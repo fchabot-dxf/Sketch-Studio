@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sketch Studio Unified</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --fusion-dark: #2C2C2C;
+            --fusion-orange: #EA580C;
+            --fusion-blue: #3B82F6;
+        }
+        body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; -webkit-user-select: none; user-select: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .cursor-select { cursor: default; }
+        .cursor-draw { cursor: crosshair; }
+        .cursor-pan { cursor: grab; }
+        .cursor-pan:active { cursor: grabbing; }
+
+        .tool-btn {
+            transition: all 0.15s;
+            border: 1px solid transparent;
+            min-width: 48px;
+            min-height: 48px;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .tool-btn:active {
+            background-color: #e0e0e0;
+            transform: scale(0.95);
+        }
+        @media (max-width: 640px) {
+            .tool-btn {
+                min-width: 44px;
+                min-height: 44px;
+                width: 44px;
+                height: 44px !important;
+            }
+            .tool-btn span {
+                font-size: 7px !important;
+            }
+            .tool-btn:active {
+                transform: scale(0.92);
+            }
+        }
+        .tool-btn:hover {
+            background-color: #f0f0f0;
+        }
+        @media (hover: none) {
+            .tool-btn:hover {
+                background-color: transparent;
+            }
+        }
+        .tool-btn.active {
+            background-color: #3B82F6;
+            color: white;
+            border: 1px solid #1E40AF;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tool-btn.active:active {
+            background-color: #2563eb;
+        }
+        .tool-btn.active span, .tool-btn.active i { color: white; }
+
+        #svgCanvas { width: 100%; height: 100%; touch-action: none; background-color: #ffffff; transition: background-color 0.15s ease; }
+        #svgCanvas.snapping { background-color: #fff7ed; }
+        
+        /* Prevent pinch-zoom but allow panning */
+        @supports (touch-action: pan-x pan-y) {
+            #svgCanvas {
+                touch-action: pan-x pan-y;
+            }
+        }
+        
+        /* Tool dropdown */
+        .tool-dropdown {
+            position: relative;
+        }
+        .tool-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            min-width: 100px;
+        }
+        .tool-dropdown-menu.show {
+            display: block;
+        }
+        .tool-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            min-height: 40px;
+        }
+        @media (max-width: 640px) {
+            .tool-dropdown-item {
+                padding: 10px 14px;
+                font-size: 11px;
+            }
+        }
+        .tool-dropdown-item:hover,
+        .tool-dropdown-item.hover {
+            background: #e0e7ff;
+        }
+        .tool-dropdown-item.active {
+            background: #3B82F6;
+            color: white;
+        }
+        .tool-btn .dropdown-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid #94a3b8;
+        }
+        .tool-btn.active .dropdown-indicator {
+            border-top-color: white;
+        }
+        
+        .dim-input { 
+            position: absolute; background: white; border: 2px solid var(--fusion-orange);
+            border-radius: 4px; padding: 2px 4px; font-weight: bold; font-size: 11px;
+            outline: none; text-align: center; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        @media (max-width: 640px) {
+            .dim-input {
+                padding: 4px 6px;
+                font-size: 14px;
+                min-width: 70px;
+                min-height: 36px;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            .dim-input::-webkit-outer-spin-button,
+            .dim-input::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .dim-input[type=number] {
+                -moz-appearance: textfield;
+            }
+        }
+        .dim-input.hidden { display: none; }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-[#F0F0F0] select-none text-xs">
+
+    <!-- HEADER -->
+    <header class="bg-[#2C2C2C] text-white px-4 py-2 flex justify-between items-center z-50 shadow-lg shrink-0 relative">
+        <div class="flex items-center gap-4">
+            <div class="bg-orange-600 p-1 rounded shadow-inner"><i data-lucide="maximize" class="w-4 h-4"></i></div>
+            <span class="text-[11px] font-bold uppercase tracking-widest text-slate-200">Sketch Studio Unified</span>
+        </div>
+        <div class="flex items-center gap-4 text-[10px] font-bold text-slate-400">
+            <span id="solver-status" class="text-green-500 uppercase">Solver Active</span>
+        </div>
+    </header>
+
+    <!-- TOOLS RIBBON -->
+    <div class="bg-white border-b border-slate-300 p-1 flex gap-1 z-40 overflow-x-auto no-scrollbar shadow-sm shrink-0 relative">
+        <!-- EDIT -->
+        <div class="flex flex-col items-center px-1 md:px-2 border-r border-slate-200 shrink-0">
+            <div class="flex gap-0.5 flex-wrap md:flex-nowrap justify-center">
+                <button id="btn-undo" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded" disabled>
+                    <i data-lucide="undo-2" class="w-5 h-5 mb-0.5"></i>
+                    <span class="text-[8px] font-medium uppercase">Undo</span>
+                </button>
+            </div>
+            <span class="text-[7px] text-slate-400 uppercase mt-0.5">Edit</span>
+        </div>
+        <!-- CREATE -->
+        <div class="flex flex-col items-center px-1 md:px-2 border-r border-slate-200 shrink-0">
+            <div class="flex gap-0.5 flex-wrap md:flex-nowrap justify-center">
+                <button id="tool-select" class="tool-btn active flex flex-col items-center justify-center w-12 h-14 md:w-12 md:h-14 rounded">
+                    <i data-lucide="mouse-pointer-2" class="w-[18px]"></i>
+                    <span class="text-[8px] font-black uppercase mt-1">Select</span>
+                </button>
+                <button id="tool-line" class="tool-btn flex flex-col items-center justify-center w-12 h-14 md:w-12 md:h-14 rounded">
+                    <i data-lucide="minus" class="w-[18px]"></i>
+                    <span class="text-[8px] font-black uppercase mt-1">Line</span>
+                </button>
+                <div class="tool-dropdown">
+                    <button id="tool-rect" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded relative">
+                        <svg id="rect-icon" class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <!-- 2-point mode icon (default) -->
+                            <rect x="4" y="4" width="16" height="16"/>
+                            <circle cx="4" cy="4" r="2" fill="currentColor" class="rect-icon-dot rect-icon-2pt"/>
+                            <circle cx="20" cy="20" r="2" fill="currentColor" class="rect-icon-dot rect-icon-2pt"/>
+                            <!-- center mode dots -->
+                            <circle cx="12" cy="12" r="2" fill="currentColor" class="rect-icon-dot rect-icon-center" style="display:none"/>
+                            <circle cx="20" cy="20" r="2" fill="currentColor" class="rect-icon-dot rect-icon-center" style="display:none"/>
+                            <!-- 3-point mode dots -->
+                            <circle cx="4" cy="4" r="2" fill="currentColor" class="rect-icon-dot rect-icon-3pt" style="display:none"/>
+                            <circle cx="20" cy="4" r="2" fill="currentColor" class="rect-icon-dot rect-icon-3pt" style="display:none"/>
+                            <circle cx="20" cy="20" r="2" fill="currentColor" class="rect-icon-dot rect-icon-3pt" style="display:none"/>
+                        </svg>
+                        <span id="rect-label" class="text-[8px] font-black uppercase mt-1">Rect</span>
+                        <span class="dropdown-indicator"></span>
+                    </button>
+                    <div id="rect-dropdown" class="tool-dropdown-menu">
+                        <div class="tool-dropdown-item active" data-mode="rect-2pt">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16"/><circle cx="4" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="currentColor"/></svg>
+                            2-Point (Corner)
+                        </div>
+                        <div class="tool-dropdown-item" data-mode="rect-center">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="currentColor"/></svg>
+                            Center Point
+                        </div>
+                        <div class="tool-dropdown-item" data-mode="rect-3pt">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16"/><circle cx="4" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/><circle cx="20" cy="20" r="2" fill="currentColor"/></svg>
+                            3-Point
+                        </div>
+                    </div>
+                </div>
+                <button id="tool-circle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="circle" class="w-[18px]"></i>
+                    <span class="text-[8px] font-black uppercase mt-1">Circle</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Create</span>
+        </div>
+
+        <!-- CONSTRAIN -->
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button id="tool-coincident" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Coinc</span>
+                </button>
+                <button id="tool-hv" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="4" y1="12" x2="20" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">H/V</span>
+                </button>
+                <button id="tool-parallel" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="4" y1="20" x2="20" y2="4"/><line x1="8" y1="20" x2="24" y2="4"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Para</span>
+                </button>
+                <button id="tool-perp" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="4" y1="20" x2="20" y2="20"/><line x1="12" y1="20" x2="12" y2="4"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Perp</span>
+                </button>
+                <button id="tool-collinear" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                        <circle cx="6" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="18" cy="12" r="2" fill="currentColor"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Coll</span>
+                </button>
+                <button id="tool-tangent" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="8"/>
+                        <line x1="2" y1="12" x2="12" y2="12"/>
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Tang</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Constrain</span>
+        </div>
+
+        <!-- INSPECT -->
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button id="tool-dim" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="hash" class="w-[18px]"></i>
+                    <span class="text-[8px] font-black uppercase mt-1">Dim</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Inspect</span>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="ml-auto flex items-center gap-2 pr-4 shrink-0">
+            <button id="btn-undo" class="p-2 hover:bg-slate-100 rounded text-slate-400" title="Undo"><i data-lucide="undo-2" class="w-4"></i></button>
+            <button id="btn-clear" class="p-2 hover:bg-red-50 rounded text-slate-400 hover:text-red-500" title="Clear All"><i data-lucide="trash-2" class="w-4"></i></button>
+        </div>
+    </div>
+
+    <!-- MAIN VIEWPORT -->
+    <main class="flex-1 relative bg-[#DBDBDB] flex flex-col overflow-hidden p-2 md:p-4">
+        <div class="flex-1 bg-white rounded shadow-inner border border-slate-300 relative overflow-hidden">
+            <svg id="svgCanvas" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F1F5F9" stroke-width="0.5"/>
+                    </pattern>
+                    <pattern id="grid-heavy" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#grid)" />
+                        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+                    </pattern>
+                </defs>
+                <rect id="infinite-grid" width="100%" height="100%" fill="url(#grid-heavy)" />
+                <g id="world-group">
+                    <g id="origin-datum">
+                        <circle r="4" fill="none" stroke="#64748B" stroke-width="1.5" />
+                        <line x1="-8" y1="0" x2="8" y2="0" stroke="#64748B" stroke-width="1" />
+                        <line x1="0" y1="-8" x2="0" y2="8" stroke="#64748B" stroke-width="1" />
+                    </g>
+                </g>
+            </svg>
+            <input type="number" id="dimInput" class="dim-input hidden" step="0.1" inputmode="decimal" autocomplete="off" />
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-100 border-t border-slate-300 px-4 py-1.5 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0">
+        <div class="flex gap-4"><span id="modeText">MODE: SELECT</span></div>
+        <div><span id="coords-text">X: 0 Y: 0</span></div>
+    </footer>
+
+    <script>lucide.createIcons();</script>
+    <script>
+        // Prevent iOS default gesture behaviors that might interfere
+        document.addEventListener('gesturestart', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Prevent unwanted page zoom on double-tap (iOS)
+        document.addEventListener('dblclick', (e) => {
+            if(e.target.id === 'svgCanvas') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
+    <script type="module" src="src/8-main.js"></script>
+</body>
+</html>

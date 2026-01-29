@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sketch Studio Ultimate - Precision CAD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap');
+        
+        :root {
+            --accent: #EA580C;
+            --accent-soft: rgba(234, 88, 12, 0.12);
+            --primary: #3B82F6;
+            --slate: #64748B;
+        }
+
+        body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; background: #F1F5F9; }
+
+        .tool-btn { transition: all 0.1s; border: 1px solid transparent; color: var(--slate); cursor: pointer; }
+        .tool-btn:hover { background-color: #F8FAFC; color: var(--primary); }
+        .tool-btn.active { 
+            background-color: var(--primary); 
+            color: white !important; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .tool-btn.active i, .tool-btn.active span { color: white !important; }
+
+        #canvas-svg { 
+            width: 100%; height: 100%; 
+            touch-action: none; 
+            background: white;
+            transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Snap Feedback State */
+        .snap-pulse-active { background-color: var(--accent-soft) !important; }
+
+        .dim-input { 
+            position: absolute; background: white; border: 2px solid var(--accent);
+            border-radius: 6px; padding: 4px 8px; font-weight: 800; font-size: 13px;
+            outline: none; text-align: center; z-index: 1000; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2);
+            font-family: 'JetBrains Mono', monospace; width: 70px;
+        }
+
+        .constraint-glyph { cursor: pointer; pointer-events: auto; }
+        .constraint-glyph rect { fill: white; stroke: #CBD5E1; stroke-width: 1px; rx: 3px; }
+        .constraint-glyph.selected rect { fill: #FFF7ED; stroke: var(--accent); stroke-width: 2px; }
+        .constraint-glyph text { pointer-events: none; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .group-label { font-size: 8px; font-weight: 900; color: #94A3B8; text-transform: uppercase; margin-top: 4px; }
+    </style>
+</head>
+<body class="flex flex-col h-screen select-none text-xs">
+
+    <header class="bg-[#1E293B] text-white px-4 py-2 flex justify-between items-center z-50 shadow-md shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-orange-600 p-1.5 rounded-lg shadow-lg rotate-3"><i data-lucide="target" class="w-4 h-4 text-white"></i></div>
+            <div>
+                <h1 class="text-[11px] font-extrabold uppercase tracking-widest leading-none">Sketch Studio</h1>
+                <span class="text-[9px] text-slate-400 font-bold tracking-tighter uppercase">Snap Engine V4.8</span>
+            </div>
+        </div>
+        <div id="coords-display" class="font-mono text-[10px] text-slate-400 bg-slate-800 px-2 py-1 rounded">X: 0 Y: 0</div>
+    </header>
+
+    <div class="bg-white border-b border-slate-200 p-1 flex gap-1 z-40 overflow-x-auto no-scrollbar shadow-sm shrink-0">
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-1">
+                <button onclick="setTool('select')" id="btn-select" class="tool-btn active flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg">
+                    <i data-lucide="mouse-pointer-2" class="w-5"></i><span class="text-[8px] font-bold mt-1">SELECT</span>
+                </button>
+                <button onclick="setTool('delete')" id="btn-delete" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg">
+                    <i data-lucide="trash-2" class="w-5 text-red-500"></i><span class="text-[8px] font-bold mt-1 uppercase text-red-500">Delete</span>
+                </button>
+            </div>
+            <span class="group-label">Editor</span>
+        </div>
+
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-1">
+                <button onclick="setTool('line')" id="btn-line" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="minus" class="w-5"></i><span class="text-[8px] font-bold mt-1 uppercase">Line</span></button>
+                <button onclick="setTool('rect')" id="btn-rect" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="square" class="w-5"></i><span class="text-[8px] font-bold mt-1 uppercase">Rect</span></button>
+                <button onclick="setTool('circle')" id="btn-circle" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="circle" class="w-5"></i><span class="text-[8px] font-bold mt-1 uppercase">Circle</span></button>
+            </div>
+            <span class="group-label">Draw</span>
+        </div>
+
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-1">
+                <button onclick="setTool('coincident')" id="btn-coincident" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="link" class="w-5 text-blue-500"></i><span class="text-[8px] font-bold mt-1 uppercase">Coinc</span></button>
+                <button onclick="setTool('hv')" id="btn-hv" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="split" class="w-5"></i><span class="text-[8px] font-bold mt-1 uppercase">H / V</span></button>
+                <button onclick="setTool('tangent')" id="btn-tangent" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="circle-dot" class="w-5 text-purple-600"></i><span class="text-[8px] font-bold mt-1 uppercase">Tan</span></button>
+            </div>
+            <span class="group-label">Constraint</span>
+        </div>
+
+        <div class="flex flex-col items-center px-2">
+            <button onclick="setTool('dimension')" id="btn-dimension" class="tool-btn flex flex-col items-center justify-center min-w-[50px] h-14 rounded-lg"><i data-lucide="hash" class="w-5 text-orange-600"></i><span class="text-[8px] font-bold mt-1 uppercase">Dim</span></button>
+            <span class="group-label">Measures</span>
+        </div>
+
+        <div class="ml-auto flex items-center gap-2 pr-4">
+            <button onclick="undo()" class="p-2 hover:bg-slate-100 rounded-lg text-slate-400"><i data-lucide="undo-2" class="w-4"></i></button>
+            <button onclick="clearCanvas()" class="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4"></i></button>
+        </div>
+    </div>
+
+    <main class="flex-1 relative bg-slate-200 p-2 overflow-hidden">
+        <div class="w-full h-full bg-white rounded-xl shadow-2xl border border-slate-300 relative overflow-hidden" id="viewport-frame">
+            <svg id="canvas-svg">
+                <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F1F5F9" stroke-width="0.5"/></pattern>
+                    <pattern id="grid-heavy" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#grid)" /><path d="M 100 0 L 0 0 0 100" fill="none" stroke="#E2E8F0" stroke-width="1"/></pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid-heavy)" />
+                <g id="world-group">
+                    <g id="origin-datum"><circle r="5" fill="none" stroke="#64748B" stroke-width="1.5" /><line x1="-10" y1="0" x2="10" y2="0" stroke="#64748B" stroke-width="1" /><line x1="0" y1="-10" x2="0" y2="10" stroke="#64748B" stroke-width="1" /></g>
+                    <g id="shapes-layer"></g><g id="constraints-layer"></g><g id="preview-layer"></g><g id="snap-layer"></g>
+                </g>
+            </svg>
+            <div id="floating-status" class="absolute top-4 right-4 bg-white/80 backdrop-blur border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm pointer-events-none flex items-center gap-3">
+                <span id="active-tool-badge" class="px-2 py-0.5 bg-slate-800 text-white rounded text-[9px] font-black uppercase">SELECT</span>
+                <span id="selection-count" class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ready</span>
+            </div>
+            <input type="number" id="dim-input" class="dim-input hidden" />
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 px-4 py-1.5 flex justify-between items-center text-[10px] font-bold text-slate-400 shrink-0 uppercase tracking-widest">
+        <div class="flex gap-4"><span>Space + Drag: Pan</span><span>Scroll: Zoom</span></div>
+        <div id="stats-text">0 Objects | 0 Constraints</div>
+    </footer>
+
+    <script>
+        // --- CORE STATE ---
+        let joints = new Map(), shapes = [], constraints = [], currentTool = 'select';
+        let viewPan = { x: 0, y: 0 }, viewScale = 1;
+        let dragTarget = null, activeShape = null, selectionBuffer = [], selectedConstraint = null, snapTarget = null;
+        let jointIdCounter = 0, isSpaceDown = false;
+
+        const svg = document.getElementById('canvas-svg'), worldGroup = document.getElementById('world-group'),
+              shapesLayer = document.getElementById('shapes-layer'), constraintsLayer = document.getElementById('constraints-layer'),
+              previewLayer = document.getElementById('preview-layer'), snapLayer = document.getElementById('snap-layer'), 
+              dimInput = document.getElementById('dim-input'), viewportFrame = document.getElementById('viewport-frame');
+
+        joints.set('origin', { x: 0, y: 0, fixed: true });
+
+        function init() {
+            lucide.createIcons(); centerOrigin();
+            window.onresize = centerOrigin;
+            window.onkeydown = (e) => { 
+                if (e.code === 'Space') isSpaceDown = true; 
+                if (e.key === 'Escape') resetState();
+                if (e.key === 'Delete' || e.key === 'Backspace') deleteFeature();
+            };
+            window.onkeyup = (e) => { if (e.code === 'Space') isSpaceDown = false; };
+            dimInput.onkeydown = (e) => { if (e.key === 'Enter') applyDim(); };
+            
+            svg.onwheel = handleWheel;
+            svg.onpointerdown = handlePointerDown;
+            svg.onpointermove = handlePointerMove;
+            svg.onpointerup = handlePointerUp;
+            
+            requestAnimationFrame(engineLoop);
+        }
+
+        // --- SOLVER ---
+        function solve() {
+            const iter = 60;
+            for (let i = 0; i < iter; i++) {
+                for (const c of constraints) {
+                    const j = c.joints.map(id => joints.get(id)).filter(n => !!n);
+                    if (j.length < 2) continue;
+
+                    switch (c.type) {
+                        case 'coincident': {
+                            const mx = (j[0].x + j[1].x) / 2, my = (j[0].y + j[1].y) / 2;
+                            if (!j[0].fixed) { j[0].x = mx; j[0].y = my; }
+                            if (!j[1].fixed) { j[1].x = mx; j[1].y = my; }
+                            break;
+                        }
+                        case 'horizontal': { const my = (j[0].y + j[1].y)/2; if(!j[0].fixed) j[0].y = my; if(!j[1].fixed) j[1].y = my; break; }
+                        case 'vertical': { const mx = (j[0].x + j[1].x)/2; if(!j[0].fixed) j[0].x = mx; if(!j[1].fixed) j[1].x = mx; break; }
+                        case 'distance': {
+                            const dx = j[1].x-j[0].x, dy = j[1].y-j[0].y, d = Math.hypot(dx,dy); if (d < 0.1) continue;
+                            const f = (d - c.value) / d * 0.5;
+                            if (!j[0].fixed) { j[0].x += dx * f; j[0].y += dy * f; }
+                            if (!j[1].fixed) { j[1].x -= dx * f; j[1].y -= dy * f; }
+                            break;
+                        }
+                        case 'tangent': {
+                            const r = Math.hypot(j[1].x-j[0].x, j[1].y-j[0].y);
+                            const j3 = j[2], j4 = j[3]; if (!j3 || !j4) continue;
+                            const dx = j4.x-j3.x, dy = j4.y-j3.y, l2 = dx*dx + dy*dy; if (l2 < 0.1) continue;
+                            const t = ((j[0].x-j[3].x)*dx + (j[0].y-j[3].y)*dy)/l2;
+                            const px = j3.x+t*dx, py = j3.y+t*dy, dist = Math.hypot(j[0].x-px, j[0].y-py);
+                            if (dist < 0.1) continue;
+                            const factor = (dist-r)/dist;
+                            if(!j[0].fixed) { j[0].x -= (j[0].x-px)*factor; j[0].y -= (j[0].y-py)*factor; }
+                            break;
+                        }
+                        case 'point-on-line': {
+                            const dx = j[2].x-j[1].x, dy = j[2].y-j[1].y, l2 = dx*dx + dy*dy; if (l2 < 0.1) continue;
+                            const t = ((j[0].x-j[1].x)*dx + (j[0].y-j[1].y)*dy)/l2;
+                            if(!j[0].fixed) { j[0].x = j[1].x + t*dx; j[0].y = j[1].y + t*dy; }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        function engineLoop() { solve(); draw(); requestAnimationFrame(engineLoop); }
+
+        // --- RENDER ---
+        function draw() {
+            document.getElementById('active-tool-badge').innerText = currentTool.toUpperCase();
+            document.getElementById('stats-text').innerText = `${shapes.length} Objects | ${constraints.length} Constraints`;
+
+            const isEngaged = snapTarget && (activeShape || dragTarget);
+            viewportFrame.classList.toggle('snap-pulse-active', !!isEngaged);
+
+            let sHtml = '';
+            for (const s of shapes) {
+                const j = s.joints.map(id => joints.get(id)).filter(n => !!n);
+                if (j.length < 2) continue;
+                const isSn = isEngaged && snapTarget.shape === s;
+                const isSelected = selectionBuffer.some(h => h.shape === s);
+                const col = (isSn || isSelected) ? 'var(--accent)' : 'var(--primary)';
+                const w = (isSn || isSelected ? 4.5 : 2.5) / viewScale;
+
+                if (s.type === 'line') sHtml += `<line x1="${j[0].x}" y1="${j[0].y}" x2="${j[1].x}" y2="${j[1].y}" stroke="${col}" stroke-width="${w}" stroke-linecap="round" />`;
+                else if (s.type === 'circle') sHtml += `<circle cx="${j[0].x}" cy="${j[0].y}" r="${Math.hypot(j[1].x-j[0].x, j[1].y-j[0].y)}" fill="none" stroke="${col}" stroke-width="${w}" />`;
+            }
+            for (const [id, j] of joints.entries()) {
+                const isSn = isEngaged && snapTarget.id === id;
+                const isSelected = selectionBuffer.some(h => h.id === id);
+                const isO = id === 'origin';
+                const r = (isO ? 5 : (isSn || isSelected ? 7 : 3.5)) / viewScale;
+                sHtml += `<circle cx="${j.x}" cy="${j.y}" r="${r}" fill="${isO?'var(--slate)':'white'}" stroke="${isSn||isSelected?'var(--accent)':'var(--primary)'}" stroke-width="${1.5/viewScale}" />`;
+            }
+            shapesLayer.innerHTML = sHtml;
+
+            let cHtml = '';
+            constraints.forEach((c, idx) => {
+                const j = c.joints.map(id => joints.get(id)).filter(n => !!n);
+                if (j.length < 2) return;
+                const isSel = (selectedConstraint === c);
+                
+                if (c.type === 'distance') {
+                    const ox = c.offset.x, oy = c.offset.y;
+                    cHtml += `<g class="constraint-glyph" data-index="${idx}" onpointerdown="event.stopPropagation(); selectConstraint(${idx}, event)">
+                        <line x1="${j[0].x}" y1="${j[0].y}" x2="${ox + (j[0].x-(j[0].x+j[1].x)/2)}" y2="${oy + (j[0].y-(j[0].y+j[1].y)/2)}" stroke="var(--accent)" stroke-width="${0.5/viewScale}" stroke-dasharray="2" />
+                        <line x1="${j[1].x}" y1="${j[1].y}" x2="${ox + (j[1].x-(j[0].x+j[1].x)/2)}" y2="${oy + (j[0].y-(j[0].y+j[1].y)/2)}" stroke="var(--accent)" stroke-width="${0.5/viewScale}" stroke-dasharray="2" />
+                        <rect x="${ox - 22/viewScale}" y="${oy - 10/viewScale}" width="${44/viewScale}" height="${20/viewScale}" rx="4" fill="white" stroke="${isSel?'var(--accent)':'#CBD5E1'}" />
+                        <text x="${ox}" y="${oy + 5/viewScale}" font-size="${10/viewScale}" text-anchor="middle" font-weight="900" fill="var(--accent)" style="font-family:'JetBrains Mono'">${c.value.toFixed(0)}</text>
+                    </g>`;
+                } else {
+                    const icon = { horizontal: '-', vertical: '|', parallel: '//', tangent: '○', coincident: 'X', 'point-on-line': '•' }[c.type] || 'C';
+                    const mx = (j[0].x + j[1].x)/2, my = (j[0].y + j[1].y)/2 - 15/viewScale;
+                    cHtml += `<g class="constraint-glyph ${isSel?'selected':''}" data-index="${idx}" onpointerdown="event.stopPropagation(); selectedConstraint=constraints[${idx}]" transform="translate(${mx}, ${my}) scale(${1/viewScale})">
+                        <rect x="-8" y="-8" width="16" height="16" rx="3" /><text y="3" text-anchor="middle" font-size="10" font-weight="900" fill="${isSel?'var(--accent)':'var(--slate)'}">${icon}</text>
+                    </g>`;
+                }
+            });
+            constraintsLayer.innerHTML = cHtml;
+
+            if (activeShape) {
+                const j = joints.get(activeShape.startId), t = activeShape.temp, w = 2/viewScale;
+                if (currentTool === 'line') previewLayer.innerHTML = `<line x1="${j.x}" y1="${j.y}" x2="${t.x}" y2="${t.y}" stroke="var(--primary)" stroke-width="${w}" stroke-dasharray="4" />`;
+                else if (currentTool === 'circle') previewLayer.innerHTML = `<circle cx="${j.x}" cy="${j.y}" r="${Math.hypot(t.x-j.x, t.y-j.y)}" fill="none" stroke="var(--primary)" stroke-width="${w}" stroke-dasharray="4" />`;
+                else if (currentTool === 'rect') previewLayer.innerHTML = `<rect x="${Math.min(j.x,t.x)}" y="${Math.min(j.y,t.y)}" width="${Math.abs(j.x-t.x)}" height="${Math.abs(j.y-t.y)}" fill="none" stroke="var(--primary)" stroke-width="${w}" stroke-dasharray="4" />`;
+            } else previewLayer.innerHTML = '';
+        }
+
+        // --- INTERACTION ---
+        function handlePointerDown(e) {
+            const coords = getCoords(e);
+            
+            // Delete Mode Immediate Action
+            if (currentTool === 'delete') {
+                const hit = findHit(coords, 25 / viewScale);
+                const glyph = e.target.closest('.constraint-glyph');
+                if (glyph) { 
+                    const idx = parseInt(glyph.dataset.index);
+                    constraints.splice(idx, 1);
+                } else if (hit) {
+                    if (hit.shape) shapes = shapes.filter(s => s !== hit.shape);
+                    else if (hit.id && hit.id !== 'origin') {
+                        shapes = shapes.filter(s => !s.joints.includes(hit.id));
+                        joints.delete(hit.id);
+                    }
+                }
+                return;
+            }
+
+            const hit = findHit(coords, 25 / viewScale, activeShape?.startId);
+
+            if (currentTool === 'select' || e.button === 1 || isSpaceDown) {
+                if (e.button === 1 || isSpaceDown) dragTarget = { type: 'pan', start: { x: e.clientX, y: e.clientY }, initPan: { ...viewPan } };
+                else if (hit?.type === 'joint') dragTarget = { type: 'joint', id: hit.id };
+                else if (hit?.shape) {
+                    const iJs = new Map(); hit.shape.joints.forEach(id => iJs.set(id, { ...joints.get(id) }));
+                    dragTarget = { type: 'shape', shape: hit.shape, iJs, startCoords: { ...coords } };
+                } else dragTarget = { type: 'pan', start: { x: e.clientX, y: e.clientY }, initPan: { ...viewPan } };
+                svg.setPointerCapture(e.pointerId);
+                if (hit) selectionBuffer = [hit]; else selectionBuffer = [];
+            }
+            else if (['line', 'circle', 'rect'].includes(currentTool)) {
+                if (!activeShape) {
+                    const sId = hit?.type === 'joint' ? hit.id : genJointId();
+                    if (!joints.has(sId)) joints.set(sId, { ...coords, fixed: false });
+                    activeShape = { startId: sId, temp: { ...coords } };
+                } else {
+                    const eId = hit?.type === 'joint' ? hit.id : genJointId();
+                    if (!joints.has(eId)) joints.set(eId, { ...coords, fixed: false });
+
+                    // Coincident Logic during snapping
+                    if (hit?.type === 'joint') constraints.push({ type: 'coincident', joints: [activeShape.startId, eId] });
+                    else if (hit && ['line-snap', 'curve'].includes(hit.type)) constraints.push({ type: hit.type==='line-snap'?'point-on-line':'point-on-curve', joints: [eId, ...hit.shape.joints] });
+
+                    if (currentTool === 'line') { shapes.push({ type: 'line', joints: [activeShape.startId, eId] }); activeShape = hit ? null : { startId: eId, temp: coords }; }
+                    else if (currentTool === 'circle') { shapes.push({ type: 'circle', joints: [activeShape.startId, eId] }); activeShape = null; }
+                    else if (currentTool === 'rect') {
+                        const j1 = activeShape.startId, j3 = eId, j2 = genJointId(), j4 = genJointId();
+                        const p1 = joints.get(j1), p3 = joints.get(j3);
+                        joints.set(j2, { x: p3.x, y: p1.y }); joints.set(j4, { x: p1.x, y: p3.y });
+                        shapes.push({ type: 'line', joints: [j1, j2] }, { type: 'line', joints: [j2, j3] }, { type: 'line', joints: [j3, j4] }, { type: 'line', joints: [j4, j1] });
+                        constraints.push({ type: 'horizontal', joints: [j1, j2] }, { type: 'vertical', joints: [j2, j3] }, { type: 'horizontal', joints: [j3, j4] }, { type: 'vertical', joints: [j4, j1] });
+                        activeShape = null;
+                    }
+                }
+            }
+            else if (['coincident', 'hv', 'tangent'].includes(currentTool) && hit) {
+                selectionBuffer.push(hit);
+                if (selectionBuffer.length === 2) {
+                    const [h1, h2] = selectionBuffer;
+                    if (currentTool === 'coincident') constraints.push({ type: 'coincident', joints: [h1.id || h1.shape.joints[0], h2.id || h2.shape.joints[0]] });
+                    else if (currentTool === 'hv') constraints.push({ type: (Math.abs(joints.get(h1.shape.joints[0]).x - joints.get(h1.shape.joints[1]).x) > Math.abs(joints.get(h1.shape.joints[0]).y - joints.get(h1.shape.joints[1]).y) ? 'horizontal' : 'vertical'), joints: [...h1.shape.joints] });
+                    else if (currentTool === 'tangent') constraints.push({ type: 'tangent', joints: [...h1.shape.joints, ...h2.shape.joints] });
+                    selectionBuffer = [];
+                }
+            }
+            else if (currentTool === 'dimension' && hit) {
+                const j = hit.shape ? hit.shape.joints : [selectionBuffer[0]?.id, hit.id];
+                if (j[0] && j[1]) {
+                    const val = Math.hypot(joints.get(j[1]).x-joints.get(j[0]).x, joints.get(j[1]).y-joints.get(j[0]).y);
+                    constraints.push({ type: 'distance', joints: [j[0], j[1]], value: val, offset: coords });
+                    selectionBuffer = [];
+                } else if (hit.type === 'joint') selectionBuffer = [hit];
+            }
+        }
+
+        function handlePointerMove(e) {
+            const raw = getCoords(e); let coords = raw;
+            document.getElementById('coords-display').innerText = `X: ${coords.x} Y: ${coords.y}`;
+            const exId = activeShape ? activeShape.startId : (dragTarget?.type === 'joint' ? dragTarget.id : null);
+            snapTarget = findHit(coords, 25 / viewScale, exId); 
+
+            if (dragTarget) {
+                if (snapTarget?.point) coords = snapTarget.point;
+                if (dragTarget.type === 'joint') { const j = joints.get(dragTarget.id); if (j && !j.fixed) { j.x = coords.x; j.y = coords.y; } }
+                else if (dragTarget.type === 'shape') {
+                    const dx = coords.x-dragTarget.startCoords.x, dy = coords.y-dragTarget.startCoords.y;
+                    dragTarget.shape.joints.forEach(id => { const j = joints.get(id), i = dragTarget.iJs.get(id); if(j && !j.fixed) { j.x = i.x+dx; j.y = i.y+dy; } });
+                } else if (dragTarget.type === 'pan') { viewPan.x = dragTarget.initPan.x + (e.clientX-dragTarget.start.x); viewPan.y = dragTarget.initPan.y + (e.clientY-dragTarget.start.y); updateViewport(); }
+            } else if (activeShape) {
+                if (snapTarget?.point) coords = snapTarget.point;
+                else if (currentTool === 'line') {
+                    const j1 = joints.get(activeShape.startId);
+                    const dx = coords.x - j1.x, dy = coords.y - j1.y;
+                    if (Math.abs(dy) < 5/viewScale) coords.y = j1.y;
+                    else if (Math.abs(dx) < 5/viewScale) coords.x = j1.x;
+                }
+                activeShape.temp = coords;
+            }
+        }
+
+        function handlePointerUp() { 
+            if (dragTarget?.type === 'joint' && snapTarget?.type === 'joint') {
+                constraints.push({ type: 'coincident', joints: [dragTarget.id, snapTarget.id] });
+            }
+            dragTarget = null; 
+        }
+
+        // --- UTILS ---
+        function findHit(coords, threshold = 15, exId = null) {
+            for (const [id, j] of joints.entries()) if (id !== exId && Math.hypot(coords.x - j.x, coords.y - j.y) < threshold) return { type: 'joint', id };
+            for (const s of shapes) {
+                const j = s.joints.map(id => joints.get(id)); if (s.joints.includes(exId)) continue;
+                if (s.type === 'line') {
+                    const dx = j[1].x-j[0].x, dy = j[1].y-j[0].y, l2 = dx*dx+dy*dy, t = Math.max(0, Math.min(1, ((coords.x-j[0].x)*dx+(coords.y-j[0].y)*dy)/l2));
+                    const px = j[0].x+t*dx, py = j[0].y+t*dy; if (Math.hypot(coords.x-px, coords.y-py) < threshold) return { type: 'line-snap', shape: s, point: {x:px, y:py} };
+                } else if (s.type === 'circle') {
+                    const r = Math.hypot(j[1].x-j[0].x, j[1].y-j[0].y), d = Math.hypot(coords.x-j[0].x, coords.y-j[0].y);
+                    if (Math.abs(d-r) < threshold) return { type: 'curve', shape: s, point: { x: j[0].x+(coords.x-j[0].x)*(r/d), y: j[0].y+(coords.y-j[0].y)*(r/d) } };
+                }
+            }
+            return null;
+        }
+
+        function setTool(t) { currentTool = t; selectionBuffer = []; activeShape = null; document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.id === 'btn-'+t)); lucide.createIcons(); }
+        
+        function deleteFeature() {
+            if (selectedConstraint) { constraints = constraints.filter(c => c !== selectedConstraint); selectedConstraint = null; }
+            else if (selectionBuffer.length > 0) {
+                const hit = selectionBuffer[0];
+                if (hit.shape) shapes = shapes.filter(s => s !== hit.shape);
+                else if (hit.id && hit.id !== 'origin') {
+                    shapes = shapes.filter(s => !s.joints.includes(hit.id));
+                    joints.delete(hit.id);
+                }
+                selectionBuffer = [];
+            }
+        }
+
+        function getCoords(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const inv = pt.matrixTransform(worldGroup.getScreenCTM().inverse()); return { x: Math.round(inv.x), y: Math.round(inv.y) }; }
+        function handleWheel(e) { e.preventDefault(); const f = e.deltaY > 0 ? 1/1.1 : 1.1; const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const wPt = pt.matrixTransform(worldGroup.getScreenCTM().inverse()); viewScale *= f; viewPan.x = e.clientX - wPt.x*viewScale; viewPan.y = e.clientY - wPt.y*viewScale; updateViewport(); }
+        function centerOrigin() { const r = svg.getBoundingClientRect(); viewPan.x = r.width/2; viewPan.y = r.height/2; updateViewport(); }
+        function updateViewport() { worldGroup.setAttribute('transform', `translate(${viewPan.x}, ${viewPan.y}) scale(${viewScale})`); }
+        function showDimInputAt(x, y, v) { dimInput.style.left = (x-35)+'px'; dimInput.style.top = (y-15)+'px'; dimInput.value = v; dimInput.classList.remove('hidden'); setTimeout(()=>dimInput.focus(), 50); }
+        function selectConstraint(idx, e) { selectedConstraint = constraints[idx]; if (currentTool === 'dimension') showDimInputAt(e.clientX, e.clientY, selectedConstraint.value); }
+        function applyDim() { if (selectedConstraint) selectedConstraint.value = parseFloat(dimInput.value); dimInput.classList.add('hidden'); svg.focus(); }
+        function resetState() { selectionBuffer = []; activeShape = null; selectedConstraint = null; setTool('select'); }
+        function genJointId() { return 'j_' + (++jointIdCounter) + '_' + Date.now(); }
+        function undo() { shapes.pop(); }
+        function clearCanvas() { joints.clear(); joints.set('origin', {x:0, y:0, fixed:true}); shapes = []; constraints = []; centerOrigin(); }
+
+        init();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,37 @@
+{
+  "snapping": {
+    "snapPx": 30,
+    "jointHitRadius": 20
+  },
+  "joints": {
+    "radius": 6,
+    "originRadius": 8,
+    "fillColor": "#ffffff",
+    "strokeColor": "#2563eb",
+    "strokeWidth": 2,
+    "selectedFillColor": "#fbbf24",
+    "selectedStrokeColor": "#f59e0b"
+  },
+  "shapes": {
+    "strokeColor": "#2563eb",
+    "strokeWidth": 2
+  },
+  "preview": {
+    "strokeColor": "#10b981"
+  },
+  "grid": {
+    "size": 50,
+    "color": "#e0e0e0"
+  },
+  "snap": {
+    "indicatorColor": "#ea580c",
+    "backgroundColor": "#fff7ed"
+  },
+  "canvas": {
+    "backgroundColor": "#ffffff"
+  },
+  "view": {
+    "defaultWidth": 1200,
+    "defaultHeight": 800
+  }
+}

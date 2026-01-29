@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sketch Studio – Rebuild v6.1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Inter, sans-serif;
+  }
+  #canvas {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    background: white;
+    touch-action: none;
+  }
+</style>
+</head>
+<body>
+
+<header class="bg-slate-800 text-white px-4 py-2 text-xs font-bold">
+  Sketch Studio — Line · Rect · Circle · Snap · ⟂ · Tangent · Zoom/Pan
+</header>
+
+<svg id="canvas" width="100%" height="100%"></svg>
+
+<script>
+/* =========================
+   VIEWPORT (PAN + ZOOM)
+========================= */
+const svg = document.getElementById("canvas");
+
+let view = { x: 0, y: 0, w: 1200, h: 900 };
+let isPanning = false;
+let panStart = null;
+
+function updateView() {
+  svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+}
+updateView();
+
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const scale = e.deltaY > 0 ? 1.1 : 0.9;
+  view.w *= scale;
+  view.h *= scale;
+  updateView();
+}, { passive: false });
+
+svg.addEventListener("pointerdown", e => {
+  if (e.button === 1 || e.shiftKey) {
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+  }
+});
+
+svg.addEventListener("pointermove", e => {
+  if (!isPanning) return;
+  const dx = (panStart.x - e.clientX) * view.w / svg.clientWidth;
+  const dy = (panStart.y - e.clientY) * view.h / svg.clientHeight;
+  view.x += dx;
+  view.y += dy;
+  panStart = { x: e.clientX, y: e.clientY };
+  updateView();
+});
+
+svg.addEventListener("pointerup", () => isPanning = false);
+
+/* =========================
+   STORE
+========================= */
+class Store {
+  joints = new Map();
+  shapes = [];
+  constraints = [];
+  jid = 0;
+
+  newJoint(x, y) {
+    const id = "j" + (++this.jid);
+    this.joints.set(id, { x, y });
+    return id;
+  }
+
+  addShape(type, data) {
+    this.shapes.push({ type, ...data });
+  }
+
+  addConstraint(type, data) {
+    this.constraints.push({ type, ...data });
+  }
+}
+
+/* =========================
+   SOLVER
+========================= */
+class Solver {
+  constructor(store) { this.store = store; }
+
+  solve() {
+    for (let i = 0; i < 40; i++) {
+      for (const c of this.store.constraints) this.apply(c);
+    }
+  }
+
+  apply(c) {
+    if (c.type === "radius") {
+      const c0 = this.store.joints.get(c.center);
+      const e = this.store.joints.get(c.edge);
+      const dx = e.x - c0.x;
+      const dy = e.y - c0.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const s = c.value / d;
+      e.x = c0.x + dx * s;
+      e.y = c0.y + dy * s;
+    }
+  }
+}
+
+/* =========================
+   SNAP + INFERENCE
+========================= */
+class SnapEngine {
+  constructor(store) { this.store = store; }
+
+  snap(pt) {
+    let best = null;
+    let r = 12;
+    for (const j of this.store.joints.values()) {
+      const d = Math.hypot(j.x - pt.x, j.y - pt.y);
+      if (d < r) {
+        r = d;
+        best = { x: j.x, y: j.y, color: "#2563eb" };
+      }
+    }
+    return best;
+  }
+}
+
+class Inference {
+  infer(a, b) {
+    if (Math.abs(a.x - b.x) < 6)
+      return { x: a.x, y: b.y, color: "#ea580c" };
+    if (Math.abs(a.y - b.y) < 6)
+      return { x: b.x, y: a.y, color: "#ea580c" };
+    return null;
+  }
+}
+
+/* =========================
+   TOOLS
+========================= */
+class Tools {
+  constructor(store, snap, infer) {
+    this.store = store;
+    this.snap = snap;
+    this.infer = infer;
+    this.mode = "line";
+    this.active = null;
+  }
+
+  down(pt) {
+    const s = this.snap.snap(pt);
+    const id = this.store.newJoint(s?.x ?? pt.x, s?.y ?? pt.y);
+    this.active = { start: id };
+  }
+
+  move(pt) {
+    if (!this.active) return null;
+    const a = this.store.joints.get(this.active.start);
+    return {
+      snap: this.snap.snap(pt),
+      infer: this.infer.infer(a, pt),
+      raw: pt
+    };
+  }
+
+  up(p) {
+    if (!this.active || !p) return;
+    const a = this.store.joints.get(this.active.start);
+    const end = p.infer ?? p.snap ?? p.raw;
+    const b = this.store.newJoint(end.x, end.y);
+    this.store.addShape("line", { a: this.active.start, b });
+    this.active = null;
+  }
+}
+
+/* =========================
+   RENDER
+========================= */
+function draw(store, preview) {
+  svg.innerHTML = "";
+
+  for (const s of store.shapes) {
+    const a = store.joints.get(s.a);
+    const b = store.joints.get(s.b);
+    svg.innerHTML += `
+      <line x1="${a.x}" y1="${a.y}"
+            x2="${b.x}" y2="${b.y}"
+            stroke="#2563eb" stroke-width="2"/>
+    `;
+  }
+
+  for (const j of store.joints.values()) {
+    svg.innerHTML += `
+      <circle cx="${j.x}" cy="${j.y}" r="3"
+              fill="white" stroke="#2563eb"/>
+    `;
+  }
+
+  if (preview) {
+    const p = preview.infer ?? preview.snap ?? preview.raw;
+    const color = preview.color || "#16a34a";
+    svg.innerHTML += `
+      <circle cx="${p.x}" cy="${p.y}" r="5"
+              fill="none" stroke="${color}"/>
+    `;
+  }
+}
+
+/* =========================
+   APP
+========================= */
+const store = new Store();
+const solver = new Solver(store);
+const snap = new SnapEngine(store);
+const infer = new Inference();
+const tools = new Tools(store, snap, infer);
+
+let preview = null;
+
+svg.addEventListener("pointerdown", e =>
+  tools.down({ x: e.offsetX, y: e.offsetY })
+);
+svg.addEventListener("pointermove", e =>
+  preview = tools.move({ x: e.offsetX, y: e.offsetY })
+);
+svg.addEventListener("pointerup", () => {
+  tools.up(preview);
+  preview = null;
+});
+
+window.addEventListener("keydown", e => {
+  if (e.key === "l") tools.mode = "line";
+});
+
+function loop() {
+  solver.solve();
+  draw(store, preview);
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

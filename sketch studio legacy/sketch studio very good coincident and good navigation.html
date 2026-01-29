@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sketch Studio Pro - Iterative Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --fusion-dark: #2C2C2C;
+            --fusion-orange: #EA580C;
+            --fusion-blue: #3B82F6;
+        }
+        body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .tool-btn { transition: all 0.15s; border: 1px solid transparent; }
+        .tool-btn:hover { background-color: #f0f0f0; }
+        .tool-btn.active { background-color: #3B82F6; color: white !important; border: 1px solid #1E40AF; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+        .tool-btn.active i, .tool-btn.active span { color: white !important; }
+
+        #canvas-svg { width: 100%; height: 100%; touch-action: none; background-color: #ffffff; cursor: crosshair; }
+        .cursor-select { cursor: default; }
+        
+        .dim-input { 
+            position: absolute; background: white; border: 2px solid var(--fusion-orange);
+            border-radius: 4px; padding: 2px 4px; font-weight: bold; font-size: 11px;
+            outline: none; text-align: center; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .hidden { display: none; }
+
+        .constraint-glyph { cursor: pointer; pointer-events: auto; transition: all 0.1s; }
+        .constraint-glyph rect { fill: white; stroke: #CBD5E1; stroke-width: 1px; }
+        .constraint-glyph:hover rect { fill: #F1F5F9; }
+        .constraint-glyph.selected rect { fill: #FFF7ED; stroke: var(--fusion-orange); stroke-width: 2px; }
+        .constraint-glyph.selected text { fill: var(--fusion-orange); }
+
+        .group-label { font-size: 8px; font-weight: 900; color: #CBD5E1; text-transform: uppercase; margin-top: 4px; }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-[#F0F0F0] select-none text-xs">
+
+    <header class="bg-[#2C2C2C] text-white px-4 py-2 flex justify-between items-center z-50 shadow-lg shrink-0">
+        <div class="flex items-center gap-4">
+            <div class="bg-orange-600 p-1 rounded shadow-inner"><i data-lucide="maximize" class="w-4 h-4"></i></div>
+            <span class="text-[11px] font-bold uppercase tracking-widest text-slate-200">Sketch Studio Pro</span>
+        </div>
+        <div class="flex items-center gap-4 text-[10px] font-bold text-slate-400">
+            <span id="solver-status" class="text-green-500 uppercase">Solver Active</span>
+        </div>
+    </header>
+
+    <div class="bg-white border-b border-slate-300 p-1 flex gap-1 z-40 overflow-x-auto no-scrollbar shadow-sm shrink-0">
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button onclick="setTool('select')" id="btn-select" class="tool-btn active flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="mouse-pointer-2" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">(Esc)</span>
+                </button>
+                <button onclick="setTool('line')" id="btn-line" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="minus" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">L</span>
+                </button>
+                <button onclick="setTool('rect')" id="btn-rect" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="square" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">R</span>
+                </button>
+                <button onclick="setTool('circle')" id="btn-circle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="circle" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">C</span>
+                </button>
+                <button onclick="setTool('arc')" id="btn-arc" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="arc-orange" class="w-[18px]">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9"/><circle cx="12" cy="12" r="1"/><circle cx="21" cy="12" r="1"/><circle cx="12" cy="3" r="1"/></svg>
+                    </i>
+                    <span class="text-[8px] font-bold mt-1">A</span>
+                </button>
+            </div>
+            <span class="group-label">Create</span>
+        </div>
+
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button onclick="setTool('coincident')" id="btn-coincident" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="link" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">X</span>
+                </button>
+                <button onclick="setTool('hv')" id="btn-hv" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="split" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">H/V</span>
+                </button>
+                <button onclick="setTool('midpoint')" id="btn-midpoint" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="dot" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">Mid</span>
+                </button>
+                <button onclick="setTool('tangent')" id="btn-tangent" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="circle-dot" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">Tan</span>
+                </button>
+                <button onclick="setTool('parallel')" id="btn-parallel" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="columns-2" class="w-[18px] rotate-45"></i>
+                    <span class="text-[8px] font-bold mt-1">Para</span>
+                </button>
+                <button onclick="setTool('perpend')" id="btn-perpend" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="corner-down-right" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">T</span>
+                </button>
+            </div>
+            <span class="group-label">Constrain</span>
+        </div>
+
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button onclick="setTool('dimension')" id="btn-dimension" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <i data-lucide="hash" class="w-[18px]"></i>
+                    <span class="text-[8px] font-bold mt-1">D</span>
+                </button>
+            </div>
+            <span class="group-label">Inspect</span>
+        </div>
+
+        <div class="ml-auto flex items-center gap-2 pr-4">
+            <button onclick="undo()" class="p-2 hover:bg-slate-100 rounded text-slate-400" title="Undo"><i data-lucide="undo-2" class="w-4"></i></button>
+            <button onclick="clearCanvas()" class="p-2 hover:bg-red-50 rounded text-slate-400 hover:text-red-500" title="Clear All"><i data-lucide="trash-2" class="w-4"></i></button>
+        </div>
+    </div>
+
+    <main class="flex-1 relative bg-[#DBDBDB] flex flex-col overflow-hidden p-4">
+        <div id="viewport-container" class="flex-1 bg-white rounded shadow-inner border border-slate-300 relative overflow-hidden">
+            <svg id="canvas-svg">
+                <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F1F5F9" stroke-width="0.5"/>
+                    </pattern>
+                    <pattern id="grid-heavy" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#grid)" />
+                        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+                    </pattern>
+                </defs>
+                <rect id="infinite-grid" width="100%" height="100%" fill="url(#grid-heavy)" />
+                <g id="world-group">
+                    <g id="origin-datum">
+                        <circle r="4" fill="none" stroke="#64748B" stroke-width="1.5" />
+                        <line x1="-8" y1="0" x2="8" y2="0" stroke="#64748B" stroke-width="1" />
+                        <line x1="0" y1="-8" x2="0" y2="8" stroke="#64748B" stroke-width="1" />
+                    </g>
+                    <g id="shapes-layer"></g>
+                    <g id="constraints-layer"></g>
+                    <g id="preview-layer"></g>
+                    <g id="snap-layer"></g>
+                </g>
+            </svg>
+            <input type="number" id="dim-input" class="dim-input hidden" step="0.1" />
+        </div>
+    </main>
+
+    <footer class="bg-slate-100 border-t border-slate-300 px-4 py-1.5 flex justify-between text-[10px] font-bold text-slate-400 uppercase">
+        <div id="mode-text">MODE: SELECT</div>
+        <div id="coords-text">X: 0 Y: 0</div>
+    </footer>
+
+    <script>
+        // --- STATE ---
+        let joints = new Map(); 
+        let shapes = [];        
+        let constraints = [];   
+        let currentTool = 'select';
+        let viewPan = { x: 0, y: 0 };
+        let viewScale = 1;
+        
+        let dragTarget = null;
+        let activeShape = null; 
+        let selectionBuffer = [];
+        let selectedConstraint = null; 
+        let snapTarget = null;
+        let jointIdCounter = 0;
+
+        let dimensionPhase = 0;
+        let activeDimTarget = null;
+        let lastMousePos = {x:0, y:0};
+
+        const svg = document.getElementById('canvas-svg');
+        const worldGroup = document.getElementById('world-group');
+        const shapesLayer = document.getElementById('shapes-layer');
+        const constraintsLayer = document.getElementById('constraints-layer');
+        const previewLayer = document.getElementById('preview-layer');
+        const snapLayer = document.getElementById('snap-layer');
+        const gridPattern = document.getElementById('grid-heavy');
+        const dimInput = document.getElementById('dim-input');
+
+        joints.set('origin', { x: 0, y: 0, fixed: true });
+
+        function init() {
+            lucide.createIcons();
+            centerOrigin();
+            window.addEventListener('resize', centerOrigin);
+            window.addEventListener('keydown', handleKeyDown);
+            dimInput.addEventListener('keydown', handleDimInputKey);
+            svg.addEventListener('wheel', handleWheel, { passive: false });
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleWheel(e) {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
+            const rect = svg.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const pt = svg.createSVGPoint();
+            pt.x = e.clientX; pt.y = e.clientY;
+            const worldPt = pt.matrixTransform(worldGroup.getScreenCTM().inverse());
+            viewScale *= delta;
+            viewScale = Math.max(0.01, Math.min(50, viewScale));
+            viewPan.x = mouseX - worldPt.x * viewScale;
+            viewPan.y = mouseY - worldPt.y * viewScale;
+            updateViewport();
+        }
+
+        function handleKeyDown(e) {
+            if (document.activeElement === dimInput) return;
+            const key = e.key.toLowerCase();
+            if (key === 'l') setTool('line');
+            if (key === 'r') setTool('rect');
+            if (key === 'c') setTool('circle');
+            if (key === 'a') setTool('arc');
+            if (key === 'x') setTool('coincident');
+            if (key === 't') setTool('perpend');
+            if (key === 'd') setTool('dimension');
+            if (key === 'm') setTool('midpoint');
+            if (e.key === 'Escape') setTool('select');
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (selectedConstraint) {
+                    constraints = constraints.filter(c => c !== selectedConstraint);
+                    selectedConstraint = null;
+                }
+            }
+        }
+
+        function handleDimInputKey(e) {
+            if (e.key === 'Enter') {
+                const val = parseFloat(dimInput.value);
+                if (!isNaN(val) && selectedConstraint) selectedConstraint.value = val;
+                dimInput.classList.add('hidden');
+                svg.focus();
+            }
+        }
+
+        function centerOrigin() {
+            const rect = svg.getBoundingClientRect();
+            viewPan.x = rect.width / 2; viewPan.y = rect.height / 2;
+            updateViewport();
+        }
+
+        function updateViewport() {
+            worldGroup.setAttribute('transform', `translate(${viewPan.x}, ${viewPan.y}) scale(${viewScale})`);
+            gridPattern.setAttribute('patternTransform', `translate(${viewPan.x}, ${viewPan.y}) scale(${viewScale})`);
+        }
+
+        function getCoords(e) {
+            const pt = svg.createSVGPoint();
+            pt.x = e.clientX; pt.y = e.clientY;
+            const inverted = pt.matrixTransform(worldGroup.getScreenCTM().inverse());
+            return { x: Math.round(inverted.x), y: Math.round(inverted.y) };
+        }
+
+        function getDist(p1, p2) { return (p1 && p2) ? Math.hypot(p1.x - p2.x, p1.y - p2.y) : 0; }
+        function genJointId() { return 'j_' + (++jointIdCounter) + '_' + Date.now(); }
+
+        // --- MATH UTILS ---
+        function getArcData(p1, p2, p3) {
+            const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, x3 = p3.x, y3 = p3.y;
+            const D = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+            if (Math.abs(D) < 0.001) return null;
+            const cx = ((x1**2 + y1**2) * (y2 - y3) + (x2**2 + y2**2) * (y3 - y1) + (x3**2 + y3**2) * (y1 - y2)) / D;
+            const cy = ((x1**2 + y1**2) * (x3 - x2) + (x2**2 + y2**2) * (x1 - x3) + (x3**2 + y3**2) * (x2 - x1)) / D;
+            const r = Math.hypot(x1 - cx, y1 - cy);
+            return { cx, cy, r };
+        }
+
+        // --- SOLVER ENGINE ---
+        function solveConstraints() {
+            const iterations = 40; 
+            for (let i = 0; i < iterations; i++) {
+                for (const c of constraints) {
+                    const j1 = joints.get(c.joints[0]);
+                    const j2 = joints.get(c.joints[1]);
+                    if (!j1 || !j2) continue;
+
+                    if (c.type === 'coincident') {
+                        const midX = (j1.x + j2.x) / 2;
+                        const midY = (j1.y + j2.y) / 2;
+                        if (!j1.fixed) { j1.x = midX; j1.y = midY; }
+                        if (!j2.fixed) { j2.x = midX; j2.y = midY; }
+                    }
+                    else if (c.type === 'horizontal') {
+                        const midY = (j1.y + j2.y) / 2;
+                        if (!j1.fixed) j1.y = midY;
+                        if (!j2.fixed) j2.y = midY;
+                    }
+                    else if (c.type === 'vertical') {
+                        const midX = (j1.x + j2.x) / 2;
+                        if (!j1.fixed) j1.x = midX;
+                        if (!j2.fixed) j2.x = midX;
+                    }
+                    else if (c.type === 'distance') {
+                        const dx = j2.x - j1.x, dy = j2.y - j1.y;
+                        const current = Math.hypot(dx, dy);
+                        if (current < 0.001) continue;
+                        const error = (current - c.value) / current;
+                        const offsetX = dx * error * 0.5, offsetY = dy * error * 0.5;
+                        if (!j1.fixed) { j1.x += offsetX; j1.y += offsetY; }
+                        if (!j2.fixed) { j2.x -= offsetX; j2.y -= offsetY; }
+                    }
+                    else if (c.type === 'parallel' || c.type === 'perpendicular') {
+                        const j3 = joints.get(c.joints[2]), j4 = joints.get(c.joints[3]);
+                        if (!j3 || !j4) continue;
+                        const angRef = Math.atan2(j2.y - j1.y, j2.x - j1.x);
+                        let targetAng = c.type === 'parallel' ? angRef : angRef + Math.PI/2;
+                        const len2 = Math.hypot(j4.x - j3.x, j4.y - j3.y);
+                        const cx = (j3.x + j4.x) / 2, cy = (j3.y + j4.y) / 2;
+                        if (!j3.fixed) { j3.x = cx - Math.cos(targetAng) * len2 * 0.5; j3.y = cy - Math.sin(targetAng) * len2 * 0.5; }
+                        if (!j4.fixed) { j4.x = cx + Math.cos(targetAng) * len2 * 0.5; j4.y = cy + Math.sin(targetAng) * len2 * 0.5; }
+                    }
+                    else if (c.type === 'point-on-curve') {
+                        if (c.joints.length === 3) {
+                            // Circle
+                            const j3 = joints.get(c.joints[2]);
+                            if (!j3) continue;
+                            const center = j2;
+                            const r = Math.hypot(j3.x - j2.x, j3.y - j2.y);
+                            const dist = Math.hypot(j1.x - center.x, j1.y - center.y);
+                            if (dist === 0) continue;
+                            const scale = r / dist;
+                            if (!j1.fixed) {
+                                j1.x = center.x + (j1.x - center.x) * scale;
+                                j1.y = center.y + (j1.y - center.y) * scale;
+                            }
+                        } else if (c.joints.length === 4) {
+                            // Arc
+                            const a1 = joints.get(c.joints[1]);
+                            const a2 = joints.get(c.joints[2]);
+                            const a3 = joints.get(c.joints[3]);
+                            if (!a1 || !a2 || !a3) continue;
+                            const arc = getArcData(a1, a2, a3);
+                            if (arc) {
+                                const dist = Math.hypot(j1.x - arc.cx, j1.y - arc.cy);
+                                if (dist === 0) continue;
+                                const scale = arc.r / dist;
+                                if (!j1.fixed) {
+                                    j1.x = arc.cx + (j1.x - arc.cx) * scale;
+                                    j1.y = arc.cy + (j1.y - arc.cy) * scale;
+                                }
+                            }
+                        }
+                    }
+                    else if (c.type === 'point-on-line') {
+                        const j3 = joints.get(c.joints[2]); // j1 point, j2-j3 line
+                        if (!j3) continue;
+                        const dx = j3.x - j2.x, dy = j3.y - j2.y;
+                        const len2 = dx * dx + dy * dy;
+                        if (len2 < 0.001) continue;
+                        const t = ((j1.x - j2.x) * dx + (j1.y - j2.y) * dy) / len2;
+                        const projX = j2.x + t * dx;
+                        const projY = j2.y + t * dy;
+                        if (!j1.fixed) {
+                            j1.x = projX;
+                            j1.y = projY;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- INTERACTION ---
+        svg.onpointerdown = (e) => {
+            const coords = getCoords(e);
+            
+            const target = e.target.closest('.constraint-glyph');
+            if (target) {
+                const index = parseInt(target.getAttribute('data-index'));
+                selectedConstraint = constraints[index];
+                if (selectedConstraint && selectedConstraint.type === 'distance') showDimInputAt(e.clientX, e.clientY, selectedConstraint.value);
+                return;
+            } else {
+                selectedConstraint = null;
+                dimInput.classList.add('hidden');
+            }
+
+            const hit = findHit(coords);
+            if (currentTool === 'select' || e.button === 1) {
+                if (e.button === 1) {
+                    dragTarget = { type: 'pan', start: { x: e.clientX, y: e.clientY }, initialPan: { ...viewPan } };
+                } else if (hit && hit.type === 'joint') {
+                    dragTarget = { type: 'joint', id: hit.id, initialCoords: { ...coords } };
+                } else if (hit && hit.type === 'shape') {
+                    const initialJoints = new Map();
+                    hit.shape.joints.forEach(id => initialJoints.set(id, { ...joints.get(id) }));
+                    dragTarget = { type: 'shape', shape: hit.shape, initialJoints, startCoords: { ...coords } };
+                } else {
+                    dragTarget = { type: 'pan', start: { x: e.clientX, y: e.clientY }, initialPan: { ...viewPan } };
+                }
+                svg.setPointerCapture(e.pointerId);
+            } 
+            else if (['line', 'rect', 'circle', 'arc'].includes(currentTool)) {
+                if (!activeShape) {
+                    const startId = (hit && hit.type === 'joint') ? hit.id : genJointId();
+                    if (!joints.has(startId)) joints.set(startId, { ...coords, fixed: false });
+                    activeShape = { startId, tempCoords: { ...coords }, phase: 1 };
+                    
+                    if (hit && (hit.type === 'curve' || hit.type === 'line-snap')) {
+                        const type = hit.type === 'line-snap' ? 'point-on-line' : 'point-on-curve';
+                        constraints.push({ type: type, joints: [startId, ...hit.shape.joints] });
+                    }
+                } else {
+                    const endId = (hit && hit.type === 'joint') ? hit.id : genJointId();
+                    if (!joints.has(endId)) joints.set(endId, { ...coords, fixed: false });
+                    
+                    if (hit && (hit.type === 'curve' || hit.type === 'line-snap')) {
+                        const type = hit.type === 'line-snap' ? 'point-on-line' : 'point-on-curve';
+                        constraints.push({ type: type, joints: [endId, ...hit.shape.joints] });
+                    }
+
+                    if (currentTool === 'line') {
+                        shapes.push({ type: 'line', joints: [activeShape.startId, endId] });
+                        if (hit) activeShape = null; else activeShape = { startId: endId, tempCoords: { ...coords } };
+                    } else if (currentTool === 'circle') {
+                        shapes.push({ type: 'circle', joints: [activeShape.startId, endId] });
+                        activeShape = null;
+                    } else if (currentTool === 'arc') {
+                        if (activeShape.phase === 1) {
+                            activeShape.endId = endId;
+                            activeShape.phase = 2;
+                        } else if (activeShape.phase === 2) {
+                            shapes.push({ type: 'arc', joints: [activeShape.startId, activeShape.endId, endId] });
+                            activeShape = null;
+                        }
+                    } else if (currentTool === 'rect') {
+                        const j1 = joints.get(activeShape.startId), j3 = joints.get(endId);
+                        const j2Id = genJointId(), j4Id = genJointId();
+                        joints.set(j2Id, { x: j3.x, y: j1.y, fixed: false });
+                        joints.set(j4Id, { x: j1.x, y: j3.y, fixed: false });
+                        const gid = 'rect_' + Date.now();
+                        shapes.push({ type: 'line', joints: [activeShape.startId, j2Id], groupId: gid }, { type: 'line', joints: [j2Id, endId], groupId: gid }, { type: 'line', joints: [endId, j4Id], groupId: gid }, { type: 'line', joints: [j4Id, activeShape.startId], groupId: gid });
+                        constraints.push({ type: 'horizontal', joints: [activeShape.startId, j2Id], groupId: gid }, { type: 'vertical', joints: [j2Id, endId], groupId: gid }, { type: 'horizontal', joints: [endId, j4Id], groupId: gid }, { type: 'vertical', joints: [j4Id, activeShape.startId], groupId: gid });
+                        activeShape = null;
+                    }
+                }
+            }
+            else if (currentTool === 'coincident') {
+                if (hit) {
+                    selectionBuffer.push(hit);
+                    if (selectionBuffer.length === 2) {
+                        const h1 = selectionBuffer[0], h2 = selectionBuffer[1];
+                        if (h1.type === 'joint' && h2.type === 'joint') {
+                            constraints.push({ type: 'coincident', joints: [h1.id, h2.id] });
+                        } else if (h1.type === 'joint' && h2.type === 'shape') {
+                            const type = h2.shape.type === 'line' ? 'point-on-line' : 'point-on-curve';
+                            constraints.push({ type: type, joints: [h1.id, ...h2.shape.joints] });
+                        } else if (h2.type === 'joint' && h1.type === 'shape') {
+                            const type = h1.shape.type === 'line' ? 'point-on-line' : 'point-on-curve';
+                            constraints.push({ type: type, joints: [h2.id, ...h1.shape.joints] });
+                        }
+                        selectionBuffer = []; setTool('select');
+                    }
+                }
+            }
+            else if (['hv', 'midpoint', 'tangent', 'parallel', 'perpend', 'colinear'].includes(currentTool)) {
+                if (hit) {
+                    selectionBuffer.push(hit);
+                    if (currentTool === 'hv' && hit.type === 'shape' && hit.shape.type === 'line') {
+                        const j1 = joints.get(hit.shape.joints[0]), j2 = joints.get(hit.shape.joints[1]);
+                        constraints.push({ type: Math.abs(j2.x - j1.x) > Math.abs(j2.y - j1.y) ? 'horizontal' : 'vertical', joints: [...hit.shape.joints] });
+                        selectionBuffer = []; setTool('select');
+                    } else if (selectionBuffer.length === 2) {
+                        const h1 = selectionBuffer[0], h2 = selectionBuffer[1];
+                        if (currentTool === 'midpoint' && h1.type === 'shape' && h1.shape.type === 'line' && h2.type === 'joint') {
+                            constraints.push({ type: 'midpoint', joints: [h1.shape.joints[0], h1.shape.joints[1], h2.id] });
+                        } else if (currentTool === 'tangent' && h1.type === 'shape' && h1.shape.type === 'circle' && h2.type === 'shape' && h2.shape.type === 'line') {
+                            constraints.push({ type: 'tangent', joints: [h1.shape.joints[0], h1.shape.joints[1], h2.shape.joints[0], h2.shape.joints[1]] });
+                        } else if (['parallel', 'perpend', 'colinear'].includes(currentTool) && h1.type === 'shape' && h2.type === 'shape') {
+                            constraints.push({ type: currentTool === 'perpend' ? 'perpendicular' : currentTool, joints: [...h1.shape.joints, ...h2.shape.joints] });
+                        }
+                        selectionBuffer = []; setTool('select');
+                    }
+                }
+            }
+            else if (currentTool === 'dimension') {
+                if (dimensionPhase === 0 && hit) {
+                    if (hit.type === 'shape' && hit.shape.type === 'line') { activeDimTarget = { joints: [...hit.shape.joints] }; dimensionPhase = 1; }
+                    else if (hit.type === 'joint') { selectionBuffer.push(hit.id); if (selectionBuffer.length === 2) { activeDimTarget = { joints: [...selectionBuffer] }; selectionBuffer = []; dimensionPhase = 1; } }
+                } else if (dimensionPhase === 1) {
+                    const j1 = joints.get(activeDimTarget.joints[0]), j2 = joints.get(activeDimTarget.joints[1]);
+                    const val = getDist(j1, j2);
+                    const newC = { type: 'distance', joints: activeDimTarget.joints, value: val, offset: { x: coords.x, y: coords.y } };
+                    constraints.push(newC); selectedConstraint = newC;
+                    showDimInputAt(e.clientX, e.clientY, val.toFixed(1));
+                    activeDimTarget = null; dimensionPhase = 0; setTool('select');
+                }
+            }
+        };
+
+        svg.onpointermove = (e) => {
+            const rawCoords = getCoords(e);
+            let coords = rawCoords;
+            document.getElementById('coords-text').innerText = `X: ${coords.x} Y: ${coords.y}`;
+            
+            const excludeId = (dragTarget && dragTarget.type === 'joint') ? dragTarget.id : null;
+            snapTarget = findHit(coords, 12, excludeId);
+            
+            if (snapTarget && (snapTarget.type === 'curve' || snapTarget.type === 'line-snap')) {
+                coords = snapTarget.point;
+            }
+
+            if (dragTarget) {
+                if (dragTarget.type === 'joint') {
+                    const j = joints.get(dragTarget.id);
+                    if (j && !j.fixed) { j.x = coords.x; j.y = coords.y; }
+                } else if (dragTarget.type === 'shape') {
+                    const dx = coords.x - dragTarget.startCoords.x, dy = coords.y - dragTarget.startCoords.y;
+                    dragTarget.shape.joints.forEach(id => {
+                        const initJ = dragTarget.initialJoints.get(id);
+                        const j = joints.get(id);
+                        if (j && !j.fixed) { j.x = initJ.x + dx; j.y = initJ.y + dy; }
+                    });
+                } else if (dragTarget.type === 'pan') {
+                    viewPan.x = dragTarget.initialPan.x + (e.clientX - dragTarget.start.x);
+                    viewPan.y = dragTarget.initialPan.y + (e.clientY - dragTarget.start.y);
+                    updateViewport();
+                }
+            }
+            if (activeShape) activeShape.tempCoords = coords;
+            lastMousePos = {x: e.clientX, y: e.clientY};
+        };
+
+        svg.onpointerup = () => { 
+            if (dragTarget && dragTarget.type === 'joint') {
+                if (snapTarget) {
+                    if (snapTarget.type === 'joint' && snapTarget.id !== dragTarget.id) {
+                        const exists = constraints.find(c => c.type === 'coincident' && ((c.joints[0] === dragTarget.id && c.joints[1] === snapTarget.id) || (c.joints[0] === snapTarget.id && c.joints[1] === dragTarget.id)));
+                        if (!exists) constraints.push({ type: 'coincident', joints: [dragTarget.id, snapTarget.id] });
+                    } else if ((snapTarget.type === 'curve' || snapTarget.type === 'line-snap') && !snapTarget.shape.joints.includes(dragTarget.id)) {
+                        const type = snapTarget.type === 'line-snap' ? 'point-on-line' : 'point-on-curve';
+                        constraints.push({ type: type, joints: [dragTarget.id, ...snapTarget.shape.joints] });
+                    }
+                }
+            }
+            dragTarget = null; 
+        };
+
+        function findHit(coords, threshold = 15, excludeJointId = null) {
+            for (const [id, j] of joints.entries()) {
+                if (id === excludeJointId) continue;
+                if (getDist(coords, j) < threshold / viewScale) return { type: 'joint', id };
+            }
+            for (const s of shapes) {
+                if (excludeJointId && s.joints.includes(excludeJointId)) continue;
+                
+                const j1 = joints.get(s.joints[0]), j2 = joints.get(s.joints[1]);
+                if (!j1 || !j2) continue;
+                
+                if (s.type === 'circle') {
+                    const r = getDist(j1, j2);
+                    const d = getDist(coords, j1);
+                    if (Math.abs(d - r) < threshold / viewScale) {
+                        const scale = r / d;
+                        const snapPoint = { x: j1.x + (coords.x - j1.x) * scale, y: j1.y + (coords.y - j1.y) * scale };
+                        return { type: 'curve', shape: s, point: snapPoint };
+                    }
+                } else if (s.type === 'arc') {
+                    const j3 = joints.get(s.joints[2]);
+                    if (!j3) continue;
+                    const circle = getArcData(j1, j2, j3);
+                    if (circle) {
+                        const d = Math.hypot(coords.x - circle.cx, coords.y - circle.cy);
+                        if (Math.abs(d - circle.r) < threshold / viewScale) {
+                            const scale = circle.r / d;
+                            const snapPoint = { x: circle.cx + (coords.x - circle.cx) * scale, y: circle.cy + (coords.y - circle.cy) * scale };
+                            return { type: 'curve', shape: s, point: snapPoint };
+                        }
+                    }
+                } else if (s.type === 'line') {
+                    if (distToSegment(coords, j1, j2) < threshold / viewScale) {
+                        const dx = j2.x - j1.x, dy = j2.y - j1.y;
+                        const len2 = dx*dx + dy*dy;
+                        const t = ((coords.x - j1.x) * dx + (coords.y - j1.y) * dy) / len2;
+                        const clampedT = Math.max(0, Math.min(1, t)); 
+                        const snapPoint = { x: j1.x + clampedT * dx, y: j1.y + clampedT * dy };
+                        return { type: 'line-snap', shape: s, point: snapPoint };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function distToSegment(p, v, w) {
+            const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
+            if (l2 === 0) return getDist(p, v);
+            let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return getDist(p, { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) });
+        }
+
+        function setTool(tool) {
+            currentTool = tool; selectionBuffer = []; dimensionPhase = 0; activeDimTarget = null;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + (tool==='arc'?'arc':tool))?.classList.add('active');
+            document.getElementById('mode-text').innerText = 'MODE: ' + tool.toUpperCase();
+            svg.classList.toggle('cursor-select', tool === 'select');
+            activeShape = null;
+        }
+
+        function showDimInputAt(x, y, val) {
+            dimInput.style.left = (x - 30) + 'px'; dimInput.style.top = (y - 12) + 'px';
+            dimInput.value = val; dimInput.classList.remove('hidden');
+            setTimeout(() => dimInput.focus(), 10);
+        }
+
+        function gameLoop() { solveConstraints(); draw(); requestAnimationFrame(gameLoop); }
+
+        function draw() {
+            let shapesHtml = '';
+            for (const s of shapes) {
+                const j1 = joints.get(s.joints[0]), j2 = joints.get(s.joints[1]);
+                if (!j1 || !j2) continue;
+                const isS = selectionBuffer.some(h => h.shape === s);
+                const color = isS ? '#EA580C' : '#3B82F6';
+                if (s.type === 'line') shapesHtml += `<line x1="${j1.x}" y1="${j1.y}" x2="${j2.x}" y2="${j2.y}" stroke="${color}" stroke-width="${2.5/viewScale}" stroke-linecap="round" />`;
+                else if (s.type === 'circle') shapesHtml += `<circle cx="${j1.x}" cy="${j1.y}" r="${getDist(j1, j2)}" fill="none" stroke="${color}" stroke-width="${2.5/viewScale}" />`;
+                else if (s.type === 'arc') {
+                    const j3 = joints.get(s.joints[2]);
+                    if (j3) { 
+                        const arc = getArcData(j1, j2, j3);
+                        if (arc) {
+                            const sAngle = Math.atan2(j1.y - arc.cy, j1.x - arc.cx);
+                            const eAngle = Math.atan2(j2.y - arc.cy, j2.x - arc.cx);
+                            const mAngle = Math.atan2(j3.y - arc.cy, j3.x - arc.cx);
+                            let sweep = eAngle - sAngle;
+                            while (sweep < 0) sweep += Math.PI * 2;
+                            while (sweep > Math.PI * 2) sweep -= Math.PI * 2;
+                            let midDiff = mAngle - sAngle;
+                            while (midDiff < 0) midDiff += Math.PI * 2;
+                            const sweepFlag = midDiff < sweep ? 1 : 0;
+                            const largeArc = sweep > Math.PI ? 1 : 0;
+                            shapesHtml += `<path d="M ${j1.x} ${j1.y} A ${arc.r} ${arc.r} 0 ${largeArc} ${sweepFlag} ${j2.x} ${j2.y}" fill="none" stroke="${color}" stroke-width="${2.5/viewScale}" stroke-linecap="round" />`;
+                        }
+                    }
+                }
+            }
+            for (const [id, j] of joints.entries()) {
+                const isOrigin = (id === 'origin'), isS = selectionBuffer.some(h => h.id === id);
+                const color = j.fixed ? (isOrigin ? '#000000' : '#64748B') : (isS ? '#EA580C' : '#3B82F6');
+                shapesHtml += `<circle cx="${j.x}" cy="${j.y}" r="${isOrigin ? 4/viewScale : 3/viewScale}" fill="${isOrigin ? '#64748B' : 'white'}" stroke="${color}" stroke-width="${1.5/viewScale}" />`;
+            }
+            shapesLayer.innerHTML = shapesHtml;
+
+            let constHtml = '';
+            constraints.forEach((c, i) => {
+                const j1 = joints.get(c.joints[0]), j2 = joints.get(c.joints[1]);
+                if (!j1 || !j2) return;
+                let mx = (j1.x + j2.x) / 2, my = (j1.y + j2.y) / 2;
+                let content = {horizontal: '-', vertical: '|', parallel: '//', perpendicular: '⊥', colinear: '—', coincident: 'X', midpoint: '•', tangent: '○', 'point-on-curve': 'X', 'point-on-line': 'X'}[c.type];
+                
+                if (c.type === 'distance') {
+                    const ox = c.offset.x, oy = c.offset.y;
+                    constHtml += `<g class="constraint-glyph ${c === selectedConstraint ? 'selected' : ''}" data-index="${i}">
+                        <line x1="${j1.x}" y1="${j1.y}" x2="${ox + (j1.x - (j1.x+j2.x)/2)}" y2="${oy + (j1.y - (j1.y+j2.y)/2)}" stroke="#EA580C" stroke-width="${0.5/viewScale}" stroke-dasharray="${2/viewScale}" />
+                        <line x1="${j2.x}" y1="${j2.y}" x2="${ox + (j2.x - (j1.x+j2.x)/2)}" y2="${oy + (j2.y - (j1.y+j2.y)/2)}" stroke="#EA580C" stroke-width="${0.5/viewScale}" stroke-dasharray="${2/viewScale}" />
+                        <rect x="${ox - 18/viewScale}" y="${oy - 8/viewScale}" width="${36/viewScale}" height="${16/viewScale}" rx="${2/viewScale}" fill="white" stroke="#EA580C" stroke-width="${1/viewScale}" />
+                        <text x="${ox}" y="${oy + 4/viewScale}" font-size="${9/viewScale}" text-anchor="middle" font-weight="bold" fill="#EA580C">${c.value.toFixed(1)}</text>
+                    </g>`;
+                    return;
+                }
+                
+                if (['parallel', 'perpendicular', 'colinear', 'tangent'].includes(c.type)) {
+                    const j3 = joints.get(c.joints[2]), j4 = joints.get(c.joints[3]);
+                    if (j3 && j4) {
+                        mx = (j3.x + j4.x) / 2; my = (j3.y + j4.y) / 2;
+                    } else return;
+                } else if (c.type === 'midpoint') {
+                    const j3 = joints.get(c.joints[2]);
+                    if (j3) { mx = j3.x; my = j3.y - 12/viewScale; } else return;
+                } else if (c.type === 'point-on-curve' || c.type === 'point-on-line') {
+                    mx = j1.x + 8/viewScale; my = j1.y - 8/viewScale;
+                } else {
+                    mx = (j1.x + j2.x) / 2; my = (j1.y + j2.y) / 2;
+                }
+
+                constHtml += `<g class="constraint-glyph ${c === selectedConstraint ? 'selected' : ''}" data-index="${i}" transform="translate(${mx}, ${my - 14/viewScale}) scale(${1/viewScale})">
+                    <rect x="-8" y="-7" width="16" height="14" rx="2" /><text font-size="8" text-anchor="middle" y="3.5" font-weight="900" fill="#64748B">${content}</text>
+                </g>`;
+            });
+            constraintsLayer.innerHTML = constHtml;
+
+            if (activeShape) {
+                const j1 = joints.get(activeShape.startId), t = activeShape.tempCoords;
+                if (currentTool === 'line') previewLayer.innerHTML = `<line x1="${j1.x}" y1="${j1.y}" x2="${t.x}" y2="${t.y}" stroke="#3B82F6" stroke-width="${2/viewScale}" stroke-dasharray="${4/viewScale}" />`;
+                else if (currentTool === 'circle') previewLayer.innerHTML = `<circle cx="${j1.x}" cy="${j1.y}" r="${getDist(j1, t)}" fill="none" stroke="#3B82F6" stroke-width="${2/viewScale}" stroke-dasharray="${4/viewScale}" />`;
+                else if (currentTool === 'arc') {
+                    if (activeShape.phase === 1) previewLayer.innerHTML = `<line x1="${j1.x}" y1="${j1.y}" x2="${t.x}" y2="${t.y}" stroke="#3B82F6" stroke-width="${2/viewScale}" stroke-dasharray="${4/viewScale}" />`;
+                    else {
+                        const j2 = joints.get(activeShape.endId);
+                        const arc = getArcData(j1, j2, t);
+                        if (arc) {
+                            const sAngle = Math.atan2(j1.y - arc.cy, j1.x - arc.cx);
+                            const eAngle = Math.atan2(j2.y - arc.cy, j2.x - arc.cx);
+                            const mAngle = Math.atan2(t.y - arc.cy, t.x - arc.cx);
+                            let sweep = eAngle - sAngle;
+                            while (sweep < 0) sweep += Math.PI * 2;
+                            while (sweep > Math.PI * 2) sweep -= Math.PI * 2;
+                            let midDiff = mAngle - sAngle;
+                            while (midDiff < 0) midDiff += Math.PI * 2;
+                            const sweepFlag = midDiff < sweep ? 1 : 0;
+                            const largeArc = sweep > Math.PI ? 1 : 0;
+                            previewLayer.innerHTML = `<path d="M ${j1.x} ${j1.y} A ${arc.r} ${arc.r} 0 ${largeArc} ${sweepFlag} ${j2.x} ${j2.y}" fill="none" stroke="#3B82F6" stroke-width="${2/viewScale}" stroke-dasharray="${4/viewScale}" />`;
+                        }
+                    }
+                } else if (currentTool === 'rect') previewLayer.innerHTML = `<rect x="${Math.min(j1.x, t.x)}" y="${Math.min(j1.y, t.y)}" width="${Math.abs(j1.x - t.x)}" height="${Math.abs(j1.y - t.y)}" fill="none" stroke="#3B82F6" stroke-width="${2/viewScale}" stroke-dasharray="${4/viewScale}" />`;
+            } else previewLayer.innerHTML = '';
+            
+            if (snapTarget) {
+                const pt = snapTarget.point || joints.get(snapTarget.id);
+                if (pt) {
+                    snapLayer.innerHTML = `<rect x="${pt.x-6/viewScale}" y="${pt.y-6/viewScale}" width="${12/viewScale}" height="${12/viewScale}" fill="none" stroke="#EA580C" stroke-width="${2/viewScale}" />`;
+                } else {
+                    snapLayer.innerHTML = '';
+                }
+            } else snapLayer.innerHTML = '';
+        }
+
+        function undo() { if (shapes.length > 0) shapes.pop(); }
+        function clearCanvas() { joints.clear(); joints.set('origin', { x: 0, y: 0, fixed: true }); shapes = []; constraints = []; activeShape = null; jointIdCounter = 0; viewScale = 1; centerOrigin(); }
+        window.onload = init;
+    </script>
+</body>
+</html>

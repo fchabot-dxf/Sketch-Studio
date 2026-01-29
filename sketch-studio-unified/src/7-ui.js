@@ -260,18 +260,45 @@ export function setupUI(state){
       if(state.shapes.length) state.shapes.pop();
       return;
     }
-    // Delete/Backspace to delete selected constraint or clear all
+    // Delete/Backspace to delete selected item (constraint/shape/joint(s))
     if(e.key === 'Delete' || e.key === 'Backspace'){
-      // If a constraint is selected, delete just that constraint
-      if(state.selectedConstraint){
-        const idx = state.constraints.indexOf(state.selectedConstraint);
-        if(idx >= 0) state.constraints.splice(idx, 1);
-        state.selectedConstraint = null;
+      const sel = state.getSelected ? state.getSelected() : state.selection;
+      if(sel && sel.type === 'constraint'){
+        const c = sel.payload;
+        const idx = state.constraints.indexOf(c);
+        if(idx >= 0){
+          // Save state and remove
+          state.saveState();
+          if(c.__selected) c.__selected = false;
+          state.constraints.splice(idx, 1);
+        }
+        state.clearSelection();
         return;
       }
-      // Otherwise clear everything
-      state.initStore();
-      state.selectedJoints.clear();
+      if(sel && sel.type === 'shape'){
+        const s = sel.payload;
+        const shapeIdx = state.shapes.indexOf(s);
+        if(shapeIdx !== -1){
+          state.saveState();
+          const deletedShapeId = s.id;
+          state.shapes.splice(shapeIdx, 1);
+          state.constraints = state.constraints.filter(c => {
+            if(c.shapes && c.shapes.includes(deletedShapeId)) return false;
+            if(c.shape === deletedShapeId) return false;
+            if(c.line === deletedShapeId) return false;
+            if(c.circle === deletedShapeId) return false;
+            return true;
+          });
+        }
+        state.clearSelection();
+        return;
+      }
+      if(sel && (sel.type === 'joint' || sel.type === 'joints')){
+        // Deleting joints is not supported via Delete key to avoid accidental heavy changes
+        // Consider leaving as future improvement
+        return;
+      }
+      // Nothing selected: do nothing (prevent accidental clear of whole drawing)
       return;
     }
   }, true); // Use capture phase

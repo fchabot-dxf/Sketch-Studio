@@ -228,7 +228,7 @@ Before considering export complete, verify:
 
 1. **Start in source directory**
    ```
-   Primary work location: c:\Users\danse\Dropbox\APPS\sketch-studio-unified\
+   Primary work location: d:\My Drive\APPS\SketchStudio\Sketch-Studio\sketch-studio-unified\
    ```
 
 2. **Make all edits** to `.js` files or `index.html`

@@ -1,5 +1,5 @@
 import { screenToWorld, worldToScreen, makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points, getDist, addConstraint } from './1-utils.js';
-import { findSnap, hitJointAtScreen, hitLineAtScreen, findCoincidentCluster, findInference } from './3-snap.js';
+import { findSnap, hitJointAtScreen, hitLineAtScreen, hitCircleAtScreen, findCoincidentCluster, findInference } from './3-snap.js';
 
 // Show dimension input for editing a constraint value
 export function showDimInput(svg, state, constraint){
@@ -416,14 +416,15 @@ export function setupInput(svg, state){
       }
 
       if(constraint){
-        // Immediate delete on glyph click (undoable)
-        state.saveState();
-        const idx = state.constraints.indexOf(constraint);
-        if(idx !== -1){
-          state.constraints.splice(idx, 1);
-          state.selectedConstraint = null;
-          render();
-        }
+        // Select constraint glyph for visual feedback (do NOT delete immediately)
+        state.selectItem('constraint', constraint);
+        // Ensure we are in select mode visually
+        state.currentTool = 'select';
+        document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+        const selBtn = document.getElementById('tool-select');
+        if(selBtn) selBtn.classList.add('active');
+        // Re-render to show selection feedback (safe-call if render is available)
+        try{ render(); }catch(_){ }
         return;
       }
     }
@@ -452,20 +453,16 @@ export function setupInput(svg, state){
     } else if(state.currentTool==='select'){
       continueFrom = null;
       // Clear previous selections when clicking elsewhere
-      state.selectedConstraint = null;
-      state.selectedShape = null;
+      state.clearSelection();
       
       if(hitJoint){ 
         svg.setPointerCapture(e.pointerId);
         // Find all joints in coincident cluster first
         const cluster = findCoincidentCluster(hitJoint.id, state.constraints);
         const jointIds = Array.from(cluster);
-        // Select this joint (add to selection with Shift, replace otherwise)
-        if(!e.shiftKey) state.selectedJoints.clear();
-        // Add ALL joints in the cluster to selection
-        for(const jid of jointIds){
-          state.selectedJoints.add(jid);
-        }
+        // Select this joint cluster (add to selection with Shift, replace otherwise)
+        if(!e.shiftKey) state.clearSelection();
+        state.selectItem('joints', jointIds);
         const initial = new Map();
         for(const id of jointIds){
           const j = state.joints.get(id);
@@ -495,8 +492,7 @@ export function setupInput(svg, state){
         const hitLine = hitLineAtScreen(state.joints, state.shapes, svg, e.clientX, e.clientY, 10);
         if(hitLine){
           // Select and prepare to drag the line
-          state.selectedShape = hitLine.shape;
-          state.selectedJoints.clear();
+          state.selectItem('shape', hitLine.shape);
           state.active = null;
           svg.setPointerCapture(e.pointerId);
           // Start dragging the line by tracking both its joints
@@ -1236,9 +1232,32 @@ export function setupInput(svg, state){
     
     // Dimension tool: finalize on release (after dragging to position)
     if(state.active && (state.active.mode === 'dim-line' || state.active.mode === 'dim-circle' || (state.active.mode === 'dim-p2p' && state.active.j2))){
+      // Defensive validation: ensure joints array exists and a numeric value is present
+      if(!state.active.joints || state.active.joints.length < 2){
+        if(state.active.mode === 'dim-line' && state.active.shape && state.active.shape.joints){
+          state.active.joints = state.active.shape.joints.slice();
+        } else if(state.active.mode === 'dim-circle' && state.active.joints && state.active.joints.length >= 2){
+          // OK
+        } else if(state.active.mode === 'dim-p2p' && state.active.j1 && state.active.j2){
+          state.active.joints = [state.active.j1, state.active.j2];
+        } else {
+          console.warn('[dim] Missing joints for dimension creation:', state.active);
+        }
+      }
+
+      // Compute value if missing from active state
+      if((state.active.value === undefined || state.active.value === null) && state.active.joints && state.active.joints.length >= 2){
+        const j1 = state.joints.get(state.active.joints[0]);
+        const j2 = state.joints.get(state.active.joints[1]);
+        if(j1 && j2){
+          state.active.value = getDist(j1, j2);
+        }
+      }
+
       state.saveState(); // Save state BEFORE adding constraint
+      console.log('[dim] Adding distance constraint:', { joints: state.active.joints, value: state.active.value, offset: state.active.offset, mode: state.active.mode });
       const added = addConstraint(state, 'distance', {
-        joints: state.active.joints.slice(),
+        joints: state.active.joints ? state.active.joints.slice() : [],
         value: state.active.value,
         offset: state.active.offset || 30,
         isRadius: state.active.mode === 'dim-circle'
@@ -1247,7 +1266,7 @@ export function setupInput(svg, state){
       // Find the newly added constraint for selection and editing
       if(added){
         const newConstraint = state.constraints[state.constraints.length - 1];
-        state.selectedConstraint = newConstraint;
+        state.selectItem('constraint', newConstraint);
         // Show dimension input for editing
         showDimInput(svg, state, newConstraint);
       }
@@ -1274,6 +1293,8 @@ export function setupInput(svg, state){
         const idx = state.constraints.indexOf(state.selectedConstraint);
         if(idx !== -1){
           state.saveState(); // Save state BEFORE deleting
+          // Clear selection flag on the removed constraint
+          if(state.selectedConstraint && state.selectedConstraint.__selected) state.selectedConstraint.__selected = false;
           state.constraints.splice(idx, 1);
           state.selectedConstraint = null;
         }
@@ -1306,7 +1327,7 @@ export function setupInput(svg, state){
       state.active = null;
       continueFrom = null;
       polylineOrigin = null;
-      state.selectedConstraint = null;
+      state.clearSelection();
       
       // Update UI to show select tool is active
       document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));

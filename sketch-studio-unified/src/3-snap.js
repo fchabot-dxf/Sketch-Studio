@@ -24,6 +24,29 @@ export function hitLineAtScreen(joints, shapes, svg, screenX, screenY, threshold
   return best;
 }
 
+// Find circle at screen position (closest point on circumference)
+export function hitCircleAtScreen(joints, shapes, svg, screenX, screenY, threshold=10){
+  const w = screenToWorld(svg, screenX, screenY);
+  let best = null, bestD = threshold;
+  for(const s of shapes){
+    if(s.type === 'circle'){
+      const center = joints.get(s.joints[0]);
+      const edge = joints.get(s.joints[1]);
+      if(!center || !edge) continue;
+      const radius = Math.hypot(edge.x - center.x, edge.y - center.y);
+      if(radius <= 1e-6) continue;
+      // Project mouse onto circle along radial direction
+      const vx = w.x - center.x, vy = w.y - center.y;
+      const vlen = Math.hypot(vx, vy);
+      const onCirc = vlen > 0 ? { x: center.x + vx * (radius / vlen), y: center.y + vy * (radius / vlen) } : { x: center.x + radius, y: center.y };
+      const sc = worldToScreen(svg, onCirc);
+      const d = Math.hypot(sc.x - screenX, sc.y - screenY);
+      if(d < bestD){ bestD = d; best = { shape: s, pt: onCirc }; }
+    }
+  }
+  return best;
+}
+
 // Find all joints in same coincident cluster
 export function findCoincidentCluster(jointId, constraints){
   const cluster = new Set([jointId]);

@@ -44,6 +44,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Y axis (vertical, green)  
   svg.insertAdjacentHTML('beforeend', `<line x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}" stroke="#22c55e" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
   
+  // If a constraint object has an explicit __selected flag but selectedConstraint argument is null,
+  // prefer the flagged one so rendering can show selection reliably.
+  if(!selectedConstraint){
+    selectedConstraint = constraints.find(c => c && c.__selected) || null;
+  } else if(selectedConstraint && !selectedConstraint.__selected){
+    // Keep the flag in sync with the passed selectedConstraint
+    selectedConstraint.__selected = true;
+  }
+
   // Determine which joints and shapes are part of the selected constraint (for highlighting)
   let constraintJoints = new Set();
   let constraintShapes = new Set();
@@ -434,33 +443,35 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       svg.insertAdjacentHTML('beforeend', `<g class="constraint-glyph"${previewAttr}${tr} style="${groupStyle}">${inner}</g>`);
     };
 
-    switch(c.type){
-      case 'coincident': {
-        let x, y;
-        if(c.__pos){ x = c.__pos.x; y = c.__pos.y; }
-        else {
-          const j1 = joints.get(c.joints && c.joints[0]) || joints.get(c.joints && c.joints[1]);
-          if(!j1) return; const offset = scale(10); x = j1.x + offset; y = j1.y - offset;
-        }
+    // Compute hover/selection state and dynamic stroke widths here so inner HTML can use them
+    const isHoveredGlob = !preview && hoveredConstraint === c;
+    const isSelectedGlob = !preview && (selectedConstraint === c || c.__selected);
+    const bgStrokeW = (isHoveredGlob || isSelectedGlob) ? scale(4.5) : scale(3.5);
+
+      if (c.type === 'coincident') {
+        // Position offset near one of the coincident joints
+        const j1 = (c.joints && joints.get(c.joints[0])) || null; if(!j1) return;
+        const offset = scale(10);
+        const x = j1.x + offset, y = j1.y - offset;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#2563eb';
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         const glowHtml = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${bgRadius + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
         const symbolSize = glyphSize * 0.6;
-        const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glowHtml}<circle cx="0" cy="0" r="${bgRadius}" fill="#ef4444" fill-opacity="${bgOpacity}" stroke="#dc2626" stroke-width="${scale(3.5)}"/><line x1="-${symbolSize}" y1="-${symbolSize}" x2="${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/><line x1="${symbolSize}" y1="-${symbolSize}" x2="-${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
+        const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glowHtml}<circle cx="0" cy="0" r="${bgRadius}" fill="#ef4444" fill-opacity="${bgOpacity}" stroke="#dc2626" stroke-width="${bgStrokeW}"/><line x1="-${symbolSize}" y1="-${symbolSize}" x2="${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/><line x1="${symbolSize}" y1="-${symbolSize}" x2="-${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
         makeGroup(inner, `translate(${x},${y})`);
-        break;
+        return;
       }
 
-      case 'horizontal': {
+      if(c.type === 'horizontal') {
         const j1 = joints.get(c.joints[0]), j2 = joints.get(c.joints[1]);
         if(!j1 || !j2) return;
         const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2 + scale(10);
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#059669';
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -468,30 +479,29 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const bgColor = '#22c55e';
         const glow = (isHovered || isSelected) ? `<circle cx="${mx}" cy="${my}" r="${bgRadius + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
         const symbolSize = glyphSize * 0.6;
-        const inner = `<circle cx="${mx}" cy="${my}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="${mx}" cy="${my}" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#15803d" stroke-width="${scale(3.5)}"/><line x1="${mx - symbolSize}" y1="${my}" x2="${mx + symbolSize}" y2="${my}" stroke="white" stroke-width="${strokeW}"/>`;
+        const inner = `<circle cx="${mx}" cy="${my}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="${mx}" cy="${my}" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#15803d" stroke-width="${bgStrokeW}"/><line x1="${mx - symbolSize}" y1="${my}" x2="${mx + symbolSize}" y2="${my}" stroke="white" stroke-width="${strokeW}"/>`;
         makeGroup(inner);
-        break;
+        return;
       }
 
-      case 'vertical': {
+      if(c.type === 'vertical') {
         const j1 = joints.get(c.joints[0]), j2 = joints.get(c.joints[1]);
         if(!j1 || !j2) return;
         const mx = (j1.x + j2.x)/2 + scale(10), my = (j1.y + j2.y)/2;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         const bgColor = '#22c55e';
         const glow = (isHovered || isSelected) ? `<circle cx="${mx}" cy="${my}" r="${bgRadius + scale(4)}" fill="#1e40af" fill-opacity="0.15"/>` : '';
         const symbolSize = glyphSize * 0.6;
-        const inner = `<circle cx="${mx}" cy="${my}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="${mx}" cy="${my}" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#0369a1" stroke-width="${scale(3.5)}"/><line x1="${mx}" y1="${my - symbolSize}" x2="${mx}" y2="${my + symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
+        const inner = `<circle cx="${mx}" cy="${my}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="${mx}" cy="${my}" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#0369a1" stroke-width="${bgStrokeW}"/><line x1="${mx}" y1="${my - symbolSize}" x2="${mx}" y2="${my + symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
         makeGroup(inner);
-        break;
+        return;
       }
 
-      case 'parallel':
-      case 'perpendicular': {
+      if(c.type === 'parallel' || c.type === 'perpendicular') {
         const s1 = shapes.find(s => s.id === c.shapes[0]);
         if(!s1 || !s1.joints) return;
         const j1 = joints.get(s1.joints[0]), j2 = joints.get(s1.joints[1]);
@@ -510,17 +520,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const glow = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${bgRadius + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
         if(c.type === 'parallel'){
           const symbolSize = glyphSize * 0.6;
-          const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#ca8a04" stroke-width="${scale(3.5)}"/><line x1="-${symbolSize}" y1="-${symbolSize/3}" x2="${symbolSize}" y2="-${symbolSize/3}" stroke="white" stroke-width="${strokeW}"/><line x1="-${symbolSize}" y1="${symbolSize/3}" x2="${symbolSize}" y2="${symbolSize/3}" stroke="white" stroke-width="${strokeW}"/>`;
+          const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#ca8a04" stroke-width="${bgStrokeW}"/><line x1="-${symbolSize}" y1="-${symbolSize/3}" x2="${symbolSize}" y2="-${symbolSize/3}" stroke="white" stroke-width="${strokeW}"/><line x1="-${symbolSize}" y1="${symbolSize/3}" x2="${symbolSize}" y2="${symbolSize/3}" stroke="white" stroke-width="${strokeW}"/>`;
           makeGroup(inner, `translate(${gx},${gy})`);
         } else {
           const symbolSize = glyphSize * 0.6;
-          const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#7c3aed" stroke-width="${scale(3.5)}"/><line x1="-${symbolSize}" y1="${symbolSize}" x2="${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/><line x1="0" y1="${symbolSize}" x2="0" y2="-${symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
+          const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${bgRadius}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#7c3aed" stroke-width="${bgStrokeW}"/><line x1="-${symbolSize}" y1="${symbolSize}" x2="${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/><line x1="0" y1="${symbolSize}" x2="0" y2="-${symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
           makeGroup(inner, `translate(${gx},${gy})`);
         }
-        break;
+        return;
       }
 
-      case 'pointOnLine': {
+      if(c.type === 'pointOnLine') {
         const pt = joints.get(c.joint); if(!pt) return;
         const isHovered = !preview && hoveredConstraint === c;
         const isSelected = !preview && selectedConstraint === c;
@@ -530,10 +540,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const glow = (isHovered || isSelected) ? `<circle cx="0" cy="-${scale(12)}" r="${scale(9)}" fill="#f97316" fill-opacity="0.15"/>` : '';
         const inner = `<circle cx="0" cy="-${scale(12)}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="-${scale(12)}" r="${scale(7)}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#ea580c" stroke-width="${scale(3)}"/><circle cx="0" cy="-${scale(12)}" r="${scale(1.4)}" fill="white"/>`;
         makeGroup(inner, `translate(${pt.x},${pt.y})`);
-        break;
+        return;
       }
 
-      case 'collinear': {
+      if(c.type === 'collinear') {
         // Allow preview-only position via c.__pos or fall back to middle joint
         let px, py;
         if(c.__pos){ px = c.__pos.x; py = c.__pos.y; }
@@ -552,10 +562,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const glow = (isHovered || isSelected) ? `<circle cx="0" cy="-${scale(12)}" r="${glyphSize + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
         const inner = `<circle cx="0" cy="-${scale(12)}" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="-${scale(12)}" r="${glyphSize + scale(5)}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="#0d9488" stroke-width="${scale(3.5)}"/><circle cx="${-spacing}" cy="-${scale(12)}" r="${dotSize * 0.6}" fill="white"/><circle cx="0" cy="-${scale(12)}" r="${dotSize * 0.6}" fill="white"/><circle cx="${spacing}" cy="-${scale(12)}" r="${dotSize * 0.6}" fill="white"/>`;
         makeGroup(inner, `translate(${px},${py})`);
-        break;
+        return;
       }
 
-      case 'tangent': {
+      if(c.type === 'tangent') {
         const lineShape = shapes.find(s => s.id === c.line); const circleShape = shapes.find(s => s.id === c.circle);
         if(!lineShape || !circleShape || !lineShape.joints || !circleShape.joints) return;
         const la = joints.get(lineShape.joints[0]); const lb = joints.get(lineShape.joints[1]); const center = joints.get(circleShape.joints[0]);
@@ -565,18 +575,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const nx = len > 0 ? -dy/len : 0; const ny = len > 0 ? dx/len : 1; const offset = scale(10);
         const gx = mx + nx * offset, gy = my + ny * offset;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         const bgColor = '#fbbf24';
         const glow = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${glyphSize + scale(4)}" fill="#1e40af" fill-opacity="0.15"/>` : '';
         const symbolSize = glyphSize * 0.6;
-        const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${glyphSize + scale(5)}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="white" stroke-width="${scale(3.5)}"/><circle cx="0" cy="-${scale(3)}" r="${scale(3.5)}" fill="none" stroke="white" stroke-width="${scale(2)}"/><line x1="-${symbolSize}" y1="${scale(6)}" x2="${symbolSize}" y2="${scale(6)}" stroke="white" stroke-width="${scale(2)}"/>`;
+        const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glow}<circle cx="0" cy="0" r="${glyphSize + scale(5)}" fill="${bgColor}" fill-opacity="${bgOpacity}" stroke="white" stroke-width="${bgStrokeW}"/><circle cx="0" cy="-${scale(3)}" r="${scale(3.5)}" fill="none" stroke="white" stroke-width="${scale(2)}"/><line x1="-${symbolSize}" y1="${scale(6)}" x2="${symbolSize}" y2="${scale(6)}" stroke="white" stroke-width="${scale(2)}"/>`;
         makeGroup(inner, `translate(${gx},${gy})`);
-        break;
+        return;
       }
-
-      default: return;
-    }
   }
 
   // CONSTRAINT GLYPHS - Rendered last so they appear on top of everything
@@ -595,7 +602,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const x = j1.x + offset, y = j1.y - offset;
       
       const isHovered = hoveredConstraint === c;
-      const isSelected = selectedConstraint === c;
+      const isSelected = (selectedConstraint === c || c.__selected);
       const stroke = (isHovered || isSelected) ? '#1e40af' : '#2563eb';
       const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
       const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -627,7 +634,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(j1 && j2){
         const mx = (j1.x + j2.x)/2 + scale(10), my = (j1.y + j2.y)/2; // perpendicular offset
         const isHovered = hoveredConstraint === c;
-        const isSelected = selectedConstraint === c;
+        const isSelected = (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#059669';
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -652,7 +659,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const offset = scale(10);
           const gx = mx + nx * offset, gy = my + ny * offset;
           const isHovered = hoveredConstraint === c;
-          const isSelected = selectedConstraint === c;
+          const isSelected = (selectedConstraint === c || c.__selected);
           const stroke = (isHovered || isSelected) ? '#1e40af' : '#7c3aed';
           const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
           const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -678,7 +685,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const offset = scale(10);
           const gx = mx + nx * offset, gy = my + ny * offset;
           const isHovered = hoveredConstraint === c;
-          const isSelected = selectedConstraint === c;
+          const isSelected = (selectedConstraint === c || c.__selected);
           const stroke = (isHovered || isSelected) ? '#1e40af' : '#0891b2';
           const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
           const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -697,6 +704,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const cIdx = constraints.indexOf(c);
         const canEdit = currentTool === 'select' || currentTool === 'dim';
         
+        const isHoveredDim = hoveredConstraint === c;
+        const isSelectedDim = (selectedConstraint === c || c.__selected);
+        const labelStroke = (isHoveredDim || isSelectedDim) ? '#1e40af' : '#2563eb';
+        const labelStrokeW = (isHoveredDim || isSelectedDim) ? 2.5 : 1.5;
+        
         if(c.isRadius){
           // Circle radius dimension
           const center = j1;
@@ -714,18 +726,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const edgeY = center.y + Math.sin(angle) * radius;
           
           // Draw leader line
-          svg.insertAdjacentHTML('beforeend', `<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" stroke="#2563eb" stroke-width="1.5"/>`);
+          svg.insertAdjacentHTML('beforeend', `<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" stroke="${labelStroke}" stroke-width="1.5"/>`);
           
           // Draw radius line
-          svg.insertAdjacentHTML('beforeend', `<line x1="${center.x}" y1="${center.y}" x2="${edgeX}" y2="${edgeY}" stroke="#2563eb" stroke-width="1" stroke-dasharray="3,2" stroke-opacity="0.6"/>`);
+          svg.insertAdjacentHTML('beforeend', `<line x1="${center.x}" y1="${center.y}" x2="${edgeX}" y2="${edgeY}" stroke="${labelStroke}" stroke-width="1" stroke-dasharray="3,2" stroke-opacity="0.6"/>`);
           
           // Arrow at circle edge
           const arrowSize = 6;
-          svg.insertAdjacentHTML('beforeend', `<polygon points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" fill="#2563eb"/>`);
+          svg.insertAdjacentHTML('beforeend', `<polygon points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" fill="${labelStroke}"/>`);
           
           // Label with "R" prefix
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${labelX - 25}" y="${labelY - 10}" width="50" height="18" fill="#9ca3af" fill-opacity="0.9" rx="2" stroke="#2563eb" stroke-width="1.5"/>
+            <rect x="${labelX - 25}" y="${labelY - 10}" width="50" height="18" fill="#9ca3af" fill-opacity="0.9" rx="2" stroke="${labelStroke}" stroke-width="${labelStrokeW}"/>
             <text x="${labelX}" y="${labelY + 4}" text-anchor="middle" font-size="11" fill="white" font-weight="bold">R ${dist}</text>
           </g>`;
           svg.insertAdjacentHTML('beforeend', labelHtml);
@@ -758,21 +770,21 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const dimLineEnd = ext2End;
           
           // Draw extension lines
-          svg.insertAdjacentHTML('beforeend', `<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" stroke="#2563eb" stroke-width="1" stroke-opacity="0.6"/>`);
-          svg.insertAdjacentHTML('beforeend', `<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" stroke="#2563eb" stroke-width="1" stroke-opacity="0.6"/>`);
+          svg.insertAdjacentHTML('beforeend', `<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" stroke="${labelStroke}" stroke-width="1" stroke-opacity="0.6"/>`);
+          svg.insertAdjacentHTML('beforeend', `<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" stroke="${labelStroke}" stroke-width="1" stroke-opacity="0.6"/>`);
           
           // Draw dimension line with arrows
-          svg.insertAdjacentHTML('beforeend', `<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" stroke="#2563eb" stroke-width="1.5"/>`);
+          svg.insertAdjacentHTML('beforeend', `<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" stroke="${labelStroke}" stroke-width="1.5"/>`);
           
           // Arrow markers (small triangles at ends)
           const arrowSize = 6;
           const adx = dx / len, ady = dy / len;
-          svg.insertAdjacentHTML('beforeend', `<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + adx*arrowSize + nx*arrowSize/2},${dimLineStart.y + ady*arrowSize + ny*arrowSize/2} ${dimLineStart.x + adx*arrowSize - nx*arrowSize/2},${dimLineStart.y + ady*arrowSize - ny*arrowSize/2}" fill="#2563eb"/>`);
-          svg.insertAdjacentHTML('beforeend', `<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - adx*arrowSize + nx*arrowSize/2},${dimLineEnd.y - ady*arrowSize + ny*arrowSize/2} ${dimLineEnd.x - adx*arrowSize - nx*arrowSize/2},${dimLineEnd.y - ady*arrowSize - ny*arrowSize/2}" fill="#2563eb"/>`);
+          svg.insertAdjacentHTML('beforeend', `<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + adx*arrowSize + nx*arrowSize/2},${dimLineStart.y + ady*arrowSize + ny*arrowSize/2} ${dimLineStart.x + adx*arrowSize - nx*arrowSize/2},${dimLineStart.y + ady*arrowSize - ny*arrowSize/2}" fill="${labelStroke}"/>`);
+          svg.insertAdjacentHTML('beforeend', `<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - adx*arrowSize + nx*arrowSize/2},${dimLineEnd.y - ady*arrowSize + ny*arrowSize/2} ${dimLineEnd.x - adx*arrowSize - nx*arrowSize/2},${dimLineEnd.y - ady*arrowSize - ny*arrowSize/2}" fill="${labelStroke}"/>`);
           
           // Clickable text label with background (only editable in select or dim tool)
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${annotX - 20}" y="${annotY - 10}" width="40" height="18" fill="#9ca3af" fill-opacity="0.9" rx="2" stroke="#2563eb" stroke-width="1.5"/>
+            <rect x="${annotX - 20}" y="${annotY - 10}" width="40" height="18" fill="#9ca3af" fill-opacity="0.9" rx="2" stroke="${labelStroke}" stroke-width="${labelStrokeW}"/>
             <text x="${annotX}" y="${annotY + 4}" text-anchor="middle" font-size="11" fill="white" font-weight="bold">${dist}</text>
           </g>`;
           svg.insertAdjacentHTML('beforeend', labelHtml);
@@ -845,4 +857,45 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
   }
+
+  // Tooltip: show a small hint near the selected constraint glyph
+  try{
+    const tooltip = document.getElementById('constraintTooltip');
+    if(tooltip){
+      if(selectedConstraint){
+        let anchor = null;
+        // Prefer midpoint of first two joints if available
+        if(selectedConstraint.joints && selectedConstraint.joints.length >= 2){
+          const j1 = joints.get(selectedConstraint.joints[0]);
+          const j2 = joints.get(selectedConstraint.joints[1]);
+          if(j1 && j2) anchor = { x: (j1.x + j2.x)/2, y: (j1.y + j2.y)/2 - scale(10) };
+        }
+        // Fallback to single joint
+        if(!anchor && selectedConstraint.joint){
+          const j = joints.get(selectedConstraint.joint);
+          if(j) anchor = { x: j.x, y: j.y - scale(10) };
+        }
+        // Fallback to first shape midpoint
+        if(!anchor && selectedConstraint.shapes && selectedConstraint.shapes.length){
+          const s = shapes.find(s => s.id === selectedConstraint.shapes[0]);
+          if(s && s.joints && s.joints.length >= 2){
+            const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]);
+            if(a && b) anchor = { x: (a.x + b.x)/2, y: (a.y + b.y)/2 - scale(10) };
+          }
+        }
+        if(anchor){
+          const pos = worldToScreen(svg, anchor);
+          tooltip.style.left = pos.x + 'px';
+          tooltip.style.top = pos.y + 'px';
+          tooltip.classList.remove('hidden');
+          tooltip.textContent = 'Press Delete to remove constraint';
+        } else {
+          tooltip.classList.add('hidden');
+        }
+      } else {
+        tooltip.classList.add('hidden');
+      }
+    }
+  }catch(_){ }
 }
+

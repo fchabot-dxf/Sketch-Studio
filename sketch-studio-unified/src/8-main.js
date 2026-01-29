@@ -40,14 +40,65 @@ const state = {
   lastMouse: null,
   pendingConstraint: null,  // { type: 'parallel', firstElement: { type: 'line|joint', id }, ... }
   view,
+
+  // Unified selection model
+  selection: { type: null, payload: null }, // { type: 'constraint'|'shape'|'joint'|'joints'|null, payload }
   selectedJoints: new Set(),  // Track selected joints for showing constraint glyphs
-  selectedConstraint: null,    // Track selected constraint for deletion
-  selectedShape: null,         // Track selected shape for deletion
+  selectedConstraint: null,    // For backwards compatibility - kept in sync with selection
+  selectedShape: null,         // For backwards compatibility - kept in sync with selection
+
+  // Hover state
   hoveredShape: null,          // Track hovered shape for visual feedback
   hoveredJoint: null,          // Track hovered joint for visual feedback
   hoveredConstraint: null,     // Track hovered constraint for visual feedback
+
   history: [],  // Store last 5 states for undo
   maxHistory: 5,
+
+  // Selection helpers
+  selectItem: function(type, payload, opts = {}){
+    // Clear existing selection safely
+    this.clearSelection();
+    this.selection = { type, payload };
+    console.log('[selection] selectItem', type, payload);
+
+    if(type === 'constraint'){
+      this.selectedConstraint = payload || null;
+      if(this.selectedConstraint) this.selectedConstraint.__selected = true;
+      this.selectedShape = null;
+      this.selectedJoints.clear();
+    } else if(type === 'shape'){
+      this.selectedShape = payload || null;
+      this.selectedConstraint = null;
+      this.selectedJoints.clear();
+    } else if(type === 'joint'){
+      this.selectedJoints.clear();
+      if(payload) this.selectedJoints.add(payload);
+      this.selectedConstraint = null;
+      this.selectedShape = null;
+    } else if(type === 'joints'){
+      this.selectedJoints.clear();
+      if(Array.isArray(payload)) payload.forEach(j => this.selectedJoints.add(j));
+      this.selectedConstraint = null;
+      this.selectedShape = null;
+    } else {
+      // Unknown / null selection
+      this.selectedConstraint = null;
+      this.selectedShape = null;
+      this.selectedJoints.clear();
+    }
+  },
+
+  clearSelection: function(){
+    if(this.selectedConstraint && this.selectedConstraint.__selected) this.selectedConstraint.__selected = false;
+    this.selection = { type: null, payload: null };
+    this.selectedConstraint = null;
+    this.selectedShape = null;
+    this.selectedJoints.clear();
+  },
+
+  getSelected: function(){ return this.selection; },
+
   saveState: function() {
     // Deep copy current state BEFORE making changes
     const snapshot = {
@@ -73,9 +124,7 @@ const state = {
     this.constraints.length = 0;
     this.constraints.push(...snapshot.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined})));
     // Clear selections and active tool state
-    this.selectedJoints.clear();
-    this.selectedConstraint = null;
-    this.selectedShape = null;
+    this.clearSelection();
     this.active = null;
     // Update undo button state
     const undoBtn = document.getElementById('btn-undo');

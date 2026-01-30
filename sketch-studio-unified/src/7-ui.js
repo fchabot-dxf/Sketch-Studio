@@ -6,6 +6,8 @@ export function setupUI(state){
   state.rectMode = 'rect-2pt'; // default: 2-point corner rect
   
   function setTool(t){ 
+    // Ensure any active undo group is cancelled (do NOT commit) when switching tools
+    try{ if(state._undoGroupActive) state.cancelUndoGroup(); }catch(_){ }
     console.log('Setting tool to:', t); // Debug log
     state.currentTool = t; 
     state.active = null; // clear any in-progress action
@@ -39,51 +41,22 @@ export function setupUI(state){
     if(el) {
       el.addEventListener('click', (e) => {
         console.log('Tool button clicked:', t); // Debug log
-        
-        // For constraint tools, check if there's a pending selection
         const constraintTools = ['coincident','hv','parallel','perp','collinear','tangent'];
         if(constraintTools.includes(t)){
-          // For coincident: just switch to the tool, let the sequential click method handle it
-          // Clear any selection so user starts fresh
-          if(t === 'coincident'){
-            state.selectedJoints.clear();
-            state.selectedShape = null;
-            state.pendingConstraint = null;
-            state.active = null;
-            setTool(t);
-            // render happens automatically in the animation loop
-            return;
-          }
-          
-          if(state.selectedJoints.size > 0 || state.selectedShape){
-            // There's a selection - start pending constraint mode
-            // Use just ONE joint from the selection (the clicked one, which is the first)
-            const firstElement = state.selectedJoints.size > 0 
-              ? { type: 'joint', id: Array.from(state.selectedJoints)[0] }
-              : { type: 'shape', id: state.selectedShape.id };
-            
-            state.pendingConstraint = {
-              type: t,
-              firstElement: firstElement
-            };
-            
-            // For collinear, initialize the joints array
-            if(t === 'collinear' && firstElement.type === 'joint'){
-              state.pendingConstraint.joints = [firstElement.id];
-            }
-            
-            // Update mode text to show pending constraint
-            const mt = document.getElementById('modeText');
-            let modeText = t === 'collinear' ? (t.toUpperCase() + ' - 1/3 Points') : (t.toUpperCase() + ' - Select 2nd Element');
-            if(mt) mt.innerText = 'MODE: ' + modeText;
-            
-            // Highlight the first element visually by keeping tool active
-            document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-            el.classList.add('active');
-            return;
-          }
+          // Always enter pendingConstraint mode and wait for user picks
+          try{ state.selectionGetSet('joints').clear(); }catch(_){ if(state.selectedJoints) state.selectedJoints.clear(); }
+          try{ state.selectionGetSet('shape').clear(); }catch(_){ if(state.selectedShapes) state.selectedShapes.clear(); }
+          state.pendingConstraint = { type: t, firstElement: null };
+          state.active = null;
+          setTool(t);
+          // Update mode text to show pending constraint
+          const mt = document.getElementById('modeText');
+          let modeText = t === 'collinear' ? (t.toUpperCase() + ' - 1/3 Points') : (t.toUpperCase() + ' - Select 1st Element');
+          if(mt) mt.innerText = 'MODE: ' + modeText;
+          document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+          el.classList.add('active');
+          return;
         }
-        
         // Normal tool selection
         setTool(t);
       }); 
@@ -233,8 +206,8 @@ export function setupUI(state){
     const key = e.key.toLowerCase();
     
     // Escape cancels current action
-    if(e.key === 'Escape'){
-      state.active = null;
+    if(e.key === 'Escape'){      // If user presses Escape, cancel any active undo group (do not commit)
+      try{ if(state._undoGroupActive) state.cancelUndoGroup(); }catch(_){ }      state.active = null;
       state.pendingConstraint = null;
       if(state.resetPolyline) state.resetPolyline();
       
@@ -257,7 +230,7 @@ export function setupUI(state){
     // Undo with Ctrl+Z
     if((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)){
       e.preventDefault();
-      if(state.shapes.length) state.shapes.pop();
+      try{ state.undo(); }catch(_){ }
       return;
     }
     // Delete/Backspace to delete selected item (constraint/shape/joint(s))
@@ -267,19 +240,47 @@ export function setupUI(state){
         const c = sel.payload;
         const idx = state.constraints.indexOf(c);
         if(idx >= 0){
-          // Save state and remove
-          state.saveState();
+          try{ state.beginUndoGroup(); }catch(_){ }
           if(c.__selected) c.__selected = false;
           state.constraints.splice(idx, 1);
+          try{ state.endUndoGroup(); }catch(_){ }
         }
         state.clearSelection();
         return;
       }
+
+      if(state.selectedConstraints && state.selectedConstraints.size > 0){
+        try{ state.beginUndoGroup(); }catch(_){ }
+        const delSet = new Set(state.selectedConstraints);
+        state.constraints = state.constraints.filter(c => !delSet.has(c));
+        for(const c of delSet) if(c && c.__selected) c.__selected = false;
+        state.selectedConstraints.clear();
+        state.clearSelection();
+        try{ state.endUndoGroup(); }catch(_){ }
+        return;
+      }
+      if(state.selectedShapes && state.selectedShapes.size > 0){
+        // Bulk delete selected shapes
+        try{ state.beginUndoGroup(); }catch(_){ }
+        const delSet = new Set(state.selectedShapes);
+        state.shapes = state.shapes.filter(s => !delSet.has(s.id));
+        state.constraints = state.constraints.filter(c => {
+          if(c.shapes && c.shapes.some(id => delSet.has(id))) return false;
+          if(c.shape && delSet.has(c.shape)) return false;
+          if(c.line && delSet.has(c.line)) return false;
+          if(c.circle && delSet.has(c.circle)) return false;
+          return true;
+        });
+        try{ state.endUndoGroup(); }catch(_){ }
+        state.clearSelection();
+        return;
+      }
+
       if(sel && sel.type === 'shape'){
         const s = sel.payload;
         const shapeIdx = state.shapes.indexOf(s);
         if(shapeIdx !== -1){
-          state.saveState();
+          try{ state.beginUndoGroup(); }catch(_){ }
           const deletedShapeId = s.id;
           state.shapes.splice(shapeIdx, 1);
           state.constraints = state.constraints.filter(c => {
@@ -289,6 +290,7 @@ export function setupUI(state){
             if(c.circle === deletedShapeId) return false;
             return true;
           });
+          try{ state.endUndoGroup(); }catch(_){ }
         }
         state.clearSelection();
         return;
@@ -304,7 +306,7 @@ export function setupUI(state){
   }, true); // Use capture phase
   
   // add undo/clear
-  document.getElementById('btn-undo')?.addEventListener('click', ()=>{ if(state.shapes.length) state.shapes.pop(); });
+  document.getElementById('btn-undo')?.addEventListener('click', ()=>{ try{ state.undo(); }catch(_){ } });
   document.getElementById('btn-clear')?.addEventListener('click', ()=>{ state.initStore(); });
   // ensure default
   setTool(state.currentTool || 'select');

@@ -1,5 +1,6 @@
 import { screenToWorld, worldToScreen, makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points, getDist, addConstraint } from './1-utils.js';
 import { findSnap, hitJointAtScreen, hitLineAtScreen, hitCircleAtScreen, findCoincidentCluster, findInference } from './3-snap.js';
+import { deleteSelected } from './delete.js';
 
 // Show dimension input for editing a constraint value
 export function showDimInput(svg, state, constraint){
@@ -367,7 +368,7 @@ export function setupInput(svg, state){
             lastDimClick = { constraint: null, time: 0 };
           } else {
             // Single click: select the dimension and allow dragging
-            state.selectedConstraint = constraint;
+            state.selectItem('constraint', constraint);
             lastDimClick = { constraint, time: now };
             
             // Start dragging if user wants to move the label
@@ -417,7 +418,8 @@ export function setupInput(svg, state){
 
       if(constraint){
         // Select constraint glyph for visual feedback (do NOT delete immediately)
-        state.selectItem('constraint', constraint);
+        const add = !!(e.shiftKey || e.ctrlKey);
+        state.selectItem('constraint', constraint, { add });
         // Ensure we are in select mode visually
         state.currentTool = 'select';
         document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
@@ -452,17 +454,18 @@ export function setupInput(svg, state){
       }
     } else if(state.currentTool==='select'){
       continueFrom = null;
-      // Clear previous selections when clicking elsewhere
-      state.clearSelection();
+      // Clear previous selections when clicking elsewhere unless user is multi-selecting
+      if(!(e.shiftKey || e.ctrlKey)) state.clearSelection();
       
       if(hitJoint){ 
         svg.setPointerCapture(e.pointerId);
         // Find all joints in coincident cluster first
         const cluster = findCoincidentCluster(hitJoint.id, state.constraints);
         const jointIds = Array.from(cluster);
-        // Select this joint cluster (add to selection with Shift, replace otherwise)
-        if(!e.shiftKey) state.clearSelection();
-        state.selectItem('joints', jointIds);
+        // Select this joint cluster (add to selection with Shift/Ctrl, replace otherwise)
+        const add = !!(e.shiftKey || e.ctrlKey);
+        if(!add) state.clearSelection();
+        state.selectItem('joints', jointIds, { add });
         const initial = new Map();
         for(const id of jointIds){
           const j = state.joints.get(id);
@@ -484,15 +487,18 @@ export function setupInput(svg, state){
         const coincidentConstraint = state.constraints.find(c => c.type === 'coincident' && c.joints && c.joints.includes(hitJoint.id));
         if(coincidentConstraint){
           console.log('[select] auto-select coincident constraint for joint', hitJoint.id, coincidentConstraint);
-          state.selectedConstraint = coincidentConstraint;
+          const addC = !!(e.shiftKey || e.ctrlKey);
+          state.selectItem('constraint', coincidentConstraint, { add: addC });
           try{ render(); }catch(_){ /* render may be provided by outer scope; ignore if not */ }
         } 
       } else {
         // Check if clicking on a line/shape
         const hitLine = hitLineAtScreen(state.joints, state.shapes, svg, e.clientX, e.clientY, 10);
         if(hitLine){
-          // Select and prepare to drag the line
-          state.selectItem('shape', hitLine.shape);
+          // Select and prepare to drag the line (support Shift/Ctrl to add)
+          const add = !!(e.shiftKey || e.ctrlKey);
+          try{ state.selectItem('shape', hitLine.shape, { add }); }catch(_){ state.selectItem('shape', hitLine.shape); }
+          try{ console.log('[multi-select] clicked line', hitLine.shape.id, 'add=', add, 'selectedShapes=', Array.from(state.selectedShapes || [])); }catch(_){ }
           state.active = null;
           svg.setPointerCapture(e.pointerId);
           // Start dragging the line by tracking both its joints
@@ -1288,38 +1294,8 @@ export function setupInput(svg, state){
   // Handle Delete key to remove selected constraint or shape
   document.addEventListener('keydown', (e) => {
     if(e.key === 'Delete'){
-      if(state.selectedConstraint){
-        // Remove the selected constraint
-        const idx = state.constraints.indexOf(state.selectedConstraint);
-        if(idx !== -1){
-          state.saveState(); // Save state BEFORE deleting
-          // Clear selection flag on the removed constraint
-          if(state.selectedConstraint && state.selectedConstraint.__selected) state.selectedConstraint.__selected = false;
-          state.constraints.splice(idx, 1);
-          state.selectedConstraint = null;
-        }
-      } else if(state.selectedShape){
-        // Remove the selected shape and any constraints applied to it
-        state.saveState(); // Save state BEFORE deleting
-        const shapeIdx = state.shapes.indexOf(state.selectedShape);
-        if(shapeIdx !== -1){
-          const deletedShapeId = state.selectedShape.id;
-          state.shapes.splice(shapeIdx, 1);
-          
-          // Remove constraints that reference the deleted shape
-          state.constraints = state.constraints.filter(c => {
-            // Remove if constraint references this shape
-            if(c.shapes && c.shapes.includes(deletedShapeId)) return false;
-            if(c.shape === deletedShapeId) return false;
-            if(c.line === deletedShapeId) return false;
-            if(c.circle === deletedShapeId) return false;
-            
-            // Keep all other constraints
-            return true;
-          });
-          
-          state.selectedShape = null;
-        }
+      try{ deleteSelected(state); }catch(_){
+        // If deleteSelected isn't available, do nothing as a safe fallback
       }
     } else if(e.key === 'Escape'){
       // Escape key: exit tool and activate select tool

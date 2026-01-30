@@ -1,0 +1,10 @@
+{
+  "name": "sketch-studio-unified",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "export:simple": "node scripts/export-simple.js",
+    "test": "node --test"
+  }
+}

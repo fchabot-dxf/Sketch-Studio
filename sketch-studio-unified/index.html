@@ -325,7 +325,6 @@
                 </g>
             </svg>
             <input type="number" id="dimInput" class="dim-input hidden" step="0.1" inputmode="decimal" autocomplete="off" />
-            <div id="constraintTooltip" class="constraint-tooltip hidden">Press Delete to remove constraint</div>
         </div>
     </main>
 
@@ -349,6 +348,27 @@
             }
         }, { passive: false });
     </script>
-    <script type="module" src="src/8-main.js"></script>
+    <script>
+    (async function(){
+      // Dev-friendly module loader: attempts to import the app module and shows an overlay on error.
+      const showError = (err) => {
+        console.error('[dev-loader] module load error', err);
+        let o = document.getElementById('__dev_error_overlay');
+        if(!o){
+          o = document.createElement('div'); o.id = '__dev_error_overlay';
+          Object.assign(o.style, { position: 'fixed', left: '12px', right: '12px', top: '12px', padding: '12px', background: 'rgba(220,38,38,0.95)', color: 'white', fontFamily: 'monospace', zIndex: 99999, whiteSpace: 'pre-wrap', borderRadius: '6px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)' });
+          document.body.appendChild(o);
+        }
+        o.textContent = String(err && (err.stack || err.message || err));
+      };
+      try{
+        // Try eager import first (works for Live Server too)
+        await import('./src/8-main.js');
+        console.log('[dev-loader] module loaded');
+      }catch(e){
+        showError(e);
+      }
+    })();
+    </script>
 </body>
 </html>

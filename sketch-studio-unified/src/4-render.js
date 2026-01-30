@@ -1,5 +1,5 @@
 import { worldToScreen } from './1-utils.js';
-export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraint=null, currentTool=null, inference=null, selectedShape=null, hoveredShape=null, hoveredJoint=null, hoveredConstraint=null){ 
+export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedConstraints=new Set(), selectedJoints=new Set(), selectedConstraint=null, currentTool=null, inference=null, selectedShapes=new Set(), selectedShape=null, hoveredShape=null, hoveredJoint=null, hoveredConstraint=null){ 
   // Toggle snapping class for background color change
   if(snapTarget) svg.classList.add('snapping'); else svg.classList.remove('snapping');
   svg.innerHTML=''; 
@@ -115,8 +115,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // draw shapes (clickable for selection)
   for(const s of shapes){ 
-    const isSelected = selectedShape && selectedShape.id === s.id;
-    const isHovered = hoveredShape && hoveredShape.id === s.id;
+    const isSelected = (selectedShapes && selectedShapes.has && selectedShapes.has(s.id)) || (selectedShape && selectedShape.id === s.id);
+    const isHovered = hoveredShape && hoveredShape.id === s.id; // single hovered shape enforced by input layer
     const isConstraintPart = constraintShapes.has(s.id);
     
     let strokeWidth = scale(BASE_LINE_STROKE);
@@ -438,15 +438,31 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const preview = !!c.__isPreview || !!opts.isPreview;
     const previewAttr = preview ? ' data-preview="1"' : '';
     const groupStyle = preview ? 'opacity:0.5; pointer-events:none' : 'cursor:pointer';
+    // Compose data attributes for hit testing
+    let dataAttrs = `data-ctype="${c.type}"`;
+    if(c.type === 'coincident' || c.type === 'horizontal' || c.type === 'vertical'){
+      if(c.joints && c.joints.length >= 2) dataAttrs += ` data-cj0="${c.joints[0]}" data-cj1="${c.joints[1]}"`;
+    } else if(c.type === 'parallel' || c.type === 'perpendicular'){
+      if(c.shapes && c.shapes.length >= 2) dataAttrs += ` data-cs0="${c.shapes[0]}" data-cs1="${c.shapes[1]}"`;
+    } else if(c.type === 'pointOnLine'){
+      if(c.joint && c.shape) dataAttrs += ` data-cjoint="${c.joint}" data-cshape="${c.shape}"`;
+    } else if(c.type === 'collinear'){
+      if(c.joints) dataAttrs += ` data-cjoints="${c.joints.join(',')}"`;
+    } else if(c.type === 'tangent'){
+      if(c.line && c.circle) dataAttrs += ` data-cline="${c.line}" data-ccircle="${c.circle}"`;
+    }
     const makeGroup = (inner, transform) => {
       const tr = transform ? ` transform="${transform}"` : '';
-      svg.insertAdjacentHTML('beforeend', `<g class="constraint-glyph"${previewAttr}${tr} style="${groupStyle}">${inner}</g>`);
+      svg.insertAdjacentHTML('beforeend', `<g class="constraint-glyph" ${dataAttrs}${previewAttr}${tr} style="${groupStyle}">${inner}</g>`);
     };
 
     // Compute hover/selection state and dynamic stroke widths here so inner HTML can use them
     const isHoveredGlob = !preview && hoveredConstraint === c;
-    const isSelectedGlob = !preview && (selectedConstraint === c || c.__selected);
-    const bgStrokeW = (isHoveredGlob || isSelectedGlob) ? scale(4.5) : scale(3.5);
+    const isSelectedGlob = !preview && ((selectedConstraints && selectedConstraints.has(c)) || selectedConstraint === c || c.__selected);
+    // Stronger visual feedback for selection/hover
+    const bgStrokeW = (isHoveredGlob || isSelectedGlob) ? scale(7) : scale(3.5);
+    const glowColor = (isHoveredGlob || isSelectedGlob) ? '#1e40af' : 'none';
+    const glowOpacity = (isHoveredGlob || isSelectedGlob) ? 0.35 : 0;
 
       if (c.type === 'coincident') {
         // Position offset near one of the coincident joints
@@ -456,10 +472,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const isHovered = !preview && hoveredConstraint === c;
         const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#2563eb';
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-        const glowHtml = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${bgRadius + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
+        const strokeW = (isHovered || isSelected) ? scale(5) : scale(2.5);
+        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(10) : glyphSize + scale(5);
+        const bgOpacity = (isHovered || isSelected) ? '0.98' : '0.85';
+        // Strong glow for selected/hovered
+        const glowHtml = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${bgRadius + scale(10)}" fill="${stroke}" fill-opacity="0.25"/>` : '';
         const symbolSize = glyphSize * 0.6;
         const inner = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="transparent"/>${glowHtml}<circle cx="0" cy="0" r="${bgRadius}" fill="#ef4444" fill-opacity="${bgOpacity}" stroke="#dc2626" stroke-width="${bgStrokeW}"/><line x1="-${symbolSize}" y1="-${symbolSize}" x2="${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/><line x1="${symbolSize}" y1="-${symbolSize}" x2="-${symbolSize}" y2="${symbolSize}" stroke="white" stroke-width="${strokeW}"/>`;
         makeGroup(inner, `translate(${x},${y})`);
@@ -471,7 +488,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         if(!j1 || !j2) return;
         const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2 + scale(10);
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && (selectedConstraint === c || c.__selected);
+        const isSelected = !preview && ((selectedConstraints && selectedConstraints.has(c)) || selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#059669';
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -489,7 +506,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         if(!j1 || !j2) return;
         const mx = (j1.x + j2.x)/2 + scale(10), my = (j1.y + j2.y)/2;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && (selectedConstraint === c || c.__selected);
+        const isSelected = !preview && ((selectedConstraints && selectedConstraints.has(c)) || selectedConstraint === c || c.__selected);
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
@@ -511,7 +528,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const nx = len > 0 ? -dy/len : 0; const ny = len > 0 ? dx/len : 1; const offset = scale(10);
         const gx = mx + nx * offset, gy = my + ny * offset;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : (c.type === 'perpendicular' ? '#0891b2' : '#7c3aed');
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -533,7 +550,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(c.type === 'pointOnLine') {
         const pt = joints.get(c.joint); if(!pt) return;
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const strokeW = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         const bgColor = '#fb923c';
@@ -554,7 +571,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           px = midJoint.x; py = midJoint.y;
         }
         const isHovered = !preview && hoveredConstraint === c;
-        const isSelected = !preview && selectedConstraint === c;
+        const isSelected = !preview && (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#8b5cf6';
         const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         const bgColor = '#14b8a6';
@@ -591,26 +608,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   for(const c of constraints){
     if(c.type === 'coincident' && c.joints && c.joints.length >= 2){
       // Show one glyph per coincident constraint when any of its joints are selected
-      const isRelated = c.joints.some(jid => selectedJoints.has(jid)) || selectedConstraint === c;
+      const isRelated = c.joints.some(jid => selectedJoints.has(jid)) || selectedConstraint === c || c.__selected;
       if(!isRelated) continue;
-      
-      // Use whichever joint exists for positioning
-      const j1 = joints.get(c.joints[0]) || joints.get(c.joints[1]);
-      if(!j1) continue;
-      
-      const offset = scale(10);
-      const x = j1.x + offset, y = j1.y - offset;
-      
-      const isHovered = hoveredConstraint === c;
-      const isSelected = (selectedConstraint === c || c.__selected);
-      const stroke = (isHovered || isSelected) ? '#1e40af' : '#2563eb';
-      const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-      const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-      const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-      const bgColor = '#ef4444'; // red for coincident
-      const glowHtml = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${bgRadius + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
-      const symbolSize = glyphSize * 0.6;
-      
       drawConstraintGlyph(svg, c);
     } else if(c.type === 'horizontal' && c.joints && c.joints.length >= 2){
       // Horizontal line glyph at midpoint - offset perpendicular (downward)
@@ -618,7 +617,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(j1 && j2){
         const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2 + scale(10); // perpendicular offset
         const isHovered = hoveredConstraint === c;
-        const isSelected = selectedConstraint === c;
+        const isSelected = (selectedConstraint === c || c.__selected);
         const stroke = (isHovered || isSelected) ? '#1e40af' : '#059669';
         const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
         const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
@@ -793,21 +792,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     } else if(c.type === 'pointOnLine'){
       // Small circle with dot for point-on-line constraint
       // Only show when the joint is selected (same behavior as coincident)
-      const isRelated = selectedJoints.has(c.joint);
+      const isRelated = selectedJoints.has(c.joint) || selectedConstraint === c || c.__selected;
       if(!isRelated) continue;
-      
-      const pt = joints.get(c.joint);
-      const shape = shapes.find(s => s.id === c.shape);
-      if(pt && shape){
-        const isHovered = hoveredConstraint === c;
-        const isSelected = selectedConstraint === c;
-        const stroke = (isHovered || isSelected) ? '#1e40af' : '#f97316';
-        const strokeW = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-        const bgColor = '#fb923c'; // orange for point-on-line
-        const glow = (isHovered || isSelected) ? `<circle cx="0" cy="${-scale(12)}" r="${scale(9)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
-        drawConstraintGlyph(svg, c);
-      }
+      drawConstraintGlyph(svg, c);
     } else if(c.type === 'collinear'){
       // Three dots in a line for collinear constraint
       if(c.joints && c.joints.length >= 3){
@@ -816,14 +803,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const midJoint = joints.get(c.joints[midIdx]);
         if(midJoint){
           const isHovered = hoveredConstraint === c;
-          const isSelected = selectedConstraint === c;
-          const stroke = (isHovered || isSelected) ? '#1e40af' : '#8b5cf6';
-          const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-          const bgColor = '#14b8a6'; // teal for collinear
-          const dotSize = scale(2.5);
-          const spacing = scale(5);
-          const glow = (isHovered || isSelected) ? `<circle cx="0" cy="${-scale(12)}" r="${glyphSize + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
-          const jointsStr = c.joints.join(',');
+          const isSelected = (selectedConstraint === c || c.__selected);
           drawConstraintGlyph(svg, c);
         }
       }
@@ -846,12 +826,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const gx = mx + nx * offset, gy = my + ny * offset;
           
           const isHovered = hoveredConstraint === c;
-          const isSelected = selectedConstraint === c;
-          const stroke = (isHovered || isSelected) ? '#1e40af' : '#f59e0b';
-          const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-          const bgColor = '#fbbf24'; // yellow for tangent
-          const glow = (isHovered || isSelected) ? `<circle cx="0" cy="0" r="${glyphSize + scale(4)}" fill="${stroke}" fill-opacity="0.15"/>` : '';
-          const symbolSize = glyphSize * 0.6; // Smaller symbols
+          const isSelected = (selectedConstraint === c || c.__selected);
           drawConstraintGlyph(svg, c);
         }
       }

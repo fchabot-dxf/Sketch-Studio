@@ -389,3 +389,76 @@ Iterative relaxation solver - runs multiple passes to satisfy constraints.
 | Tool activation | `currentTool===` or `setTool(` |
 | Drag handling | `state.drag` |
 | Selection handling | `selectedJoints` or `selectedShape` |
+
+---
+
+## 🌳 Tree: UI Objects & Function Types (Compact)
+
+This section is a compact, hierarchical view of the system to make the architecture easier to study at a glance. Use it as a quick map for where to look in the code.
+
+- **Runtime State (main `state` object)**
+  - `engine` - engine instance (`createEngine`) (API: `genJ`, `init`, `getJoints`, `getShapes`, `getConstraints`, `solve`)
+  - `joints` (Map<id,{x,y}>)
+  - `shapes` (Array<{id,type,joints,...}>)
+  - `constraints` (Array<constraint objects>)
+  - Selection sets
+    - `selectedJoints` (Set<id>)
+    - `selectedShapes` (Set<id>)
+    - `selectedConstraints` (Set<constraint>)
+    - `selection` / `selectedShape` / `selectedConstraint` (compat helpers)
+  - Interaction state
+    - `active` (tool in-progress state)
+    - `drag` (dragging metadata)
+    - `snapTarget`, `inference`, `hovered*` (preview/hover state)
+  - History & Undo
+    - `history`, `saveState()`, `undo()`, `beginUndoGroup()`, `endUndoGroup()`, `cancelUndoGroup()`
+
+- **DOM / Visual Elements**
+  - `#svgCanvas` - main SVG drawing surface
+  - `.shape-elem` - shape primitives (lines/circles)
+  - `.constraint-glyph` - glyph groups for constraints (clickable)
+  - `.dim-label` - dimension labels (editable)
+  - `.tool-btn` - toolbar buttons (tool activation)
+  - `#btn-undo`, status UI elements
+
+- **Function categories (what they do + examples)**
+  - **Renderers** - draw visuals to SVG
+    - `draw()` (4-render.js)
+    - `drawConstraintGlyph()` (glyph helpers in 4-render)
+  - **Input / Tools** - pointer and keyboard handling
+    - `setupInput()` (6-input.js): pointerdown/move/up flows, tool logic
+    - Tool-specific handlers: line/rect/circle/coincident/parallel/perp/collinear/tangent/dim
+  - **UI glue**
+    - `setupUI()` (7-ui.js): toolbar, shortcuts, Delete/Undo wiring
+    - `setTool()` and tool state toggles
+  - **Engine / Solver**
+    - `createEngine()` (5-engine.js): ID gen, storage, solve wrapper
+    - `solve()` (2-solver.js): iterative constraint resolution
+  - **Snap & Hit tests**
+    - `findSnap()`, `hitJointAtScreen()`, `hitLineAtScreen()`, `findInference()` (3-snap.js)
+  - **Constraint utilities**
+    - `addConstraint()`, `hasConstraint()` (1-utils.js)
+  - **Helpers**
+    - Coordinate transforms: `worldToScreen()`, `screenToWorld()` (1-utils.js)
+    - Geometry helpers: `getDist()`, vector math
+
+- **File → Key responsibilities (tree view)**
+  - `src/`
+    - `1-utils.js` → helpers, geometry, constants, `addConstraint` preview guard
+    - `2-solver.js` → constraint solve algorithms
+    - `3-snap.js` → hit detection / inference / snap rules
+    - `4-render.js` → everything SVG: draw, glyphs, previews
+    - `5-engine.js` → store/API for joints/shapes/constraints, `genJ()`, `init()`
+    - `6-input.js` → pointer logic, tool flows, selection, drag, delete handling
+    - `7-ui.js` → toolbar & keyboard shortcuts
+    - `8-main.js` → application bootstrap, shared `state`, render loop
+    - `selection.js` → (NEW) centralized selection API; provides `attachSelection(state)` to migrate selection helpers (`selectItem`, `clearSelection`) and exposes `selectionAdd`/`selectionRemove` shims on `state`.
+
+- **Quick study tips 💡**
+  - Follow the user flow: **pointerdown → pointermove → pointerup** in `6-input.js` and check `state.active`/`state.drag` to trace behaviour.
+  - For visual issues: check `4-render.js` → look for `selected*` and `hovered*` branch conditions.
+  - For solver/debug: inspect snapshots using `state._snapshotState()` and `history`.
+
+---
+
+If you want, I can also produce a collapsible JSON/tree file (e.g., `docs/APP_MAP_TREE.md` or `APP_MAP.json`) that IDEs or editors can fold—do you prefer that? 🎯

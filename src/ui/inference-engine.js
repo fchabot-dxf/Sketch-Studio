@@ -126,16 +126,27 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
   // Prefer midpoint inference before H/V detection, but only for joint→line midpoints
 
 
-  // Check horizontal (0° or ±180°)
-  const horizontalDiff = Math.min(Math.abs(angle), Math.abs(Math.abs(angle) - 180));
-  if(horizontalDiff < ANGLE_SNAP_DEG){
-    return { type: INFERENCE_TYPES.HORIZONTAL, pos: { x: endPt.x, y: startPt.y }, targetId: null };
-  }
+  // Fallback H/V check based on the (startPt → endPt) displacement angle.
+  //
+  // This is the right signal when *drawing* a new line (startPt is the line's
+  // start, endPt is the cursor → displacement IS the line). It is the wrong
+  // signal during a *drag* — `startPt` is the joint's initial position and
+  // `endPt` is the cursor, so `angle` is the joint's motion direction, not
+  // any actual line's orientation. The smart per-attached-line H/V check
+  // above (inside the joint-drag block) already handles the drag case
+  // correctly, so skip this fallback whenever a drag is in progress.
+  if(!options || !options.draggedId){
+    // Check horizontal (0° or ±180°)
+    const horizontalDiff = Math.min(Math.abs(angle), Math.abs(Math.abs(angle) - 180));
+    if(horizontalDiff < ANGLE_SNAP_DEG){
+      return { type: INFERENCE_TYPES.HORIZONTAL, pos: { x: endPt.x, y: startPt.y }, targetId: null };
+    }
 
-  // Check vertical (±90°)
-  const verticalDiff = Math.abs(Math.abs(angle) - 90);
-  if(verticalDiff < ANGLE_SNAP_DEG){
-    return { type: INFERENCE_TYPES.VERTICAL, pos: { x: startPt.x, y: endPt.y }, targetId: null };
+    // Check vertical (±90°)
+    const verticalDiff = Math.abs(Math.abs(angle) - 90);
+    if(verticalDiff < ANGLE_SNAP_DEG){
+      return { type: INFERENCE_TYPES.VERTICAL, pos: { x: startPt.x, y: endPt.y }, targetId: null };
+    }
   }
 
   // Check perpendicular to other lines

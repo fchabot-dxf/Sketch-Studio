@@ -64,12 +64,13 @@ export class ConstraintManager {
             this.lockPerpendicularBranch(state, normalized);
         }
 
-        // Branch lock: TANGENT (circle-circle) records 'external' vs 'internal'
-        // tangency at creation time, again so a fast drag can't flip a wraparound
-        // tangent into a kissing tangent.
-        if (type === CONSTRAINT_TYPES.TANGENT && normalized.shapes && normalized.shapes.length === 2 && normalized.branch == null) {
-            this.lockTangentBranch(state, normalized);
-        }
+        // Tangent branch auto-detect is intentionally OFF for now. Even with the
+        // proximity gate, locking 'external' vs 'internal' at creation time can
+        // surprise users — the solver gets pinned to a target distance the user
+        // didn't explicitly choose. The lockTangentBranch helper is preserved
+        // below so callers can opt in by passing `branch: 'external' | 'internal'`
+        // explicitly. Re-enable here once we can detect the user's intent more
+        // reliably (e.g. lock AFTER first convergence, not at creation).
 
         // Check duplicates
         if (constraints.hasConstraint(state.constraints, type, normalized)) {

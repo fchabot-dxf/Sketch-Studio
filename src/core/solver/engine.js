@@ -16,7 +16,18 @@ export class NewtonSolver {
       lambdaInit: 1e-3,
       lambdaUp: 10,
       lambdaDown: 0.1,
-      verbose: false
+      verbose: false,
+      // Relaxation pre-pass: a few cheap steepest-descent steps with the optimal
+      // Cauchy step length, run before LM. Cuts residual fast when far from the
+      // solution and gets us into Newton's basin of attraction.
+      prepassEnabled: true,
+      prepassIters: 10,
+      // Skip the pre-pass when the initial residual is already small — Newton
+      // alone will converge in 2-3 steps and the pre-pass just costs assemblies.
+      prepassResidualSkip: 1e-3,
+      // Hand off to LM as soon as residual drops below this; LM converges
+      // quadratically inside its basin.
+      prepassHandoffResidual: 1e-2
     }, config);
     this.interaction = new InteractionSolver(this);
   }
@@ -295,6 +306,84 @@ export class NewtonSolver {
     return { J, r, m, n };
   }
 
+  // Steepest-descent pre-pass with optimal Cauchy step length.
+  //
+  // Newton/LM converges quadratically inside its basin of attraction but can
+  // wander, oscillate, or pump damping λ to huge values when started far away.
+  // A handful of steepest-descent steps gets us close enough that LM finishes
+  // in 2-3 iterations.
+  //
+  // Per-step math (cheap — no factorization):
+  //   gradient    g = Jᵀr
+  //   direction   d = -g
+  //   linearized  cost(α) = ½‖r + αJd‖² ⇒ optimal α = ‖g‖² / ‖Jg‖²
+  //   accept      x ← x - α g, with Armijo backtracking if cost doesn't drop
+  //
+  // Returns { x, converged, residual }. converged=true means we already hit
+  // tolerance; the caller can skip LM in that case.
+  _preRelax(x0) {
+    const maxIters = this.config.prepassIters | 0;
+    if (maxIters <= 0) return { x: x0, converged: false, residual: Infinity };
+
+    let x = new Float64Array(x0);
+    const n = x.length;
+    let xNew = new Float64Array(n);
+    let cost = Infinity;
+    let residual = Infinity;
+
+    for (let k = 0; k < maxIters; ++k) {
+      const { J, r, m } = this._assemble(x);
+      if (m === 0) return { x, converged: true, residual: 0 };
+
+      cost = 0; for (let i = 0; i < m; ++i) cost += r[i] * r[i]; cost *= 0.5;
+      residual = Math.sqrt(2 * cost);
+      if (residual < this.config.tol) return { x, converged: true, residual };
+      // Inside Newton's basin — let LM finish.
+      if (residual < this.config.prepassHandoffResidual) return { x, converged: false, residual };
+
+      // g = Jᵀ r
+      const g = new Float64Array(n);
+      for (let j = 0; j < n; ++j) {
+        let s = 0; for (let i = 0; i < m; ++i) s += J[i * n + j] * r[i];
+        g[j] = s;
+      }
+      let gNorm2 = 0; for (let j = 0; j < n; ++j) gNorm2 += g[j] * g[j];
+      if (gNorm2 < 1e-24) return { x, converged: false, residual };
+
+      // ‖Jg‖² (avoid materializing Jg)
+      let JgNorm2 = 0;
+      for (let i = 0; i < m; ++i) {
+        let s = 0; for (let j = 0; j < n; ++j) s += J[i * n + j] * g[j];
+        JgNorm2 += s * s;
+      }
+      if (JgNorm2 < 1e-30) return { x, converged: false, residual };
+
+      let alpha = gNorm2 / JgNorm2;
+      let accepted = false;
+      // Armijo backtracking: try the Cauchy step, halve up to 6 times.
+      for (let bt = 0; bt < 6; ++bt) {
+        for (let j = 0; j < n; ++j) xNew[j] = x[j] - alpha * g[j];
+        const { r: rNew } = this._assemble(xNew);
+        let costNew = 0; for (let i = 0; i < rNew.length; ++i) costNew += rNew[i] * rNew[i]; costNew *= 0.5;
+        if (costNew < cost - 1e-4 * alpha * gNorm2) {
+          // swap x ↔ xNew (avoid re-alloc)
+          const tmp = x; x = xNew; xNew = tmp;
+          cost = costNew;
+          accepted = true;
+          break;
+        }
+        alpha *= 0.5;
+      }
+      if (!accepted) return { x, converged: false, residual };
+
+      if (this.config.verbose) {
+        try { console.log('[NewtonSolver] prepass iter=', k, 'cost=', cost.toExponential(), 'alpha=', alpha.toExponential()); } catch(_) {}
+      }
+    }
+
+    return { x, converged: false, residual: Math.sqrt(2 * cost) };
+  }
+
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
     const x0 = this._pack();
@@ -319,6 +408,23 @@ export class NewtonSolver {
       }
     }
     if (dragOpt) cleanup = this.interaction.attachMouseSpring(dragOpt);
+
+    // Relaxation pre-pass: only worthwhile when starting far from the solution.
+    // Cheap cost-of-entry: one assemble to measure initial residual.
+    if (this.config.prepassEnabled) {
+      const { r: rInit } = this._assemble(x);
+      let r0 = 0; for (let i = 0; i < rInit.length; ++i) r0 += rInit[i] * rInit[i];
+      const residual0 = Math.sqrt(r0);
+      if (residual0 > this.config.prepassResidualSkip) {
+        const pre = this._preRelax(x);
+        x = pre.x;
+        if (pre.converged) {
+          this._unpack(x);
+          if (cleanup) cleanup();
+          return { converged: true, error: pre.residual };
+        }
+      }
+    }
 
     for (let k = 0; k < iter; ++k) {
       const { J, r, m, n } = this._assemble(x);

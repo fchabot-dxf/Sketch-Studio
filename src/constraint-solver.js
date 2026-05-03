@@ -28,7 +28,11 @@ export function createEngine(svg){
     tol: SolverConfig.LM_TOL || 1e-6,
     lambdaInit: SolverConfig.LM_LAMBDA_INIT || 1e-3,
     lambdaUp: SolverConfig.LM_LAMBDA_UP || 10,
-    lambdaDown: SolverConfig.LM_LAMBDA_DOWN || 0.1
+    lambdaDown: SolverConfig.LM_LAMBDA_DOWN || 0.1,
+    prepassEnabled: SolverConfig.RELAX_PREPASS_ENABLED !== false,
+    prepassIters: SolverConfig.RELAX_PREPASS_ITERS != null ? SolverConfig.RELAX_PREPASS_ITERS : 10,
+    prepassResidualSkip: SolverConfig.RELAX_PREPASS_SKIP_RESIDUAL != null ? SolverConfig.RELAX_PREPASS_SKIP_RESIDUAL : 1e-3,
+    prepassHandoffResidual: SolverConfig.RELAX_PREPASS_HANDOFF != null ? SolverConfig.RELAX_PREPASS_HANDOFF : 1e-2
   });
   function init(){ _initStore(); }
   function genJ(){ return _genJ(); }

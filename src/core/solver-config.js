@@ -36,7 +36,13 @@ const DEFAULTS = {
     LM_LAMBDA_INIT: 0.001,
     LM_LAMBDA_UP: 10.0,
     LM_LAMBDA_DOWN: 0.1,
-    LM_TOL: 1e-6
+    LM_TOL: 1e-6,
+
+    // ── Relaxation pre-pass (steepest-descent before LM) ─────────────
+    RELAX_PREPASS_ENABLED: true,
+    RELAX_PREPASS_ITERS: 10,
+    RELAX_PREPASS_SKIP_RESIDUAL: 1e-3,   // Skip pre-pass if initial residual already below this
+    RELAX_PREPASS_HANDOFF: 1e-2          // Hand off to LM once residual drops below this
 };
 
 // 2. Try to Load User Settings (localStorage and project config)
@@ -44,8 +50,9 @@ let savedConfig = {};
 let projectConfig = {};
 
 // Attempt to load project-level config (node: filesystem, browser: fetch not attempted here)
+// Guarded with `typeof require` so ESM test environments don't trip a ReferenceError.
 try {
-    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+    if (typeof process !== 'undefined' && process.versions && process.versions.node && typeof require === 'function') {
         const fs = require('fs');
         const path = require('path');
         const p = path.resolve(process.cwd(), 'sketch-studio.config.json');
@@ -54,14 +61,17 @@ try {
         }
     }
 } catch (e) {
-    console.warn('[SolverConfig] Project config read failed:', e);
+    // silently skip — environment doesn't expose CommonJS require
 }
 
+// Guarded so Node test environments without a `localStorage` global don't warn.
 try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) savedConfig = JSON.parse(raw);
+    if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) savedConfig = JSON.parse(raw);
+    }
 } catch (e) {
-    console.warn('[SolverConfig] Could not load settings from localStorage:', e);
+    // silently skip — no browser storage available
 }
 
 // 3. Export Config (Merge: defaults <- project config <- local overrides)

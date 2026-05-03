@@ -75,6 +75,10 @@ export function createEngine(svg){
       maxDelta: result.error || 0,
       iterations: iter,
       converged: result.converged || false,
+      // Sketch is under-constrained (rank(J) < n). May still be "converged" if
+      // a valid configuration was found; the flag tells UI the configuration
+      // is non-unique so it can prompt the user to add more constraints.
+      rankDeficient: result.rankDeficient === true,
       constraintErrors: constraintErrors
     };
     

@@ -137,6 +137,10 @@ export class NewtonSolver {
       const def = Definitions[c.type];
       if (def && typeof def.rows === 'number') {
         rowsPerConstraint[i] = def.rows;
+      } else if (def && typeof def.rows === 'function') {
+        // Variable-row constraint (e.g. branch-locked perpendicular): the def
+        // decides per-instance based on params.
+        rowsPerConstraint[i] = def.rows(c) | 0;
       } else if (c.type === 'coincident') {
         rowsPerConstraint[i] = 2;
       } else if (c.type === 'collinear') {
@@ -387,13 +391,19 @@ export class NewtonSolver {
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
     const x0 = this._pack();
-    if (x0.length === 0) return { converged: true, error: 0 };
+    if (x0.length === 0) return { converged: true, error: 0, rankDeficient: false };
 
     let x = new Float64Array(x0); // current estimate
     let lambda = this.config.lambdaInit;
     let lastCost = Infinity;
     let converged = false;
     let finalError = 0;
+    // Tracks whether JᵀJ is singular at the final state (rank(J) < n).
+    // In CAD terms: the sketch is under-constrained — there are free directions
+    // along which the residual doesn't change. The solver may still report
+    // converged=true if it found a valid configuration; the flag tells the
+    // UI that the configuration is non-unique.
+    let rankDeficient = false;
 
     // If a drag target exists (explicit via options OR implicit j.dragTarget on a joint), inject a temporary 'mouse-spring'
     let cleanup = null;
@@ -419,9 +429,12 @@ export class NewtonSolver {
         const pre = this._preRelax(x);
         x = pre.x;
         if (pre.converged) {
+          // Even a converged pre-pass deserves the rank check — the user may
+          // want to know the sketch has freedom even though we found a fit.
+          rankDeficient = this._checkRankDeficient(x);
           this._unpack(x);
           if (cleanup) cleanup();
-          return { converged: true, error: pre.residual };
+          return { converged: true, error: pre.residual, rankDeficient };
         }
       }
     }
@@ -484,7 +497,9 @@ export class NewtonSolver {
       finalError = Math.sqrt(2 * costNew);
     }
 
-    // Optional polishing Gauss-Newton pass (zero-damping) to improve final accuracy
+    // Optional polishing Gauss-Newton pass (zero-damping) to improve final
+    // accuracy. The undamped Cholesky here doubles as a rank-deficiency probe:
+    // success ⟺ JᵀJ is positive-definite ⟺ rank(J) = n ⟺ well-constrained.
     try {
       const assembled = this._assemble(x);
       const { J, r, m, n } = assembled;
@@ -495,6 +510,7 @@ export class NewtonSolver {
       const Acopy = new Float64Array(A);
       const dx = new Float64Array(g);
       const ok = Algebra.choleskySolve(Acopy, n, dx);
+      rankDeficient = !ok;
       if (ok) {
         // apply small polish step and accept only if it reduces residual
         const xPolish = new Float64Array(n);
@@ -511,7 +527,21 @@ export class NewtonSolver {
     this._unpack(x);
     if (cleanup) cleanup();
 
-    return { converged, error: finalError };
+    return { converged, error: finalError, rankDeficient };
+  }
+
+  // One-shot rank-deficiency probe at position x. Re-assembles, builds JᵀJ
+  // (no LM damping), tries Cholesky. Failure ⟺ rank(J) < n.
+  // Used by the early-return path when the pre-pass converges before LM runs.
+  _checkRankDeficient(x) {
+    try {
+      const { J, m, n } = this._assemble(x);
+      if (m === 0 || n === 0) return false;
+      const A = Algebra.allocMatrix(n, n); for (let i = 0; i < A.length; ++i) A[i] = 0.0;
+      Algebra.gram(J, m, n, A);
+      const probe = new Float64Array(n);
+      return !Algebra.choleskySolve(A, n, probe);
+    } catch (_) { return false; }
   }
 }
 

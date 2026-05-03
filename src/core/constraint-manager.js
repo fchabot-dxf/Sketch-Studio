@@ -787,8 +787,17 @@ export class ConstraintManager {
     }
 
     // Auto-detect external vs internal tangent for circle-circle from current geometry.
-    // Picks whichever target distance the centers are closest to. Defaults to
-    // 'external' when ambiguous (e.g. equal radii, or centers far from both targets).
+    //
+    // Branch-lock only fires when the sketch is ALREADY near a tangent
+    // configuration — i.e. the user has positioned the circles to be roughly
+    // tangent and is adding the constraint to formalize what's there. We then
+    // pin the branch they're already on so a later drag can't flip it.
+    //
+    // If the geometry is far from any tangent configuration (residual >
+    // ~25% of the larger radius for both targets), we DON'T lock. The solver
+    // picks the closer target naturally on the first solve. Forcing a branch
+    // in that case can drive the geometry into a configuration the user never
+    // wanted, which feels like the constraint is "locking everything."
     static lockTangentBranch(state, normalized) {
         try {
             const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
@@ -813,9 +822,18 @@ export class ConstraintManager {
             const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
             const tExt = r1 + r2;
             const tInt = Math.abs(r1 - r2);
+            const resExt = Math.abs(dist - tExt);
+            const resInt = Math.abs(dist - tInt);
+            const chosenRes = Math.min(resExt, resInt);
+            // Only lock when the chosen branch's residual is small relative to
+            // the radius scale — i.e. the user's circles are already roughly
+            // tangent. Otherwise leave the field unset so the solver picks
+            // freely on its first run.
+            const proximityThreshold = 0.25 * Math.max(r1, r2);
+            if (chosenRes > proximityThreshold) return;
             // Equal radii → tInt = 0 (concentric); always pick external.
             if (tInt < 1e-9) { normalized.branch = 'external'; return; }
-            normalized.branch = Math.abs(dist - tInt) < Math.abs(dist - tExt) ? 'internal' : 'external';
+            normalized.branch = resInt < resExt ? 'internal' : 'external';
             dbg.log('constraints', '[ConstraintManager] tangent branch locked:', normalized.branch);
         } catch (e) {
             dbg.warn('constraints', '[ConstraintManager] lockTangentBranch error:', e);

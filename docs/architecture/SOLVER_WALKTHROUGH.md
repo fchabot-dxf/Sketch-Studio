@@ -211,7 +211,7 @@ For circle-circle tangent there are two valid configurations:
 
 `params.branch === 'internal'` switches the target distance; `'external'` (or unset) is the default. The Jacobian is identical for both branches — the partial derivatives of `‖C₂−C₁‖` w.r.t. center positions don't depend on the constant target.
 
-**Auto-detect:** `ConstraintManager.lockTangentBranch` picks whichever target the current center distance is closest to. Defaults to `'external'` when ambiguous (e.g. equal radii, where internal target collapses to zero).
+**Auto-detect:** `ConstraintManager.lockTangentBranch` picks whichever target the current center distance is closest to **only when the geometry is already near-tangent** (chosen residual within ~25% of the larger radius). When the circles are far from any tangent configuration, the branch is left unset and the solver picks freely on its first run — locking in that case would force the geometry into a configuration the user never asked for, which feels like the constraint is "locking everything." Defaults to `'external'` when ambiguous (e.g. equal radii, where internal target collapses to zero).
 
 ---
 

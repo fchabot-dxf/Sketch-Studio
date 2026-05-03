@@ -4,12 +4,12 @@
   const { Definitions } = await import('../src/core/solver/definitions.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
-  // ─── lockTangentBranch: external configuration ──────────────────────
+  // ─── lockTangentBranch: external configuration (already near-tangent) ─
   {
     const state = { joints: new Map(), shapes: [] };
     state.joints.set('c1', { x: 0, y: 0 });
     state.joints.set('r1', { x: 5, y: 0 });   // r1 = 5
-    state.joints.set('c2', { x: 12, y: 0 });   // dist = 12 = 5 + 7 (external)
+    state.joints.set('c2', { x: 12, y: 0 });   // dist = 12 = 5 + 7 (external, exact)
     state.joints.set('r2', { x: 19, y: 0 });   // r2 = 7
     state.shapes.push({ id: 's1', type: 'circle', joints: ['c1', 'r1'] });
     state.shapes.push({ id: 's2', type: 'circle', joints: ['c2', 'r2'] });
@@ -18,7 +18,7 @@
     assert(params.branch === 'external', `expected branch='external', got ${params.branch}`);
   }
 
-  // ─── lockTangentBranch: internal configuration ──────────────────────
+  // ─── lockTangentBranch: internal configuration (already near-tangent) ─
   {
     const state = { joints: new Map(), shapes: [] };
     state.joints.set('c1', { x: 0, y: 0 });
@@ -30,6 +30,24 @@
     const params = { shapes: ['s1', 's2'] };
     ConstraintManager.lockTangentBranch(state, params);
     assert(params.branch === 'internal', `expected branch='internal', got ${params.branch}`);
+  }
+
+  // ─── lockTangentBranch: far from any tangent → DO NOT lock ──────────
+  // Regression test for the "tangent locks everything" report. If the user
+  // adds a tangent constraint with circles nowhere near tangent, locking a
+  // branch forces the geometry into a config they didn't ask for. Leave the
+  // branch unset so the solver picks freely on first solve.
+  {
+    const state = { joints: new Map(), shapes: [] };
+    state.joints.set('c1', { x: 0, y: 0 });
+    state.joints.set('r1', { x: 5, y: 0 });    // r1 = 5
+    state.joints.set('c2', { x: 50, y: 30 });  // dist ≈ 58 — not near ext (12) or int (2)
+    state.joints.set('r2', { x: 57, y: 30 });  // r2 = 7
+    state.shapes.push({ id: 's1', type: 'circle', joints: ['c1', 'r1'] });
+    state.shapes.push({ id: 's2', type: 'circle', joints: ['c2', 'r2'] });
+    const params = { shapes: ['s1', 's2'] };
+    ConstraintManager.lockTangentBranch(state, params);
+    assert(params.branch == null, `far-from-tangent geometry should NOT lock branch, got ${params.branch}`);
   }
 
   // ─── tangent residual respects branch ───────────────────────────────

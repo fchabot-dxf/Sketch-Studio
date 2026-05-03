@@ -739,14 +739,7 @@ export function handleSelectionPointerMove(e, svg, state) {
         const primary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
         if (state.engine && primary) {
             const dt = { jointId: primary, x: smoothed.x, y: smoothed.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
-            let solveResult = null;
-            try { solveResult = state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: dt }); } catch (_) { /* fail-open */ }
-            // Diagnostic: did the joint actually move? Without this we can't
-            // tell from the drag log alone whether the solver is responding.
-            try {
-                const jAfter = state.joints.get(primary);
-                if (jAfter) console.log('[DRAG-AFTER-SOLVE]', primary, 'joint:', jAfter.x.toFixed(3), jAfter.y.toFixed(3), 'target:', dt.x.toFixed(3), dt.y.toFixed(3), 'result:', solveResult);
-            } catch (_) { }
+            try { state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: dt }); } catch (_) { /* fail-open */ }
         }
     } catch (_) { }
 

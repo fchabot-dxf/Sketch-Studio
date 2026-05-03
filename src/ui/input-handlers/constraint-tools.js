@@ -211,30 +211,15 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
         // Allow Line + (Circle|Arc) and (Circle|Arc) + (Circle|Arc)
         const circleLike = (s) => s.type === 'circle' || s.type === 'arc';
 
-        console.log('[TANGENT-TOOL] selected pair:', s1.id, '(', s1.type, ')', s2.id, '(', s2.type, ')');
-
         // Line + Circle/Arc
         if ((s1.type === 'line' && circleLike(s2)) || (s2.type === 'line' && circleLike(s1))) {
             const line = s1.type === 'line' ? s1 : s2;
             const circle = s1.type === 'line' ? s2 : s1;
-            console.log('[TANGENT-TOOL] creating line-circle tangent');
-            const r = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: line.id, circle: circle.id }, { source: 'toolbar' });
-            console.log('[TANGENT-TOOL] createConstraint returned:', r);
+            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: line.id, circle: circle.id }, { source: 'toolbar' });
         }
         // Circle/Arc + Circle/Arc
         else if (circleLike(s1) && circleLike(s2)) {
-            console.log('[TANGENT-TOOL] creating circle-circle tangent');
-            const r = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
-            console.log('[TANGENT-TOOL] createConstraint returned:', r);
-            console.log('[TANGENT-TOOL] constraint count after:', state.constraints.length);
-            const c1 = state.joints.get(s1.joints[0]), c2 = state.joints.get(s2.joints[0]);
-            const r1pt = state.joints.get(s1.joints[1]), r2pt = state.joints.get(s2.joints[1]);
-            if (c1 && c2 && r1pt && r2pt) {
-                const r1v = Math.hypot(r1pt.x - c1.x, r1pt.y - c1.y);
-                const r2v = Math.hypot(r2pt.x - c2.x, r2pt.y - c2.y);
-                const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
-                console.log('[TANGENT-TOOL] post-solve geometry: dist=', dist.toFixed(4), 'r1=', r1v.toFixed(4), 'r2=', r2v.toFixed(4), 'r1+r2=', (r1v+r2v).toFixed(4), '|r1-r2|=', Math.abs(r1v-r2v).toFixed(4));
-            }
+            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
         } else {
             console.warn('[constraint-tools] TANGENT requires a Line+Circle/Arc or Circle/Arc+Circle/Arc');
         }

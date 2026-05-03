@@ -249,7 +249,53 @@ export class NewtonSolver {
               }
             }
           }
-        } else if ((c.type === 'collinear' || c.type === 'parallel' || c.type === 'perpendicular' || c.type === 'equal') && c.shapes && c.shapes.length > 0) {
+        }
+        // Tangent line+circle (created by the UI tool with {line, circle} fields).
+        // Synthesize joints = [center, A, B] and pass radius via params.radius.
+        else if (c.type === 'tangent' && c.line && c.circle) {
+          const lineShape = this.shapes.find(s => s.id === c.line);
+          const circShape = this.shapes.find(s => s.id === c.circle);
+          if (lineShape && lineShape.type === 'line' && lineShape.joints && lineShape.joints.length >= 2 &&
+              circShape && (circShape.type === 'circle' || circShape.type === 'arc') && circShape.joints && circShape.joints.length >= 1) {
+            const cIdx = jointIndexMap.get(circShape.joints[0]);
+            const aIdx = jointIndexMap.get(lineShape.joints[0]);
+            const bIdx = jointIndexMap.get(lineShape.joints[1]);
+            if (typeof cIdx === 'number' && typeof aIdx === 'number' && typeof bIdx === 'number') {
+              params.joints = [cIdx, aIdx, bIdx];
+              params.radius = (typeof circShape.radius === 'number')
+                ? circShape.radius
+                : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+            }
+          }
+        }
+        // Distance "radius on circle" — {shape, isRadius, value}: center→rim distance.
+        else if (c.type === 'distance' && c.isRadius && c.shape) {
+          const shape = this.shapes.find(s => s.id === c.shape);
+          if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
+            params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
+          }
+        }
+        // Distance line-line — {shapes:[s1,s2], value}: perpendicular distance.
+        // Synthesize as joints = [P, A, B] reusing the point_on_line residual
+        // shifted by `value`. P = s2.joints[0] (one endpoint of line 2);
+        // A,B = s1's endpoints (the reference line). The perpendicular distance
+        // from P to line AB is computed by point_on_line; the distance residual
+        // is that minus the target. Handled below in computeError dispatch.
+        else if (c.type === 'distance' && c.shapes && c.shapes.length === 2) {
+          const s1 = this.shapes.find(s => s.id === c.shapes[0]);
+          const s2 = this.shapes.find(s => s.id === c.shapes[1]);
+          if (s1 && s2 && s1.type === 'line' && s2.type === 'line' &&
+              s1.joints && s1.joints.length >= 2 && s2.joints && s2.joints.length >= 1) {
+            const aIdx = jointIndexMap.get(s1.joints[0]);
+            const bIdx = jointIndexMap.get(s1.joints[1]);
+            const pIdx = jointIndexMap.get(s2.joints[0]);
+            if (typeof aIdx === 'number' && typeof bIdx === 'number' && typeof pIdx === 'number') {
+              params.joints = [pIdx, aIdx, bIdx];
+              params.__lineLine = true; // sentinel — distance.computeError checks this
+            }
+          }
+        }
+        else if ((c.type === 'collinear' || c.type === 'parallel' || c.type === 'perpendicular' || c.type === 'equal' || c.type === 'angle') && c.shapes && c.shapes.length > 0) {
           const jointList = [];
           for (const sid of c.shapes) {
             const s = this.shapes.find(x => x.id === sid);

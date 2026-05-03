@@ -4,10 +4,33 @@
 function idx(positions, jointIndex) { return jointIndex * 2; }
 
 export const Definitions = {
-  // Distance constraint between joint a and b: |pa - pb| - value = 0
+  // Distance constraint:
+  //   joint-pair  (joints=[a,b], value):                  |a−b| − value
+  //   radius      (joints=[center,rim], value):           |rim−center| − value     (synthesized from {shape, isRadius})
+  //   line-line   (joints=[P,A,B], value, __lineLine):    |perp dist from P to line AB| − value
+  //
+  // The line-line case is engine-synthesized from {shapes:[s1,s2]} — P is one
+  // endpoint of line 2, AB is line 1. Two parallel lines have constant
+  // perpendicular distance, so a single point measure is sufficient when the
+  // lines are also constrained parallel (which they typically are by shape
+  // construction in CAD UIs); without that, this constraint pulls one endpoint
+  // of line 2 toward the target distance from line 1.
   distance: {
     rows: 1,
     computeError: (params, positions) => {
+      if (params.__lineLine) {
+        const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
+        const px = positions[pi*2], py = positions[pi*2+1];
+        const ax = positions[ai*2], ay = positions[ai*2+1];
+        const bx = positions[bi*2], by = positions[bi*2+1];
+        const ux = bx - ax, uy = by - ay;
+        const wx = px - ax, wy = py - ay;
+        const cross = wx * uy - wy * ux;
+        const lu = Math.hypot(ux, uy) || 1e-12;
+        // Signed perp distance; subtract sign(initial)·value via abs.
+        const signed = cross / lu;
+        return Math.abs(signed) - (params.value || 0);
+      }
       const ia = params.joints[0], ib = params.joints[1];
       const ax = positions[ia*2], ay = positions[ia*2+1];
       const bx = positions[ib*2], by = positions[ib*2+1];
@@ -15,12 +38,33 @@ export const Definitions = {
       return Math.hypot(dx, dy) - (params.value || 0);
     },
     computeJacobian: (params, positions, outRow) => {
+      if (params.__lineLine) {
+        const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
+        const px = positions[pi*2], py = positions[pi*2+1];
+        const ax = positions[ai*2], ay = positions[ai*2+1];
+        const bx = positions[bi*2], by = positions[bi*2+1];
+        const ux = bx - ax, uy = by - ay;
+        const wx = px - ax, wy = py - ay;
+        const cross = wx * uy - wy * ux;
+        const lu = Math.hypot(ux, uy) || 1e-12;
+        const signed = cross / lu;
+        const sgn = signed >= 0 ? 1 : -1;
+        // d|signed|/dvar = sgn · d(signed)/dvar
+        // d(cross/|u|)/dvar — same chain as in tangent's circle-line case.
+        const lu3 = lu * lu * lu;
+        outRow[pi*2 + 0] = sgn * (uy / lu);
+        outRow[pi*2 + 1] = sgn * (-ux / lu);
+        outRow[ai*2 + 0] = sgn * ((wy - uy) / lu + cross * (ux / lu3));
+        outRow[ai*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
+        outRow[bi*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
+        outRow[bi*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
+        return;
+      }
       const ia = params.joints[0], ib = params.joints[1];
       const ax = positions[ia*2], ay = positions[ia*2+1];
       const bx = positions[ib*2], by = positions[ib*2+1];
       const dx = ax - bx, dy = ay - by;
       const r = Math.hypot(dx, dy) || 1e-12;
-      // derivative w.r.t ax,ay is (dx/r, dy/r); w.r.t bx,by is (-dx/r, -dy/r)
       outRow[ia*2 + 0] = dx / r; outRow[ia*2 + 1] = dy / r;
       outRow[ib*2 + 0] = -dx / r; outRow[ib*2 + 1] = -dy / r;
     }
@@ -165,27 +209,25 @@ export const Definitions = {
       }
     }
   },
-  // Parallel: enforce direction vectors are collinear -> cross product zero
-  // For two segments A-B and C-D: error = ( (B-A) x (D-C) ) / (|B-A|*|D-C|)  -> scalar
+  // Parallel: cross(u, v) = 0 where u = B−A, v = D−C.
+  //
+  // We use the un-normalized cross product (not cross/|u||v|) — the residual
+  // scales with |u|·|v| but the Jacobian is exact and clean. The earlier
+  // normalized form had a sign bug in ∂/∂cy and an approximate Jacobian that
+  // ignored the denominator's derivative, causing the solver to step in the
+  // wrong direction and "converge" at the initial state.
   parallel: {
     rows: 1,
     computeError: (params, positions) => {
-      const a = positions[params.joints[0]*2], b = positions[params.joints[0]*2+1];
-      // params.joints: [A,B,C,D]
       const ax = positions[params.joints[0]*2], ay = positions[params.joints[0]*2+1];
       const bx = positions[params.joints[1]*2], by = positions[params.joints[1]*2+1];
       const cx = positions[params.joints[2]*2], cy = positions[params.joints[2]*2+1];
       const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      const cross = ux * vy - uy * vx;
-      const denom = (Math.hypot(ux, uy) * Math.hypot(vx, vy)) || 1e-12;
-      return cross / denom;
+      return ux * vy - uy * vx;
     },
     computeJacobian: (params, positions, outRow) => {
-      // For brevity and performance: compute numeric partials via analytic chain rule but keep compact.
-      // (Implementation note: parallel constraints are rare and Jacobians below are straightforward but verbose.)
-      // --- simplified (robust for small-scale solver) ---
       const aI = params.joints[0], bI = params.joints[1], cI = params.joints[2], dI = params.joints[3];
       const ax = positions[aI*2], ay = positions[aI*2+1];
       const bx = positions[bI*2], by = positions[bI*2+1];
@@ -193,21 +235,15 @@ export const Definitions = {
       const dx = positions[dI*2], dy = positions[dI*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      const cross = ux * vy - uy * vx;
-      const lu = Math.hypot(ux, uy) || 1e-12;
-      const lv = Math.hypot(vx, vy) || 1e-12;
-      const denom = lu * lv;
-      // partials (example for ax): ∂cross/∂ax = -vy ; adjust by /denom and account for denom derivative
-      const ddenom_du = (1/lu) * (ux / lu); // simplified scalar used below when needed
-
-      outRow[aI*2 + 0] = (-vy)/denom;
-      outRow[aI*2 + 1] = (vx)/denom;
-      outRow[bI*2 + 0] = (vy)/denom;
-      outRow[bI*2 + 1] = (-vx)/denom;
-      outRow[cI*2 + 0] = ( -(-uy) )/denom; // ∂/∂cx -> +uy/denom
-      outRow[cI*2 + 1] = ( -( -ux) )/denom; // -> -ux/denom
-      outRow[dI*2 + 0] = (-uy)/denom;
-      outRow[dI*2 + 1] = (ux)/denom;
+      // r = ux*vy − uy*vx, with u = b−a, v = d−c. Chain rule:
+      //   ∂r/∂ax = −vy   ∂r/∂ay = vx     (∂u/∂a = −I)
+      //   ∂r/∂bx =  vy   ∂r/∂by = −vx    (∂u/∂b = +I)
+      //   ∂r/∂cx =  uy   ∂r/∂cy = −ux    (∂v/∂c = −I)
+      //   ∂r/∂dx = −uy   ∂r/∂dy =  ux    (∂v/∂d = +I)
+      outRow[aI*2 + 0] = -vy; outRow[aI*2 + 1] =  vx;
+      outRow[bI*2 + 0] =  vy; outRow[bI*2 + 1] = -vx;
+      outRow[cI*2 + 0] =  uy; outRow[cI*2 + 1] = -ux;
+      outRow[dI*2 + 0] = -uy; outRow[dI*2 + 1] =  ux;
     }
   },
 
@@ -282,9 +318,12 @@ export const Definitions = {
   tangent: {
     rows: 1,
     computeError: (params, positions) => {
-      // Two modes supported:
-      // 1) circle-line tangent: params.joints = [C, A, B] => enforce (C-A) dot (B-A) = 0 (radius ⟂ tangent)
-      // 2) circle-circle tangent (shapes case): params.joints = [C1, C2] and params.radii = [r1, r2]
+      // Two modes:
+      //   1) circle-circle: params.joints = [C1, C2], params.radii = [r1, r2]
+      //      residual = ‖C2−C1‖ − target, target = r1+r2 (external) or |r1−r2| (internal)
+      //   2) circle-line:   params.joints = [C, A, B], params.radius = r
+      //      residual = (cross² − r²·|u|²) / |u|²  where cross = (C−A) × (B−A), u = B−A
+      //      Smooth (no |·|), zero iff distance(C, line) = r.
       if (params.joints && params.joints.length === 2 && Array.isArray(params.radii) && params.radii.length === 2) {
         const i1 = params.joints[0], i2 = params.joints[1];
         const x1 = positions[i1*2], y1 = positions[i1*2+1];
@@ -297,14 +336,20 @@ export const Definitions = {
         return dist - target;
       }
 
-      // Fallback: circle-line tangent
+      // Circle-line case: residual = |signed_dist(C, line AB)| − radius
+      // Linear in |d|, so the gradient stays at unit slope all the way to
+      // convergence (unlike d²−r² which shrinks near the optimum and stalls
+      // LM at a few-tenths-of-a-percent geometric error).
       const cI = params.joints[0], aI = params.joints[1], bI = params.joints[2];
       const cx = positions[cI*2], cy = positions[cI*2+1];
       const ax = positions[aI*2], ay = positions[aI*2+1];
       const bx = positions[bI*2], by = positions[bI*2+1];
       const ux = bx - ax, uy = by - ay;
       const wx = cx - ax, wy = cy - ay;
-      return wx * ux + wy * uy;
+      const cross = wx * uy - wy * ux;
+      const lu = Math.hypot(ux, uy) || 1e-12;
+      const r = Number(params.radius) || 0;
+      return Math.abs(cross / lu) - r;
     },
     computeJacobian: (params, positions, outRow) => {
       // circle-circle Jacobian: same as distance w.r.t centers
@@ -314,24 +359,36 @@ export const Definitions = {
         const x2 = positions[i2*2], y2 = positions[i2*2+1];
         const dx = x2 - x1, dy = y2 - y1;
         const r = Math.hypot(dx, dy) || 1e-12;
-        // ∂/∂C1 = -(dx/r, dy/r); ∂/∂C2 = (dx/r, dy/r)
         outRow[i1*2 + 0] = -dx / r; outRow[i1*2 + 1] = -dy / r;
-        outRow[i2*2 + 0] = dx / r; outRow[i2*2 + 1] = dy / r;
+        outRow[i2*2 + 0] =  dx / r; outRow[i2*2 + 1] =  dy / r;
         return;
       }
 
-      // circle-line Jacobian (existing behavior)
+      // Circle-line Jacobian for residual = |s| − r where s = cross/|u|.
+      // d|s|/dvar = sgn(s) · ds/dvar.
       const cI = params.joints[0], aI = params.joints[1], bI = params.joints[2];
       const cx = positions[cI*2], cy = positions[cI*2+1];
       const ax = positions[aI*2], ay = positions[aI*2+1];
       const bx = positions[bI*2], by = positions[bI*2+1];
       const ux = bx - ax, uy = by - ay;
-      // ∂/∂C : (ux, uy)
-      outRow[cI*2 + 0] = ux; outRow[cI*2 + 1] = uy;
-      // ∂/∂A : - (ux, uy) + (C-A) dot dU/dA (ignored for stability)
-      outRow[aI*2 + 0] = -ux; outRow[aI*2 + 1] = -uy;
-      // ∂/∂B : (C-A) dot dU/dB (approx 0 for robustness)
-      outRow[bI*2 + 0] = 0; outRow[bI*2 + 1] = 0;
+      const wx = cx - ax, wy = cy - ay;
+      const cross = wx * uy - wy * ux;
+      const lu = Math.hypot(ux, uy) || 1e-12;
+      const s = cross / lu;
+      const sgn = s >= 0 ? 1 : -1;
+      // ∂cross/∂{Cx,Cy} = (uy, −ux)
+      // ∂cross/∂{Ax,Ay} = (wy − uy,  ux − wx)
+      // ∂cross/∂{Bx,By} = (−wy,       wx)
+      // ∂(1/|u|)/∂{Ax,Ay} = ( ux/|u|³,  uy/|u|³)
+      // ∂(1/|u|)/∂{Bx,By} = (−ux/|u|³, −uy/|u|³)
+      // ∂(1/|u|)/∂{Cx,Cy} = 0
+      const lu3 = lu * lu * lu;
+      outRow[cI*2 + 0] = sgn * (uy / lu);
+      outRow[cI*2 + 1] = sgn * (-ux / lu);
+      outRow[aI*2 + 0] = sgn * ((wy - uy) / lu + cross * (ux / lu3));
+      outRow[aI*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
+      outRow[bI*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
+      outRow[bI*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
     }
   },
 
@@ -371,6 +428,52 @@ export const Definitions = {
         outRow[c*2 + 0] = -dx2 / l2; outRow[c*2 + 1] = -dy2 / l2;
         outRow[d*2 + 0] = dx2 / l2; outRow[d*2 + 1] = dy2 / l2;
       }
+    }
+  },
+
+  // Angle: enforce the angle between two line segments equals params.value (degrees).
+  //
+  // Lines are direction-symmetric (flipping a line by 180° is geometrically the
+  // same line), so we pick a residual that's invariant under that flip:
+  //   r = cross(u, v) · cos(t) − dot(u, v) · sin(t)     where t = value · π/180
+  // Zero iff the angle from u to v is t mod π. Special cases:
+  //   t = 0°  → r = cross(u, v)         (same as parallel)
+  //   t = 90° → r = −dot(u, v)          (same as perpendicular, no branch lock)
+  // Un-normalized — the residual scales with |u|·|v|, but the Jacobian is exact.
+  angle: {
+    rows: 1,
+    computeError: (params, positions) => {
+      const ax = positions[params.joints[0]*2], ay = positions[params.joints[0]*2+1];
+      const bx = positions[params.joints[1]*2], by = positions[params.joints[1]*2+1];
+      const cx = positions[params.joints[2]*2], cy = positions[params.joints[2]*2+1];
+      const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
+      const ux = bx - ax, uy = by - ay;
+      const vx = dx - cx, vy = dy - cy;
+      const t = ((Number(params.value) || 0) * Math.PI) / 180;
+      const ct = Math.cos(t), st = Math.sin(t);
+      return (ux * vy - uy * vx) * ct - (ux * vx + uy * vy) * st;
+    },
+    computeJacobian: (params, positions, outRow) => {
+      const aI = params.joints[0], bI = params.joints[1], cI = params.joints[2], dI = params.joints[3];
+      const ax = positions[aI*2], ay = positions[aI*2+1];
+      const bx = positions[bI*2], by = positions[bI*2+1];
+      const cx = positions[cI*2], cy = positions[cI*2+1];
+      const dx = positions[dI*2], dy = positions[dI*2+1];
+      const ux = bx - ax, uy = by - ay;
+      const vx = dx - cx, vy = dy - cy;
+      const t = ((Number(params.value) || 0) * Math.PI) / 180;
+      const ct = Math.cos(t), st = Math.sin(t);
+      // r = cross·ct − dot·st
+      // ∂cross/∂(ux,uy) = (vy, −vx); ∂dot/∂(ux,uy) = (vx, vy)
+      // ∂cross/∂(vx,vy) = (−uy, ux); ∂dot/∂(vx,vy) = (ux, uy)
+      const drdux =  vy * ct - vx * st;
+      const drduy = -vx * ct - vy * st;
+      const drdvx = -uy * ct - ux * st;
+      const drdvy =  ux * ct - uy * st;
+      outRow[aI*2 + 0] = -drdux; outRow[aI*2 + 1] = -drduy;
+      outRow[bI*2 + 0] =  drdux; outRow[bI*2 + 1] =  drduy;
+      outRow[cI*2 + 0] = -drdvx; outRow[cI*2 + 1] = -drdvy;
+      outRow[dI*2 + 0] =  drdvx; outRow[dI*2 + 1] =  drdvy;
     }
   },
 

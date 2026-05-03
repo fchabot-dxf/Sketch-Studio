@@ -35,3 +35,6 @@ Thumbs.db
 # --- misc ---
 .cache/
 *.log
+
+# --- auto-runner trigger folder (Claude tooling) ---
+.triggers/

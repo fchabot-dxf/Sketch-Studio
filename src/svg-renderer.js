@@ -731,7 +731,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       lateOverlay = `<g class="debug-joint-label-overlay" style="pointer-events:none;">${debugLabelGroups.join('')}</g>`;
     }
     // Add style for high z-index (SVG: later in DOM = higher z-order)
-    if (!document.getElementById('debug-joint-label-style')) {
+    // Guarded for headless/test environments that stub `document` but don't
+    // implement getElementById/head — checking the methods explicitly is
+    // more robust than `typeof document !== 'undefined'` alone.
+    if (typeof document !== 'undefined' &&
+        typeof document.getElementById === 'function' &&
+        document.head &&
+        !document.getElementById('debug-joint-label-style')) {
       const style = document.createElement('style');
       style.id = 'debug-joint-label-style';
       style.innerHTML = `.debug-joint-label { pointer-events: none; }

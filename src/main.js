@@ -192,58 +192,12 @@ function initApp(){
   // initialize
   engine.init();
 
-  // ════════════════════════════════════════════════════════════════════════
-  // STARTUP INJECTION: Fully Constrained Test Triangle (3 Units)
-  // ════════════════════════════════════════════════════════════════════════
-  
-  // 1. Define Joints (6 unique joints for 3 lines)
-  // Line 1 (Vertical): (0,0) to (0,-3)
-  const l1_j1 = state.genJ();
-  const l1_j2 = state.genJ();
-  state.joints.set(l1_j1, { x: 0, y: 0, fixed: false });
-  state.joints.set(l1_j2, { x: 0, y: -3, fixed: false });
+  // Empty starting sketch — only j_origin (created by engine.init()) exists.
+  // Set the view to show ~20 world units wide, centered near the origin.
+  state.view.w = 20;
+  state.view.x = 1.5;
+  state.view.y = -1.5;
 
-  // Line 2 (Horizontal): (0,0) to (3,0)
-  const l2_j1 = state.genJ();
-  const l2_j2 = state.genJ();
-  state.joints.set(l2_j1, { x: 0, y: 0, fixed: false });
-  state.joints.set(l2_j2, { x: 3, y: 0, fixed: false });
-
-  // Line 3 (Hypotenuse): (0,-3) to (3,0)
-  const l3_j1 = state.genJ();
-  const l3_j2 = state.genJ();
-  state.joints.set(l3_j1, { x: 0, y: -3, fixed: false });
-  state.joints.set(l3_j2, { x: 3, y: 0, fixed: false });
-
-  // 2. Create Shapes
-  const groupId = 'startup_tri';
-  const lineVert = { id: 's_test_vert', type: 'line', joints: [l1_j1, l1_j2], groupId };
-  const lineHoriz = { id: 's_test_horiz', type: 'line', joints: [l2_j1, l2_j2], groupId };
-  const lineHyp = { id: 's_test_hyp', type: 'line', joints: [l3_j1, l3_j2], groupId }; 
-  state.shapes.push(lineVert, lineHoriz, lineHyp);
-
-  // 3. Add Coincident Constraints (Topology)
-  // Corner at Origin: l1_j1, l2_j1, and j_origin (anchored)
-  addConstraintObject(state, { type: 'coincident', joints: ['j_origin', l1_j1, l2_j1] });
-  // Corner at Top: l1_j2 and l3_j1
-  addConstraintObject(state, { type: 'coincident', joints: [l1_j2, l3_j1] });
-  // Corner at Right: l2_j2 and l3_j2
-  addConstraintObject(state, { type: 'coincident', joints: [l2_j2, l3_j2] });
-
-  // 4. Add Structural Constraints
-  addConstraintObject(state, { type: 'vertical', joints: [l1_j1, l1_j2] });
-  addConstraintObject(state, { type: 'horizontal', joints: [l2_j1, l2_j2] });
-
-  // 5. Add Dimensions (Value = 3.0)
-  addConstraintObject(state, { type: 'distance', joints: [l1_j1, l1_j2], value: 3.0, offset: -0.6 });
-  addConstraintObject(state, { type: 'distance', joints: [l2_j1, l2_j2], value: 3.0, offset: 0.6 });
-
-  // 5. AUTO-ZOOM: Set camera to show ~20 units of width
-  state.view.w = 20; 
-  state.view.x = 1.5;  // Center X
-  state.view.y = -1.5; // Center Y
-  
-  // Force view update immediately
   const svgEl = document.getElementById('svgCanvas');
   if(svgEl) {
       const rect = svgEl.getBoundingClientRect();
@@ -252,8 +206,6 @@ function initApp(){
           svgEl.setAttribute('viewBox', `${state.view.x - state.view.w/2} ${state.view.y - state.view.h/2} ${state.view.w} ${state.view.h}`);
       }
   }
-
-  dbg.log('startup', '[Startup] Test Triangle Injected (3 units).');
   
   // 6. Initialize Tuning Wizard (dev-only)
   try {

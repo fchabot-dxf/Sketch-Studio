@@ -426,6 +426,35 @@ function handleShapeSelection(e, svg, state, hitShape) {
     return true;
 }
 
+// True if shape1 and shape2 are already constrained to be (parallel | perpendicular)
+// to each other — either explicitly via a PARALLEL/PERPENDICULAR constraint or
+// implicitly via H/V locks on both lines. Used by canApplyInference to suppress
+// redundant parallel/perpendicular hints during drag.
+function isRelationshipAlreadyEnforced(state, shape1Id, shape2Id, wantParallel) {
+    const constraints = state.constraints || [];
+    const shapes = state.shapes || [];
+    const matchingType = wantParallel ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
+    // Explicit constraint between the two
+    for (const c of constraints) {
+        if (c.type !== matchingType || !c.shapes || c.shapes.length !== 2) continue;
+        const [a, b] = c.shapes;
+        if ((a === shape1Id && b === shape2Id) || (a === shape2Id && b === shape1Id)) return true;
+    }
+    // H/V implicit relationship
+    const s1 = shapes.find(s => s.id === shape1Id);
+    const s2 = shapes.find(s => s.id === shape2Id);
+    if (!s1 || !s2 || !Array.isArray(s1.joints) || !Array.isArray(s2.joints) || s1.joints.length < 2 || s2.joints.length < 2) return false;
+    const samePair = (c, j1, j2) => c.joints && c.joints.length >= 2 &&
+        ((c.joints[0] === j1 && c.joints[1] === j2) || (c.joints[0] === j2 && c.joints[1] === j1));
+    const has = (s, type) => constraints.some(c => c.type === type && samePair(c, s.joints[0], s.joints[1]));
+    const s1H = has(s1, CONSTRAINT_TYPES.HORIZONTAL);
+    const s1V = has(s1, CONSTRAINT_TYPES.VERTICAL);
+    const s2H = has(s2, CONSTRAINT_TYPES.HORIZONTAL);
+    const s2V = has(s2, CONSTRAINT_TYPES.VERTICAL);
+    if (wantParallel) return (s1H && s2H) || (s1V && s2V);
+    return (s1H && s2V) || (s1V && s2H);
+}
+
 function canApplyInference(state, primaryId, inference, options = {}) {
     if (!inference || !primaryId) return false;
     const opts = { full: false, ...options };
@@ -448,10 +477,21 @@ function canApplyInference(state, primaryId, inference, options = {}) {
     if (type === INFERENCE_TYPES.PARALLEL || type === INFERENCE_TYPES.PERPENDICULAR) {
         const targetId = inference.targetId;
         if (!targetId) return false;
+        // Suppress inference when the geometric relationship is ALREADY enforced
+        // by existing constraints — otherwise the snap fires on every drag frame
+        // for, e.g., a horizontal-locked line being dragged along a vertical-locked
+        // line (which are already perpendicular by construction). The snap value
+        // would equal the cursor's current position and produce nothing but visual
+        // noise.
+        const wantParallel = type === INFERENCE_TYPES.PARALLEL;
+        for (const s of lineShapes) {
+            if (s.id === targetId) continue;
+            if (isRelationshipAlreadyEnforced(state, s.id, targetId, wantParallel)) return false;
+        }
         // During dragging (full: false), always allow position snapping for visual guidance
         // Only validate constraint addition when committing (full: true)
         if (!opts.full) return true;
-        const cType = type === INFERENCE_TYPES.PARALLEL ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
+        const cType = wantParallel ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
         for (const s of lineShapes) {
             if (s.id === targetId) continue;
             const res = ConstraintManager.canAddConstraint(state, cType, { shapes: [s.id, targetId] }, opts);

@@ -123,8 +123,28 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
   }
 
 
-  // Prefer midpoint inference before H/V detection, but only for joint→line midpoints
-
+  // MIDPOINT inference (joint→line only): runs BEFORE the global parallel /
+  // perpendicular / H/V scans because midpoint snapping is more specific —
+  // dragging a free joint toward a line's midpoint should win over a
+  // coincidentally-parallel cursor displacement. Threshold is inclusive (<=)
+  // so geometry that lands exactly on the cap still snaps.
+  {
+    const draggedIsJointEarly = options && options.draggedType === 'joint';
+    if (draggedIsJointEarly && Array.isArray(shapes) && shapes.length > 0) {
+      for (const shape of shapes) {
+        if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
+          const a = joints.get(shape.joints[0]);
+          const b = joints.get(shape.joints[1]);
+          if (!a || !b) continue;
+          const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          const dmid = Math.hypot(endPt.x - mid.x, endPt.y - mid.y);
+          const lineLen = Math.hypot(b.x - a.x, b.y - a.y);
+          const MID_THRESH = Math.max(MIDPOINT.MIN, Math.min(MIDPOINT.MAX, lineLen * MIDPOINT.PCT));
+          if (dmid <= MID_THRESH) return { type: INFERENCE_TYPES.MIDPOINT, pos: mid, targetId: shape.id, refLine: { id: shape.id, p1: a, p2: b } };
+        }
+      }
+    }
+  }
 
   // Fallback H/V check based on the (startPt → endPt) displacement angle.
   //
@@ -294,23 +314,8 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
     }
   }catch(_){ }
 
-  // MIDPOINT fallback (joint→line only): prefer other inferences first, then midpoint
-  const draggedIsJoint = options && options.draggedType === 'joint';
-  if (draggedIsJoint && Array.isArray(shapes) && shapes.length > 0) {
-    for (const shape of shapes) {
-      if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
-        const a = joints.get(shape.joints[0]);
-        const b = joints.get(shape.joints[1]);
-        if (a && b) {
-          const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-          const dmid = Math.hypot(endPt.x - mid.x, endPt.y - mid.y);
-          const lineLen = Math.hypot(b.x - a.x, b.y - a.y);
-          const MID_THRESH = Math.max(MIDPOINT.MIN, Math.min(MIDPOINT.MAX, lineLen * MIDPOINT.PCT));
-          if (dmid < MID_THRESH) return { type: INFERENCE_TYPES.MIDPOINT, pos: mid, targetId: shape.id, refLine: { id: shape.id, p1: a, p2: b } };
-        }
-      }
-    }
-  }
+  // (MIDPOINT joint→line check runs earlier — see the block right after the
+  // joint-attached-line section. Kept here as a no-op to flag the intent.)
 
   return null;
 }

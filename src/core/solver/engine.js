@@ -53,6 +53,30 @@ export class NewtonSolver {
       // Compute the full coincident cluster (transitive)
       const cluster = getCoincidentJoints(id, this.constraints) || new Set([id]);
 
+      // If the cluster contains a fixed member (j_origin or fixed:true), the
+      // entire cluster is pinned by that anchor. Pull every cluster member's
+      // stored position to the anchor and skip them from the variable set —
+      // they're constants, not unknowns. Without this, a coincident-with-fixed
+      // joint becomes a solver variable held only by a unit-weight residual,
+      // which a stiff mouse spring (weight ~1e4) can pull away from the anchor.
+      let anchor = null;
+      for (const jid of cluster) {
+        const mj = this.joints.get(jid);
+        if (mj && (mj.fixed || jid === 'j_origin')) { anchor = jid; break; }
+      }
+      if (anchor) {
+        const ap = this.joints.get(anchor);
+        for (const jid of cluster) {
+          const mj = this.joints.get(jid);
+          if (!mj) continue;
+          processed.add(jid);
+          if (jid === anchor) continue;
+          // Snap the member to the anchor's position so densePositions is consistent.
+          mj.x = ap.x; mj.y = ap.y;
+        }
+        continue; // no variables for this cluster
+      }
+
       // Choose the representative as the first cluster member encountered in joint insertion order
       let rep = null;
       const members = [];

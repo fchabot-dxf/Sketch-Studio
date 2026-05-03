@@ -19,14 +19,20 @@ Open `index.html` in a modern browser (Chrome/Edge/Firefox).
 
 > **Note:** ES modules require a web server. Use VS Code's \"Live Preview\" extension, or run a local server.
 
-### Mobile / Offline usage (Tailwind CSS)
+### Styling
 
-This app uses Tailwind CSS for styling. To run the app on a mobile browser or as a single-file offline build, compile Tailwind into `src/style.css` and inline it into the single-file build:
+The app uses Tailwind CSS via the official CDN (`<script src="https://cdn.tailwindcss.com">` in `index.html`). Tailwind compiles in the browser at page load — no local build step is required to develop or deploy.
 
-1. Install dependencies: `npm install` (installs `tailwindcss` as a dev dependency).
-2. Build CSS and bundle: `npm run build` — this runs `build:css` then `build:inline` and produces `output/sketch-studio-unified-v1.0.html` with CSS inlined.
+### Single-file offline build (optional)
 
-If you prefer not to install, you can use `npx tailwindcss ...` directly but installing is recommended for repeatable builds.
+To produce a self-contained HTML file with all JS bundled inline (e.g. for emailing or running offline):
+
+```
+npm install
+npm run build:inline
+```
+
+Output: `output/sketch-studio-unified-v1.0.html`.
 ## File Structure
 
 ```

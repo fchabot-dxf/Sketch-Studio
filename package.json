@@ -9,17 +9,11 @@
   "scripts": {
     "test": "node scripts/run-tests.js",
     "test:unit": "node scripts/run-tests.js",
-    "build:css": "npx @tailwindcss/cli -i src/tailwind.css -o src/style.css --minify",
-    "watch:css": "npx @tailwindcss/cli -i src/tailwind.css -o src/style.css --watch",
-    "build:inline": "node scripts/build-inline.cjs",
-    "build": "npm run build:css && npm run build:inline"
+    "build:inline": "node scripts/build-inline.cjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
-  "devDependencies": {
-    "@tailwindcss/cli": "^4.1.18",
-    "tailwindcss": "^4.1.18"
-  }
+  "devDependencies": {}
 }

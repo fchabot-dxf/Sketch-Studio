@@ -698,6 +698,26 @@ export function handleSelectionPointerMove(e, svg, state) {
         }
     }
 
+    // Drag step cap: when the cursor jumps far in a single frame (lag, focus
+    // loss, fast flick), the solver gets a huge target displacement and can
+    // overshoot. Clamp the proposed target to MAX_DRAG_STEP world units from
+    // the dragged joint's current position. The joint catches up over the
+    // next few frames if constraints allow.
+    try {
+        const maxStep = SolverConfig.MAX_DRAG_STEP;
+        if (maxStep && maxStep > 0 && state.drag && state.drag.id) {
+            const j = state.joints && state.joints.get(state.drag.id);
+            if (j) {
+                const sdx = smoothed.x - j.x, sdy = smoothed.y - j.y;
+                const stepLen = Math.hypot(sdx, sdy);
+                if (stepLen > maxStep) {
+                    const k = maxStep / stepLen;
+                    smoothed = { x: j.x + sdx * k, y: j.y + sdy * k };
+                }
+            }
+        }
+    } catch (_) { /* fail-open */ }
+
     state.drag.lastTarget = smoothed;
 
     // NATIVE SOLVER DRAG: Set drag targets on joints instead of forcing positions

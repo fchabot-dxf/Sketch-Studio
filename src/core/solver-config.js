@@ -42,7 +42,14 @@ const DEFAULTS = {
     RELAX_PREPASS_ENABLED: true,
     RELAX_PREPASS_ITERS: 10,
     RELAX_PREPASS_SKIP_RESIDUAL: 1e-3,   // Skip pre-pass if initial residual already below this
-    RELAX_PREPASS_HANDOFF: 1e-2          // Hand off to LM once residual drops below this
+    RELAX_PREPASS_HANDOFF: 1e-2,         // Hand off to LM once residual drops below this
+
+    // ── Drag step cap (world units) ──────────────────────────────────
+    // When the cursor moves far in a single frame (lag spike, fast flick),
+    // clamp the dragTarget seen by the solver to this distance from the
+    // dragged joint's current position. The joint catches up over a few
+    // frames. Set to 0 to disable.
+    MAX_DRAG_STEP: 100
 };
 
 // 2. Try to Load User Settings (localStorage and project config)

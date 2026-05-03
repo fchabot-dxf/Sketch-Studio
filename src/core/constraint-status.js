@@ -140,12 +140,15 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
         const yLocked = lockedAxisY.has(jid) ? 1 : 0;
         const base = Math.max(0, 2 - (xLocked + yLocked));
         const rCount = radialConstraints.has(jid) ? radialConstraints.get(jid).size : 0;
-        // Count other reductions recorded in dofSources (exclude distance/radius/origin/ground)
+        // Count other reductions recorded in dofSources (exclude sources that are
+        // already accounted for by axis locks or radialConstraints — see the
+        // identical skip list in the Phase-3 final pass below for rationale).
         let other = 0;
         if (dofSources.has(jid)) {
             for (const s of dofSources.get(jid)) {
                 const t = (s && s.split) ? s.split(':')[0] : s;
-                if (t === 'distance' || t === 'radius' || t === 'origin' || t === 'ground') continue;
+                if (t === 'distance' || t === 'radius' || t === 'origin' || t === 'ground'
+                    || t === 'fixed' || t === 'anchor' || t === 'horizontal' || t === 'vertical') continue;
                 other++;
             }
         }
@@ -525,11 +528,21 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
         const afterRadial = Math.max(0, base - Math.max(0, Math.min(rCount, base)));
 
         // Additional DOF reductions from other constraint types (equal, midpoint, point_on_line, etc.)
+        // Skip-list rationale:
+        //   distance / radius — already counted in radialConstraints (rCount above).
+        //   ground / origin / fixed — already reflected in axis locks; double-counting would
+        //     drive a fixed joint's neighbors below their true freedom.
+        //   anchor — pure metadata pushed by the DISTANCE handler alongside the real
+        //     'distance:...' source; counts the same physical constraint twice.
+        //   horizontal / vertical — already reflected in lockedAxisY / lockedAxisX
+        //     (the BFS H/V handler propagates the axis lock); counting them again
+        //     would subtract a DOF that's already gone.
         let otherReductions = 0;
         if (dofSources.has(id)) {
             for (const s of dofSources.get(id)) {
                 const type = (s && s.split && s.split(':')[0]) ? s.split(':')[0] : s;
-                if (type === 'distance' || type === 'radius' || type === 'ground' || type === 'origin') continue;
+                if (type === 'distance' || type === 'radius' || type === 'ground' || type === 'origin'
+                    || type === 'fixed' || type === 'anchor' || type === 'horizontal' || type === 'vertical') continue;
                 // Count 'equal', 'midpoint', 'point_on_line', 'parallel', 'perpendicular', 'collinear', etc.
                 otherReductions++;
             }
@@ -574,10 +587,22 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             // (axis locks + radial constraint counts), then force the entire cluster to the
             // absolute minimum of those computed DOFs (so clusters behave as single rigid bodies).
 
-            // First, merge radialConstraints across the cluster (union) so counting is consistent
+            // First, merge radialConstraints across the cluster (union) so counting is consistent.
+            // Filter out 'ground:<X>' sources where X itself is in the cluster — those are
+            // self-referential within the cluster (one member's coincident-with-grounded marker
+            // pointing at another member that's only provisionally grounded). Keeping them
+            // would double-count each member's own grounding when the merged set is broadcast
+            // back to every cluster member.
             const mergedRadial = new Set();
             for (const jid of cluster) {
-                if (radialConstraints.has(jid)) for (const s of radialConstraints.get(jid)) mergedRadial.add(s);
+                if (!radialConstraints.has(jid)) continue;
+                for (const s of radialConstraints.get(jid)) {
+                    if (typeof s === 'string' && s.startsWith('ground:')) {
+                        const target = s.substring('ground:'.length);
+                        if (cluster.has(target)) continue;
+                    }
+                    mergedRadial.add(s);
+                }
             }
             if (mergedRadial.size > 0) {
                 for (const jid of cluster) radialConstraints.set(jid, new Set(mergedRadial));

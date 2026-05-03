@@ -418,14 +418,24 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // Positioning origin for this label (anchor point at cluster)
         const lx = cx + labelOffset;
 
-        // Measure widest line using offscreen canvas (screen px)
-        if (!draw._measureCtx) { const _c = document.createElement('canvas'); draw._measureCtx = _c.getContext('2d'); }
+        // Measure widest line using offscreen canvas (screen px). In a non-DOM
+        // environment (tests), document.createElement isn't available — fall
+        // back to a character-count estimate so headless renders still work.
+        if (!draw._measureCtx) {
+          if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+            const _c = document.createElement('canvas');
+            draw._measureCtx = (_c && typeof _c.getContext === 'function') ? _c.getContext('2d') : null;
+          }
+          if (!draw._measureCtx) draw._measureCtx = null;
+        }
         const measureCtx = draw._measureCtx;
         const baseFontPx = debugFontPx; // screen px used for label font
-        measureCtx.font = `${baseFontPx}px monospace`;
+        if (measureCtx) measureCtx.font = `${baseFontPx}px monospace`;
         let maxMeasuredPx = 0;
         for (const ln of linesArr) {
-          const wpx = Math.ceil(measureCtx.measureText(ln).width);
+          const wpx = measureCtx
+            ? Math.ceil(measureCtx.measureText(ln).width)
+            : Math.ceil(ln.length * baseFontPx * 0.6); // rough monospace heuristic
           if (wpx > maxMeasuredPx) maxMeasuredPx = wpx;
         }
         const measuredPx = Math.max(4, maxMeasuredPx);
@@ -583,29 +593,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
             }
           }
 
-          // Render whiskers aligned to the freedom vector when we have a single DOF
-          if (jdof === 1 && freedomDir) {
-            const dx = freedomDir.x, dy = freedomDir.y;
-            const sx = jpt.x + dx * whiskerOffset;
-            const sy = jpt.y + dy * whiskerOffset;
-            // forward direction
-            whiskerMarkup += `<line class="debug-whisker" x1="${sx}" y1="${sy}" x2="${sx + dx * whiskerLen}" y2="${sy + dy * whiskerLen}" stroke="#9CA3AF" stroke-opacity="0.6" stroke-width="${WHISKER_STROKE}" stroke-linecap="round" />`;
-            // backward direction
-            const bx = jpt.x - dx * whiskerOffset;
-            const by = jpt.y - dy * whiskerOffset;
-            whiskerMarkup += `<line class="debug-whisker" x1="${bx}" y1="${by}" x2="${bx - dx * whiskerLen}" y2="${by - dy * whiskerLen}" stroke="#9CA3AF" stroke-opacity="0.6" stroke-width="${WHISKER_STROKE}" stroke-linecap="round" />`; 
-          } else {
-            // Basic axis-aligned whiskers (fallback / 2-DOF case)
-            if (allowX) {
-              const sx = jpt.x + whiskerOffset;
-              // Minimal, unobtrusive stroke for line whiskers
-              whiskerMarkup += `<line class="debug-whisker" x1="${sx}" y1="${jpt.y}" x2="${sx + whiskerLen}" y2="${jpt.y}" stroke="#9CA3AF" stroke-opacity="0.6" stroke-width="${WHISKER_STROKE}" stroke-linecap="round" />`;
-            }
-            if (allowY) {
-              const sy = jpt.y - whiskerOffset; // draw upward whisker by default
-              whiskerMarkup += `<line class="debug-whisker" x1="${jpt.x}" y1="${sy}" x2="${jpt.x}" y2="${sy - whiskerLen}" stroke="#9CA3AF" stroke-opacity="0.6" stroke-width="${WHISKER_STROKE}" stroke-linecap="round" />`;
-            }
-          }
+          // (Whisker rendering for the freedom vector / axis fallback was
+          // duplicated from the inner block above — removed as dead code.
+          // The duplicate referenced `freedomDir` which lives in an inner
+          // scope and was undefined here, throwing on every render in any
+          // sketch with at least one joint and the debug overlay enabled.)
 
           // Dynamic arc whisker for radial-locked joints (unchanged)
           if (radialLocked && radialLocked.has && radialLocked.has(jid) && jdof > 0) {

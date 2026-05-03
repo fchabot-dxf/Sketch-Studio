@@ -120,12 +120,12 @@ export function handleLineKeyDown(e, svg, state) {
         return true;
     }
 
-    // Enter: commit the current preview as a line and end the polyline chain.
-    // The user wanted a keyboard alternative to clicking + Escape. finalize
-    // already aborts zero-length segments, so a stray Enter without movement
-    // safely just ends the chain.
+    // Enter: end the polyline chain, keeping only segments that were already
+    // committed by clicks. The current preview segment (the rubber-band from
+    // the last click to the cursor) is DISCARDED — same as Escape but more
+    // ergonomic to reach for. deactivateLineTool removes the in-flight start
+    // joint and any pending coincident constraint that the polyline auto-added.
     if (e.key === 'Enter') {
-        try { finalizeLineFromActive(svg, state); } catch (err) { console.error('[line-tool] Enter finalize error:', err); }
         try { deactivateLineTool(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
         return true;
     }

@@ -31,11 +31,15 @@ let inputState = {
 };
 
 export function setupLiveDimensionInput() {
-    if (typeof document === 'undefined') return;
+    // Guard against headless document — we need at least createElement to do
+    // anything useful. Treat missing getElementById as "no existing element"
+    // (just create fresh) so test stubs that only provide createElement work.
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    const findById = typeof document.getElementById === 'function' ? (id) => document.getElementById(id) : () => null;
 
     // --- Current (refactored) inputs ---
     // Create input elements if they don't exist
-    if (!document.getElementById('live-dim-width')) {
+    if (!findById('live-dim-width')) {
         const widthInput = document.createElement('input');
         widthInput.id = 'live-dim-width';
         widthInput.type = 'text';
@@ -73,7 +77,7 @@ export function setupLiveDimensionInput() {
         inputState.inputs.angle = angleInput;
 
         // Reuse or create single input for editing
-        let singleInput = document.getElementById('dimInput');
+        let singleInput = findById('dimInput');
         if (!singleInput) {
             singleInput = document.createElement('input');
             singleInput.id = 'dimInput';
@@ -94,11 +98,11 @@ export function setupLiveDimensionInput() {
             });
         });
     } else {
-        inputState.inputs.width = document.getElementById('live-dim-width');
-        inputState.inputs.height = document.getElementById('live-dim-height');
-        inputState.inputs.length = document.getElementById('live-dim-length');
-        inputState.inputs.angle = document.getElementById('live-dim-angle');
-        inputState.inputs.single = document.getElementById('dimInput');
+        inputState.inputs.width = findById('live-dim-width');
+        inputState.inputs.height = findById('live-dim-height');
+        inputState.inputs.length = findById('live-dim-length');
+        inputState.inputs.angle = findById('live-dim-angle');
+        inputState.inputs.single = findById('dimInput');
     }
 
     // --- Legacy compatibility: create older single-input IDs and showSingleInput API ---
@@ -107,7 +111,7 @@ export function setupLiveDimensionInput() {
     // compatibility layer that mirrors the previous behavior and dispatches the
     // `liveDimensionApplied` event on commit (Enter or blur), while ensuring
     // Enter suppresses the subsequent blur-apply to avoid double dispatch.
-    if (!document.getElementById('liveDimSingleInput')) {
+    if (!findById('liveDimSingleInput')) {
         const legacyContainer = document.createElement('div');
         legacyContainer.id = 'liveDimSingleInput';
         legacyContainer.style.display = 'none';
@@ -146,7 +150,7 @@ export function setupLiveDimensionInput() {
 
 // Backwards-compatible showSingleInput for tests/legacy callers
 export function showSingleInput(x, y, value, field, initialKey = null) {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     setupLiveDimensionInput(); // ensure legacy DOM exists
     const el = document.getElementById('liveDimSingle');
     const container = document.getElementById('liveDimSingleInput');

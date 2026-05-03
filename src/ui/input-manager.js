@@ -442,9 +442,12 @@ function handlePointerDown(e, svg, state) {
         if (handlePanZoomPointerDown(e, svg, state)) return true;
     }
 
-    // Handle Dimension Driven/Driving Toggle Click
-    if (e.target && (e.target.classList.contains('dim-driven-toggle') || e.target.closest('.dim-driven-toggle'))) {
-        const el = e.target.classList.contains('dim-driven-toggle') ? e.target : e.target.closest('.dim-driven-toggle');
+    // Handle Dimension Driven/Driving Toggle Click — guard against synthetic
+    // events from tests whose targets lack classList/closest.
+    const _hasCls = e.target && e.target.classList && typeof e.target.classList.contains === 'function';
+    const _hasClosest = e.target && typeof e.target.closest === 'function';
+    if ((_hasCls && e.target.classList.contains('dim-driven-toggle')) || (_hasClosest && e.target.closest('.dim-driven-toggle'))) {
+        const el = (_hasCls && e.target.classList.contains('dim-driven-toggle')) ? e.target : e.target.closest('.dim-driven-toggle');
         const cIdx = parseInt(el.getAttribute('data-c-idx'), 10);
         if (!isNaN(cIdx) && state.constraints && state.constraints[cIdx]) {
             const c = state.constraints[cIdx];
@@ -579,24 +582,40 @@ function handlePointerDown(e, svg, state) {
     let hitShape = null;
     let clickSnap = null;
     try {
-        const snapBoost = isTouch ? 2.0 : 1.0;
-        clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
-        // DEBUG: Log what findSnap returns when clicking
-        console.log('[DEBUG input-manager] pointerdown findSnap:', clickSnap, 'at screen:', screenX, screenY, 'joints count:', state.joints.size);
-        if (clickSnap) {
-            if (clickSnap.type === 'joint') {
-                const jid = clickSnap.targetId;
-                hitJoint = { id: jid, j: state.joints.get(jid) };
-            } else if (clickSnap.type === 'line' || clickSnap.type === 'shape' || clickSnap.type === 'midpoint') {
-                hitShape = { shape: clickSnap.shape, pt: clickSnap.pt || { x: clickSnap.x, y: clickSnap.y } };
-            }
-        } else if (state.snapTarget) {
-            clickSnap = state.snapTarget; // Use existing snapTarget as fallback
+        // If the user already has a LOCKED snap from hovering (the magnetic
+        // visual indicator that locks within SNAP_MAGNETISM px), honor it
+        // over a fresh findSnap. Otherwise rapid hover-lock → click sequences
+        // can lose the lock to a geometrically-closer entity at the exact
+        // click pixel.
+        if (state.snapTarget && state.snapTarget.isLocked) {
+            clickSnap = state.snapTarget;
             if (state.snapTarget.type === 'joint') {
                 const jid = state.snapTarget.targetId;
                 hitJoint = { id: jid, j: state.joints.get(jid) };
             } else if (state.snapTarget.type === 'line' || state.snapTarget.type === 'shape' || state.snapTarget.type === 'midpoint') {
                 hitShape = { shape: state.snapTarget.shape, pt: state.snapTarget.pt };
+            }
+        }
+        if (!hitJoint && !hitShape) {
+            const snapBoost = isTouch ? 2.0 : 1.0;
+            clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
+            // DEBUG: Log what findSnap returns when clicking
+            console.log('[DEBUG input-manager] pointerdown findSnap:', clickSnap, 'at screen:', screenX, screenY, 'joints count:', state.joints.size);
+            if (clickSnap) {
+                if (clickSnap.type === 'joint') {
+                    const jid = clickSnap.targetId;
+                    hitJoint = { id: jid, j: state.joints.get(jid) };
+                } else if (clickSnap.type === 'line' || clickSnap.type === 'shape' || clickSnap.type === 'midpoint') {
+                    hitShape = { shape: clickSnap.shape, pt: clickSnap.pt || { x: clickSnap.x, y: clickSnap.y } };
+                }
+            } else if (state.snapTarget) {
+                clickSnap = state.snapTarget; // Unlocked-snapTarget fallback
+                if (state.snapTarget.type === 'joint') {
+                    const jid = state.snapTarget.targetId;
+                    hitJoint = { id: jid, j: state.joints.get(jid) };
+                } else if (state.snapTarget.type === 'line' || state.snapTarget.type === 'shape' || state.snapTarget.type === 'midpoint') {
+                    hitShape = { shape: state.snapTarget.shape, pt: state.snapTarget.pt };
+                }
             }
         }
     } catch (err) {

@@ -190,7 +190,9 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     selectionState.lastClickedIndex = _targetConstraintIdx;
 
     // 1. Check for Dimension Label Interaction
-    const dimLabel = e.target.closest('.dim-label');
+    // Test environments may pass synthetic pointer events whose target lacks
+    // .closest(); fall back to null so the dim-label branch is skipped.
+    const dimLabel = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-label') : null;
     if (dimLabel) {
         const cIdx = parseInt(dimLabel.dataset.constraintIdx);
         const constraint = state.constraints[cIdx];
@@ -391,6 +393,9 @@ export function handleJointSelection(e, svg, state, hitJoint) {
 function handleShapeSelection(e, svg, state, hitShape) {
     // Toggle shape selection in the set
     const id = hitShape.shape.id;
+    // Lazy-init selection sets — same pattern used for selectedShapes below.
+    if (!state.selectedJoints) state.selectedJoints = new Set();
+    if (!state.selectedConstraints) state.selectedConstraints = new Set();
     if (!e.shiftKey) { state.selectedJoints.clear(); state.selectedConstraints.clear(); }
     // Clear cluster glyphs when changing selection to a non-joint entity
     try{ clearCoincidentGlyphFlags(state); }catch(_){ }
@@ -722,11 +727,15 @@ export function handleSelectionPointerMove(e, svg, state) {
 
     // NATIVE SOLVER DRAG: Set drag targets on joints instead of forcing positions
     // This tells the solver "try to be here", but allows constraints to override.
+    // Set dragTarget on every member of the drag (fixed joints included) so the
+    // renderer can show them and downstream tests/inspections can see what the
+    // mask actually allows. The solver's auto-detect path already skips fixed
+    // joints, so fixed joints never produce a mouse_spring.
     const dx = smoothed.x - state.drag.startWorld.x, dy = smoothed.y - state.drag.startWorld.y;
     console.log('[DRAG] smoothed:', smoothed, 'startWorld:', state.drag.startWorld, 'dx/dy:', dx, dy);
     for (const id of state.drag.jointIds) {
         const init = state.drag.initial.get(id), j = state.joints.get(id);
-        if (j && init && !j.fixed) { 
+        if (j && init) {
             j.dragTarget = { x: init.x + dx, y: init.y + dy };
             console.log('[DRAG] Joint', id, 'init:', init, 'dragTarget:', j.dragTarget);
         }

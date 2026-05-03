@@ -32,6 +32,9 @@ export function setupNotifications() {
 }
 
 export function showNotification(message, type = 'error', duration = 3000) {
+    // No-op in non-DOM environments (tests, server-side imports). Notifications
+    // are pure UI candy; their absence shouldn't crash logic flows.
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const container = document.getElementById('notification-container');
     if (!container) {
         // Try to setup if missing (lazy init)

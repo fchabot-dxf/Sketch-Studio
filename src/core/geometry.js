@@ -94,12 +94,17 @@ export function screenToWorld(svg, screenX, screenY) {
 export function worldToScreen(svg, pt) {
     const rect = svg.getBoundingClientRect();
     const vb = svg.viewBox.baseVal;
-    
+    // Defensive defaults — real SVGRect always has x/y, but tests may stub
+    // viewBox.baseVal as { width, height }. Without these, (pt.x - undefined)
+    // becomes NaN and silently propagates.
+    const vbX = (typeof vb.x === 'number') ? vb.x : 0;
+    const vbY = (typeof vb.y === 'number') ? vb.y : 0;
+
     const scaleX = rect.width / vb.width;
     const scaleY = rect.height / vb.height;
-    
-    const localX = (pt.x - vb.x) * scaleX;
-    const localY = (pt.y - vb.y) * scaleY;
+
+    const localX = (pt.x - vbX) * scaleX;
+    const localY = (pt.y - vbY) * scaleY;
     
     const left = (typeof rect.left === 'number') ? rect.left : (typeof rect.x === 'number' ? rect.x : 0);
     const top = (typeof rect.top === 'number') ? rect.top : (typeof rect.y === 'number' ? rect.y : 0);

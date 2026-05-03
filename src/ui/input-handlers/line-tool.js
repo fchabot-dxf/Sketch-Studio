@@ -112,13 +112,24 @@ export function handleLineKeyDown(e, svg, state) {
     dbg.log('line-tool', '[DEBUG LINE] KeyDown:', e.key);
     if (state.currentTool !== TOOL_MODES.LINE) return false;
     if (!state.active || !state.active.start) return false;
-    
-    // Use unified live dimension input
+
+    // Use unified live dimension input first — if a length is being typed,
+    // Enter belongs to that input.
     if (handleLiveLineKeyDown(e, svg, state)) {
         dbg.log('line-tool', '[DEBUG LINE] Handled by live input');
         return true;
     }
-    
+
+    // Enter: commit the current preview as a line and end the polyline chain.
+    // The user wanted a keyboard alternative to clicking + Escape. finalize
+    // already aborts zero-length segments, so a stray Enter without movement
+    // safely just ends the chain.
+    if (e.key === 'Enter') {
+        try { finalizeLineFromActive(svg, state); } catch (err) { console.error('[line-tool] Enter finalize error:', err); }
+        try { deactivateLineTool(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
+        return true;
+    }
+
     return false;
 }
 

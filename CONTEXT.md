@@ -87,18 +87,18 @@ The Newton-Raphson engine is implemented and working. From earlier analysis:
 
 `tests/ai-vision-label-spacing.test.js` fails with `Expected label text lines at AI_VISION=false`. The test calls `draw()` with one joint and expects `<text class="debug-joint-label">` elements in `svg.innerHTML`. None appear. Started a diagnostic script but the auto-runner choked on `{}` characters in the inline JS — abandoned that approach. Next agent has terminal access and can run the diagnostic directly. Probable cause is somewhere in the `if (showDebugOverlay)` block in `svg-renderer.js` lines 345-735, or in how `SettingsManager.set()` interacts with the renderer's read.
 
-### 2. Solver robustness — the user's main goal (high priority)
+### 2. Solver robustness — the user's main goal ✅ ALL DONE
 
-Three remaining items (the pre-pass is done as of this session):
+All four items from the original list are landed as of this session. See `docs/architecture/SOLVER_WALKTHROUGH.md` for the full picture.
 
-- ~~**Relaxation pre-pass before Newton.**~~ ✅ DONE. Steepest-descent loop with optimal Cauchy step length (`α = ‖g‖²/‖Jg‖²`) plus Armijo backtracking, in `engine._preRelax`. Runs up to 10 iterations before LM, skipped when initial residual < 1e-3, hands off to LM once residual < 1e-2. Toggleable via `SolverConfig.RELAX_PREPASS_ENABLED` and friends. Test: `tests/solver-relaxation-prepass.test.js`.
-- **Branch locking on tangent / perpendicular constraints.** Multi-solution constraints (tangent arc-arc has internal vs external; perp has 90° vs 270°) currently let Newton pick whichever side the linearization points toward — and that can flip mid-drag, causing sketches to snap inside-out. Fix: store the chosen branch sign at constraint creation, enforce as inequality.
-- **Rank-deficiency detection with a useful UI message.** Currently when `det(JᵀJ)` is near zero, Cholesky returns false and the solver silently reports `converged: false`. Better: detect this up front, surface "sketch is under-constrained" or similar in the UI.
-- **Drag step cap.** When the user drags a joint a long way in one frame, Newton sees a large displacement and can overshoot. Clamp the per-frame Δ in the input handler so the solver always sees a small change.
+- ~~**Relaxation pre-pass before Newton.**~~ ✅ Steepest-descent with optimal Cauchy step (`α = ‖g‖²/‖Jg‖²`) + Armijo backtracking, in `engine._preRelax`. Toggle via `SolverConfig.RELAX_PREPASS_ENABLED`. Test: `tests/solver-relaxation-prepass.test.js`.
+- ~~**Branch locking on tangent / perpendicular.**~~ ✅ Tangent gets `branch: 'external' | 'internal'` (default external); perpendicular gets `branch: +1 | -1` using the combined residual `cross(u,v) − branch·‖u‖‖v‖` (single row, no kinks, no local minima on the wrong half). Auto-detected at constraint creation by `ConstraintManager.lockTangentBranch` / `lockPerpendicularBranch`. Test: `tests/solver-branch-lock.test.js`.
+- ~~**Rank-deficiency detection.**~~ ✅ Polishing pass's undamped Cholesky doubles as a rank-deficiency probe; `result.rankDeficient` is plumbed through `lastSolveStats.rankDeficient` so the existing `window.__updateSolverMetrics` UI hook receives it. Test: `tests/solver-rank-deficiency.test.js`. UI panel still needs to render the flag — that's a tiny renderer-side follow-up, not engine work.
+- ~~**Drag step cap.**~~ ✅ `SolverConfig.MAX_DRAG_STEP` (default 100 world units) clamps the per-frame `dragTarget` distance from the joint's current position. Set to 0 to disable. Test: `tests/drag-step-cap.test.js`.
 
-### 3. Detailed walkthrough of `src/core/solver/` (user requested)
+### 3. Detailed walkthrough of `src/core/solver/` ✅ DONE
 
-User asked for a deep, detailed reading of the solver source files: how `engine.js` orchestrates iterations, how `definitions.js` encodes each constraint's residual + Jacobian, what role `interaction.js` plays, where the LM damping logic lives, etc. Treat this as a code-review-style document, not a full rewrite.
+Written as `docs/architecture/SOLVER_WALKTHROUGH.md`. Covers file map, data structures, packing/unification, assembly, the four-stage solve pipeline (pre-pass → LM → polish → rank check), the constraint zoo with branch-lock formulations, tunable knobs, known limitations, extension recipes, and the test surface.
 
 ## Gotchas / things to know
 
@@ -122,8 +122,14 @@ User asked for a deep, detailed reading of the solver source files: how `engine.
 
 ## Suggested first move for next session
 
-1. Decide between **branch locking** (item 2 above) or the **deep walkthrough** of `src/core/solver/`. Ask the user.
-2. Note: the test runner (`scripts/run-tests.js`) halts on first failure. There are ~23 known pre-existing failures (mostly DOM-dependent UI tests, plus a few stale solver assertions like `mouse-spring-structural` whose math no longer matches the test). Run individual files with `node tests/<name>.test.js` while iterating; the solver-specific tests all pass.
+The solver-robustness backlog from CONTEXT.md is empty. Likely next areas:
+
+1. **UI surface for `rankDeficient`** — wire the new flag through `lastSolveStats.rankDeficient` to a visible "sketch is under-constrained" indicator. Renderer-side work, not engine.
+2. **Triage pre-existing failures** — 23 broken tests, most are DOM-stub issues (`document is not defined`); a few are stale assertions from before the engine evolved. Worth one cleanup pass to either fix or quarantine.
+3. **Extend branch lock pattern** — Parallel currently has the `alignParallelOrientation` swap-at-creation hack; could be replaced with a proper branch field for symmetry with perp/tangent.
+4. **Conflict UX from `rankDeficient` + residual** — combine "well-constrained but won't converge" (over-constrained, conflicts) with rankDeficient to surface a meaningful per-constraint diagnostic.
+
+Note: test runner (`scripts/run-tests.js`) halts on first failure. Run individual files with `node tests/<name>.test.js` while iterating; the nine solver/drag tests all pass.
 
 ## Test suite status (as of relaxation pre-pass session)
 

@@ -56,7 +56,10 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
       const dragDist = Math.hypot(dragDx, dragDy);
 
       // FIRST: Check if this line would be parallel/perpendicular to other lines (prefer matching existing lines)
-      const normDragAngle = ((dragAngle % 360) + 360) % 360;
+      // Use the SIGNED angle difference (not absolute) so we can tell whether
+      // the dragged line is parallel-same or anti-parallel to the reference,
+      // and which side of perpendicular it's on. Otherwise the snap pos
+      // computed from `otherAngle` flips the dragged line 180°.
       for(const otherShape of shapes){
         if(!otherShape || otherShape === attachedLine) continue;
         if(otherShape.type === 'line' && otherShape.joints && otherShape.joints.length >= 2){
@@ -67,14 +70,21 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
           const otherDx = ob.x - oa.x;
           const otherDy = ob.y - oa.y;
           const otherAngle = Math.atan2(otherDy, otherDx) * 180 / Math.PI;
-          const normOtherAngle = ((otherAngle % 360) + 360) % 360;
 
-          // Check parallel
-          let angleDiff = Math.abs(normDragAngle - normOtherAngle);
-          if(angleDiff > 180) angleDiff = 360 - angleDiff;
-          if(angleDiff < ANGLE_SNAP_DEG || Math.abs(angleDiff - 180) < ANGLE_SNAP_DEG){
-            // Snap to make lines exactly parallel - project current position onto parallel direction
-            const rad = otherAngle * Math.PI / 180;
+          // Signed difference, normalized to (-180, 180]
+          let signedDiff = dragAngle - otherAngle;
+          while (signedDiff > 180) signedDiff -= 360;
+          while (signedDiff <= -180) signedDiff += 360;
+          const absDiff = Math.abs(signedDiff);
+
+          // Parallel: dragged line is within SNAP° of either same-direction (0)
+          // or anti-parallel (±180). Pick the matching branch so the dragged
+          // line keeps its current orientation.
+          const isParaSame = absDiff < ANGLE_SNAP_DEG;
+          const isParaOpp  = Math.abs(absDiff - 180) < ANGLE_SNAP_DEG;
+          if(isParaSame || isParaOpp){
+            const targetAngleDeg = isParaOpp ? (otherAngle + 180) : otherAngle;
+            const rad = targetAngleDeg * Math.PI / 180;
             const snapPos = {
               x: fixedJoint.x + dragDist * Math.cos(rad),
               y: fixedJoint.y + dragDist * Math.sin(rad)
@@ -82,13 +92,13 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
             return { type: INFERENCE_TYPES.PARALLEL, pos: snapPos, targetId: otherShape.id, refLine: { id: otherShape.id, p1: oa, p2: ob } };
           }
 
-          // Check perpendicular (90° difference)
-          const perpDiff1 = Math.abs(angleDiff - 90);
-          const perpDiff2 = Math.abs(angleDiff - 270);
-          const minPerpDiff = Math.min(perpDiff1, perpDiff2);
-          if(minPerpDiff < ANGLE_SNAP_DEG){
-            const perpAngle = otherAngle + (perpDiff1 < perpDiff2 ? 90 : -90);
-            const rad = perpAngle * Math.PI / 180;
+          // Perpendicular: dragged line is within SNAP° of either +90 or -90
+          // from the reference. signedDiff sign tells us which side.
+          const isPerpPlus  = Math.abs(signedDiff -  90) < ANGLE_SNAP_DEG;
+          const isPerpMinus = Math.abs(signedDiff - (-90)) < ANGLE_SNAP_DEG;
+          if(isPerpPlus || isPerpMinus){
+            const targetAngleDeg = isPerpPlus ? (otherAngle + 90) : (otherAngle - 90);
+            const rad = targetAngleDeg * Math.PI / 180;
             const snapPos = {
               x: fixedJoint.x + dragDist * Math.cos(rad),
               y: fixedJoint.y + dragDist * Math.sin(rad)

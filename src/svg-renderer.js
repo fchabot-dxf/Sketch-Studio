@@ -777,12 +777,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     let strokeWidth = scale(BASE_LINE_STROKE);
     let strokeColor = '#60A5FA'; // base blue (paler)
     
+    // Color rule: black ONLY when the shape is fully rigid (all joints DOF=0
+    // → fixedShapes). `constrainedShapes` includes shapes whose joints have
+    // ANY constraint (e.g. one V/H lock leaves the joint at DOF 1) — those
+    // can still move and should stay blue, otherwise the user has no visual
+    // signal that the sketch isn't done.
     if (fixedShapes.has(s.id)) {
-        strokeColor = '#202020'; // Black (Treat Fixed as Constrained for now)
-    } else if (constrainedShapes.has(s.id)) {
-        strokeColor = '#202020'; // Black
+        strokeColor = '#202020'; // Black — fully rigid
     } else {
-        strokeColor = '#60A5FA'; // Blue (paler)
+        strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
 
     if(isConstraintPart){

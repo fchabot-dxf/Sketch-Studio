@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sketch Studio Unified</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inline SVG favicon showing the Select tool pointer -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%233B82F6'/%3E%3Cpath d='M3 2 L21 12 L13 13 L11 21 L9 13 L3 2 Z' fill='%23ffffff'/%3E%3C/svg%3E">
+    <!-- Load Inter font to ensure consistent typography and spacing -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="src/style.css">
+    <style>
+        :root {
+            --fusion-dark: #2C2C2C;
+            --fusion-orange: #EA580C;
+            --fusion-blue: #3B82F6;
+        }
+        body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; -webkit-user-select: none; user-select: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .cursor-select { cursor: default; }
+        .cursor-draw { cursor: crosshair; }
+        .cursor-pan { cursor: grab; }
+        .cursor-pan:active { cursor: grabbing; }
+
+        .tool-btn {
+            transition: all 0.15s;
+            border: 1px solid transparent;
+            min-width: 48px;
+            min-height: 48px;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .tool-btn:active {
+            background-color: #e0e0e0;
+            transform: scale(0.95);
+        }
+        @media (max-width: 640px) {
+            .tool-btn {
+                min-width: 44px;
+                min-height: 44px;
+                width: 44px;
+                height: 44px !important;
+            }
+            .tool-btn span {
+                font-size: 7px !important;
+            }
+            .tool-btn:active {
+                transform: scale(0.92);
+            }
+        }
+        .tool-btn:hover {
+            background-color: #f0f0f0;
+        }
+        @media (hover: none) {
+            .tool-btn:hover {
+                background-color: transparent;
+            }
+        }
+        .tool-btn.active {
+            background-color: #3B82F6;
+            color: white;
+            border: 1px solid #1E40AF;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tool-btn.active:active {
+            background-color: #2563eb;
+        }
+        .tool-btn.active span, .tool-btn.active i, .tool-btn.active svg { color: white; }
+
+        #svgCanvas { width: 100%; height: 100%; touch-action: none; background-color: #ffffff; transition: background-color 0.15s ease; }
+        #svgCanvas.snapping { background-color: #fff7ed; }
+        
+        /* Prevent pinch-zoom but allow panning */
+        @supports (touch-action: pan-x pan-y) {
+            #svgCanvas {
+                touch-action: pan-x pan-y;
+            }
+        }
+        
+        /* Toolbar touch/drag scrolling improvements */
+        /* Allow horizontal native touch panning so users can scroll the ribbon with one finger */
+        #toolsRibbon { touch-action: pan-x; -webkit-overflow-scrolling: touch; cursor: grab; scroll-behavior: smooth; }
+        #toolsRibbon.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+        @media (hover: none) {
+            /* On touch devices keep scrollbars hidden but allow native panning */
+            #toolsRibbon.no-scrollbar { scrollbar-width: none; }
+        }
+        
+        /* Tool dropdown */
+        .tool-dropdown {
+          position: relative;
+        }
+
+        /* Unified dropdown menu */
+        .tool-dropdown-menu {
+          display: none;
+          position: absolute;
+          top: 100%;
+          left: 0;
+          background: white;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          z-index: 9999 !important;
+          min-width: 160px;
+          padding: 4px 0;
+        }
+        .tool-dropdown-menu.show {
+          display: block !important;
+        }
+
+        .tool-dropdown-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 11px;
+          font-weight: 600;
+          white-space: nowrap;
+          transition: background-color 0.15s ease;
+        }
+        .tool-dropdown-item:hover { background-color: #f3f4f6; }
+        .tool-dropdown-item.active { background-color: #3B82F6; color: white; }
+
+        .dropdown-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
+        /* Tool icon variants */
+        .tool-icon-variant { display: none; }
+
+        /* Dropdown indicator arrow */
+        .dropdown-indicator { position: absolute; bottom: 2px; right: 2px; width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 3px solid #94a3b8; }
+        .tool-btn.active .dropdown-indicator { border-top-color: white; }
+
+        /* Z-index hierarchy (updated to ensure dropdowns overlay the canvas) */
+        /* Ensure canvas and toolbar establish predictable stacking contexts */
+        #svgCanvas { position: relative; z-index: 1 !important; }
+        #toolsRibbon { position: relative; z-index: 100 !important; }
+
+        /* Force all dropdowns above everything */
+        .tool-dropdown-menu {
+          display: none;
+          position: absolute !important;
+          z-index: 99999 !important;
+          background: white;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          min-width: 160px;
+          top: calc(100% + 4px);
+          left: 0;
+        }
+
+        /* Ensure dropdown containers don't interfere */
+        .tool-dropdown { position: relative; z-index: inherit; }
+
+        /* If anything is interfering, this resets inline stacking (use sparingly) */
+        body * { z-index: auto; }
+
+        /* Re-assert important values as safety net */
+        #svgCanvas { z-index: 1 !important; }
+        #toolsRibbon { z-index: 100 !important; }
+        .tool-dropdown-menu { z-index: 99999 !important; }
+
+        /* Icon sprite color modes (Fusion Standard) */
+        /* Mode A: Toolbar (Professional Red/Black) */
+        .tool-btn svg { width: 28px; height: 28px; display: block; margin: auto; color: #000303; --icon-accent: #ff0402; stroke-width: 1px; }
+
+        /* Subtle settings gear: make the cog a grey outline to reduce visual weight */
+        #btn-settings-toggle svg { color: #6b7280; /* slate-500 */ }
+        #btn-settings-toggle svg path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+
+        /* Mode B: Normal Canvas Glyph (Canvas color) */
+        .constraint-glyph use {
+            color: #3B82F6; /* Standard Fusion Blue */
+            --icon-accent: #3B82F6; /* Unify accent color */
+            stroke-width: 1.5px; /* Slightly bolder for visibility */
+            transition: all 0.2s ease;
+            transform-origin: center;
+        }
+
+        /* Mode C: Selected/Hovered Glyph (Bold Emphasis) */
+        .constraint-glyph.selected use,
+        .constraint-glyph.hovered use {
+            color: #1e40af; /* Main = Dark Blue */
+            --icon-accent: #1e40af; /* Accent = Dark Blue */
+            stroke-width: 2.5px; /* Very bold */
+            transform: scale(1.2);
+            transform-origin: center;
+        }
+
+        /* Preview state */
+        .constraint-glyph.preview { opacity: 0.5; pointer-events: none; }
+        .constraint-glyph { transition: opacity 0.12s ease; }
+
+        /* Ensure toolbar buttons center svg precisely */
+        .tool-btn { display: flex; align-items: center; justify-content: center; padding: 4px; }
+        .tool-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            min-height: 40px;
+        }
+        @media (max-width: 640px) {
+            .tool-dropdown-item {
+                padding: 10px 14px;
+                font-size: 11px;
+            }
+        }
+        .tool-dropdown-item:hover,
+        .tool-dropdown-item.hover {
+            background: #e0e7ff;
+        }
+        .tool-dropdown-item.active {
+            background: #3B82F6;
+            color: white;
+        }
+        .tool-btn .dropdown-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid #94a3b8;
+        }
+        .tool-btn.active .dropdown-indicator {
+            border-top-color: white;
+        }
+        
+        .dim-input { 
+            position: absolute; background: white; border: 2px solid var(--fusion-orange);
+            border-radius: 4px; padding: 2px 4px; font-weight: bold; font-size: 11px;
+            outline: none; text-align: center; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        @media (max-width: 640px) {
+            .dim-input {
+                padding: 4px 6px;
+                font-size: 14px;
+                min-width: 70px;
+                min-height: 36px;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            .dim-input::-webkit-outer-spin-button,
+            .dim-input::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .dim-input[type=number] {
+                -moz-appearance: textfield;
+                appearance: textfield;
+            }
+        }
+        .dim-input.hidden { display: none; }
+
+        /* Arc/Dropdown z-index fixes */
+        /* Standard dropdown container */
+        .tool-dropdown { position: relative; z-index: inherit; }
+
+        /* Individual dropdown items and layout */
+        .tool-dropdown .tool-dropdown-item { padding: 8px 12px; display: flex; align-items: center; }
+
+        /* Show state: display block; menu is absolutely positioned and already has a high z-index */
+        .tool-dropdown .tool-dropdown.show { display: block; }
+
+        /* Ensure canvas and toolbar have explicit stacking contexts */
+        #svgCanvas { position: relative; z-index: 1 !important; }
+        #toolsRibbon { position: relative; z-index: 100 !important; }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-[#F0F0F0] select-none text-xs">
+
+    <!-- SVG ICON SPRITE (hidden) -->
+    <svg style="display: none;" aria-hidden="true">
+      <defs>
+        <!-- Symbols injected by src/ui/cursor-manager.js -->
+        <symbol id="icon-concentric" viewBox="0 0 14 14" preserveAspectRatio="xMidYMid meet" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6.777" cy="6.777" r="6.277" stroke="var(--icon-accent, #ef4444)"/>
+            <circle cx="6.885" cy="6.85" r="3.611" stroke="currentColor"/>
+        </symbol>
+        <!-- Equal constraint: two horizontal strokes -->
+        <symbol id="icon-equal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="5" y1="9" x2="19" y2="9" />
+            <line x1="5" y1="15" x2="19" y2="15" />
+        </symbol>
+        <!-- Midpoint constraint: segment with highlighted center -->
+        <symbol id="icon-midpoint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <circle cx="12" cy="12" r="2" fill="var(--icon-accent, currentColor)" stroke="currentColor" />
+        </symbol>
+        <!-- Terminal / Console glyph (used for Debug toggle) -->
+        <symbol id="icon-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 12 4 7"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+        </symbol>
+        <!-- Cogwheel icon (filled gear for higher contrast) -->
+        <symbol id="icon-cog" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <!-- center hole filled white for contrast when icon is dark -->
+          <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" fill="#ffffff" />
+          <!-- gear outer shape filled with currentColor -->
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.3 17.9l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82L4.3 4.6A2 2 0 1 1 7.13 1.77l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V1a2 2 0 1 1 4 0v.09c0 .57.37 1.09.9 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 19.4 6.1l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.42.53 1 .9 1.51.9H21a2 2 0 0 1 0 4h-.09c-.52 0-1.09.37-1.51.9z" fill="currentColor" />
+        </symbol>
+        <!-- Custom cog symbol (provided SVG) -->
+        <symbol id="icon-cog-custom" viewBox="0 0 1280 1278" preserveAspectRatio="xMidYMid meet">
+          <g transform="translate(0.000000,1278.000000) scale(0.100000,-0.100000)" fill="currentColor" stroke="none">
+            <path d="M7235 12766 c-16 -8 -42 -26 -56 -42 -14 -16 -153 -267 -309 -559
+-156 -291 -298 -553 -316 -582 -53 -84 -49 -83 -328 -94 l-247 -11 -53 26
+c-53 26 -59 34 -416 549 -200 287 -373 536 -386 553 -29 39 -80 64 -132 64
+-43 0 -1174 -376 -1213 -403 -58 -41 -70 -89 -59 -235 24 -296 71 -892 81
+-1029 l12 -153 -29 -57 c-28 -55 -38 -64 -234 -200 -113 -78 -221 -147 -240
+-153 -82 -24 -92 -21 -736 246 -661 274 -642 267 -720 232 -38 -18 -781 -942
+-796 -990 -8 -29 -8 -48 0 -77 8 -25 152 -223 402 -552 338 -446 391 -521 401
+-564 14 -65 14 -65 -116 -375 -115 -277 -141 -316 -219 -344 -23 -8 -324 -66
+-671 -128 -660 -118 -663 -119 -707 -179 -52 -70 -181 -1268 -139 -1293 6 -4
+293 -110 637 -236 344 -126 640 -238 657 -248 66 -38 81 -81 141 -413 31 -169
+56 -328 56 -355 0 -31 -9 -65 -23 -91 -15 -29 -167 -177 -492 -479 -259 -240
+-479 -451 -490 -467 -13 -21 -19 -47 -18 -81 0 -46 25 -97 255 -544 141 -271
+268 -506 283 -522 14 -15 45 -33 68 -39 39 -11 87 -2 667 129 654 148 677 151
+750 117 39 -19 504 -499 532 -549 38 -70 36 -90 -66 -488 -235 -917 -230 -897
+-217 -940 6 -22 22 -51 34 -65 12 -14 242 -149 511 -300 443 -249 494 -275
+535 -275 27 0 59 8 76 18 17 11 230 222 475 471 245 249 461 461 482 471 73
+39 93 37 459 -45 189 -42 355 -83 368 -92 69 -45 73 -54 286 -694 201 -603
+207 -619 245 -653 22 -20 55 -38 77 -42 91 -17 658 19 1020 65 164 21 199 38
+227 113 9 24 75 322 146 662 86 406 137 630 149 650 39 62 68 77 373 193 329
+126 371 135 444 96 18 -10 248 -191 510 -403 263 -212 491 -393 508 -403 22
+-13 45 -17 83 -14 51 3 62 11 349 228 583 441 638 484 657 511 11 14 22 48 24
+75 5 44 -15 102 -227 658 -128 336 -235 626 -237 645 -10 69 13 112 173 332
+86 117 166 224 178 236 35 39 95 65 151 64 27 0 326 -30 663 -67 l612 -66 43
+19 c23 11 50 28 60 39 14 16 364 954 422 1131 22 65 8 120 -43 172 -20 21
+-268 208 -551 416 -508 373 -514 378 -539 433 l-25 55 12 215 c16 281 18 294
+55 348 30 43 53 56 613 337 321 161 590 299 599 306 22 19 54 85 54 112 0 42
+-259 1217 -275 1248 -9 17 -32 41 -53 55 -42 27 1 24 -1013 89 -389 25 -396
+27 -455 83 -43 41 -223 380 -230 434 -4 27 0 60 8 84 8 22 162 289 342 593
+314 528 328 554 328 602 -1 27 -7 60 -14 74 -13 25 -850 884 -898 921 -15 12
+-45 21 -80 23 l-57 4 -564 -313 c-310 -172 -582 -319 -604 -327 -69 -24 -114
+-9 -300 95 -188 105 -208 120 -237 177 -26 50 -25 37 -49 751 -20 590 -21 611
+-43 655 -37 75 36 53 -984 296 -172 40 -323 74 -335 74 -12 -1 -35 -7 -52 -14z
+m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
+-283 70 -419 70 -748 1 -310 -4 -386 -45 -635 -192 -1169 -955 -2197 -2024
+-2725 -405 -200 -755 -305 -1245 -372 -153 -21 -711 -17 -880 5 -874 119
+-1636 499 -2230 1113 -849 878 -1212 2088 -990 3300 146 797 579 1558 1196
+2103 609 537 1352 856 2169 930 151 14 608 6 755 -13z"/>
+          </g>
+        </symbol>
+      </defs>
+    </svg>
+
+    <!-- TOOLS RIBBON -->
+    <div id="toolsRibbon" class="bg-white border-b border-slate-300 p-1 flex gap-1 z-40 overflow-x-auto no-scrollbar shadow-sm shrink-0 relative" aria-label="Tools Ribbon">
+        <!-- EDIT -->
+        <div class="flex flex-col items-center px-1 md:px-2 border-r border-slate-200 shrink-0">
+            <div class="flex gap-0.5 flex-wrap md:flex-nowrap justify-center">
+                <button id="btn-clear" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded" title="Clear All" aria-label="Clear All">
+                    <svg class="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"/>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    </svg>
+                    <span class="text-[8px] font-medium uppercase">Clear</span>
+                </button>
+                <button id="btn-undo" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded" disabled>
+                    <svg class="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 14 4 9l5-5"/>
+                        <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>
+                    </svg>
+                    <span class="text-[8px] font-medium uppercase">Undo</span>
+                </button>
+            </div>
+            <span class="text-[7px] text-slate-400 uppercase mt-0.5">Edit</span>
+        </div>
+        <!-- CREATE -->
+        <div class="flex flex-col items-center px-1 md:px-2 border-r border-slate-200 shrink-0">
+            <div class="flex gap-0.5 flex-wrap md:flex-nowrap justify-center">
+                <button id="tool-select" class="tool-btn active flex flex-col items-center justify-center w-12 h-14 md:w-12 md:h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <use href="#icon-tool-select" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Select</span>
+                </button>
+                <button id="tool-line" class="tool-btn flex flex-col items-center justify-center w-12 h-14 md:w-12 md:h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <use href="#icon-tool-line" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Line</span>
+                </button>
+                <div class="tool-dropdown">
+                    <button id="tool-rect" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded relative">
+                        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <use id="rect-tool-icon-use" href="#icon-tool-rect-2pt" />
+                        </svg>
+                        <span id="rect-label" class="text-[8px] font-black uppercase mt-1">Rect</span>
+                        <span class="dropdown-indicator"></span>
+                    </button>
+                    <div id="rect-dropdown" class="tool-dropdown-menu">
+                        <div class="tool-dropdown-item active" data-mode="rect-2pt">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <use href="#icon-tool-rect-2pt" />
+                            </svg>
+                            2-Point (Corner)
+                        </div>
+                        <div class="tool-dropdown-item" data-mode="rect-center">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <use href="#icon-tool-rect-center" />
+                            </svg>
+                            Center Point
+                        </div>
+                        <div class="tool-dropdown-item" data-mode="rect-3pt">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <use href="#icon-tool-rect-3pt" />
+                            </svg>
+                            3-Point
+                        </div>
+                    </div>
+                </div>
+                <button id="tool-circle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <use href="#icon-tool-circle" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Circle</span>
+                </button>
+
+                <div class="relative tool-dropdown">
+  <button id="tool-arc" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded relative">
+    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <use id="arc-tool-icon-use" href="#icon-tool-arc-cse" />
+    </svg>
+    <span id="arc-label" class="text-[8px] font-black uppercase mt-1">Arc</span>
+  </button>
+</div>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Create</span>
+        </div>
+
+        <!-- CONSTRAIN -->
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+        
+
+                <button id="tool-coincident" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-coincident" x="0" y="0" width="24" height="24" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Coinc</span>
+                </button>
+                <button id="tool-hv" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-hv" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">H/V</span>
+                </button>
+                <button id="tool-parallel" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-parallel" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Para</span>
+                </button>
+                <button id="tool-perp" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-perpendicular" x="0" y="0" width="24" height="24" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Perp</span>
+                </button>
+                <button id="tool-collinear" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-collinear" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Coll</span>
+                </button>
+                <button id="tool-tangent" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-tangent" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Tang</span>
+                </button>
+                <button id="tool-equal" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-equal" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Equal</span>
+                </button>
+                <button id="tool-midpoint" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <use href="#icon-midpoint" x="0" y="0" width="24" height="24" stroke="currentColor" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Mid</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Constrain</span>
+        </div>
+
+        <!-- INSPECT -->
+        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button id="tool-dim" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <use href="#icon-tool-dim" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Dim</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Inspect</span>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="ml-auto flex items-center gap-2 pr-4 shrink-0">
+            <button id="btn-settings-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Settings" aria-label="Settings">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <use href="#icon-cog" />
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Settings</span>
+            </button>
+            <button id="btn-debug-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Debug" aria-label="Debug">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <use href="#icon-terminal" />
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Debug</span>
+            </button>
+            <button id="btn-export" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-500" title="Export" aria-label="Export">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 5 17 10"/>
+                    <line x1="12" y1="5" x2="12" y2="21"/>
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Export</span>
+            </button>
+
+        </div>
+    </div>
+
+    <!-- MAIN VIEWPORT -->
+    <main class="flex-1 relative bg-[#DBDBDB] flex flex-col overflow-hidden p-2 md:p-4">
+        <div class="flex-1 bg-white rounded shadow-inner border border-slate-300 relative overflow-hidden">
+            <svg id="svgCanvas" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <pattern id="grid" width="2" height="2" patternUnits="userSpaceOnUse">
+                        <path d="M 2 0 L 0 0 0 2" fill="none" stroke="#CBD5E1" stroke-width="1"/>
+                    </pattern>
+                    <pattern id="grid-heavy" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <rect width="10" height="10" fill="url(#grid)" />
+                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#93C5FD" stroke-width="2"/>
+                    </pattern>
+                </defs>
+                <rect id="infinite-grid" x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid-heavy)" />
+                <g id="world-group">
+                    <g id="origin-datum">
+                        <circle r="4" fill="none" stroke="#64748B" stroke-width="1.5" />
+                        <line x1="-8" y1="0" x2="8" y2="0" stroke="#64748B" stroke-width="1" />
+                        <line x1="0" y1="-8" x2="0" y2="8" stroke="#64748B" stroke-width="1" />
+                    </g>
+                </g>
+
+                <!-- Magnifier portal (hidden by default) -->
+                <g id="magnifier" style="display: none; pointer-events: none;">
+                    <circle r="50" fill="white" stroke="#3B82F6" stroke-width="2" fill-opacity="0.9" />
+                    <defs>
+                        <mask id="mag-mask" maskContentUnits="userSpaceOnUse">
+                            <circle cx="0" cy="0" r="48" fill="white"/>
+                        </mask>
+                    </defs>
+                    <g id="mag-content" mask="url(#mag-mask)"></g>
+                </g>
+            </svg>
+            <input type="number" id="dimInput" class="dim-input hidden" step="0.1" inputmode="decimal" autocomplete="off" />
+
+            <!-- Floating Construct toggle (moved from footer): positioned over canvas for quick access -->
+            <div class="absolute right-4 top-4 z-40 flex gap-2">
+                <button id="btn-construct-toggle" class="toolbar-btn bg-white shadow-sm px-3 py-1 rounded text-xs uppercase" title="Toggle Construction Mode" aria-pressed="false">Construction</button>
+                <button id="btn-recenter-view" class="toolbar-btn bg-white shadow-sm px-3 py-1 rounded text-xs uppercase text-slate-500 hover:text-slate-700" title="Recenter View">Recenter</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-100 border-t border-slate-300 px-4 py-1.5 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0">
+        <div class="flex gap-4"><span id="modeText">MODE: SELECT</span>
+            <button id="btn-mag-toggle" class="ml-4 px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-200 transition-all text-[9px] font-bold" aria-pressed="false">
+                MAG LENS: OFF
+            </button>
+        </div>
+        <div><span id="coords-text">X: 0 Y: 0</span><span id="viewport-size" class="ml-4 border-l border-slate-300 pl-4 text-slate-500">VIEW: - x -</span></div>
+    </footer>
+
+    <div id="settings-panel" style="z-index:99999" class="hidden" aria-hidden="true">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="color:#60a5fa; font-size:13px; font-weight:600; text-transform:uppercase;">⚙ Settings</div>
+            <button id="btn-settings-close" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;">✕</button>
+        </div>
+        <div class="space-y-2">
+            <label class="flex justify-between"><span>Show Grid</span><input id="s-show-grid" type="checkbox"/></label>
+            <label class="flex justify-between"><span>Snap Magnetism</span><input id="s-snap-mag" type="number" class="w-20 text-right" step="1" min="0"/></label>
+            <label class="flex justify-between"><span>Grid Magnetism</span><input id="s-grid-mag" type="number" class="w-20 text-right" step="1" min="0"/></label>
+            <label class="flex justify-between"><span>Grid Size</span><input id="s-grid-size" type="number" class="w-20 text-right" step="0.5" min="0.5"/></label>
+            <label class="flex justify-between"><span>Grid Major Step</span><input id="s-grid-major" type="number" class="w-20 text-right" step="1" min="1"/></label>
+            <label class="flex justify-between"><span>Line Stroke</span><input id="s-line-stroke" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
+            <label class="flex justify-between"><span>Joint Radius</span><input id="s-joint-radius" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
+            <label class="flex justify-between"><span>Joint Stroke Mult</span><input id="s-joint-stroke-mult" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
+            <label class="flex justify-between"><span>Selection Stroke Mult</span><input id="s-selection-mult" type="number" class="w-20 text-right" step="0.1" min="0.1" value="2"/></label>
+            <label class="flex justify-between"><span>Hover Stroke Mult</span><input id="s-hover-mult" type="number" class="w-20 text-right" step="0.1" min="0.1" value="3"/></label>
+            <label class="flex justify-between"><span>Glyph Icon Size</span><input id="s-glyph-icon" type="number" class="w-20 text-right" step="1" min="8"/></label>
+            <label class="flex justify-between"><span>Glyph Inference Size</span><input id="s-glyph-infer" type="number" class="w-20 text-right" step="1" min="8"/></label>
+            <label class="flex justify-between"><span>Glyph Offset</span><input id="s-glyph-offset" type="number" class="w-20 text-right" step="1" min="0"/></label>
+            <label class="flex justify-between"><span>Glow Width</span><input id="s-glow-width" type="number" class="w-20 text-right" step="1" min="0"/></label>
+            <label class="flex justify-between"><span>Dash Length</span><input id="s-dash-length" type="number" class="w-20 text-right" step="1" min="1"/></label>
+            <label class="flex justify-between"><span>Dash Gap</span><input id="s-dash-gap" type="number" class="w-20 text-right" step="1" min="1"/></label>
+        </div>
+        <div class="flex justify-between mt-4">
+            <div>
+                <button id="s-save-project" class="px-2 py-1 bg-blue-600 text-white rounded" title="Save project config">Save (Project)</button>
+                <div id="s-save-help" class="text-xs text-slate-400 mt-1">In standalone builds this will try to save back to the original file (if your browser supports it); otherwise it downloads an updated HTML you can save manually.</div>
+            </div>
+            <div class="flex gap-2">
+                <button id="s-reset" class="px-2 py-1 border rounded">Reset</button>
+                <button id="s-close" class="px-2 py-1 border rounded">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EXPORT PANEL -->
+    <div id="export-panel" style="z-index:99999" class="hidden bg-white border border-slate-200 rounded shadow-lg p-4 w-80" aria-hidden="true">
+        <div class="flex justify-between items-center mb-2" style="align-items:center;">
+            <div style="color:#60a5fa; font-size:13px; font-weight:600;">Export</div>
+            <button id="btn-export-close" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;">✕</button>
+        </div>
+        <div class="space-y-3">
+            <label class="block"><span class="text-xs">File name</span><input id="export-filename" class="w-full mt-1 p-1 border rounded" type="text" value="sketch"/></label>
+            <label class="block"><span class="text-xs">File type</span>
+                <select id="export-type" class="w-full mt-1 p-1 border rounded">
+                    <option value="svg">SVG (vector)</option>
+                    <option value="dxf">DXF (simple, R12)</option>
+                </select>
+            </label>
+            <label class="flex items-center gap-2"><input id="export-only-lines" type="checkbox" checked/> <span class="text-xs">Export lines & arcs only (no joints or glyphs)</span></label>
+            <label class="block"><span class="text-xs">Precision (decimals)</span><input id="export-precision" class="w-24 mt-1 p-1 border rounded" type="number" min="0" max="8" value="6"/></label>
+            <label class="flex items-center gap-2"><input id="export-approx-arcs" type="checkbox"/> <span class="text-xs">Approximate arcs as polylines</span></label>
+            <label class="block"><span class="text-xs">Arc segments</span><input id="export-arc-segments" class="w-24 mt-1 p-1 border rounded" type="number" min="4" max="1024" value="32"/></label>
+            <label class="block"><span class="text-xs">Scale</span><div class="flex gap-2 mt-1"><input id="export-scale" class="w-24 p-1 border rounded" type="number" value="1" step="0.01"/><select id="export-units" class="w-28 p-1 border rounded"><option value="world">world</option><option value="mm">mm</option><option value="in">in</option></select></div></label>
+            <label class="flex items-center gap-2"><input id="export-invert-y" type="checkbox"/> <span class="text-xs">Invert Y axis (DXF compatibility)</span></label>
+            <label class="block"><span class="text-xs">DXF version</span>
+                <select id="export-dxf-version" class="w-full mt-1 p-1 border rounded">
+                    <option value="r12">R12 (default)</option>
+                    <option value="r2000">R2000</option>
+                </select>
+            </label>
+        </div>
+        <div class="flex justify-end items-center mt-4 gap-2">
+            <button id="btn-export-cancel" class="px-2 py-1 border rounded">Cancel</button>
+            <button id="btn-export-do" class="px-3 py-1 bg-blue-600 text-white rounded">Export</button>
+        </div>
+    </div>
+
+    <script>
+        // Prevent iOS default gesture behaviors that might interfere
+        document.addEventListener('gesturestart', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Prevent unwanted page zoom on double-tap (iOS)
+        document.addEventListener('dblclick', (e) => {
+            if(e.target.id === 'svgCanvas') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

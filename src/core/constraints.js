@@ -146,9 +146,15 @@ export function createConstraint(type, params) {
             return { type, joints: params.joints.slice() };
             
         case CONSTRAINT_TYPES.PARALLEL:
-        case CONSTRAINT_TYPES.PERPENDICULAR:
+        case CONSTRAINT_TYPES.PERPENDICULAR: {
             if (!params.shapes || params.shapes.length < 2) return null;
-            return { type, shapes: params.shapes };
+            const out = { type, shapes: params.shapes };
+            // Branch lock: preserve handedness sign (+1 or -1) for perpendicular.
+            if (type === CONSTRAINT_TYPES.PERPENDICULAR && (params.branch === 1 || params.branch === -1)) {
+                out.branch = params.branch;
+            }
+            return out;
+        }
             
         case CONSTRAINT_TYPES.COLLINEAR:
             if (params.shapes && params.shapes.length >= 2) {
@@ -160,17 +166,23 @@ export function createConstraint(type, params) {
             if (uniqueJoints.length < 3) return null;
             return { type: CONSTRAINT_TYPES.COLLINEAR, joints: uniqueJoints };
             
-        case CONSTRAINT_TYPES.TANGENT:
+        case CONSTRAINT_TYPES.TANGENT: {
             // Support multiple parameterizations:
             // - { line: '<id>', circle: '<id>' }
             // - { shapes: ['id1','id2'] } where each shape is a circle or arc or one is a line and the other is a circle/arc
+            // Branch lock: preserve 'external' (default) vs 'internal' for circle-circle tangent.
             if (params.line && params.circle) {
-                return { type: CONSTRAINT_TYPES.TANGENT, line: params.line, circle: params.circle };
+                const out = { type: CONSTRAINT_TYPES.TANGENT, line: params.line, circle: params.circle };
+                if (params.branch === 'external' || params.branch === 'internal') out.branch = params.branch;
+                return out;
             }
             if (params.shapes && params.shapes.length === 2) {
-                return { type: CONSTRAINT_TYPES.TANGENT, shapes: params.shapes.slice() };
+                const out = { type: CONSTRAINT_TYPES.TANGENT, shapes: params.shapes.slice() };
+                if (params.branch === 'external' || params.branch === 'internal') out.branch = params.branch;
+                return out;
             }
             return null;
+        }
             
         case CONSTRAINT_TYPES.DISTANCE:
             // Support both legacy joint-to-joint distance and radius-style distance (shape-based)

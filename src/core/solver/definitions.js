@@ -213,6 +213,13 @@ export const Definitions = {
 
   // Perpendicular: (B-A) dot (D-C) = 0
   perpendicular: {
+    // Always 1 row, but the residual *formula* depends on branch:
+    //   no branch:   r = u · v        (zero for either ±90° configuration)
+    //   branch ±1:   r = u × v − branch · |u||v|
+    //                (zero iff u ⟂ v AND cross(u,v) has sign 'branch')
+    // The branched form is smooth with no kinks and has a single global
+    // minimum at the chosen perpendicular configuration — no local minima
+    // on the wrong half-plane.
     rows: 1,
     computeError: (params, positions) => {
       const ax = positions[params.joints[0]*2], ay = positions[params.joints[0]*2+1];
@@ -221,7 +228,11 @@ export const Definitions = {
       const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      return ux * vx + uy * vy;
+      if (params.branch !== 1 && params.branch !== -1) return ux * vx + uy * vy;
+      const cross = ux * vy - uy * vx;
+      const lenU = Math.hypot(ux, uy) || 1e-12;
+      const lenV = Math.hypot(vx, vy) || 1e-12;
+      return cross - params.branch * lenU * lenV;
     },
     computeJacobian: (params, positions, outRow) => {
       const a = params.joints[0], b = params.joints[1], c = params.joints[2], d = params.joints[3];
@@ -231,19 +242,43 @@ export const Definitions = {
       const dx = positions[d*2], dy = positions[d*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      // ∂/∂ax = -vx ; ∂/∂ay = -vy
-      outRow[a*2 + 0] = -vx; outRow[a*2 + 1] = -vy;
-      // ∂/∂bx = vx ; ∂/∂by = vy
-      outRow[b*2 + 0] = vx; outRow[b*2 + 1] = vy;
-      // ∂/∂cx = -ux ; ∂/∂cy = -uy
-      outRow[c*2 + 0] = -ux; outRow[c*2 + 1] = -uy;
-      // ∂/∂dx = ux ; ∂/∂dy = uy
-      outRow[d*2 + 0] = ux; outRow[d*2 + 1] = uy;
+      if (params.branch !== 1 && params.branch !== -1) {
+        // Original dot-product Jacobian
+        outRow[a*2 + 0] = -vx; outRow[a*2 + 1] = -vy;
+        outRow[b*2 + 0] =  vx; outRow[b*2 + 1] =  vy;
+        outRow[c*2 + 0] = -ux; outRow[c*2 + 1] = -uy;
+        outRow[d*2 + 0] =  ux; outRow[d*2 + 1] =  uy;
+        return;
+      }
+      // Branched: r = (ux*vy − uy*vx) − branch · |u| · |v|
+      // ∂r/∂u = (vy, −vx) − branch · |v| · (ux/|u|, uy/|u|)
+      // ∂r/∂v = (−uy, ux) − branch · |u| · (vx/|v|, vy/|v|)
+      // Chain to a,b,c,d via u = b−a, v = d−c.
+      const lenU = Math.hypot(ux, uy) || 1e-12;
+      const lenV = Math.hypot(vx, vy) || 1e-12;
+      const br = params.branch;
+      const drdux =  vy - br * lenV * (ux / lenU);
+      const drduy = -vx - br * lenV * (uy / lenU);
+      const drdvx = -uy - br * lenU * (vx / lenV);
+      const drdvy =  ux - br * lenU * (vy / lenV);
+      // u = b − a  →  ∂u/∂a = −I, ∂u/∂b = +I
+      outRow[a*2 + 0] = -drdux; outRow[a*2 + 1] = -drduy;
+      outRow[b*2 + 0] =  drdux; outRow[b*2 + 1] =  drduy;
+      // v = d − c  →  ∂v/∂c = −I, ∂v/∂d = +I
+      outRow[c*2 + 0] = -drdvx; outRow[c*2 + 1] = -drdvy;
+      outRow[d*2 + 0] =  drdvx; outRow[d*2 + 1] =  drdvy;
     }
   },
 
   // Tangent: for circle/arc-line or arc-arc; simplified as dot of normals = 0 for arc-line
   // Here we implement point/arc tangent to line as constraint between arc center and line direction + radius sign.
+  //
+  // Circle-circle branch lock: `params.branch` ∈ {'external', 'internal'}
+  //   'external' (default): circles touch on the outside, dist(centers) = r1 + r2
+  //   'internal':           one circle inside the other, dist(centers) = |r1 - r2|
+  // Without a branch, the solver picks whichever side the linearization points
+  // toward — and a fast drag can flip mid-stroke. Locking at creation time
+  // pins the chosen configuration.
   tangent: {
     rows: 1,
     computeError: (params, positions) => {
@@ -256,7 +291,9 @@ export const Definitions = {
         const x2 = positions[i2*2], y2 = positions[i2*2+1];
         const dx = x2 - x1, dy = y2 - y1;
         const dist = Math.hypot(dx, dy) || 1e-12;
-        const target = (Number(params.radii[0]) || 0) + (Number(params.radii[1]) || 0);
+        const r1 = Number(params.radii[0]) || 0;
+        const r2 = Number(params.radii[1]) || 0;
+        const target = (params.branch === 'internal') ? Math.abs(r1 - r2) : (r1 + r2);
         return dist - target;
       }
 

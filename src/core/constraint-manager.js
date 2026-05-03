@@ -56,6 +56,21 @@ export class ConstraintManager {
             this.alignParallelOrientation(state, normalized.shapes);
         }
 
+        // Branch lock: PERPENDICULAR records the chosen handedness (+1 / -1) so
+        // the solver can't rotate one line through 180° mid-drag and snap the
+        // sketch inside-out. Skip when geometry is too close to parallel — the
+        // branch is undefined there and the user can re-add once it's clearer.
+        if (type === CONSTRAINT_TYPES.PERPENDICULAR && normalized.shapes && normalized.shapes.length === 2 && normalized.branch == null) {
+            this.lockPerpendicularBranch(state, normalized);
+        }
+
+        // Branch lock: TANGENT (circle-circle) records 'external' vs 'internal'
+        // tangency at creation time, again so a fast drag can't flip a wraparound
+        // tangent into a kissing tangent.
+        if (type === CONSTRAINT_TYPES.TANGENT && normalized.shapes && normalized.shapes.length === 2 && normalized.branch == null) {
+            this.lockTangentBranch(state, normalized);
+        }
+
         // Check duplicates
         if (constraints.hasConstraint(state.constraints, type, normalized)) {
             dbg.log('constraints', `[ConstraintManager] Duplicate ${type} constraint rejected`);
@@ -740,6 +755,70 @@ export class ConstraintManager {
                 return params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2 && typeof params.value === 'number';
             default:
                 return false;
+        }
+    }
+
+    // Auto-detect and store the handedness sign for perpendicular constraints.
+    // Branch is +1 if line2 is rotated CCW from line1 (cross > 0), -1 otherwise.
+    // Skipped when lines are nearly parallel: branch is undefined there.
+    static lockPerpendicularBranch(state, normalized) {
+        try {
+            const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
+            const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
+            if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line') return;
+            if (!s1.joints || s1.joints.length < 2 || !s2.joints || s2.joints.length < 2) return;
+            const a = state.joints.get(s1.joints[0]);
+            const b = state.joints.get(s1.joints[1]);
+            const c = state.joints.get(s2.joints[0]);
+            const d = state.joints.get(s2.joints[1]);
+            if (!a || !b || !c || !d) return;
+            const ux = b.x - a.x, uy = b.y - a.y;
+            const vx = d.x - c.x, vy = d.y - c.y;
+            const lenU = Math.hypot(ux, uy), lenV = Math.hypot(vx, vy);
+            if (lenU < 1e-9 || lenV < 1e-9) return;
+            const cross = ux * vy - uy * vx;
+            // Skip near-parallel: |sin θ| < ~0.1 means the branch is ambiguous.
+            if (Math.abs(cross) < 0.1 * lenU * lenV) return;
+            normalized.branch = cross >= 0 ? 1 : -1;
+            dbg.log('constraints', '[ConstraintManager] perpendicular branch locked:', normalized.branch);
+        } catch (e) {
+            dbg.warn('constraints', '[ConstraintManager] lockPerpendicularBranch error:', e);
+        }
+    }
+
+    // Auto-detect external vs internal tangent for circle-circle from current geometry.
+    // Picks whichever target distance the centers are closest to. Defaults to
+    // 'external' when ambiguous (e.g. equal radii, or centers far from both targets).
+    static lockTangentBranch(state, normalized) {
+        try {
+            const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
+            const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
+            if (!s1 || !s2) return;
+            const isCircular = (s) => s.type === 'circle' || s.type === 'arc';
+            if (!isCircular(s1) || !isCircular(s2)) return; // only circle-circle has the internal/external choice
+            const radiusOf = (s) => {
+                if (typeof s.radius === 'number') return s.radius;
+                if (s.joints && s.joints.length >= 2) {
+                    const c = state.joints.get(s.joints[0]);
+                    const r = state.joints.get(s.joints[1]);
+                    if (c && r) return Math.hypot(r.x - c.x, r.y - c.y);
+                }
+                return 0;
+            };
+            const c1 = state.joints.get(s1.joints && s1.joints[0]);
+            const c2 = state.joints.get(s2.joints && s2.joints[0]);
+            if (!c1 || !c2) return;
+            const r1 = radiusOf(s1), r2 = radiusOf(s2);
+            if (r1 < 1e-9 || r2 < 1e-9) return;
+            const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
+            const tExt = r1 + r2;
+            const tInt = Math.abs(r1 - r2);
+            // Equal radii → tInt = 0 (concentric); always pick external.
+            if (tInt < 1e-9) { normalized.branch = 'external'; return; }
+            normalized.branch = Math.abs(dist - tInt) < Math.abs(dist - tExt) ? 'internal' : 'external';
+            dbg.log('constraints', '[ConstraintManager] tangent branch locked:', normalized.branch);
+        } catch (e) {
+            dbg.warn('constraints', '[ConstraintManager] lockTangentBranch error:', e);
         }
     }
 

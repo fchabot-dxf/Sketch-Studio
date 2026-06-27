@@ -22,7 +22,11 @@ function _initStore(){
   joints.set('j_origin', { x: 0, y: 0, fixed: true });
 }
 
-export function createEngine(svg){
+export function createEngine(options = {}){
+  // Injected seams (shell wires these). svg is still used by the screen-space
+  // snap pass-throughs below; onMetrics replaces the old window.__updateSolverMetrics
+  // global so the core never reaches for window.
+  const { svg = null, onMetrics = null } = options || {};
   const solver = createNewtonSolver(joints, constraints, shapes, {
     maxIter: SolverConfig.ITERATIONS || 500,
     tol: SolverConfig.LM_TOL || 1e-6,
@@ -93,10 +97,8 @@ export function createEngine(svg){
       constraintErrors: constraintErrors
     };
 
-    // Emit to tuning wizard if available
-    if (typeof window !== 'undefined' && window.__updateSolverMetrics) {
-      window.__updateSolverMetrics(lastSolveStats);
-    }
+    // Emit metrics via the injected callback (shell wires this to the tuning wizard).
+    if (onMetrics) onMetrics(lastSolveStats);
     // Authoritative result: geometry-derived `converged` + `conflicts` list, with
     // `error` reported as the max geometric residual (world units / radians),
     // not the engine's internal step norm.

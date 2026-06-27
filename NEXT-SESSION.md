@@ -1,16 +1,17 @@
 # NEXT-SESSION — handoff (tactical)
 
 > What to do *right now*. For the strategy behind it, read **ROADMAP.md**.
-> Last updated by the session that committed Blocker 1 and implemented Blocker 2 (branch `solver-robustness`).
+> Last updated: Phase 0 complete & committed; the Phase 1 **workspace carve-out** is the next action (detailed in §1 below).
 
 ## TL;DR
 
 **Phase 0 (solver honesty + robustness) is COMPLETE and committed** on branch `solver-robustness`:
 Blocker 1 (`88336cd`), Blocker 2 (`8fe623c`), point-on-circle medium (`a4d423e`) — each pinned by
-a fail-first repro test, full solver suite green. Next: **the Phase 1 carve-out** — promote this
-repo to the platform root and split into `packages/core` + `apps/sketchstudio` (+ `apps/shaper`).
-Optional/anytime: the `_detectConflict` watch-item test. The carve-out reorganizes folders and the
-VS Code workspace — do it deliberately, as one move.
+a fail-first repro test, full solver suite green. **Do this first — the Phase 1 workspace
+carve-out:** reshape this single-app repo into the monorepo (`packages/core` + `apps/sketchstudio`
++ `apps/shaper`), browser-native ESM + import map, **no bundler** — full step-by-step in §1 below.
+Everything else (the `_detectConflict` watch-item test) waits until after. One deliberate,
+behavior-preserving structural move: green solver tests before and after.
 
 ## Where we are exactly
 
@@ -88,13 +89,89 @@ the shape as a constant) and `point_on_line` gained a point-on-circle branch (re
 
 ## Next actions, in order
 
-### 1. Phase 1 — the carve-out (the next big move)
+### 1. Phase 1 — workspace carve-out  ⭐ DO THIS FIRST
 
-See ROADMAP.md → "Phase 1 carve-out — target layout". Promote this repo to the platform root;
-split `src/` into `packages/core` + `apps/sketchstudio`; bring the old Shaper Origin Editor folder
-in as `apps/shaper`. Run the three green blocker tests before and after the `git mv` as proof the
-structural move preserved behavior. Reopen VS Code on the new single root then — not before. ONE
-deliberate structural move; don't interleave behavior changes.
+Phase 0 behavior work is done & committed, so this is now the one clean **structural** move:
+reshape this single-app repo into the monorepo from ROADMAP.md → "Phase 1 carve-out — target
+layout" (`packages/core` brain + `apps/sketchstudio` + `apps/shaper`, browser-native ESM + import
+map, **no bundler**). Do it before anything else; the watch-item test (§2) waits.
+
+**Preconditions — clear these IN ORDER, before any `git mv`:**
+
+- **A. Clean the tree.** Commit any stray edits (this file included) so the structural-move commits
+  don't tangle with doc/other changes — `git status --short` must be empty.
+- **B. Integrate Phase 0 to `main`, then branch off it.** Phase 0 currently lives ONLY on
+  `solver-robustness` (`88336cd` B1 · `8fe623c` B2 · `a4d423e` pt-on-circle · `b8e258c` docs);
+  `main` (`44c6d4b`) can **fast-forward** — clean linear history, no divergence:
+  ```
+  git checkout main && git merge --ff-only solver-robustness
+  git checkout -b carve-out
+  ```
+  Pushing `main` auto-deploys Phase 0 to Cloudflare — fine (solver fixes only, no structural
+  change). Do the carve-out **on `carve-out`, NOT on `main`**: the `index.html` move must not reach
+  the deploy until the Cloudflare call (step 4 gotcha) is made and verified.
+- **C. Record the baseline oracle.** Run the per-file solver loop now; confirm every `solver-*`
+  test green. That green set proves the move preserved behavior — re-run it after.
+
+**Procedure (verifiable; commit after each batch):**
+
+0. **Safety.** `git checkout -b carve-out`. **Snapshot the untracked Shaper Origin Editor folder**
+   (`C:\Users\danse\APPS\Shaper Origin Editor` — no `.git`, no safety net) before touching it.
+
+1. **Map the brain/shell boundary BEFORE moving — THREE buckets, not two.** The DOM grep is
+   necessary but NOT sufficient. Run it to find DOM-touchers:
+   `grep -rlnE "document|window\.|requestAnimationFrame|innerHTML|getElementById|localStorage" src/`
+   then classify EVERY `src/` file into one of three:
+   - **pure logic + app-agnostic → `packages/core`** (the brain; #4 framework-free).
+   - **pure logic BUT app-specific / shell-orchestration → `apps/sketchstudio`.** DOM-free does NOT
+     auto-promote to core — anything Shaper/CNC/export-shaped, or that merely wires the UI, is shell
+     (#6: no app logic in the brain).
+   - **touches DOM → `apps/sketchstudio`** — EXCEPT a mostly-pure module with one stray
+     `window`/`document` hook: that goes to **core, with the leak EXTRACTED** (emit via a callback
+     the shell wires up — don't exile the logic). Known case: `constraint-manager.js` →
+     `window.__updateSolverMetrics` (the Blocker 1 watch-item; a #4 violation to fix during the move).
+
+   Best-guess starting split (VERIFY against the grep — don't trust blind):
+   - → core: `src/core/solver/*`, `src/core/{geometry,joints,shapes,constraints,constraint-manager,
+     constraint-status,solver-config}.js`, `src/constraint-solver.js`, `src/solver-core.js`, units,
+     `src/inference-engine.js` (interaction seam).
+   - → sketchstudio: `src/main.js`, `ui-manager.js`, `svg-renderer.js`, `snap-detection.js`,
+     `settings-manager.js`, `src/ui/**`, `index.html`, `styles/`, `assets/`.
+
+   **▶ GATE — post the proposed core/shell list (and where each DOM hit landed) for north-star
+   review BEFORE any `git mv`.** Misclassification is cheap now, expensive once files move and
+   imports rewire. No moves until the list is blessed.
+
+2. **Skeleton.** `mkdir -p packages/core apps/sketchstudio apps/shaper`.
+
+3. **Move WITH history.** `git mv` core files → `packages/core/…`, shell files →
+   `apps/sketchstudio/…`, in logical batches. The Shaper folder is untracked → copy it into
+   `apps/shaper/` then `git add` (gains git history for the first time). Co-locate tests: solver
+   tests → `packages/core/tests/`, UI tests → `apps/sketchstudio/tests/`.
+
+4. **Rewire imports (ESM import map — no bundler).** Add an import map to each app's `index.html`,
+   e.g. `<script type="importmap">{"imports":{"@core/":"/packages/core/"}}</script>` (path is the
+   **serving** root). Shell imports of the brain `../src/… / ./core/…` → `@core/…`. Fix intra-core
+   relative paths that shifted. **Node tests do NOT read HTML import maps** → keep test imports as
+   **relative paths** (or add a `package.json` `"imports"` map); don't use `@core/` in Node tests.
+
+5. **Verify behavior preserved (the whole point).** Re-run the per-file solver loop → the same
+   tests green. Then **serve** `index.html` (via `server.js`) and smoke-test in a browser: sketch
+   loads, constraints solve, drag is stable. `file://` won't honor the import map — you must serve.
+
+6. **Cut over the workspace.** Reopen VS Code on the new single root (File → Open Folder); retire
+   the multi-root workspace. Update CONTEXT.md "Project layout" + key paths to the new tree.
+
+**Gotchas specific to this refactor:**
+- ⚠ **Cloudflare deploy breaks if `index.html` leaves the repo root.** Pages is configured output
+  `/`, branch `main`, no build (see CONTEXT.md gotchas). Moving `index.html` into
+  `apps/sketchstudio/` will 404 the deploy. Either keep a thin root `index.html` that loads the
+  app, or change the Pages **output directory** to `apps/sketchstudio`. Decide deliberately.
+- Use `git mv` (preserves history) — never delete + recreate.
+- Import-map paths are relative to the **serving** root — verify by serving, not `file://`.
+- Optional final polish (AFTER the move is committed & verified): rename the on-disk root to a
+  neutral name (`cad-platform`) and flatten the `…\SketchStudio Newton Raphson\Sketch-Studio`
+  nesting. Don't do it mid-move — it confuses git/VS Code.
 
 ### 2. (Anytime, not blocking) targeted test for the conflict-detection sandbox
 
@@ -132,6 +209,7 @@ the watch-item above.
   *reproducing the user's specific "bouncy / doesn't reflect the constraint" complaints* — a
   separate diagnosis. Both are true; don't read CONTEXT.md as "solver is finished."
 - **No build / no bundler** is a confirmed preference — never introduce one.
-- **Don't reorganize folders or change the VS Code workspace yet.** Phase 0 (the blockers) runs
-  in the current structure. One structural move, later, at carve-out.
+- **The carve-out IS the current task** (Phase 0 is done). Make it ONE deliberate, behavior-
+  preserving structural move — green solver tests before and after the `git mv`, no behavior
+  changes interleaved. See §1.
 - **Don't edit `.env`** (Cloudflare token). **Don't commit `.triggers/`** (in .gitignore).

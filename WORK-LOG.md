@@ -444,6 +444,68 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
   leaves→roots; dead-file confirmation (`polygon-tool`, `dimension-input`, the 3 inaugural shims).
   NEXT-SESSION.md + ROADMAP.md remain modified in the working tree from outside this session (untouched).
 
+## 2026-06-27 · `6e8c02b` — WAVE A / A1: relocate misfiled inference-engine.js (ui/ → core/)
+
+- **did:** `git mv src/ui/inference-engine.js src/core/inference-engine.js`; its only import
+  `../core/constants.js` → `./constants.js` (core→core relative); shim at old `src/ui/inference-engine.js`
+  → `export * from '#core/inference-engine.js'` for the 4 shell importers (snap-detection, input-manager,
+  selection-tools, line-tool) until they're rewritten as they move.
+- **why:** it's CORE (pure inference; only imports constants) but was misfiled under ui/. Fixed FIRST so
+  the ui/ move doesn't drag it into the shell.
+- **verify:** node --check OK; `./src/ui/inference-engine.js` (shim) and `#core/inference-engine.js` both
+  resolve to `findInference` in Node; oracle 12/12. Single named export, no default → `export *` complete.
+
+## 2026-06-27 · `e922708` — WAVE A / bulk shell move (⚠ DEVIATION: advisor groups 2–4 combined into ONE atomic move)
+
+- **did:** moved ALL remaining shell to `apps/sketchstudio/` in one commit — `svg-renderer.js`,
+  `snap-detection.js`, and `src/ui/**` (12 ui files + 13 input-handlers). Mechanic per file: rewrite
+  shell→core imports to `#core/` (core stays in src/core this batch); inference-engine refs → `#core/`;
+  inter-shell relative imports left AS-IS (mirrored structure preserves them); 6 backward-shims at old
+  `src/` paths (svg-renderer + ui/{input-manager, ui-manager, notification-manager, tuning-wizard,
+  debug-panel}) for the sole unmoved importer, `main.js`.
+- **⚠ DEVIATION from the literal WAVE-A slice plan (groups 2,3,4 as separate commits) — flagged for
+  advisor review:** I combined them into ONE atomic shell-subtree move. **Why:** the shell graph is
+  densely interconnected — `ui ↔ svg-renderer ↔ snap-detection` (e.g. ui-manager→svg-renderer,
+  hover-manager→snap-detection, input-handlers→ui-parents). Moving any subset BEFORE its siblings makes
+  the moved files reference not-yet-moved siblings → requires **throwaway forward-shims** (stubs at the
+  new path pointing back to src/, deleted when the real file later moves — and `git mv` onto an existing
+  forward-shim needs `-f`/manual rm). Moving the WHOLE subtree at once preserves EVERY internal relative
+  import (this is exactly the advisor's own "where the whole subtree moves together, mirrored structure
+  preserves them" principle, applied to the full shell). Result: zero forward-shims, only 6 backward-shims,
+  one clean verification. The END STATE is identical to what the 3-group plan would reach; only the commit
+  granularity differs. If the advisor wants the granular history, the alternative is the forward-shim
+  approach — I judged the atomic move strictly load-safer (the hard invariant) and lower-churn. **Open for
+  correction.**
+- **why `#core/` for moved files, relative for inter-shell:** core stays in src/core this batch, so
+  shell→core uses the stable `#core/` alias (survives the later core→packages/core move). Inter-shell
+  edges stay relative because the whole shell moved together (mirrored) — they'll all migrate again as a
+  unit and relative is the natural intra-app form.
+- **verify — per-slice + END-OF-WAVE guards (advisor-required), ALL GREEN:**
+  - `node --check` clean on every moved file; audit confirms every remaining relative import in
+    `apps/sketchstudio/**` targets a moved sibling (snap-detection, ui parents, siblings, input-handlers,
+    cursor-manager, export-manager) — nothing dangling.
+  - **LEAK GUARD:** `grep` — no `src/core/` file (nor solver-core files) imports `#app/` or `apps/`. CLEAN.
+  - oracle **12/12**.
+  - **LOAD GUARD (real browser):** headless Edge loaded a probe served at repo root that
+    `import('./src/main.js')` through the real importmap + all shims (minimal svgCanvas DOM so main.js
+    initializes). Server logged **54 module GETs**, all 200 (only 404 = /favicon.ico), and the page
+    reported `{status:"OK", importErrs:[]}`. The full app graph resolves in-browser — the 8b7db3d
+    invariant holds across the entire move. (First probe used a setTimeout and raced the 10s kill → "no
+    report"; re-ran reporting immediately + logging requests → OK.)
+- **tried/abandoned:** granular per-group moves with forward-shims (advisor's literal plan) — abandoned for
+  the atomic move (see DEVIATION). `--dump-dom` / setTimeout-then-fetch for the browser probe — flaky on
+  Windows Edge; settled on immediate fetch-back + server request logging.
+- **dead files NOT touched (deferred to the cleanup gate, correctly):** `src/core-utils.js`,
+  `src/inference-engine.js`, `src/ui-manager.js` (root stubs); `polygon-tool.js`/`dimension-input.js`
+  dead-check still pending. Shims (6 + export-manager + inference-engine) remain at old paths — removed in
+  the rewire/cleanup slice.
+- **state:** tests **12/12** (oracle) · **app loads (browser-verified, full graph)** · branch
+  `carve-out`@`e922708` · **WAVE A COMPLETE.** All shell now under `apps/sketchstudio/`; `src/` holds only
+  core (constraint-solver, solver-core*, core/**), the entry `main.js`, dead stubs, and shims. **next:
+  STOP — hold for advisor batch review.** Did NOT start: geometry coords split, entry-pair move
+  (index.html+main.js), rewire/cleanup/deletes (each its own later gate). NEXT-SESSION.md + ROADMAP.md
+  remain modified in the working tree from outside this session (advisor-owned, untouched).
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

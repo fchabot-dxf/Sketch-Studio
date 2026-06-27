@@ -161,6 +161,165 @@
   start the shell/core `git mv` batches without advisor go (NEXT-SESSION "After slice 1"). NEXT-SESSION.md
   remains modified in the working tree from before this session — advisor-owned, left untouched.**
 
+## 2026-06-27 — SHELL BATCH STEP 0: migration PLAN (plan-only, NO files moved) — HOLD FOR ADVISOR
+
+Plan-only per NEXT-SESSION. Nothing was `git mv`'d. Data gathered from the full `src/` import graph
+(every `import … from` in src), `tests/` importers, `index.html`, and `apps/shaper` precedent.
+Two **gates** surfaced (path strategy + debug/settings classification) — flagged with ⚠ and options.
+
+### 0. Ground facts discovered (these shape everything below)
+- **No import map exists.** `index.html` is pure relative-path ESM: one `<script type="module"
+  src="src/main.js">`, no `<script type="importmap">` anywhere in the repo. `apps/shaper/index.html`
+  is the same shape (`<script type="module" src="src/main.js">`). ROADMAP target layout *does* list
+  "index.html + import map" — so a map is sanctioned but **not yet present**.
+- **Consequence — the move breaks imports in BOTH directions.** A re-export shim at the OLD path only
+  fixes importers-OF-the-moved-file. The moved file's OWN relative imports to *unmoved* `core/` also
+  break (a file at `apps/sketchstudio/ui/x.js` can't reach `../core/…` anymore). This is exactly what
+  killed `8b7db3d` (missing-export at load). So **every move must fix the moved file's own imports too**,
+  not just drop a shim. → see GATE A (path strategy).
+- **`assets/` has ZERO runtime references** (`grep 'assets/'` over src = none; toolbar icons are inline
+  `<symbol>`s in index.html). The 10 files in `assets/` are design source (`.af`, `.svg`, `.xml`), not
+  loaded by the app. Moving them is cosmetic — no path updates, no load risk.
+
+### 1. MOVE-LIST — every shell file → destination, with importer count (low fan-out first)
+Destination convention = files directly under `apps/sketchstudio/` (mirrors current `src/` tree;
+matches the inaugural override's `apps/sketchstudio/coords.js`). Counts = **distinct src importers**;
+`+Nt` = test importers; ⚠ = a CORE importer (a leak risk).
+
+**Entry pair (move together, last):**
+- `index.html` → `apps/sketchstudio/index.html` — 0 importers (HTML); holds the importmap + script src.
+- `src/main.js` → `apps/sketchstudio/main.js` — **0** src importers (the entry module).
+
+**Top-level shell modules:**
+- `src/svg-renderer.js` → `apps/sketchstudio/svg-renderer.js` — **2** (main, ui-manager) +~4t
+- `src/snap-detection.js` → `apps/sketchstudio/snap-detection.js` — **5** (hover-manager, input-manager,
+  circle-tool, selection-tools, rect-tool) +~10t. (imports the coords helpers — see §5.)
+
+**`src/ui/` → `apps/sketchstudio/ui/`:**
+- `export-manager.js` — **1** (ui-manager) +1t  ← **LOWEST leaf → the §3 proof file**
+- `ui-manager.js` — 1 (main) | `input-manager.js` — 1 (main) | `debug-panel.js` — 1 (main, dynamic)
+  | `tuning-wizard.js` — 1 (main, dynamic) | `settings-panel.js` — ~0–1 (dynamic; verify)
+- `cursor-manager.js` — 2 | `snap-magnet.js` — 2 | `wizard-base.js` — 3 | `hover-manager.js` — 4
+- `notification-manager.js` — 5 (now core-clean after slice-1 c2) | `preview-manager.js` — 7
+- `numeric-input-manager.js` — 8 (highest in ui/)
+
+**`src/ui/input-handlers/` → `apps/sketchstudio/ui/input-handlers/`:**
+- `dimension-input.js` — 0 static (⚠ verify dead/dynamic) | `polygon-tool.js` — 0 static (⚠ likely
+  dead — no toolbar button, no importer; flag for delete-not-move)
+- `drawing-tools.js` — 1 | `constraint-tools.js` — 1 | `pan-zoom.js` — 1
+- `rect-tool.js` — 2 | `circle-tool.js` — 2 | `arc-tool.js` — 2 | `selection-tools.js` — 2
+  | `dimension-tool.js` — 2 | `live-dimension-input.js` — 2 | `line-tool.js` — 3 | `base-tool.js` — 4
+
+**Assets:** `assets/` → `apps/sketchstudio/assets/` — 0 runtime refs (move whenever; no risk).
+
+**NEW file:** `apps/sketchstudio/coords.js` — created by the §5 geometry split.
+
+**DELETE (do NOT move — blessed dead in the inaugural gate):** `src/inference-engine.js` (empty
+re-export), `src/ui-manager.js` (1-line re-export), `src/core-utils.js` (throw-stub). Repoint/confirm
+no live importer first (the live UI manager is `src/ui/ui-manager.js`, a different file).
+
+### 2. SHIM STRATEGY (per move)
+Rule honored: **shims are SHELL→shell re-exports only; NEVER core→apps/** (that re-introduces the leak
+slice 1 just removed). With the advisor's "move-with-shim, rewire-later" model:
+- **For each moved file Y:** leave a re-export shim at Y's OLD path (`export * from '<new path>'`) so
+  unmoved importers + tests resolve through the move → load stays green. Shims deleted in a final
+  rewire slice (§3) once all importers point at the new path.
+- **The moved file's own imports** to unmoved `core/` get rewritten to the stable `core/` alias (GATE A)
+  — NOT to throwaway relative paths (those would churn again at the core batch). This is the half a
+  shim can't cover.
+- **No shim needed when** a file moves in the SAME slice as all its importers (e.g. the tightly-coupled
+  `input-handlers/*` cluster can move as one slice; only cross-cluster importers need shims).
+- **Tests** import via `../src/…` (mostly dynamic `import()`); they are importers too — the OLD-path
+  shim keeps them green without editing test files (this is what the `8b7db3d` reset proved necessary).
+
+### 3. SLICE PLAN (each commit: app-LOADS + oracle 12/12)
+- **Slice 0 — import map, additive, ZERO moves.** Add `<script type="importmap">` to `index.html`
+  mapping a stable `core/` alias (→ `./src/core/`) and `app/` (→ `./apps/sketchstudio/`). Existing
+  relative imports keep working (a map only adds bare-specifier resolution), so this is provably
+  load-safe on its own. Verify load + oracle. *Proves the map breaks nothing before any file moves.*
+- **Slice 1 — PROOF (smallest end-to-end).** `git mv src/ui/export-manager.js
+  apps/sketchstudio/ui/export-manager.js`; rewrite its 2 imports (`constants`, `settings-manager`) to
+  the `core/` alias; leave a re-export shim at `src/ui/export-manager.js`. Verify: app loads · oracle
+  12/12 · `export.test.js` green (resolves via shim). *Validates import-map + shim mechanic on one
+  file before the mass move.*
+- **Slices 2…N — mass move, leaves→roots, fan-out order.** Group the cohesive `input-handlers/*`
+  cluster as one slice (move together, internal imports need no shims). Then `ui/*` leaves, then the
+  higher-fan-out `ui/*` (numeric-input, preview), then `svg-renderer` + `snap-detection`. Each: git mv
+  + alias-rewrite own imports + shim old paths. Verify load + oracle each commit.
+- **Slice (entry) — `index.html` + `main.js` together.** Move both to `apps/sketchstudio/`; update the
+  `<script src>` to the new `main.js` location (and confirm the importmap paths from the new index.html
+  location). This is where §4's Cloudflare note applies.
+- **Slice (rewire + cleanup, last).** Repoint all remaining importers off the OLD paths onto `app/`
+  aliases; DELETE every shim; delete the dead files (§1). Verify load + oracle. End state: no shims,
+  no relative cross-tree paths.
+
+### 4. index.html / Cloudflare
+- `index.html` lands at `apps/sketchstudio/index.html`. Its `<script type="module" src="…">` becomes
+  the new `main.js` location (`./main.js` if main.js sits beside it in `apps/sketchstudio/`), and it
+  carries the importmap. Relative `core/` alias target must be correct from the NEW index.html depth.
+- ⚠ **Pages output dir is a HUMAN, merge-time action** (already DECIDED at the human gate): change the
+  Cloudflare Pages **Build output directory** `/` → `apps/sketchstudio`, timed with the merge to `main`.
+  The `carve-out` branch move does NOT affect the live deploy (it runs off `main`). NOT a thin root
+  loader. The worker does not touch the dashboard.
+
+### 5. GEOMETRY COORDS SPLIT — confirmed, rides in this batch
+- Extract `screenToWorld` (geometry.js:67), `worldToScreen` (:94), `getZoomFactor` (:275) → NEW
+  `apps/sketchstudio/coords.js`. All three are DOM-coupled (`svg.getBoundingClientRect()` +
+  `svg.viewBox.baseVal`) → shell, per #5 "convert only at the edges." `core/geometry.js` keeps pure math.
+- **Zero core importers** of the three (verified): every importer is shell — `svg-renderer`,
+  `hover-manager`, `input-manager`, `numeric-input-manager`, `circle/arc/rect/line/selection/
+  dimension/live-dimension` tools, `snap-detection` (~11–17 shell files; the reset note counted 17).
+  Because all importers move in THIS batch, they're "touched once": repoint their screen-helper imports
+  to `coords.js` as they move. Do the extraction as its own slice within the batch (it's the change that
+  broke `8b7db3d` — isolate + verify it hardest: load + oracle + a real drag/snap still maps coords).
+
+### ⚠ GATE A — PATH STRATEGY (advisor ruling needed before Slice 0)
+The moved-file-own-imports problem (§0) forces a choice:
+- **(A) Import map + `core/`/`app/` aliases [RECOMMENDED].** Matches ROADMAP target. Moved files'
+  imports rewritten to `core/…` ONCE and stay valid even after the core batch moves `src/core` →
+  `packages/core` (just update the map). Minimal churn; one-time map setup. Slice 0 above assumes this.
+- **(B) Per-move relative-path rewrites, no map.** Each moved file's `../core/…` rewritten to the new
+  relative depth, then rewritten AGAIN when core moves. Double churn; no new mechanism. Simpler to
+  understand, worse to execute across 30+ files twice.
+Recommend **A**.
+
+### ⚠ GATE B — `debug.js` + `settings-manager.js` CLASSIFICATION (the blessed split is internally inconsistent here)
+The inaugural gate put `core/debug.js` and `core/settings-manager.js` in the SHELL bucket, but:
+- **`core/debug.js` is imported by 4 CORE files** — `constraint-manager.js`, `joints.js`,
+  `snap-constraints.js`, `constraints.js` (all import `{ dbg }`). Moving it to `apps/` = **core→apps
+  leak** — forbidden. BUT debug.js also has a DOM half: lines 57–136 are a `window`/`requestAnimationFrame`
+  overlay + `window.ug.debug` controls that import `SettingsManager`. So it's neither cleanly core nor
+  cleanly shell as-is.
+- **`core/settings-manager.js`** is environment-agnostic (every `process`/`document`/`localStorage`
+  access is guarded). Imported only by shell files + debug.js. No TRUE-core file imports it directly.
+Options:
+- **(A) Split debug.js [principled end state].** Pure `dbg` logger (lines 22–55, no window, no
+  SettingsManager) stays `core/debug.js`; the overlay + `window.ug.debug` + SettingsManager import →
+  `apps/sketchstudio/debug-overlay.js` (side-effect import from main.js). Then settings-manager is
+  shell-only → moves in this batch. Mirrors the geometry/coords split + slice-1 callback extractions.
+  Cost: a behavior-affecting extraction (verify the overlay/`window.ug.debug` still works) — its own slice.
+- **(C) Defer both [RECOMMENDED for THIS batch].** Do NOT move debug.js or settings-manager.js in the
+  shell batch. They stay in `src/core`, reached by shell via the `core/` alias (shell→core, fine) and by
+  core via relative `./debug.js` (core→core, fine). No leak crosses an apps/packages boundary yet (it's
+  still `src/core`, not `packages/core`). The split (option A) becomes a gated step in/just-before the
+  CORE batch. Keeps the shell batch's scope to true shell files.
+- (B) Reclassify whole debug.js → core: rejected — drags the DOM overlay + a localStorage-persistence
+  concern into the brain (violates #4); also forces settings-manager into core.
+Recommend **C now, A before the core batch.**
+
+### ⚠ Minor — `ui/inference-engine.js` is CORE but lives in `ui/`
+Classified core (pure inference) in the inaugural gate, but physically under `src/ui/`. If `ui/**` moves
+to `apps/sketchstudio/ui/`, this file would wrongly ride into the shell. Importers (4, all shell:
+snap-detection, input-manager, selection-tools, line-tool). **Proposal:** before moving `ui/`, relocate
+`src/ui/inference-engine.js` → `src/core/inference-engine.js` (toward packages/core) with a shim at the
+old path for the 4 shell importers. Small, isolates the misplacement. Flag for advisor.
+
+### State
+- tests **12/12** (oracle, unchanged — no code touched) · branch `carve-out`@`9dc279a` · **NO files
+  moved.** Working tree clean except this WORK-LOG append + the pre-existing NEXT-SESSION mod.
+- **next: STOP — hold for advisor.** Advisor rulings needed on GATE A (path = import map?), GATE B
+  (debug/settings = defer?), and the `ui/inference-engine.js` relocation, before Slice 0 executes.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

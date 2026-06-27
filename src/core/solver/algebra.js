@@ -38,7 +38,14 @@ export const Algebra = {
   // Solve (A) u = b in-place; A is n*n (row-major); b is length n
   choleskySolve: function(A, n, b) {
     // Compute Cholesky factorization A = L * L^T (store L in lower triangle of A)
-    const EPS = 1e-14;
+    // EPS rejects (near-)singular matrices. It must be loose enough never to
+    // reject the LM-damped normal equations (A = JᵀJ + λI, λ >= lambdaInit ~1e-3,
+    // so pivots >= ~1e-3), yet tight enough to reject the near-singular JᵀJ of the
+    // zero-damping polish step — a pivot ~1e-10 otherwise divides through to a
+    // ~1e10 step and flings geometry during a drag (the "bounce"). 1e-8 sits
+    // safely between the two. Rejection => caller treats the system as
+    // rank-deficient and skips the undamped step, keeping the stable LM result.
+    const EPS = 1e-8;
     for (let i = 0; i < n; ++i) {
       for (let j = 0; j <= i; ++j) {
         let s = A[i * n + j];

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 84 132" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g id="Tiles">
+        <g id="unit_single_1">
+            <path d="M54,66L60,60L48,60L54,66Z" style="fill:rgb(245,200,0);fill-rule:nonzero;"/>
+            <path d="M54,66L48,72L48,60L54,66Z" style="fill:rgb(16,52,166);fill-rule:nonzero;"/>
+            <path d="M54,66L60,72L48,72L54,66Z" style="fill:rgb(9,7,0);fill-rule:nonzero;"/>
+            <path d="M54,66L60,72L60,60L54,66Z" style="fill:rgb(236,31,39);fill-rule:nonzero;"/>
+        </g>
+    </g>
+    <g id="Ribbon_Mesh">
+        <g id="Path_0">
+            <g id="Seg_undefined">
+                <g id="Left_scarlet">
+                    <path id="ribbon_saved_0_seg_undefined_left_scarlet" d="M30,30L36,24L36,96L30,102L30,30Z" style="fill:rgb(236,31,39);fill-rule:nonzero;"/>
+                </g>
+                <g id="Right_sky">
+                    <path id="ribbon_saved_0_seg_undefined_right_sky" d="M30,30L24,24L24,108L30,102L30,30Z" style="fill:rgb(16,52,166);fill-rule:nonzero;"/>
+                </g>
+                <g id="Left_lemon">
+                    <path id="ribbon_saved_0_seg_undefined_left_lemon" d="M30,102L36,96L60,96L54,102L30,102Z" style="fill:rgb(245,200,0);fill-rule:nonzero;"/>
+                </g>
+                <g id="Right_shadow">
+                    <path id="ribbon_saved_0_seg_undefined_right_shadow" d="M30,102L24,108L60,108L54,102L30,102Z" style="fill:rgb(9,7,0);fill-rule:nonzero;"/>
+                </g>
+            </g>
+            <g id="Cap_1">
+                <path id="ribbon_saved_0_cap_1_lemon" d="M36,24L24,24L30,30L36,24Z" style="fill:rgb(245,200,0);fill-rule:nonzero;"/>
+            </g>
+            <g id="Cap_2">
+                <path id="ribbon_saved_0_cap_2_scarlet" d="M60,108L60,96L54,102L60,108Z" style="fill:rgb(236,31,39);fill-rule:nonzero;"/>
+            </g>
+        </g>
+    </g>
+</svg>

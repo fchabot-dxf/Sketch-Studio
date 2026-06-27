@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SVG Editor — Shaper Origin</title>
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+  <header class="toolbar">
+    <strong>SVG Editor</strong>
+    <span class="subtitle">Shaper Origin</span>
+    <span class="spacer"></span>
+    <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
+    <button id="open">Open SVG</button>
+    <button id="fit">Fit</button>
+    <button id="export">Export</button>
+  </header>
+
+  <main class="layout">
+    <aside id="tree" class="pane tree"></aside>
+    <section id="canvas" class="pane canvas">
+      <div class="empty">Drop an SVG here, or click “Open SVG”</div>
+    </section>
+    <aside id="inspector" class="pane inspector"></aside>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

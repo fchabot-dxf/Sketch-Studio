@@ -673,6 +673,21 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
         }, { passive: false });
     </script>
 
+    <!-- Import map (browser): stable aliases so shell files can move without churning every
+         relative path. core/ = the headless brain (src/core today; retargets to packages/core
+         after the core batch — update this map, not every importer). app/ = the SketchStudio shell.
+         Additive: a map only adds bare-specifier resolution; existing ./ and ../ imports are
+         resolved against the base URL, unaffected. NOTE: this map is browser-only — Node (the
+         test runner / solver oracle) does NOT read it; see WORK-LOG GATE on Node resolution. -->
+    <script type="importmap">
+    {
+      "imports": {
+        "core/": "./src/core/",
+        "app/": "./apps/sketchstudio/"
+      }
+    }
+    </script>
+
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

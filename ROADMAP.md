@@ -95,12 +95,16 @@ PHASE 0 — Solver honesty + robustness  (in THIS repo, current structure)
   ✅ PHASE 0 COMPLETE — solver is honest + robust; the carve-out (Phase 1) is unblocked.
   (all on branch solver-robustness; each pinned by a fail-first repro test; solver suite green)
 
-PHASE 1 — Monorepo carve-out  (one structural move, validated by the green blocker tests)
-  Promote THIS repo to the platform root; split src/ into packages/core + apps/sketchstudio.
+PHASE 1 — Monorepo carve-out  🔄 IN PROGRESS  (load-safe SLICES, not one shot — see revision below)
+  ▸ Consolidation: Shaper app moved INTO the repo at apps/shaper   ✅ committed (cda8c91)
+  ▸ Slice-1 commit-1: metrics → injected onMetrics callback (in place, no moves)  ✅ committed (a8245de)
+  ▸ Next: slice-1 commits 2-3 (notify, snap-detection), THEN the git mv of src/ → packages/core +
+    apps/sketchstudio. Each commit MUST keep the app LOADING + oracle green.
+  (on branch carve-out; src/ is still the live code — nothing moved into packages/core yet)
 
-PHASE 2 — Shaper shell  (apps/shaper, peer to sketchstudio)
-  toolpath-param layer + visual-simulation layer + Shaper cut-path SVG export.
-  Reuse shaper.js (correct cut-type encoding) from the old Shaper Origin Editor folder.
+PHASE 2 — Shaper shell  (apps/shaper — the app is now IN the repo; the SHELL logic is the work)
+  toolpath-param layer + visual-simulation layer + Shaper cut-path SVG export, over packages/core.
+  shaper.js (correct cut-type encoding) is already at apps/shaper/src/shaper.js.
 
 FUTURE — laser / 3D-print / other-CNC apps attach at the same seams, no core edits.
 ```
@@ -112,6 +116,16 @@ changes *structure*. Finish all behavior work first (B1 → B2), each pinned by 
 the current known-good structure, then do the structural move **once** — using both green
 blocker tests as proof the migration preserved behavior. Interleaving a structural move between
 two behavior fixes means debugging numerics in freshly-moved files. Batch like with like.
+
+### Carve-out revision (learned the hard way)
+
+The first carve-out attempt (`8b7db3d`) extracted + relocated code in one commit and was **reset**:
+green in the Node oracle but **dead in the browser**. This is a no-build ESM app run live — so
+relocating an export breaks every importer immediately, and the Node oracle can't see the shell.
+**Revised invariant: every commit must keep the app LOADING (serve index.html) AND the oracle
+green — not just the oracle.** The carve-out now runs as **load-safe vertical slices**, each
+extraction shipping with its shell wiring in the same commit; the geometry screen-helper split is
+deferred into the shell batch (where its importers move anyway). Current slice: see NEXT-SESSION.md.
 
 ## Phase 1 carve-out — target layout
 
@@ -130,21 +144,23 @@ cad-platform/                    ← promote THIS repo here (keeps solver git hi
 ```
 
 - **Promote the existing repo**, don't start fresh — keeps all solver history incl. the blocker
-  commits. The old Shaper Origin Editor folder is *not* a git repo, so its files just drop into
-  `apps/shaper`.
+  commits. ✅ The old Shaper Origin Editor folder (not a git repo) has now been **dropped into
+  `apps/shaper`** (commit `cda8c91`) — that consolidation is done; the multi-root workspace can
+  collapse to this single folder.
 - **Peers, not parent/child:** Shaper does NOT live "inside SketchStudio." Both are thin shells
   over `packages/core` (north star #6). Anything that knows "this is a CNC cut" lives in a shell;
   anything true for all apps lives in the brain.
-- **VS Code:** today's multi-root workspace is fine through Phase 0. At carve-out, reopen on the
-  single new root (File → Open Folder → cad-platform).
+- **VS Code:** ✅ consolidated — Shaper is now in `apps/shaper`, so open the single Sketch-Studio
+  folder (File → Open Folder) and drop the multi-root workspace. (Flattening the deep
+  `…/Sketch-Studio` path / renaming to a neutral root is a separate optional follow-up.)
 
 ## Reusable assets
 
-- From the old **Shaper Origin Editor** folder (`C:\Users\danse\APPS\Shaper Origin Editor`):
-  `shaper.js` (correct cut-type encoding: exterior/interior/pocket/on-line/guide;
-  `shaper:cutDepth/cutOffset/toolDia`; namespace `http://www.shapertools.com/namespaces/shaper`)
-  → feeds the Shaper shell's export-param layer. `svgio.js`, `canvas.js` (pan/zoom/selection)
-  are candidate shell pieces. The old `store.doc` DOM-as-state model is **discarded** (violates #1).
+- Now at **`apps/shaper/src/`** (moved in — commit `cda8c91`): `shaper.js` (correct cut-type
+  encoding: exterior/interior/pocket/on-line/guide; `shaper:cutDepth/cutOffset/toolDia`; namespace
+  `http://www.shapertools.com/namespaces/shaper`) → feeds the Shaper shell's export-param layer.
+  `svgio.js`, `canvas.js` (pan/zoom/selection) are candidate shell pieces. The old `store.doc`
+  DOM-as-state model is **discarded** (violates #1).
 
 ## What's locked (do not relitigate)
 

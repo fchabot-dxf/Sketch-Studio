@@ -386,6 +386,64 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
   NEXT-SESSION.md + ROADMAP.md remain modified in the working tree from outside this session
   (advisor-owned, untouched).
 
+## 2026-06-27 · `a6751f6` — shell batch BRIDGE slice: isomorphic `#core/`/`#app/` resolution (Node + browser)
+
+- **context — gate resolved:** advisor accepted the Slice-1 objection and ruled the Node↔browser gate
+  with a synthesis better than my recommendation: a single `#`-prefixed specifier resolved NATIVELY in
+  BOTH envs (no custom loader, no node_modules, no build). Required one check first: confirm the BROWSER
+  honors `#`-keyed import maps; fall back to a Node `--import` loader only if it doesn't.
+- **did** (git diff `a6751f6`, 2 files):
+  - `package.json` — added `"imports": { "#core/*": "./src/core/*", "#app/*": "./apps/sketchstudio/*" }`
+    (Node-native subpath imports).
+  - `index.html` — re-keyed the slice-0 importmap `core/`→`#core/`, `app/`→`#app/` (same targets).
+- **verify — BOTH resolution paths PROVEN empirically (not assumed):**
+  - **Node:** from repo root, `import('#core/constants.js')` returns the module (CONSTRAINT_TYPES present).
+    Scratch confirm of `#core/*` subpath pattern → resolved (`123`).
+  - **Browser:** built a throwaway page with a `#core/`-keyed importmap importing `#core/val.js`, served
+    over HTTP (Chromium blocks `file://` module CORS), loaded in **headless Edge** (Chromium, found at the
+    default Windows path) → reported back `OK:resolved-via-hash-importmap`. So `#` import-map keys DO
+    resolve in-browser → option-A-with-`#` is valid; **no fallback needed.** Reported path used: `#`-isomorphic.
+  - Additive (nothing uses `#` yet) → app loads unchanged; **oracle 12/12.**
+- **why it’s the right bridge:** ONE specifier works in browser (importmap) + Node (package.json), AND
+  survives the later core→`packages/core` move — retarget 2 configs, not 30 importers. Tooling to drive
+  the browser check (headless Edge + a tiny fetch-back HTTP harness) is now proven; reusable for the mass
+  move's load checks.
+- **state:** tests 12/12 · app loads · branch `carve-out`@`a6751f6` · next: Slice 1 (now unblocked).
+
+## 2026-06-27 · `4569d15` — shell batch SLICE 1 (PROOF): move `export-manager.js` via `#`-aliases + shim
+
+- **did** (git diff `4569d15`): the smallest end-to-end proof of the move mechanic on the lowest-fan-out
+  leaf (1 importer + 1 test).
+  - `git mv src/ui/export-manager.js apps/sketchstudio/ui/export-manager.js`.
+  - moved file: its only 2 imports rewritten `../core/constants.js`→`#core/constants.js`,
+    `../core/settings-manager.js`→`#core/settings-manager.js` (settings-manager STAYS in core per GATE B
+    defer; `#core/` is its current home — the alias retargets if it ever moves).
+  - NEW shim at OLD path `src/ui/export-manager.js`: `export * from '#app/ui/export-manager.js';`
+    (export-manager has only NAMED exports, no default → `export *` is complete). SHELL→shell via `#app/`,
+    never core→apps.
+- **why git shows create+modify, not rename:** the old path still exists (now the shim), so there’s no
+  pure rename to detect — old path = 6-line shim, new path = the 262-line implementation. Intended.
+- **verify — REAL symptom in BOTH surfaces:**
+  - **Node (the proof the bridge works):** `node tests/export.test.js` → **"Export tests passed ✅"**.
+    Chain exercised: test imports `../src/ui/export-manager.js` (shim) → `#app/ui/export-manager.js`
+    (package.json) → moved file → `#core/constants.js` + `#core/settings-manager.js` (package.json). All
+    resolve in Node and the export functions run. **Oracle 12/12.** `node --check` clean on both files.
+  - **Browser (app LOADS — the 8b7db3d killer invariant):** headless Edge loaded a probe (served from the
+    repo root, real files, real importmap) that imported BOTH `#app/ui/export-manager.js` and the relative
+    shim `./src/ui/export-manager.js` → reported `{"viaApp":"function","viaShim":"function"}`. Both the
+    moved-file path (resolving `#app/`→ then internal `#core/`) and the shim path resolve to a working
+    `buildSVG`. No removed exports (unlike 8b7db3d); consumers import the same names through the shim.
+  - importer audit: only the shim, `ui/ui-manager.js` (`./export-manager.js`→shim), and `export.test.js`
+    (`../src/ui/export-manager.js`→shim) reference the old path. All resolve through the shim.
+- **tried/abandoned:** the GATE-A bare-`core/` form (advisor's first ruling) — proven to break Node tests
+  (`ERR_MODULE_NOT_FOUND`); superseded by the `#` bridge. `--dump-dom` for the browser check — Edge on
+  Windows is a GUI-subsystem app and wrote nothing to stdout; switched to a fetch-back-to-server signal.
+- **state:** tests **12/12** (oracle) · `export.test.js` green · **app loads (browser-verified)** · branch
+  `carve-out`@`4569d15` · **PROOF COMPLETE (bridge `a6751f6` + slice 1 `4569d15`).** No mass move started.
+  **next: STOP — hold for advisor.** Queued (no action): inference-engine relocation; mass move
+  leaves→roots; dead-file confirmation (`polygon-tool`, `dimension-input`, the 3 inaugural shims).
+  NEXT-SESSION.md + ROADMAP.md remain modified in the working tree from outside this session (untouched).
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

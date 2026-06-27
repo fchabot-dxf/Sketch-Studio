@@ -506,6 +506,46 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
   (index.html+main.js), rewire/cleanup/deletes (each its own later gate). NEXT-SESSION.md + ROADMAP.md
   remain modified in the working tree from outside this session (advisor-owned, untouched).
 
+## 2026-06-27 · `588a667` — WAVE A FIX: complete shim coverage (16 backward-shims for test importers)
+
+- **advisor finding (accepted):** my bulk move (`e922708`) shimmed only the 6 old paths `main.js`
+  imports; **16 more** old paths are imported by the TEST SUITE and were pure renames (no shim) →
+  those tests hit `ERR_MODULE_NOT_FOUND`. The bulk move kept the app loading + oracle green (the
+  advisor's per-slice minimum) but under-covered the broader importer set. Fixed.
+- **did:** added `export *` re-export shims at all 16 old paths → `#app/<mirrored>`; the 2 with default
+  exports (`settings-panel.js`, `wizard-base.js`) also get `export { default } from …`. The 16 (matched
+  the advisor's count exactly via `grep` of test imports vs. missing files): `snap-detection`,
+  `ui/{cursor-manager, numeric-input-manager, preview-manager, settings-panel, wizard-base}`,
+  `ui/input-handlers/{arc-tool, circle-tool, constraint-tools, dimension-input, drawing-tools, line-tool,
+  live-dimension-input, pan-zoom, rect-tool, selection-tools}`.
+- **why these 16 and not more:** the other moved files' old paths have NO remaining importer (their only
+  importers were other shell files that moved with them) — confirmed by re-grep (zero `STILL MISSING`).
+- **verify:** `node --check` all 16; previously-broken tests now RESOLVE — snap-detection-priority,
+  settings-panel-sliders, preview-manager, snap-to-cluster **PASS**; wizard-base resolves (its only
+  failure is a pre-existing `document.createElement` DOM dep in `createWizardPanel`, not resolution —
+  `applyPanelStyle` asserts pass + `createWizardPanel` is defined). Named+default re-export transparency
+  confirmed through both default-bearing shims (`import d, {…}` → object/function). oracle 12/12; leak clean.
+
+## 2026-06-27 — WAVE A end-of-wave GUARDS (final state `588a667`)
+
+- **LEAK GUARD:** `grep` — no `src/core/` (nor solver-core) file imports `#app/` or `apps/`. **CLEAN.**
+- **LOAD GUARD (real browser):** headless Edge loaded `index.html`→`main.js`→entire graph through the
+  real importmap + all shims (probe served at repo root, minimal svgCanvas DOM). Verdict
+  `{status:"OK", importErrs:[]}`, **no 404s** (excl. favicon). The whole moved graph resolves in-browser.
+- Result: all shell now under `apps/sketchstudio/` (svg-renderer, snap-detection, ui/** incl.
+  input-handlers); `src/` holds core (constraint-solver, solver-core*, core/** incl. the A1-relocated
+  inference-engine), the entry `main.js`, the dead stubs (deferred), and 22 backward-shims (6 for main.js
+  + 16 for tests + export-manager + inference-engine = the rewire/cleanup slice removes them).
+- **Commits:** A1 `6e8c02b` · bulk `e922708` · fix `588a667` (+ WORK-LOG docs). **Deviation on record:**
+  bulk = advisor groups 2–4 combined into one atomic subtree move (dense interconnection; avoids
+  throwaway forward-shims) — end state identical, open for correction.
+- **NOT started (each its own later gate):** geometry coords split; entry-pair (`index.html`+`main.js`)
+  move + importmap base-path fix + Cloudflare; rewire/cleanup (delete all shims + 3 dead stubs +
+  `polygon-tool`/`dimension-input` dead-check). NEXT-SESSION.md + ROADMAP.md remain working-tree-modified
+  from outside this session (advisor-owned, untouched).
+
+=== WAVE A COMPLETE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

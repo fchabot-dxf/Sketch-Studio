@@ -93,6 +93,74 @@
   `core/constraint-manager.js` + `setConstraintNotifier(showNotification)` shell wiring. NOT started
   (per instruction: stop after commit 1, hold for advisor).**
 
+## 2026-06-27 · `5d73c02` — carve-out slice 1, COMMIT 2 of 3: notify callback (extraction + shell wiring, in place)
+
+- **did** (git diff `5d73c02`, 2 files): the notify-callback extraction as ONE load-safe commit —
+  extraction + its shell wiring together (the `8b7db3d` lesson).
+  - `core/constraint-manager.js` — dropped `import { showNotification } from '../ui/notification-manager.js'`;
+    added a module-level seam: `let notify = () => {}` + `export function setConstraintNotifier(fn)`
+    (coerces non-functions back to a no-op). The 4 conflict call-sites (ERR-CMATH-01/02, ERR-CSOLVE-01/02)
+    now call `notify(...)` instead of `showNotification(...)`; signatures unchanged (msg, type, duration).
+  - `main.js` (shell) — added `import { setConstraintNotifier }` (core) + `import { showNotification }` (ui);
+    call `setConstraintNotifier(showNotification)` once at module load, right after `createEngine`, so
+    conflict toasts still fire.
+- **why — default no-op, not throw:** the brain must stay headless (north star #4 — no UI import in core).
+  Default `notify` is a silent no-op so the oracle / any headless consumer runs without a notifier; the
+  shell opts in by injecting `showNotification`. Same seam shape as commit 1's `onMetrics`.
+- **why — wire at top-level, not in initApp:** `setConstraintNotifier` only stores a function (no DOM,
+  no `showNotification` invocation at wiring time), and constraints are only created later via UI
+  interaction — so top-level module load is the earliest correct point and can't race ahead of any
+  createConstraint call.
+- **why — `import` removed, not an export:** removing constraint-manager's *import* of showNotification
+  can't break any importer of constraint-manager (no export was removed); the only NEW export is
+  `setConstraintNotifier`, which main.js consumes. So the module graph still links → app loads.
+- **tried/abandoned:** nothing dead-ended. Considered wiring inside `initApp` for symmetry with other
+  setup — abandoned: top-level is strictly earlier and equally safe (no DOM needed), and keeps the
+  wiring next to its sibling `onMetrics` injection.
+- **verify — REAL symptom, not a proxy:** `node --input-type=module` harness — injected a spy notifier,
+  then triggered a structural math-conflict (COINCIDENT on two fixed joints at different positions) →
+  `createConstraint` returned `null` (rejected) AND the injected notifier fired with type `error`. That
+  exercises the exact path the shell uses with `showNotification`, proving conflict notifications still
+  fire through the seam. `node --check` clean on constraint-manager.js + main.js + notification-manager.js.
+  **Solver oracle 12/12 GREEN** (each `solver-*.test.js` run individually). Notification-path tests still
+  pass: constraint-conflict, constraint-manager, constraint-manager-sandbox-notification (the last relies
+  on the real notifier running under a DOM shim — now a no-op, still passes since it never asserts on the toast).
+- **state:** tests **12/12** (oracle) · app loads · branch `carve-out`@`5d73c02` · committed only the 2
+  source files (WORK-LOG committed separately at slice end; NEXT-SESSION untouched — it was already
+  modified in the working tree before this session, advisor-owned, left as-is) · **next: COMMIT 3 —
+  remove findSnap/hitJointAtScreen pass-throughs + snap-detection import + orphaned `svg` option.**
+
+## 2026-06-27 · `18e0a22` — carve-out slice 1, COMMIT 3 of 3: drop snap-detection pass-throughs (SLICE 1 COMPLETE)
+
+- **did** (git diff `18e0a22`, 2 files): removed the screen-space snap pass-throughs from the brain.
+  - `constraint-solver.js` — removed `import { findSnap as snapFind, hitJointAtScreen as snapHit } from './snap-detection.js'`;
+    removed the `findSnap(lastMouse)` / `hitJointAtScreen(...)` wrapper functions and dropped both from
+    the returned engine object; removed the now-orphaned `svg` option from the `createEngine` destructure
+    (it existed ONLY to feed those two pass-throughs — commit 1's note flagged it would "drop out in
+    commit 3"). `createEngine` now destructures only `{ onMetrics }`.
+  - `main.js` (shell) — dropped `svg,` from the `createEngine({...})` options (engine no longer reads it;
+    `svg` is still used throughout main.js for view/DOM, just not handed to the engine).
+- **why — pure removal, zero behavior change:** grep proved NO call-site ever called `engine.findSnap`
+  / `engine.hitJointAtScreen` (`\.findSnap\(` / `\.hitJointAtScreen\(` → no matches anywhere). Every
+  shell snap consumer (input-manager, hover-manager, rect-tool, circle-tool, selection-tools) already
+  imports `findSnap`/`hitJointAtScreen` straight from `snap-detection.js`. So the brain's wrappers were
+  dead pass-throughs — removing them touches no live path; snapping is untouched.
+- **why — `svg` dropped from createEngine:** once the pass-throughs are gone, `svg` has no reader inside
+  the engine. Leaving it would be a dead option (and a lingering DOM-ish coupling in the brain, #4).
+  Removing it is cleanup of the orphan this same change created.
+- **tried/abandoned:** none — design was fixed by commit 1's note and confirmed by the no-caller grep.
+- **verify — REAL symptom:** orphan grep clean (no `snapFind`/`snapHit`/`svg` left in constraint-solver.js);
+  `node --check` clean on both files; node import harness confirms `createEngine({onMetrics})` and
+  `createEngine(null)` both still build an engine, and the returned object no longer exposes
+  `findSnap`/`hitJointAtScreen`. **Solver oracle 12/12 GREEN.** Snap tests (snap-detection-priority,
+  snap-to-cluster, midpoint-snap) still pass — they import `snap-detection` directly, which this commit
+  never touched. App loads: no export any importer relies on was removed (only engine-object methods that
+  nothing referenced); `createEngine` is still an options-object factory so main.js (its sole shell caller) links.
+- **state:** tests **12/12** (oracle) · app loads · branch `carve-out`@`18e0a22` · **SLICE 1 COMPLETE
+  (commits 1 `a8245de` · 2 `5d73c02` · 3 `18e0a22`)** · **next: STOP — hold for advisor review. Do NOT
+  start the shell/core `git mv` batches without advisor go (NEXT-SESSION "After slice 1"). NEXT-SESSION.md
+  remains modified in the working tree from before this session — advisor-owned, left untouched.**
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

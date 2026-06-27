@@ -1,11 +1,11 @@
 // Multi-mode Arc tool (3-Point + Center Start/End) with live radius input
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, CONSTRAINT_TYPES, SNAP } from '../../core/constants.js';
-import { makeArc } from '../../core/shapes.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
-import { applySnapConstraint } from '../../core/snap-constraints.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, CONSTRAINT_TYPES, SNAP } from '#core/constants.js';
+import { makeArc } from '#core/shapes.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
 import { showSingleInput, isInputActive, hideInput, resetLockedDimensions, updateInputPosition, setupNumericInput } from '../numeric-input-manager.js';
-import { worldToScreen, angleBetween } from '../../core/geometry.js';
+import { worldToScreen, angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '../preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 

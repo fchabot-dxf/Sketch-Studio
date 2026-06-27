@@ -5,8 +5,8 @@
 // and fallback logic live in one place.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { SolverConfig } from '../core/solver-config.js';
-import SettingsManager from '../core/settings-manager.js';
+import { SolverConfig } from '#core/solver-config.js';
+import SettingsManager from '#core/settings-manager.js';
 
 /**
  * Get the effective magnetism threshold (in screen px).

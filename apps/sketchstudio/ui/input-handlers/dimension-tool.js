@@ -1,14 +1,14 @@
-import { SolverConfig } from '../../core/solver-config.js';
+import { SolverConfig } from '#core/solver-config.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 // DIMENSION TOOL - Handles creation of distance and radius constraints
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '../../core/constants.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
-import { getDist, screenToWorld, perpendicularDistance, projectPointOnLine, getLineIntersection, worldToScreen } from '../../core/geometry.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { getDist, screenToWorld, perpendicularDistance, projectPointOnLine, getLineIntersection, worldToScreen } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '../numeric-input-manager.js';
-import { analyzeConstraintStatus } from '../../core/constraint-status.js';
+import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { showNotification } from '../notification-manager.js';
 
 function logDim() { /* logging disabled */ }

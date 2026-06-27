@@ -2,8 +2,8 @@
 // PAN-ZOOM TOOLS - Handles viewport navigation (pan and zoom)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES } from '../../core/constants.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES } from '#core/constants.js';
 
 // Local state for pan-zoom
 let panZoomState = {

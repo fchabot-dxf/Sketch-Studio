@@ -2,7 +2,7 @@
 // HOVER MANAGER - Single source of truth for hover state
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap } from '../snap-detection.js';
-import { worldToScreen } from '../core/geometry.js';
+import { worldToScreen } from '#core/geometry.js';
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly

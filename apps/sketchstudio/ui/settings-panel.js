@@ -1,5 +1,5 @@
-import SettingsManager from '../core/settings-manager.js';
-import { dbg } from '../core/debug.js';
+import SettingsManager from '#core/settings-manager.js';
+import { dbg } from '#core/debug.js';
 import { normalizeExistingPanel } from './wizard-base.js';
 
 export function setupSettingsPanel(svg, state) {

@@ -1,9 +1,9 @@
-import { SolverConfig } from '../core/solver-config.js';
+import { SolverConfig } from '#core/solver-config.js';
 // src/ui/numeric-input-manager.js
-import { worldToScreen } from '../core/geometry.js';
+import { worldToScreen } from '#core/geometry.js';
 import { showNotification } from './notification-manager.js';
-import { analyzeConstraintStatus } from '../core/constraint-status.js';
-import { CONSTRAINT_TYPES } from '../core/constants.js';
+import { analyzeConstraintStatus } from '#core/constraint-status.js';
+import { CONSTRAINT_TYPES } from '#core/constants.js';
 
 let uiState = {
     active: false,

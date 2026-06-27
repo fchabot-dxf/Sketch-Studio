@@ -2,19 +2,19 @@
 // SELECTION TOOLS - Handles selection, dragging, and dimension label interaction
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '../../core/constants.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
 import { findCoincidentCluster, hitJointAtScreen } from '../../snap-detection.js';
-import { addConstraint } from '../../core/constraints.js';
-import { screenToWorld, worldToScreen, perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '../../core/geometry.js';
+import { addConstraint } from '#core/constraints.js';
+import { screenToWorld, worldToScreen, perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '../numeric-input-manager.js';
-import { applySnapConstraint } from '../../core/snap-constraints.js';
-import { findInference } from '../inference-engine.js';
-import SettingsManager from '../../core/settings-manager.js';
-import { SolverConfig } from '../../core/solver-config.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
+import { findInference } from '#core/inference-engine.js';
+import SettingsManager from '#core/settings-manager.js';
+import { SolverConfig } from '#core/solver-config.js';
 import { isWithinMagnet } from '../snap-magnet.js';
-import { INFERENCE_TYPES } from '../../core/constants.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
+import { INFERENCE_TYPES } from '#core/constants.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
 
 // Local state for selection tools
 let selectionState = {
@@ -51,7 +51,7 @@ import { findClosestConstraintGlyph, getScreenDist } from '../hover-manager.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Helper: Analyze constraints to determine allowed Degrees of Freedom (DOF) for dragging
-import { analyzeConstraintStatus } from '../../core/constraint-status.js';
+import { analyzeConstraintStatus } from '#core/constraint-status.js';
 
 function getDragDOF(state, jointIds) {
     // Rigid masked interaction: use analyzeConstraintStatus as single source-of-truth

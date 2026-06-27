@@ -1,6 +1,6 @@
-﻿﻿import { worldToScreen, screenToWorld, projectPointOnSegment, getDist, getArcParams, resolveJoints, getZoomFactor } from './core/geometry.js';
-import { SNAP } from './core/constants.js';
-import { findInference } from './ui/inference-engine.js';
+﻿﻿import { worldToScreen, screenToWorld, projectPointOnSegment, getDist, getArcParams, resolveJoints, getZoomFactor } from '#core/geometry.js';
+import { SNAP } from '#core/constants.js';
+import { findInference } from '#core/inference-engine.js';
 
 // Find joint at screen position
 export function hitJointAtScreen(joints, svg, screenX, screenY, threshold=14){

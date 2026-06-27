@@ -2,14 +2,14 @@
 // LINE TOOL - Handles line and polyline behavior with Auto-Coincident snapping
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, SNAP, CONSTRAINT_TYPES, INFERENCE_TYPES } from '../../core/constants.js';
-import { addConstraint } from '../../core/constraints.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
-import { findNearbyJoint } from '../../core/joints.js';
-import { applySnapConstraint } from '../../core/snap-constraints.js';
-import { findInference } from '../inference-engine.js';
-import { screenToWorld, worldToScreen } from '../../core/geometry.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, SNAP, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/constants.js';
+import { addConstraint } from '#core/constraints.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { findNearbyJoint } from '#core/joints.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
+import { findInference } from '#core/inference-engine.js';
+import { screenToWorld, worldToScreen } from '#core/geometry.js';
 import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
 import { updatePreview, clearPreview } from '../preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';

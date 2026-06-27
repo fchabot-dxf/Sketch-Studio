@@ -2,9 +2,9 @@
 // CONSTRAINT TOOLS - Handles constraint creation and manipulation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { TOOL_MODES, CONSTRAINT_TYPES } from '../../core/constants.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
-import { dbg } from '../../core/debug.js';
+import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { dbg } from '#core/debug.js';
 
 export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');

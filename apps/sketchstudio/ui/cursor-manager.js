@@ -2,8 +2,8 @@
 // CURSOR & ICON MANAGER - Single source of truth for UI icons and Cursors
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../core/debug.js';
-import { TOOL_MODES } from '../core/constants.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES } from '#core/constants.js';
 
 // Central definition of all icons. 
 // These paths will be used for BOTH the UI buttons (via <symbol>) and the Cursors (via Data URI).

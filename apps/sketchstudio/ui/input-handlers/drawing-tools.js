@@ -2,11 +2,11 @@
 // DRAWING TOOLS - Handles line, circle, and rectangle drawing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, RECT_MODES, SNAP, CONSTRAINT_TYPES } from '../../core/constants.js';
-import { addConstraint } from '../../core/constraints.js';
-import { findNearbyJoint } from '../../core/joints.js';
-import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '../../core/shapes.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, RECT_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
+import { addConstraint } from '#core/constraints.js';
+import { findNearbyJoint } from '#core/joints.js';
+import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
 import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from './line-tool.js';
 import { clearPreview } from '../preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from './rect-tool.js';

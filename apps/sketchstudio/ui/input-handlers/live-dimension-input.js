@@ -1,11 +1,11 @@
-import { SolverConfig } from '../../core/solver-config.js';
+import { SolverConfig } from '#core/solver-config.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIVE DIMENSION INPUT - Unified Numeric Input System
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { worldToScreen, getDist, projectPointOnLine, perpendicularDistance } from '../../core/geometry.js';
-import { CONSTRAINT_TYPES } from '../../core/constants.js';
-import { RECT_MODES } from '../../core/constants.js';
+import { worldToScreen, getDist, projectPointOnLine, perpendicularDistance } from '#core/geometry.js';
+import { CONSTRAINT_TYPES } from '#core/constants.js';
+import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '../notification-manager.js';
 
 let inputState = {

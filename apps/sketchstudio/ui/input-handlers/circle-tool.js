@@ -1,11 +1,11 @@
 // Circle tool - preview and creation
-import { TOOL_MODES, CONSTRAINT_TYPES } from '../../core/constants.js';
-import { addConstraint } from '../../core/constraints.js';
+import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { addConstraint } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
 import { updatePreview, clearPreview } from '../preview-manager.js';
-import { applySnapConstraint } from '../../core/snap-constraints.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '../../snap-detection.js';
-import { worldToScreen } from '../../core/geometry.js';
+import { worldToScreen } from '#core/geometry.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 
 let circleState = { lockedRadius: null };

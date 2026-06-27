@@ -1,14 +1,14 @@
 // Rect tool - preview and creation
-import { dbg } from '../../core/debug.js';
-import { TOOL_MODES, RECT_MODES, CONSTRAINT_TYPES } from '../../core/constants.js';
-import { ConstraintManager } from '../../core/constraint-manager.js';
-import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '../../core/shapes.js';
-import { findNearbyJoint } from '../../core/joints.js';
+import { dbg } from '#core/debug.js';
+import { TOOL_MODES, RECT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
+import { findNearbyJoint } from '#core/joints.js';
 import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
 import { updatePreview, clearPreview } from '../preview-manager.js';
-import { applySnapConstraint, previewSnapConstraint } from '../../core/snap-constraints.js';
+import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '../../snap-detection.js';
-import { worldToScreen } from '../../core/geometry.js';
+import { worldToScreen } from '#core/geometry.js';
 import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };

@@ -2,8 +2,12 @@
 import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
-import { showNotification } from '../ui/notification-manager.js';
 import { SolverConfig } from './solver-config.js';
+
+// Notification seam: the shell injects a notifier via setConstraintNotifier(); the
+// brain stays headless (default no-op) so core never imports the UI layer.
+let notify = () => {};
+export function setConstraintNotifier(fn) { notify = typeof fn === 'function' ? fn : () => {}; }
 
 // Structural constraint types — cannot be driven, must be rejected on conflict
 const STRUCTURAL_TYPES = new Set([
@@ -88,14 +92,14 @@ export class ConstraintManager {
             if (mathConflict) {
                 const isStructural = STRUCTURAL_TYPES.has(type);
                 if (isStructural) {
-                    showNotification(`${this._friendlyName(type)} rejected — ${mathConflict} [ERR-CMATH-01]`, 'error', 3000);
+                    notify(`${this._friendlyName(type)} rejected — ${mathConflict} [ERR-CMATH-01]`, 'error', 3000);
                     dbg.warn('constraints', `[ConstraintManager] ${type} math-rejected: ${mathConflict} [ERR-CMATH-01]`);
                     return null;
                 } else {
                     normalized.isDriven = true;
                     normalized.driven = true;
                     normalized.drivenReason = `math-precheck: ${mathConflict} [ERR-CMATH-02]`;
-                    showNotification(`Dimension set to reference — ${mathConflict} [ERR-CMATH-02]`, 'warning', 3000);
+                    notify(`Dimension set to reference — ${mathConflict} [ERR-CMATH-02]`, 'warning', 3000);
                     dbg.log('constraints', `[ConstraintManager] ${type} auto-driven: ${mathConflict} [ERR-CMATH-02]`);
                 }
             }
@@ -111,14 +115,14 @@ export class ConstraintManager {
                     const diagMsg = diag && diag.residual !== undefined ? ` (res: ${Number(diag.residual).toFixed(4)}${diag.id ? `, id: ${diag.id}` : ''})` : '';
 
                     if (isStructural) {
-                        showNotification(`${this._friendlyName(type)} rejected — creates a conflict${diagMsg} [ERR-CSOLVE-01]`, 'error', 3000);
+                        notify(`${this._friendlyName(type)} rejected — creates a conflict${diagMsg} [ERR-CSOLVE-01]`, 'error', 3000);
                         dbg.warn('constraints', `[ConstraintManager] ${type} sandbox-rejected [ERR-CSOLVE-01]`, diag || 'no-diag');
                         return null;
                     } else {
                         normalized.isDriven = true;
                         normalized.driven = true;
                         normalized.drivenReason = `sandbox-conflict [ERR-CSOLVE-02]`;
-                        showNotification(`Dimension set to reference (conflict)${diagMsg} [ERR-CSOLVE-02]`, 'warning', 3000);
+                        notify(`Dimension set to reference (conflict)${diagMsg} [ERR-CSOLVE-02]`, 'warning', 3000);
                         dbg.log('constraints', `[ConstraintManager] ${type} auto-driven (sandbox) [ERR-CSOLVE-02]`, diag || 'no-diag');
                     }
                 }

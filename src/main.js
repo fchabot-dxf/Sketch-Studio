@@ -8,6 +8,8 @@ import { setupInput, showDimInput } from './ui/input-manager.js';
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from './constraint-solver.js';
 import { applyDefaultState } from './core/state.js';
+import { setConstraintNotifier } from './core/constraint-manager.js';
+import { showNotification } from './ui/notification-manager.js';
 
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;
@@ -38,6 +40,11 @@ const engine = createEngine({
     }
   }
 });
+
+// Wire the brain's notification seam to the shell's toast UI. The core stays
+// headless (it only knows the injected notifier, not the UI module); without
+// this call conflict notifications would silently no-op.
+setConstraintNotifier(showNotification);
 
 // shared app state passed to input and ui modules
 const state = {

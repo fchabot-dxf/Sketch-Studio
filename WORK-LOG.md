@@ -546,6 +546,36 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
 
 === WAVE A COMPLETE — HOLD ===
 
+## 2026-06-27 — WAVE A FIX reconciliation: explicit test-resolution GUARD + handoff protocol adopted
+
+- **context:** the advisor refreshed NEXT-SESSION (the "WAVE A FIX" task) AND switched coordination to a
+  monotonic turn marker (`handoff.py` + `.handoff/state.json` → `HANDOFF.md`; `.handoff/` and `HANDOFF.md`
+  gitignored). The marker (cycle 1, turn 1, ball=worker) named exactly this task: "add 16 missing
+  re-export shims + test-resolution guard (16→0); STOP after." I executed the shims under the prior task
+  wording and signed off with the prior sentinel `=== WAVE A COMPLETE — HOLD ===`; the refreshed task asks
+  for the sentinel `=== WAVE A SHIMS FIXED — HOLD ===` — corrected at the bottom of this entry. WORK-LOG is
+  append-only, so both sentinels stand; this one is authoritative for the FIX task.
+- **the GUARD the advisor flagged as missing (now run explicitly, the lesson logged):** the oracle never
+  imports shell, so it can't catch broken shell-test resolution — a dedicated guard was needed. Ran it:
+  extracted every `../src/*.js` specifier imported under `tests/` (static + dynamic) = **38 distinct**;
+  asserted each resolves to an existing file → **MISSING: 0** (advisor's 16 → 0). PLUS oracle **12/12** ·
+  no `src/core/` file imports `#app/`/`apps/` (leak CLEAN) · `src/main.js` import-graph resolves in-browser
+  (headless-Edge @588a667: `{status:OK, importErrs:[]}`, no 404s).
+- **shims delivered (commit `588a667`, recapped):** 16 `export *` re-export shims at the old paths
+  (snap-detection; ui/{cursor-manager, numeric-input-manager, preview-manager, settings-panel,
+  wizard-base}; ui/input-handlers/{arc-tool, circle-tool, constraint-tools, dimension-input, drawing-tools,
+  line-tool, live-dimension-input, pan-zoom, rect-tool, selection-tools}); the 2 with `export default`
+  (settings-panel, wizard-base) also re-export `{ default }`. Default-export check done per-file, not assumed.
+- **protocol adopted:** switching from NEXT-SESSION content-watch to `handoff.py`. Will consume turn 1
+  (`wait --role worker`) and `pass --to advisor` with a completion note; future waits use
+  `python handoff.py wait --role worker`. `handoff.py`/`.gitignore` are the advisor's protocol setup —
+  left untouched (not part of this task).
+- **state:** tests **16→0 missing · oracle 12/12** · app loads (browser-verified) · branch
+  `carve-out`@`588a667` (+ WORK-LOG docs). No further moves; deferred gates (geometry coords split,
+  entry-pair, rewire/cleanup) untouched.
+
+=== WAVE A SHIMS FIXED — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

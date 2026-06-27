@@ -461,7 +461,16 @@ export class NewtonSolver {
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
     const x0 = this._pack();
-    if (x0.length === 0) return { converged: true, error: 0, rankDeficient: false };
+    if (x0.length === 0) {
+      // No free variables — every joint is pinned (all fixed, or merged into a
+      // fixed coincident cluster). The sketch can't move, but its constraints
+      // may still be VIOLATED (e.g. a distance on a joint welded to the origin).
+      // Check the residual instead of unconditionally claiming success.
+      const { r } = this._assemble(x0);
+      let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
+      const residual0 = Math.sqrt(s);
+      return { converged: residual0 < this.config.tol, error: residual0, rankDeficient: false };
+    }
 
     let x = new Float64Array(x0); // current estimate
     let lambda = this.config.lambdaInit;

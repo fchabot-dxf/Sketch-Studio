@@ -47,46 +47,60 @@ export function createEngine(svg){
   function solve(iter=20, options = {}){ 
     const result = solver.solve(iter, options);
     
-    // Compute per-constraint residuals
+    // Per-constraint GEOMETRIC residuals are the ground truth for convergence.
+    // The engine's `converged` flag is step/least-squares based and can report
+    // success while a constraint is unsatisfied (over-constrained or zero-DOF
+    // cases). Re-check every non-driven constraint and let geometry — not the
+    // engine — decide convergence, so the returned result never lies to callers.
     const tolerance = SolverConfig.VERIFIER_TOLERANCE || 0.001;
     const constraintErrors = [];
-    
+    const conflicts = [];
+    let maxResidual = 0;
+
     for (const c of constraints) {
       if (c.isDriven || c.driven) continue; // Skip driven dimensions
       const residual = measureResidual(c, joints, shapes);
-      if (residual > tolerance || options.showAll) {
-        constraintErrors.push({
-          id: c.id,
-          type: c.type,
-          residual: residual,
-          satisfied: residual <= tolerance,
-          joints: c.joints || [],
-          shapes: c.shapes || [],
-          value: c.value
-        });
-      }
+      if (residual > maxResidual) maxResidual = residual;
+      const entry = {
+        id: c.id,
+        type: c.type,
+        residual: residual,
+        satisfied: residual <= tolerance,
+        joints: c.joints || [],
+        shapes: c.shapes || [],
+        value: c.value
+      };
+      if (!entry.satisfied) conflicts.push(entry);
+      if (residual > tolerance || options.showAll) constraintErrors.push(entry);
     }
-    
+
     // Sort by residual (worst first)
     constraintErrors.sort((a, b) => b.residual - a.residual);
-    
+    conflicts.sort((a, b) => b.residual - a.residual);
+
+    // Geometry decides convergence: satisfied iff no constraint exceeds tolerance.
+    const converged = conflicts.length === 0;
+
     // Update metrics for tuning wizard
     lastSolveStats = {
       maxDelta: result.error || 0,
       iterations: iter,
-      converged: result.converged || false,
+      converged: converged,
       // Sketch is under-constrained (rank(J) < n). May still be "converged" if
       // a valid configuration was found; the flag tells UI the configuration
       // is non-unique so it can prompt the user to add more constraints.
       rankDeficient: result.rankDeficient === true,
       constraintErrors: constraintErrors
     };
-    
+
     // Emit to tuning wizard if available
     if (typeof window !== 'undefined' && window.__updateSolverMetrics) {
       window.__updateSolverMetrics(lastSolveStats);
     }
-    return result;
+    // Authoritative result: geometry-derived `converged` + `conflicts` list, with
+    // `error` reported as the max geometric residual (world units / radians),
+    // not the engine's internal step norm.
+    return { ...result, converged, error: maxResidual, conflicts, constraintErrors, rankDeficient: result.rankDeficient === true };
   }
   
   function getSolveStats() { return lastSolveStats; }

@@ -2,9 +2,15 @@
 
 > Paste this whole document into the next agent (e.g. Claude Code in VS Code) at the start of the session. It captures everything decided so far so you don't have to re-explain.
 
+> **Companion docs:** `ROADMAP.md` = the plan + the six north-star principles · `NEXT-SESSION.md`
+> = the current task in flight · **this file** = the environment, architecture, deployment, and
+> gotchas a fresh agent needs. Keep all three current.
+
 ## What this project is
 
 A 2D CAD sketch application with constraint solving (Newton-Raphson + Levenberg-Marquardt). Browser-based, ES modules, no bundler. Used personally for designing G-code paths for an Ultimate Bee CNC running a DDCS Expert 1.1 controller.
+
+**Current direction — platform pivot.** SketchStudio is becoming the **first shell of a shared "one brain, many shells" CAD platform**: a headless, app-agnostic core (model · constraint solver · geometry · units · interaction) reused by SketchStudio, a **Shaper Origin** cut-path editor, and future apps (laser / 3D-print / other CNC). The solver in this repo *is* that brain and is being **reused, not rewritten**. We're in **Phase 0** — finishing solver honesty/robustness (the blockers) in the current structure, before the Phase 1 monorepo carve-out. Plan + principles live in `ROADMAP.md`.
 
 - **GitHub:** https://github.com/fchabot-dxf/Sketch-Studio
 - **Live:** https://sketch-studio.pages.dev (Cloudflare Pages, auto-deploys on push to `main`)
@@ -87,9 +93,21 @@ The Newton-Raphson engine is implemented and working. From earlier analysis:
 
 `tests/ai-vision-label-spacing.test.js` fails with `Expected label text lines at AI_VISION=false`. The test calls `draw()` with one joint and expects `<text class="debug-joint-label">` elements in `svg.innerHTML`. None appear. Started a diagnostic script but the auto-runner choked on `{}` characters in the inline JS — abandoned that approach. Next agent has terminal access and can run the diagnostic directly. Probable cause is somewhere in the `if (showDebugOverlay)` block in `svg-renderer.js` lines 345-735, or in how `SettingsManager.set()` interacts with the renderer's read.
 
-### 2. Solver robustness — the user's main goal ✅ ALL DONE
+### 2. Solver robustness — current status
 
-All four items from the original list are landed as of this session. See `docs/architecture/SOLVER_WALKTHROUGH.md` for the full picture.
+The live to-do is in **NEXT-SESSION.md**. Short version, on branch `solver-robustness`:
+
+- **Blocker 1 — "converged but lying"** ✅ **committed** (`88336cd`): geometry now decides
+  convergence; `solve()` returns a `conflicts` list and `error` as the max geometric residual.
+- **Blocker 2 — "bouncy" drag** ✅ implemented & **staged, pending bounce-repro review**:
+  Cholesky guard `EPS` `1e-14`→`1e-8` in `algebra.js` so the undamped polish step is skipped near
+  singularity and the damped LM result stands.
+- **Medium — point-on-circle silently ignored** ← next (before exposing circle snapping).
+
+These three came from reproducing the user's **"bouncy / doesn't reflect the constraint"**
+complaints. Separately, an **earlier** robustness backlog already landed — relaxation pre-pass,
+branch lock, rank-deficiency detection, drag-step cap — those four are done and detailed below.
+See `docs/architecture/SOLVER_WALKTHROUGH.md` for the engine walkthrough.
 
 - ~~**Relaxation pre-pass before Newton.**~~ ✅ Steepest-descent with optimal Cauchy step (`α = ‖g‖²/‖Jg‖²`) + Armijo backtracking, in `engine._preRelax`. Toggle via `SolverConfig.RELAX_PREPASS_ENABLED`. Test: `tests/solver-relaxation-prepass.test.js`.
 - ~~**Branch locking on tangent / perpendicular.**~~ ✅ Tangent gets `branch: 'external' | 'internal'` (default external); perpendicular gets `branch: +1 | -1` using the combined residual `cross(u,v) − branch·‖u‖‖v‖` (single row, no kinks, no local minima on the wrong half). Auto-detected at constraint creation by `ConstraintManager.lockTangentBranch` / `lockPerpendicularBranch`. Test: `tests/solver-branch-lock.test.js`.
@@ -122,7 +140,9 @@ Written as `docs/architecture/SOLVER_WALKTHROUGH.md`. Covers file map, data stru
 
 ## Suggested first move for next session
 
-The solver-robustness backlog from CONTEXT.md is empty. Likely next areas:
+**→ `NEXT-SESSION.md` governs** (currently: commit Blocker 2 after the bounce-repro review, then
+point-on-circle, then the monorepo carve-out). The items below are older background ideas — *not*
+the current task:
 
 1. **UI surface for `rankDeficient`** — wire the new flag through `lastSolveStats.rankDeficient` to a visible "sketch is under-constrained" indicator. Renderer-side work, not engine.
 2. **Triage pre-existing failures** — 23 broken tests, most are DOM-stub issues (`document is not defined`); a few are stale assertions from before the engine evolved. Worth one cleanup pass to either fix or quarantine.

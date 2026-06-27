@@ -2,6 +2,15 @@
 
 A CAD-style 2D sketch application with constraint solving.
 
+## Where this is heading
+
+SketchStudio is becoming the **first shell of a parametric-CAD platform** — *one shared, headless
+"brain" (model · constraint solver · geometry · units · interaction) with many thin app shells*
+over it: SketchStudio itself, a **Shaper Origin** cut-path editor, and future apps
+(laser / 3D-print / other CNC). The constraint solver in this repo *is* that brain and is being
+**reused, not rewritten**. Browser-native ESM + import map, **no build step**. See **`ROADMAP.md`**
+for the full plan and **`NEXT-SESSION.md`** for the current work in flight.
+
 ## Fundamental Design Principle
 
 **Every shape has unique joints at each endpoint.** Connections between shapes are made via explicit **coincident constraints**, not by sharing joint objects.

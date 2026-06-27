@@ -320,6 +320,72 @@ old path for the 4 shell importers. Small, isolates the misplacement. Flag for a
 - **next: STOP — hold for advisor.** Advisor rulings needed on GATE A (path = import map?), GATE B
   (debug/settings = defer?), and the `ui/inference-engine.js` relocation, before Slice 0 executes.
 
+## 2026-06-27 · `03a05a2` — shell batch SLICE 0: import map (additive, ZERO file moves)
+
+- **did** (git diff `03a05a2`, index.html only): added `<script type="importmap">` before the module
+  script, mapping `"core/" → "./src/core/"` and `"app/" → "./apps/sketchstudio/"` (the advisor-blessed
+  GATE-A option-A aliases, trailing-slash prefix maps).
+- **why — additive, provably load-safe:** an import map only ADDS bare-specifier resolution; `./` and
+  `../` imports are resolved against the document base URL and are NOT affected by the map. No JS file
+  changed, no import rewritten, so the browser loads exactly as before — now with `core/`/`app/`
+  available for the moves to come.
+- **verify:** import map JSON parses (`{"core/":"./src/core/","app/":"./apps/sketchstudio/"}`); it
+  precedes `<script type="module" src="src/main.js">` (required ordering); module entry unchanged.
+  Oracle **12/12** (no JS touched). App loads (map additive + valid + correctly placed).
+- **state:** tests 12/12 · app loads · branch `carve-out`@`03a05a2` · next: SLICE 1 — see BLOCKER below.
+
+## 2026-06-27 — ⚠ SLICE 1 BLOCKED — GATE: browser import map ≠ Node resolution (option A needs a Node companion)
+
+**Slice 1 cannot be executed as specified.** The task says: move `export-manager.js`, rewrite its
+imports to the `core/`/`app/` **bare aliases**, shim the old path, and verify **`export*.test.js`
+green via shim**. Those last two conflict in the Node test environment. **No files were moved; this is
+an objection, not a change.**
+
+- **Root cause (empirically proven):** a `<script type="importmap">` is **browser-only**. Node (the
+  test runner AND the way the oracle is run, `node tests/x.js`) does NOT read it, and there is **no
+  `node_modules`** here. A bare specifier therefore cannot resolve in Node. Scratch proof:
+  `node -e "import 'core/constants.js'"` → `ERR_MODULE_NOT_FOUND: Cannot find package 'core'`.
+- **Why it breaks `export.test.js` specifically:** `tests/export.test.js:2` does
+  `import { buildSVG, buildDXF } from '../src/ui/export-manager.js'`. After the move that path is the
+  re-export shim → the moved `apps/sketchstudio/ui/export-manager.js` → which (per the ruling) does
+  `import { CONSTRAINT_TYPES } from 'core/constants.js'`. ESM resolves the whole graph at load, so Node
+  hits the bare `core/` and throws **before any test body runs**. The shim path style is irrelevant —
+  the moved file's OWN bare imports are the blocker.
+- **Scope — this is systemic, not one test.** Bare `core/` aliases make a module **browser-only**. Any
+  Node test that imports a shell file which has adopted aliases breaks the same way. Already true for
+  the proof file; will compound across the mass move (shell tests import `svg-renderer`, `snap-detection`,
+  ui tools, `export-manager`, …). So option A needs a **Node-side resolution companion BEFORE the proof
+  can be "green via shim"** — the proof surfaced exactly the risk it exists to surface.
+- **What is NOT affected:** the 12-test solver oracle never imports a shell file (solver tests →
+  `constraint-solver.js` → `./core/...` relative). Oracle stays **12/12** regardless. The conflict is
+  strictly SHELL Node-tests vs. bare aliases.
+
+**Options for the advisor (the worker will not pick a bridge unilaterally):**
+- **(A) Node ESM loader that reads the import map [worker’s recommendation].** A small
+  `--import ./scripts/import-map-resolver.js` hook resolves `core/`/`app/` from the SAME importmap in
+  index.html → one source of truth, true to option A’s "one stable specifier in both envs", no
+  `node_modules`. Cost: wire the flag into `scripts/run-tests.js` AND into how the oracle is invoked
+  (individual `node tests/solver-*.test.js` runs — set via `NODE_OPTIONS` or a wrapper so I don’t pass
+  `--import` by hand each time).
+- **(B) `node_modules` junctions** `core → src/core`, `app → apps/sketchstudio` (Windows `mklink /J`),
+  created by an `npm prepare`/setup script (node_modules gitignored). Same bare specifier resolves in
+  Node + browser. Cost: setup step on every clone/CI; Windows-symlink fragility (cf. the user’s sync
+  caveat).
+- **(C) package.json `"imports"` subpath map** — Node-native, but requires a `#` prefix (`#core/…`),
+  which **diverges** from the browser’s `core/…`, so the "one specifier" goal is lost (files would need
+  both, or per-env specifiers). Not recommended.
+- **(D) Keep moved shell files on RELATIVE core paths for now** (= GATE-A option B, already rejected):
+  Node-green with zero infra, but re-churns at the core→`packages/core` batch. Fallback only.
+
+Recommend **(A)** — it preserves option A’s single-specifier promise and keeps the entire Node test
+suite runnable through the migration. Whichever is chosen, it should land as its own slice *before*
+Slice 1, then Slice 1 (and the mass move) proceed unchanged.
+
+- **state:** tests **12/12** (oracle) · app loads (import map additive) · branch `carve-out`@`03a05a2`
+  · Slice 0 done; **Slice 1 HELD pending advisor ruling on the Node-resolution bridge.** No files moved.
+  NEXT-SESSION.md + ROADMAP.md remain modified in the working tree from outside this session
+  (advisor-owned, untouched).
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

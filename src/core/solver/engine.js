@@ -254,6 +254,17 @@ export class NewtonSolver {
           if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
             params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1]) ];
           }
+          // Point-on-circle/arc: pull the point onto the rim. joints = [point, center];
+          // radius is captured as a constant from the shape so only the point moves.
+          // (Without this branch a circle target left params.joints empty -> NaN -> the
+          // constraint was silently ignored.)
+          else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 1) {
+            params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]) ];
+            params.radius = (typeof shape.radius === 'number')
+              ? shape.radius
+              : (shape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(shape.joints[0]) * 2; const ri = jointIndexMap.get(shape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+            params.onCircle = true;
+          }
         }
         // Support tangent between two circle/arc shapes by synthesizing center indices + radii
         else if (c.type === 'tangent' && c.shapes && c.shapes.length === 2) {

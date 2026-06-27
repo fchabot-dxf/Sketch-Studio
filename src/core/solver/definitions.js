@@ -75,6 +75,12 @@ export const Definitions = {
   point_on_line: {
     rows: 1,
     computeError: (params, positions) => {
+      // Point-on-circle/arc target: residual = dist(point, center) - radius.
+      if (params.onCircle) {
+        const dx = positions[params.joints[0]*2] - positions[params.joints[1]*2];
+        const dy = positions[params.joints[0]*2+1] - positions[params.joints[1]*2+1];
+        return Math.hypot(dx, dy) - (params.radius || 0);
+      }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
       const px = positions[pi*2], py = positions[pi*2+1];
       const ax = positions[ai*2], ay = positions[ai*2+1];
@@ -86,6 +92,16 @@ export const Definitions = {
       return cross / denom;
     },
     computeJacobian: (params, positions, outRow) => {
+      // Point-on-circle/arc: move only the point along the radial direction.
+      if (params.onCircle) {
+        const pi = params.joints[0], ci = params.joints[1];
+        const dx = positions[pi*2] - positions[ci*2];
+        const dy = positions[pi*2+1] - positions[ci*2+1];
+        const d = Math.hypot(dx, dy) || 1e-12;
+        outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
+        outRow[ci*2 + 0] = 0; outRow[ci*2 + 1] = 0;
+        return;
+      }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
       const px = positions[pi*2], py = positions[pi*2+1];
       const ax = positions[ai*2], ay = positions[ai*2+1];

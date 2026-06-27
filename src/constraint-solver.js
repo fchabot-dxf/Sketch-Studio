@@ -1,4 +1,3 @@
-import { findSnap as snapFind, hitJointAtScreen as snapHit } from './snap-detection.js';
 import { measureResidual } from './core/constraint-verifier.js';
 import { SolverConfig } from './core/solver-config.js';
 import { createNewtonSolver } from './core/solver/engine.js';
@@ -23,10 +22,9 @@ function _initStore(){
 }
 
 export function createEngine(options = {}){
-  // Injected seams (shell wires these). svg is still used by the screen-space
-  // snap pass-throughs below; onMetrics replaces the old window.__updateSolverMetrics
-  // global so the core never reaches for window.
-  const { svg = null, onMetrics = null } = options || {};
+  // Injected seams (shell wires these). onMetrics replaces the old
+  // window.__updateSolverMetrics global so the core never reaches for window.
+  const { onMetrics = null } = options || {};
   const solver = createNewtonSolver(joints, constraints, shapes, {
     maxIter: SolverConfig.ITERATIONS || 500,
     tol: SolverConfig.LM_TOL || 1e-6,
@@ -106,8 +104,6 @@ export function createEngine(options = {}){
   }
   
   function getSolveStats() { return lastSolveStats; }
-  function findSnap(lastMouse){ return snapFind(joints, shapes, svg, lastMouse); }
-  function hitJointAtScreen(screenX,screenY,threshold=10){ return snapHit(joints, svg, screenX, screenY, threshold); }
 
-  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, findSnap, hitJointAtScreen };
+  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats };
 }

@@ -30,7 +30,6 @@ setTimeout(updateView, 0); // Initial update after layout
 
 // create engine instance bound to this svg
 const engine = createEngine({
-  svg,
   // Forward solver metrics to the tuning wizard (lazy-loaded, dev-only). The wizard
   // registers window.__updateSolverMetrics when it mounts; the core no longer touches
   // window — the shell injects this callback and keeps the window glue here.

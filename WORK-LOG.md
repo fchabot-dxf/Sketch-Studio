@@ -957,6 +957,27 @@ So "the 12" is ambiguous: 12 solver-* alone, OR 11 solver-* (which one dropped?)
 
 No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advisor, STOP** for the ruling.
 
+## 2026-06-28 · `43cac32` — CORE SLICE C: co-locate the 12 solver-oracle tests (turn 11; ruling = Option A)
+
+- **ruling:** advisor upheld my Option A. Move ALL 12 `tests/solver-*.test.js` (pure `#core`, incl.
+  `solver-constraint-audit`) → `packages/core/tests/`; KEEP `drag-step-cap.test.js` in `tests/` (it imports
+  `apps/.../selection-tools` — co-locating it would leak `#app` into the core package's tests).
+- **did:** `git mv` the 12 (clean renames). They already import `#core/…` (from SLICE B), which resolves
+  from the new dir via the repo-root `package.json` `"imports"` (no per-file edits needed). Rewrote
+  `scripts/run-tests.js` to discover `.test.js` in BOTH `tests/` and `packages/core/tests/` (graceful if a
+  dir is absent; prints the total count at the end).
+- **verify:** the 12 oracle **run + PASS from the new dir (12/12)**; **assert-count** — the runner's
+  discovery finds `tests/` → 97 and `packages/core/tests/` → 12 `.test.js` (NOT a silent 0); **clean-package
+  leak guard** — no `#app/`/`apps/` import anywhere under `packages/core` (tests included) → the brain +
+  its oracle are shell-free; **baseline-diff over BOTH dirs** = the same 8 pre-existing failures, **0
+  net-new** (drag-step-cap, kept in tests/, passes).
+- **state:** branch `carve-out`@`43cac32` · oracle 12/12 (now homed at `packages/core/tests`) · app loads.
+  `packages/core` is now a self-contained package: brain + its oracle, depending on nothing in `apps/`.
+  next: STOP. Remaining (advisor's call): cleanup — `build-inline.cjs` stale-ref fix; delete dead
+  `solver-core.legacy.js` (0 importers, pre-existing syntax error).
+
+=== CORE SLICE C (oracle co-location) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

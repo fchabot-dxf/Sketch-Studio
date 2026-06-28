@@ -19,5 +19,7 @@
     "#core/*": "./packages/core/*",
     "#app/*": "./apps/sketchstudio/*"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@salusoft89/planegcs": "^1.1.7"
+  }
 }

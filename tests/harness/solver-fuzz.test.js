@@ -135,7 +135,7 @@ function fuzzOne(seed) {
 
   const K = ri(5, 12);
   for (let k = 0; k < K && violations.length === 0; k++) {
-    const choice = ri(0, 7);
+    const choice = ri(0, 8);
     if (choice <= 1) {                                // DIMENSION an edge (consistent or new) — varied dims
       const [name, a, b] = E[ri(0, E.length - 1)];
       const cur = s.edgeLen(a, b);
@@ -163,18 +163,25 @@ function fuzzOne(seed) {
     } else if (choice === 6) {                        // OVER-CONSTRAIN by editing a driver to a wild value
       const drv = dims.filter((d) => d && !s.isDriven(d));
       if (drv.length) { const d = drv[ri(0, drv.length - 1)]; s.editValue(d, ri(1, 40)); ops.push('edit-wild'); check('edit', true); }
-    } else {                                          // OVER-CONSTRAIN by a conflicting dimension
+    } else if (choice === 7) {                        // OVER-CONSTRAIN by a conflicting dimension
       const [name, a, b] = E[ri(0, E.length - 1)];
       const val = Math.max(1, Math.round(s.edgeLen(a, b)) + ri(-9, 9));
       const d = s.dimension(a, b, val); s.solve(); if (d) { placeDim(s, d, a, b); dims.push(d); }
       ops.push(`dimX(${name},${val})`); check('dimX', true);
+    } else {                                          // TOGGLE a dim driver<->reference (real toggleDriving seam)
+      if (dims.length) {
+        const dim = dims[ri(0, dims.length - 1)];
+        if (s.isDriven(dim)) s.setDriving(dim); else s.setReference(dim);
+        s.solve();
+        ops.push('toggle'); check('toggle', true);
+      }
     }
   }
   return { seed, shape: shape.name, ops, violations };
 }
 
 const N = Number(process.argv[2]) || 150;
-console.log(`\n====== SOLVER FUZZER  (${N} sims · rect/polyline/polygon/circle · REAL app placement path · adversarial) ======`);
+console.log(`\n====== SOLVER FUZZER  (${N} sims · 4 shapes · REAL app paths: placement/edit/toggle · adversarial) ======`);
 const buckets = {};
 const shapeFail = {};
 for (let seed = 1; seed <= N; seed++) {

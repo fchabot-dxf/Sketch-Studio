@@ -2646,6 +2646,38 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5a (TABBED-DOCK WIDGET) DONE — HOLD ===
 
+## 2026-06-28 · S5b — shared constraint-list + DOF info panel → #ui/ (turn 103) — standalone, byte-identical
+
+- **did (S5b; the data-driven OVERVIEW/MANAGE content — the on-canvas glyphs/dim-edit/snap STAY):**
+  - **`packages/ui/design-info-panel.js`** (new) — `createDesignInfoPanel({ state, engine })` → `{ el,
+    render(container), refresh, destroy }` (drops into a TabbedDockPanel tab via `render: (body) =>
+    panel.render(body)`). Reads the SHARED state/engine; imports only `#core/constraint-status`.
+  - **Constraint list:** a row per `state.constraints` with a type icon + label (coincident / horizontal /
+    vertical / parallel / perpendicular / collinear / tangent / point-on-line / distance / equal / angle /
+    midpoint) + the value for dimensioned ones + a `(ref)` tag for driven dims. **Click a row → toggles
+    `state.selectedConstraints`** — the shared renderer ALREADY highlights selected constraints on the canvas, so
+    the dock↔canvas highlight is automatic (no new plumbing). (Delete deferred — no clean reuse needed for v1.)
+  - **DOF readout:** real DOF via `analyzeConstraintStatus` (sum of `jointDOFs`) — `"<n> constraints · DOF <m> ·
+    {fully constrained | m free} · ✓ solved"` (solve status from `engine.getSolveStats()` when present). Got a
+    true DOF number, so no count-only fallback needed.
+  - **`refresh()`** re-renders list + DOF from current state (the host wires it to constraint changes at S5c/S5d).
+    Self-contained `<style id="sk-info-styles">`; themed via `--sk-dock-accent`/`--sk-selection`. STANDALONE — no
+    app imports it → both apps byte-identical.
+- **verify (exactly how):**
+  - CDP smoke in ISOLATION (real sample state: engine + createSketchState + a coincident + a distance, solved):
+    list labels = **["Coincident","Distance"]**; DOF readout = **"2 constraints · DOF 1 · 1 free · ✓ solved"**;
+    clicking row 0 → **`state.selectedConstraints.size===1`** + the row gets `.sel`; adding a 3rd constraint +
+    `refresh()` → rows **2→3** (`refreshGrew`). `errors=0`.
+  - **Both apps byte-identical:** SketchStudio world-group **5** + `.sk-info` absent (unimported); Shaper loads.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · no importers.
+- **state:** branch `carve-out` · both shared dock pieces exist in `#ui/`, unmounted (apps unchanged): the
+  TabbedDockPanel chrome (S5a) + this data-driven info panel (S5b). Next per the de-risked sequence: **S5c** —
+  Shaper adopts the dock (mount a TabbedDockPanel in the Design tab with the info panel as content; new app, low
+  risk) — then S5d (SketchStudio adopts, the deliberate toolbar re-home, isolated last). STOP — hold for advisor.
+
+=== S5b (CONSTRAINT-LIST + DOF PANEL) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

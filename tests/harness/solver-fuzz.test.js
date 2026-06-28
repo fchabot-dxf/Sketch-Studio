@@ -1,24 +1,21 @@
 // AUTOMATED solver fuzzer — runs a few hundred sims so bugs surface WITHOUT hand-drawing.
-// Every sketch is built with the REAL RECT TOOL (s.rect → makeRectFromTwoJoints → ConstraintManager,
-// the exact rect-tool.js path — never a hand-assembled rect), then exercised with VARIED constraints +
-// dimensions (edge dims · diagonal dims · equal→square) and adversarial ops (drag hard · push/pull ·
-// over-constrain by edit and by conflicting dimension). Three universal invariants are checked after
-// EVERY step:
+// Each sim picks a random BASE SHAPE built with the REAL builders the app uses (never hand-assembled):
+//   rect (rect tool / makeRectFromTwoJoints) · polyline (line shapes) · polygon (makePolygon) · circle.
+// Then it applies VARIED constraints + dimensions (H/V/equal/parallel · edge & diagonal dims) and
+// adversarial ops (drag hard · push/pull · over-constrain by edit and by conflicting dimension), checking
+// three universal invariants after EVERY step:
 //   P1 NO-EXPLODE   every joint stays finite + bounded (no NaN / runaway).
 //   P2 NO-LIE       if the solver reports `converged`, EVERY non-driven constraint is ACTUALLY satisfied
-//                   (any type). This is the universal "never silently deform" check — for a plain rect it
-//                   means it stays a rectangle; for a rect+equal it stays a square; for any constraint set
-//                   it means the geometry matches what the constraints demand.
-//   P3 NEVER-SILENT after a committed op (dimension / constraint / edit) the sketch is converged OR an
-//                   error was shown — it is never left silently non-converged / mangled.
-// Seeded PRNG ⇒ any failure prints a replayable {seed, ops} to promote into solver-scenarios.
-// Reporter (exits 0) — a bug-finder board, not a gate.
+//                   (any type, any shape) — the universal "never silently deform" check.
+//   P3 NEVER-SILENT after a committed op the sketch is converged OR an error was shown — never left
+//                   silently non-converged / mangled.
+// Seeded PRNG ⇒ any failure prints a replayable {seed, ops}. Reporter (exits 0) — a bug-finder board.
 
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { makePolygon } from '#core/shapes.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 
-// deterministic PRNG (mulberry32) — a failing seed replays the exact sketch.
 function rng(seed) {
   let a = seed >>> 0;
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -28,22 +25,59 @@ function rng(seed) {
 function residual(s, c) {
   const J = c.joints || [];
   if (J.length < 2) return 0;
-  const p = (i) => s.pos(J[i]);
+  const P = J.map((id) => s.pos(id));
+  if (P.some((p) => !p)) return 0;
   const sub = (u, v) => ({ x: u.x - v.x, y: u.y - v.y });
   const len = (u) => Math.hypot(u.x, u.y);
   switch (c.type) {
-    case T.HORIZONTAL: return Math.abs(p(0).y - p(1).y);
-    case T.VERTICAL: return Math.abs(p(0).x - p(1).x);
-    case T.COINCIDENT: return len(sub(p(0), p(1)));
-    case T.DISTANCE: return Math.abs(len(sub(p(1), p(0))) - (Number(c.value) || 0));
-    case T.EQUAL: { if (J.length < 4) return 0; return Math.abs(len(sub(p(0), p(1))) - len(sub(p(2), p(3)))); }
-    case T.PARALLEL: { if (J.length < 4) return 0; const u = sub(p(1), p(0)), v = sub(p(3), p(2)); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.y - u.y * v.x) / d); }
-    case T.PERPENDICULAR: { if (J.length < 4) return 0; const u = sub(p(1), p(0)), v = sub(p(3), p(2)); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.x + u.y * v.y) / d); }
+    case T.HORIZONTAL: return Math.abs(P[0].y - P[1].y);
+    case T.VERTICAL: return Math.abs(P[0].x - P[1].x);
+    case T.COINCIDENT: return len(sub(P[0], P[1]));
+    case T.DISTANCE: return Math.abs(len(sub(P[1], P[0])) - (Number(c.value) || 0));
+    case T.EQUAL: { if (P.length < 4) return 0; return Math.abs(len(sub(P[0], P[1])) - len(sub(P[2], P[3]))); }
+    case T.PARALLEL: { if (P.length < 4) return 0; const u = sub(P[1], P[0]), v = sub(P[3], P[2]); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.y - u.y * v.x) / d); }
+    case T.PERPENDICULAR: { if (P.length < 4) return 0; const u = sub(P[1], P[0]), v = sub(P[3], P[2]); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.x + u.y * v.y) / d); }
     default: return 0; // types the fuzzer doesn't generate
   }
 }
 
 const addCon = (s, type, joints, extra = {}) => ConstraintManager.createConstraint(s.state, type, { joints: [...joints], ...extra }, { source: 'fuzz' });
+
+// build a random base shape with the REAL builders → { name, edges:[[label,a,b]...], drag:[jointId...] }
+function buildShape(s, ri) {
+  const kind = ri(0, 3);
+  if (kind === 0) {                                   // RECTANGLE via the rect tool
+    const w = ri(4, 16), h = ri(4, 16);
+    const r = s.rect(0, 0, w, h);
+    const [c1, c2, c3, c4] = r.corners;
+    return { name: `rect(${w}x${h})`, edges: [['top', c1, c2], ['bot', c4, c3], ['left', c1, c4], ['right', c2, c3]], drag: r.corners };
+  }
+  if (kind === 1) {                                   // POLYLINE — a chain of real line shapes
+    const n = ri(3, 5);
+    const pts = [s.point(0, 0, true)];
+    let px = 0, py = 0;
+    for (let i = 1; i < n; i++) { px += (ri(-9, 9) || 6); py += (ri(-9, 9) || 6); pts.push(s.point(px, py, false)); }
+    const edges = [];
+    for (let i = 0; i < n - 1; i++) { s.engine.addShape({ id: `seg_${i}`, type: 'line', joints: [pts[i], pts[i + 1]] }); edges.push([`e${i}`, pts[i], pts[i + 1]]); }
+    return { name: `polyline${n}`, edges, drag: pts.slice(1) };
+  }
+  if (kind === 2) {                                   // POLYGON via makePolygon (real builder, welded)
+    const n = ri(3, 6);
+    const center = s.point(0, 0, true);
+    const vertex = s.point(ri(5, 12), 0, false);
+    const built = makePolygon(s.state.joints, center, vertex, n, s.engine.genJ);
+    for (const sh of built.shapes) s.engine.addShape(sh);
+    for (const c of built.constraints) ConstraintManager.createConstraint(s.state, c.type, c, { source: 'fuzz' });
+    const edges = built.shapes.filter((sh) => /^s_poly_\d/.test(sh.id)).map((sh, i) => [`p${i}`, sh.joints[0], sh.joints[1]]);
+    const drag = [...new Set(edges.flatMap((e) => [e[1], e[2]]))];
+    return { name: `poly${n}`, edges, drag };
+  }
+  // kind === 3: CIRCLE — center + rim joint (radius = dist)
+  const center = s.point(0, 0, true);
+  const rim = s.point(ri(4, 12), 0, false);
+  s.engine.addShape({ id: 'circ0', type: 'circle', joints: [center, rim] });
+  return { name: 'circle', edges: [['radius', center, rim]], drag: [rim] };
+}
 
 function fuzzOne(seed) {
   const rand = rng(seed);
@@ -51,13 +85,9 @@ function fuzzOne(seed) {
   const s = createSketch();
   const ops = [];
   const dims = [];
-
-  // ── build with the REAL RECT TOOL (no hand-drawn rect) ──
-  const w = ri(4, 16), h = ri(4, 16);
-  const r = s.rect(0, 0, w, h);
-  ops.push(`rectTool(${w}x${h})`);
-  const [c1, c2, c3, c4] = r.corners;
-  const edgeList = [['top', c1, c2], ['bottom', c4, c3], ['left', c1, c4], ['right', c2, c3]];
+  const shape = buildShape(s, ri);
+  ops.push(shape.name);
+  const E = shape.edges, D = shape.drag;
   s.solve();
 
   const violations = [];
@@ -81,46 +111,52 @@ function fuzzOne(seed) {
   const K = ri(5, 12);
   for (let k = 0; k < K && violations.length === 0; k++) {
     const choice = ri(0, 7);
-    if (choice <= 1) {                              // DIMENSION an edge (consistent or a new value) — varied dims
-      const [name, a, b] = edgeList[ri(0, 3)];
+    if (choice <= 1) {                                // DIMENSION an edge (consistent or new) — varied dims
+      const [name, a, b] = E[ri(0, E.length - 1)];
       const cur = s.edgeLen(a, b);
       const val = ri(0, 1) ? Math.round(cur * 10) / 10 : ri(3, 16);
       const d = s.dimension(a, b, val); s.solve(); if (d) dims.push(d);
-      ops.push(`dim(${name},${val})`); check(`dim(${name})`, true);
-    } else if (choice === 2) {                      // DIAGONAL dimension — a different distance
-      const val = Math.round(s.edgeLen(c1, c3));
-      const d = s.dimension(c1, c3, val); s.solve(); if (d) dims.push(d);
-      ops.push(`diag(${val})`); check('diag', true);
-    } else if (choice === 3) {                      // EQUAL two edges — a different constraint type (→ square)
-      addCon(s, T.EQUAL, [c1, c2, c2, c3]); s.solve();
-      ops.push('equal(top,right)'); check('equal', true);
-    } else if (choice === 4) {                      // DRAG HARD — push/pull a corner a long way
-      const corner = r.corners[ri(0, 3)]; const dx = ri(-15, 15), dy = ri(-15, 15);
-      s.drag(corner, dx, dy);
+      ops.push(`dim(${name},${val})`); check('dim', true);
+    } else if (choice === 2) {                        // ADD H or V on an edge — a different constraint type
+      const [name, a, b] = E[ri(0, E.length - 1)];
+      const t = ri(0, 1) ? T.HORIZONTAL : T.VERTICAL;
+      addCon(s, t, [a, b]); s.solve();
+      ops.push(`${t === T.HORIZONTAL ? 'horiz' : 'vert'}(${name})`); check('hv', true);
+    } else if (choice === 3 && E.length >= 2) {       // EQUAL or PARALLEL between two edges
+      const e1 = E[ri(0, E.length - 1)], e2 = E[ri(0, E.length - 1)];
+      const t = ri(0, 1) ? T.EQUAL : T.PARALLEL;
+      addCon(s, t, [e1[1], e1[2], e2[1], e2[2]]); s.solve();
+      ops.push(`${t === T.EQUAL ? 'equal' : 'parallel'}`); check('eqpar', true);
+    } else if (choice === 4) {                        // DRAG HARD — push/pull a joint a long way
+      const j = D[ri(0, D.length - 1)]; const dx = ri(-15, 15), dy = ri(-15, 15);
+      s.drag(j, dx, dy);
       ops.push(`drag(${dx},${dy})`); check('drag', false);
-    } else if (choice === 5) {                      // PUSH-THEN-PULL — two hard drags
-      const corner = r.corners[ri(0, 3)];
-      s.drag(corner, ri(-15, 15), ri(-15, 15)); s.drag(corner, ri(-15, 15), ri(-15, 15));
+    } else if (choice === 5) {                        // PUSH-THEN-PULL — two hard drags
+      const j = D[ri(0, D.length - 1)];
+      s.drag(j, ri(-15, 15), ri(-15, 15)); s.drag(j, ri(-15, 15), ri(-15, 15));
       ops.push('pushpull'); check('pushpull', false);
-    } else if (choice === 6) {                      // OVER-CONSTRAIN by editing a driver to a wild value
-      const drv = dims.filter(d => d && !s.isDriven(d));
-      if (drv.length) { const d = drv[ri(0, drv.length - 1)]; const val = ri(1, 40); s.editValue(d, val); ops.push(`edit(${val})`); check('edit', true); }
-    } else {                                        // OVER-CONSTRAIN by a conflicting dimension on a parallel edge
-      const [name, a, b] = edgeList[ri(0, 3)];
+    } else if (choice === 6) {                        // OVER-CONSTRAIN by editing a driver to a wild value
+      const drv = dims.filter((d) => d && !s.isDriven(d));
+      if (drv.length) { const d = drv[ri(0, drv.length - 1)]; s.editValue(d, ri(1, 40)); ops.push('edit-wild'); check('edit', true); }
+    } else {                                          // OVER-CONSTRAIN by a conflicting dimension
+      const [name, a, b] = E[ri(0, E.length - 1)];
       const val = Math.max(1, Math.round(s.edgeLen(a, b)) + ri(-9, 9));
       const d = s.dimension(a, b, val); s.solve(); if (d) dims.push(d);
       ops.push(`dimX(${name},${val})`); check('dimX', true);
     }
   }
-  return { seed, ops, violations };
+  return { seed, shape: shape.name, ops, violations };
 }
 
 const N = Number(process.argv[2]) || 150;
-console.log(`\n====== SOLVER FUZZER  (${N} sims · rect TOOL · varied constraints+dims · drag-hard · over-constrain) ======`);
+console.log(`\n====== SOLVER FUZZER  (${N} sims · rect/polyline/polygon/circle · varied constraints+dims · adversarial) ======`);
 const buckets = {};
+const shapeFail = {};
 for (let seed = 1; seed <= N; seed++) {
   const r = fuzzOne(seed);
   if (!r.violations.length) continue;
+  const base = r.shape.replace(/[0-9(].*$/, '');
+  shapeFail[base] = (shapeFail[base] || 0) + 1;
   const v = r.violations[0];
   let kind = 'OTHER';
   if (v.startsWith('P1')) kind = 'EXPLODE (NaN / runaway)';
@@ -131,15 +167,16 @@ for (let seed = 1; seed <= N; seed++) {
 }
 const failed = Object.values(buckets).reduce((a, b) => a + b.count, 0);
 if (failed === 0) {
-  console.log(`  ${N}/${N} clean — every sim survives varied constraints + drag-hard + over-constrain with NO silent deform.`);
+  console.log(`  ${N}/${N} clean — every shape survives varied constraints + drag-hard + over-constrain with NO silent deform.`);
 } else {
   console.log(`  ${failed}/${N} sims broke an invariant. By failure mode (worst first):\n`);
   for (const [kind, b] of Object.entries(buckets).sort((a, c) => c[1].count - a[1].count)) {
     console.log(`  ▸ ${b.count.toString().padStart(3)} ×  ${kind}`);
-    console.log(`           e.g. seed ${b.repro.seed}: ${b.repro.ops.join(' → ')}`);
+    console.log(`           e.g. seed ${b.repro.seed} [${b.repro.shape}]: ${b.repro.ops.join(' → ')}`);
     console.log(`                ✗ ${b.repro.violations[0]}`);
   }
+  console.log(`\n  failures by base shape: ${Object.entries(shapeFail).map(([k, n]) => `${k}=${n}`).join('  ')}`);
 }
-console.log('\n  P1 explode · P2 deform(no-lie, all constraint types) · P3 over-constrain-never-silent');
-console.log('================================================================================================\n');
+console.log('\n  P1 explode · P2 deform(no-lie, all types) · P3 over-constrain-never-silent  ·  shapes: rect/polyline/polygon/circle');
+console.log('==========================================================================================================\n');
 process.exit(0);

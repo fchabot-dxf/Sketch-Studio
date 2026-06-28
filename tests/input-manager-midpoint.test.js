@@ -15,7 +15,7 @@
     // First click on line
     state.snapTarget = { type: 'line', shape: state.shapes[0], pt: { x: 5, y: 0 }, isLocked: true, targetId: 'L1' };
     const svg = { setPointerCapture: () => {}, releasePointerCapture: () => {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), viewBox: { baseVal: { width: 100, height: 100 } } };
-    const { worldToScreen } = await import('../src/core/geometry.js');
+    const { worldToScreen } = await import('../apps/sketchstudio/coords.js');
     let e = { clientX: worldToScreen(svg, state.snapTarget.pt).x, clientY: worldToScreen(svg, state.snapTarget.pt).y, pointerId: 1, pointerType: 'mouse', button: 0, preventDefault: () => {} };
     handlePointerDown(e, svg, state);
     // Then click on joint

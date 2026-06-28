@@ -8,7 +8,7 @@ import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isI
 import { updatePreview, clearPreview } from '../preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '../../snap-detection.js';
-import { worldToScreen } from '#core/geometry.js';
+import { worldToScreen } from '#app/coords.js';
 import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };

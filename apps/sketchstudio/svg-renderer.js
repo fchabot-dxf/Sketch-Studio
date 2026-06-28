@@ -1,5 +1,6 @@
 import { dbg } from '#core/debug.js';
-import { worldToScreen, calculateArcPath, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
+import { worldToScreen } from '#app/coords.js';
+import { calculateArcPath, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';

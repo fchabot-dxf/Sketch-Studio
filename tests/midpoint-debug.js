@@ -1,6 +1,6 @@
 (async () => {
     const { findSnap } = await import('../src/snap-detection.js');
-    const { worldToScreen } = await import('../src/core/geometry.js');
+    const { worldToScreen } = await import('../apps/sketchstudio/coords.js');
 
     const joints = new Map();
     joints.set('j1', { x: 0, y: 0 });

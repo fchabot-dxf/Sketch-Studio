@@ -1,4 +1,5 @@
-﻿﻿import { worldToScreen, screenToWorld, projectPointOnSegment, getDist, getArcParams, resolveJoints, getZoomFactor } from '#core/geometry.js';
+﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#app/coords.js';
+import { projectPointOnSegment, getDist, getArcParams, resolveJoints } from '#core/geometry.js';
 import { SNAP } from '#core/constants.js';
 import { findInference } from '#core/inference-engine.js';
 

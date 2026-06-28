@@ -1,7 +1,7 @@
 (async () => {
     const { findSnap } = await import('../src/snap-detection.js');
     const { applySnapConstraint, previewSnapConstraint } = await import('../src/core/snap-constraints.js');
-    const { worldToScreen } = await import('../src/core/geometry.js');
+    const { worldToScreen } = await import('../apps/sketchstudio/coords.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup simple line and a free joint

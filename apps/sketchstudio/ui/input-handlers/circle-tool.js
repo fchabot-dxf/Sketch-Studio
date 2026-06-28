@@ -5,7 +5,7 @@ import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, i
 import { updatePreview, clearPreview } from '../preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '../../snap-detection.js';
-import { worldToScreen } from '#core/geometry.js';
+import { worldToScreen } from '#app/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 
 let circleState = { lockedRadius: null };

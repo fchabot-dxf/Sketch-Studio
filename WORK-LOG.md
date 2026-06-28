@@ -2130,6 +2130,42 @@ split per R3); P5 = integration. Each remains an independent byte-identical-for-
 
 === SHAPER P1 (SKETCHER CSS VAR CONTRACT) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER P2 — GATE (mechanism + test conflict surfaced before the 40+ site edit) (turn 79)
+
+Investigated before editing; hit two things that change how P2 must be done — surfacing per protocol (no renderer
+code changed this turn). **No DONE sentinel — awaiting the advisor's call.**
+
+- **Finding 1 — the renderer is STRING-MARKUP, not `setAttribute`/`el.style`.** `svg-renderer.js` emits SVG as
+  template strings (`out.push(\`<circle … fill="#60A5FA" …/>\`)`), ~75 `fill="` + ~76 `stroke="` sites (many
+  `="none"`/`="${var}"`). So the dispatched "`el.style.fill = 'var(--sk-x,'+color+')'`" maps to rewriting the
+  **presentation attribute → inline style**: `fill="${c}"` → `style="fill:${skv(c)}"`. Several elements carry
+  fill+stroke and/or an existing `style="…"` → those must MERGE into one `style` attr (the fiddly part).
+- **Finding 2 — status colors vary at runtime** (`strokeColor` ∈ {`#202020` fixed, `#3B82F6` free, `#10b981`
+  fully, …}). Cleanest handling: a `skv(value)` helper mapping a known hex → `var(--sk-NAME, value)` and passing
+  others through, so ONE emission site (`style="stroke:${skv(strokeColor)}"`) themes every status. Mapping is
+  value-based (same hex shared across roles → one var); byte-identical via the fallback; Shaper themes per value.
+- **Finding 3 — "baseline 0 net-new" conflicts with 2 tests that assert RAW color markup:**
+  - `tests/debug-ai-health.test.js` asserts `fill="#ef4444"` — a DEBUG color. Proposed: leave debug colors
+    (`#ef4444` residual/feedback, `#fbbf24`, `#6b7280`, `#eab308`, `#9333ea`, debug labels) UNROUTED — they're
+    dev-overlay, not canvas-theme. → debug-ai-health stays green, no edit.
+  - `tests/svg-renderer-coincident-visual.test.js` asserts `fill="white"` ×2 (it **counts visible joints by
+    counting `fill="white"`** → expects 3, then 4) and `/stroke="#3B82F6"/` ×2 (the hover-glow halo). Both ARE
+    canvas colors; routing them via `style=` removes those exact attrs → the joint-COUNT proxy + glow regex
+    break. Keeping it green needs an intent-preserving rewrite (count the new joint-fill markup; match the
+    glow's `style="stroke:var(--sk-…,#3B82F6)"`). That changes the test's counting mechanism, so I'm not doing
+    it unilaterally.
+- **Recommendation (ready to execute on OK):** mechanism A — inline-style via a `skv(value)` helper; SCOPE =
+  canvas-theme colors only (constraint glyphs, joints, line/status strokes, dimensions, selection/hover/origin,
+  construction, perpendicular), SKIP `none` + debug colors; update `svg-renderer-coincident-visual.test.js`'s 4
+  assertions to the var-routed form (intent preserved). Alternative B (class+var) preserves markup for FIXED-role
+  colors (no test edits) but cannot express per-status strokes via one class — so status colors still need
+  inline-style; A is the only uniform mechanism.
+- **Question for advisor:** approve A + the scope (skip debug) + sanctioning the coincident-visual assertion
+  rewrite? Or prefer a hybrid (class+var for the test-asserted fixed colors to avoid touching that test, inline
+  for the rest)?
+
+=== SHAPER P2 GATE — AWAITING ADVISOR ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

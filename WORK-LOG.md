@@ -1884,6 +1884,35 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4b (L1 MANAGERS) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER S4c — base + leaf handlers → #ui/input-handlers/ VERBATIM (turn 67)
+
+- **did (S4c of the blessed plan; relocation only):**
+  - **`git mv` 5 handlers VERBATIM** → **`packages/ui/input-handlers/`** (subdir PRESERVED; renames, no logic
+    change): `base-tool.js`, `constraint-tools.js`, `pan-zoom.js`, `live-dimension-input.js`,
+    `dimension-input.js`. (`mkdir packages/ui/input-handlers` first — git mv won't create the target dir.)
+    Their cross-cluster deps were already repointed to `#ui/` in S4a/S4b, so the moved files carry only
+    `#core/*` + `#ui/*` (coords, preview-manager, notification-manager, numeric-input-manager) — **no
+    cross-package relative to convert**, and none import a sibling handler.
+  - `TODO(shaper):` added to the two with real SketchStudio DOM-id reaches: `live-dimension-input` (7
+    getElementById/querySelector) + `dimension-input` (2). `base-tool`/`constraint-tools`/`pan-zoom` have **0**
+    id-reaches (their earlier DOM counts were generic event/document refs, not id-coupling) → no TODO.
+  - **Repointed all 9 importers → `#ui/input-handlers/<name>.js`** (basename match, WITH the subdir): the 4
+    per-shape tools still in apps/ (`./base-tool`→`#ui/input-handlers/base-tool.js`, etc.), input-manager, and
+    4 tests (constraint-tools, dimension-inline-edit, live-dimension-race, pan-during-drawing). Grep: 0 stale.
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN** (exit 0). Node smoke: all 5 `#ui/input-handlers/<h>` import
+    OK. `node --check` clean on the moved files.
+  - Browser (CDP): **SketchStudio** `errors=0`, world-group rendered **5 children** (byte-identical — verbatim
+    mv, only import paths changed); **Shaper** Design `errors=0` → 6 children.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · fuzzer 400 → **400/400** · scenario tester
+    **23/23** · baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out` · `#ui/` now holds coords + svg-renderer + cursor-manager + sketch-canvas + 5 L0
+  leaves + 2 L1 managers + `input-handlers/{base-tool,constraint-tools,pan-zoom,live-dimension-input,
+  dimension-input}`. Next per the plan: **S4d** (per-shape tools: line/rect/circle/arc/dimension-tool/selection
+  → `#ui/input-handlers/`). STOP — hold for advisor.
+
+=== SHAPER S4c (BASE + LEAF HANDLERS) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

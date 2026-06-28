@@ -9,7 +9,7 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
 const localState = { isDragging: false, dragStartScreen: null };

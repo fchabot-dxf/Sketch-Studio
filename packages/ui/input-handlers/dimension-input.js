@@ -1,5 +1,8 @@
 import { setupNumericInput, showEditInput, hideInput } from '#ui/numeric-input-manager.js';
 
+// Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4c.
+// TODO(shaper): parameterize the DOM-id reaches before Shaper adopts this — relocation only for now.
+//
 // Wrapper module providing a backward-compatible dimension input API.
 // Delegates to the canonical numeric input manager while exposing a
 // simple `setupDimensionInput`, `showDimInput`, and `resetDimensionInputState` API

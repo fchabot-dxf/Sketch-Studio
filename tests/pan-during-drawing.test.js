@@ -1,6 +1,6 @@
 (async () => {
     const { setupInput } = await import('../apps/sketchstudio/ui/input-manager.js');
-    const { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/pan-zoom.js');
+    const { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp } = await import('#ui/input-handlers/pan-zoom.js');
     const { TOOL_MODES } = await import('#core/constants.js');
 
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

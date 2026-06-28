@@ -1,5 +1,5 @@
 (async () => {
-  const { setupDimensionInput, showDimInput, resetDimensionInputState } = await import('../apps/sketchstudio/ui/input-handlers/dimension-input.js');
+  const { setupDimensionInput, showDimInput, resetDimensionInputState } = await import('#ui/input-handlers/dimension-input.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Provide a minimal document with a fake #dimInput element

@@ -8,7 +8,7 @@ import { showSingleInput, isInputActive, hideInput, resetLockedDimensions, updat
 import { worldToScreen } from '#ui/coords.js';
 import { angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 

@@ -14,8 +14,8 @@ import { toggleDriving } from '#ui/dimension-seams.js';
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';
 import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from './input-handlers/drawing-tools.js';
-import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from './input-handlers/constraint-tools.js';
-import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from './input-handlers/pan-zoom.js';
+import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
+import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from './input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
@@ -25,7 +25,7 @@ import { handleRectKeyDown } from './input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from './input-handlers/circle-tool.js';
 import { handleArcKeyDown } from './input-handlers/arc-tool.js';
 import { initCursors } from '#ui/cursor-manager.js';
-import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from './input-handlers/live-dimension-input.js';
+import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -1241,7 +1241,7 @@ function handleEscape(state) {
     state.active = null; state.drag = null;
 
     // 4. RESET CONSTRAINT BUFFERS (Crucial for multi-click tools)
-    try{ resetConstraintState(); }catch(_){ try{ import('./input-handlers/constraint-tools.js').then(m => m.resetConstraintState()); }catch(_){ state.selectionBuffer = []; } }
+    try{ resetConstraintState(); }catch(_){ try{ import('#ui/input-handlers/constraint-tools.js').then(m => m.resetConstraintState()); }catch(_){ state.selectionBuffer = []; } }
 
     // 5. Force UI to Select Mode
     try{ state.currentTool = TOOL_MODES.SELECT; }catch(_){ }

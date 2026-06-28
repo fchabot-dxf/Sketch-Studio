@@ -12,9 +12,9 @@ import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
 import { clearHover } from '#ui/hover-manager.js';
-import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from './live-dimension-input.js';
+import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from '#ui/input-handlers/live-dimension-input.js';
 
 let lineState = { lockedLength: null, lockedAngle: null, isDriven: false };
 

@@ -2,6 +2,9 @@ import { SolverConfig } from '#core/solver-config.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIVE DIMENSION INPUT - Unified Numeric Input System
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4c.
+// TODO(shaper): parameterize the DOM-id reaches (getElementById/querySelector on SketchStudio ids) before
+// Shaper adopts this — relocation only for now.
 
 import { worldToScreen } from '#ui/coords.js';
 import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geometry.js';

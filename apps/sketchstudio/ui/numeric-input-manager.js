@@ -278,12 +278,19 @@ function handleCommit() {
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
             if (uiState.appState.engine) {
-                const result = uiState.appState.engine.solve(SolverConfig.ITERATIONS || 500);
-                if (result && !result.converged) showNotification(
-                    "Constraints could not be fully satisfied. [ERR-SOLVE-01] Reason: Solver did not converge after numeric input.\nArgs: " +
-                    JSON.stringify({ target: uiState.target, result }),
-                    "warning"
-                );
+                let result = uiState.appState.engine.solve(SolverConfig.ITERATIONS || 500);
+                if (result && !result.converged) {
+                    // Over-constrained: the typed value can't be satisfied with the current constraints.
+                    // Instead of the old hard ERR-SOLVE-01 (which left the geometry stuck on the impossible
+                    // value), auto-demote this dimension to a REFERENCE (driven) dim. The solver skips driven
+                    // dims (packages/core/constraint-solver.js), so the sketch settles; the renderer then shows
+                    // the dim's MEASURED value in (parens) and it stays toggleable back to driving — reversible.
+                    uiState.target.isDriven = true;
+                    uiState.target.driven = true;
+                    uiState.target.drivenReason = 'over-constrained — kept as reference';
+                    result = uiState.appState.engine.solve(SolverConfig.ITERATIONS || 500); // re-solve, now skipping the driven dim
+                    showNotification("Dimension set to reference — can't be enforced with the current constraints.", "warning");
+                }
             }
         }
         uiState.target.__editing = false;

@@ -15,6 +15,7 @@ import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makePolygon } from '#core/shapes.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
+import { updateConstraintOffset } from '#app/ui/input-handlers/dimension-tool.js';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -43,6 +44,21 @@ function residual(s, c) {
 
 const addCon = (s, type, joints, extra = {}) => ConstraintManager.createConstraint(s.state, type, { joints: [...joints], ...extra }, { source: 'fuzz' });
 
+// Drive the REAL app placement step (dimension-tool.updateConstraintOffset) after every dimension add —
+// this is where Root1 lived: it re-evaluated isDriven and could re-promote a redundant REFERENCE back to a
+// DRIVER. The harness's `dimension()` only hits the core (ConstraintManager); without this, the fuzzer is
+// blind to app-layer bugs (exactly the one the user had to find by hand).
+function placeDim(s, dim, a, b) {
+  if (!dim) return;
+  const A = s.pos(a), B = s.pos(b);
+  if (!A || !B) return;
+  const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+  const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy) || 1;
+  const w = { x: mx - (dy / L) * 8, y: my + (dx / L) * 8 };   // glyph drop-point, perpendicular to the edge
+  try { updateConstraintOffset(s.state, dim, w); } catch (_) {}
+  s.solve();
+}
+
 // build a random base shape with the REAL builders → { name, edges:[[label,a,b]...], drag:[jointId...] }
 function buildShape(s, ri) {
   const kind = ri(0, 3);
@@ -50,7 +66,7 @@ function buildShape(s, ri) {
     const w = ri(4, 16), h = ri(4, 16);
     const r = s.rect(0, 0, w, h);
     const [c1, c2, c3, c4] = r.corners;
-    return { name: `rect(${w}x${h})`, edges: [['top', c1, c2], ['bot', c4, c3], ['left', c1, c4], ['right', c2, c3]], drag: r.corners };
+    return { name: `rect(${w}x${h})`, edges: [['top', c1, c2], ['bot', c4, c3], ['left', c1, c4], ['right', c2, c3]], drag: r.corners, wEdges: [[c1, c2], [c4, c3]], hEdges: [[c1, c4], [c2, c3]] };
   }
   if (kind === 1) {                                   // POLYLINE — a chain of real line shapes
     const n = ri(3, 5);
@@ -102,6 +118,15 @@ function fuzzOne(seed) {
         const res = residual(s, c);
         if (res > 0.03) violations.push(`P2 LIE@${label}: converged but ${c.type} residual=${res.toFixed(2)}`);
       }
+      // P4 NO-REDUNDANT-DRIVER (rects, via the app placement path): top/bottom share ONE width, left/right
+      // ONE height — each group may have at most 1 DRIVING dim. A 2nd surviving as a driver = a redundant
+      // reference re-promoted (the Root1 app-placement bug). Only catchable because placeDim drives the real
+      // dimension-tool step — this is the invariant the fuzzer was BLIND to before.
+      if (shape.wEdges) {
+        const grp = (es) => es.reduce((n, [a, b]) => n + s.drivingDistanceCount(a, b), 0);
+        if (grp(shape.wEdges) > 1) violations.push(`P4 REDUNDANT-DRIVER@${label}: ${grp(shape.wEdges)} width drivers (redundant reference re-promoted)`);
+        if (grp(shape.hEdges) > 1) violations.push(`P4 REDUNDANT-DRIVER@${label}: ${grp(shape.hEdges)} height drivers (redundant reference re-promoted)`);
+      }
     } else if (committed && !s.lastError) {
       violations.push(`P3 SILENT@${label}: not converged after a committed op but NO error shown`);
     }
@@ -115,7 +140,7 @@ function fuzzOne(seed) {
       const [name, a, b] = E[ri(0, E.length - 1)];
       const cur = s.edgeLen(a, b);
       const val = ri(0, 1) ? Math.round(cur * 10) / 10 : ri(3, 16);
-      const d = s.dimension(a, b, val); s.solve(); if (d) dims.push(d);
+      const d = s.dimension(a, b, val); s.solve(); if (d) { placeDim(s, d, a, b); dims.push(d); }
       ops.push(`dim(${name},${val})`); check('dim', true);
     } else if (choice === 2) {                        // ADD H or V on an edge — a different constraint type
       const [name, a, b] = E[ri(0, E.length - 1)];
@@ -141,7 +166,7 @@ function fuzzOne(seed) {
     } else {                                          // OVER-CONSTRAIN by a conflicting dimension
       const [name, a, b] = E[ri(0, E.length - 1)];
       const val = Math.max(1, Math.round(s.edgeLen(a, b)) + ri(-9, 9));
-      const d = s.dimension(a, b, val); s.solve(); if (d) dims.push(d);
+      const d = s.dimension(a, b, val); s.solve(); if (d) { placeDim(s, d, a, b); dims.push(d); }
       ops.push(`dimX(${name},${val})`); check('dimX', true);
     }
   }
@@ -149,7 +174,7 @@ function fuzzOne(seed) {
 }
 
 const N = Number(process.argv[2]) || 150;
-console.log(`\n====== SOLVER FUZZER  (${N} sims · rect/polyline/polygon/circle · varied constraints+dims · adversarial) ======`);
+console.log(`\n====== SOLVER FUZZER  (${N} sims · rect/polyline/polygon/circle · REAL app placement path · adversarial) ======`);
 const buckets = {};
 const shapeFail = {};
 for (let seed = 1; seed <= N; seed++) {
@@ -162,6 +187,7 @@ for (let seed = 1; seed <= N; seed++) {
   if (v.startsWith('P1')) kind = 'EXPLODE (NaN / runaway)';
   else if (v.startsWith('P2')) kind = 'DEFORM (converged but a constraint is violated)';
   else if (v.startsWith('P3')) kind = 'OVER-CONSTRAIN not reverted (mangled, no error)';
+  else if (v.startsWith('P4')) kind = 'REDUNDANT-DRIVER (app placement re-promoted a reference)';
   if (!buckets[kind]) buckets[kind] = { count: 0, repro: r };
   buckets[kind].count++;
 }
@@ -177,6 +203,6 @@ if (failed === 0) {
   }
   console.log(`\n  failures by base shape: ${Object.entries(shapeFail).map(([k, n]) => `${k}=${n}`).join('  ')}`);
 }
-console.log('\n  P1 explode · P2 deform(no-lie, all types) · P3 over-constrain-never-silent  ·  shapes: rect/polyline/polygon/circle');
+console.log('\n  P1 explode · P2 deform · P3 over-constrain-never-silent · P4 redundant-driver(app placement)  ·  4 shapes');
 console.log('==========================================================================================================\n');
 process.exit(0);

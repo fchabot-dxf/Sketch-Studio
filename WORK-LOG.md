@@ -1947,6 +1947,39 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4d (PER-SHAPE TOOLS) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER S4e — drawing-tools → #ui/ + remove dead require fallbacks (turn 71)
+
+- **did (S4e of the blessed plan; relocation + the ONE sanctioned non-verbatim edit):**
+  - **`git mv` `drawing-tools.js` VERBATIM** → `packages/ui/input-handlers/` (rename). Its handler deps
+    (line/rect/circle/arc/dimension/selection + preview/hover) were already `#ui/` from S4c/S4d → all imports
+    are `#core/*` + `#ui/*`, nothing to convert. 0 id-reaches → no TODO. `apps/sketchstudio/ui/input-handlers/`
+    is now **empty** (whole dir lives in `#ui/`).
+  - **Removed the 2 dead `require('#ui/input-handlers/selection-tools.js')` CJS fallbacks** (flagged at S4d).
+    **Confirmed dead three ways:** (a) both are `try/catch`-guarded; (b) `require` is undefined in browser-ESM
+    AND Node-ESM → always throws → caught; (c) the guard `if (state.drag && state.drag.type === DRAG_TYPES.*)`
+    references **`DRAG_TYPES`, which is NOT imported in this file** — so if it ever entered it would ReferenceError
+    on the condition; in practice `state.drag` is falsy during a drawing tool so the `if` is never taken. Note the
+    advisor's premise "a static import provides the same binding" was only *partly* true — the file statically
+    imports `handleJointSelection` (still used at the arc joint-drag path), NOT the `handleSelectionPointerMove/
+    Up` the dead branches called — so I **deleted** the dead delegations (didn't swap to a static binding).
+    Deleted: the `awaitSelectionMove` helper + both `if`-blocks. No orphan imports (DRAG_TYPES was never imported;
+    handleJointSelection/setHoverFromSnap stay, still used).
+  - **Repointed all 4 importers → `#ui/input-handlers/drawing-tools.js`** (input-manager + 3 tests:
+    arc-integration, arc-logging, pan-during-drawing). Grep: 0 stale (import + require).
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN**; `node --check` clean; Node smoke: `#ui/input-handlers/
+    drawing-tools` imports OK (6 exports).
+  - Browser (CDP): **SketchStudio** `errors=0`, world-group rendered **5 children**; **Shaper** Design
+    `errors=0` → 6 children. **Byte-identical** — proves the removed `require` delegations were truly dead.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · fuzzer 400 → **400/400** · scenario tester
+    **23/23** · baseline-diff = the 8 pre-existing, **0 net-new** (the drag tests are the proof the removal
+    didn't change drag behavior).
+- **state:** branch `carve-out` · the ENTIRE input-handlers/ dir + all managers/snap/seam now live in `#ui/`;
+  only **`input-manager.js`** remains app-side in the cluster. Next per the plan: **S4f** (input-manager root +
+  invert the settings-panel coupling: inject `openSettings`, drop the dead `require` at :203). STOP — hold.
+
+=== SHAPER S4e (DRAWING-TOOLS + DEAD REQUIRE) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

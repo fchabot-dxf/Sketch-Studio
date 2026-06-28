@@ -100,14 +100,7 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerMove(e, svg, state, w) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) return false; 
-
-    // Helper to delegate to selection pointer move (avoid circular import at top level)
-    function awaitSelectionMove(ev, svgEl, st) {
-        // Import lazily to avoid cyclic deps
-        const sel = require('#ui/input-handlers/selection-tools.js');
-        return sel.handleSelectionPointerMove(ev, svgEl, st);
-    }
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) return false;
 
     // Debug: show active snap while moving (guarded; enable with `window.ug.debug.verboseDrawingLogs = true`)
     try{
@@ -123,11 +116,6 @@ export function handleDrawingPointerMove(e, svg, state, w) {
     // When idle (no state.active), hover is managed by updateHover in hover-manager
     if (state.active) {
         setHoverFromSnap(state);
-    }
-
-    // If a joint/cluster drag is active, delegate to selection pointer move so joints can be dragged
-    if (state.drag && (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER)) {
-        try { return awaitSelectionMove(e, svg, state); } catch(_) { /* fall-through */ }
     }
 
     switch (state.currentTool) {
@@ -159,11 +147,6 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
         return false;
     }
     try{ dbg.log('drawing', '[drawing-tools] pointerUp', { tool: state.currentTool, hitSnap, activeSnap: state.activeSnap, w, wasDragging }); }catch(_){ }
-
-    // If a joint drag is active, delegate to selection pointer up so drag finalizes correctly
-    if (state.drag && (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER)) {
-        try { const sel = require('#ui/input-handlers/selection-tools.js'); return sel.handleSelectionPointerUp(e, svg, state); } catch(_){ }
-    }
 
     // Handle based on tool
     switch (state.currentTool) {

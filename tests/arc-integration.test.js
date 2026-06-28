@@ -1,5 +1,5 @@
 (async () => {
-  const { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/drawing-tools.js');
+  const { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp } = await import('#ui/input-handlers/drawing-tools.js');
   const { TOOL_MODES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

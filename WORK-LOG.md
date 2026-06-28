@@ -2239,6 +2239,71 @@ code changed this turn). **No DONE sentinel — awaiting the advisor's call.**
 
 === SHAPER P3 (RENDERER CTX) DONE — HOLD ===
 
+## 2026-06-28 · PLAN P4 — input-layer DOM reaches → opts/inputCtx (turn 85) — PLAN ONLY, no code
+
+Enumerated every DOM reach in `input-manager.js` (+ the input-widget reaches in the handler modules the advisor
+folds into P4a). **Refinement from the audit: the dimInput/liveDim widgets are SELF-PROVISIONING** (`createElement`
++ `document.body.appendChild`, reuse-if-present) → already host-portable; the genuine `index.html` coupling is
+narrower than the ~54 raw hits suggest.
+
+### (1) Enumeration + grouping  (R=read, W=write/mutates app DOM)
+**input-manager.js:**
+- **P4a IN-CANVAS:**
+  - magnifier/loupe — `#magnifier`,`#mag-content`,`#mag-translate`,`#btn-mag-toggle` + `:scope>circle`/`clipPath
+    circle`/`use` (L69-126, 778-780). R+W. Heaviest canvas coupling (needs SketchStudio's `<defs>` loupe subtree).
+  - `#world-group` (L71) R — magnifier clones the render group.
+  - `#viewport-size` (L854, 949) W — canvas-size readout text.
+  - `document.querySelector('svg')` (L968-988, 5×) R — the canvas svg passed to keydown→tool handlers.
+- **P4b TOOLBAR/STATUS (app chrome):**
+  - tool-button active-state sync — `#tool-<name>` (L1122,1148,1252), `.tool-btn`/`.tool-button`/`[class*=tool]`
+    /`[data-tool]` querySelectorAll (L1133,1135,1147,1247,1253,1259). W (add/remove `active`, blur).
+  - `#modeText` (L1154, 1191) W — current-tool/mode status text.
+- **LEAVE (not opts):** `window.ug.*` debug namespaces (L222-271, 474) — dev, guarded.
+
+**handler modules (P4a widgets — mostly self-provisioning, low coupling):**
+- `numeric-input-manager.js`: `#dimInput` reuse-or-`createElement`→`document.body` (L42-83). Self-provisioning.
+- `dimension-input.js`: `#dimInput` lookup (L15,34) — reuses the above.
+- `live-dimension-input.js`: creates its inputs into `document.body` (L47-124); reads `#liveDimSingle`/
+  `#liveDimSingleInput` (L159-160); `document.querySelector('svg')` (L700,716) R.
+- `line-tool.js`: `#live-dim-length` (L227) R.
+
+### (2) Proposed opts CONTRACT  (mirror P3: a `defaultInputCtx`; `setupInput(svg,state,opts)` already exists —
+extend `opts` with `opts.inputCtx`, stored module-level, default = `defaultInputCtx` = today's SketchStudio
+reaches; omitting it ⇒ byte-identical)
+- **P4a:** `getCanvasSvg()` →`document.querySelector('svg')` [R] · `getWorldGroup()`→`#world-group` [R] ·
+  `setViewportSize(text)`→`#viewport-size` [W] · `magnifier`: `getEls()`→{#magnifier,#mag-content,#mag-translate,
+  #btn-mag-toggle} [R] + the update writes [W] (or a single `updateMagnifier(state)` that no-ops if els absent).
+  · `getInputHost()`→`document.body` [R] for where created widgets append (low-priority; self-provisioning today).
+- **P4b:** `setActiveTool(toolName)`→the #tool-<name>/.tool-btn active-class sync+blur [W] · `setModeText(text)`→
+  `#modeText` [W].
+All default to the current SketchStudio DOM; a host passing `{}`/partial just skips (no loupe, no toolbar sync).
+
+### (3) Split confirmation
+**P4a is self-contained + byte-identical with P4b still defaulting** — route the canvas reaches (svg/world-group/
+viewport/magnifier) to opts; the toolbar/status reaches keep their direct SketchStudio DOM (untouched) → no
+behavior change. Then P4b routes tool-sync + modeText. Each slice byte-identical for SketchStudio. **No straddle:**
+the magnifier reads `#world-group` (both canvas/P4a); nothing canvas-side touches the toolbar. dimInput/liveDim are
+self-provisioning → can ride in P4a or be left (recommend: leave as-is + add only `getInputHost()` so a host can
+redirect where they append; not load-bearing for the split).
+
+### (4) Risks + how to verify
+- **R-INTERACTIVE — most P4 reaches fire on interaction, not load.** Verify byte-identical via CDP SIMULATION:
+  - P4b tool switch: CDP click `#tool-line` → assert `#tool-line` gains `active`, others lose it, `#modeText`
+    text changes.
+  - P4a magnifier: CDP click `#btn-mag-toggle` (enable) + dispatch a `pointermove` on `#svgCanvas` → assert
+    `#mag-content` updated. (Interactive + complex — the hardest to verify.)
+  - P4a dim edit: drive a dimension create + set `#dimInput`.value + Enter → assert the value applies + solves.
+- **R-SVG-AMBIGUITY (latent bug for Shaper):** `document.querySelector('svg')` grabs the FIRST svg globally —
+  in Shaper (editor svg + design svg) this would grab the WRONG one. `getCanvasSvg()` should default to the svg
+  passed to `setupInput`, NOT a global query. Flag to fix as part of P4a.
+- **Should stay app-specific (opt-in, default SketchStudio):** the magnifier/loupe (SketchStudio-only feature),
+  the toolbar active-state sync + `#modeText` (Shaper has its own toolbar/status). These become opt-in via opts;
+  Shaper omits them.
+- **Recommended slicing:** P4a (canvas: svg + world-group + viewport + magnifier; fix the svg-ambiguity) then
+  P4b (toolbar sync + modeText). Keep dimInput/liveDim as-is (self-provisioning) + optional `getInputHost()`.
+
+=== P4 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

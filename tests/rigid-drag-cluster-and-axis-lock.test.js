@@ -1,5 +1,5 @@
 (async () => {
-  const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
+  const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('#ui/input-handlers/selection-tools.js');
   const { ConstraintManager } = await import('#core/constraint-manager.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

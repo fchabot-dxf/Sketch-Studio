@@ -8,7 +8,7 @@
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
-import { updateConstraintOffset } from '#app/ui/input-handlers/dimension-tool.js';
+import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
 import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
 
 const rows = [];

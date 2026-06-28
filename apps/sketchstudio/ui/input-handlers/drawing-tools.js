@@ -7,13 +7,13 @@ import { TOOL_MODES, RECT_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.
 import { addConstraint } from '#core/constraints.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
-import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from './line-tool.js';
+import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from '#ui/input-handlers/line-tool.js';
 import { clearPreview } from '#ui/preview-manager.js';
-import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from './rect-tool.js';
-import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from './circle-tool.js';
+import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
+import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from '#ui/input-handlers/circle-tool.js';
 // Polygon tool removed: polygon-tool.js import removed
-import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from './arc-tool.js';
-import { handleJointSelection } from './selection-tools.js';
+import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
+import { handleJointSelection } from '#ui/input-handlers/selection-tools.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
 
 // Local state for drawing tools
@@ -105,7 +105,7 @@ export function handleDrawingPointerMove(e, svg, state, w) {
     // Helper to delegate to selection pointer move (avoid circular import at top level)
     function awaitSelectionMove(ev, svgEl, st) {
         // Import lazily to avoid cyclic deps
-        const sel = require('./selection-tools.js');
+        const sel = require('#ui/input-handlers/selection-tools.js');
         return sel.handleSelectionPointerMove(ev, svgEl, st);
     }
 
@@ -162,7 +162,7 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
 
     // If a joint drag is active, delegate to selection pointer up so drag finalizes correctly
     if (state.drag && (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER)) {
-        try { const sel = require('./selection-tools.js'); return sel.handleSelectionPointerUp(e, svg, state); } catch(_){ }
+        try { const sel = require('#ui/input-handlers/selection-tools.js'); return sel.handleSelectionPointerUp(e, svg, state); } catch(_){ }
     }
 
     // Handle based on tool

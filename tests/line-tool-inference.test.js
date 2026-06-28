@@ -1,5 +1,5 @@
 (async () => {
-    const { handleLinePointerDown, handleLinePointerMove, handleLinePointerUp } = await import('../apps/sketchstudio/ui/input-handlers/line-tool.js');
+    const { handleLinePointerDown, handleLinePointerMove, handleLinePointerUp } = await import('#ui/input-handlers/line-tool.js');
     const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

@@ -6,24 +6,24 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
 import { deleteSelection } from '#core/delete-manager.js';
-import { deactivateLineTool } from './input-handlers/line-tool.js';
+import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from '#ui/dimension-seams.js';
 
-import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';
+import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
 import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from './input-handlers/drawing-tools.js';
 import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from '#ui/input-handlers/pan-zoom.js';
-import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from './input-handlers/dimension-tool.js';
+import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
-import { handleLineKeyDown } from './input-handlers/line-tool.js';
-import { handleRectKeyDown } from './input-handlers/rect-tool.js';
-import { handleCircleKeyDown } from './input-handlers/circle-tool.js';
-import { handleArcKeyDown } from './input-handlers/arc-tool.js';
+import { handleLineKeyDown } from '#ui/input-handlers/line-tool.js';
+import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
+import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
+import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -1221,7 +1221,7 @@ function handleEscape(state) {
             try { const idx = state.constraints.indexOf(state.placingConstraint); if (idx !== -1) state.constraints.splice(idx, 1); } catch(_){}
             try { state.placingConstraint.__placing = false; } catch(_){}
             state.placingConstraint = null;
-            try { resetDimensionState(state); } catch(_){ try{ import('./input-handlers/dimension-tool.js').then(m => m.resetDimensionState(state)); }catch(_){ } }
+            try { resetDimensionState(state); } catch(_){ try{ import('#ui/input-handlers/dimension-tool.js').then(m => m.resetDimensionState(state)); }catch(_){ } }
         }
     } catch(_) {}
 

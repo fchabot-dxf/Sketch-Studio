@@ -2,6 +2,8 @@ import { SolverConfig } from '#core/solver-config.js';
 // ═══════════════════════════════════════════════════════════════════════════════
 // DIMENSION TOOL - Handles creation of distance and radius constraints
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
+// TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';

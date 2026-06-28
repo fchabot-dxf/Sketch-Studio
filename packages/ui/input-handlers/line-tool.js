@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // LINE TOOL - Handles line and polyline behavior with Auto-Coincident snapping
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
+// TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/constants.js';

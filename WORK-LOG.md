@@ -1913,6 +1913,40 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4c (BASE + LEAF HANDLERS) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER S4d — per-shape tool handlers → #ui/input-handlers/ VERBATIM (turn 69)
+
+- **did (S4d of the blessed plan; relocation only):**
+  - **`git mv` 6 per-shape tools VERBATIM** → `packages/ui/input-handlers/` (renames, no logic change):
+    `line-tool.js`, `rect-tool.js`, `circle-tool.js`, `arc-tool.js`, `dimension-tool.js`, `selection-tools.js`.
+    Their deps were already `#ui/` (S4a–S4c: base-tool/live-dimension-input/preview/numeric-input/hover/snap/
+    notification) — confirmed **all imports are `#core/*` + `#ui/*`**, nothing to convert; siblings now resolve
+    intra-`#ui/input-handlers/` via the alias (left as-is per the advisor). Only `drawing-tools.js` remains in
+    the app's `input-handlers/` (S4e).
+  - `TODO(shaper):` added to `line-tool` (1 id-reach, confirmed), `dimension-tool` + `selection-tools` (the
+    advisor-flagged DOM-touchers). `rect`/`circle`/`arc` have 0 id-reaches → no TODO.
+  - **Repointed all 35 importers → `#ui/input-handlers/<name>.js`**: drawing-tools, input-manager, ui-manager,
+    and ~32 tests **incl. the harness** — `tests/harness/solver-fuzz.test.js` (`updateConstraintOffset` from
+    `#app/ui/input-handlers/dimension-tool.js` → `#ui/…`), `solver-scenarios.test.js`, `sketch.js`.
+  - **Caught a gap the `#`-guard + import-regex both miss:** two `require('./selection-tools.js')` lazy CJS
+    fallbacks in `drawing-tools.js` (dead in browser-ESM — `require` is undefined, both are try/catch-guarded,
+    and a working static import exists alongside). Repointed their paths → `require('#ui/input-handlers/
+    selection-tools.js')` for relocation consistency; left the dead pattern intact (cleanup belongs with the
+    drawing-tools move S4e / the settings-panel-style `require` removal at S4f). Re-grep: **0 stale** (import +
+    require).
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN**. Node smoke: all 6 `#ui/input-handlers/<tool>` import OK.
+    `node --check` clean.
+  - Browser (CDP): **SketchStudio** `errors=0`, world-group rendered **5 children** (byte-identical);
+    **Shaper** Design `errors=0` → 6 children.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · **fuzzer 400 → 400/400 (confirms the
+    `updateConstraintOffset` harness repoint)** · scenario tester **23/23** · baseline-diff = the 8 pre-existing,
+    **0 net-new**.
+- **state:** branch `carve-out` · all per-shape tools now in `#ui/input-handlers/`; only `drawing-tools.js` +
+  `input-manager.js` remain app-side in the cluster. Next per the plan: **S4e** (drawing-tools aggregator →
+  `#ui/input-handlers/`). STOP — hold for advisor.
+
+=== SHAPER S4d (PER-SHAPE TOOLS) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

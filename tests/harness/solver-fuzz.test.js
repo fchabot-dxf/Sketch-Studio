@@ -15,7 +15,7 @@ import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makePolygon } from '#core/shapes.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
-import { updateConstraintOffset } from '#app/ui/input-handlers/dimension-tool.js';
+import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
 
 function rng(seed) {
   let a = seed >>> 0;

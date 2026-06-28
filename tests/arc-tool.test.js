@@ -1,5 +1,5 @@
 (async () => {
-    const { finalizeArcFromActive, _test_setArcLockedRadius } = await import('../apps/sketchstudio/ui/input-handlers/arc-tool.js');
+    const { finalizeArcFromActive, _test_setArcLockedRadius } = await import('#ui/input-handlers/arc-tool.js');
     const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

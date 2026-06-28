@@ -1,5 +1,5 @@
 (async () => {
-    const { finalizeLineFromActive } = await import('../apps/sketchstudio/ui/input-handlers/line-tool.js');
+    const { finalizeLineFromActive } = await import('#ui/input-handlers/line-tool.js');
     const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

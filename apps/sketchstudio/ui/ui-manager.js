@@ -5,8 +5,8 @@ import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { exportToFile } from './export-manager.js';
 
-import { deactivateLineTool } from './input-handlers/line-tool.js';
-import { startDimensionFromSelection } from './input-handlers/dimension-tool.js';
+import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
+import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { draw } from '#ui/svg-renderer.js';
 export function setupUI(state){

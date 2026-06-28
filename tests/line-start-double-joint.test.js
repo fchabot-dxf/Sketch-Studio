@@ -1,5 +1,5 @@
 (async () => {
-    const { handleLinePointerDown, handleLinePointerUp } = await import('../apps/sketchstudio/ui/input-handlers/line-tool.js');
+    const { handleLinePointerDown, handleLinePointerUp } = await import('#ui/input-handlers/line-tool.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup minimal state
@@ -27,7 +27,7 @@
     const moveEvent = { clientX: 30, clientY: 0 };
     // Minimal DOM shim for tests so pointerMove can run without errors
     if (typeof global.document === 'undefined') global.document = { getElementById: () => null };
-    await import('../apps/sketchstudio/ui/input-handlers/line-tool.js').then(m => m.handleLinePointerMove(moveEvent, svg, state, { x: 30, y: 0 }));
+    await import('#ui/input-handlers/line-tool.js').then(m => m.handleLinePointerMove(moveEvent, svg, state, { x: 30, y: 0 }));
     const upEvent = { clientX: 100, clientY: 0 };
     handleLinePointerUp(upEvent, svg, state, null, { x: 100, y: 0 }, true);
 

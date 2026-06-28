@@ -1,6 +1,6 @@
 (async () => {
-  const { updateHoverFeedback } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
-  const { findClosestConstraintGlyph } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
+  const { updateHoverFeedback } = await import('#ui/input-handlers/selection-tools.js');
+  const { findClosestConstraintGlyph } = await import('#ui/input-handlers/selection-tools.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Create a fake svg with a simple worldToScreen mapping: identity (1:1) coordinates

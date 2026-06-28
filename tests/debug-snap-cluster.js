@@ -1,4 +1,4 @@
-import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '../apps/sketchstudio/ui/input-handlers/selection-tools.js';
+import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '#ui/input-handlers/selection-tools.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { TOOL_MODES } from '#core/constants.js';
 

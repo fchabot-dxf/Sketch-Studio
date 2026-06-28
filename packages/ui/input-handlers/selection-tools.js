@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // SELECTION TOOLS - Handles selection, dragging, and dimension label interaction
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
+// TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';

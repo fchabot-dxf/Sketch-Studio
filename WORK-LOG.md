@@ -2374,6 +2374,78 @@ redirect where they append; not load-bearing for the split).
 
 === P4b (INPUT TOOLBAR CTX) DONE — HOLD ===
 
+## 2026-06-28 · PLAN P5 — Shaper Design tab adopts the FULL renderer + input (turn 91) — PLAN ONLY, no code
+
+Investigated the render path, the Design SVG, the state shape, and coexistence. P5 is the payoff but has two
+non-trivial challenges (state shape + global-listener coexistence) that shape the slicing.
+
+### (1) S1 baseline
+Shaper Design = `#design-view` (hidden) → `<svg id="design-canvas" viewBox="-60 -45 120 90">` (EMPTY — **no
+world-group, no defs**). `main.js` lazy `mountSketch(#design-canvas)` on first Design open → S1's `createSketch`
+(minimal state {joints,shapes,constraints,engine,genJ}) + an INLINE renderer (`svgEl.innerHTML=…`) + a 2-click
+line input + a demo seed. P5 replaces the inline renderer/input with the real `draw()` + `setupInput`.
+
+### (2) Render path (SketchStudio, to mirror)
+`main.js` runs a continuous RAF `loop()`: `engine.solve(iters)` → `window.__lastSolveStats =
+engine.getSolveStats()` (this is the WRITE P3's getSolverStats reads) → `draw(state.joints, state.shapes, svg,
+…17 args…, worldGroup)` → `requestAnimationFrame`. `worldGroup = getElementById('world-group')` (a `<g>` inside
+`#svgCanvas`). **Shaper must (a) create a world-group `<g>` inside `#design-canvas` as the renderTarget, and
+(b) run its own RAF loop (solve+draw) — STARTED on Design-tab activation, STOPPED when hidden** (perf; S1 has no
+loop, renders on demand).
+
+### (3) Shaper RENDER ctx (the P3 seam)
+- `updateGrid` → **OMIT** (Shaper Design has no `#grid` `<pattern>` defs; omitting → no-op, no grid. Optional
+  later: add Shaper grid defs.) `getSolverStats`/`injectDebugStyle` → **OMIT** (no debug overlay). So Shaper
+  passes `ctx = {}` (or `{updateGrid(){}}`) → all three ancillary blocks no-op. Confirmed no-op-safe (P3).
+
+### (4) Shaper INPUT ctx (the P4 seam)
+- PROVIDE: `getCanvasSvg()` → `#design-canvas`, `getWorldGroup()` → Shaper's design world-group,
+  `getInputHost()` → a Design container (or document.body for the self-provisioning dim widgets),
+  `setViewportSize` → omit or a Design readout.
+- OMIT (opt-in, degrade gracefully): `getMagEls` (no loupe), `setActiveTool`/`highlightActiveTool`/`setModeText`/
+  `resetToSelectTool` (no SketchStudio toolbar). Confirmed fall-throughs: magnifier `getMagEls?.()` absent →
+  `updateMagnifier` early-returns (no loupe); `setActiveTool` absent → `switchToTool` falls through to the direct
+  `state.currentTool` switch (correct for a no-toolbar host); `setModeText?.()` absent → no status write.
+
+### (5) Multi-SVG (the P4a fix pays off)
+`setupInput(#design-canvas, state, {inputCtx})` captures `canvasSvg = #design-canvas`; `getCanvasSvg()` returns
+it → the keydown→tool reaches target the Design canvas, NOT the SVG-editor's svg. ✓ The pointer listeners attach
+to the passed svg (`#design-canvas`) — scoped. **BUT** `setupInput` also adds DOCUMENT-level listeners
+(keydown @1020, wheel @891, contextmenu @897, pointerdown @944) + window events (live-rect-commit) — these fire
+GLOBALLY regardless of tab → would hijack the SVG-editor. **RISK-COEXIST (the big one).**
+
+### (6) Theme
+Dark `--sk-*` (P1) are on Shaper's `:root`; P2 routed the renderer's colors through them — CDP already confirmed
+Shaper resolves `--sk-constraint-fill #4c9aff` / `--sk-canvas-bg #14161a` / geometry light-on-dark. So once the
+Design canvas renders via the real `draw()`, it is dark automatically. ✓ (the payoff of P1+P2).
+
+### (7) Slice plan (recommended — sub-sliced)
+- **(pre) P5-state:** the renderer+input need SketchStudio's **41-field rich state** (engine proxies + view +
+  selection Sets + hover/active/drag/snap + undo group methods + currentTool) — currently INLINE in `main.js`,
+  not shared. Recommend **extract `createSketchState(engine)` → `#ui/`**, used by `main.js` (byte-identical) AND
+  Shaper. This is the ONE SketchStudio-touching step (verify byte-identical). *Alt:* duplicate a Design-local
+  state in Shaper (keeps SketchStudio untouched per the P5 framing, but ~120 lines duplicated — DRY cost).
+- **P5a — read-only render:** create the world-group `<g>` in `#design-canvas`; build the Design state (via the
+  factory); a RAF loop (solve+draw, Shaper render ctx omitting grid/stats/debug) started on tab-activate/stopped
+  on hide; seed the demo. Verify: demo renders via the REAL renderer, dark, SketchStudio untouched.
+- **P5b — interactive input:** `setupInput(#design-canvas, state, {inputCtx})` (omit toolbar/magnifier); **gate
+  the document-level listeners to the Design tab** (RISK-COEXIST). Verify: draw a line + add a constraint on the
+  Design canvas; the SVG-editor is unaffected; tab-switch clean.
+
+### Risks
+- **RISK-COEXIST (highest):** `setupInput`'s document-level keydown/wheel/contextmenu/pointerdown + window
+  listeners fire globally → hijack the SVG-editor. P5b must gate them (only-when-Design-active) or scope them.
+  Verify by CDP: with the SVG-editor active, a keypress must NOT trigger Design tool behavior.
+- **RISK-STATE:** the rich state shape — extract (cleaner, touches SketchStudio) vs duplicate (isolated, DRY
+  cost). Recommend extract; flag for the advisor's call.
+- **RAF when hidden:** the Design loop must pause on tab-hide (don't solve+draw an invisible canvas every frame).
+- **world-group creation + viewBox:** `#design-canvas` needs the `<g>` render target; its fixed viewBox
+  (-60 -45 120 90) means no pan/zoom unless the Design loop manages `state.view` like SketchStudio.
+- **mount idempotency:** `mountSketch` already guards `designMounted` once — keep (don't double-wire listeners).
+- dock/panel: not relevant yet (Design is a full-screen overlay).
+
+=== P5 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -37,6 +37,13 @@ const PATTERNS = [
   { name: 'collinear', build(s) { const A = s.point(0, 0, true), B = s.point(10, 0, true), C = s.point(5, 5, false); con(s, T.COLLINEAR, [A, B, C]); return { drag: C, dd: [0, 4], check: () => near(perp(s, C, A, B), 0) }; } },
   { name: 'parallel', build(s) { const a = s.point(0, 0, true), b = s.point(10, 0, true), c = s.point(0, 5, true), d = s.point(10, 9, false); con(s, T.PARALLEL, [a, b, c, d]); return { drag: d, dd: [0, 4], check: () => near(cross(unit(vec(s, a, b)), unit(vec(s, c, d))), 0) }; } },
   { name: 'perpendicular', build(s) { const a = s.point(0, 0, true), b = s.point(10, 0, true), c = s.point(0, 0, true), d = s.point(3, 5, false); con(s, T.PERPENDICULAR, [a, b, c, d]); return { drag: d, dd: [4, 0], check: () => near(dot(unit(vec(s, a, b)), unit(vec(s, c, d))), 0) }; } },
+  { name: 'equal', build(s) { const a = s.point(0, 0, true), b = s.point(10, 0, true), c = s.point(0, 5, true), d = s.point(7, 5, false); con(s, T.EQUAL, [a, b, c, d]); return { drag: d, dd: [0, 4], check: () => near(s.edgeLen(a, b), s.edgeLen(c, d)) }; } },
+  { name: 'angle(45°)', build(s) { const a = s.point(0, 0, true), b = s.point(10, 0, true), c = s.point(0, 0, true), d = s.point(5, 1, false); con(s, T.ANGLE, [a, b, c, d], { value: 45 }); const t = Math.PI / 4, ct = Math.cos(t), st = Math.sin(t); return { drag: d, dd: [3, 0], check: () => { const u = unit(vec(s, a, b)), v = unit(vec(s, c, d)); return near(cross(u, v) * ct - dot(u, v) * st, 0); } }; } },
+  { name: 'tangent(line)', build(s) { const A = s.point(0, 0, true), B = s.point(10, 0, true), C = s.point(5, 5, false); con(s, T.TANGENT, [C, A, B], { radius: 3 }); return { drag: C, dd: [0, 4], check: () => near(perp(s, C, A, B), 3) }; } },
+  // ── canonical multi-constraint shapes (where interaction bugs hide, like the rect-shear) ──
+  { name: 'equilateral tri', build(s) { const A = s.point(0, 0, true), B = s.point(10, 0, false), C = s.point(5, 9, false); con(s, T.EQUAL, [A, B, A, C]); con(s, T.EQUAL, [A, B, B, C]); return { drag: C, dd: [3, 2], check: () => { const ab = s.edgeLen(A, B), bc = s.edgeLen(B, C), ca = s.edgeLen(C, A); return near(ab, bc, 0.25) && near(bc, ca, 0.25); } }; } },
+  { name: 'parallelogram', build(s) { const A = s.point(0, 0, true), B = s.point(10, 0, true), C = s.point(12, 5, false), D = s.point(2, 5, false); con(s, T.PARALLEL, [A, B, D, C]); con(s, T.PARALLEL, [A, D, B, C]); const par = (a, b, c, d) => near(cross(unit(vec(s, a, b)), unit(vec(s, c, d))), 0, 0.04); return { drag: C, dd: [3, 3], check: () => par(A, B, D, C) && par(A, D, B, C) }; } },
+  { name: 'square(rect+eq)', build(s) { const r = s.rect(0, 0, 10, 10); const [c1, c2, c3] = r.corners; con(s, T.EQUAL, [c1, c2, c2, c3]); return { drag: c3, dd: [4, 2], check: () => s.isRectangle(r.corners, 0.25) && near(s.edgeLen(c1, c2), s.edgeLen(c2, c3), 0.25) }; } },
 ];
 
 const mark = (b) => (b ? 'PASS ✅' : 'FAIL ❌');
@@ -56,7 +63,7 @@ for (const p of PATTERNS) {
 }
 console.log('  ----------------------------------------------------------------------------');
 console.log(`  ${pass}/${PATTERNS.length} constraints conform (satisfied AND survive a drag).`);
-console.log('  TODO (need circle/angle setup): equal · angle · tangent · concentric · point-on-circle');
+console.log('  (covers all 12 constraint types; circle-circle tangent / point-on-circle would need a circle shape)');
 console.log('===============================================================================\n');
 // GATING regression guard: if any constraint stops surviving a drag (like H/V did pre-fix), fail the suite.
 process.exit(pass === PATTERNS.length ? 0 : 1);

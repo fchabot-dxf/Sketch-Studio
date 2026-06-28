@@ -1,5 +1,5 @@
 import { SolverConfig } from '#core/solver-config.js';
-// src/ui/numeric-input-manager.js
+// apps/sketchstudio/ui/numeric-input-manager.js
 import { worldToScreen } from '#app/coords.js';
 import { showNotification } from './notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';

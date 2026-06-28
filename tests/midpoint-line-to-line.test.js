@@ -1,5 +1,5 @@
 (async () => {
-    const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('../src/ui/input-handlers/selection-tools.js');
+    const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     const state = {
@@ -39,7 +39,7 @@
     assert(!(state.inference && state.inference.type === 'midpoint'), 'Did not expect midpoint inference between lines');
 
     // Simulate a snap: compute the midpoint snap via findSnap and set it as active
-    const { findSnap } = await import('../src/snap-detection.js');
+    const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
     const midSC = { x: 20, y: 0 };
     // Simulate an explicit midpoint snap selection (exclude nearby joints overriding the midpoint)
     state.activeSnap = { type: 'midpoint', joints: ['j2','j3'], pt: { x: 20, y: 0 }, isLocked: true };

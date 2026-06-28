@@ -1,5 +1,5 @@
 (async () => {
-    const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('../src/ui/input-handlers/selection-tools.js');
+    const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     const state = {

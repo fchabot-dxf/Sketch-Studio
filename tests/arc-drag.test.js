@@ -1,5 +1,5 @@
 (async () => {
-  const { handleArcPointerDown, handleArcPointerMove, handleArcPointerUp } = await import('../src/ui/input-handlers/arc-tool.js');
+  const { handleArcPointerDown, handleArcPointerMove, handleArcPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/arc-tool.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Minimal state

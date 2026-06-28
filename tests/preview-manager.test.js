@@ -1,5 +1,5 @@
 (async () => {
-    const { updatePreview, clearPreview, getPreviewData } = await import('../src/ui/preview-manager.js');
+    const { updatePreview, clearPreview, getPreviewData } = await import('../apps/sketchstudio/ui/preview-manager.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     const state = {

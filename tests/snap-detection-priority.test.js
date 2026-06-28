@@ -1,5 +1,5 @@
 (async () => {
-  const { findSnap } = await import('../src/snap-detection.js');
+  const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
   const { SNAP } = await import('../src/core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

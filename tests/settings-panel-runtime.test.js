@@ -1,6 +1,6 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const mod = await import('../src/ui/settings-panel.js');
+  const mod = await import('../apps/sketchstudio/ui/settings-panel.js');
 
   // Minimal fake DOM the module expects
   // Ensure a minimal DOM shim exists (test runner may or may not provide one)

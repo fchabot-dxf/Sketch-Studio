@@ -1,6 +1,6 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const setup = await import('../src/ui/settings-panel.js');
+  const setup = await import('../apps/sketchstudio/ui/settings-panel.js');
 
   // Minimal DOM shim (deterministic, small but compatible with normalizeExistingPanel)
   global.document = global.document || {};

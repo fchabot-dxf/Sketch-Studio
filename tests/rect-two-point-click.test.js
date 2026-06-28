@@ -1,5 +1,5 @@
 (async () => {
-    const { handleRectPointerDown, handleRectPointerUp } = await import('../src/ui/input-handlers/rect-tool.js');
+    const { handleRectPointerDown, handleRectPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/rect-tool.js');
     const { TOOL_MODES, RECT_MODES } = await import('../src/core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

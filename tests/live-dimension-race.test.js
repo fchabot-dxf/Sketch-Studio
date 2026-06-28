@@ -1,5 +1,5 @@
 (async () => {
-  const { setupLiveDimensionInput, showSingleInput } = await import('../src/ui/input-handlers/live-dimension-input.js');
+  const { setupLiveDimensionInput, showSingleInput } = await import('../apps/sketchstudio/ui/input-handlers/live-dimension-input.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Minimal DOM shim: track created elements by id

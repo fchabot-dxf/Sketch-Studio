@@ -1,7 +1,7 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const mod = await import('../src/ui/settings-panel.js');
-  const { applyPanelStyle } = await import('../src/ui/wizard-base.js');
+  const mod = await import('../apps/sketchstudio/ui/settings-panel.js');
+  const { applyPanelStyle } = await import('../apps/sketchstudio/ui/wizard-base.js');
 
   // Provide a minimal DOM shape the module expects
   global.document = global.document || {};

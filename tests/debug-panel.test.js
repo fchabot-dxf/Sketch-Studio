@@ -1,7 +1,7 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
   const SettingsManager = (await import('../src/core/settings-manager.js')).default;
-  const { setupDebugPanel } = await import('../src/ui/debug-panel.js');
+  const { setupDebugPanel } = await import('../apps/sketchstudio/ui/debug-panel.js');
 
   // Lightweight DOM shim
   global.document = global.document || {};

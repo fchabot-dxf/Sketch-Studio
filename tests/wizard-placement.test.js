@@ -1,6 +1,6 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const { createWizardPanel, normalizeExistingPanel, PANEL_STACK_SPACING } = await import('../src/ui/wizard-base.js');
+  const { createWizardPanel, normalizeExistingPanel, PANEL_STACK_SPACING } = await import('../apps/sketchstudio/ui/wizard-base.js');
 
   // Clean DOM shim for style checks
   global.document = global.document || {};

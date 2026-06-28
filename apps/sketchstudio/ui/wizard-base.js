@@ -1,4 +1,4 @@
-// src/ui/wizard-base.js
+// apps/sketchstudio/ui/wizard-base.js
 // Small helper to unify floating wizard/panel layout & styles
 export function applyPanelStyle(el, opts = {}) {
   if (!el || typeof el.style === 'undefined') return;

@@ -1,4 +1,4 @@
-// src/ui/debug-panel.js
+// apps/sketchstudio/ui/debug-panel.js
 // Dedicated Debug panel (separate from Tuning Wizard)
 import SettingsManager from '#core/settings-manager.js';
 import { dbg } from '#core/debug.js';

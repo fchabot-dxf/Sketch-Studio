@@ -1,5 +1,5 @@
 (async () => {
-    const { handlePointerDown } = await import('../src/ui/input-manager.js');
+    const { handlePointerDown } = await import('../apps/sketchstudio/ui/input-manager.js');
     const { TOOL_MODES } = await import('../src/core/constants.js');
     const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

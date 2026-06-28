@@ -1,5 +1,5 @@
 (async () => {
-  const { handleLinePointerDown, handleLinePointerUp } = await import('../src/ui/input-handlers/line-tool.js');
+  const { handleLinePointerDown, handleLinePointerUp } = await import('../apps/sketchstudio/ui/input-handlers/line-tool.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Minimal state

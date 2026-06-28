@@ -1,6 +1,6 @@
 (async () => {
-    const { setupInput } = await import('../src/ui/input-manager.js');
-    const { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp } = await import('../src/ui/input-handlers/pan-zoom.js');
+    const { setupInput } = await import('../apps/sketchstudio/ui/input-manager.js');
+    const { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/pan-zoom.js');
     const { TOOL_MODES } = await import('../src/core/constants.js');
 
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
@@ -35,7 +35,7 @@
 
     // Avoid calling full setupInput in tests (touches DOM APIs). We'll just import helpers
     const { screenToWorld } = await import('../apps/sketchstudio/coords.js');
-    const { handleDrawingPointerMove } = await import('../src/ui/input-handlers/drawing-tools.js');
+    const { handleDrawingPointerMove } = await import('../apps/sketchstudio/ui/input-handlers/drawing-tools.js');
 
     // Note: tests run without a DOM event loop; we'll manually call the drawing move after simulating pan
 

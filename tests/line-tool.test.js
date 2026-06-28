@@ -1,5 +1,5 @@
 (async () => {
-    const { finalizeLineFromActive } = await import('../src/ui/input-handlers/line-tool.js');
+    const { finalizeLineFromActive } = await import('../apps/sketchstudio/ui/input-handlers/line-tool.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup minimal state

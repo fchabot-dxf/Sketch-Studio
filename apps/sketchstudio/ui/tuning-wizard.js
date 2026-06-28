@@ -1,4 +1,4 @@
-// src/ui/tuning-wizard.js
+// apps/sketchstudio/ui/tuning-wizard.js
 // @dev-only — Solver tuning panel with live metrics
 import { SolverConfig, saveSolverConfig, loadSolverConfig, resetSolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';

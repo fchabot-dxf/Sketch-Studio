@@ -1,6 +1,6 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const { applyPanelStyle } = await import('../src/ui/wizard-base.js');
+  const { applyPanelStyle } = await import('../apps/sketchstudio/ui/wizard-base.js');
 
   // Minimal fake element
   const el = { style: { cssText: '' } };
@@ -14,7 +14,7 @@
   assert(css.indexOf('display: block') !== -1, 'display should be applied when provided');
 
   // Test createWizardPanel factory
-  const created = await import('../src/ui/wizard-base.js');
+  const created = await import('../apps/sketchstudio/ui/wizard-base.js');
   const { createWizardPanel } = created;
   const { panel: p2, header, closeBtn } = createWizardPanel({ id: 'x-test', title: 'Hello', closeId: 'x-close', width: 220, position: { bottom: '10px', right: '10px' }, padding: 8, display: 'block', center: false });
   assert(p2 && p2.id === 'x-test', 'createWizardPanel should create panel with id');

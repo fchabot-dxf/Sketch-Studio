@@ -1,7 +1,7 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const { setupUI } = await import('../src/ui-manager.js');
-  // const { setupArcTool } = await import('../src/ui/input-handlers/arc-tool.js');
+  const { setupUI } = await import('../apps/sketchstudio/ui/ui-manager.js');
+  // const { setupArcTool } = await import('../apps/sketchstudio/ui/input-handlers/arc-tool.js');
   // Minimal DOM: arc icon container with variants and dropdown
   let doc;
   if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {

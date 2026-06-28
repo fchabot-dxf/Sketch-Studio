@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { buildSVG, buildDXF } from '../src/ui/export-manager.js';
+import { buildSVG, buildDXF } from '../apps/sketchstudio/ui/export-manager.js';
 
 function makeStateLine() {
   const joints = new Map();

@@ -410,6 +410,60 @@ export class NewtonSolver {
     return { J, r, m, n };
   }
 
+  // ── Rank-redundancy of a candidate constraint row ───────────────────────────
+  // Slice a row-major assembly {J,m,n} into an array of length-n row vectors.
+  _rowsOf(asm) {
+    const { J, m, n } = asm; const rows = [];
+    for (let i = 0; i < m; ++i) { const v = new Float64Array(n); for (let k = 0; k < n; ++k) v[k] = J[i * n + k]; rows.push(v); }
+    return rows;
+  }
+
+  // True if ANY candidate row has a component OUTSIDE the span of the basis rows — i.e. adding it
+  // RAISES the constraint rank. Modified Gram-Schmidt with a scale-robust relative tolerance.
+  _rowsRaiseRank(basisRows, candRows, n) {
+    const dot = (a, b) => { let s = 0; for (let i = 0; i < n; ++i) s += a[i] * b[i]; return s; };
+    const ABS = 1e-9, REL = 1e-6;
+    const basis = [];
+    for (const row of basisRows) {
+      const v = Float64Array.from(row);
+      for (const b of basis) { const d = dot(v, b); for (let i = 0; i < n; ++i) v[i] -= d * b[i]; }
+      const nrm = Math.sqrt(dot(v, v));
+      if (nrm > ABS) { for (let i = 0; i < n; ++i) v[i] /= nrm; basis.push(v); }
+    }
+    for (const row of candRows) {
+      const v = Float64Array.from(row);
+      const n0 = Math.sqrt(dot(v, v));
+      if (n0 < ABS) continue; // a zero row carries no information
+      for (const b of basis) { const d = dot(v, b); for (let i = 0; i < n; ++i) v[i] -= d * b[i]; }
+      if (Math.sqrt(dot(v, v)) > REL * n0) return true; // an independent component remains
+    }
+    return false;
+  }
+
+  // True if `candidate`'s Jacobian row(s) at the present configuration are linearly DEPENDENT on the
+  // current NON-DRIVEN constraint rows — adding it would NOT raise the constraint rank (it is already
+  // determined / REDUNDANT). NOTE: this is per-row rank-increase, NOT the global rankDeficient flag
+  // (which is true whenever ANY DOF is free, e.g. an undimensioned height).
+  rankRowRedundant(candidate) {
+    if (!candidate) return false;
+    const allC = this.constraints;
+    const x0 = this._pack();
+    const n = x0.length;
+    if (n === 0) return true; // fully pinned → any new dimension is redundant
+    const basisCons = allC.filter(c => c && !c.isDriven && !c.driven && c.type !== 'mouse_spring');
+    let redundant;
+    try {
+      this.constraints = basisCons;
+      const basisRows = this._rowsOf(this._assemble(x0));
+      this.constraints = basisCons.concat([candidate]);
+      const candRows = this._rowsOf(this._assemble(x0)).slice(basisRows.length);
+      redundant = candRows.length > 0 && !this._rowsRaiseRank(basisRows, candRows, n);
+    } finally {
+      this.constraints = allC;
+    }
+    return redundant;
+  }
+
   // Steepest-descent pre-pass with optimal Cauchy step length.
   //
   // Newton/LM converges quadratically inside its basin of attraction but can

@@ -104,6 +104,11 @@ export function createEngine(options = {}){
   }
   
   function getSolveStats() { return lastSolveStats; }
+  // Rank-redundancy probe: true if `candidate`'s constraint row is linearly dependent on the existing
+  // non-driven rows (adding it would not raise the constraint rank → it's already determined).
+  function isDistanceRedundant(candidate) {
+    return (solver && typeof solver.rankRowRedundant === 'function') ? solver.rankRowRedundant(candidate) : false;
+  }
 
-  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats };
+  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant };
 }

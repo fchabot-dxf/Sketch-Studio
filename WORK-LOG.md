@@ -1204,6 +1204,37 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === SOLVER FIX #3 (OVER-CONSTRAIN REFUSE+REVERT) DONE — HOLD ===
 
+## 2026-06-28 · redundant driving dimension → reference (rank-redundancy, generalizes #4) (turn 29)
+
+- **bug (#6):** rect with the TOP edge dimensioned (driving) → dimensioning the BOTTOM (opposite) edge came
+  in as a SECOND DRIVER, but the bottom width is already determined (top distance + the two verticals), so it
+  must be a REFERENCE. #4 only caught a duplicate on the SAME joint-pair; this is a different, rank-redundant
+  edge. Trap: the global `rankDeficient` flag is already true here (the undimensioned HEIGHT is a legit free
+  DOF) so it can't be the signal.
+- **signal — per-row rank-INCREASE:** a new DRIVING distance is redundant iff its Jacobian row is linearly
+  DEPENDENT on the existing NON-DRIVEN constraint rows (adding it does not raise the constraint rank).
+- **fix — `packages/core/solver/engine.js` (NewtonSolver):** new `rankRowRedundant(candidate)` — `_pack()`
+  for the var mapping, assemble the non-driven constraints' rows, assemble again with the candidate appended,
+  take the candidate's row(s), and test independence by modified Gram-Schmidt (`_rowsRaiseRank`, scale-robust
+  relative tol). No mutation of the real constraint list (swaps `this.constraints` under a try/finally).
+  Exposed via `constraint-solver.js` `createEngine().isDistanceRedundant(candidate)`.
+- **wired — `packages/core/constraint-manager.js` `createConstraint` DISTANCE path:** after the same-edge
+  check, if `isDistanceRedundant({...normalized, type})` → add as REFERENCE (`isDriven=driven=true`, soft
+  notice). Subsumes #4's same-edge case (kept the cheap exact check as a fast path).
+- **BUG I hit + fixed:** first pass demoted EVERY distance (drivers=0) — I passed `normalized` (which has no
+  `type`, since `normalizeParams` strips it) so `_assemble` saw `Definitions[undefined]`, skipped it, and the
+  candidate row was all-zeros → "redundant". Fix: pass `{ ...normalized, type }`. (Found via row-vector dump.)
+- **scenario #6 (new):** `redundant cross-edge dimension → reference` — top drives, bottom = reference,
+  HEIGHT (genuinely-new info) still DRIVES (guards against over-demoting), converged & rectangular.
+- **verify:** scenario tester **8/8, backlog EMPTY**; constraint-conformance **15/15 (gating, exit 0)**;
+  #1-#5/#4b/bridge stay GREEN; oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**;
+  `node --check` clean; headless app-load OK. #3's EDIT-path refuse+revert stays distinct (rank INCREASES
+  there → no solution → revert), whereas an ADD that's rank-redundant-but-consistent → reference (this task).
+- **state:** branch `carve-out` · oracle 12/12 · every solver scenario green · redundant dims now references
+  without over-demoting genuinely-new ones. STOP.
+
+=== SOLVER REDUNDANT-DIM → REFERENCE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

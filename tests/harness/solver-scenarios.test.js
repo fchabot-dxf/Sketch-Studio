@@ -108,6 +108,21 @@ run('5. toggle reference→driving (only would-be driver)', 'PASS', () => {
   };
 });
 
+// 6 — redundant CROSS-EDGE dimension → reference (and a genuinely-new height still DRIVES)
+run('6. redundant cross-edge dimension → reference', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 5, 5);
+  const top = s.dimension(r.corners[0], r.corners[1], 5);     // top edge → driver
+  const bottom = s.dimension(r.corners[3], r.corners[2], 5);  // opposite edge → REDUNDANT → reference
+  const height = s.dimension(r.corners[1], r.corners[2], 5);  // height → NEW info → driver (no over-demote)
+  s.solve();
+  return {
+    pass: s.isDriven(bottom) === true && s.isDriven(top) === false && s.isDriven(height) === false &&
+          s.converged === true && s.isRectangle(r.corners),
+    nums: { bottomRef: s.isDriven(bottom), topDrives: !s.isDriven(top), heightDrives: !s.isDriven(height), converged: s.converged, isRect: s.isRectangle(r.corners) },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

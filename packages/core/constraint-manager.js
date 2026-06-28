@@ -112,6 +112,21 @@ export class ConstraintManager {
             dbg.log('constraints', `[ConstraintManager] 2nd distance on a driven edge -> reference`);
         }
 
+        // Generalize (subsumes the same-edge case): a new DRIVING distance whose Jacobian row is
+        // RANK-REDUNDANT against the existing non-driven constraints is already DETERMINED (e.g. the
+        // opposite edge of an already-dimensioned rect — fixed by the facing edge + the two verticals).
+        // Bring it in as a REFERENCE, not a 2nd driver. Uses rank-INCREASE of the new row, NOT the global
+        // rankDeficient flag (which is also true whenever a legit DOF like an undimensioned height is free).
+        if (type === CONSTRAINT_TYPES.DISTANCE && !normalized.isDriven && !normalized.driven &&
+            state.engine && typeof state.engine.isDistanceRedundant === 'function' &&
+            state.engine.isDistanceRedundant({ ...normalized, type })) {
+            normalized.isDriven = true;
+            normalized.driven = true;
+            normalized.drivenReason = 'redundant — already determined by existing dimensions/constraints';
+            notify('Dimension added as reference — already determined by the existing dimensions.', 'info', 2500);
+            dbg.log('constraints', `[ConstraintManager] rank-redundant distance -> reference`);
+        }
+
         // ── Conflict detection ─────────────────────────────────────────
         // Two layers:
         //   1. Math pre-check — catches common contradictions instantly (µs)

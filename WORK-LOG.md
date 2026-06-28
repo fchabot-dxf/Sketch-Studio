@@ -2617,6 +2617,35 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5 PLAN READY - HOLD ===
 
+## 2026-06-28 · S5a — shared TabbedDockPanel widget → #ui/ (turn 101) — standalone, byte-identical
+
+- **did (S5a; the app-agnostic dock chrome, built DIRECTLY in `#ui/` — skipped the apps-then-promote step since
+  `#ui/` is already the shared home):**
+  - **`packages/ui/tabbed-dock-panel.js`** (new) — `createTabbedDockPanel({ tabs:[{label,icon,render()}],
+    persistKey })` → `{ el, setActiveTab, getState, destroy }`. Pure chrome, imports NOTHING (no solver/cut-paths).
+    FLOATING + TRANSLUCENT (fixed, rgba bg + backdrop-blur) · DOCKABLE (drag header near a screen edge → snaps to
+    a docked strip; drag off > threshold → undocks) · DRAG-RESIZABLE (corner; min 56×80 ≈ 1-icon floor — content
+    using an auto-fill grid reflows one-icon-at-a-time via CSS) · TABBED (horizontal strip; click switches, calls
+    the tab's `render(body)`) · PERSISTS pos/size/active-tab/dock to `localStorage[persistKey]` (DEBT-1: fine for
+    v1, swap to an injected adapter later). Self-contained: injects its own `<style id="sk-dock-styles">` once;
+    themed via `--sk-dock-*` (fallback `--sk-selection`/neutral) so each shell's `:root` retints it.
+  - **STANDALONE — no app imports it** → both apps byte-identical.
+- **verify (exactly how):**
+  - CDP smoke on the widget in ISOLATION (dynamic-imported into a page that doesn't use it; 3 sample tabs):
+    **tabCount=3**, initial tab rendered, **click switches** content (Beta shows, Alpha gone), **header-drag
+    moves** (left grew >100px), **corner-drag resizes** (width grew), **drag-to-left-edge docks**
+    (`dataset.dock==='left'`), and **persist/restore** — re-created with the same persistKey → active tab
+    restored to **Beta** + dock restored to **left**. `errors=0`.
+  - **Both apps byte-identical:** SketchStudio world-group renders **5**, `.sk-dock` NOT present (widget
+    unimported); Shaper loads. `errors=0` both.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · no importers (grep).
+- **state:** branch `carve-out` · the shared dock CHROME exists in `#ui/`, unmounted (both apps unchanged). Next
+  per the de-risked sequence: **S5b** — build the constraint-list / DOF info panel (Design-tab content, data-driven
+  off the shared `createSketchState`/engine), still byte-identical (standalone content module). STOP — hold.
+
+=== S5a (TABBED-DOCK WIDGET) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

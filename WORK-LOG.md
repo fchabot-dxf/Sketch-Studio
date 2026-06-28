@@ -1425,6 +1425,40 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === NONLINEAR OVER-CONSTRAIN REFUSE DONE — HOLD ===
 
+## 2026-06-28 · collinear anchors the established (axis-aligned) line (turn 43)
+
+- **bug (real app):** making an already-vertical line collinear with another rotated it toward ~45°
+  (looked like a symmetric compromise) instead of staying vertical + pulling the other onto it.
+- **diagnosis:** collinear IS reference-based — the Definition's Jacobian (`definitions.js:212-225`) moves
+  ONLY the extra points (ji[2..]), anchoring the FIRST line (ji[0],ji[1]); the synthesis
+  (`engine.js:354-363`) + `measureResidual` (`constraint-verifier.js:74-86`) both treat the first shape as
+  the baseline. The real tool (`constraint-tools.js handleCollinearPointerDown`) passes `shapes:[l1,l2]` in
+  SELECTION order. So when the established (V-constrained) line was selected SECOND, collinear anchored the
+  OTHER line and the vertical's V constraint fought the collinear → repro (other-first): L_vert=90, L_other
+  =11.3, **converged=true but NOT collinear** (the false-converge the advisor flagged).
+- **fix — `packages/core/constraint-manager.js`:** new `anchorEstablishedLine(state, normalized)` +
+  `_lineIsAxisAligned` — for a 2-shape COLLINEAR, if one line is H/V-constrained and the other isn't, swap
+  so the axis-aligned line is FIRST (the anchor). Runs in `createConstraint` (covers the app + harness; both
+  the solver synthesis and the residual then anchor the established line). A bare vertical line stays
+  vertical and the other rotates onto it. Both-or-neither axis-aligned → keep first-drawn order.
+- **state (repro, both selection orders):** L_vert=90.0, L_other=90.0, collinearResidual=0.000, converged
+  — fixed regardless of order.
+- **SIDE-FINDING confirmed (reported, NOT fixed — out of the anchor-fix scope):** a 4-FREE-point raw
+  collinear (vert L1 + horiz L2, no V/H, `engine.addConstraint`) reports `converged=true, error=0` while
+  L1=90/L2=0 — because the solver finds a DEGENERATE solution: c and d both collapse to (0,5), i.e. L2
+  shrinks to a ZERO-LENGTH point ON L1's line, which is trivially collinear (residual 0). Not a residual
+  bug; collinear alone doesn't preserve L2's length/orientation, so the solver is free to collapse it. Needs
+  a separate fix (e.g. preserve length, or reject zero-length) — flagging for the advisor.
+- **scenario #19 (real path):** V-constrained vertical + free sloped line, collinear with the OTHER selected
+  FIRST → vertical stays 90, other rotates to 90, converged.
+- **verify:** scenario tester **20/20, backlog EMPTY**; `node tests/harness/solver-fuzz.test.js 400` →
+  **400/400 clean**; constraint-conformance **15/15 (gating)**; oracle **12/12**; baseline-diff = the 8
+  pre-existing, **0 net-new**; `node --check` clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · collinear anchors the established line.
+  STOP.
+
+=== COLLINEAR ANCHORS ESTABLISHED LINE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

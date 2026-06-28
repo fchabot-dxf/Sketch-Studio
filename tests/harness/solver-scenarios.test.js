@@ -299,6 +299,27 @@ run('18. infeasible coincident ADD → refuse + revert', 'PASS', () => {
   return { pass: !kept && s.constraintCount === before && s.lastError !== null, nums: { kept, delta: s.constraintCount - before, lastError: s.lastError || 'none' } };
 });
 
+// 19 — COLLINEAR anchors the established (axis-aligned) line: a V-constrained vertical line made collinear
+//      with another line STAYS vertical (the other rotates onto it), even when selected SECOND.
+run('19. collinear anchors the established (vertical) line', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true), b = s.point(0, 10, false);   // L_vert
+  s.engine.addShape({ id: 'Lv', type: 'line', joints: [a, b] });
+  ConstraintManager.createConstraint(s.state, T.VERTICAL, { joints: [a, b] }, { source: 'scenario' });
+  const c = s.point(5, 5, false), d = s.point(15, 7, false);  // L_other (free, sloped)
+  s.engine.addShape({ id: 'Lo', type: 'line', joints: [c, d] });
+  s.solve();
+  // select the OTHER line FIRST (the order that used to drag the vertical to ~45 / false-converge)
+  ConstraintManager.createConstraint(s.state, T.COLLINEAR, { shapes: ['Lo', 'Lv'] }, { source: 'scenario' });
+  s.solve();
+  const vAngle = Math.abs(Math.atan2(s.pos(b).y - s.pos(a).y, s.pos(b).x - s.pos(a).x) * 180 / Math.PI);
+  const oAngle = Math.abs(Math.atan2(s.pos(d).y - s.pos(c).y, s.pos(d).x - s.pos(c).x) * 180 / Math.PI);
+  return {
+    pass: Math.abs(vAngle - 90) < 1 && Math.abs(oAngle - 90) < 1 && s.converged === true,
+    nums: { vertAngle: vAngle.toFixed(1), otherAngle: oAngle.toFixed(1), converged: s.converged },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

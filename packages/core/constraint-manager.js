@@ -38,6 +38,26 @@ export class ConstraintManager {
 
         return { ok: true };
     }
+    // Reorder a 2-shape COLLINEAR so an axis-aligned (H/V-constrained) line becomes the anchor (first shape).
+    // The collinear solver/residual hold the first line fixed and move the second onto it, so anchoring the
+    // established line keeps it put (a vertical line stays vertical) and rotates the other onto it.
+    static _lineIsAxisAligned(state, sid) {
+        const sh = state.shapes && state.shapes.find(x => x.id === sid);
+        if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return false;
+        const [a, b] = sh.joints;
+        return state.constraints.some(c =>
+            (c.type === CONSTRAINT_TYPES.HORIZONTAL || c.type === CONSTRAINT_TYPES.VERTICAL) &&
+            c.joints && c.joints.length >= 2 &&
+            ((c.joints[0] === a && c.joints[1] === b) || (c.joints[0] === b && c.joints[1] === a)));
+    }
+    static anchorEstablishedLine(state, normalized) {
+        const [s1, s2] = normalized.shapes;
+        // Only swap to put an axis-aligned line first; if both or neither are, keep the first-drawn order.
+        if (this._lineIsAxisAligned(state, s2) && !this._lineIsAxisAligned(state, s1)) {
+            normalized.shapes = [s2, s1];
+        }
+    }
+
     // True if EVERY joint a constraint touches (directly via joints, or via its shapes/shape/line/circle)
     // is fixed (or the anchored origin) — i.e. the constraint has NO degrees of freedom to satisfy it, so
     // an unsatisfied one is genuinely infeasible (vs merely slow / not-yet-assembled).
@@ -99,6 +119,15 @@ export class ConstraintManager {
         // Pre-process PARALLEL constraints to prevent flipping anti-parallel lines
         if (type === CONSTRAINT_TYPES.PARALLEL && normalized.shapes && normalized.shapes.length === 2) {
             this.alignParallelOrientation(state, normalized.shapes);
+        }
+
+        // COLLINEAR is REFERENCE-based: the solver anchors the FIRST shape (its endpoints are the baseline;
+        // only the other line's points are moved onto it). So order matters. If one line is axis-aligned
+        // (already H/V-constrained) and the other isn't, anchor the established one (make it first) — a bare
+        // vertical line then STAYS vertical and the other rotates onto it, instead of the established line
+        // being dragged toward whichever happened to be selected first (the ~45° symmetric-looking compromise).
+        if (type === CONSTRAINT_TYPES.COLLINEAR && normalized.shapes && normalized.shapes.length === 2) {
+            this.anchorEstablishedLine(state, normalized);
         }
 
         // Branch lock: PERPENDICULAR records the chosen handedness (+1 / -1) so

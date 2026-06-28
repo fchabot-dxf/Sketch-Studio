@@ -10,6 +10,7 @@ import * as inspector from './inspector.js';
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { createDesignToolPalette } from '#ui/design-tool-palette.js';
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -63,16 +64,16 @@ const designView = document.getElementById('design-view');
 const tabDesign = document.getElementById('tab-design');
 const designBack = document.getElementById('design-back');
 let designController = null; // mounted once; controls the RAF render loop (started on show, paused on hide)
-let dock = null, infoPanel = null, lastSig = '';
+let dock = null, infoPanel = null, palette = null, lastSig = '';
 
-// Refresh the dock's info panel when the sketch changes (constraint count / values / selection). Called each
-// render frame via mountSketch's onRender hook; the signature check keeps it cheap (re-render only on change).
+// Refresh the dock's tool palette + info panel when the sketch changes (active tool / constraint count / values /
+// selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap.
 function dockTick() {
-  if (!infoPanel || !designController) return;
+  if (!designController) return;
   const s = designController.state;
   let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
-  const sig = s.constraints.length + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0);
-  if (sig !== lastSig) { lastSig = sig; infoPanel.refresh(); }
+  const sig = s.constraints.length + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
+  if (sig !== lastSig) { lastSig = sig; if (palette) palette.refresh(); if (infoPanel) infoPanel.refresh(); }
 }
 
 // Build the floating dock ONCE: Design tab = the live constraint-list/DOF info panel (off Shaper's live
@@ -81,11 +82,13 @@ function dockTick() {
 // --sk-*/--sk-dock-*, which Shaper's :root sets dark. The on-canvas glyphs/dim-edit are untouched (additive).
 function buildDock() {
   const { state, engine } = designController;
+  palette = createDesignToolPalette({ state });
   infoPanel = createDesignInfoPanel({ state, engine });
   dock = createTabbedDockPanel({
     persistKey: 'shaper-design-dock',
     tabs: [
-      { label: 'Design', icon: '✎', render: (body) => infoPanel.render(body) },
+      // Design tab: the tool palette ABOVE the live constraint-list/DOF info panel.
+      { label: 'Design', icon: '✎', render: (body) => { palette.render(body); infoPanel.render(body); } },
       { label: 'Prepare', icon: '▦', render: (body) => { body.textContent = 'Prepare — cut type + toolpath (coming soon).'; } },
       { label: 'Export', icon: '⤓', render: (body) => { body.textContent = 'Export / Simulate (coming soon).'; } },
       { label: 'Settings', icon: '⚙', render: (body) => { body.textContent = 'Settings (coming soon).'; } },

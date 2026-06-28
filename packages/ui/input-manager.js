@@ -1188,7 +1188,7 @@ function toggleFixedSelection(state) {
 export const showDimInput = showEditInput;
 
 // Helper: Switch the active tool programmatically with UI update fallback
-function switchToTool(state, toolName) {
+export function switchToTool(state, toolName) {
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;

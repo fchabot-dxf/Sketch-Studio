@@ -2714,6 +2714,39 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5c (SHAPER MOUNTS DOCK + INFO) DONE — HOLD ===
 
+## 2026-06-28 · S5c2 — shared Design tool palette in Shaper's dock (turn 107) — Shaper-only mount
+
+- **did (S5c2; Shaper-only mount → SketchStudio keeps its `#toolsRibbon`, byte-identical):**
+  - **Exported `switchToTool`** from `#ui/input-manager.js` (was internal) — the EXISTING tool-switch path the
+    keyboard shortcuts use. Adding an export is byte-identical (no new import for SketchStudio).
+  - **`packages/ui/design-tool-palette.js`** (new) — `createDesignToolPalette({ state })` → `{ el, render(
+    container), refresh, destroy }`. Two button groups (draw: select/line/rect/circle/arc · constrain:
+    coincident/perpendicular/parallel/equal/dimension); a button click calls `switchToTool(state, tool)` (the
+    reused path). **Constraints are TOOL-driven** — a button just switches to that constraint tool; the on-canvas
+    selection applies it via the existing handlers (no new apply path reinvented). `refresh()` syncs the active
+    highlight to `state.currentTool`. Flex-wrap layout (reflows). App-agnostic; themed via `--sk-dock-accent`/
+    `--sk-selection`; self-contained `<style>`.
+  - **`apps/shaper/src/main.js`** — the dock's Design tab now renders the palette ABOVE the S5b info panel
+    (`render: (body) => { palette.render(body); infoPanel.render(body); }`); `dockTick` adds `currentTool` to its
+    signature + refreshes the palette too, so the active highlight tracks tool changes (palette OR keyboard).
+- **verify (exactly how) — CDP, Shaper dock Design tab:**
+  - Palette shows **10 buttons** (5 draw + 5 constrain), positioned ABOVE the info panel (`paletteBeforeInfo`).
+  - Clicking the **Line** button → it highlights (`lineActive=true` → `state.currentTool='line'`), active bg
+    computed `rgb(76,154,255)` = `#4c9aff` (Shaper dark accent). Clicking **Coincident** → it highlights, Line
+    de-highlights (`coActive=true`, `lineDeactivated=true`).
+  - **Drawing still works via the palette-switched tool:** after the Line button + a primed drag, world-group
+    `.shape-elem` went **1→2** (`drew=true`). (A first run without a leading pointermove read `drew=false` — a
+    flaky gesture, not a wiring issue; `lineActive=true` already proved the switch.)
+  - **SketchStudio UNTOUCHED:** world-group renders **5**, no `.sk-tool-palette` (it doesn't mount it). Both apps
+    `errors=0`.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · Shaper's Design dock now has the **tool palette + live constraint-list/DOF**,
+  dark — the Design tab is a usable mini-CAD shell over the shared core. Next per the sequence: **S5d** —
+  SketchStudio adopts the dock (the deliberate toolbar re-home; not byte-identical, isolated last). STOP — hold.
+
+=== S5c2 (DESIGN TOOL PALETTE) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

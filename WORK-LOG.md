@@ -1537,6 +1537,101 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === MIDPOINT JACOBIAN BIDIRECTIONAL DONE — HOLD ===
 
+## 2026-06-28 · PLAN — Shaper gains a shared #core-backed "Design" tab (turn 51, PLAN ONLY, no code)
+
+Goal (per `docs/architecture/UI_SHELL.md`): apps/shaper (today a self-contained SVG attribute editor) gains
+a **Design** tab that draws + constrains via the SAME `#core` solver + tools SketchStudio uses. UI_SHELL.md
+names a generic, **app-agnostic** tabbed/floating/dockable panel (it "knows NOTHING app-specific") whose
+**Design** tab is SHARED by both apps, with app-specific Prepare/Export tabs.
+
+### (1) MODULARITY AUDIT — what's reusable vs UI-bound
+- **`packages/core/*` — 100% reusable, headless.** No DOM, no `window`; seams already injected
+  (`createEngine({onMetrics})`, `setConstraintNotifier`). Both apps can import `#core/` today. Mount recipe:
+  `createEngine` → `setConstraintNotifier` → `engine.init()` → build `state{joints,shapes,constraints,engine,
+  genJ,…}` → `setupInput(svg,state)` → `setupUI(state)` → rAF loop `engine.solve(); draw(...)`.
+- **CORE-clean, easily shareable shell bits:**
+  - `apps/sketchstudio/coords.js` — `#core`-clean AND parameterized (`screenToWorld(svg,…)`/`worldToScreen(svg,pt)`
+    read the passed svg's viewBox/rect). Move-as-is.
+  - `apps/sketchstudio/ui/dimension-seams.js` — pure `(state,…)→result`, no DOM. Move-as-is.
+- **UI-bound to apps/sketchstudio (need parameterizing on extract):**
+  - `svg-renderer.js` `draw(...,svg,...)` — takes the svg (good) BUT imports `#app/coords.js` and reaches
+    `document.getElementById('grid'|'grid-heavy')` for grid patterns.
+  - `input-manager.js` `setupInput(svg,state)` — binds the passed svg (good) BUT reaches `magnifier`,
+    `world-group`, `btn-mag-toggle`, `coords-text`, `viewport-size`; imports `#app/coords.js`. Tool handlers
+    (`ui/input-handlers/*`) each import `#app/coords.js`.
+  - `ui-manager.js` — hardcoded tool-button ids (`tool-select`, `tool-line`, …).
+  - `numeric-input-manager.js` — reaches/creates `#dimInput`; `notification-manager.js` — toast DOM (creates
+    its own container → near-shareable).
+- **apps/shaper today:** self-contained, **zero `#core` coupling, NO importmap**. Modules `src/{main,canvas,
+  store,tree,inspector,shaper,svgio}.js`; 3-pane grid `#tree | #canvas | #inspector`; no tab switching; clean
+  container-based `init()` (no global DOM traps, isolated listeners). To mount a sketch canvas it needs: an
+  importmap, a tab/view toggle, a dedicated svg container, and the mount recipe above.
+
+### (2) SHARING MECHANISM — a new isomorphic `#ui/` alias → `packages/ui/`
+The blocker: `#app/` resolves **per-app** in the browser importmap (`./` = each app's own dir) but to a
+**single** dir in `package.json` (`./apps/sketchstudio/*`). So a module that lives in one place yet is used by
+BOTH apps **cannot** rely on `#app/` — exactly like `#core/` already avoids it. Introduce a third isomorphic
+alias and move shared sketcher UI behind it, converting its internal `#app/coords.js` → `#ui/coords.js`.
+
+```
+alias    browser: sketchstudio/index.html   browser: shaper/index.html   node (package.json)        role
+#core/   ../../packages/core/               ../../packages/core/         ./packages/core/*          shared brain (today)
+#app/    ./   (= apps/sketchstudio/)        ./   (= apps/shaper/)         ./apps/sketchstudio/*      each app's OWN shell
+#ui/     ../../packages/ui/                 ../../packages/ui/           ./packages/ui/*            NEW shared UI (both apps)
+```
+Decision: **extract shared sketcher UI to `packages/ui/` under `#ui/`** (NOT "shaper imports #app/… directly"
+— that breaks the per-app `#app/` meaning and the Node side). `#ui/` mirrors the proven `#core/` pattern
+(identical specifier in browser + Node). Shaper also needs an importmap added (it has none today).
+
+```
+            BEFORE                                   AFTER (target)
+  apps/sketchstudio ──#core──> packages/core   apps/sketchstudio ─┐         ┌─#core─> packages/core
+  apps/shaper (standalone, no #core)           apps/shaper ───────┴─#ui──> packages/ui ─┘
+                                                 (both mount the SAME Design canvas from #ui/)
+```
+
+### (3) MINIMAL LOAD-SAFE FIRST SLICE — a Design tab mounting a #core canvas in Shaper
+Goal: prove a `#core`-backed canvas inside Shaper WITHOUT touching Shaper's SVG editor or SketchStudio.
+- **New** `packages/ui/sketch-canvas.js` — `mountSketch(svgEl, opts) → { state, engine, destroy }`: `createEngine`
+  + `setConstraintNotifier` + `engine.init()` + build `state` + a MINIMAL pointer input + a MINIMAL renderer
+  for line + coincident + distance + `engine.solve()` in a rAF loop. Imports `#core/*` ONLY (+ a local copy of
+  the parameterized coords math) so it's self-sufficient this slice — no dependency on apps/sketchstudio.
+- **New** `packages/ui/coords.js` — move `apps/sketchstudio/coords.js` verbatim (it's `#core`-clean +
+  parameterized); SketchStudio keeps importing its own copy this slice (untouched) — extraction/repoint is a
+  LATER slice, so SketchStudio can't break.
+- **Edit** `apps/shaper/index.html` — add `<script type="importmap">` with `#core/`, `#app/`→`./src/` (its own),
+  `#ui/`→`../../packages/ui/`; add a "Design" tab button to `.toolbar` and a hidden `#design-view` with an
+  `<svg id="design-canvas">` (the existing `#tree/#canvas/#inspector` grid wrapped as the "Editor" view).
+- **Edit** `apps/shaper/src/main.js` — tab toggle (Editor ↔ Design via `display`); on first Design activation,
+  `import('#ui/sketch-canvas.js')` and `mountSketch(designSvg)`. Shaper's store/editor untouched (separate state).
+- **Edit** `apps/sketchstudio/index.html` + `package.json` — add the `#ui/` alias (UNUSED this slice → no
+  behavior change), so the alias is live for later slices.
+- **Verify:** `apps/shaper/index.html` AND `apps/sketchstudio/index.html` both LOAD (headless probe);
+  drawing a line + coincident + distance in Shaper's Design tab solves + renders; SketchStudio unchanged;
+  oracle 12/12 · conformance 15/15 · fuzzer 400/400 · baseline-diff = the 8, 0 net-new. (Node oracle/fuzzer
+  unaffected — only `#core` is exercised there; `#ui/sketch-canvas` is browser-mounted.)
+
+### (4) SLICE SEQUENCE to the full shared Design tab (each: BOTH index.html LOAD + oracle/conformance/fuzzer green + 0 net-new)
+- **S1 (above):** `#ui/` alias + minimal `#ui/sketch-canvas` + Shaper Design tab (minimal renderer/input).
+- **S2:** move `coords.js` → `#ui/coords.js`; repoint SketchStudio's `#app/coords.js` → `#ui/coords.js`
+  (one-line per importer). `sketch-canvas` drops its local coords copy.
+- **S3:** extract `svg-renderer.js` → `#ui/` (convert `#app/coords`→`#ui/coords`; parameterize/guard the
+  `grid`/`grid-heavy` lookups to the mount container). Both apps render via `#ui/svg-renderer`; Shaper's Design
+  tab swaps the minimal renderer for the full one. SketchStudio repoints its `draw` import.
+- **S4:** extract `input-manager` + `ui/input-handlers/*` + `numeric-input-manager` + `dimension-seams` +
+  `notification-manager` → `#ui/`, parameterizing the reached DOM ids (`magnifier`, `world-group`, `dimInput`,
+  footer text) via a passed config/guards. Shaper's Design tab gets the full tool palette (line/rect/circle/arc
+  + constraints + dimensions + drag), driven by the SAME seams the harness/SketchStudio exercise.
+- **S5:** extract the generic tabbed/floating/dockable panel (UI_SHELL.md) → `#ui/`; both apps host the Design
+  tab in the shared dock panel; app-specific Prepare/Export stay per-app.
+- **S6:** parity polish + persistence (panel pos/size/active-tab) + the Shaper Design→cut handoff; confirm the
+  shared Design tab is feature-equal in both apps.
+
+NOTE: this is a plan; nothing implemented. The carve-out invariant (load-safe vertical slices, ship UI with its
+wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
+
+=== SHAPER-SKETCHER PLAN READY — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

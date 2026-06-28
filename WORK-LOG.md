@@ -2476,6 +2476,41 @@ Design canvas renders via the real `draw()`, it is dark automatically. ✓ (the 
 
 === P5 PRE (STATE EXTRACT) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER P5a — Design tab renders via the REAL draw() (read-only, dark) (turn 95) — Shaper-only
+
+- **did (P5a; Shaper-only → SketchStudio untouched; READ-ONLY, no setupInput):**
+  - **Rewrote `mountSketch(svgEl)`** in `packages/ui/sketch-canvas.js` to use the FULL shared renderer:
+    builds `engine` + `createSketchState(engine, view)` (the P5-pre factory), creates a `<g id="design-world-
+    group">` render target inside the host svg (the only DOM structure P5 adds), seeds the demo (line +
+    coincident-to-origin + distance 50), and runs a **RAF solve→draw loop** calling the real `draw(…17 args…,
+    worldGroup, renderCtx)` with `renderCtx = {}` (omits updateGrid/getSolverStats/injectDebugStyle — no
+    `#grid`/debug; all no-op per P3). Returns `{state, engine, worldGroup, start, stop}`. Removed the S1 inline
+    renderer + pointer input + the now-unused `screenToWorld` import (kept `createSketch` as the headless helper).
+  - **`apps/shaper/src/main.js`** Design toggle: mount once (`designController` guard), set the canvas visible
+    BEFORE mounting (so the first frame sees a laid-out svg), `start()` on show / `stop()` on hide (pause the RAF
+    while hidden). `start()` is idempotent (a rafId guard prevents a 2nd RAF).
+  - Theme: nothing set here — the host's dark `--sk-*` (P1) + the P2 var-routing colour the render automatically.
+- **verify (exactly how):**
+  - Headless: the demo SOLVES with the factory state — a=(0.00,0.00), b at **dist 50.00**, converged
+    (constraints=2, joints=3).
+  - Browser (CDP): clicking Design → `#design-world-group` renders **12 children** via the real `draw()` (incl.
+    the distance dimension label **"50.0"**); `errors=0`. **DARK theme confirmed:** the demo line's computed
+    stroke = **rgb(76,154,255) = #4c9aff** (Shaper's accent — NOT SketchStudio's #2563eb), dim text fill =
+    #2b2d31 (Shaper dark) — the renderer's `var(--sk-*)` resolve to Shaper's palette. (The red origin X-axis is
+    `#ef4444` canvas chrome, intentionally unthemed.) **Idempotent:** after Design→Editor→Design, exactly ONE
+    `#design-world-group` (`wgCount=1`) and it's still rendering (`children=12`) → no double-mount / stacked RAF;
+    `stop()` cancels the RAF on hide.
+  - **SketchStudio UNTOUCHED:** CDP world-group renders **5**, `#svgCanvas` bg `rgb(255,255,255)` (light) — it
+    doesn't import sketch-canvas, so it's trivially byte-identical. Both apps `errors=0`.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · **Shaper's Design tab now renders the shared `#core`/`#ui` sketcher via the
+  REAL renderer, in its own dark theme** — the carve-out payoff. Read-only this slice. Next per the plan: **P5b**
+  — wire `setupInput` (Shaper input ctx: getCanvasSvg→design canvas, omit toolbar/magnifier) for interactive
+  draw/select/constrain, and GATE the document-level listeners to the Design tab (RISK-COEXIST). STOP — hold.
+
+=== P5a (SHAPER READ-ONLY RENDER) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

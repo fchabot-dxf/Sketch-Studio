@@ -1,18 +1,19 @@
-// Shared, minimal #core-backed sketch canvas — the S1 load-safe PROOF that Shaper (and any shell) can host
-// the same constraint sketcher SketchStudio uses. Self-contained: imports #core ONLY, plus a TINY inline
-// renderer + pointer input — just enough to draw a line, add a coincident + a distance, solve, and render.
-//
-// NOTE: the renderer/input here are intentionally minimal and TEMPORARY. The real svg-renderer + input-manager
-// (+ full tool palette) move to #ui/ in later slices (S3/S4); this slice only proves the mount + #core path.
-//
-// `createSketch()` is headless (engine + ops, no DOM — testable in Node). `mountSketch(svgEl)` adds the DOM
-// renderer/input and seeds a demo sketch.
+// Shared #core/#ui-backed sketch canvas for a host shell's Design tab (Shaper today).
+// `createSketch()` is the headless core (engine + ops, no DOM — testable in Node).
+// `mountSketch(svgEl)` (P5a) renders via the REAL shared renderer: it builds the full sketch state
+// (#ui/sketch-state.js), creates a world-group render target inside the host svg, seeds a small demo, and runs
+// a RAF solve→draw loop (read-only this slice — interactive input arrives in P5b). The host drives start()/stop()
+// on tab show/hide so the loop never runs while hidden. Theme: the host's dark --sk-* vars (P1) colour the
+// render automatically (P2 routed the renderer through them) — nothing is set here.
 
 import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import { screenToWorld } from '#ui/coords.js'; // shared screen<->world math (same as SketchStudio)
+import { draw } from '#ui/svg-renderer.js';
+import { createSketchState } from '#ui/sketch-state.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // ── Headless core (no DOM) ──────────────────────────────────────────────────
 export function createSketch() {
@@ -46,70 +47,46 @@ export function createSketch() {
   };
 }
 
-// ── Tiny SVG renderer (draws in WORLD coords; the svg's viewBox maps world→screen) ──
-function renderInto(svgEl, sketch) {
-  const out = [];
-  // origin marker
-  out.push('<line x1="-3" y1="0" x2="3" y2="0" stroke="#3b4252" stroke-width="0.4"/>');
-  out.push('<line x1="0" y1="-3" x2="0" y2="3" stroke="#3b4252" stroke-width="0.4"/>');
-  // line shapes
-  for (const s of sketch.state.shapes) {
-    if (s.type !== 'line' || !s.joints || s.joints.length < 2) continue;
-    const a = sketch.pos(s.joints[0]), b = sketch.pos(s.joints[1]);
-    if (a && b) out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#60a5fa" stroke-width="0.8" stroke-linecap="round"/>`);
-  }
-  // distance dimension labels (at the segment midpoint)
-  for (const c of sketch.state.constraints) {
-    if (c.type !== CONSTRAINT_TYPES.DISTANCE || !c.joints || c.joints.length < 2 || typeof c.value !== 'number') continue;
-    const a = sketch.pos(c.joints[0]), b = sketch.pos(c.joints[1]);
-    if (a && b) {
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      out.push(`<text x="${mx}" y="${my - 1.5}" font-size="4" fill="#93c5fd" text-anchor="middle">${(c.value).toFixed(1)}</text>`);
-    }
-  }
-  // joints (skip the origin to keep it subtle)
-  for (const [id, j] of sketch.state.joints) {
-    if (id === 'j_origin') continue;
-    out.push(`<circle cx="${j.x}" cy="${j.y}" r="1.3" fill="#e5e7eb" stroke="#2563eb" stroke-width="0.4"/>`);
-  }
-  svgEl.innerHTML = out.join('');
+// Seed a small demo so the canvas visibly renders: a line whose start is coincident with the origin and whose
+// length is driven to 50.
+function seedDemo(engine, state) {
+  const a = engine.genJ(); engine.addJoint(a, 20, 20, false);
+  const b = engine.genJ(); engine.addJoint(b, 80, 20, false);
+  engine.addShape({ id: 'L_' + a + '_' + b, type: 'line', joints: [a, b] });
+  ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [a, 'j_origin'] }, { source: 'design' });
+  ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [a, b], value: 50 }, { source: 'design' });
 }
 
-// ── Mount into a DOM <svg> ──────────────────────────────────────────────────
+// ── Mount the full renderer into a host <svg> (read-only; P5a) ───────────────
 export function mountSketch(svgEl) {
-  const sketch = createSketch();
+  const engine = createEngine(null);
+  engine.init();
+  // Read-only render: view isn't driven (no pan/zoom yet); the svg's own viewBox maps world→screen.
+  const view = { x: 0, y: 0, w: 120, h: 90 };
+  const state = createSketchState(engine, view);
+  setConstraintNotifier(() => {}); // host has no toast surface yet
 
-  // Seed a demo so the proof renders immediately: a line whose start is coincident with the origin and whose
-  // length is driven to 50 — exercises draw + coincident + distance + solve + render in one shot.
-  const seg = sketch.line(20, 20, 80, 20);
-  sketch.coincident(seg.a, 'j_origin');
-  sketch.distance(seg.a, seg.b, 50);
-  sketch.solve();
+  // World-group: the render target draw() writes into (created once inside the host svg).
+  let worldGroup = svgEl && svgEl.querySelector ? svgEl.querySelector('#design-world-group') : null;
+  if (!worldGroup && svgEl) {
+    worldGroup = document.createElementNS(SVG_NS, 'g');
+    worldGroup.id = 'design-world-group';
+    svgEl.appendChild(worldGroup);
+  }
 
-  const render = () => renderInto(svgEl, sketch);
-  render();
+  seedDemo(engine, state);
 
-  // Tiny input: click to drop joints; two consecutive clicks make a line segment. Then solve + render.
-  // Screen→world via the SHARED #ui/coords.js (identical math to SketchStudio).
-  let pending = null;
-  const onPointerDown = (e) => {
-    const w = screenToWorld(svgEl, e.clientX, e.clientY); if (!w) return;
-    const id = sketch.point(w.x, w.y);
-    if (pending) {
-      const sid = 'L_' + pending + '_' + id;
-      sketch.engine.addShape({ id: sid, type: 'line', joints: [pending, id] });
-      pending = null;
-    } else {
-      pending = id;
-    }
-    sketch.solve();
-    render();
+  // Render ctx OMITS updateGrid/getSolverStats/injectDebugStyle — the host has no #grid/debug overlay; all
+  // three are no-op-safe (P3).
+  const renderCtx = {};
+  let rafId = null;
+  const frame = () => {
+    engine.solve(SolverConfig.ITERATIONS || 500);
+    draw(state.joints, state.shapes, svgEl, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, renderCtx);
+    rafId = requestAnimationFrame(frame);
   };
-  if (svgEl && svgEl.addEventListener) svgEl.addEventListener('pointerdown', onPointerDown);
+  const start = () => { if (rafId == null && typeof requestAnimationFrame === 'function') rafId = requestAnimationFrame(frame); };
+  const stop = () => { if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; } };
 
-  return {
-    sketch,
-    render,
-    destroy: () => { if (svgEl && svgEl.removeEventListener) svgEl.removeEventListener('pointerdown', onPointerDown); },
-  };
+  return { state, engine, worldGroup, start, stop };
 }

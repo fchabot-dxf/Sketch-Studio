@@ -55,22 +55,22 @@ async function loadFile(file) {
   }
 }
 
-// ── Design tab (S1): toggle the shared #core sketcher; the SVG editor is left completely untouched. ──
+// ── Design tab: toggle the shared #ui sketcher (real renderer, P5a); the SVG editor is left untouched. ──
 const editorView = document.querySelector('main.layout');
 const designView = document.getElementById('design-view');
 const tabDesign = document.getElementById('tab-design');
 const designBack = document.getElementById('design-back');
-let designMounted = false;
+let designController = null; // mounted once; controls the RAF render loop (started on show, paused on hide)
 function showDesign() {
-  if (!designMounted) {
-    mountSketch(document.getElementById('design-canvas'));
-    designMounted = true;
-  }
+  // Make the canvas visible BEFORE mounting/starting so the first render frame sees a laid-out svg.
   designView.hidden = false;
   if (editorView) editorView.style.display = 'none';
   tabDesign.classList.add('active');
+  if (!designController) designController = mountSketch(document.getElementById('design-canvas'));
+  designController.start(); // idempotent (guards against a second RAF)
 }
 function showEditor() {
+  if (designController) designController.stop(); // pause the RAF while the Design tab is hidden
   designView.hidden = true;
   if (editorView) editorView.style.display = '';
   tabDesign.classList.remove('active');

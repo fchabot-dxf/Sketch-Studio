@@ -66,11 +66,14 @@ export function createSketch() {
   }
 
   // ── ops ───────────────────────────────────────────────────────────────────
-  // Real distance dimension via ConstraintManager (the duplicate / auto-driven path).
+  // Real distance dimension via ConstraintManager (handles redundant→reference, conflicting→refuse+revert).
+  // Refresh lastResult afterwards so converged/conflicts reflect the post-add (possibly reverted) state;
+  // lastError carries any refusal (captured from the core notifier).
   function dimension(a, b, value, opts = {}) {
     lastError = null;
     ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE,
       { joints: [a, b], value, dimMode: opts.dimMode || 'auto' }, { source: 'dimension' });
+    lastResult = engine.solve(ITER);
     return findDistance(a, b);
   }
 

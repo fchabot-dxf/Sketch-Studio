@@ -123,6 +123,21 @@ run('6. redundant cross-edge dimension → reference', 'PASS', () => {
   };
 });
 
+// 8 — conflicting dimension ADD → refuse + revert (not kept, sketch stays a valid converged rect)
+run('8. conflicting dimension ADD → refuse + revert', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 100, 60);
+  s.dimension(r.corners[0], r.corners[1], 100); // top edge = 100 (driving)
+  s.solve();
+  const before = s.constraintCount;
+  // the bottom edge is forced equal to the top by the verticals; dimensioning it to 50 is a CONFLICT
+  const d = s.dimension(r.corners[3], r.corners[2], 50);
+  return {
+    pass: s.constraintCount === before && s.converged === true && s.isRectangle(r.corners) && s.lastError !== null,
+    nums: { keptDelta: s.constraintCount - before, converged: s.converged, isRect: s.isRectangle(r.corners), lastError: s.lastError || 'none' },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

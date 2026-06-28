@@ -1235,6 +1235,39 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === SOLVER REDUNDANT-DIM → REFERENCE DONE — HOLD ===
 
+## 2026-06-28 · dimension-ADD refuse+revert — extend #3 to the add path (turn 31)
+
+- **bug (advisor's fuzzer, 138/400 P3 SILENT):** ADDing a dimension that over-constrains left the sketch
+  NON-converged with NO error (silent mangle). #3 only covered EDITing.
+- **root (found via logging):** the over-constraining dim was being auto-driven to a REFERENCE, but the
+  engine's `_assemble` does NOT skip driven rows — so a reference whose value can't be met still pulls the
+  geometry (least-squares compromise) and breaks the structural constraints → wrapper reports non-converged.
+  So keying the revert on "driver only" missed them; it must fire for ANY non-converged DISTANCE add.
+- **fix — `packages/core/constraint-manager.js` `createConstraint`:** snapshot joint positions before
+  persisting ANY distance; after add+autoSolve, if the solve is non-converged → REFUSE + REVERT: remove the
+  constraint, restore the snapshot, re-solve to last-valid, and `notify("Can't add <N> — conflicts with
+  <types from result.conflicts>. Reverted.")`. Redundant-but-consistent dims still converge (→ kept as
+  references, #6); only genuine conflicts are reverted. Covers all add paths (dimension-tool / numeric-input
+  go through this same ConstraintManager call). Harness `dimension()` refreshes `lastResult` after the add so
+  `converged`/`lastError` reflect the post-revert state.
+- **unified:** ADD redundant→reference (#6) · ADD conflicting→refuse+revert (THIS) · EDIT conflicting→
+  refuse+revert (#3).
+- **scenario #8 (new):** `conflicting dimension ADD → refuse+revert` — rect, top edge=100 (driving), then
+  bottom edge=50 (forced equal to the top by the verticals → conflict): refused, constraint NOT kept
+  (`keptDelta=0`), sketch stays a valid converged rect, `lastError` = "Can't add 50 — conflicts with
+  vertical, distance. Reverted."
+- **verify:** scenario tester **9/9, backlog EMPTY**; **`node tests/harness/solver-fuzz.test.js 400` →
+  `400/400 clean` (P3 SILENT 138→0)**; constraint-conformance **15/15 (gating)**; #1-#6/#4b/bridge stay
+  GREEN; oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**; `node --check` clean; headless
+  app-load OK. Normal satisfiable dims still apply (scenario #2 width=100 holds; #6 height drives).
+- **note/debt:** the deeper cause is that the engine enforces driven (reference) rows; making `_assemble`
+  skip driven would let conflicting references be inert instead of mangling. Out of scope here (task asked
+  for refuse+revert); flagging for the advisor.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 clean · over-constrain never silent (add OR
+  edit). STOP.
+
+=== DIMENSION-ADD REFUSE+REVERT DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

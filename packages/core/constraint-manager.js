@@ -174,6 +174,14 @@ export class ConstraintManager {
             }
         }
 
+        // Snapshot positions BEFORE persisting a DISTANCE, so a genuinely over-constraining ADD can be
+        // refused + reverted to the last-valid shape (see the post-solve check below). Captured for any
+        // distance (driver OR reference): the engine enforces driven rows too, so a reference whose value
+        // can't be met still mangles the geometry — that must be reverted, not left silently broken.
+        const _preAdd = (type === CONSTRAINT_TYPES.DISTANCE)
+            ? (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })()
+            : null;
+
         // Use existing canonical addConstraint path to validate and persist
         const added = constraints.addConstraint(state, type, normalized);
         if (!added) {
@@ -200,12 +208,33 @@ export class ConstraintManager {
         }
 
         // Auto-solve if requested
+        let _solveRes = null;
         if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
             try {
-                state.engine.solve(opts.solveIterations);
+                _solveRes = state.engine.solve(opts.solveIterations);
             } catch (e) {
                 console.error('[ConstraintManager] Solver error:', e);
             }
+        }
+
+        // Over-constraining ADD → REFUSE + REVERT. A new DRIVING distance that leaves the sketch
+        // non-converged is a GENUINE conflict (redundant dims became references above and DO converge;
+        // structural conflicts were rejected above). Remove it, restore the last-valid geometry, re-solve,
+        // and surface a clear error — never leave the sketch silently non-converged. (The EDIT-path analogue
+        // lives in numeric-input-manager handleCommit.)
+        if (_preAdd && created && typeof created === 'object' &&
+            _solveRes && _solveRes.converged === false) {
+            const clash = [...new Set((_solveRes.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
+            const ci = state.constraints.indexOf(created);
+            if (ci >= 0) state.constraints.splice(ci, 1);
+            for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+            if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                try { state.engine.solve(opts.solveIterations); } catch (_) {}
+            }
+            const val = normalized.value != null ? normalized.value : '';
+            notify(`Can't add ${val} — conflicts with ${clash || 'existing constraints'}. Reverted.`, 'warning', 3500);
+            dbg.warn('constraints', `[ConstraintManager] over-constraining ${type} ADD refused + reverted`);
+            return null;
         }
 
         dbg.log('constraints', `[ConstraintManager] Added ${type} constraint from ${opts.source}:`, created || { type, params: normalized });

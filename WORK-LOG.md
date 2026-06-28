@@ -978,6 +978,40 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === CORE SLICE C (oracle co-location) DONE — HOLD ===
 
+## 2026-06-28 · `730b663` — CORE SLICE D: final cleanup — PHASE 1 COMPLETE (turn 13)
+
+- **did:**
+  1. `git rm packages/core/solver-core.legacy.js` — re-grepped 0 importers immediately before; dead +
+     pre-existing syntax error.
+  2. `rmdir` the now-empty `src/` filesystem dirs (`src/core/solver`, `src/core`, `src`) — git didn't track
+     them; **`src/` is truly gone.**
+  3. reworded `packages/core/debug.js` comment to drop the `apps/sketchstudio/…` path → the clean-package
+     leak grep (`apps/`/`#app` under `packages/core/`) is now a **TRUE 0**; also reworded
+     `packages/core/solver-core.js` comment that named the removed legacy file (no surviving ref).
+  4. **`build-inline.cjs` — REPORTED, not deleted (advisor's ELSE branch).** Usage check: no automated/CI
+     caller, but it IS a **documented user feature** — `README.md` "Single-file offline build (optional)"
+     (for emailing / running offline) + `scripts/README.md`. Per "if there IS a [documented] use → do NOT
+     delete; report for a rewrite slice." It's broken post-carve-out (bundles the gone `src/`: reads
+     `INDEX_HTML` at root, `src/main.js` marker, `src/overrides.css`). **Needs a rewrite** to bundle
+     `apps/sketchstudio` + `packages/core`. Flagged for a future slice; kept the file + its `build:inline`
+     script + the docs intact (deleting a documented feature on no-automated-caller alone is too aggressive).
+- **GUARD (all green):** clean-package leak grep **TRUE-0**; **no surviving ref** to the removed legacy
+  (code dirs); **oracle 12/12** (from `packages/core/tests`); **baseline-diff both dirs = the 8
+  pre-existing, 0 net-new**; **app loads** headless: GET `/` 302 → `/apps/sketchstudio/`,
+  `{status:OK, importErrs:[]}`, no 404s.
+- **PHASE 1 (carve-out) COMPLETE.** Final shape: `packages/core/` = the headless brain (model · solver ·
+  geometry · units · interaction) + its co-located oracle (`packages/core/tests`), importing nothing in
+  `apps/`; `apps/sketchstudio/` + `apps/shaper/` = thin shells over `#core/`; `tests/` = shell/integration
+  suite; `_redirects` serves the app at `/`. No `src/`, no shims. The six north stars hold: model is the
+  source of truth, one capability one home, pure core / thin shell, one geometry+units language, core is a
+  platform with `#core/` seams.
+- **Open follow-ups (NOT Phase 1):** build-inline.cjs rewrite (above); settings-manager → shell +
+  injected persistence ([DEBT-1] sibling, kept in core for now); flattening the deep repo path / neutral
+  root rename (optional). Branch `carve-out`@`730b663`; merge-time note: confirm `_redirects` on the
+  Cloudflare deploy preview before merging to `main`.
+
+=== CORE SLICE D (CLEANUP) DONE — PHASE 1 COMPLETE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

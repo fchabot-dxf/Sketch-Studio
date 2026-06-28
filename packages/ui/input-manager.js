@@ -124,6 +124,10 @@ export const defaultInputCtx = {
   },
 };
 let inputCtx = defaultInputCtx;
+// P5b: gate the DOCUMENT-level listeners (keydown/wheel/contextmenu/pointerdown) to the active surface so a
+// multi-surface host (Shaper: SVG editor + Design canvas) doesn't have the inactive Design hijack global input.
+// Default ()=>true → SketchStudio (passes no isActive) is byte-identical. Shaper passes () => Design visible.
+let isActiveFn = () => true;
 
 // Global flag for magnifier toggle
 let magEnabled = false;
@@ -256,6 +260,7 @@ export function setupInput(svg, state, opts = {}) {
     // P4a: bind the canvas svg + the (optional) host input context. Defaults = SketchStudio globals → byte-identical.
     canvasSvg = svg;
     inputCtx = opts.inputCtx || defaultInputCtx;
+    isActiveFn = opts.isActive || (() => true); // P5b: gate predicate (default-on → byte-identical)
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
@@ -881,6 +886,7 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
         // Document-level wheel fallback: if wheel events don't reach the svg (overlays/extensions),
         // delegate zoom when we know the cursor is over the SVG.
         const docWheelHandler = (e) => {
+            if (!isActiveFn()) return; // P5b gate (default-on)
             try {
                 if (state._isPointerOverSvg && e.target !== svg) {
                     console.debug && console.debug('[input-manager] document wheel delegated to svg', { deltaY: e.deltaY, x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName });
@@ -895,6 +901,7 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
 
     // Prevent default context menu when drawing a line so right-click can finish a segment
     document.addEventListener('contextmenu', (e) => {
+        if (!isActiveFn()) return; // P5b gate (default-on)
         try {
             if (state.currentTool === TOOL_MODES.LINE && state.active) e.preventDefault();
         } catch(_) {}
@@ -941,7 +948,8 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
     });
 
     // Also attach keyboard shortcuts at document-level (already handled) - ensure focus doesn't steal keys
-        document.addEventListener('pointerdown',(e)=>{ 
+        document.addEventListener('pointerdown',(e)=>{
+            if (!isActiveFn()) return; // P5b gate (default-on)
             // Don't steal focus if user is clicking an input
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
             try{ svg.focus(); }catch(_){ } 
@@ -1018,6 +1026,7 @@ function updateViewBox(svg, view) {
 
 function setupKeyboardShortcuts(state) {
     document.addEventListener('keydown', (e) => {
+        if (!isActiveFn()) return; // P5b gate (default-on)
         // CRITICAL: If the target is an INPUT, the dimension input, or a TEXTAREA, do not process global shortcuts
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.id === 'dimInput')) return;
         // Route to focused tool handlers first

@@ -2511,6 +2511,42 @@ Design canvas renders via the real `draw()`, it is dark automatically. ✓ (the 
 
 === P5a (SHAPER READ-ONLY RENDER) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER P5b — Design tab INTERACTIVE + gated listeners (turn 97) — P5 COMPLETE
+
+- **did (P5b, the LAST slice; interactive input + the coexistence gate):**
+  - **Wired `setupInput` for the Design canvas** (in `mountSketch`, `packages/ui/sketch-canvas.js`):
+    `setupInput(svgEl, state, { inputCtx, isActive })` with a host inputCtx — `getCanvasSvg`→the Design svg,
+    `getWorldGroup`→`#design-world-group`, `getInputHost`→document.body — and **omitting** `getMagEls` (loupe) +
+    the toolbar methods (P4 fall-throughs: `switchToTool` falls through to the direct `state.currentTool` switch;
+    `updateMagnifier` early-returns). The existing RAF loop re-renders each frame, so input-driven state changes
+    show with no extra wiring.
+  - **Gated the document-level listeners (RISK-COEXIST):** added a module-level `isActiveFn` (set from
+    `opts.isActive`, default `()=>true`) and an `if (!isActiveFn()) return;` guard at the top of the four
+    DOCUMENT/window USER-input handlers — keydown, wheel, contextmenu, document-pointerdown (NOT the svg-scoped
+    pointer handlers). SketchStudio passes no `isActive` → default-on → **byte-identical**. Shaper's main.js
+    passes `isActive: () => !designView.hidden`, so while the SVG editor shows, the Design listeners no-op.
+  - (Mechanism per the advisor — predicate gate, default-on; no fork, SketchStudio byte-identical safe, so
+    implemented directly without re-gating.)
+- **verify (exactly how) — all three checks via CDP:**
+  - **(a) Shaper Design INTERACTIVE:** Design active → keydown `'l'` (tool→line; the no-toolbar fall-through sets
+    `state.currentTool` directly) → a press-move-release drag on the Design canvas → `.shape-elem` count **1→2**
+    (`drewLine=true`) → input drives state, the RAF renders it (dark).
+  - **(b) RISK-COEXIST gate holds:** keydown `'l'` while Design ACTIVE → `defaultPrevented=true` (handler ran);
+    the SAME keydown while Design HIDDEN → `defaultPrevented=false` (gated, no-op) → `gateHolds=true`. So an
+    editor-active keystroke can't drive a Design tool.
+  - **(c) SketchStudio BYTE-IDENTICAL:** keydown `'l'` → `defaultPrevented=true`, `#tool-line` active, world-group
+    renders **5** — input fully works (isActive defaults true); unchanged.
+  - both apps `errors=0` · import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 ·
+    fuzzer 400/400 · scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · **P5 COMPLETE — and the whole Shaper-adopts-the-sketcher arc is done.** Shaper's
+  Design tab now drives the FULL shared `#core`/`#ui` sketcher INTERACTIVELY (draw/select/etc.), in its own DARK
+  theme, with the SVG editor coexisting (input gated by tab), while SketchStudio stays byte-identical throughout.
+  The carve-out's payoff is realized: `packages/core` (brain) + `packages/ui` (shared sketcher — coords,
+  renderer, cursor, state, managers, snap, input + handlers, sketcher.css) are consumed by BOTH apps.
+  STOP — hold for advisor.
+
+=== P5b (SHAPER INTERACTIVE) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -66,7 +66,11 @@ function showDesign() {
   designView.hidden = false;
   if (editorView) editorView.style.display = 'none';
   tabDesign.classList.add('active');
-  if (!designController) designController = mountSketch(document.getElementById('design-canvas'));
+  if (!designController) designController = mountSketch(document.getElementById('design-canvas'), {
+    // P5b: gate the shared input layer's document-level listeners to the Design tab, so they no-op while the
+    // SVG editor is showing (the editor keeps full control of the keyboard/wheel).
+    isActive: () => !designView.hidden,
+  });
   designController.start(); // idempotent (guards against a second RAF)
 }
 function showEditor() {

@@ -12,6 +12,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { draw } from '#ui/svg-renderer.js';
 import { createSketchState } from '#ui/sketch-state.js';
+import { setupInput } from '#ui/input-manager.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -57,11 +58,13 @@ function seedDemo(engine, state) {
   ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [a, b], value: 50 }, { source: 'design' });
 }
 
-// ── Mount the full renderer into a host <svg> (read-only; P5a) ───────────────
-export function mountSketch(svgEl) {
+// ── Mount the full renderer + input into a host <svg> (P5a render + P5b interactive) ─────────────
+// opts.isActive: () => boolean — gates the input layer's document-level listeners to the host's active surface
+// (so an inactive Design tab doesn't hijack a sibling editor's keyboard/wheel). Defaults to always-active.
+export function mountSketch(svgEl, opts = {}) {
   const engine = createEngine(null);
   engine.init();
-  // Read-only render: view isn't driven (no pan/zoom yet); the svg's own viewBox maps world→screen.
+  // view isn't driven yet (no pan/zoom UI); the svg's own viewBox maps world→screen.
   const view = { x: 0, y: 0, w: 120, h: 90 };
   const state = createSketchState(engine, view);
   setConstraintNotifier(() => {}); // host has no toast surface yet
@@ -75,6 +78,15 @@ export function mountSketch(svgEl) {
   }
 
   seedDemo(engine, state);
+
+  // P5b: interactive input. Host input ctx binds the Design canvas; OMIT getMagEls (loupe) + the toolbar methods
+  // (P4 fall-throughs degrade gracefully). isActive gates the document-level listeners to the Design surface.
+  const hostInputCtx = {
+    getCanvasSvg: () => svgEl,
+    getWorldGroup: () => worldGroup,
+    getInputHost: () => (typeof document !== 'undefined' ? document.body : null),
+  };
+  try { setupInput(svgEl, state, { inputCtx: hostInputCtx, isActive: opts.isActive }); } catch (_) { /* non-fatal */ }
 
   // Render ctx OMITS updateGrid/getSolverStats/injectDebugStyle — the host has no #grid/debug overlay; all
   // three are no-op-safe (P3).

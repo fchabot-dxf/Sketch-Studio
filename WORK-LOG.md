@@ -734,6 +734,37 @@ re-export) · `src/core-utils.js` (throw-stub).
 
 === CLEANUP STAGE 1 (REWIRE+PROOF) DONE — HOLD ===
 
+## 2026-06-28 · `c63e4c7` — CLEANUP stage 2: delete the blessed list (turn 1, new tool; COMPLETES shell batch)
+
+- **handoff infra note:** between stage 1 and 2 the advisor adopted the **canonical `handoff.py`**
+  (marker is now `HANDOFF.md` itself — `cycle/turn/to/from/note`; per-role cursor `.handoff/<role>.last`;
+  it force-reconfigures stdout to UTF-8, so the cp1252 note-crash is fixed in this version). The turn
+  counter reset (cycle 0); my stage-1 work was accepted and stage 2 dispatched as **turn 1**. My old
+  `wait` (stale invocation) crashed once on the swap — harmless; re-armed on the new tool.
+- **did:** `git rm` the advisor-blessed delete-list — **28 files**: 24 re-export shims (old `src/` paths)
+  + 3 inaugural dead files (`src/inference-engine.js` empty, `src/ui-manager.js` 1-line stub,
+  `src/core-utils.js` throw-stub) + the real dead `apps/sketchstudio/ui/input-handlers/polygon-tool.js`
+  (re-grepped immediately before: **0 importers** static or dynamic). **KEPT** the real
+  `apps/sketchstudio/ui/input-handlers/dimension-input.js` (dimension-inline-edit.test imports it).
+  Did **NOT** touch `build-inline.cjs` (its stale refs are a separate slice, per advisor).
+- **structural result:** `src/` is now **CORE-ONLY** — `core/**` (incl. the A1-relocated
+  `inference-engine.js`) + `constraint-solver.js` + `solver-core.js` + `solver-core.legacy.js`. The
+  entire shell (incl. its entry + coords) lives under `apps/sketchstudio/`. No shims remain. This is the
+  clean precondition for the CORE batch (`src/core` -> `packages/core`).
+- **verify:** **no-surviving-ref** grep clean — the only match is an explanatory comment in
+  `drawing-tools.js` ("Polygon tool removed"), not an import. **baseline-diff 0 net-new** — failing set =
+  the same 8 (subset of the pre-existing 9; settings-project-config passes); no solver test among them ->
+  **oracle 12/12**. **leak clean** (no `src/core` -> `#app/`/`apps/`). **app loads:** GET `/` 302 ->
+  `/apps/sketchstudio/`; headless probe `{status:OK, importErrs:[]}`, no 404s. (Deletions are
+  irreversible -> verified the real load symptom before committing.)
+- **state:** branch `carve-out`@`c63e4c7` · 0 net-new · oracle 12/12 · app loads · **SHELL BATCH
+  COMPLETE** (import map -> bridge -> proof -> WAVE A -> geometry split -> entry-pair -> cleanup 1+2).
+  Next PHASE (advisor's call, separate gate): **CORE batch** — `git mv src/core` -> `packages/core`
+  (+ co-locate the solver oracle) and the deferred `debug.js` split (pure logger stays core / `window`
+  overlay -> shell). Also still open: `build-inline.cjs` stale-ref fix.
+
+=== CLEANUP STAGE 2 (DELETIONS) DONE — SHELL BATCH COMPLETE ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

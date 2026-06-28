@@ -8,6 +8,8 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
+import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
+import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -61,21 +63,56 @@ const designView = document.getElementById('design-view');
 const tabDesign = document.getElementById('tab-design');
 const designBack = document.getElementById('design-back');
 let designController = null; // mounted once; controls the RAF render loop (started on show, paused on hide)
+let dock = null, infoPanel = null, lastSig = '';
+
+// Refresh the dock's info panel when the sketch changes (constraint count / values / selection). Called each
+// render frame via mountSketch's onRender hook; the signature check keeps it cheap (re-render only on change).
+function dockTick() {
+  if (!infoPanel || !designController) return;
+  const s = designController.state;
+  let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
+  const sig = s.constraints.length + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0);
+  if (sig !== lastSig) { lastSig = sig; infoPanel.refresh(); }
+}
+
+// Build the floating dock ONCE: Design tab = the live constraint-list/DOF info panel (off Shaper's live
+// state/engine); Prepare/Export/Settings = v1 stubs (per UI_SHELL.md). Re-parented INTO #design-view so it
+// floats over the Design canvas + hides with the tab. Dark theming is automatic — the dock/info use
+// --sk-*/--sk-dock-*, which Shaper's :root sets dark. The on-canvas glyphs/dim-edit are untouched (additive).
+function buildDock() {
+  const { state, engine } = designController;
+  infoPanel = createDesignInfoPanel({ state, engine });
+  dock = createTabbedDockPanel({
+    persistKey: 'shaper-design-dock',
+    tabs: [
+      { label: 'Design', icon: '✎', render: (body) => infoPanel.render(body) },
+      { label: 'Prepare', icon: '▦', render: (body) => { body.textContent = 'Prepare — cut type + toolpath (coming soon).'; } },
+      { label: 'Export', icon: '⤓', render: (body) => { body.textContent = 'Export / Simulate (coming soon).'; } },
+      { label: 'Settings', icon: '⚙', render: (body) => { body.textContent = 'Settings (coming soon).'; } },
+    ],
+  });
+  designView.appendChild(dock.el);
+}
+
 function showDesign() {
   // Make the canvas visible BEFORE mounting/starting so the first render frame sees a laid-out svg.
   designView.hidden = false;
   if (editorView) editorView.style.display = 'none';
   tabDesign.classList.add('active');
-  if (!designController) designController = mountSketch(document.getElementById('design-canvas'), {
-    // P5b: gate the shared input layer's document-level listeners to the Design tab, so they no-op while the
-    // SVG editor is showing (the editor keeps full control of the keyboard/wheel).
-    isActive: () => !designView.hidden,
-  });
+  if (!designController) {
+    designController = mountSketch(document.getElementById('design-canvas'), {
+      // P5b: gate the shared input layer's document-level listeners to the Design tab.
+      isActive: () => !designView.hidden,
+      // S5c: refresh the dock's info panel on change, in sync with the render loop.
+      onRender: dockTick,
+    });
+    buildDock();
+  }
   designController.start(); // idempotent (guards against a second RAF)
 }
 function showEditor() {
   if (designController) designController.stop(); // pause the RAF while the Design tab is hidden
-  designView.hidden = true;
+  designView.hidden = true; // hides #design-view AND the dock (its child)
   if (editorView) editorView.style.display = '';
   tabDesign.classList.remove('active');
 }

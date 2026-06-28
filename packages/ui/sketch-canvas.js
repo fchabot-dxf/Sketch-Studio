@@ -95,6 +95,7 @@ export function mountSketch(svgEl, opts = {}) {
   const frame = () => {
     engine.solve(SolverConfig.ITERATIONS || 500);
     draw(state.joints, state.shapes, svgEl, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, renderCtx);
+    try { opts.onRender && opts.onRender(); } catch (_) { /* host hook (e.g. dock refresh) */ }
     rafId = requestAnimationFrame(frame);
   };
   const start = () => { if (rafId == null && typeof requestAnimationFrame === 'function') rafId = requestAnimationFrame(frame); };

@@ -2678,6 +2678,42 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5b (CONSTRAINT-LIST + DOF PANEL) DONE — HOLD ===
 
+## 2026-06-28 · S5c — Shaper mounts the dock (Design tab = live info panel, dark) (turn 105) — Shaper-only
+
+- **did (S5c; Shaper-only → SketchStudio untouched; tool palette deferred to S5c2):**
+  - **`mountSketch` got an `opts.onRender` hook** (`packages/ui/sketch-canvas.js`) — called each render frame
+    after `draw()`, so a host can sync UI to the loop. SketchStudio doesn't use mountSketch → byte-identical.
+  - **`apps/shaper/src/main.js`** now builds a floating `TabbedDockPanel` (`persistKey:'shaper-design-dock'`)
+    ONCE when the Design tab first opens, wired to Shaper's LIVE state/engine (`designController.state/engine`):
+    - **Design tab** = `createDesignInfoPanel({state,engine})` (the S5b live constraint-list + DOF) ·
+      **Prepare/Export/Settings** = v1 stub text (per UI_SHELL.md).
+    - Re-parented into `#design-view` so it floats over the Design canvas + hides with the tab.
+    - **Live refresh:** `mountSketch`'s `onRender` calls a `dockTick()` that refreshes the info panel when the
+      sketch changes (constraint count / values / selection signature — cheap, re-render only on change). The
+      on-canvas glyphs/dim-edit are untouched (additive).
+- **verify (exactly how) — CDP, open Shaper Design:**
+  - Dock renders: **4 tabs**; Design tab shows the LIVE info panel — **2 rows** (the demo coincident+distance) +
+    DOF readout `"2 constraints · DOF 1 · 1 free · ✓ solved"` off Shaper's live state.
+  - **Drawing updates it live:** keydown `l` + a drag drew a line → the dock re-rendered to
+    `"3 constraints · DOF 7 · 7 free · ✓ solved"` (`liveRefreshed=true`) — the auto-coincident + new joints flowed
+    through `onRender→dockTick→refresh`.
+  - **Row-click → canvas highlight:** clicking a constraint row set the row `.sel` (`rowSel=true`) and toggled
+    `state.selectedConstraints` — the shared renderer highlights it on the Shaper canvas (no new plumbing).
+  - **Dark:** active-tab accent computed `rgb(76,154,255)` = `#4c9aff` (Shaper's `--sk-selection`, NOT
+    SketchStudio's); dock bg `rgba(22,24,28,0.82)` (dark translucent). **Persists:** switching to Prepare wrote
+    `localStorage['shaper-design-dock'].tab===1` (restore proven in S5a).
+  - **SketchStudio UNTOUCHED:** world-group renders **5**, no `.sk-dock` (it doesn't import the dock). Both apps
+    `errors=0`.
+  - import-resolution guard GREEN (Shaper now imports `#ui/tabbed-dock-panel` + `#ui/design-info-panel`) · oracle
+    12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 · scenario 23/23 · baseline-diff = the 8
+    pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · **Shaper's Design tab now has the full shared dock** — the TabbedDockPanel
+  (float/dock/resize/tabs/persist) + a LIVE constraint-list/DOF overview, dark, additive to the canvas GUI.
+  Next per the sequence: **S5c2** (tool palette in the dock) and/or **S5d** (SketchStudio adopts the dock — the
+  deliberate toolbar re-home, isolated last). STOP — hold for advisor.
+
+=== S5c (SHAPER MOUNTS DOCK + INFO) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

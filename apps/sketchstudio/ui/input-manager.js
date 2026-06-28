@@ -9,7 +9,7 @@ import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from './input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#app/coords.js';
-import { getDist } from '#core/geometry.js';
+import { toggleDriving } from './dimension-seams.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';
 import { updateHover } from './hover-manager.js';
@@ -452,83 +452,19 @@ function handlePointerDown(e, svg, state) {
         const cIdx = parseInt(el.getAttribute('data-c-idx'), 10);
         if (!isNaN(cIdx) && state.constraints && state.constraints[cIdx]) {
             const c = state.constraints[cIdx];
-            
-            // ONE driving dimension per edge: if this dim is a reference and ANOTHER dim on the same
-            // edge/shapes already DRIVES, SWAP — demote that driver to a reference and let this one take
-            // over (replaces the old ERR-DRIVE-01 refusal, so the user can always pick which dim drives).
-            if (c.isDriven) {
-                let others = [];
-                if (c.type === CONSTRAINT_TYPES.DISTANCE) {
-                    if (c.isRadius && c.shape) {
-                        others = state.constraints.filter(oc =>
-                            oc !== c && !oc.isDriven && !oc.driven &&
-                            oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
-                    } else if (c.joints && c.joints.length >= 2) {
-                        const [j1, j2] = c.joints;
-                        // Any other driving distance on the same joint-pair (any dimMode) — one driver per edge.
-                        others = state.constraints.filter(oc =>
-                            oc !== c && !oc.isDriven && !oc.driven &&
-                            oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length >= 2 &&
-                            ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
-                    }
-                } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-                    const [s1, s2] = c.shapes;
-                    others = state.constraints.filter(oc =>
-                        oc !== c && !oc.isDriven && !oc.driven &&
-                        oc.type === CONSTRAINT_TYPES.ANGLE && oc.shapes && oc.shapes.length === 2 &&
-                        ((oc.shapes[0] === s1 && oc.shapes[1] === s2) || (oc.shapes[0] === s2 && oc.shapes[1] === s1)));
-                }
-                if (others.length) {
-                    for (const oc of others) { oc.isDriven = true; oc.driven = true; }
-                    showNotification('Now driving this dimension — the previous one is now a reference.', 'info');
-                }
-            }
 
-            c.isDriven = !c.isDriven;
-            c.driven = c.isDriven; // keep the two driven flags in sync (solver checks isDriven || driven)
-            
-            // If switching to DRIVING mode, update the constraint value to match current geometry
-            // to prevent the geometry from snapping to an old/stale value.
-            if (!c.isDriven) {
-                if (c.isRadius && c.shape) {
-                    const s = state.shapes.find(x => x.id === c.shape);
-                    if (s && typeof s.radius === 'number') c.value = s.radius;
-                } else if (c.joints && c.joints.length >= 2) {
-                    const j1 = state.joints.get(c.joints[0]);
-                    const j2 = state.joints.get(c.joints[1]);
-                    if (j1 && j2) {
-                        c.value = getDist(j1, j2);
-                    }
-                } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-                    const s1 = state.shapes.find(s => s.id === c.shapes[0]);
-                    const s2 = state.shapes.find(s => s.id === c.shapes[1]);
-                    if (s1 && s2 && s1.joints && s2.joints) {
-                        const j1a = state.joints.get(s1.joints[0]);
-                        const j1b = state.joints.get(s1.joints[1]);
-                        const j2a = state.joints.get(s2.joints[0]);
-                        const j2b = state.joints.get(s2.joints[1]);
-                        if (j1a && j1b && j2a && j2b) {
-                            const a1 = Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x);
-                            const a2 = Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x);
-                            let val = Math.abs((a1 - a2) * 180 / Math.PI);
-                            if (val > 180) val = 360 - val;
-                            c.value = val;
-                        }
-                    }
-                }
-                if (state.engine) {
-                    const result = state.engine.solve(SolverConfig.ITERATIONS || 500);
-                    if (result && !result.converged) {
-                        showNotification(
-                            `Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.\nArgs: ` +
-                            JSON.stringify({
-                                constraint: c,
-                                result
-                            }),
-                            "warning"
-                        );
-                    }
-                }
+            // Driving-toggle logic (one-driver-per-edge SWAP + flip + recompute + solve) lives in the
+            // shared headless seam, so the harness drives the EXACT same code. We keep only the DOM glue
+            // (event + notifications) here.
+            const res = toggleDriving(state, c);
+            if (res.swapped) {
+                showNotification('Now driving this dimension — the previous one is now a reference.', 'info');
+            }
+            if (res.error === 'ERR-DRIVE-02') {
+                showNotification(
+                    `Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.`,
+                    "warning"
+                );
             }
             // Return true to consume the event (prevent selection/drag)
             return true;

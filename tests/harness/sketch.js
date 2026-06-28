@@ -14,6 +14,8 @@ import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manag
 import { makeRectFromTwoJoints } from '#core/shapes.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
+// The harness drives the REAL app edit/toggle logic via shared headless seams (single source of truth).
+import { commitDimensionEdit, toggleDriving } from '#app/ui/dimension-seams.js';
 
 const ITER = SolverConfig.ITERATIONS || 500;
 
@@ -100,48 +102,33 @@ export function createSketch() {
     return lastResult;
   }
 
-  // Edit a dimension's value (mirrors numeric-input-manager.js handleCommit: snapshot positions + old
-  // value, apply + solve; on a genuine non-convergence REFUSE + REVERT to the last valid shape, never
-  // leave it mangled). No auto-reference.
+  // Edit a dimension's value via the REAL edit seam (numeric-input-manager handleCommit calls the same
+  // function): on a genuine over-constraint it refuses + reverts to the last valid shape.
   function editValue(dim, value) {
     lastError = null;
-    const oldValue = dim.value;
-    const snap = new Map();
-    state.joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
-    dim.value = value;
-    const attempt = engine.solve(ITER);
-    if (attempt && !attempt.converged) {
-      const clash = [...new Set((attempt.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
-      dim.value = oldValue;
-      state.joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
-      lastResult = engine.solve(ITER); // settle back to last-valid
-      lastError = `Can't set to ${value}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`;
-      return lastResult;
-    }
-    lastResult = attempt;
+    const { reverted, clash } = commitDimensionEdit(state, dim, value);
+    if (reverted) lastError = `Can't set to ${value}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`;
+    lastResult = engine.solve(ITER); // refresh converged/conflicts
     return lastResult;
   }
 
-  // Make a dimension a reference (always allowed).
-  function setReference(dim) { if (dim) { dim.isDriven = true; dim.driven = true; } return true; }
+  // Make a dimension a REFERENCE via the REAL toggle seam (flip only if it's currently driving).
+  function setReference(dim) {
+    if (dim && !dim.isDriven && !dim.driven) toggleDriving(state, dim);
+    lastResult = engine.solve(ITER);
+    return true;
+  }
 
-  // Toggle a reference dim -> driving (mirrors input-manager.js: one-driver-per-edge SWAP — demote any
-  // other driver on the same edge, then promote this one; recompute value; solve; ERR-DRIVE-02 if not
-  // converged). No ERR-DRIVE-01 refusal anymore.
+  // Make a dimension DRIVING via the REAL toggle seam (input-manager calls the same function): flips a
+  // reference to driving with the one-driver-per-edge SWAP. No-op if it already drives.
   function setDriving(dim) {
     lastError = null;
     if (!dim) return false;
-    if (dim.type === CONSTRAINT_TYPES.DISTANCE && dim.joints && dim.joints.length >= 2) {
-      const [j1, j2] = dim.joints;
-      const others = state.constraints.filter(oc => oc !== dim && !oc.isDriven && !oc.driven &&
-        oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length >= 2 &&
-        ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
-      for (const oc of others) { oc.isDriven = true; oc.driven = true; } // swap: demote the old driver(s)
+    if (dim.isDriven || dim.driven) {
+      const res = toggleDriving(state, dim);
+      if (res.error === 'ERR-DRIVE-02') lastError = '[ERR-DRIVE-02] solver did not converge after toggling driving';
     }
-    dim.isDriven = false; dim.driven = false;
-    if (dim.joints && dim.joints.length >= 2) dim.value = distOf(dim.joints[0], dim.joints[1]);
     lastResult = engine.solve(ITER);
-    if (lastResult && !lastResult.converged) lastError = '[ERR-DRIVE-02] solver did not converge after toggling driving';
     return true;
   }
 

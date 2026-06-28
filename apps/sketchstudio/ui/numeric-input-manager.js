@@ -1,9 +1,9 @@
-import { SolverConfig } from '#core/solver-config.js';
 // apps/sketchstudio/ui/numeric-input-manager.js
 import { worldToScreen } from '#app/coords.js';
 import { showNotification } from './notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
+import { commitDimensionEdit } from './dimension-seams.js';
 
 let uiState = {
     active: false,
@@ -276,31 +276,14 @@ function handleCommit() {
             if (uiState.appState.saveState) uiState.appState.saveState();
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
-            const engine = uiState.appState.engine;
-            if (engine) {
-                // Snapshot joint positions + the dim's old value FIRST, so a genuinely unsatisfiable
-                // edit can be REFUSED and the sketch snapped back to its last valid shape — never left
-                // mangled/sheared. (No auto-reference; the value the user typed is simply rejected.)
-                const oldValue = uiState.target.value;
-                const joints = engine.getJoints ? engine.getJoints() : null;
-                const snap = new Map();
-                if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
-
-                uiState.target.value = val;
-                const result = engine.solve(SolverConfig.ITERATIONS || 500);
-                if (result && !result.converged) {
-                    // Refuse + revert: restore the old value AND joint positions, re-solve to last-valid.
-                    const clash = [...new Set((result.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
-                    uiState.target.value = oldValue;
-                    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
-                    engine.solve(SolverConfig.ITERATIONS || 500);
-                    showNotification(
-                        `Can't set to ${val}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
-                        "warning"
-                    );
-                }
-            } else {
-                uiState.target.value = val;
+            // Edit logic lives in the shared headless seam (so the harness drives the EXACT same code).
+            // On a genuine over-constraint it refuses + reverts to the last valid shape; we just surface it.
+            const { reverted, clash } = commitDimensionEdit(uiState.appState, uiState.target, val);
+            if (reverted) {
+                showNotification(
+                    `Can't set to ${val}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
+                    "warning"
+                );
             }
         }
         uiState.target.__editing = false;

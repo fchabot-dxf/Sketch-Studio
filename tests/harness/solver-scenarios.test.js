@@ -9,6 +9,7 @@ import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 import { updateConstraintOffset } from '#app/ui/input-handlers/dimension-tool.js';
+import { commitDimensionEdit, toggleDriving } from '#app/ui/dimension-seams.js';
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -192,6 +193,38 @@ run('11. app placement keeps cross-edge reference driven', 'PASS', () => {
   return {
     pass: left.isDriven === true && left.driven === true && s.converged === true,
     nums: { leftIsDriven: left.isDriven, leftDriven: left.driven, drivers: s.drivingDistanceCount(r.corners[0], r.corners[3]), converged: s.converged },
+  };
+});
+
+// 12 — EDIT seam driven directly: over-constraining edit refuses+reverts; a valid edit applies
+run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 100, 60);
+  s.dimension(r.corners[0], r.corners[1], 100);
+  const diagNow = s.edgeLen(r.corners[0], r.corners[2]);
+  const diag = s.dimension(r.corners[0], r.corners[2], diagNow);
+  s.solve();
+  const bad = commitDimensionEdit(s.state, diag, 50);            // diagonal 50 < width 100 → impossible
+  const good = commitDimensionEdit(s.state, diag, diagNow + 20); // satisfiable
+  s.solve();
+  return {
+    pass: bad.reverted === true && !!bad.clash && good.reverted === false &&
+          s.isRectangle(r.corners) && s.converged === true && Math.abs(diag.value - (diagNow + 20)) < 1e-6,
+    nums: { badReverted: bad.reverted, badClash: bad.clash || 'none', goodApplied: !good.reverted, diagValue: diag.value, isRect: s.isRectangle(r.corners) },
+  };
+});
+
+// 13 — TOGGLE seam driven directly: flip a reference → driving with the one-driver-per-edge swap
+run('13. toggleDriving seam — flip + swap', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 100, 60);
+  const d1 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'horizontal' }); // driver
+  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // reference (one-driver rule)
+  const res = toggleDriving(s.state, d2); // promote d2 → swap demotes d1
+  s.solve();
+  return {
+    pass: res.nowDriving === true && res.swapped === true && d2.isDriven === false && d1.isDriven === true && s.converged === true,
+    nums: { nowDriving: res.nowDriving, swapped: res.swapped, d2drives: !d2.isDriven, d1ref: d1.isDriven, converged: s.converged },
   };
 });
 

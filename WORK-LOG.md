@@ -1334,6 +1334,38 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === REDUNDANT-DIM RENDERS AS REFERENCE DONE — HOLD ===
 
+## 2026-06-28 · edit + toggle SEAMS — harness drives the REAL app logic (turn 37)
+
+- **why:** the last app-layer bug (cross-edge demotion) hid because the harness only drove the CORE path;
+  its `editValue`/`setDriving`/`setReference` were RE-IMPLEMENTATIONS, so a divergence between harness and app
+  couldn't be caught. Extract the edit + toggle logic into shared headless seams and point BOTH the real
+  handlers AND the harness at them (single source of truth), like `updateConstraintOffset` last turn.
+- **new module `apps/sketchstudio/ui/dimension-seams.js` (pure, NO DOM):**
+  - `commitDimensionEdit(state, c, val)` — snapshot → set value → solve → on genuine non-converge REVERT
+    (restore value + positions, re-solve) → returns `{reverted, clash}`.
+  - `toggleDriving(state, c)` — one-driver-per-edge SWAP (demote other same-edge/shape drivers) → flip
+    `isDriven`/`driven` in sync → on promote, recompute value from geometry + solve → returns
+    `{nowDriving, swapped, error}` (`error='ERR-DRIVE-02'` when the post-promote solve fails).
+- **refactors (behavior-preserving — only DOM glue stays in the handlers):**
+  - `numeric-input-manager.js` handleCommit edit branch → calls `commitDimensionEdit`, shows the refusal
+    notice from `{reverted, clash}`. (Removed the now-orphaned `SolverConfig` import.)
+  - `input-manager.js` driving-toggle handler → calls `toggleDriving`, maps `{swapped, error}` to the two
+    notifications. (Removed the now-orphaned `getDist` import.)
+  - `tests/harness/sketch.js` `editValue`/`setDriving`/`setReference` → call the SAME seams (re-implementations
+    retired). `setReference`/`setDriving` flip via `toggleDriving` only when the target state differs.
+- **exported** both seams; added scenarios **#12** (drive `commitDimensionEdit` directly: impossible edit
+  reverts with a clash, valid edit applies) and **#13** (drive `toggleDriving` directly: promote a reference
+  → `nowDriving`, `swapped`, the other driver demoted).
+- **verify:** scenario tester **14/14, backlog EMPTY**; **`node tests/harness/solver-fuzz.test.js 400` →
+  `400/400 clean`** (the fuzzer now exercises the REAL edit/toggle seams via the harness — confirms NO
+  behavior change); constraint-conformance **15/15 (gating)**; oracle **12/12**; baseline-diff = the 8
+  pre-existing, **0 net-new**; `node --check` clean on all touched files; headless app-load OK (live app
+  edit/toggle unchanged).
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · edit + toggle now have ONE implementation
+  shared by app + harness — future app-path divergences can't hide. STOP.
+
+=== EDIT+TOGGLE SEAMS DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

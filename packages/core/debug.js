@@ -55,6 +55,6 @@ export const dbg = {
 };
 
 // NOTE: the window.ug.debug console API + the spring overlay (which need window/
-// requestAnimationFrame/SettingsManager) were split out to apps/sketchstudio/debug-overlay.js
-// (shell, #4) — main.js side-effect-imports it. _state + LEVEL_ORDER are exported so that
+// requestAnimationFrame/SettingsManager) were split out to the shell's debug-overlay module
+// (#4) — the shell entry side-effect-imports it. _state + LEVEL_ORDER are exported so that
 // overlay's enable/disable/level controls mutate THIS logger's state.

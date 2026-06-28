@@ -10,6 +10,7 @@ import { createEngine } from '../../src/constraint-solver.js';
 import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from './ui/notification-manager.js';
+import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;

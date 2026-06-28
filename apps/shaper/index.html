@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SVG Editor — Shaper Origin</title>
   <link rel="stylesheet" href="styles/main.css">
+  <!-- Isomorphic aliases (mirror SketchStudio + package.json): #core = shared brain, #ui = shared UI.
+       Added for the shared Design tab (S1); Shaper's own modules keep using relative ./src imports. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "#core/": "../../packages/core/",
+      "#ui/": "../../packages/ui/"
+    }
+  }
+  </script>
+  <style>
+    #design-view { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; background: #0b1020; z-index: 5; }
+    #design-view[hidden] { display: none; }
+    .design-bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; background: #111827; border-bottom: 1px solid #1f2937; }
+    #design-canvas { flex: 1; width: 100%; min-height: 0; }
+    #tab-design.active { background: #2563eb; color: #fff; }
+  </style>
 </head>
 <body>
   <header class="toolbar">
@@ -15,6 +32,7 @@
     <button id="open">Open SVG</button>
     <button id="fit">Fit</button>
     <button id="export">Export</button>
+    <button id="tab-design">Design</button>
   </header>
 
   <main class="layout">
@@ -24,6 +42,15 @@
     </section>
     <aside id="inspector" class="pane inspector"></aside>
   </main>
+
+  <!-- Shared #core-backed Design canvas (S1 proof). Hidden until the Design tab is toggled. -->
+  <section id="design-view" hidden>
+    <div class="design-bar">
+      <button id="design-back">← Editor</button>
+      <span>Design — shared #core sketcher (click to add line points)</span>
+    </div>
+    <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+  </section>
 
   <script type="module" src="src/main.js"></script>
 </body>

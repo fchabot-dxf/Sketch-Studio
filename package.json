@@ -17,7 +17,8 @@
   "type": "module",
   "imports": {
     "#core/*": "./packages/core/*",
-    "#app/*": "./apps/sketchstudio/*"
+    "#app/*": "./apps/sketchstudio/*",
+    "#ui/*": "./packages/ui/*"
   },
   "devDependencies": {
     "@salusoft89/planegcs": "^1.1.7"

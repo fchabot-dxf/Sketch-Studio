@@ -1632,6 +1632,35 @@ wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
 
 === SHAPER-SKETCHER PLAN READY — HOLD ===
 
+## 2026-06-28 · Shaper ← shared sketcher SLICE S1 — shared #core canvas mount (turn 53)
+
+- **did (S1 of the blessed plan — load-safe proof, S2+ NOT started):**
+  - **`#ui/` alias** added in all three places (isomorphic, mirrors `#core/`): `package.json` `"imports"`
+    (`"#ui/*": "./packages/ui/*"`), `apps/sketchstudio/index.html` importmap (`"#ui/": "../../packages/ui/"`),
+    and a NEW importmap in `apps/shaper/index.html` mapping `#core/` + `#ui/` (Shaper had none).
+  - **`packages/ui/sketch-canvas.js`** (new) — `createSketch()` (headless: `#core` engine + `point/line/
+    coincident/distance/solve`, no DOM → Node-testable) and `mountSketch(svgEl)` (adds a TINY inline
+    world-coord SVG renderer + click-to-add-line-point input, seeds a demo: a line, start coincident with the
+    origin, length driven to 50). `#core` ONLY. Comment notes the real svg-renderer/input arrive in S3/S4.
+  - **Shaper Design tab** — a `#tab-design` toggle in the toolbar + a hidden `#design-view` with
+    `<svg id="design-canvas" viewBox=…>`; `main.js` eager-imports `mountSketch` (so page load exercises
+    `#ui/`+`#core/` resolution) and mounts on first Design activation; toggling Editor↔Design just hides/shows
+    — Shaper's SVG-editing panes/flow are untouched.
+  - **SketchStudio** — only the `#ui/` importmap line added (UNUSED) → zero behavior change.
+- **verify (exactly how):**
+  - Headless `#ui/` probe (Node): `import('#ui/sketch-canvas.js').createSketch()` → line + coincident(origin)
+    + distance(50) + solve → **converged, len=50.000, start at origin → MOUNT OK** (alias resolves in Node;
+    `#core` mount solves).
+  - Browser load (CDP, console-error + exception capture): **SketchStudio** `errors=0`, `svgCanvas` present
+    (unchanged with the unused `#ui/`); **Shaper** `errors=0` (importmap resolved `#core/`+`#ui/`), Design
+    toggled → `#design-canvas` rendered **6 children** (demo line + dim + joints), design view visible.
+  - oracle **12/12** · constraint-conformance **15/15** · differential-planegcs **9/9** · solver-fuzz 400 →
+    **400/400** · scenario tester 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · both apps load · Shaper hosts a working shared `#core` sketch canvas (S1).
+  Next per the plan: S2 (move `coords.js` → `#ui/`). STOP — hold for advisor.
+
+=== SHAPER S1 (SHARED CANVAS MOUNT) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

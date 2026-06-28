@@ -5,6 +5,9 @@ import { parseSvg, serializeSvg, download } from './svgio.js';
 import * as canvas from './canvas.js';
 import * as tree from './tree.js';
 import * as inspector from './inspector.js';
+// Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
+// the mount itself runs only when the Design tab is first opened.
+import { mountSketch } from '#ui/sketch-canvas.js';
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -51,3 +54,26 @@ async function loadFile(file) {
     alert(`Could not load SVG:\n${err.message}`);
   }
 }
+
+// ── Design tab (S1): toggle the shared #core sketcher; the SVG editor is left completely untouched. ──
+const editorView = document.querySelector('main.layout');
+const designView = document.getElementById('design-view');
+const tabDesign = document.getElementById('tab-design');
+const designBack = document.getElementById('design-back');
+let designMounted = false;
+function showDesign() {
+  if (!designMounted) {
+    mountSketch(document.getElementById('design-canvas'));
+    designMounted = true;
+  }
+  designView.hidden = false;
+  if (editorView) editorView.style.display = 'none';
+  tabDesign.classList.add('active');
+}
+function showEditor() {
+  designView.hidden = true;
+  if (editorView) editorView.style.display = '';
+  tabDesign.classList.remove('active');
+}
+tabDesign.addEventListener('click', () => (designView.hidden ? showDesign() : showEditor()));
+designBack.addEventListener('click', showEditor);

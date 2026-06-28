@@ -860,6 +860,38 @@ Plan only · NO files moved · branch `carve-out`@`2f4e276` · suite at baseline
 hold for advisor.** Decisions needing a ruling: FLATTEN (§1), settings-manager keep-in-core (§4), oracle
 tests → packages/core/tests (§5), solver-core.legacy delete (findings), build-inline as a separate slice.
 
+## 2026-06-28 · `7ce67ee` — CORE batch SLICE A: debug.js split IN PLACE (turn 5)
+
+- **advisor ruling adopted:** plan BLESSED (flatten, alias=2 configs, settings-manager KEEP, legacy
+  delete-later) with OVERRIDE — **oracle-test co-location is its OWN slice after the lift**, not folded in.
+  SLICE A = the deferred GATE-B debug split, IN PLACE (debug.js stays `src/core` this slice).
+- **did:** `src/core/debug.js` now holds ONLY the framework-free logger — `dbg` + `shouldPrint` +
+  `_state` + `LEVEL_ORDER` (the last two now `export`ed). Dropped the `import SettingsManager`, the
+  `requestAnimationFrame` spring overlay (`_overlay`/`_startOverlayLoop`/`_updateOverlayConfigFromSettings`),
+  and the `window.ug.debug` wiring — moved VERBATIM to NEW `apps/sketchstudio/debug-overlay.js` (which
+  imports `{ _state, LEVEL_ORDER }` from `#core/debug.js` + `SettingsManager` from `#core/settings-manager.js`).
+  `main.js` gains a side-effect `import './debug-overlay.js'`.
+- **why export `_state`/`LEVEL_ORDER` (not just control fns):** the moved `window.ug.debug.{enable,disable,
+  list,level}` controls operate on the logger's private `_state`; exporting it lets the overlay mutate the
+  SAME state by reference, so `dbg`'s `shouldPrint` honors `window.ug.debug.enable(...)` exactly as before
+  — a behavior-EXACT split with the window block moved verbatim (lowest risk).
+- **pre-existing quirk preserved (NOT fixed — surgical):** consumers read `dbg.overlay`
+  (svg-renderer.js:472, debug-panel.js:78) but the overlay was only ever on `window.ug.debug.overlay`, so
+  `dbg.overlay` was already `undefined` (guarded no-op). The split keeps `dbg` overlay-less → identical
+  behavior. (Wiring `dbg.overlay` would be a behavior change; out of scope.)
+- **verify (hardest):** node --check all 3; `#core/debug.js` exports dbg(+log) + `_state` + `LEVEL_ORDER`,
+  `dbg.warn` works; `src/core/debug.js` has NO `window`/`requestAnimationFrame`/`SettingsManager` (pure,
+  #4); oracle **12/12**; baseline-diff **0 net-new** (8 ⊆ pre-existing 9); leak clean. **Browser (the real
+  symptom):** headless load of the app entry → `window.ug.debug` registers with `enable` + `overlay.getState`,
+  and `enable('probecat')` shows in `list().enabled` (proves controls mutate the shared logger `_state`);
+  `{status:OK, importErrs:[]}`, no 404s.
+- **state:** branch `carve-out`@`7ce67ee` · oracle 12/12 · app loads · `src/core/debug.js` is now pure.
+  next: STOP. Remaining core-batch slices (advisor's call): proof (1 leaf+shim) -> ATOMIC lift (flatten +
+  retarget 2 configs + facade-importer rewire) -> oracle-tests co-location (own slice) -> cleanup
+  (build-inline, solver-core.legacy delete).
+
+=== CORE SLICE A (debug split) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

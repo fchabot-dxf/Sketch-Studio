@@ -2166,6 +2166,46 @@ code changed this turn). **No DONE sentinel — awaiting the advisor's call.**
 
 === SHAPER P2 GATE — AWAITING ADVISOR ===
 
+## 2026-06-28 · SHAPER P2 — route renderer inline colors through --sk-* vars (turn 81) — gate APPROVED (mechanism A)
+
+- **did (mechanism A, approved):**
+  - **`skv(value)` helper** in `svg-renderer.js`: a known canvas color → `var(--sk-NAME, value)`, unknown/debug/
+    `none` pass through. Value-based, so ONE emission themes fixed-role AND per-status colors; the fallback is the
+    original value → SketchStudio byte-identical. Map covers the 12 in-scope colors (all already had a P1 var; no
+    new vars needed).
+  - **Routed 89 emission lines** (via a careful per-line transform, then verified): rewrote in-scope
+    `fill="X"`/`stroke="X"` → a SINGLE merged `style="…:${skv(X)}…"` (literal hex → `${skv('#hex')}`, color
+    `${var}` → `${skv(var)}`), merging fill+stroke and any existing `style=` into one attribute. SCOPE = canvas
+    colors (glyphs/joints/line-status/dimensions/selection/hover/origin/construction/perpendicular); **SKIPPED**
+    `fill="none"`, debug colors (`#ef4444`/`#fbbf24`/`#6b7280`/`#22c55e`/…), and all `class="debug-*"` overlay
+    lines (8 such lines left raw) → keeps debug-ai-health + debug-whisker* green, honors "leave debug" .
+  - **The ONE sanctioned test edit — `svg-renderer-coincident-visual.test.js`** (its `fill="white"` joint-count
+    + `stroke="#3B82F6"` glow are markup PROXIES that routing legitimately changed). Rewritten preserving intent
+    EXACTLY (same 3→4 counts, same glow assertion), now matching the routed markup. BEFORE → AFTER:
+    - `(svg.innerHTML.match(/fill="white"/g)||[]).length` → `…match(/fill:var\(--sk-joint-fill, white\)/g)…`
+      (both the count===3 and count===4 sites; expectations 3 and 4 UNCHANGED).
+    - `assert(/stroke="#3B82F6"/.test(svg.innerHTML), 'leader glow')` →
+      `assert(/stroke:var\(--sk-origin, #3B82F6\)/.test(svg.innerHTML), 'leader glow')`.
+    `debug-ai-health.test.js` left untouched (its `fill="#ef4444"` is a debug color, not routed).
+- **verify (exactly how):**
+  - **SketchStudio BYTE-IDENTICAL** — CDP injected each routed `style="…var(--sk-…,#hex)"` and read the COMPUTED
+    color: constraintFill `rgb(96,165,250)`=#60A5FA · selection `rgb(30,64,175)`=#1e40af · jointFill
+    `rgb(255,255,255)`=white · dimension `rgb(37,99,235)`=#2563eb · geoFixed `rgb(32,32,32)`=#202020 · geoFree
+    `rgb(59,130,246)`=#3b82f6 · geoFully `rgb(16,185,129)`=#10b981 — every var resolves to EXACTLY today's color
+    (light default = fallback). world-group renders 5; `errors=0`. The render-test suite (arc, angle-preview,
+    selection-coincident*, glyph-click, joint-radius, whisker, debug-*) all PASS — structural cross-check that
+    the markup is well-formed; the computed-color check is the cross-check on the test edit (identical colors ⇒
+    the rewrite only updated the proxy, didn't weaken).
+  - **Shaper** — same vars resolve DARK (constraintFill `#4c9aff`, jointFill `#2b2d31`, geoFixed `#e6e6e6`, …),
+    `errors=0` — proves the P1+P2 chain themes end-to-end (materializes when Shaper adopts the renderer at P5).
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out` · the renderer's canvas colors are now theme-var-driven (byte-identical for
+  SketchStudio; Shaper-dark-ready). Next per the plan: **P3** — renderer ctx param (fold the grid retune /
+  stats / debug-style ancillary reaches into `ctx`, default = SketchStudio globals). STOP — hold for advisor.
+
+=== SHAPER P2 (RENDERER COLORS → VARS) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -15,6 +15,31 @@ import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 
+// P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
+// attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
+// `var(--sk-NAME, <color>)` (fallback = the original color → SketchStudio resolves to exactly today's color,
+// byte-identical; each app's :root override retints it). Unknown/debug colors + 'none' pass through unchanged.
+// Value-based (not role-based): a hex shared across roles maps to one var (acceptable; defaults match anyway).
+const SK_VAR = {
+  '#60A5FA': '--sk-constraint-fill',
+  '#2563eb': '--sk-constraint-stroke',
+  '#1e40af': '--sk-selection',
+  '#3B82F6': '--sk-origin',
+  '#3b82f6': '--sk-geo-free',
+  '#202020': '--sk-geo-fixed',
+  '#10b981': '--sk-geo-fully',
+  '#f97316': '--sk-construction',
+  '#9ca3af': '--sk-muted',
+  '#9CA3AF': '--sk-muted',
+  '#0891b2': '--sk-perpendicular-stroke',
+  'white': '--sk-joint-fill',
+};
+export function skv(color) {
+  if (typeof color !== 'string') return color;
+  const v = SK_VAR[color];
+  return v ? `var(${v}, ${color})` : color;
+}
+
 export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget){ 
   // Update cursor based on tool
   if (svg) {
@@ -214,17 +239,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // Selected glyphs get stronger, larger feedback (disc + subtle outline). Hovered glyphs get slightly stronger disc.
     if(!isPreview && (isHovered || isSelected)){
       if (isSelected) {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" fill="#1e40af" fill-opacity="0.28" stroke="none"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv('#1e40af')}" fill-opacity="0.28" stroke="none"/>`);
         // Outer subtle stroked ring to emphasize selection — use 4px screen stroke and nudge radius outward so stroke appears mostly outside
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 14)}" fill="none" stroke="#1e40af" stroke-width="${scale(4)}" stroke-opacity="0.22"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 14)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(4)}" stroke-opacity="0.22"/>`);
       } else {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 8)}" fill="#1e40af" fill-opacity="0.22" stroke="none"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 8)}" style="fill:${skv('#1e40af')}" fill-opacity="0.22" stroke="none"/>`);
       }
     }
 
     // B: Middle layer — background circle
     // NOTE: Increased stroke width for better visibility (doubled from 1.5 -> 3)
-    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="${bgFill}" stroke="${bgStroke}" stroke-width="${scale(3)}"/>`;
+    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(3)}"/>`;
 
     // C: Top layer — icon (optional)
     const iconStyleStr = 'style="color: white !important; --icon-accent: white !important; stroke: white !important;"';
@@ -334,7 +359,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
       if (points.length >= 3) {
         const d = `M ${points[0]} L ${points.slice(1).join(' ')} Z`;
-        out.push(`<path d="${d}" fill="#60A5FA" fill-opacity="0.2" stroke="none"/>`);
+        out.push(`<path d="${d}" style="fill:${skv('#60A5FA')}" fill-opacity="0.2" stroke="none"/>`);
       }
     }
   } catch (_){ }
@@ -810,11 +835,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const b = s.joints && s.joints[1] ? joints.get(s.joints[1]) : null;
       if(!a || !b) continue;
       if(isHovered || isSelected){
-        out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${strokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
+        out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
       }
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
-      out.push(`<line class="shape-elem" data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${effStrokeColor}" stroke-width="${effStrokeW}" stroke-linecap="round" style="cursor:pointer"${constructionAttr}/>`);
+      out.push(`<line class="shape-elem" data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
     } else if(s.type==='circle'){
       const c = s.joints && s.joints[0] ? joints.get(s.joints[0]) : null;
       if(!c) continue;
@@ -824,11 +849,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       // If radius is missing or non-positive, treat as zero
       if(isNaN(r) || r <= 0) r = 0;
       if(isHovered || isSelected){
-        out.push(`<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28"/>`);
+        out.push(`<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28"/>`);
       }
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
-      out.push(`<circle class="shape-elem" data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" fill="none" stroke="${effStrokeColor}" stroke-width="${effStrokeW}" style="cursor:pointer"${constructionAttr}/>`);
+      out.push(`<circle class="shape-elem" data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}"${constructionAttr}/>`);
     }
     else if (s.type === 'arc') {
       const [p1, p2, p3] = s.joints.map(id => joints.get(id));
@@ -839,18 +864,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
       // Glow only when the arc shape itself is selected (constraint glyph selection should not add arc glow)
       if (isSelected) {
-        out.push(`<path d="${pathData}" fill="none" stroke="${strokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
+        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
       }
       // Draw thick glow for hovered/selected arcs
       if (isHovered || isSelected) {
-        out.push(`<path d="${pathData}" fill="none" stroke="${strokeColor}" stroke-width="${scale(20)}" stroke-linecap="round" stroke-opacity="0.2"/>`);
+        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(20)}" stroke-linecap="round" stroke-opacity="0.2"/>`);
       }
 
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
 
       // Draw the actual arc path
-      out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" stroke="${effStrokeColor}" stroke-width="${effStrokeW}" stroke-linecap="round" style="cursor:pointer"${constructionAttr}/>`);
+      out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
     }
   }
   
@@ -1043,18 +1068,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         if (isHighlightOrigin || isSelectedOrigin) {
           const glowR = r;
           const glowStroke = scale(GLOW_WIDTH_PX);
-          out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" stroke="#3B82F6" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
+          out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv('#3B82F6')}" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
         }
       } catch (_){ }
 
       // Draw the origin as a normal joint (white fill) with the shared stroke
-      out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" style="cursor:pointer"/>`);
+      out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);
 
       // If origin is single, behave like an endpoint: add larger invisible hit-target + subtle ring
       if (originIsSingle) {
         const hitR = r * 1.9;
         out.push(`<circle class="joint-handle" data-joint-id="${id}" cx="${j.x}" cy="${j.y}" r="${hitR}" fill="rgba(0,0,0,0)" style="cursor:pointer"/>`);
-        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r * 1.6}" fill="none" stroke="#9ca3af" stroke-width="${scale(1)}" stroke-opacity="0.12"/>`);
+        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r * 1.6}" fill="none" style="stroke:${skv('#9ca3af')}" stroke-width="${scale(1)}" stroke-opacity="0.12"/>`);
       }
 
       // continue to next joint (we don't want the regular joint rendering duplicated)
@@ -1109,12 +1134,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // FIX: Use dynamic radius and scaled stroke width so the glow appears outside the joint
         const glowR = r; // match the joint radius
         const glowStroke = scale(GLOW_WIDTH_PX); // thicker outward stroke for better visibility
-        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" stroke="#3B82F6" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
+        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv('#3B82F6')}" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
       }
     } catch (_){ }
 
     // Main joint circle
-    out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}" style="cursor:pointer"/>`);
+    out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);
 
     // If this joint is an arc/circle endpoint, draw an expanded invisible hit-target and subtle ring to make dragging easier
     try {
@@ -1123,7 +1148,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const hitR = r * 1.9;
         out.push(`<circle class="joint-handle" data-joint-id="${id}" cx="${j.x}" cy="${j.y}" r="${hitR}" fill="rgba(0,0,0,0)" style="cursor:pointer"/>`);
         // More visible ring to indicate a draggable handle for arc endpoints
-        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r * 1.6}" fill="none" stroke="#2563eb" stroke-width="${scale(1.5)}" stroke-opacity="0.18"/>`);
+        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r * 1.6}" fill="none" style="stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}" stroke-opacity="0.18"/>`);
       }
     } catch (_){ }
     
@@ -1145,7 +1170,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const p2 = (active.preview.p2 && joints.has(active.preview.p2)) ? joints.get(active.preview.p2) : null;
       if (p1) {
         // Draw simple line from first fixed point to cursor while user positions the second point
-        out.push(`<line x1="${p1.x}" y1="${p1.y}" x2="${p.x}" y2="${p.y}" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<line x1="${p1.x}" y1="${p1.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if (active.preview.center && typeof active.preview.radius === 'number'){
         const centerJ = (joints.has(active.preview.center)) ? joints.get(active.preview.center) : null;
         const centerPt = centerJ || active.preview.center;
@@ -1171,11 +1196,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
           const pathData = `M ${startX},${startY} A ${radius},${radius} 0 ${largeArc},${sweep} ${endX},${endY}`;
 
-          out.push(`<path d="${pathData}" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}" fill="none"/>`);
-          out.push(`<circle cx="${centerPt.x}" cy="${centerPt.y}" r="${scale(3)}" fill="${previewStroke}" fill-opacity="${previewOpacity}"/>`);
-          out.push(`<circle cx="${startX}" cy="${startY}" r="${scale(2)}" fill="${previewStroke}" fill-opacity="${previewOpacity * 0.8}"/>`);
-          out.push(`<circle cx="${endX}" cy="${endY}" r="${scale(2)}" fill="${previewStroke}" fill-opacity="${previewOpacity * 0.8}"/>`);
-          out.push(`<line x1="${centerPt.x}" y1="${centerPt.y}" x2="${startX}" y2="${startY}" stroke="${previewStroke}" stroke-width="${scale(1)}" stroke-dasharray="${scale(2)},${scale(2)}" stroke-opacity="${previewOpacity * 0.6}"/>`);
+          out.push(`<path d="${pathData}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}" fill="none"/>`);
+          out.push(`<circle cx="${centerPt.x}" cy="${centerPt.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${startX}" cy="${startY}" r="${scale(2)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity * 0.8}"/>`);
+          out.push(`<circle cx="${endX}" cy="${endY}" r="${scale(2)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity * 0.8}"/>`);
+          out.push(`<line x1="${centerPt.x}" y1="${centerPt.y}" x2="${startX}" y2="${startY}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(2)},${scale(2)}" stroke-opacity="${previewOpacity * 0.6}"/>`);
         }
       }
     }
@@ -1190,10 +1215,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const previewOpacity = 0.5;
       const previewDash = `${scale(6)},${scale(6)}`;
       if(active.preview.type === 'line'){
-        out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'circle'){
         const r = Math.hypot(p.x - a.x, p.y - a.y);
-        out.push(`<circle cx="${a.x}" cy="${a.y}" r="${r}" fill="none" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<circle cx="${a.x}" cy="${a.y}" r="${r}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'polygon'){
         // Draw regular polygon preview using center 'a' and preview point 'p'
         const sides = active.preview.sides || 6;
@@ -1205,24 +1230,24 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           pts.push(`${(a.x + Math.cos(ang)*r).toFixed(2)},${(a.y + Math.sin(ang)*r).toFixed(2)}`);
         }
         const ptsStr = pts.join(' ');
-        out.push(`<polygon points="${ptsStr}" fill="none" stroke="${previewStroke}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linejoin="round"/>`);
-        out.push(`<polygon points="${ptsStr}" fill="none" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<polygon points="${ptsStr}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linejoin="round"/>`);
+        out.push(`<polygon points="${ptsStr}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'rect'){
         const minX = Math.min(a.x, p.x);
         const minY = Math.min(a.y, p.y);
         const w = Math.abs(p.x - a.x);
         const h = Math.abs(p.y - a.y);
         
-        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${previewStroke}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
-        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
+        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
         
         // Hovering Dimensions
         const fs = scale(12);
         const off = scale(10);
         // Width (Top)
-        out.push(`<text x="${minX + w/2}" y="${minY - off}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
+        out.push(`<text x="${minX + w/2}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
         // Height (Left)
-        out.push(`<text x="${minX - off}" y="${minY + h/2}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
+        out.push(`<text x="${minX - off}" y="${minY + h/2}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
 
       } else if(active.preview.type === 'rect-center'){
         const dx = p.x - a.x, dy = p.y - a.y;
@@ -1231,17 +1256,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const minX = a.x - Math.abs(dx);
         const minY = a.y - Math.abs(dy);
         
-        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${previewStroke}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
-        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
-        out.push(`<circle cx="${a.x}" cy="${a.y}" r="${scale(4)}" fill="${previewStroke}" fill-opacity="0.5"/>`);
+        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
+        out.push(`<rect x="${minX}" y="${minY}" width="${w}" height="${h}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        out.push(`<circle cx="${a.x}" cy="${a.y}" r="${scale(4)}" style="fill:${skv(previewStroke)}" fill-opacity="0.5"/>`);
 
         // Hovering Dimensions
         const fs = scale(12);
         const off = scale(10);
         // Width (Top)
-        out.push(`<text x="${a.x}" y="${minY - off}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
+        out.push(`<text x="${a.x}" y="${minY - off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle">${w.toFixed(1)}</text>`);
         // Height (Left)
-        out.push(`<text x="${minX - off}" y="${a.y}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
+        out.push(`<text x="${minX - off}" y="${a.y}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="end" dominant-baseline="middle">${h.toFixed(1)}</text>`);
 
       // arc preview handled above when present
       } else if(active.preview.type === 'rect-3pt'){
@@ -1252,8 +1277,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
             const h = (p.x - a.x) * px + (p.y - a.y) * py;
             const c3 = { x: b.x + px * h, y: b.y + py * h };
             const c4 = { x: a.x + px * h, y: a.y + py * h };
-            out.push(`<polygon points="${a.x},${a.y} ${b.x},${b.y} ${c3.x},${c3.y} ${c4.x},${c4.y}" fill="none" stroke="${previewStroke}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linejoin="round"/>`);
-            out.push(`<polygon points="${a.x},${a.y} ${b.x},${b.y} ${c3.x},${c3.y} ${c4.x},${c4.y}" fill="none" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+            out.push(`<polygon points="${a.x},${a.y} ${b.x},${b.y} ${c3.x},${c3.y} ${c4.x},${c4.y}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linejoin="round"/>`);
+            out.push(`<polygon points="${a.x},${a.y} ${b.x},${b.y} ${c3.x},${c3.y} ${c4.x},${c4.y}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
             
             // Hovering Dimensions
             const fs = scale(12);
@@ -1264,17 +1289,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
             // Normal points towards c4/c3, so reverse it for "outside" label or keep it? 
             // Let's push it "out" away from the rect. If h is positive, normal points in.
             const outDir = h >= 0 ? -1 : 1; 
-            out.push(`<text x="${midBase.x + px * off * outDir}" y="${midBase.y + py * off * outDir}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${len.toFixed(1)}</text>`);
+            out.push(`<text x="${midBase.x + px * off * outDir}" y="${midBase.y + py * off * outDir}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${len.toFixed(1)}</text>`);
 
             // Height (Side b->c3)
             const midSide = { x: (b.x + c3.x)/2, y: (b.y + c3.y)/2 };
             // Direction of base vector (normalized)
             const bx = (b.x - a.x) / len;
             const by = (b.y - a.y) / len;
-            out.push(`<text x="${midSide.x + bx * off}" y="${midSide.y + by * off}" fill="${previewStroke}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${Math.abs(h).toFixed(1)}</text>`);
+            out.push(`<text x="${midSide.x + bx * off}" y="${midSide.y + by * off}" style="fill:${skv(previewStroke)}" font-size="${fs}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${Math.abs(h).toFixed(1)}</text>`);
           }
         } else {
-          out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" stroke="${previewStroke}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+          out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
         }
       }
     }
@@ -1294,7 +1319,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const fill = isWindow ? '#f97316' : '#eab308';
         const dash = isWindow ? '' : `stroke-dasharray="${scale(8)},${scale(8)}"`;
         
-        out.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" fill-opacity="0.2" stroke="${stroke}" stroke-width="${scale(1.5)}" ${dash} />`);
+        out.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" style="fill:${skv(fill)}; stroke:${skv(stroke)}" fill-opacity="0.2" stroke-width="${scale(1.5)}" ${dash} />`);
   }
   
   // Draw dimension preview while dragging
@@ -1318,15 +1343,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const ext2Start = { x: j2.x, y: j2.y };
       
       // Preview extension lines
-      out.push(`<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" stroke="#10b981" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}"/>`);
-      out.push(`<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" stroke="#10b981" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}"/>`);
+      out.push(`<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" style="stroke:${skv('#10b981')}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}"/>`);
+      out.push(`<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" style="stroke:${skv('#10b981')}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}"/>`);
       // Preview dimension line
-      out.push(`<line x1="${ext1End.x}" y1="${ext1End.y}" x2="${ext2End.x}" y2="${ext2End.y}" stroke="#10b981" stroke-width="${scale(2)}" stroke-dasharray="${scale(4)}"/>`);
+      out.push(`<line x1="${ext1End.x}" y1="${ext1End.y}" x2="${ext2End.x}" y2="${ext2End.y}" style="stroke:${skv('#10b981')}" stroke-width="${scale(2)}" stroke-dasharray="${scale(4)}"/>`);
       // Preview text
       const pLabelW = scale(36);
       const pLabelH = scale(14);
-      out.push(`<rect x="${annotX - pLabelW/2}" y="${annotY - pLabelH/2 - scale(1)}" width="${pLabelW}" height="${pLabelH}" fill="#10b981" fill-opacity="0.2" rx="${scale(2)}"/>`);
-      out.push(`<text x="${annotX}" y="${annotY + scale(3)}" text-anchor="middle" font-size="${scale(11)}" fill="#10b981" font-weight="bold">${dist}</text>`);
+      out.push(`<rect x="${annotX - pLabelW/2}" y="${annotY - pLabelH/2 - scale(1)}" width="${pLabelW}" height="${pLabelH}" style="fill:${skv('#10b981')}" fill-opacity="0.2" rx="${scale(2)}"/>`);
+      out.push(`<text x="${annotX}" y="${annotY + scale(3)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('#10b981')}" font-weight="bold">${dist}</text>`);
     }
   } else if (active && active.mode === 'dim-angle' && active.shapes && active.shapes.length === 2) {
     // Draw Angle Dimension Preview
@@ -1377,10 +1402,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           while (delta >= Math.PI * 2) delta -= Math.PI * 2;
           const largeArcFlag = (delta > Math.PI) ? 1 : 0;
           const sweepFlag = 1; // draw in positive (CCW) direction from start->end
-          out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" stroke="${previewColor}" stroke-width="${scale(1.5)}" stroke-opacity="0.6"/>`);
+          out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(previewColor)}" stroke-width="${scale(1.5)}" stroke-opacity="0.6"/>`);
           // Dashed lines to center
-          out.push(`<line x1="${int.x}" y1="${int.y}" x2="${sx}" y2="${sy}" stroke="${previewColor}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}" stroke-opacity="0.3"/>`);
-          out.push(`<line x1="${int.x}" y1="${int.y}" x2="${ex}" y2="${ey}" stroke="${previewColor}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}" stroke-opacity="0.3"/>`);
+          out.push(`<line x1="${int.x}" y1="${int.y}" x2="${sx}" y2="${sy}" style="stroke:${skv(previewColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}" stroke-opacity="0.3"/>`);
+          out.push(`<line x1="${int.x}" y1="${int.y}" x2="${ex}" y2="${ey}" style="stroke:${skv(previewColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(4)}" stroke-opacity="0.3"/>`);
         }
       }
     }
@@ -1410,13 +1435,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // differentiate from a simple hover/selection. Otherwise draw the small center dot.
         if (isDragging) {
           // Prominent outer ring (much thicker) and darker, matching selection color for strong contrast
-          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(18)}" fill="none" stroke="#1e40af" stroke-width="${scale(8)}" stroke-opacity="0.95"/>`);
+          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(18)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(8)}" stroke-opacity="0.95"/>`);
           // Subtle larger halo to expand visual footprint while remaining unobtrusive
-          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(30)}" fill="none" stroke="#1e40af" stroke-width="${scale(2)}" stroke-opacity="0.06"/>`);
+          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(30)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(2)}" stroke-opacity="0.06"/>`);
         } else {
           // Use the same prominent outer ring even when not actively dragging to keep visuals consistent
-          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(18)}" fill="none" stroke="#1e40af" stroke-width="${scale(8)}" stroke-opacity="0.95"/>`);
-          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(30)}" fill="none" stroke="#1e40af" stroke-width="${scale(2)}" stroke-opacity="0.06"/>`);
+          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(18)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(8)}" stroke-opacity="0.95"/>`);
+          out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(30)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(2)}" stroke-opacity="0.06"/>`);
         }
       }
     } else if (effectiveSnap.type === 'line'){
@@ -1425,7 +1450,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(shape && shape.joints){
         const a = joints.get(shape.joints[0]), b = joints.get(shape.joints[1]);
         if(a && b){
-          out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#2563eb" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
+          out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:${skv('#2563eb')}" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
         }
       }
       // Only show diamond and X for drawing tools, not constraint tools
@@ -1433,24 +1458,24 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // Diamond indicator for line snap point
         const diamondSize = 6;
         const diamondStroke = scale(2);
-        out.push(`<rect x="${p.x-scale(diamondSize)}" y="${p.y-scale(diamondSize)}" width="${scale(diamondSize*2)}" height="${scale(diamondSize*2)}" fill="#2563eb" fill-opacity="0.3" stroke="#2563eb" stroke-width="${diamondStroke}" transform="rotate(45 ${p.x} ${p.y})"/>`);
+        out.push(`<rect x="${p.x-scale(diamondSize)}" y="${p.y-scale(diamondSize)}" width="${scale(diamondSize*2)}" height="${scale(diamondSize*2)}" style="fill:${skv('#2563eb')}; stroke:${skv('#2563eb')}" fill-opacity="0.3" stroke-width="${diamondStroke}" transform="rotate(45 ${p.x} ${p.y})"/>`);
         // Small X to indicate coincident will be added
         const xSize = 4;
         const xStroke = scale(2);
-        out.push(`<line x1="${p.x-scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x+scale(xSize)}" y2="${p.y+scale(xSize)}" stroke="#2563eb" stroke-width="${xStroke}"/>`);
-        out.push(`<line x1="${p.x+scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x-scale(xSize)}" y2="${p.y+scale(xSize)}" stroke="#2563eb" stroke-width="${xStroke}"/>`);
+        out.push(`<line x1="${p.x-scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x+scale(xSize)}" y2="${p.y+scale(xSize)}" style="stroke:${skv('#2563eb')}" stroke-width="${xStroke}"/>`);
+        out.push(`<line x1="${p.x+scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x-scale(xSize)}" y2="${p.y+scale(xSize)}" style="stroke:${skv('#2563eb')}" stroke-width="${xStroke}"/>`);
       }
     } else if (effectiveSnap.type === 'grid') {
       // Grid snap indicator: Small solid dot
       if(!isConstraintTool && p){
-        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(4)}" fill="#2563eb" stroke="none" opacity="0.8"/>`);
+        out.push(`<circle cx="${p.x}" cy="${p.y}" r="${scale(4)}" style="fill:${skv('#2563eb')}" stroke="none" opacity="0.8"/>`);
       }
     } else {
       // Generic snap indicator
       if(!isConstraintTool){
         const diamondSize = 6;
         const diamondStroke = scale(2);
-        out.push(`<rect x="${p.x-scale(diamondSize)}" y="${p.y-scale(diamondSize)}" width="${scale(diamondSize*2)}" height="${scale(diamondSize*2)}" fill="none" stroke="#2563eb" stroke-width="${diamondStroke}" transform="rotate(45 ${p.x} ${p.y})"/>`);
+        out.push(`<rect x="${p.x-scale(diamondSize)}" y="${p.y-scale(diamondSize)}" width="${scale(diamondSize*2)}" height="${scale(diamondSize*2)}" fill="none" style="stroke:${skv('#2563eb')}" stroke-width="${diamondStroke}" transform="rotate(45 ${p.x} ${p.y})"/>`);
       }
     }
 
@@ -1550,7 +1575,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // Force white icon and accent with !important to override external CSS (selected state etc.)
     const iconStyle = 'style="color: white !important; --icon-accent: white !important;"';
     // Reusable background circle (uses hitZoneRadius derived from GLYPH_BG_DIAMETER_PX)
-    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="${bgFill}" stroke="${bgStroke}" stroke-width="${scale(1.5)}"/>`; 
+    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(1.5)}"/>`; 
     
     if (c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2) {
       const leaderA = getClusterLeader(c.joints[0]);
@@ -1794,11 +1819,11 @@ switch(c.type){
         const bgRadiusE = (isHoveredE || isSelectedE) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacityE = (isHoveredE || isSelectedE) ? '0.95' : '0.85';
         const bgColorE = CONSTRAINT_COLORS[CONSTRAINT_TYPES.EQUAL].fill;
-        if(!preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" fill="#1e40af" fill-opacity="0.2" stroke="none"/>`);
+        if(!preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv('#1e40af')}" fill-opacity="0.2" stroke="none"/>`);
         const symSize = glyphSize * 0.6;
-        const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" fill="${bgFill}" fill-opacity="${bgOpacityE}" stroke="${bgStroke}" stroke-width="${scale(3.5)}"/>` +
-                           `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" stroke="white" stroke-width="${scale(2)}"/>` +
-                           `<line x1="-${symSize}" y1="${symSize/3}" x2="${symSize}" y2="${symSize/3}" stroke="white" stroke-width="${scale(2)}"/>`;
+        const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" fill-opacity="${bgOpacityE}" stroke-width="${scale(3.5)}"/>` +
+                           `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>` +
+                           `<line x1="-${symSize}" y1="${symSize/3}" x2="${symSize}" y2="${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>`;
         drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual });
         break;
       }
@@ -2123,14 +2148,14 @@ switch(c.type){
           const edgeY = center.y + Math.sin(angle) * radius;
 
           // Draw leader line
-          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" stroke="${strokeColor}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
           // Draw radius line
-          out.push(`<line x1="${center.x}" y1="${center.y}" x2="${edgeX}" y2="${edgeY}" stroke="${strokeColor}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.6}"/>`);
+          out.push(`<line x1="${center.x}" y1="${center.y}" x2="${edgeX}" y2="${edgeY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.6}"/>`);
 
           // Arrow at circle edge
           const arrowSize = scale(6);
-          out.push(`<polygon points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" fill="${strokeColor}" opacity="${visualOpacity}"/>`);
+          out.push(`<polygon points="${edgeX},${edgeY} ${edgeX - Math.cos(angle)*arrowSize + Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize - Math.cos(angle)*arrowSize/2} ${edgeX - Math.cos(angle)*arrowSize - Math.sin(angle)*arrowSize/2},${edgeY - Math.sin(angle)*arrowSize + Math.cos(angle)*arrowSize/2}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
           // Label with "R" prefix (wrap in parentheses when driven = false)
           const labelW = scale(50);
           const labelH = scale(18);
@@ -2141,7 +2166,7 @@ switch(c.type){
           const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
 
           if (isSelected) {
-            out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" stroke="${labelStrokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+            out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
           
           // Driven Toggle Button
@@ -2151,9 +2176,9 @@ switch(c.type){
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="#9ca3af" fill-opacity="0.9" rx="${labelRx}" stroke="${labelStrokeColor}" stroke-width="${labelStrokeWidth}"/>
-            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" fill="white" font-weight="bold">R ${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" fill="${toggleFill}" stroke="#2563eb" stroke-width="${scale(1.5)}" style="cursor:pointer"/>
+            <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
+            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">R ${displayVal}</text>
+            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2237,16 +2262,16 @@ switch(c.type){
           const strokeColor = isPlacing ? '#3B82F6' : '#2563eb';
 
           // Draw extension lines
-          out.push(`<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" stroke="${strokeColor}" stroke-width="${scale(1)}" stroke-opacity="${0.6 * visualOpacity}"/>`);
-          out.push(`<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" stroke="${strokeColor}" stroke-width="${scale(1)}" stroke-opacity="${0.6 * visualOpacity}"/>`);
+          out.push(`<line x1="${ext1Start.x}" y1="${ext1Start.y}" x2="${ext1End.x}" y2="${ext1End.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${0.6 * visualOpacity}"/>`);
+          out.push(`<line x1="${ext2Start.x}" y1="${ext2Start.y}" x2="${ext2End.x}" y2="${ext2End.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${0.6 * visualOpacity}"/>`);
 
           // Draw dimension line with arrows
-          out.push(`<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" stroke="${strokeColor}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          out.push(`<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
           // Arrow markers (small triangles at ends)
           const arrowSizeLin = scale(6);
-          out.push(`<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin - ny*arrowSizeLin/2}" fill="${strokeColor}"/>`);
-          out.push(`<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin - ny*arrowSizeLin/2}" fill="${strokeColor}"/>`);
+          out.push(`<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          out.push(`<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
 
           // Clickable text label with background (only editable in select or dim tool)
           const labelW = scale(40);
@@ -2258,7 +2283,7 @@ switch(c.type){
           const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
 
           if (isSelected) {
-            out.push(`<rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" stroke="${labelStrokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+            out.push(`<rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
 
           // Driven Toggle Button
@@ -2268,9 +2293,9 @@ switch(c.type){
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="#9ca3af" fill-opacity="0.9" rx="${labelRx}" stroke="${labelStrokeColor}" stroke-width="${labelStrokeWidth}"/>
-            <text x="${annotX}" y="${annotY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" fill="white" font-weight="bold">${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" fill="${toggleFill}" stroke="#2563eb" stroke-width="${scale(1.5)}" style="cursor:pointer"/>
+            <rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
+            <text x="${annotX}" y="${annotY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
+            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2346,14 +2371,14 @@ switch(c.type){
             while (delta >= Math.PI * 2) delta -= Math.PI * 2;
             const largeArcFlag = (delta > Math.PI) ? 1 : 0;
             const sweepFlag = 1;
-            out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" stroke="${strokeColor}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
             
             // Draw Arrows
             const arrowSize = scale(6);
             // Start Arrow
-            out.push(`<polygon points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" fill="${strokeColor}" opacity="${visualOpacity}"/>`);
+            out.push(`<polygon points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
             // End Arrow
-            out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" fill="${strokeColor}" opacity="${visualOpacity}"/>`);
+            out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
             
             // Label (scaled like linear dimensions)
             const isDrivenFlag = !!(c.isDriven || c.driven);
@@ -2377,7 +2402,7 @@ switch(c.type){
             const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
 
             if (isSelected) {
-                out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" stroke="${labelStrokeColor}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+                out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
             }
 
             const toggleR = scale(5);
@@ -2386,9 +2411,9 @@ switch(c.type){
             
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-                <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="#9ca3af" fill-opacity="0.9" rx="${labelRx}" stroke="${labelStrokeColor}" stroke-width="${labelStrokeWidth}"/>
-                <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" fill="white" font-weight="bold">${displayVal}</text>
-                <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" fill="${toggleFill}" stroke="#2563eb" stroke-width="${scale(1.5)}" style="cursor:pointer"/>
+                <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
+                <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
+                <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
             </g>`;
             
             // Store computed label position for hit testing and dragging

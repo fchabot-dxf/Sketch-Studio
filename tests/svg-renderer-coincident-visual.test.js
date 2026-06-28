@@ -32,14 +32,15 @@
   const svg = makeSVG();
   // Draw default (no selection) - should show exactly 3 visible white joint circles
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
-  const whiteCircles = (svg.innerHTML.match(/fill="white"/g) || []).length;
+  // P2: joint fill is now routed through the theme var -> `fill:var(--sk-joint-fill, white)` (was fill="white").
+  const whiteCircles = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(whiteCircles === 3, `Expected 3 visible white joints, got ${whiteCircles}`);
 
   // Hover one of the hidden follower joints (e.g., a2) and verify the leader glows (blue halo)
   svg.innerHTML = '';
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, 'a2', null, null, false, null);
-  // Glow markup uses stroke="#3B82F6" (Fusion Blue halo). Ensure it's present
-  assert(/stroke="#3B82F6"/.test(svg.innerHTML), 'Hovering hidden joint should show leader glow');
+  // Glow markup uses the routed origin var `stroke:var(--sk-origin, #3B82F6)` (Fusion Blue halo). Ensure present.
+  assert(/stroke:var\(--sk-origin, #3B82F6\)/.test(svg.innerHTML), 'Hovering hidden joint should show leader glow');
 
   // Select the coincident constraint c1 and assert the corresponding glyph appears (opacity:1)
   svg.innerHTML = '';
@@ -52,7 +53,7 @@
   svg.innerHTML = '';
   const constraints2 = [c2, c3];
   draw(joints, shapes, svg, null, null, constraints2, new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
-  const whiteCircles2 = (svg.innerHTML.match(/fill="white"/g) || []).length;
+  const whiteCircles2 = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(whiteCircles2 === 4, `After removing one coincident constraint expected 4 visible joints, got ${whiteCircles2}`);
 
   console.log('svg-renderer-coincident-visual tests passed ✅');

@@ -808,7 +808,7 @@ function detectDimMode(j1, j2, w) {
     return 'horizontal';
 }
 
-function updateConstraintOffset(state, c, w) {
+export function updateConstraintOffset(state, c, w) {
     if (c.isRadius) {
         const shape = state.shapes ? state.shapes.find(s => s.id === c.shape) : null;
         const center = (shape && shape.joints && shape.joints[0]) ? state.joints.get(shape.joints[0]) : null;
@@ -849,16 +849,20 @@ function updateConstraintOffset(state, c, w) {
                 }
                 c.dimMode = mode;
                 
-                // Check for existing driving constraint of same mode
-                const hasConflict = state.constraints.some(oc => 
-                    oc !== c && 
-                    oc.type === CONSTRAINT_TYPES.DISTANCE && 
+                // Check for an existing same-mode DRIVING dim on THIS edge (same joint-pair).
+                const hasConflict = state.constraints.some(oc =>
+                    oc !== c &&
+                    oc.type === CONSTRAINT_TYPES.DISTANCE &&
                     !oc.isDriven && !oc.driven &&
                     oc.joints && oc.joints.length >= 2 &&
                     ((oc.joints[0] === c.joints[0] && oc.joints[1] === c.joints[1]) || (oc.joints[0] === c.joints[1] && oc.joints[1] === c.joints[0])) &&
                     (oc.dimMode || 'aligned') === mode
                 );
-                c.isDriven = hasConflict;
+                // Promote to reference on a same-edge conflict, but NEVER DEMOTE an upstream driven decision
+                // (e.g. a rank-redundant CROSS-edge dim already marked driven by ConstraintManager) back to a
+                // driver — that's the "renders as driver despite the reference notice" bug. Keep both flags in sync.
+                c.isDriven = !!(c.isDriven || c.driven || hasConflict);
+                c.driven = c.isDriven;
 
                 const midX = (j1.x + j2.x) / 2;
                 const midY = (j1.y + j2.y) / 2;

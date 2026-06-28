@@ -1302,6 +1302,38 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === REFERENCES-FREE + DIM→REFERENCE DONE — HOLD ===
 
+## 2026-06-28 · redundant cross-edge dim renders as REFERENCE (app-path divergence) (turn 35)
+
+- **bug (real app):** dimension a rect's RIGHT height (driver) then the LEFT height → the "added as
+  reference — already determined" notice fires, but it RENDERS as a DRIVER (filled dot, no parens). Core
+  path (harness) was correct; the app's dimension-tool path diverged.
+- **two roots found:**
+  1. `apps/sketchstudio/ui/input-handlers/dimension-tool.js` `updateConstraintOffset` (~:861) ran AFTER
+     `ConstraintManager.createConstraint` and did `c.isDriven = hasConflict`, where `hasConflict` is a
+     **same-edge-only** check. For a CROSS-edge redundant dim there's no same-edge driver → `hasConflict=false`
+     → it OVERWROTE the rank-redundancy decision (isDriven true→false) → rendered as a driver. **Fix:** never
+     demote — `c.isDriven = !!(c.isDriven || c.driven || hasConflict); c.driven = c.isDriven;` (promote on a
+     same-edge conflict, but preserve an upstream driven decision; keep both flags in sync).
+  2. `packages/core/constraints.js` DISTANCE builder set `isDriven` but DROPPED `driven`/`drivenReason`
+     (the two flags disagreed: isDriven=true, driven=undefined). **Fix:** carry `driven` + `drivenReason` in
+     both DISTANCE builders (joint + line-line) so the flags never disagree.
+- **verified the APP path headlessly:** exported `updateConstraintOffset` and added scenario **#11** that
+  runs the EXACT placement step (set `__placing`, call `updateConstraintOffset(state, leftDim, w)`) on a
+  right-then-left rect-height repro → asserts the left dim stays `isDriven===true && driven===true`. With the
+  old line it would demote; with the fix it stays a reference. (dimension-tool.js imports cleanly in Node, so
+  no DOM was needed — the gap the advisor allowed for didn't materialize.)
+- **scenario #6 strengthened:** asserts BOTH `bottom.isDriven===true` AND `bottom.driven===true` (was just
+  `s.isDriven`).
+- **STATE (right-then-left rect-height repro):** left dim final `isDriven=true, driven=true,
+  drivingDistanceCount(left)=0, converged=true` — both flags true, as expected.
+- **verify:** scenario tester **12/12, backlog EMPTY**; constraint-conformance **15/15 (gating)**; oracle
+  **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**; `node tests/harness/solver-fuzz.test.js 400` →
+  **400/400 clean**; `node --check` clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · redundant cross-edge dims now persist +
+  render as references (parens), flags consistent everywhere. STOP.
+
+=== REDUNDANT-DIM RENDERS AS REFERENCE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -204,24 +204,34 @@ export function createConstraint(type, params) {
             }
             // Line-Line Distance (Parallel)
             if (params.shapes && params.shapes.length === 2) {
-                return {
+                const _driven = !!(params.isDriven || params.driven);
+                const llObj = {
                     type: CONSTRAINT_TYPES.DISTANCE,
                     shapes: params.shapes.slice(),
                     value: params.value,
                     offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                    isDriven: _driven,
+                    driven: _driven,
                     glyphPos: params.glyphPos
                 };
+                if (params.drivenReason) llObj.drivenReason = params.drivenReason;
+                return llObj;
             }
             if (!params.joints || params.joints.length < 2) return null;
+            // Carry BOTH driven flags (+ reason) so isDriven and driven never disagree downstream
+            // (the renderer + solver read `isDriven || driven`).
+            const _driven = !!(params.isDriven || params.driven);
             const distObj = {
                 type: CONSTRAINT_TYPES.DISTANCE,
                 joints: params.joints,
                 value: params.value,
                 offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
                 isRadius: params.isRadius || false,
-                isDriven: !!(params.isDriven || params.driven),
+                isDriven: _driven,
+                driven: _driven,
                 dimMode: params.dimMode
             };
+            if (params.drivenReason) distObj.drivenReason = params.drivenReason;
             if (params.__pos) distObj.__pos = params.__pos;
             if (params.glyphPos) distObj.glyphPos = params.glyphPos;
             return distObj;

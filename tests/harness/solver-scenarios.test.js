@@ -8,6 +8,7 @@
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
+import { updateConstraintOffset } from '#app/ui/input-handlers/dimension-tool.js';
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -119,9 +120,11 @@ run('6. redundant cross-edge dimension → reference', 'PASS', () => {
   const height = s.dimension(r.corners[1], r.corners[2], 5);  // height → NEW info → driver (no over-demote)
   s.solve();
   return {
-    pass: s.isDriven(bottom) === true && s.isDriven(top) === false && s.isDriven(height) === false &&
+    // both flags must agree (renderer/solver read isDriven || driven; they must never disagree)
+    pass: bottom.isDriven === true && bottom.driven === true &&
+          s.isDriven(top) === false && s.isDriven(height) === false &&
           s.converged === true && s.isRectangle(r.corners),
-    nums: { bottomRef: s.isDriven(bottom), topDrives: !s.isDriven(top), heightDrives: !s.isDriven(height), converged: s.converged, isRect: s.isRectangle(r.corners) },
+    nums: { bottomIsDriven: bottom.isDriven, bottomDriven: bottom.driven, topDrives: !s.isDriven(top), heightDrives: !s.isDriven(height), converged: s.converged, isRect: s.isRectangle(r.corners) },
   };
 });
 
@@ -171,6 +174,24 @@ run('10. reference is free — drag ignores it, value tracks', 'PASS', () => {
   return {
     pass: s.isDriven(d) === true && start > 8 && start < 12 && after > 22, // geometry free; ref shows `after`
     nums: { isRef: s.isDriven(d), startLen: start, afterLen: after, refShows: after.toFixed(1) },
+  };
+});
+
+// 11 — APP add path: the placement step (real dimension-tool updateConstraintOffset) must NOT demote a
+//      rank-redundant CROSS-edge reference back to a driver (the "renders as driver despite the notice" bug).
+run('11. app placement keeps cross-edge reference driven', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 8, 5);
+  s.dimension(r.corners[1], r.corners[2], 5);              // RIGHT height (c2-c3) — driver
+  const left = s.dimension(r.corners[0], r.corners[3], 5); // LEFT height (c1-c4) — rank-redundant → reference
+  // run the exact dimension-tool placement step that used to overwrite isDriven
+  try { left.__placing = true; } catch (_) {}
+  updateConstraintOffset(s.state, left, { x: -10, y: 2.5 });
+  try { left.__placing = false; } catch (_) {}
+  s.solve();
+  return {
+    pass: left.isDriven === true && left.driven === true && s.converged === true,
+    nums: { leftIsDriven: left.isDriven, leftDriven: left.driven, drivers: s.drivingDistanceCount(r.corners[0], r.corners[3]), converged: s.converged },
   };
 });
 

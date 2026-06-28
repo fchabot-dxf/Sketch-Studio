@@ -929,6 +929,34 @@ tests → packages/core/tests (§5), solver-core.legacy delete (findings), build
 
 === CORE SLICE B (atomic lift) DONE — HOLD ===
 
+## 2026-06-28 — CORE SLICE C: OBJECTION (oracle-set mismatch) — no files moved, held for advisor (turn 9)
+
+The SLICE C note says move "the 12 oracle tests (solver-* x11 + drag-step-cap)". Audited the actual files
+before moving — two mismatches that change WHICH files move and WHERE a shell-dependent test lands, so I
+stopped rather than guess:
+
+- **`tests/solver-*.test.js` = 12, not 11** — all pure `#core/` (branch-lock, cholesky-coincident,
+  constraint-audit, converged-honesty, convergence, core-uses-newton, pack-coincident, point-on-circle,
+  polish-bounce, rank-deficiency, relaxation-prepass, tangent-arc-arc). These ARE the "oracle 12/12" I run.
+- **`drag-step-cap.test.js` is a SHELL-integration test** — it imports
+  `../apps/sketchstudio/ui/input-handlers/selection-tools.js` (shell) alongside `#core/constants` +
+  `#core/solver-config`. So it is NOT pure-core. Co-locating it under `packages/core/tests/` would make a
+  CORE-package test depend on the SHELL (`#app/…`), and its relative `../apps/…` import would have to be
+  rewired to `#app/…` to resolve from the new dir.
+
+So "the 12" is ambiguous: 12 solver-* alone, OR 11 solver-* (which one dropped?) + drag-step-cap.
+
+**Options:**
+- **(A) [recommend]** `git mv` the **12 pure-`#core` `solver-*.test.js`** → `packages/core/tests/`; **KEEP
+  `drag-step-cap.test.js` in `tests/`** (it's a shell-integration test — belongs with shell tests, keeps
+  `packages/core/tests` dependency-clean: `#core` only). Adapt `scripts/run-tests.js` to glob BOTH dirs.
+- **(B)** move 12 solver-* **+ drag-step-cap** (13 files), rewiring drag-step-cap's shell import
+  `../apps/…` → `#app/ui/input-handlers/selection-tools.js`. `packages/core/tests` then carries a `#app`
+  dependency (core-package test importing the shell).
+- **(C)** if "11 solver-*" was intentional, name WHICH solver-* test to exclude.
+
+No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advisor, STOP** for the ruling.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

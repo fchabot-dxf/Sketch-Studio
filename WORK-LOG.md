@@ -1459,6 +1459,33 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === COLLINEAR ANCHORS ESTABLISHED LINE DONE — HOLD ===
 
+## 2026-06-28 · collinear anchors a CURRENTLY axis-aligned line (freehand too) (turn 45)
+
+- **gap (firm user requirement):** a vertical line must NOT change angle on collinear — constrained OR not.
+  Turn-43's `_lineIsAxisAligned` only detected a V/H CONSTRAINT, so a FREEHAND vertical (no V) collinear with
+  another stayed 90 if selected first but rotated to ~0 if selected second.
+- **fix — `packages/core/constraint-manager.js`:** added geometric detection + an establishment SCORE:
+  - `_lineHasAxisConstraint` (the old check) — has a V/H constraint → strong signal (2).
+  - `_lineIsGeometricallyAxisAligned` — the line's CURRENT angle is within ~1.5° of 0°/90°/180° → (1).
+  - `_lineEstablishmentScore = 2·constraint + 1·geometric`. `anchorEstablishedLine` now swaps so the
+    HIGHER-scoring line is the anchor (first shape); EQUAL score (incl. both axis-aligned on different axes —
+    perpendicular, one must move) keeps the first-drawn order. Constraint outranks mere geometry (the
+    stronger tiebreak), so e.g. a freehand vertical yields to an H-CONSTRAINED line, but anchors over a plain
+    angled line regardless of click order.
+- **state (firm requirement met):** freehand vertical + angled line, BOTH selection orders →
+  **vertical final angle = 90.0°**, collinear, converged.
+- **scenario #20 (new):** freehand (unconstrained) vertical + angled, both orders → vertical anchored (~90),
+  converged. (#19's V-constrained case still green — now scores 3, still anchors.)
+- **verify:** scenario tester **21/21, backlog EMPTY**; `node tests/harness/solver-fuzz.test.js 400` →
+  **400/400 clean**; constraint-conformance **15/15 (gating)**; oracle **12/12**; baseline-diff = the 8
+  pre-existing, **0 net-new**; `node --check` clean; headless app-load OK.
+- **note:** the 4-free-point degenerate-collapse false-converge (flagged turn 43) is unrelated to anchoring
+  and still open — separate fix.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · a vertical line (constrained or freehand)
+  keeps its angle under collinear. STOP.
+
+=== COLLINEAR ANCHORS CURRENT AXIS-ALIGNED DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

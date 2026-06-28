@@ -320,6 +320,31 @@ run('19. collinear anchors the established (vertical) line', 'PASS', () => {
   };
 });
 
+// 20 — FREEHAND (unconstrained) vertical + angled line → collinear anchors the vertical in BOTH orders
+//      (geometric axis-alignment, no V constraint). A vertical line must not change angle.
+function freehandCollinear(order) {
+  const s = createSketch();
+  const a = s.point(0, 0, true), b = s.point(0, 10, false); // freehand vertical — NO V constraint
+  s.engine.addShape({ id: 'Lv', type: 'line', joints: [a, b] });
+  const c = s.point(5, 5, false), d = s.point(15, 7, false); // angled
+  s.engine.addShape({ id: 'Lo', type: 'line', joints: [c, d] });
+  s.solve();
+  const shapes = order === 'vert-first' ? ['Lv', 'Lo'] : ['Lo', 'Lv'];
+  ConstraintManager.createConstraint(s.state, T.COLLINEAR, { shapes }, { source: 'scenario' });
+  s.solve();
+  const vAngle = Math.abs(Math.atan2(s.pos(b).y - s.pos(a).y, s.pos(b).x - s.pos(a).x) * 180 / Math.PI);
+  return { s, vAngle };
+}
+run('20. freehand vertical + angled collinear → vertical anchored (both orders)', 'PASS', () => {
+  const vf = freehandCollinear('vert-first');
+  const of = freehandCollinear('other-first');
+  return {
+    pass: Math.abs(vf.vAngle - 90) < 1 && vf.s.converged === true &&
+          Math.abs(of.vAngle - 90) < 1 && of.s.converged === true,
+    nums: { vertFirstAngle: vf.vAngle.toFixed(1), otherFirstAngle: of.vAngle.toFixed(1), vfConv: vf.s.converged, ofConv: of.s.converged },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

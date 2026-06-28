@@ -38,10 +38,12 @@ export class ConstraintManager {
 
         return { ok: true };
     }
-    // Reorder a 2-shape COLLINEAR so an axis-aligned (H/V-constrained) line becomes the anchor (first shape).
-    // The collinear solver/residual hold the first line fixed and move the second onto it, so anchoring the
+    // Reorder a 2-shape COLLINEAR so the more-ESTABLISHED line becomes the anchor (first shape). The
+    // collinear solver/residual hold the first line fixed and move the second onto it, so anchoring the
     // established line keeps it put (a vertical line stays vertical) and rotates the other onto it.
-    static _lineIsAxisAligned(state, sid) {
+    // "Established" = currently axis-aligned, whether by a V/H CONSTRAINT (strong) or just GEOMETRY
+    // (a freehand line whose current angle is ~0°/90°) — the user expects a vertical line not to move.
+    static _lineHasAxisConstraint(state, sid) {
         const sh = state.shapes && state.shapes.find(x => x.id === sid);
         if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return false;
         const [a, b] = sh.joints;
@@ -50,10 +52,25 @@ export class ConstraintManager {
             c.joints && c.joints.length >= 2 &&
             ((c.joints[0] === a && c.joints[1] === b) || (c.joints[0] === b && c.joints[1] === a)));
     }
+    static _lineIsGeometricallyAxisAligned(state, sid, tolDeg = 1.5) {
+        const sh = state.shapes && state.shapes.find(x => x.id === sid);
+        if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return false;
+        const a = state.joints.get(sh.joints[0]), b = state.joints.get(sh.joints[1]);
+        if (!a || !b) return false;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (Math.hypot(dx, dy) < 1e-9) return false; // degenerate line — no orientation
+        const deg = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI); // 0..180
+        const dist = Math.min(deg, Math.abs(deg - 90), Math.abs(deg - 180)); // distance to nearest axis
+        return dist <= tolDeg;
+    }
+    // Establishment score: a V/H constraint (2) outranks mere geometric alignment (1); both stack.
+    static _lineEstablishmentScore(state, sid) {
+        return (this._lineHasAxisConstraint(state, sid) ? 2 : 0) + (this._lineIsGeometricallyAxisAligned(state, sid) ? 1 : 0);
+    }
     static anchorEstablishedLine(state, normalized) {
         const [s1, s2] = normalized.shapes;
-        // Only swap to put an axis-aligned line first; if both or neither are, keep the first-drawn order.
-        if (this._lineIsAxisAligned(state, s2) && !this._lineIsAxisAligned(state, s1)) {
+        // Anchor the MORE-established line; equal score (incl. both axis-aligned on different axes) keeps order.
+        if (this._lineEstablishmentScore(state, s2) > this._lineEstablishmentScore(state, s1)) {
             normalized.shapes = [s2, s1];
         }
     }

@@ -274,16 +274,33 @@ function handleCommit() {
         const val = parseFloat(uiState.singleInput.value);
         if (!isNaN(val)) {
             if (uiState.appState.saveState) uiState.appState.saveState();
-            uiState.target.value = val;
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
-            if (uiState.appState.engine) {
-                const result = uiState.appState.engine.solve(SolverConfig.ITERATIONS || 500);
-                if (result && !result.converged) showNotification(
-                    "Constraints could not be fully satisfied. [ERR-SOLVE-01] Reason: Solver did not converge after numeric input.\nArgs: " +
-                    JSON.stringify({ target: uiState.target, result }),
-                    "warning"
-                );
+            const engine = uiState.appState.engine;
+            if (engine) {
+                // Snapshot joint positions + the dim's old value FIRST, so a genuinely unsatisfiable
+                // edit can be REFUSED and the sketch snapped back to its last valid shape — never left
+                // mangled/sheared. (No auto-reference; the value the user typed is simply rejected.)
+                const oldValue = uiState.target.value;
+                const joints = engine.getJoints ? engine.getJoints() : null;
+                const snap = new Map();
+                if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
+
+                uiState.target.value = val;
+                const result = engine.solve(SolverConfig.ITERATIONS || 500);
+                if (result && !result.converged) {
+                    // Refuse + revert: restore the old value AND joint positions, re-solve to last-valid.
+                    const clash = [...new Set((result.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
+                    uiState.target.value = oldValue;
+                    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+                    engine.solve(SolverConfig.ITERATIONS || 500);
+                    showNotification(
+                        `Can't set to ${val}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
+                        "warning"
+                    );
+                }
+            } else {
+                uiState.target.value = val;
             }
         }
         uiState.target.__editing = false;

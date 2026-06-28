@@ -97,13 +97,25 @@ export function createSketch() {
     return lastResult;
   }
 
-  // Edit a dimension's value (mirrors numeric-input-manager.js handleCommit: set value + solve;
-  // on non-convergence the app shows ERR-SOLVE-01 and leaves the geometry as-is).
+  // Edit a dimension's value (mirrors numeric-input-manager.js handleCommit: snapshot positions + old
+  // value, apply + solve; on a genuine non-convergence REFUSE + REVERT to the last valid shape, never
+  // leave it mangled). No auto-reference.
   function editValue(dim, value) {
     lastError = null;
+    const oldValue = dim.value;
+    const snap = new Map();
+    state.joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
     dim.value = value;
-    lastResult = engine.solve(ITER);
-    if (lastResult && !lastResult.converged) lastError = '[ERR-SOLVE-01] solver did not converge after numeric input';
+    const attempt = engine.solve(ITER);
+    if (attempt && !attempt.converged) {
+      const clash = [...new Set((attempt.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
+      dim.value = oldValue;
+      state.joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+      lastResult = engine.solve(ITER); // settle back to last-valid
+      lastError = `Can't set to ${value}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`;
+      return lastResult;
+    }
+    lastResult = attempt;
     return lastResult;
   }
 

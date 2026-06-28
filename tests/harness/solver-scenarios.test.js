@@ -43,18 +43,21 @@ run('2. dimensioned rect + drag corner → isRectangle', 'PASS', () => {
 
 // 3 — over-constrain via an impossible dimension EDIT → must end as a valid, converged rect
 //      (refuse+revert, or stay rectangular). Expect FAIL today (ERR-SOLVE-01 + geometry mangled).
-run('3. over-constrain edit → stays a valid converged rect', 'FAIL(today)', () => {
+run('3. over-constrain edit → refuse + revert to valid rect', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
   s.dimension(r.corners[0], r.corners[1], 100);                 // width = 100 (driving)
   const diagNow = s.edgeLen(r.corners[0], r.corners[2]);
   const diag = s.dimension(r.corners[0], r.corners[2], diagNow); // diagonal (driving, independent)
   s.solve();
-  s.editValue(diag, 50); // impossible: diagonal (50) < width (100) — triangle inequality
-  const maxRes = s.conflicts.reduce((m, c) => Math.max(m, c.residual || 0), 0);
+  s.editValue(diag, 50); // impossible: diagonal (50) < width (100) — triangle inequality → must be refused
+  const refusedOK = s.isRectangle(r.corners) && s.converged === true && diag.value !== 50;
+  // a normal IN-RANGE edit must STILL apply (don't over-revert valid edits)
+  s.editValue(diag, diagNow + 20); // satisfiable — taller rect
+  const validApplied = s.converged === true && s.isRectangle(r.corners) && Math.abs(diag.value - (diagNow + 20)) < 1e-6;
   return {
-    pass: s.isRectangle(r.corners) && s.converged === true,
-    nums: { converged: s.converged, isRect: s.isRectangle(r.corners), maxResidual: maxRes, lastError: s.lastError || 'none' },
+    pass: refusedOK && validApplied,
+    nums: { refusedOK, validApplied, diagAfter: diag.value, converged: s.converged, isRect: s.isRectangle(r.corners), lastError: s.lastError || 'none' },
   };
 });
 
@@ -92,7 +95,7 @@ run('4b. toggle ref→driving when another drives → swaps', 'PASS', () => {
 // 5 — toggle a reference dim → driving, when it is the ONLY would-be driver → should succeed.
 //      A single edge dimension, demoted to reference, then promoted back to driving (nothing else
 //      drives that edge, so there is no real conflict). Expect FAIL today.
-run('5. toggle reference→driving (only would-be driver)', 'FAIL(today)', () => {
+run('5. toggle reference→driving (only would-be driver)', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
   const d1 = s.dimension(r.corners[0], r.corners[1], 100); // D1 driving (the only dim on this edge)

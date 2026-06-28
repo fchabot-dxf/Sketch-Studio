@@ -1179,6 +1179,31 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === SOLVER FIX #4 (ONE DRIVER PER EDGE) DONE — HOLD ===
 
+## 2026-06-28 · solver fix #3 — over-constrain edit → REFUSE + REVERT (turn 27)
+
+- **bug (scenario #3, last red row):** editing a dimension to a genuinely unsatisfiable value
+  (`rankDeficient:false` conflict, e.g. a rect's diagonal set < its width — triangle inequality) made the
+  solver fail to converge, fire ERR-SOLVE-01, and leave the geometry MANGLED (sheared, the bad value stuck).
+- **fix — `apps/sketchstudio/ui/numeric-input-manager.js` `handleCommit` (edit mode):** before applying the
+  typed value, SNAPSHOT every joint's position + the dim's old value. Apply + solve. On `!converged`:
+  **refuse + revert** — restore the old value AND all joint positions, re-solve back to the last valid shape,
+  and show a short refusal naming the clash (types from `result.conflicts`, captured BEFORE the re-solve):
+  `"Can't set to <N> — conflicts with <types>. Reverted."` — replacing the raw ERR-SOLVE-01 JSON dump. No
+  auto-reference, no deformation. In-range (satisfiable) edits are untouched — they apply as before.
+- **harness:** `tests/harness/sketch.js` `editValue` mirrors the snapshot → on non-converge restore
+  positions + revert value → re-solve, so scenario #3 reflects the real shell behavior.
+- **scenario #3** now PASS: impossible diagonal edit (50 < width 100) → refused, rect stays valid &
+  converged, value NOT applied; PLUS a follow-up in-range edit (diagonal +20) STILL applies (taller rect,
+  converged) — guards against over-reverting valid edits. (Also relabelled #5's stale 'expected' to PASS.)
+- **verify:** scenario tester **7/7, backlog: none**; constraint-conformance **9/9 (gating, exit 0)**;
+  #1/#2/#4/#4b/#5/bridge stay GREEN; oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**;
+  `node --check` clean; headless app-load OK. handleCommit is shell DOM code, but its revert logic is
+  identical to the harness `editValue` that scenario #3 exercises green, plus load + diff review.
+- **state:** branch `carve-out` · oracle 12/12 · ALL scenario rows green (over-constrain now refuses+reverts;
+  one-driver-per-edge; drag no longer shears) · scenario backlog empty. STOP.
+
+=== SOLVER FIX #3 (OVER-CONSTRAIN REFUSE+REVERT) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

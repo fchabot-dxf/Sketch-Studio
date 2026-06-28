@@ -3,11 +3,13 @@
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
-  // Midpoint (joint-based) — midpoint joint should move to the average of endpoints
+  // Midpoint (joint-based) — with the endpoints HELD, the midpoint joint moves to their average.
+  // (The midpoint Jacobian is bidirectional: with all three free it's a least-change compromise — m is
+  // still the midpoint of a,b, but a,b move too — so this test pins a,b to assert "place a marker".)
   {
     const joints = new Map();
-    joints.set('a', { x: 0, y: 0, fixed: false });
-    joints.set('b', { x: 10, y: 0, fixed: false });
+    joints.set('a', { x: 0, y: 0, fixed: true });
+    joints.set('b', { x: 10, y: 0, fixed: true });
     joints.set('m', { x: 8, y: 5, fixed: false });
     const constraints = [{ type: CONSTRAINT_TYPES.MIDPOINT, joints: ['a','b','m'] }];
     const solver = createNewtonSolver(joints, constraints, [], { maxIter: 30, tol: 1e-9 });

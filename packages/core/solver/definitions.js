@@ -182,10 +182,13 @@ export const Definitions = {
       return [ (ax + bx) * 0.5 - mx, (ay + by) * 0.5 - my ];
     },
     computeJacobian: (params, positions, outRows) => {
-      // Prefer to move only the midpoint joint (do not move the endpoints)
-      const m = params.joints[2];
-      outRows[0][m*2 + 0] = -1; outRows[0][m*2 + 1] = 0;
-      outRows[1][m*2 + 0] = 0; outRows[1][m*2 + 1] = -1;
+      // Full BIDIRECTIONAL Jacobian for residual [(ax+bx)/2 - mx, (ay+by)/2 - my]. Constraining the
+      // midpoint (e.g. coincident -> origin to center a shape) now translates the endpoints too, not just
+      // slaves m to a,b. Least-change keeps placing-a-marker behaviour: m free + endpoints held -> only m
+      // moves; a pinned m -> the endpoints follow.
+      const a = params.joints[0], b = params.joints[1], m = params.joints[2];
+      outRows[0][a*2 + 0] = 0.5; outRows[0][b*2 + 0] = 0.5; outRows[0][m*2 + 0] = -1;
+      outRows[1][a*2 + 1] = 0.5; outRows[1][b*2 + 1] = 0.5; outRows[1][m*2 + 1] = -1;
     }
   },
 

@@ -365,6 +365,23 @@ run('21. collinear of perpendicular axis-aligned lines → refused', 'PASS', () 
   };
 });
 
+// 22 — center a (free) rect on the origin: midpoint(diagonal)=center, then COINCIDENT(center, origin).
+//      The completed midpoint Jacobian lets the coincident TRANSLATE the rect (was wrongly rejected).
+run('22. center a rect on origin (midpoint + coincident)', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(50, 30, 20, 14, { pinFirst: false }); // free rect — can translate
+  const center = s.point(60, 37, false);                 // = midpoint of the diagonal c1-c3
+  ConstraintManager.createConstraint(s.state, T.MIDPOINT, { joints: [r.corners[0], r.corners[2], center] }, { source: 'scenario' });
+  s.solve();
+  const res = ConstraintManager.createConstraint(s.state, T.COINCIDENT, { joints: [center, 'j_origin'] }, { source: 'scenario' });
+  s.solve();
+  const cdist = Math.hypot(s.pos(center).x, s.pos(center).y);
+  return {
+    pass: !!res && cdist < 0.05 && s.isRectangle(r.corners) && s.converged === true,
+    nums: { accepted: !!res, centerDist: cdist.toFixed(3), isRect: s.isRectangle(r.corners), converged: s.converged },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

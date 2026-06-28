@@ -1510,6 +1510,33 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === COLLINEAR PERPENDICULAR-PAIR REFUSE DONE — HOLD ===
 
+## 2026-06-28 · midpoint Jacobian completed (bidirectional) — center a shape on origin (turn 49)
+
+- **bug:** centering a rect on the origin (center = midpoint of the diagonal, then COINCIDENT(center,
+  origin)) was wrongly rejected (ERR-CSOLVE-01, residual 0.4). ROOT: `definitions.js` `midpoint.computeJacobian`
+  set ONLY m's derivatives ("move only the midpoint"); a,b derivatives were ZERO. So m slaved to a,b but
+  constraining m couldn't pull the endpoints → coincident dragged the center to origin while the corners
+  stayed → midpoint residual blew up → non-converged → sandbox rejected. (Jacobian, not a pin.)
+- **fix — `packages/core/solver/definitions.js`:** completed the Jacobian for residual
+  `[(ax+bx)/2 - mx, (ay+by)/2 - my]`: `d/ax = d/bx = +0.5`, `d/mx = -1` (row 0); same for y (row 1). Now the
+  constraint is bidirectional — a constrained midpoint translates the endpoints. Least-change preserves
+  placing-a-marker: endpoints held + m free → only m moves; a pinned/constrained m → endpoints follow.
+- **scenario #22 (new):** free rect, center = midpoint(diagonal), COINCIDENT(center, origin) → ACCEPTED,
+  the rect TRANSLATES, **center final dist from origin = 0.000**, still rectangular, converged.
+- **tracked test updated (`tests/collinear-midpoint-enforcement.test.js`):** its midpoint sub-case had a,b
+  ALL-FREE and asserted m→(5,0) (the old one-directional behaviour). With the correct bidirectional Jacobian,
+  an all-free midpoint is a least-change COMPROMISE (m is still the midpoint of a,b — constraint enforced —
+  but a,b move too). Pinned a,b (the test's own stated intent: "midpoint moves to the average of endpoints"),
+  matching the advisor's "endpoints held → m→center". Now green. (Surgical: only that sub-case's a,b.)
+- **verify:** scenario tester **23/23, backlog EMPTY**; conformance **15/15 (gating)** incl. MIDPOINT
+  (a,b pinned, m free → m→midpoint + survives a drag); `node tests/harness/solver-fuzz.test.js 400` →
+  **400/400 clean**; oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**; `node --check`
+  clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · a shape can be centered on the origin
+  (midpoint constraint is now bidirectional). STOP.
+
+=== MIDPOINT JACOBIAN BIDIRECTIONAL DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -2547,6 +2547,76 @@ Design canvas renders via the real `draw()`, it is dark automatically. ✓ (the 
 
 === P5b (SHAPER INTERACTIVE) DONE — HOLD ===
 
+## 2026-06-28 · PLAN S5 — share the dock (turn 99) — PLAN ONLY, no code
+
+**⚠ KEY FINDING (premise mismatch): there is NO existing "dock panel (constraint list / dimension edit / DOF
+readout)" in SketchStudio to relocate.** The relocate→parameterize→adopt playbook has no target here; what's
+described is either already-shared on-canvas, or the UNBUILT `TabbedDockPanel`. Audit below; corrected proposal +
+options follow — advisor please pick the scope before implementation.
+
+### (1) What the SketchStudio UI actually is (enumerated)
+- **`#toolsRibbon` + `ui-manager.js`** — the TOOLBAR (tool buttons, undo/clear/recenter/export, `#modeText`
+  status, dropdowns). App-shell chrome (placement/layout) — app-specific.
+- **Modal overlays** (`#settings-panel`, `#export-panel`, both `hidden`, z-index 99999) — SettingsManager UI +
+  G-code/DXF export. App-specific (export especially).
+- **Dev panels** `debug-panel.js` + `tuning-wizard.js` — floating SettingsManager-backed panels via
+  `wizard-base.js` (createWizardPanel). App-specific dev tooling. (Both in the baseline-8 failing set.)
+- **On-canvas, ALREADY shared (the canvas arc delivered these):** constraints = glyphs (svg-renderer, `#ui/`);
+  DOF = debug labels (svg-renderer, behind `window.ug.debug`); **dimension edit = `#dimInput` /
+  `#ui/numeric-input-manager`** (Shaper's P5b setupInput already wires it). So "constraint list / dim edit / DOF
+  readout" are NOT a discrete panel — they're on-canvas + shared, EXCEPT a constraint *list* or a persistent DOF
+  *readout* as panel content, which **do not exist** (would be NEW UI).
+- **The planned dock = `TabbedDockPanel`** (`docs/architecture/UI_SHELL.md`, design-locked, **UNBUILT**): a
+  generic translucent/dockable/drag-resizable/tabbed widget (`createTabbedDockPanel({tabs, persistKey})`), tabs =
+  Design · Prepare · Export/Sim · ⚙Settings. Spec says "lives in apps/sketchstudio/ui for now; promote to
+  packages/ui when Shaper consumes it."
+
+### (2) Where it lives / (3) coupling
+- Nothing dock-like is in `#ui/` yet. The TabbedDockPanel isn't written anywhere. The toolbar/modals/dev-panels
+  are all in `apps/sketchstudio/ui` and are app-shell/app-specific (not sketcher-data-driven), so they're NOT
+  the shareable target.
+- The DATA a shared dock would show (constraints, DOF, selection) is on the **shared state/engine**
+  (`createSketchState` — both apps now have it). A dock that READS that state is clean + app-agnostic. The
+  dock↔canvas interaction (select a constraint in a list → highlight on canvas) wires through
+  `state.selectedConstraints` — which the shared renderer ALREADY highlights → no new plumbing needed.
+
+### (4) Shaper side
+Shaper's Design tab is the full-screen `#design-view`; it has no panel container. A shared dock would float over
+`#design-canvas` (same as it'd float over `#svgCanvas` in SketchStudio) — the TabbedDockPanel is floating by
+design, so no per-app container needed.
+
+### (5) Corrected proposal — it's a BUILD-SHARED, not a relocate
+Recommend building the `TabbedDockPanel` as a SHARED `#ui/` widget from the start (skip the "build in
+apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe slices:
+- **S5a — `packages/ui/tabbed-dock-panel.js`**: the app-agnostic widget only (float/dock/drag-resize/translucent/
+  tabbed/persist/reflow; `createTabbedDockPanel({tabs:[{label,icon,render()}], persistKey})`). Theming via
+  `--sk-*`/its own CSS. Standalone — no app wires it yet → SketchStudio byte-identical; verify via a CDP smoke
+  mount (the widget renders tabs, docks, persists).
+- **S5b — SketchStudio adopts it**: mount the panel, Design tab = its existing draw/constrain tools, Settings tab
+  folds in settings-panel/tuning-wizard, Prepare/Export stubs/existing. ⚠ **This CHANGES SketchStudio's UI — NOT
+  byte-identical** (it's a new shell; the "byte-identical" invariant from the canvas arc does NOT apply to
+  building a new dock). Flag for the advisor: confirm SketchStudio's UI is allowed to change here.
+- **S5c — Shaper adopts it**: Design tab → the shared sketcher (P5); its own Prepare/Export.
+- *(If the user specifically wants a constraint-LIST / DOF-readout as content, that's NEW Design-tab content,
+  data-driven off the shared state — a separate small build, mountable in a dock tab.)*
+
+### (6) Risks
+- **R-PREMISE (blocking):** S5 as dispatched ("relocate the dock") has no existing dock. Decide: build the
+  TabbedDockPanel (UI_SHELL.md) shared? and/or build a new constraint-list/DOF info panel? Confirm scope.
+- **R-NOT-BYTE-IDENTICAL:** adopting a new dock re-homes SketchStudio's toolbar/panels → a visible UI change, not
+  byte-identical. The canvas arc's safety invariant doesn't fit a from-scratch UI build; need a different
+  acceptance bar (the app still loads + all tools work via the dock, gates green).
+- **R-TOOLBAR-OVERLAP:** does the dock REPLACE `#toolsRibbon`/ui-manager or coexist? UI_SHELL.md implies the dock
+  becomes the shell → the toolbar is folded in (big change). Scope carefully.
+- **R-PERSISTENCE:** the panel persists pos/size/tab via localStorage → relates to DEBT-1 (inject a persistence
+  adapter so `#core`/`#ui` stay storage-agnostic).
+- **R-SETTINGS-FOLD:** settings-panel + tuning-wizard (app-specific, dev) fold into the Settings tab — app-specific
+  content in a shared panel (the panel is the shared chrome; the tab CONTENT is app-supplied — clean per
+  UI_SHELL.md).
+- **dock↔canvas interaction:** clean (via `state.selectedConstraints`, already rendered) — low risk.
+
+=== S5 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

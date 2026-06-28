@@ -38,3 +38,7 @@ Thumbs.db
 
 # --- auto-runner trigger folder (Claude tooling) ---
 .triggers/
+
+# --- advisor/worker handoff coordination (local, two-window dance) ---
+.handoff/
+HANDOFF.md

@@ -95,12 +95,50 @@ PHASE 0 — Solver honesty + robustness  (in THIS repo, current structure)
   ✅ PHASE 0 COMPLETE — solver is honest + robust; the carve-out (Phase 1) is unblocked.
   (all on branch solver-robustness; each pinned by a fail-first repro test; solver suite green)
 
-PHASE 1 — Monorepo carve-out  🔄 IN PROGRESS  (load-safe SLICES, not one shot — see revision below)
+PHASE 1 — Monorepo carve-out  ✅ COMPLETE  (load-safe SLICES, every commit 0 net-new vs baseline)
+  FINAL SHAPE: packages/core (brain + 12-test oracle, self-contained, no apps/ dep) · apps/sketchstudio
+  (shell: index.html + main.js + ui/ + coords + debug-overlay) · apps/shaper (awaiting its shell logic) ·
+  tests/ (shell+drag) · NO src/, NO shims, leak-clean (#core//#app/ aliases). App deployable, output `/`.
+  OPEN (deferred, not blockers): build-inline.cjs rewrite (documented feature, broken post-carve-out) ·
+  settings-manager → shell + injected-persistence seam (DEBT-1) · MERGE: confirm `_redirects` on preview.
   ▸ Consolidation: Shaper app moved INTO the repo at apps/shaper   ✅ committed (cda8c91)
-  ▸ Slice-1 commit-1: metrics → injected onMetrics callback (in place, no moves)  ✅ committed (a8245de)
-  ▸ Next: slice-1 commits 2-3 (notify, snap-detection), THEN the git mv of src/ → packages/core +
-    apps/sketchstudio. Each commit MUST keep the app LOADING + oracle green.
-  (on branch carve-out; src/ is still the live code — nothing moved into packages/core yet)
+  ▸ Slice 1 — core import-cleanup (in place, no moves), 3 commits, all advisor-BLESSED, oracle 12/12:
+      · commit 1  metrics → injected onMetrics callback        ✅ committed (a8245de)
+      · commit 2  notify  → setConstraintNotifier seam          ✅ committed (5d73c02)
+      · commit 3  drop dead engine snap pass-throughs + svg opt ✅ committed (18e0a22)
+    Net: constraint-solver.js + core/constraint-manager.js no longer import the shell or touch
+    window — the brain is import-clean, so the git mv won't drag UI imports into packages/core.
+  ▸ Shell batch — load-safe slices via `#core//#app/` isomorphic aliases (browser importmap + Node
+    package.json "imports"; verified both envs), all advisor-BLESSED, suite at pre-move baseline (0 net-new):
+      · slice 0  import map (additive)                          ✅ committed (03a05a2)
+      · bridge   #core//#app/ resolution (Node + browser)       ✅ committed (a6751f6)
+      · proof    export-manager.js → apps/sketchstudio + shim   ✅ committed (4569d15)
+      · WAVE A   atomic shell move (svg-renderer, snap-detection, ui/**) → apps/sketchstudio,
+                 +16-shim completion +2 source-read test repoints ✅ (e922708 / 588a667 / fdb5c6f)
+      · geometry coords split (screen helpers → apps/sketchstudio/coords.js)  ✅ committed (eb45aa3)
+        (18 importers repointed; core/geometry.js DOM-free; round-trip=id; 0 net-new failures)
+      · entry-pair: index.html + main.js → apps/sketchstudio; relative import map; root `_redirects`
+        (`/ → /apps/sketchstudio/ 302`); Cloudflare output dir STAYS `/` (no dashboard change)  ✅ (5d972a2)
+      · cleanup: rewire 73 files off the temp shims, then `git rm` 28 (24 shims + 3 dead files + the
+        dead real polygon-tool.js)  ✅ (27292f0 rewire / c63e4c7 delete) — gated: delete-list proven
+        0-ref + advisor-blessed before any deletion
+    ▸ SHELL BATCH COMPLETE — `src/` is now CORE-ONLY (`core/` + 3 solver facades + `overrides.css`);
+      whole shell under `apps/sketchstudio/`; brain import-clean; app deployable; suite at baseline
+      (101/8, 0 net-new — `settings-project-config` recovered).
+  ▸ Cloudflare DECIDED (human gate, CORRECTED): index.html lives with its shell at apps/sketchstudio;
+    Cloudflare output dir STAYS `/` (core under repo root must stay served — pointing output at the app
+    folder would 404 core); a root `_redirects` (`/ → /apps/sketchstudio/ 302`) serves the app. NO
+    dashboard change. (Confirm `_redirects` on the deploy preview before merging to `main`.)
+  ▸ CORE batch — plan blessed, then load-safe slices, all suite at baseline (0 net-new):
+      · SLICE A  debug.js split (pure `dbg` → core / `window.ug.debug` overlay → shell)  ✅ (7ce67ee)
+      · SLICE B  ATOMIC LIFT — `git mv src/core/*` + 3 facades → `packages/core/*` (flatten); both `#core/`
+        configs retargeted (the "edit 2 configs" payoff); main.js + 79 tests rewired; overrides.css → shell
+        ✅ (e18c29c)  — **the brain now lives at `packages/core`; apps/ are PEERS over it.**
+      · SLICE C  co-locate the 12 oracle tests → `packages/core/tests`  🔄 in progress
+      · SLICE D  loose ends (gated): `git rm solver-core.legacy.js` (dead) · rmdir empty `src/` ·
+        `scripts/build-inline.cjs` stale-ref fix · (settings-manager →shell + persistence seam = later, DEBT-1)
+  (on branch carve-out; `src/` reduced to two empty dirs; brain at `packages/core`, shell at `apps/sketchstudio`)
+  (on branch carve-out; shell fully under apps/sketchstudio/; src/ is core-only; nothing in packages/core yet)
 
 PHASE 2 — Shaper shell  (apps/shaper — the app is now IN the repo; the SHELL logic is the work)
   toolpath-param layer + visual-simulation layer + Shaper cut-path SVG export, over packages/core.

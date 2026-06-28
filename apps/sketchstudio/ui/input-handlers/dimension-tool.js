@@ -6,7 +6,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { screenToWorld, worldToScreen } from '#app/coords.js';
+import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '../numeric-input-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';

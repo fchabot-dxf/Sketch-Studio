@@ -12,6 +12,7 @@ import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
+import { screenToWorld } from '#ui/coords.js'; // shared screen<->world math (same as SketchStudio)
 
 // ── Headless core (no DOM) ──────────────────────────────────────────────────
 export function createSketch() {
@@ -89,16 +90,10 @@ export function mountSketch(svgEl) {
   render();
 
   // Tiny input: click to drop joints; two consecutive clicks make a line segment. Then solve + render.
+  // Screen→world via the SHARED #ui/coords.js (identical math to SketchStudio).
   let pending = null;
-  const toWorld = (e) => {
-    if (!svgEl.getScreenCTM) return null;
-    const pt = svgEl.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-    const ctm = svgEl.getScreenCTM(); if (!ctm) return null;
-    const w = pt.matrixTransform(ctm.inverse());
-    return { x: w.x, y: w.y };
-  };
   const onPointerDown = (e) => {
-    const w = toWorld(e); if (!w) return;
+    const w = screenToWorld(svgEl, e.clientX, e.clientY); if (!w) return;
     const id = sketch.point(w.x, w.y);
     if (pending) {
       const sid = 'L_' + pending + '_' + id;

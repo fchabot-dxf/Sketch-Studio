@@ -1,7 +1,7 @@
 (async () => {
     const { handlePointerDown } = await import('../apps/sketchstudio/ui/input-manager.js');
     const { TOOL_MODES, CONSTRAINT_TYPES } = await import('#core/constants.js');
-    const { worldToScreen } = await import('../apps/sketchstudio/coords.js');
+    const { worldToScreen } = await import('../packages/ui/coords.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Minimal state needed by ConstraintManager / input flows

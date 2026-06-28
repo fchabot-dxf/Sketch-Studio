@@ -3,7 +3,7 @@ import { SolverConfig } from '#core/solver-config.js';
 // LIVE DIMENSION INPUT - Unified Numeric Input System
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { worldToScreen } from '#app/coords.js';
+import { worldToScreen } from '#ui/coords.js';
 import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';

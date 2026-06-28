@@ -34,7 +34,7 @@
     state.lastMouse = { x: 400, y: 300 };
 
     // Avoid calling full setupInput in tests (touches DOM APIs). We'll just import helpers
-    const { screenToWorld } = await import('../apps/sketchstudio/coords.js');
+    const { screenToWorld } = await import('../packages/ui/coords.js');
     const { handleDrawingPointerMove } = await import('../apps/sketchstudio/ui/input-handlers/drawing-tools.js');
 
     // Note: tests run without a DOM event loop; we'll manually call the drawing move after simulating pan

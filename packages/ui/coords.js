@@ -1,7 +1,8 @@
-// Coordinate transforms — screen ↔ world. SHELL-side (north-star #4/#5: convert only at the
-// edges). These are DOM-coupled (svg.getBoundingClientRect() + svg.viewBox), so they were
-// extracted verbatim from core/geometry.js — which now keeps pure math only. Self-contained;
-// no imports needed.
+// Coordinate transforms — screen ↔ world. SHARED UI (#ui/coords.js): used by BOTH apps (SketchStudio +
+// Shaper's Design canvas) so they convert with the exact same math. DOM-coupled by design
+// (svg.getBoundingClientRect() + svg.viewBox), but fully PARAMETERIZED — every function takes the svg, so
+// it's safe to share. Pure math lives in #core/geometry.js; this is the edge-only screen<->world bridge.
+// (Relocated from apps/sketchstudio/coords.js in slice S2; API unchanged.) Self-contained; no imports.
 
 /**
  * Convert screen coordinates to world coordinates

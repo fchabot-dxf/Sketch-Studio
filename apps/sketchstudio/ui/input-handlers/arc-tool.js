@@ -5,7 +5,7 @@ import { makeArc } from '#core/shapes.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { showSingleInput, isInputActive, hideInput, resetLockedDimensions, updateInputPosition, setupNumericInput } from '../numeric-input-manager.js';
-import { worldToScreen } from '#app/coords.js';
+import { worldToScreen } from '#ui/coords.js';
 import { angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '../preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';

@@ -8,7 +8,7 @@ import { hitConstraintAtScreen, findSnap } from '../snap-detection.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from './input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
-import { screenToWorld, worldToScreen } from '#app/coords.js';
+import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from './dimension-seams.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';

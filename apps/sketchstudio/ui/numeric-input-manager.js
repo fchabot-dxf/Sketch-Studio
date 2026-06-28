@@ -1,5 +1,5 @@
 // apps/sketchstudio/ui/numeric-input-manager.js
-import { worldToScreen } from '#app/coords.js';
+import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from './notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';

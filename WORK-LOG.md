@@ -1661,6 +1661,31 @@ wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
 
 === SHAPER S1 (SHARED CANVAS MOUNT) DONE — HOLD ===
 
+## 2026-06-28 · Shaper ← shared sketcher SLICE S2 — coords.js → #ui/ (turn 55)
+
+- **did (S2 only; S3 svg-renderer NOT started):**
+  - **Relocated** `apps/sketchstudio/coords.js` → **`packages/ui/coords.js`** verbatim (API identical:
+    `screenToWorld(svg,…)` / `worldToScreen(svg,pt)` / `getZoomFactor(svg)`; self-contained, no imports — so
+    no `#app/`-only dependency to resolve, step 4 was a no-op). Old file `git rm`'d.
+  - **Repointed all 18 importers** (mechanical, scoped str-replace over `git ls-files apps tests` `.js`):
+    12 shell (`#app/coords.js` → `#ui/coords.js`: snap-detection, svg-renderer, hover-manager, input-manager,
+    numeric-input-manager, input-handlers/{arc,circle,line,selection,dimension,rect,live-dimension}) + 6 tests
+    (`../apps/sketchstudio/coords.js` → `../packages/ui/coords.js`). Grep confirms zero stale refs remain.
+  - **`packages/ui/sketch-canvas.js`** dropped its S1 inline `getScreenCTM` helper and now uses
+    `screenToWorld` from `#ui/coords.js` — Shaper's Design canvas + SketchStudio now share the EXACT coord math.
+- **verify (exactly how):**
+  - Headless `#ui/` probe (Node): `import('#ui/sketch-canvas.js')` (which now imports `#ui/coords.js`) →
+    line + coincident(origin) + distance(50) + solve → **MOUNT OK, len=50.00**.
+  - Browser load (CDP, error+exception capture): **SketchStudio** `errors=0`, `svgCanvas`+`world-group`
+    present (its shell graph now resolves `#ui/coords`) — coordinate behavior unchanged (verbatim code +
+    identical import surface); **Shaper** `errors=0`, Design tab → `#design-canvas` rendered 6 children.
+  - oracle **12/12** · conformance **15/15** · differential-planegcs **9/9** · solver-fuzz 400 → **400/400** ·
+    baseline-diff = the 8 pre-existing, **0 net-new** (repointed non-baseline tests still pass) · `node --check` clean.
+- **state:** branch `carve-out` · both apps load · `coords.js` is now shared `#ui/coords.js`, consumed by
+  SketchStudio's full sketcher AND Shaper's Design canvas. Next per the plan: S3 (svg-renderer → `#ui/`). STOP.
+
+=== SHAPER S2 (SHARED COORDS) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -6,7 +6,7 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
 import { findCoincidentCluster, hitJointAtScreen } from '../../snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
-import { screenToWorld, worldToScreen } from '#app/coords.js';
+import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '../numeric-input-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';

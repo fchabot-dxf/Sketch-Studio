@@ -8,7 +8,7 @@ import { exportToFile } from './export-manager.js';
 import { deactivateLineTool } from './input-handlers/line-tool.js';
 import { startDimensionFromSelection } from './input-handlers/dimension-tool.js';
 import { deleteSelection } from '#core/delete-manager.js';
-import { draw } from '../svg-renderer.js';
+import { draw } from '#ui/svg-renderer.js';
 export function setupUI(state){
   // Remove active class from all buttons initially
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));

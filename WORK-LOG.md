@@ -1686,6 +1686,42 @@ wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
 
 === SHAPER S2 (SHARED COORDS) DONE — HOLD ===
 
+## 2026-06-28 · Shaper ← shared sketcher SLICE S3 — svg-renderer → #ui/ VERBATIM (turn 57)
+
+- **did (S3 only; DOM-reach parameterization is a LATER slice, deliberately deferred):**
+  - **`git mv` svg-renderer.js** `apps/sketchstudio/` → **`packages/ui/svg-renderer.js`** (verbatim — git tracked
+    it as a rename, no logic change). Its only non-`#core`/`#ui` import was the relative `./ui/cursor-manager.js`,
+    which would break under `packages/ui/` → resolved by ALSO moving cursor-manager (below) and rewriting that one
+    line to the intra-package `./cursor-manager.js`.
+  - **`git mv` cursor-manager.js** `apps/sketchstudio/ui/` → **`packages/ui/cursor-manager.js`** (it imports only
+    `#core/debug` + `#core/constants` → already shareable; verbatim move). svg-renderer's `updateCursor` +
+    input-manager's `initCursors` both feed off it.
+  - **Repointed all importers (20 files, 0 stale):** `main.js` (`./svg-renderer.js`→`#ui/svg-renderer.js`),
+    `ui/ui-manager.js` (`../svg-renderer.js`→`#ui/`), `ui/input-manager.js` (`./cursor-manager.js`→
+    `#ui/cursor-manager.js`), 16 renderer tests (`../apps/sketchstudio/svg-renderer.js`→`../packages/ui/`), and
+    `cursor-icons.test.js` (its readFileSync path string → `../packages/ui/cursor-manager.js`). Grep confirms 0
+    stale refs to either old path.
+  - **DOM reaches LEFT AS-IS** (the ~8 `getElementById`/`querySelector`/`window` hits at the renderer's
+    SketchStudio ids: world-group, grid, magnifier, dimInput) — they resolve in SketchStudio so render stays
+    byte-identical. Added a top-of-file `TODO(shaper):` flagging they must be parameterized before Shaper adopts
+    the renderer (that's the later slice).
+- **verify (exactly how):**
+  - Node import smoke: `import('#ui/svg-renderer.js')` + `import('#ui/cursor-manager.js')` → **GRAPH OK**
+    (`draw`/`computeBaseJointRadiusFor`/`updateCursor`/`initCursors` all resolve, incl. the intra-package
+    `./cursor-manager.js`). `#ui/` sketch-canvas probe still **MOUNT OK**.
+  - Browser (CDP, error+exception capture): **SketchStudio** `errors=0`, `svgCanvas`+`world-group` present,
+    world-group rendered **5 children** (renders via the relocated renderer) — render is **byte-identical** by
+    construction (verbatim git mv; only the cursor import path changed to the same module) AND every svg-renderer
+    render test (arc / coincident-visual / angle-preview / whisker* / glyph / selection-coincident* / joint-radius)
+    still passes asserting exact glyph/dim/element output. **Shaper** Design `errors=0` → `#design-canvas` 6 children.
+  - oracle **12/12** · conformance **15/15** · differential-planegcs **9/9** · solver-fuzz 400 → **400/400** ·
+    baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · both apps load · `#ui/` now holds coords + svg-renderer + cursor-manager +
+  sketch-canvas. SketchStudio drives the full renderer from `#ui/`; Shaper still uses the minimal S1 canvas.
+  Next per the plan: S4 (input-manager → `#ui/`). STOP — hold for advisor.
+
+=== SHAPER S3 (SHARED RENDERER RELOCATED) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

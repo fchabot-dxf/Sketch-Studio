@@ -3,7 +3,7 @@ import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
 import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
-import { draw } from './svg-renderer.js';
+import { draw } from '#ui/svg-renderer.js';
 import { setupInput, showDimInput } from './ui/input-manager.js';
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';

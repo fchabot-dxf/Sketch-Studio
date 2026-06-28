@@ -1,5 +1,5 @@
 (async () => {
-  const { draw } = await import('../apps/sketchstudio/svg-renderer.js');
+  const { draw } = await import('../packages/ui/svg-renderer.js');
   const SettingsManager = (await import('#core/settings-manager.js')).default;
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

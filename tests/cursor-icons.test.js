@@ -1,6 +1,6 @@
 (async () => {
   const fs = await import('fs/promises');
-  const path = '../apps/sketchstudio/ui/cursor-manager.js';
+  const path = '../packages/ui/cursor-manager.js';
   const txt = await fs.readFile(new URL(path, import.meta.url), 'utf8');
   const assert = (c,m) => { if(!c) throw new Error(m||'Assertion failed'); };
 

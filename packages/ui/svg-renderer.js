@@ -1,3 +1,7 @@
+// Shared SVG renderer (#ui/svg-renderer.js) — used by SketchStudio today; Shaper's Design tab adopts it
+// in a later slice. Relocated VERBATIM from apps/sketchstudio in slice S3 (no logic change).
+// TODO(shaper): parameterize the DOM-id reaches (world-group, grid/grid-heavy, magnifier, dimInput,
+// window) before Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM.
 import { dbg } from '#core/debug.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
@@ -6,7 +10,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
-import { updateCursor } from './ui/cursor-manager.js';
+import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';

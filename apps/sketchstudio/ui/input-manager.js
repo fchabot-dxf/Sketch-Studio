@@ -24,7 +24,7 @@ import { handleLineKeyDown } from './input-handlers/line-tool.js';
 import { handleRectKeyDown } from './input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from './input-handlers/circle-tool.js';
 import { handleArcKeyDown } from './input-handlers/arc-tool.js';
-import { initCursors } from './cursor-manager.js';
+import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from './input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';

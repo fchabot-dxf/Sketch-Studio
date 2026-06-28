@@ -9,6 +9,7 @@ import { pathToFileURL } from 'url';
     const dirs = [
       path.join(process.cwd(), 'tests'),
       path.join(process.cwd(), 'packages', 'core', 'tests'),
+      path.join(process.cwd(), 'tests', 'harness'), // solver scenario tester (*.test.js reporter)
     ];
     const tests = [];
     for (const dir of dirs) {

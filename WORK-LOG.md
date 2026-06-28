@@ -1102,6 +1102,52 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === DRAG STRUCTURAL FIX DONE — HOLD ===
 
+## 2026-06-28 · solver scenario TESTER — headless harness + load bridge + seed scenarios (turn 23). NO fixes.
+
+- **new files (no edits to core/shell except the runner):**
+  - `tests/harness/sketch.js` — fluent harness over the REAL `packages/core`: `createSketch()` builds a
+    `state={joints:Map,shapes,constraints,engine,genJ}` straight off `createEngine()`, so it IS the engine.
+    builders `point/line/rect` (rect = real `makeRectFromTwoJoints` H/V/welds routed through
+    `ConstraintManager.createConstraint`, like `rect-tool.js`); ops `dimension` (real distance add via
+    ConstraintManager), `drag` (real `engine.solve` w/ mouse-spring `dragTarget`), `editValue` (mirrors
+    `numeric-input-manager` handleCommit: set value+solve, ERR-SOLVE-01 on non-converge), `setReference` /
+    `setDriving` (mirror the input-manager toggle incl. the ERR-DRIVE-01 duplicate guard + ERR-DRIVE-02),
+    `solve`; queries `isRectangle/edgeLen/pos/isDriven/converged/rankDeficient/conflicts/constraintCount/lastError`.
+    Core notifications captured via `setConstraintNotifier` → `lastError`.
+  - **`s.load(model)` + `s.serialize()`** — the "read my window" bridge. Round-trips the app's model shape
+    `{joints, shapes, constraints}` (main.js:82 `saveStateForce`); `load` accepts joints as a Map / object /
+    array / array-of-pairs so a Copy/export payload replays here. Verified by the round-trip scenario.
+  - `tests/harness/solver-scenarios.test.js` — REPORTER (always exits 0 → never a baseline failure) that
+    runs the seeds + prints the backlog table.
+  - `scripts/run-tests.js` — added `tests/harness` to the discovery dirs (one line).
+- **BACKLOG TABLE (current, honest):**
+
+  | # | scenario | result | key numbers |
+  |---|----------|--------|-------------|
+  | 1 | plain rect + drag corner → isRectangle | **PASS** | converged, 0 conflicts |
+  | 2 | dimensioned rect + drag corner → isRectangle | **PASS** | converged, width stays 100 (the drag fix) |
+  | 3 | over-constrain edit (diagonal < width) → stays a valid converged rect | **FAIL** | converged=false, isRect=false, maxResidual≈16.7, ERR-SOLVE-01 |
+  | 4 | dimension an already-dimensioned edge → exactly one driver | **FAIL** | **drivers=2** — a 2nd distance (different dimMode) is added as a SECOND DRIVING dim, silently (no notify); sandbox sees no conflict because both target 100 |
+  | 5 | toggle a lone reference dim → driving (only would-be driver) | **PASS** | wasReference→nowDriving, converged, no error |
+  | – | bridge: serialize → load → solve round-trip | **PASS** | 9 constraints preserved, converged, isRect |
+
+- **findings / honest deltas from the advisor's hypotheses:**
+  - **#5 PASSES today** (the advisor expected FAIL): promoting a lone reference dim back to driving works.
+    The "stuck reference" worry doesn't reproduce as a lone toggle — it's really a facet of **#4**: a 2nd
+    same-edge dim is added as a 2nd *driver* (not a stuck reference), because only the same dimMode is
+    deduped (`constraints.js:343-351`, value ignored) and a different-dimMode duplicate that happens to
+    agree numerically passes the sandbox. So the real duplicate bug is "two silent drivers," not a stuck ref.
+  - **#3** is the clearest live bug: an over-constraining value edit leaves the sketch unconverged AND
+    geometrically mangled (not a rect), only an ERR-SOLVE-01 toast — no refuse/revert. (Matches why the
+    auto-reference idea existed; that was reverted as the wrong fix — a real refuse/revert or manifold-aware
+    edit is the fix to design later.)
+- **FIX BACKLOG = scenarios 3 and 4.** NO fixes applied this task (per dispatch).
+- **verify:** scenario reporter exits 0; oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new**
+  (harness adds no failing test); `node --check` clean on both new files. App load unaffected (test-only files).
+- **state:** branch `carve-out` · oracle 12/12 · scenario tester live + wired · backlog = #3, #4. STOP.
+
+=== SOLVER SCENARIO TESTER DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

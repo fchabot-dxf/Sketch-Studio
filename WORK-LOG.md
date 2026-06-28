@@ -687,6 +687,53 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
 
 === ENTRY-PAIR DONE — HOLD ===
 
+## 2026-06-27 · `27292f0` — CLEANUP stage 1: rewire off old paths + DELETE-LIST proof (turn 9; NO deletions)
+
+- **did (rewire only — DELETES NOTHING; deletion is the next, gated slice):**
+  - 68 test files repointed off old `src/` shim paths → real `apps/sketchstudio/` paths. Special cases:
+    `../src/ui/inference-engine.js` → `../src/core/inference-engine.js` (it's CORE since A1, not shell);
+    `../src/ui-manager.js` (root dead stub) → `../apps/sketchstudio/ui/ui-manager.js` (real).
+  - 5 stale path-comments updated so the delete-list grep is a clean 0 (not import refs, but the advisor
+    asked for "0 remaining references"): `apps/sketchstudio/index.html` cursor-manager note + the
+    header comments in the moved debug-panel / numeric-input-manager / tuning-wizard / wizard-base.
+  - Production needed NO rewire (apps/ already use `#core/`/`#app/`/real-relative; core never imports shell).
+- **GUARDS:** baseline-diff — all 109 tests, FAILING = {ai-vision-label-spacing, debug-panel,
+  debug-whisker-align, input-manager-midpoint, settings-panel-ui, tuning-wizard, wizard-base,
+  wizard-placement} = 8 ⊆ pre-existing 9 → **0 net-new**. oracle **12/12**. leak **clean**. App loads:
+  GET `/` →302→ `/apps/sketchstudio/`; headless probe `{status:OK, importErrs:[]}`, no 404s.
+
+### DELETE-LIST (proposed for stage-2 deletion — each grepped to 0 remaining import refs from files that REMAIN)
+**24 re-export shims (src/ old paths), all 0-ref:**
+`src/svg-renderer.js` · `src/snap-detection.js` · `src/ui/{cursor-manager, debug-panel, export-manager,
+inference-engine, input-manager, notification-manager, numeric-input-manager, preview-manager,
+settings-panel, tuning-wizard, ui-manager, wizard-base}.js` · `src/ui/input-handlers/{arc-tool,
+circle-tool, constraint-tools, dimension-input, drawing-tools, line-tool, live-dimension-input,
+pan-zoom, rect-tool, selection-tools}.js`
+**3 inaugural dead files, all 0-ref:** `src/inference-engine.js` (empty) · `src/ui-manager.js` (1-line
+re-export) · `src/core-utils.js` (throw-stub).
+> Proof method: scripted grep of tests/apps/scripts/src/server.js for each file's `src/…` path; after the
+> rewire every one returned 0 references from REMAINING files (the only intra-delete-set link was
+> `src/ui-manager.js` → `./ui/ui-manager.js`, both in the list, so it vanishes together).
+
+### Additional findings (advisor's call — NOT in the shim list, NOT touched)
+- **polygon-tool — DEAD:** `apps/sketchstudio/ui/input-handlers/polygon-tool.js` has **ZERO importers**
+  (static or dynamic) anywhere. So both its src/ shim (in the list) AND the REAL module are dead. Suggest
+  deleting the real file too in stage 2 (it's dead code, no toolbar button wires it). Reporting, not deciding.
+- **dimension-input — ALIVE, keep:** `dimension-inline-edit.test.js` imports the REAL
+  `apps/sketchstudio/ui/input-handlers/dimension-input.js` (now rewired there). Only its src/ shim is
+  unused (in the list); the real module stays.
+- **`scripts/build-inline.cjs` — STALE (separate slice):** references the moved `index.html` (line 6) and
+  a `<script src="src/main.js">` marker (line 128) — an entry-pair miss (my grep there used `--include=*.js`,
+  not `.cjs`). It's a standalone inliner that bundles the whole `src/` tree, so a correct fix is its own
+  slice; NOT a shim importer, not test-covered, not load-affecting. Flagged for the advisor to scope.
+- **handoff.py note:** the repo's copy lacks `sig`/`--settle` (newer skill version has them). It's the
+  advisor's protocol tool — left untouched; I derive my turn from `status`.
+
+- **state:** rewire committed `27292f0` · 0 net-new · oracle 12/12 · app loads · branch `carve-out`.
+  **STOP — hold for advisor to bless the DELETE-LIST before stage 2 (the actual deletions, a gate).**
+
+=== CLEANUP STAGE 1 (REWIRE+PROOF) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

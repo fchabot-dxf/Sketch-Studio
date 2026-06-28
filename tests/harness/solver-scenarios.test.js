@@ -228,6 +228,37 @@ run('13. toggleDriving seam — flip + swap', 'PASS', () => {
   };
 });
 
+// 14 — toggle seam RANK-REDUNDANCY swap: promoting a redundant CROSS-edge reference demotes the determiner
+//      (the toggle-path analogue of #6 — repro: rect right-height driver, promote left-height reference).
+run('14. toggleDriving — rank-redundancy cross-edge swap', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 8, 5);
+  const right = s.dimension(r.corners[1], r.corners[2], 5); // right height (c2-c3) — driver
+  const left = s.dimension(r.corners[0], r.corners[3], 5);  // left height (c1-c4) — redundant → reference
+  toggleDriving(s.state, left);                              // promote left → must DEMOTE right (not 2 drivers)
+  s.solve();
+  const heightDrivers = s.drivingDistanceCount(r.corners[0], r.corners[3]) + s.drivingDistanceCount(r.corners[1], r.corners[2]);
+  return {
+    pass: left.isDriven === false && right.isDriven === true && heightDrivers === 1 && s.converged === true,
+    nums: { leftDrives: !left.isDriven, rightRef: right.isDriven, heightDrivers, converged: s.converged },
+  };
+});
+
+// 15 — NON-redundant ref→driving toggle still just PROMOTES (no over-demote of an independent driver)
+run('15. toggleDriving — non-redundant promote keeps the other driver', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 8, 5);
+  const width = s.dimension(r.corners[0], r.corners[1], 8); // width (c1-c2) — driver
+  const height = s.dimension(r.corners[1], r.corners[2], 5); // height (c2-c3) — independent driver
+  s.setReference(height);          // demote height → reference (width still drives)
+  toggleDriving(s.state, height);  // promote height back → independent of width → NO demotion of width
+  s.solve();
+  return {
+    pass: height.isDriven === false && width.isDriven === false && s.converged === true && s.isRectangle(r.corners),
+    nums: { heightDrives: !height.isDriven, widthStillDrives: !width.isDriven, converged: s.converged, isRect: s.isRectangle(r.corners) },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

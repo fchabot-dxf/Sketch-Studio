@@ -1366,6 +1366,30 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === EDIT+TOGGLE SEAMS DONE — HOLD ===
 
+## 2026-06-28 · toggleDriving swap generalized to RANK-REDUNDANCY (turn 39)
+
+- **bug (fuzzer P4, 5/400, now reachable because the harness drives the REAL toggle seam):** promoting a
+  redundant CROSS-edge reference to a driver left TWO drivers on a determined measurement. `toggleDriving`'s
+  one-driver swap only matched the SAME joint-pair — the gap #6 closed for the ADD path, still open in toggle.
+  Repro: rect(0,0,8,5) → dim(c2,c3,5) right driver → dim(c1,c4,5) left redundant→reference (height drivers=1)
+  → setDriving(left) → height drivers=2.
+- **fix — `apps/sketchstudio/ui/dimension-seams.js` `toggleDriving` promote branch:** after the existing
+  same-edge swap, if `c` (as a distance) would be RANK-REDUNDANT vs the remaining drivers
+  (`state.engine.isDistanceRedundant`, the #6 helper), find the determining driver by tentatively demoting
+  each candidate and re-testing — the one whose removal makes `c` carry new info is `c`'s determiner →
+  keep it demoted (swap), restore the others. Same-edge swap kept (one case); flags stay synced; recompute +
+  solve unchanged. Both the app toggle handler and the harness `setDriving`/`setReference` call this one seam.
+- **scenarios:** #14 (rank-redundancy cross-edge swap — the exact repro: promote left height → right demoted,
+  height drivers=1) and #15 (NON-redundant promote — width+height independent → promoting height back does
+  NOT demote width; no over-demote).
+- **verify:** scenario tester **16/16, backlog EMPTY**; **`node tests/harness/solver-fuzz.test.js 400` →
+  `400/400 clean`** (5 toggle P4 → 0); constraint-conformance **15/15 (gating)**; oracle **12/12**;
+  baseline-diff = the 8 pre-existing, **0 net-new**; `node --check` clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · one driver per determined measurement on
+  BOTH the add path (#6) and the toggle path (this) — same `isDistanceRedundant` rank test underneath. STOP.
+
+=== TOGGLE RANK-REDUNDANCY SWAP DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

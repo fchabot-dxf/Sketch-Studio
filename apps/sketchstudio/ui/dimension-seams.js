@@ -63,6 +63,22 @@ export function toggleDriving(state, c) {
         ((oc.shapes[0] === s1 && oc.shapes[1] === s2) || (oc.shapes[0] === s2 && oc.shapes[1] === s1)));
     }
     if (others.length) { for (const oc of others) { oc.isDriven = true; oc.driven = true; } swapped = true; }
+
+    // Generalize the swap to RANK-REDUNDANCY (not just same joint-pair): if promoting c would leave it
+    // DETERMINED by other drivers — a redundant 2nd driver on a determined measurement, e.g. the opposite
+    // edge of a dimensioned rect — demote the driver whose removal makes c carry new info, so c takes over
+    // and its partner becomes a reference. Reuses the #6 rank helper. (Same-edge swap above is one case.)
+    if (c.type === CONSTRAINT_TYPES.DISTANCE && state.engine && typeof state.engine.isDistanceRedundant === 'function') {
+      const cand = { type: c.type, joints: c.joints ? [...c.joints] : undefined, value: c.value, isRadius: c.isRadius, shape: c.shape };
+      if (state.engine.isDistanceRedundant(cand)) {
+        const drivers = state.constraints.filter(d => d !== c && !d.isDriven && !d.driven && d.type === CONSTRAINT_TYPES.DISTANCE);
+        for (const d of drivers) {
+          d.isDriven = true; d.driven = true;                                  // tentatively demote
+          if (!state.engine.isDistanceRedundant(cand)) { swapped = true; break; } // d determined c → keep demoted
+          d.isDriven = false; d.driven = false;                               // not the determiner → restore
+        }
+      }
+    }
   }
 
   c.isDriven = !c.isDriven;

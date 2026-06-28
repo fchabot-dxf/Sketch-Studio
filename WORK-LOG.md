@@ -2206,6 +2206,39 @@ code changed this turn). **No DONE sentinel — awaiting the advisor's call.**
 
 === SHAPER P2 (RENDERER COLORS → VARS) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER P3 — renderer ctx param (ancillary DOM reaches → defaultRenderCtx) (turn 83)
+
+- **did (P3, first DOM-param slice; behavior-preserving):**
+  - **`defaultRenderCtx`** (new `export const` in `svg-renderer.js`) with three methods, each doing EXACTLY what
+    the inline blocks did (verbatim), reading SketchStudio's globals/DOM:
+    - `updateGrid({GRID_SIZE, GRID_MAJOR_STEP, scale})` — (a) retunes the `#grid`/`#grid-heavy` `<pattern>`s.
+    - `getSolverStats()` — (b) returns `window.__lastSolveStats` (or null). **Correction to the dispatch's
+      "recordStats/write":** the renderer only READS this (for debug/AI-vision residual labels); the engine
+      writes it elsewhere. So it's a getter, not a recorder — implemented + named accordingly.
+    - `injectDebugStyle()` — (c) injects the one-time `#debug-joint-label-style` into `<head>` (guarded).
+  - **`draw(...)` gained a TRAILING optional `ctx = defaultRenderCtx`** (kept the existing long-positional style;
+    trailing default → existing SketchStudio callers pass nothing → byte-identical).
+  - Replaced the 3 inline blocks with `ctx.updateGrid?.({GRID_SIZE,GRID_MAJOR_STEP,scale})`,
+    `ctx.getSolverStats ? ctx.getSolverStats() : null`, `ctx.injectDebugStyle?.()`. All no-op-safe — a host
+    passing `{}`/partial ctx just skips them. Confirmed (grep) the 3 reaches now live ONLY inside
+    defaultRenderCtx, not in the draw body.
+- **verify (exactly how):**
+  - **SketchStudio byte-identical (CDP, exercising each method via the live `defaultRenderCtx`):** `gridW="2"` +
+    grid path `stroke-width="0.0273…"` (set by `updateGrid` on the load draw → grid retunes); `injectDebugStyle()`
+    → `#debug-joint-label-style` present (`debugStyleInjected:true`); `getSolverStats()` returns null-or-object
+    cleanly (`getStatsOk:true`); world-group renders **5** (unchanged); `errors=0`. **Shaper** Design still mounts
+    (6), `errors=0`.
+  - The debug render tests (debug-whisker / debug-label-vertex / debug-ai-health) exercise the debug-label path
+    (which calls getSolverStats + injectDebugStyle in situ) and pass → in-situ cross-check.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · the renderer's 3 ancillary DOM reaches are now host-injectable (default =
+  SketchStudio globals; a host can override/skip). Next per the plan: **P4** — input-manager ctx/opts (magnifier
+  / viewport-size / modeText / tool-button-sync / dimInput reaches → opts default = SketchStudio globals; may
+  split toolbar per risk R3). STOP — hold for advisor.
+
+=== SHAPER P3 (RENDERER CTX) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

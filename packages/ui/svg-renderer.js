@@ -40,7 +40,65 @@ export function skv(color) {
   return v ? `var(${v}, ${color})` : color;
 }
 
-export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget){ 
+// P3 DOM parameterization: the renderer's app-specific ANCILLARY reaches, factored into a render context so a
+// host (e.g. Shaper) can supply its own (or {} to skip). All are no-op-safe + behavior-preserving — the default
+// does EXACTLY what the inline blocks did, reading SketchStudio's globals/DOM. draw() takes ctx = defaultRenderCtx
+// as a trailing optional param, so existing SketchStudio callers (which pass nothing) stay byte-identical.
+export const defaultRenderCtx = {
+  // (a) Retune the SVG grid <pattern>s to the current grid sizes / zoom (fixes stroke saturation on zoom).
+  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
+    try {
+      const gridPattern = document.getElementById('grid');
+      const gridHeavyPattern = document.getElementById('grid-heavy');
+      if (gridPattern && gridHeavyPattern) {
+        gridPattern.setAttribute('width', GRID_SIZE);
+        gridPattern.setAttribute('height', GRID_SIZE);
+        gridHeavyPattern.setAttribute('width', GRID_MAJOR_STEP);
+        gridHeavyPattern.setAttribute('height', GRID_MAJOR_STEP);
+
+        const minorPath = gridPattern.querySelector('path');
+        if (minorPath) {
+          minorPath.setAttribute('d', `M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`);
+          // Clamp stroke width to prevent grid saturation when zooming out
+          const minorStroke = Math.min(scale(1), 0.2); // Max 0.2 units (10% of 2)
+          minorPath.setAttribute('stroke-width', minorStroke);
+        }
+
+        const majorRect = gridHeavyPattern.querySelector('rect');
+        if (majorRect) {
+          majorRect.setAttribute('width', GRID_MAJOR_STEP);
+          majorRect.setAttribute('height', GRID_MAJOR_STEP);
+        }
+        const majorPath = gridHeavyPattern.querySelector('path');
+        if (majorPath) {
+          majorPath.setAttribute('d', `M ${GRID_MAJOR_STEP} 0 L 0 0 0 ${GRID_MAJOR_STEP}`);
+          const majorStroke = Math.min(scale(2), 1.0); // Max 1.0 units (10% of 10)
+          majorPath.setAttribute('stroke-width', majorStroke);
+        }
+      }
+    } catch (_) {}
+  },
+  // (b) Read the engine's last solve stats (written elsewhere by the solver) for the debug/AI-vision residual labels.
+  getSolverStats() {
+    return (typeof window !== 'undefined' && window.__lastSolveStats) ? window.__lastSolveStats : null;
+  },
+  // (c) Inject the one-time debug-joint-label stylesheet into <head> (guarded for headless/test DOM stubs).
+  injectDebugStyle() {
+    if (typeof document !== 'undefined' &&
+        typeof document.getElementById === 'function' &&
+        document.head &&
+        !document.getElementById('debug-joint-label-style')) {
+      const style = document.createElement('style');
+      style.id = 'debug-joint-label-style';
+      style.innerHTML = `.debug-joint-label { pointer-events: none; }
+        svg .debug-joint-label { }
+      `;
+      document.head.appendChild(style);
+    }
+  },
+};
+
+export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget, ctx=defaultRenderCtx){ 
   // Update cursor based on tool
   if (svg) {
     updateCursor(svg, currentTool);
@@ -271,37 +329,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   };
 
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
-  // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue
-  try {
-    const gridPattern = document.getElementById('grid');
-    const gridHeavyPattern = document.getElementById('grid-heavy');
-    if(gridPattern && gridHeavyPattern){
-      gridPattern.setAttribute('width', GRID_SIZE);
-      gridPattern.setAttribute('height', GRID_SIZE);
-      gridHeavyPattern.setAttribute('width', GRID_MAJOR_STEP);
-      gridHeavyPattern.setAttribute('height', GRID_MAJOR_STEP);
-
-      const minorPath = gridPattern.querySelector('path');
-      if(minorPath){
-        minorPath.setAttribute('d', `M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`);
-        // Clamp stroke width to prevent grid saturation when zooming out
-        const minorStroke = Math.min(scale(1), 0.2); // Max 0.2 units (10% of 2)
-        minorPath.setAttribute('stroke-width', minorStroke);
-      }
-
-      const majorRect = gridHeavyPattern.querySelector('rect');
-      if(majorRect){
-        majorRect.setAttribute('width', GRID_MAJOR_STEP);
-        majorRect.setAttribute('height', GRID_MAJOR_STEP);
-      }
-      const majorPath = gridHeavyPattern.querySelector('path');
-      if(majorPath){
-        majorPath.setAttribute('d', `M ${GRID_MAJOR_STEP} 0 L 0 0 0 ${GRID_MAJOR_STEP}`);
-        const majorStroke = Math.min(scale(2), 1.0); // Max 1.0 units (10% of 10)
-        majorPath.setAttribute('stroke-width', majorStroke);
-      }
-    }
-  } catch(_) {}
+  // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue.
+  // Ancillary (P3): the host's render ctx retunes the grid <pattern>s (default = SketchStudio's #grid DOM).
+  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, scale });
 
   // Closed-shape fills: build simple loops from grouped line shapes
   try {
@@ -720,7 +750,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // AI Vision / Health reporting: append failing residual(s) (bold red) when present
         let residualMarkup = '';
         try {
-          const solverStats = (typeof window !== 'undefined' && window.__lastSolveStats) ? window.__lastSolveStats : null;
+          const solverStats = ctx.getSolverStats ? ctx.getSolverStats() : null; // ancillary (P3): default reads window.__lastSolveStats
           const tol = Number(SolverConfig.VERIFIER_TOLERANCE || 0.001);
           if ((showHealth || AI_VISION) && solverStats && Array.isArray(solverStats.constraintErrors) && dofSources && dofSources.has && dofSources.has(e.jid)) {
             // Look for constraint provenance entries (distance:ID, radius:ID, etc.) and match against solverStats
@@ -752,21 +782,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     if (debugLabelGroups.length > 0) {
       lateOverlay = `<g class="debug-joint-label-overlay" style="pointer-events:none;">${debugLabelGroups.join('')}</g>`;
     }
-    // Add style for high z-index (SVG: later in DOM = higher z-order)
-    // Guarded for headless/test environments that stub `document` but don't
-    // implement getElementById/head — checking the methods explicitly is
-    // more robust than `typeof document !== 'undefined'` alone.
-    if (typeof document !== 'undefined' &&
-        typeof document.getElementById === 'function' &&
-        document.head &&
-        !document.getElementById('debug-joint-label-style')) {
-      const style = document.createElement('style');
-      style.id = 'debug-joint-label-style';
-      style.innerHTML = `.debug-joint-label { pointer-events: none; }
-        svg .debug-joint-label { }
-      `;
-      document.head.appendChild(style);
-    }
+    // Add style for high z-index (SVG: later in DOM = higher z-order). Ancillary (P3): the host's render ctx
+    // injects it (default = SketchStudio's <head>; guarded for headless/test DOM stubs).
+    ctx.injectDebugStyle?.();
   }
   
   // Determine which joints and shapes are part of the selected constraint (for highlighting)

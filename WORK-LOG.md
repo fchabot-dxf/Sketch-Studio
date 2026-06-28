@@ -1722,6 +1722,37 @@ wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
 
 === SHAPER S3 (SHARED RENDERER RELOCATED) DONE — HOLD ===
 
+## 2026-06-28 · INTERLUDE — static import-resolution test (guards every slice move) (turn 59)
+
+- **did (NEW TEST ONLY — zero app code touched):** `tests/import-resolution.test.js` — automates the "0 stale
+  refs" check every slice keeps risking (coords had 18 importers, svg-renderer 20; one miss = a broken app the
+  Node oracle can't see). Plain Node ESM, no new deps (fs + regex).
+  - **Reads the 3 alias sources at runtime** (does NOT hardcode): `package.json` `"imports"` (glob form
+    normalized: `#core/*`→`packages/core/`, `#ui/*`→`packages/ui/`, `#app/*`→`apps/sketchstudio/`) + both
+    `index.html` importmaps (regex-extract `<script type=importmap>` → `JSON.parse`; targets resolved relative to
+    each index.html's dir).
+  - **Walks** all `.js` under apps/sketchstudio, apps/shaper, packages/core, packages/ui; extracts every `#`-spec
+    from static `from`, dynamic `import()`, and bare `import` forms (comments stripped first so commented-out
+    imports don't false-positive; deduped per file).
+  - **Resolves** each `#`-spec via the OWNING map (apps/shaper file → Shaper importmap; apps/sketchstudio →
+    its; packages/ → package.json) → fs path → `existsSync`. A `#app/` import inside `packages/` is a hard ERROR
+    (a shared module must not depend on the per-app alias).
+  - **Asserts** `#core/` + `#ui/` resolve to the SAME directory across all three sources. Gating: `exit(1)` with
+    a `file → spec → attempted-path` list on any unresolved/forbidden spec or any inconsistency; else `exit(0)`.
+- **verify (exactly how):**
+  - On the current tree: **PASS** — scanned **73** .js files, checked **141** `#`-specs; all resolve; `#core/`→
+    packages/core, `#ui/`→packages/ui, `#app/`→apps/sketchstudio consistent across the 3 sources. `exit 0`.
+  - **Negative control** (proves it actually gates): temporarily rewrote `sketch-canvas.js`'s `#ui/coords.js`→
+    `#ui/coords-MOVED.js` → test `exit 1` and printed `packages/ui/sketch-canvas.js: #ui/coords-MOVED.js ->
+    packages/ui/coords-MOVED.js (file not found)`. Restored → `exit 0` again. (This is exactly the class of
+    breakage the coords/svg-renderer slices risked.)
+  - baseline-diff: **PASSING 106** (was 105; +1 for this test → **106/8** as expected), FAILING = the 8
+    pre-existing, **0 net-new**. `git status` shows ONLY `?? tests/import-resolution.test.js` — no app files.
+- **state:** branch `carve-out` · a gating guard now fails CI the instant a slice leaves a stale `#`-import or
+  an inconsistent alias. Next per the plan: S4 (input-manager + tool handlers → `#ui/`). STOP — hold for advisor.
+
+=== IMPORT-RESOLUTION TEST DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

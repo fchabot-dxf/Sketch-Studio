@@ -62,17 +62,30 @@ run('3. over-constrain edit → stays a valid converged rect', 'FAIL(today)', ()
 //      Two distances on the same edge are only allowed by the code with different dimModes; a 2nd
 //      same-mode one is dropped. Either way there must be exactly ONE driver (no 2nd silent driver).
 //      Expect FAIL today.
-run('4. dimension already-dimensioned edge → one driver', 'FAIL(today)', () => {
+run('4. dimension already-dimensioned edge → one driver', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
-  const before = s.constraintCount;
   const d1 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'horizontal' }); // D1 driving
-  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // 2nd dim, same edge
-  const addedSecond = s.constraintCount - before === 2;
+  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // 2nd dim on the same edge
+  s.solve();
   const drivers = s.drivingDistanceCount(r.corners[0], r.corners[1]);
   return {
-    pass: drivers === 1, // exactly one driving distance — the 2nd was rejected or made a reference
-    nums: { drivers, secondAdded: addedSecond, d1driving: !s.isDriven(d1), d2reference: s.isDriven(d2), lastError: s.lastError || 'none' },
+    pass: drivers === 1 && s.isDriven(d2) === true && s.isDriven(d1) === false && s.converged === true && s.isRectangle(r.corners),
+    nums: { drivers, d1driving: !s.isDriven(d1), d2reference: s.isDriven(d2), converged: s.converged, isRect: s.isRectangle(r.corners) },
+  };
+});
+
+// 4b — toggle a reference dim → driving while ANOTHER dim already drives → SWAP (one driver per edge)
+run('4b. toggle ref→driving when another drives → swaps', 'PASS', () => {
+  const s = createSketch();
+  const r = s.rect(0, 0, 100, 60);
+  const d1 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'horizontal' }); // D1 driving
+  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // D2 reference (one-driver rule)
+  const ok = s.setDriving(d2);   // promote D2 → must DEMOTE D1 (swap), never refuse
+  const drivers = s.drivingDistanceCount(r.corners[0], r.corners[1]);
+  return {
+    pass: ok === true && drivers === 1 && s.isDriven(d2) === false && s.isDriven(d1) === true && s.converged === true && s.lastError === null,
+    nums: { drivers, d2nowDriving: !s.isDriven(d2), d1nowReference: s.isDriven(d1), converged: s.converged, lastError: s.lastError || 'none' },
   };
 });
 

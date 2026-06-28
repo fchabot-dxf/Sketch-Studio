@@ -1148,6 +1148,37 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === SOLVER SCENARIO TESTER DONE — HOLD ===
 
+## 2026-06-28 · solver fix #4 — ONE driving dimension per edge (turn 25)
+
+- **bug (scenario #4):** dimensioning an edge that already has a DRIVING distance silently added a
+  SECOND driving distance (`drivers=2`). The dedup (`constraints.js:343-351`) only catches same-`dimMode`
+  exact dups; a different-dimMode distance that happens to agree numerically passes the sandbox (no
+  conflict) and lands as a 2nd driver — the root of the user's `ERR-DRIVE-01` (two drivers fighting).
+- **fix (a) — core, `packages/core/constraint-manager.js`:** new static `_edgeHasDrivingDistance(state,
+  params)`; in `createConstraint`, a DISTANCE whose joint-pair (or radius shape) already carries a driving
+  distance is brought in as a REFERENCE (`isDriven=driven=true`, soft "added as reference" notice) instead
+  of a 2nd driver. Runs after the existing dedup, before conflict-detection (so the sandbox skips it). This
+  covers ALL real add paths (dimension-tool, numeric-input, harness) since they all go through
+  ConstraintManager.
+- **fix (b) — shell, `apps/sketchstudio/ui/input-manager.js` (the ERR-DRIVE-01 spot ~:489):** toggling a
+  reference dim → driving while ANOTHER dim on the same edge/shapes already drives now SWAPS — demote that
+  driver to reference, promote the toggled one — instead of refusing with ERR-DRIVE-01. Dropped the dimMode
+  match (one driver per edge, any mode). Also `c.driven = c.isDriven` after the toggle so the two driven
+  flags stay in sync (fixes a latent bug where an auto-driven dim toggled to "driving" stayed solver-skipped
+  because `driven` was still true). The lone-toggle path (scenario #5) is unchanged (no "other driver").
+- **harness:** `tests/harness/sketch.js` `setDriving` updated to mirror the swap (faithful to the shell).
+- **scenarios:** #4 now expects PASS (drivers=1, 2nd dim `isDriven`, converged, rectangular); added **#4b**
+  `toggle ref→driving when another drives → swaps` (D2 drives, D1 becomes reference, drivers=1, converged).
+- **verify:** scenario table — #4 GREEN, **#4b GREEN**, #1/#2/#5/bridge GREEN, **#3 stays RED** (not this
+  task) → 6/7, backlog = #3. oracle **12/12**; baseline-diff = the 8 pre-existing, **0 net-new** (reporter
+  exits 0); `node --check` clean on all four touched files; headless app-load OK. Part (b) is shell DOM-handler
+  code not headless-executable without a DOM, but its logic is identical to the harness `setDriving` that #4b
+  exercises green, plus load + diff review.
+- **state:** branch `carve-out` · oracle 12/12 · one-driver-per-edge enforced (add → reference, toggle →
+  swap) · backlog = #3. STOP.
+
+=== SOLVER FIX #4 (ONE DRIVER PER EDGE) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

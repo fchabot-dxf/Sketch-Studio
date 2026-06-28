@@ -110,18 +110,18 @@ export function createSketch() {
   // Make a dimension a reference (always allowed).
   function setReference(dim) { if (dim) { dim.isDriven = true; dim.driven = true; } return true; }
 
-  // Toggle a reference dim -> driving (mirrors input-manager.js:457-545: duplicate-driving guard
-  // [ERR-DRIVE-01], then recompute value from geometry, solve, [ERR-DRIVE-02] if not converged).
+  // Toggle a reference dim -> driving (mirrors input-manager.js: one-driver-per-edge SWAP — demote any
+  // other driver on the same edge, then promote this one; recompute value; solve; ERR-DRIVE-02 if not
+  // converged). No ERR-DRIVE-01 refusal anymore.
   function setDriving(dim) {
     lastError = null;
     if (!dim) return false;
     if (dim.type === CONSTRAINT_TYPES.DISTANCE && dim.joints && dim.joints.length >= 2) {
-      const [j1, j2] = dim.joints; const myMode = dim.dimMode || 'aligned';
-      const conflict = state.constraints.some(oc => oc !== dim && !oc.isDriven && !oc.driven &&
+      const [j1, j2] = dim.joints;
+      const others = state.constraints.filter(oc => oc !== dim && !oc.isDriven && !oc.driven &&
         oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length >= 2 &&
-        ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)) &&
-        (oc.dimMode || 'aligned') === myMode);
-      if (conflict) { lastError = '[ERR-DRIVE-01] cannot set to driving — duplicate driving constraint'; return false; }
+        ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
+      for (const oc of others) { oc.isDriven = true; oc.driven = true; } // swap: demote the old driver(s)
     }
     dim.isDriven = false; dim.driven = false;
     if (dim.joints && dim.joints.length >= 2) dim.value = distOf(dim.joints[0], dim.joints[1]);

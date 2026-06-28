@@ -37,6 +37,22 @@ export class ConstraintManager {
 
         return { ok: true };
     }
+    // True if the edge/joint-pair (or radius shape) already carries a DRIVING (non-reference)
+    // distance. Used to keep exactly one driving dimension per edge.
+    static _edgeHasDrivingDistance(state, params) {
+        if (!state || !Array.isArray(state.constraints)) return false;
+        return state.constraints.some(c => {
+            if (c.type !== CONSTRAINT_TYPES.DISTANCE || c.isDriven || c.driven) return false;
+            if (params.isRadius || c.isRadius) {
+                return !!(params.isRadius && c.isRadius && c.shape && params.shape && c.shape === params.shape);
+            }
+            if (c.joints && c.joints.length >= 2 && params.joints && params.joints.length >= 2) {
+                const [a, b] = c.joints; const [x, y] = params.joints;
+                return (a === x && b === y) || (a === y && b === x);
+            }
+            return false;
+        });
+    }
     static createConstraint(state, type, params, options = {}) {
         const opts = {
             autoSolve: true,
@@ -80,6 +96,20 @@ export class ConstraintManager {
         if (constraints.hasConstraint(state.constraints, type, normalized)) {
             dbg.log('constraints', `[ConstraintManager] Duplicate ${type} constraint rejected`);
             return null;
+        }
+
+        // One driving dimension per edge: a 2nd DISTANCE on a joint-pair/edge (or radius shape) that
+        // already has a DRIVING distance comes in as a REFERENCE, never a silent 2nd driver.
+        // (hasConstraint above only dedups same-dimMode exact dups; a different-dimMode distance that
+        // happens to agree numerically otherwise slips through as a 2nd driver — the root of the user's
+        // ERR-DRIVE-01: two drivers already fighting on the edge.)
+        if (type === CONSTRAINT_TYPES.DISTANCE && !normalized.isDriven && !normalized.driven &&
+            this._edgeHasDrivingDistance(state, normalized)) {
+            normalized.isDriven = true;
+            normalized.driven = true;
+            normalized.drivenReason = 'edge already has a driving dimension — added as reference';
+            notify('Dimension added as reference — this edge already has a driving dimension.', 'info', 2500);
+            dbg.log('constraints', `[ConstraintManager] 2nd distance on a driven edge -> reference`);
         }
 
         // ── Conflict detection ─────────────────────────────────────────

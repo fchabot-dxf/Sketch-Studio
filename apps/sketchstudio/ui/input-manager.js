@@ -453,52 +453,39 @@ function handlePointerDown(e, svg, state) {
         if (!isNaN(cIdx) && state.constraints && state.constraints[cIdx]) {
             const c = state.constraints[cIdx];
             
-            // VALIDATION: Prevent toggling to Driving if it creates a conflict
+            // ONE driving dimension per edge: if this dim is a reference and ANOTHER dim on the same
+            // edge/shapes already DRIVES, SWAP — demote that driver to a reference and let this one take
+            // over (replaces the old ERR-DRIVE-01 refusal, so the user can always pick which dim drives).
             if (c.isDriven) {
-                let conflict = false;
-                // Check for duplicate driving constraints
+                let others = [];
                 if (c.type === CONSTRAINT_TYPES.DISTANCE) {
                     if (c.isRadius && c.shape) {
-                        conflict = state.constraints.some(oc => 
-                            oc !== c && !oc.isDriven && !oc.driven && 
-                            oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape
-                        );
+                        others = state.constraints.filter(oc =>
+                            oc !== c && !oc.isDriven && !oc.driven &&
+                            oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
                     } else if (c.joints && c.joints.length >= 2) {
                         const [j1, j2] = c.joints;
-                        const myMode = c.dimMode || 'aligned';
-                        conflict = state.constraints.some(oc => 
+                        // Any other driving distance on the same joint-pair (any dimMode) — one driver per edge.
+                        others = state.constraints.filter(oc =>
                             oc !== c && !oc.isDriven && !oc.driven &&
-                            oc.type === CONSTRAINT_TYPES.DISTANCE && 
-                            oc.joints && oc.joints.length >= 2 &&
-                            ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)) &&
-                            (oc.dimMode || 'aligned') === myMode
-                        );
+                            oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length >= 2 &&
+                            ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
                     }
                 } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
                     const [s1, s2] = c.shapes;
-                    conflict = state.constraints.some(oc => 
+                    others = state.constraints.filter(oc =>
                         oc !== c && !oc.isDriven && !oc.driven &&
-                        oc.type === CONSTRAINT_TYPES.ANGLE &&
-                        oc.shapes && oc.shapes.length === 2 &&
-                        ((oc.shapes[0] === s1 && oc.shapes[1] === s2) || (oc.shapes[0] === s2 && oc.shapes[1] === s1))
-                    );
+                        oc.type === CONSTRAINT_TYPES.ANGLE && oc.shapes && oc.shapes.length === 2 &&
+                        ((oc.shapes[0] === s1 && oc.shapes[1] === s2) || (oc.shapes[0] === s2 && oc.shapes[1] === s1)));
                 }
-
-                if (conflict) {
-                    showNotification(
-                        `Cannot set to Driving: A constraint of this type already exists. [ERR-DRIVE-01] Reason: Duplicate driving constraint.\nArgs: ` +
-                        JSON.stringify({
-                            cIdx,
-                            constraint: c,
-                            allConstraints: state.constraints && state.constraints.length
-                        }),
-                        "warning"
-                    );
-                    return true;
+                if (others.length) {
+                    for (const oc of others) { oc.isDriven = true; oc.driven = true; }
+                    showNotification('Now driving this dimension — the previous one is now a reference.', 'info');
                 }
             }
 
             c.isDriven = !c.isDriven;
+            c.driven = c.isDriven; // keep the two driven flags in sync (solver checks isDriven || driven)
             
             // If switching to DRIVING mode, update the constraint value to match current geometry
             // to prevent the geometry from snapping to an old/stale value.

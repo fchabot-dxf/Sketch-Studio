@@ -1,7 +1,7 @@
 import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
 import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
-import { clearHover } from './hover-manager.js';
+import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { exportToFile } from './export-manager.js';
 

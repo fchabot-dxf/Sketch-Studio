@@ -12,12 +12,12 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from '#ui/dimension-seams.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';
-import { updateHover } from './hover-manager.js';
+import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from './input-handlers/drawing-tools.js';
 import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from './input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from './input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from './input-handlers/dimension-tool.js';
-import { setupNumericInput, showEditInput } from './numeric-input-manager.js';
+import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
 import { handleLineKeyDown } from './input-handlers/line-tool.js';

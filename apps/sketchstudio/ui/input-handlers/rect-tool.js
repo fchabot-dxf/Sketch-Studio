@@ -4,7 +4,7 @@ import { TOOL_MODES, RECT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
 import { findNearbyJoint } from '#core/joints.js';
-import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
+import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';

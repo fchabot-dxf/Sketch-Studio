@@ -1,5 +1,5 @@
 (async () => {
-  const { showEditInput, hideInput, setupNumericInput } = await import('../apps/sketchstudio/ui/numeric-input-manager.js');
+  const { showEditInput, hideInput, setupNumericInput } = await import('#ui/numeric-input-manager.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Minimal DOM & SVG mocks (reuse pattern from other tests)

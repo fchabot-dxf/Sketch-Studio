@@ -1,4 +1,6 @@
-// apps/sketchstudio/ui/numeric-input-manager.js
+// packages/ui/numeric-input-manager.js — shared UI. Relocated VERBATIM from apps/sketchstudio/ui in slice S4b.
+// TODO(shaper): parameterize the DOM reaches (document.getElementById('dimInput')/createElement/document.body)
+// before Shaper adopts this — it currently builds its inputs straight into the SketchStudio document.
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';

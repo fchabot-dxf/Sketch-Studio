@@ -8,7 +8,7 @@ import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
-import { showEditInput } from '../numeric-input-manager.js';
+import { showEditInput } from '#ui/numeric-input-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -45,7 +45,7 @@ function showCoincidentGlyphsForCluster(state, cluster){
 } 
 
 // Import shared helpers from hover-manager (single source of truth)
-import { findClosestConstraintGlyph, getScreenDist } from '../hover-manager.js';
+import { findClosestConstraintGlyph, getScreenDist } from '#ui/hover-manager.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)

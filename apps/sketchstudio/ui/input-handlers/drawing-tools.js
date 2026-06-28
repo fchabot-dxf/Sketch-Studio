@@ -14,7 +14,7 @@ import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, hand
 // Polygon tool removed: polygon-tool.js import removed
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from './arc-tool.js';
 import { handleJointSelection } from './selection-tools.js';
-import { setHoverFromSnap } from '../hover-manager.js';
+import { setHoverFromSnap } from '#ui/hover-manager.js';
 
 // Local state for drawing tools
 let continueFrom = null;

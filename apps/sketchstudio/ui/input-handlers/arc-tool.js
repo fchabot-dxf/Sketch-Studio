@@ -4,7 +4,7 @@ import { TOOL_MODES, CONSTRAINT_TYPES, SNAP } from '#core/constants.js';
 import { makeArc } from '#core/shapes.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
-import { showSingleInput, isInputActive, hideInput, resetLockedDimensions, updateInputPosition, setupNumericInput } from '../numeric-input-manager.js';
+import { showSingleInput, isInputActive, hideInput, resetLockedDimensions, updateInputPosition, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { worldToScreen } from '#ui/coords.js';
 import { angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';

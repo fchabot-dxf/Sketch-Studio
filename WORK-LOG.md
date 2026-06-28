@@ -1858,6 +1858,32 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4a (L0 LEAVES) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER S4b — L1 managers → #ui/ VERBATIM (turn 65)
+
+- **did (S4b of the blessed plan; relocation only):**
+  - **`git mv` 2 L1 managers VERBATIM** → `packages/ui/` (renames, no logic change): `hover-manager.js`,
+    `numeric-input-manager.js`. Their intra-cluster deps were already repointed to `#ui/` in S4a, so the moved
+    files carry only `#core/*` + `#ui/*` (coords, snap-detection, dimension-seams, notification-manager) — **no
+    cross-package relative to convert** (risk #3 satisfied). numeric-input keeps `#ui/dimension-seams` (S4a).
+  - `TODO(shaper):` added to `numeric-input-manager.js` (22 DOM reaches — builds inputs into the document) and
+    its stale `// apps/sketchstudio/ui/...` path comment corrected to the new location; `hover-manager.js` is
+    DOM-clean (0 reaches), no TODO.
+  - **Repointed all 11 importers → `#ui/<name>.js`** (basename match), app + tests: the 8 input-handlers that use
+    them, input-manager, **ui-manager** (shell), and `tests/constraint-edit-driven.test.js`. Grep confirms 0
+    stale refs.
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN** (exit 0). Node smoke: both `#ui/` managers import OK.
+    `node --check` clean on the moved files.
+  - Browser (CDP): **SketchStudio** `errors=0`, `svgCanvas` present, world-group rendered **5 children**
+    (byte-identical — verbatim mv, only import paths changed); **Shaper** Design `errors=0` → 6 children.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · fuzzer 400 → **400/400** · scenario tester
+    **23/23** (the test/harness net the guard can't see) · baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out` · `#ui/` now holds coords + svg-renderer + cursor-manager + sketch-canvas + the
+  5 L0 leaves + hover-manager + numeric-input-manager. Next per the plan: **S4c** (base-tool + leaf handlers:
+  base-tool, constraint-tools, pan-zoom, live-dimension-input, dimension-input → `#ui/`). STOP — hold for advisor.
+
+=== SHAPER S4b (L1 MANAGERS) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

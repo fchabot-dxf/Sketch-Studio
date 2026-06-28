@@ -1,4 +1,4 @@
-import { setupNumericInput, showEditInput, hideInput } from '../numeric-input-manager.js';
+import { setupNumericInput, showEditInput, hideInput } from '#ui/numeric-input-manager.js';
 
 // Wrapper module providing a backward-compatible dimension input API.
 // Delegates to the canonical numeric input manager while exposing a

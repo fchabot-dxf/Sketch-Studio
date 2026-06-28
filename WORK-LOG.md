@@ -1034,6 +1034,33 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === POLISH #1 (2-ROW TOOLBAR) DONE — HOLD ===
 
+## 2026-06-28 · `d60e3c3` — Solver UX: auto-reference an over-constrained dimension edit (turn 19)
+
+- **did:** `apps/sketchstudio/ui/numeric-input-manager.js` `handleCommit` (edit mode) — the
+  `!result.converged` branch no longer shows the hard `[ERR-SOLVE-01]` (which left the geometry stuck on
+  the impossible value). It now auto-demotes the dim to a REFERENCE: `target.isDriven = target.driven =
+  true; target.drivenReason = 'over-constrained — kept as reference'`, then **re-solves**. The solver skips
+  driven dims (`packages/core/constraint-solver.js:63`) → the sketch settles (converges); the renderer
+  shows the measured value in `(parens)` and the dim stays toggleable back to driving — non-destructive,
+  reversible. Soft `showNotification("Dimension set to reference — can't be enforced …", "warning")` in
+  place of the scary error.
+- **siblings checked (reported):** `live-dimension-input.js` ALREADY auto-references (its
+  `verifyConstraintDriving` tests + sets `isDriven`) → no change. `input-manager.js:534` (`ERR-DRIVE-02`)
+  is the EXPLICIT driving-TOGGLE path (user deliberately toggles a ref→driving); auto-reverting that would
+  undo their explicit choice, so left as-is (different intent from a value edit). No other value-edit path
+  hard-errors.
+- **verify — REAL symptom at the engine level (the crux):** reproduced the over-constrain
+  (coincident `a↔origin` + distance `a↔origin`=5) → `solve` **converged:false, conflict c_dist**; then set
+  the dim driven + re-solve → **converged:true, no conflict, value preserved** (so toggle-back works). That
+  IS the auto-reference behavior handleCommit now performs. Plus: `node --check` OK; **oracle 12/12**;
+  **baseline-diff = the 8 pre-existing, 0 net-new**; headless app-load `{status:OK, importErrs:[]}`.
+  The `(parens)` render + toggle are pre-existing (svg-renderer); the full in-browser click-through wasn't
+  scripted (app exposes no engine/state hook for CDP; the change is a faithful 6-line application of the
+  engine-proven, constraint-manager-established driven pattern).
+- **state:** branch `carve-out`@`d60e3c3` · oracle 12/12 · app loads · 0 net-new. STOP — hold for advisor.
+
+=== SOLVER AUTO-REFERENCE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

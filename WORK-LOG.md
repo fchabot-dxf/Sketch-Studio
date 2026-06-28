@@ -605,6 +605,45 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
 
 === WAVE A FIX-2 DONE — HOLD ===
 
+## 2026-06-27 · `eb45aa3` — GEOMETRY SPLIT: screen helpers core/geometry.js → apps/sketchstudio/coords.js (turn 5)
+
+- **did:** extracted the 3 DOM-coupled screen transforms (`screenToWorld` @67, `worldToScreen` @94,
+  `getZoomFactor` @275) VERBATIM from `core/geometry.js` into NEW `apps/sketchstudio/coords.js`
+  (self-contained — they use only `svg.getBoundingClientRect()`/`viewBox`/`clientWidth`+arithmetic, no
+  geometry-helper calls, so coords.js needs no imports). Removed all 3 (+ their JSDoc) from
+  `core/geometry.js`, which is now pure math (grep-confirmed: no `svg`/`getBoundingClientRect`/`viewBox`).
+- **repointed importers — split each import (3 helpers → coords; other geometry funcs stay on
+  `#core/geometry.js`):**
+  - **12 shell** → `#app/coords.js` (uniform alias, advisor-offered; resolves browser+Node, no
+    depth-counting): svg-renderer, snap-detection, input-manager, hover-manager, numeric-input-manager,
+    and input-handlers/{arc,circle,dimension,line,live-dimension-input,rect,selection}-tool(s).
+  - **6 tests** → `../apps/sketchstudio/coords.js`: pan-during-drawing, midpoint-snap, midpoint-debug(.js),
+    midpoint-debug-2(.js), input-manager-midpoint, input-manager-equal.new.
+- **count reconciliation (advisor said 20 = 12 shell + 8 tests; actual repoints = 18):** the other 2 of
+  the advisor's 8 — `selection-origin-suppression`, `dimension-inline-edit` — only had a **comment**
+  mentioning `worldToScreen` (the keyword grep matched the comment). They import shell modules
+  (selection-tools / dimension-input) and supply a **mock svg**, never importing the helpers directly →
+  nothing to repoint; the shell repoint + the byte-identical coords functions keep them at baseline
+  (verified via the guard). So 18 real importers, 2 comment-only false-positives.
+- **verify (the `8b7db3d` killer — hardest):**
+  - **behavior round-trip:** `worldToScreen(screenToWorld(p)) = p` to ~1e-16 on a non-trivial
+    viewBox(-5,-3,20,15)/rect(800×600,offset) + `getZoomFactor`=0.025 — i.e. unchanged from pre-split
+    (verbatim move).
+  - **baseline-diff guard:** ran all 109 `tests/*.test.js`; FAILING = {ai-vision-label-spacing,
+    debug-panel, debug-whisker-align, input-manager-midpoint, settings-panel-ui, tuning-wizard,
+    wizard-base, wizard-placement} = 8, ALL ⊆ the pre-existing 9 (settings-project-config passes) →
+    **0 net-new**. `input-manager-midpoint` fails only on its pre-existing logic assert ("Midpoint
+    constraint should have been created"); its `worldToScreen` now resolves via coords (not a resolution
+    regression). 5 of 6 repointed tests pass; the 6th was already in the pre-existing 9.
+  - **oracle 12/12** · **leak clean** (no `src/core/` imports `#app/`/`coords`/`apps/`) · **app LOADS**:
+    headless-Edge full `index.html`→`main.js` graph → `{status:OK, importErrs:[]}`, `coords.js` fetched
+    (200), no 404s.
+- **state:** tests 0 net-new (≤9 pre-existing) · oracle 12/12 · app loads (browser-verified) · branch
+  `carve-out`@`eb45aa3`. Coordinating via `handoff.py` (turn 5). No further moves; deferred gates
+  (entry-pair + Cloudflare, rewire/cleanup/deletes) untouched.
+
+=== GEOMETRY SPLIT DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

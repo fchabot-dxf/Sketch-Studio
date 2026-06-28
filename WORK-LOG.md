@@ -892,6 +892,43 @@ tests → packages/core/tests (§5), solver-core.legacy delete (findings), build
 
 === CORE SLICE A (debug split) DONE — HOLD ===
 
+## 2026-06-28 · `e18c29c` — CORE batch SLICE B: atomic lift src/ -> packages/core (FLATTEN) (turn 7)
+
+- **did (ONE atomic commit — the alias retarget is all-or-nothing):**
+  - `git mv` `src/core/*.js` (16) -> `packages/core/*.js`; `src/core/solver/*.js` (4) ->
+    `packages/core/solver/*.js`; the 3 facades `constraint-solver.js`/`solver-core.js`/`solver-core.legacy.js`
+    -> `packages/core/`; `src/overrides.css` -> `apps/sketchstudio/`. **`src/` is now GONE** — the brain is
+    a standalone package at `packages/core/`.
+  - **FLATTEN** (decided in STEP 0): the `core/` hop is removed, `solver/` kept. So one `#core/` covers
+    all 23 core files + facades.
+  - Facades' `./core/X` -> `./X` (they're core-internal now). Core-internal relative imports (`./debug.js`,
+    solver's `../solver-config.js`) survive untouched — the subtree flattened together.
+  - **Retarget the 2 `#core` configs ONLY:** `package.json "#core/*": "./packages/core/*"`,
+    `apps/sketchstudio/index.html` importmap `"#core/": "../../packages/core/"`. Every `#core/` importer
+    (all of `apps/`) is unchanged — the payoff.
+  - **Rewire facade importers to `#core/`:** `main.js` (`../../src/constraint-solver.js` -> `#core/…`) +
+    **79 tests** (`../src/core/` -> `#core/`, facades -> `#core/`).
+- **regression caught + fixed (the value of the baseline-diff guard):** `settings-project-config.test.js`
+  builds an eval-import path via `path.resolve(process.cwd(),'src','core','solver-config.js')` — a non-`../`
+  form my string-rewrite missed -> after the move it threw `ERR_MODULE_NOT_FOUND` (the ONLY net-new
+  failure). Fixed to `('packages','core','solver-config.js')`. Re-grep confirms no other `src/core`/`'src'`
+  path refs remain in tests.
+- **KEPT per advisor:** oracle test FILES stay in `tests/` (co-location is the next slice); `solver-core.legacy.js`
+  kept (delete later) — NOTE it has a **pre-existing** syntax error (verified: the pre-move version fails
+  `node --check` at line 58 too); it's dead (0 importers) so it never loads — surfaces only under `node --check`.
+- **verify:** node `#core/` resolves (`createEngine`/`getDist`/`solveConstraints`); `node --check` clean on
+  all live files; **oracle 12/12**; **baseline-diff 0 net-new** (failing = the 8; settings-project-config
+  now PASSES); **leak clean** (no `packages/core` file imports `#app/`/`apps/` — the brain imports no shell);
+  **headless:** GET `/` 302 -> `/apps/sketchstudio/`, apps-base probe `{status:OK, importErrs:[]}` with
+  `packages/core/*` served (browser resolves `#core/` -> `packages/core/`), no 404s. Cloudflare: output
+  stays `/`, `packages/core` under the served root -> resolves; no dashboard change.
+- **state:** branch `carve-out`@`e18c29c` · repo is now `packages/core` (brain) + `apps/{sketchstudio,shaper}`
+  (shells) + `tests/`; no `src/`. oracle 12/12 · app loads. next: STOP. Remaining (advisor's call):
+  oracle-tests co-location (-> packages/core/tests + guard glob) and cleanup (build-inline.cjs fix;
+  solver-core.legacy.js delete).
+
+=== CORE SLICE B (atomic lift) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

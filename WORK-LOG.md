@@ -2021,6 +2021,83 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4f (INPUT-MANAGER ROOT) DONE — HOLD ===
 
+## 2026-06-28 · PLAN — Shaper adopts the FULL sketcher (theming + DOM parameterization) (turn 75) — PLAN ONLY
+
+Audited the shared `#ui/` modules. **The advisor's MODEL holds** (shared var-driven `sketcher.css` + a ctx/opts
+param defaulting to SketchStudio globals → byte-identical). Refinements + the concrete map below.
+
+### (1) Theming audit — where canvas styling actually lives
+- **Glyph / joint / dimension / selection colors are INLINE SVG *presentation attributes* emitted by the
+  renderer** (`fill="#60A5FA"` etc.), sourced from `CONSTRAINT_COLORS` (`#core/constants.js:52` — hardcoded
+  unified-blue hex) PLUS many ad-hoc hex literals in `svg-renderer.js` (selection `#1e40af`, perpendicular
+  `#0891b2`, equal/parallel bg, …). A shared CSS file ALONE cannot retheme these.
+  - ⚠ **`var()` does NOT work in SVG presentation attributes** (`fill="var(--x)"` is invalid). To CSS-var-drive
+    them the renderer must emit **either** inline `style="fill:var(--sketch-glyph-fill,#60A5FA)"` **or** a
+    `class` (+ shared CSS `.sketch-glyph{fill:var(--…)}`). This is the central P2 decision (recommend inline
+    `style=` — most surgical, preserves the per-state color logic; classes are a bigger rewrite).
+- **Grid** = SVG `<pattern id="grid">`/`grid-heavy` defined in `apps/sketchstudio/index.html` (`<defs>` @565);
+  the renderer reaches `getElementById('grid')` (svg-renderer 251–272) to retune pattern stroke widths per zoom.
+  Shaper's `#design-canvas` has **none** of these defs.
+- **App shells use DIFFERENT systems:** SketchStudio = **Tailwind via CDN** (`<script src="https://cdn.
+  tailwindcss.com">` @7) utility classes + `overrides.css` (79 ln: `.tool-btn`, `#svgCanvas` bg `#fff` /
+  `.snapping`→`#fff7ed`, `#toolsRibbon`, `:root --fusion-*`). Shaper = hand-rolled `main.css` (164 ln) with
+  `:root` custom props (`--bg/--panel/--accent/--line/--text/--muted`). → the shared `sketcher.css` MUST be
+  framework-neutral plain custom properties (no Tailwind utilities), consumable by both.
+
+### (2) DOM-coupling audit — TARGET (pass in) vs ANCILLARY (guarded → ctx)
+- **Render TARGET — ALREADY a param:** `draw(…, renderTarget)`; `svg-renderer.js:2479` `const target =
+  (renderTarget instanceof Element) ? renderTarget : svg`. SketchStudio's caller passes `#world-group`. So the
+  draw output target is done; P3 only needs the ancillary blocks + a default.
+- **Ancillary in the RENDERER (guarded, SketchStudio ids):** grid/grid-heavy patterns (251–272);
+  `window.__lastSolveStats` (698, dev overlay); `debug-joint-label-style` `<style>` inject (735, dev).
+- **Ancillary in INPUT-MANAGER (heaviest coupling — to the SketchStudio SHELL):** magnifier / mag-content /
+  mag-translate / btn-mag-toggle (69–126, 778); `viewport-size` (854, 949); `modeText` (1154, 1191);
+  `tool-<name>` buttons + `.tool-btn`/`[class*="tool"]` active-state sync (1122–1259); `document.querySelector
+  ('svg')` in keydown handlers (968–988).
+- **Input widgets:** `dimInput` (numeric-input 42 — *creates it if absent*; dimension-input 15/34),
+  `liveDimSingle`/`liveDimSingleInput`/`live-dim-length` (live-dimension-input 159–160, line-tool 227 — *find*).
+- **Already app-agnostic (create-if-absent / dev-guarded):** `notification-container` (notification-manager
+  creates it); `window.ug.*` debug namespaces; cursor-manager's `svg[aria-hidden]` icon-defs + style inject.
+- **Net:** almost every ancillary reach is ALREADY null/typeof-guarded → Shaper can run the modules today and
+  they silently skip missing features. The ctx/opts just lets Shaper OPT IN to its own elements.
+
+### (3) Slice order (load-safe; each: SketchStudio byte-identical + both apps load + guard + baseline green)
+- **P1 — `packages/ui/sketcher.css` (var contract).** Extract the CSS-able canvas chrome (canvas bg + `.snapping`,
+  grid line colors, selection/hover highlight) as `--sketch-*` custom props with SketchStudio's current values as
+  defaults; each app links it + sets vars in its `:root`. SketchStudio values unchanged → byte-identical.
+- **P2 — route the renderer's inline colors through the vars.** Replace `fill="#hex"`/`stroke="#hex"` (and the
+  `CONSTRAINT_COLORS` lookups) with inline `style="fill:var(--sketch-…,#hex)"`; fallbacks = today's hex →
+  byte-identical. Keep `CONSTRAINT_COLORS` in core as the fallback source (core stays theme-unaware).
+- **P3 — renderer ctx.** Fold the ancillary blocks (grid retune, stats, debug-style) into `ctx`
+  (`draw(…, renderTarget, ctx = defaultRenderCtx)` where defaultRenderCtx reads the SketchStudio globals).
+  SketchStudio passes nothing → byte-identical.
+- **P4 — input ctx/opts.** Same for input-manager's magnifier / viewport-size / modeText / tool-button-sync /
+  dimInput reaches → `opts` defaulting to the SketchStudio globals.
+- **P5 — Shaper adopts the full renderer+input** (replace the S1 minimal canvas in `sketch-canvas.js`): Shaper's
+  `#design-canvas` gets a `world-group` (render target) + its theme vars + (optionally) grid defs; Shaper passes
+  its own ctx/opts (or omits features it doesn't want). SketchStudio untouched.
+
+### (4) Risks
+- **R1 (mechanism) — var() invalid in SVG presentation attributes** → P2 must use inline `style=` or classes
+  (recommend `style=`). Highest-impact gotcha; pick the mechanism before P2.
+- **R2 — Tailwind(CDN) vs hand-CSS.** sketcher.css must be plain custom props (no `@apply`/utilities). Watch
+  specificity: SketchStudio's id-selectors (`#svgCanvas{…}`) + Tailwind utilities may out-specify shared rules →
+  prefer var-driven values over hard rules so each app's `:root` wins.
+- **R3 — input-manager↔toolbar is the heaviest, most app-specific coupling** (tool-<id> buttons, modeText,
+  viewport-size, magnifier). These are SketchStudio shell features; the ctx must make them OPT-IN (Shaper has a
+  different toolbar / no loupe). Consider: input P4 may split (P4a canvas/dimInput reaches; P4b toolbar/status).
+- **R4 — Shaper #design-canvas lacks the defs** (grid patterns, magnifier, world-group, dimInput). P5 adds a
+  world-group minimum; grid/magnifier optional. Guarded ancillary blocks no-op if absent → graceful.
+- **R5 — keep colors out of the brain.** `CONSTRAINT_COLORS` stays a `#core` fallback only; theme vars live in
+  the UI layer. Don't let `#core` learn about CSS.
+- **R6 — should stay app-specific:** the loupe/magnifier, tuning-wizard, toolbar active-state sync, `#svgCanvas.
+  snapping` bg — SketchStudio shell features; expose as opt-in via ctx, never forced on Shaper.
+
+**Recommended grouping:** P1+P2 = "theming" pair (ship together or P1 then P2); P3+P4 = "DOM ctx" pair (P4 may
+split per R3); P5 = integration. Each remains an independent byte-identical-for-SketchStudio commit.
+
+=== SHAPER PARAMETERIZATION PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

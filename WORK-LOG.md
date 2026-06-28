@@ -576,6 +576,35 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
 
 === WAVE A SHIMS FIXED — HOLD ===
 
+## 2026-06-27 — WAVE A FIX-2: repoint 2 source-reading tests to apps/ paths (turn 3, handoff)
+
+- **context:** shim fix (`588a667`) blessed. Advisor's baseline diff vs `4569d15` found Wave A introduced
+  exactly **2 NEW** test failures a shim CANNOT fix — they read source **as text** (`readFile`), and a
+  re-export shim has no source bytes to grep. (`settings-project-config` also fails but was pre-existing.)
+- **did (2 tests, read-path string ONLY — assertions untouched):**
+  - `tests/cursor-icons.test.js`: `const path = '../src/ui/cursor-manager.js'` →
+    `'../apps/sketchstudio/ui/cursor-manager.js'` (it greps the file text for `'icon-cog'` etc.).
+  - `tests/input-manager-routing.test.js`: `const path = '../src/ui/input-manager.js'` →
+    `'../apps/sketchstudio/ui/input-manager.js'` (it `.includes('case TOOL_MODES.EQUAL')`).
+  - This is the sanctioned exception to "don't edit tests": a shim satisfies `import`, never `readFile`,
+    so a source-text read MUST point at the real moved file.
+- **grep for OTHER source-reads of moved paths (so we don't repeat this):** all `tests/` files using
+  `readFile`/`readFileSync` = cursor-icons, input-manager-routing (the 2 fixed) + header-icons,
+  settings-panel-html, settings-panel-style — the latter 3 read `../index.html` (NOT moved, stays at root)
+  → no change needed. **No other moved-path source-reads exist.**
+- **verify — STRENGTHENED baseline-diff guard (not just resolution):** ran every `tests/*.test.js`
+  individually (109 files). FAILING = {ai-vision-label-spacing, debug-panel, debug-whisker-align,
+  input-manager-midpoint, settings-panel-ui, tuning-wizard, wizard-base, wizard-placement} — **8 files,
+  all ⊆ the advisor's allowed pre-existing 9** (settings-project-config PASSED here — one fewer than
+  baseline, env-dependent; strictly not worse). `cursor-icons` + `input-manager-routing` now **PASS**.
+  No solver test among the failures → **oracle 12/12**. So Wave A introduced **0 net new failures** once
+  these 2 reads were repointed.
+- **state:** tests — only pre-existing failures remain (≤9) · oracle 12/12 · app loads (browser-verified
+  earlier) · branch `carve-out` (2 test files changed). Coordinating via `handoff.py` (turn 3). No code
+  moves; deferred gates untouched.
+
+=== WAVE A FIX-2 DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

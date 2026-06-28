@@ -345,6 +345,26 @@ run('20. freehand vertical + angled collinear → vertical anchored (both orders
   };
 });
 
+// 21 — COLLINEAR of a vertical + a horizontal line (perpendicular) → REFUSED (not added, both keep angle)
+run('21. collinear of perpendicular axis-aligned lines → refused', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true), b = s.point(0, 10, false);  // vertical
+  s.engine.addShape({ id: 'Lv', type: 'line', joints: [a, b] });
+  const c = s.point(5, 5, false), d = s.point(15, 5, false); // horizontal
+  s.engine.addShape({ id: 'Lh', type: 'line', joints: [c, d] });
+  s.solve();
+  const before = s.constraintCount;
+  const res = ConstraintManager.createConstraint(s.state, T.COLLINEAR, { shapes: ['Lv', 'Lh'] }, { source: 'scenario' });
+  s.solve();
+  const vAngle = Math.abs(Math.atan2(s.pos(b).y - s.pos(a).y, s.pos(b).x - s.pos(a).x) * 180 / Math.PI);
+  const hAngle = Math.abs(Math.atan2(s.pos(d).y - s.pos(c).y, s.pos(d).x - s.pos(c).x) * 180 / Math.PI);
+  const kept = s.state.constraints.some(co => co.type === T.COLLINEAR);
+  return {
+    pass: res === null && !kept && s.constraintCount === before && Math.abs(vAngle - 90) < 1 && hAngle < 1 && s.lastError !== null,
+    nums: { refused: res === null, kept, vertAngle: vAngle.toFixed(1), horizAngle: hAngle.toFixed(1), lastError: s.lastError || 'none' },
+  };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

@@ -1486,6 +1486,30 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === COLLINEAR ANCHORS CURRENT AXIS-ALIGNED DONE — HOLD ===
 
+## 2026-06-28 · collinear of perpendicular axis-aligned lines → REFUSED (turn 47)
+
+- **user requirement:** a vertical and a horizontal line are not the same — making them collinear must be
+  REFUSED, not rotate one off its axis. (Before: vfirst → degenerate false-converge, hfirst → vertical
+  rotates to 0.)
+- **fix — `packages/core/constraint-manager.js` COLLINEAR pre-add (where `anchorEstablishedLine` runs):**
+  new `_lineGeometricAxis` ('H' ~0/180°, 'V' ~90°, else null) + `_lineAxis` (prefer a V/H CONSTRAINT signal,
+  else geometry). Before applying a 2-shape collinear, if the two lines are on DIFFERENT axes (one 'V', one
+  'H') → clean PRE-ADD reject: return null, leave the geometry untouched, notify *"Can't make a vertical and
+  a horizontal line collinear — they're perpendicular."* No add-then-revert.
+- **unaffected:** same-axis pairs still apply; an axis-aligned + angled pair still anchors the axis-aligned
+  line (the angled line's axis is null → not a different-axis pair). Only the perpendicular axis-aligned pair
+  is refused.
+- **scenario #21 (new):** vertical + horizontal → collinear REFUSED (res===null, not added,
+  constraintCount unchanged, vertical stays 90 / horizontal stays 0, error set). #19/#20 stay green
+  (vertical + ANGLED still anchors the vertical).
+- **verify:** scenario tester **22/22, backlog EMPTY**; `node tests/harness/solver-fuzz.test.js 400` →
+  **400/400 clean**; constraint-conformance **15/15 (gating)**; oracle **12/12**; baseline-diff = the 8
+  pre-existing, **0 net-new**; `node --check` clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · collinear: anchors an axis-aligned line vs
+  angled, refuses a vertical+horizontal pair. STOP.
+
+=== COLLINEAR PERPENDICULAR-PAIR REFUSE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

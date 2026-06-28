@@ -63,6 +63,35 @@ export class ConstraintManager {
         const dist = Math.min(deg, Math.abs(deg - 90), Math.abs(deg - 180)); // distance to nearest axis
         return dist <= tolDeg;
     }
+    // Which axis a line currently lies on, geometrically: 'H' (~0/180°), 'V' (~90°), or null (angled).
+    static _lineGeometricAxis(state, sid, tolDeg = 1.5) {
+        const sh = state.shapes && state.shapes.find(x => x.id === sid);
+        if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return null;
+        const a = state.joints.get(sh.joints[0]), b = state.joints.get(sh.joints[1]);
+        if (!a || !b) return null;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (Math.hypot(dx, dy) < 1e-9) return null;
+        const deg = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI); // 0..180
+        if (Math.min(deg, Math.abs(deg - 180)) <= tolDeg) return 'H';
+        if (Math.abs(deg - 90) <= tolDeg) return 'V';
+        return null;
+    }
+    // Axis of a line: prefer a V/H CONSTRAINT signal, fall back to current geometry. 'V' | 'H' | null.
+    static _lineAxis(state, sid) {
+        const sh = state.shapes && state.shapes.find(x => x.id === sid);
+        if (sh && Array.isArray(sh.joints) && sh.joints.length >= 2) {
+            const [a, b] = sh.joints;
+            for (const c of state.constraints) {
+                if (!c.joints || c.joints.length < 2) continue;
+                const match = (c.joints[0] === a && c.joints[1] === b) || (c.joints[0] === b && c.joints[1] === a);
+                if (!match) continue;
+                if (c.type === CONSTRAINT_TYPES.VERTICAL) return 'V';
+                if (c.type === CONSTRAINT_TYPES.HORIZONTAL) return 'H';
+            }
+        }
+        return this._lineGeometricAxis(state, sid);
+    }
+
     // Establishment score: a V/H constraint (2) outranks mere geometric alignment (1); both stack.
     static _lineEstablishmentScore(state, sid) {
         return (this._lineHasAxisConstraint(state, sid) ? 2 : 0) + (this._lineIsGeometricallyAxisAligned(state, sid) ? 1 : 0);
@@ -144,6 +173,16 @@ export class ConstraintManager {
         // vertical line then STAYS vertical and the other rotates onto it, instead of the established line
         // being dragged toward whichever happened to be selected first (the ~45° symmetric-looking compromise).
         if (type === CONSTRAINT_TYPES.COLLINEAR && normalized.shapes && normalized.shapes.length === 2) {
+            // Two axis-aligned lines on DIFFERENT axes (one vertical, one horizontal) are perpendicular —
+            // making them collinear would force one off its axis. REFUSE up-front (clean pre-add reject):
+            // don't add, leave the geometry untouched, just tell the user.
+            const axA = this._lineAxis(state, normalized.shapes[0]);
+            const axB = this._lineAxis(state, normalized.shapes[1]);
+            if (axA && axB && axA !== axB) {
+                notify("Can't make a vertical and a horizontal line collinear — they're perpendicular.", 'error', 3500);
+                dbg.warn('constraints', `[ConstraintManager] collinear refused: perpendicular axis-aligned lines (${axA} vs ${axB})`);
+                return null;
+            }
             this.anchorEstablishedLine(state, normalized);
         }
 

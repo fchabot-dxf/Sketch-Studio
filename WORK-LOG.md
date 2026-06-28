@@ -765,6 +765,101 @@ re-export) · `src/core-utils.js` (throw-stub).
 
 === CLEANUP STAGE 2 (DELETIONS) DONE — SHELL BATCH COMPLETE ===
 
+## 2026-06-28 — CORE batch STEP 0: migration PLAN (plan-only, NO moves) — HOLD FOR ADVISOR (turn 3)
+
+Plan only — nothing moved. Built from the current `src/` tree, the 2 `#core` configs, and a repo-wide
+importer audit.
+
+### 1. Move-list + target structure → DECISION: FLATTEN to `packages/core/`
+`src/core/*` flattens UP to `packages/core/*` (NOT `packages/core/core/*`), `src/core/solver/*` →
+`packages/core/solver/*`, and the 3 root facades → `packages/core/*.js`. **Why flatten:** then `#core/`
+maps to ONE dir covering BOTH the core modules AND the facades; nested would strand the facades outside
+the `core/` subdir (not `#core/`-reachable). Move-list:
+- → `packages/core/` (20 modules): constants, constraint-manager, constraint-status, constraint-verifier,
+  constraints, **debug** (post-split, pure logger only), delete-manager, geometry-fans, geometry,
+  inference-engine, joints, **settings-manager** (see §4), shapes, snap-constraints, solver-config, state
+  + `solver/{algebra,definitions,engine,interaction}.js` + facades `constraint-solver.js`, `solver-core.js`
+  (+ `solver-core.legacy.js` only if kept — see findings).
+- → `apps/sketchstudio/`: `overrides.css` (shell asset), `debug-overlay.js` (NEW, from §3).
+- **Core-internal relative imports survive** (subtree flattens together: `./constants.js` stays valid;
+  `solver/engine.js`'s `../solver-config.js` → `packages/core/solver-config.js` ✓).
+- **Facades' `./core/X` → `./X`** (flatten removes the `core/` hop): `constraint-solver.js` (3 imports:
+  constraint-verifier, solver-config, solver/engine), `solver-core.js` + `.legacy.js` (1 each: solver/engine).
+
+### 2. Alias retarget — the payoff ("edit 2 configs, not N importers")
+- **package.json** `"#core/*": "./src/core/*"` → `"./packages/core/*"`; **apps/sketchstudio/index.html**
+  importmap `"#core/": "../../src/core/"` → `"../../packages/core/"` (from the moved index.html depth,
+  `../../` = repo root → packages/core/). Node + browser both retarget.
+- Every existing `#core/…` importer is **unchanged** (the payoff). **Exception — the facades** were NOT
+  `#core/`-covered (main.js imported `../../src/constraint-solver.js`; tests `../src/{constraint-solver,
+  solver-core}.js`). Rewire those importers to `#core/…` ONCE (main.js + ~10 tests) so facades join the
+  alias going forward. After that, a future `packages/core` relocation is again just the 2 configs.
+
+### 3. debug.js split (deferred GATE B, now due) — its OWN slice, verified hardest
+- `packages/core/debug.js` keeps ONLY the pure logger: `dbg` (`export const dbg`) + its control API
+  (enable/disable/level/list over the module's private `_state`). **Drops** the `import SettingsManager`,
+  the `requestAnimationFrame` overlay, and the `window.ug.debug` wiring → framework-free (#4).
+- **NEW `apps/sketchstudio/debug-overlay.js`** (shell): imports the control API from `#core/debug.js`
+  + `SettingsManager` from `#core/settings-manager.js`; runs the RAF spring-overlay; wires
+  `window.ug.debug` (enable/disable/level + overlay). `main.js` side-effect-imports it (`import
+  './debug-overlay.js'`). So `window.ug.debug` still registers; the brain stops touching window.
+- The **4 core `{ dbg }` importers** (constraint-manager, constraints, joints, snap-constraints) are
+  unchanged. Verify hardest: dbg logging intact (the oracle exercises dbg), `window.ug.debug.enable('*')`
+  works, the overlay animates, no `window`/SettingsManager left in `packages/core/debug.js`.
+
+### 4. settings-manager classification — sub-decision (recommend KEEP in core this batch)
+Zero CORE importers (8 shell files + debug's overlay-half [→ shell] + tests). Strictly #4 → shell. BUT it's
+**environment-agnostic** (every `process`/`document`/`localStorage`/`showSaveFilePicker` access is guarded).
+**Recommend: keep it in `packages/core/settings-manager.js` for the core lift** — zero churn (all
+`#core/settings-manager.js` importers + debug-overlay keep working). Defer the principled "→ shell +
+injected persistence adapter" to a later seam slice (sibling of [DEBT-1]). Flagging the alternative
+(move to `apps/sketchstudio/` + rewire 8 `#core/`→`#app/` importers + tests) for the advisor.
+
+### 5. Solver oracle tests → `packages/core/tests` + guard adaptation
+Move the 12 `solver-*.test.js` → `packages/core/tests/`; rewire their imports
+`../src/constraint-solver.js` → `#core/constraint-solver.js`, `../src/solver-core.js` → `#core/solver-core.js`
+(Node resolves `#core/` via package.json imports from any depth). **Guard adapts:** the baseline-diff /
+oracle runner globs BOTH `tests/*.test.js` AND `packages/core/tests/*.test.js`; the "oracle 12/12" set is
+now the 12 under `packages/core/tests`. (`scripts/run-tests.js` `testsDir` also needs to include the new dir.)
+
+### 6. Slice plan (load-safe; alias retarget is ALL-OR-NOTHING, so the mass move is atomic)
+- **Slice 1 — proof:** `git mv` ONE leaf (`src/core/constants.js` → `packages/core/constants.js`) + a
+  relative shim at `src/core/constants.js` (`export * from '../../packages/core/constants.js'`); the 2
+  `#core` configs UNCHANGED. Verify load + oracle + baseline-diff. Proves git-mv-into-`packages/` + shim
+  (other core files' `./constants.js` hit the shim).
+- **Slice 2 — debug split (§3):** in place (debug stays `src/core`; overlay → `apps/`). Hardest verify.
+  Done BEFORE the mass move so the move is a clean rename.
+- **Slice 3 — the atomic core lift:** `git mv` all remaining `src/core/*` + `solver/` + facades →
+  `packages/core/` (flatten); rewrite facades' `./core/` → `./`; **retarget the 2 `#core` configs**;
+  remove the constants shim; rewire facade importers (main.js + tests) → `#core/`; `git mv overrides.css`
+  → `apps/sketchstudio/` (+ update any index.html `<link>`); move the 12 oracle tests → `packages/core/tests`
+  + rewire + adapt the guard. Verify load + oracle + baseline-diff. (Atomic: the alias flips for everyone
+  at once, so all core files must be at `packages/core/` in this same commit — mechanic proven by Slice 1
+  + the shell bulk move.)
+- **Slice 4 — loose ends (gated):** build-inline.cjs fix-or-delete; `solver-core.legacy.js` delete (0 importers).
+
+### 7. Cloudflare check
+Output dir STAYS `/`. `packages/core` sits under the served repo root, so deployed `#core/` →
+`../../packages/core/` resolves at the root-serve base (from `apps/sketchstudio/index.html`). `_redirects`
+unchanged; **no dashboard change.** Will confirm at Slice 3 with the same headless `/`-302 + apps-base probe.
+
+### Findings / loose ends (reported)
+- **`solver-core.js` is TEST-ONLY** — no production importer (main.js uses `constraint-solver.js`); 8 tests
+  use its `solveConstraints`. Still core; moves to `packages/core`, only tests import it.
+- **`solver-core.legacy.js` — ZERO importers → DEAD candidate.** Propose deleting in Slice 4 (gated) unless
+  the advisor wants it kept as a reference.
+- **`overrides.css`** is referenced only by `build-inline.cjs` (stale); per task it → `apps/sketchstudio/`.
+  Confirm whether the live `index.html` actually `<link>`s it (build-inline expects
+  `<link href="src/overrides.css">`); update/remove that link on move.
+- **`build-inline.cjs`** has stale refs (index.html, src/main.js, src/overrides.css). It's a standalone-HTML
+  inliner, NOT the Cloudflare deploy path (which serves files directly). Recommend a SEPARATE slice: rework
+  for the new structure OR confirm-unused-and-delete. Not blocking the core batch.
+
+### State
+Plan only · NO files moved · branch `carve-out`@`2f4e276` · suite at baseline (oracle 12/12). **STOP —
+hold for advisor.** Decisions needing a ruling: FLATTEN (§1), settings-manager keep-in-core (§4), oracle
+tests → packages/core/tests (§5), solver-core.legacy delete (findings), build-inline as a separate slice.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

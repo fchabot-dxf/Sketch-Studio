@@ -1390,6 +1390,41 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === TOGGLE RANK-REDUNDANCY SWAP DONE — HOLD ===
 
+## 2026-06-28 · nonlinear over-constrain never silent (geometric ADD: infeasible→refuse, inert→keep) (turn 41)
+
+- **gap:** `GEOMETRIC_REFUSE_TYPES` only covered {H,V,parallel,perp,equal}; a conflicting tangent/coincident/
+  collinear/etc. fell through → silent non-converge. Tangent was excluded because it's nonlinear/slow and a
+  naive "refuse if non-converged" false-reverts a valid slow tangent (the turn-33 regression).
+- **investigation (the trap the task didn't foresee):** the literal "re-solve high; refuse if still
+  non-converged" gate BREAKS `tangent-sandbox` — its line+circle **shapes-form** tangent is *unassembled* by
+  the solver (probe: center frozen, residual constant at every budget), so it NEVER converges, yet the test
+  (and the user) want it KEPT. So convergence alone can't be the refuse signal.
+- **fix — `packages/core/constraint-manager.js` over-constrain handler (now ALL non-dimension geometric
+  types):** on a non-converged geometric ADD, re-solve with a HIGH budget (≥8× ITERATIONS) to let a genuinely
+  SLOW constraint settle; if it converges → keep. Else REFUSE + REVERT only when the add is truly destructive:
+    • **fully pinned** — new `_allConstraintJointsFixed(state,c)`: every joint it touches (via joints/shapes/
+      shape/line/circle) is fixed, so it has NO DOF to ever satisfy → infeasible → refuse; OR
+    • **mangled** — a PRE-EXISTING non-driven constraint that was satisfied is now violated (`measureResidual`
+      > CONFLICT_THRESHOLD) → it deformed the sketch → refuse.
+  Otherwise (free DOF remain, or the solver simply can't assemble it) it's unsatisfied-but-non-destructive →
+  KEEP with a soft notice. Never silent, never deforms. Removed the old `GEOMETRIC_REFUSE_TYPES` set.
+  Dimensions still become references (#6). Imported `measureResidual`.
+- **why pinned-vs-free is the right line:** an unsatisfied constraint with FREE DOF (tangent-sandbox, free
+  circle center) *could* be satisfiable — refusing it over-refuses; one that's FULLY PINNED can never be →
+  refuse. That exactly separates the valid slow/unassembled tangent (kept) from a genuinely-infeasible one.
+- **scenarios:** #16 satisfiable coincident → APPLIED (don't over-refuse); #17 fully-pinned tangent →
+  REFUSED; #18 fully-pinned coincident → REFUSED. Valid-tangent-KEPT is the tracked `tangent-sandbox.test.js`
+  (stays green). (#9's H-on-two-pinned now refuses via the pinned rule — unchanged outcome.)
+- **note:** a free-center line+circle **shapes**-form tangent is over-refused by the *createEngine* sandbox
+  (a pre-existing engine/solveConstraints divergence, NOT this change) — flagged for the advisor; out of scope.
+- **verify:** scenario tester **19/19, backlog EMPTY**; `tangent-sandbox` GREEN; `node tests/harness/
+  solver-fuzz.test.js 400` → **400/400 clean**; constraint-conformance **15/15 (gating)**; oracle **12/12**;
+  baseline-diff = the 8 pre-existing, **0 net-new**; `node --check` clean; headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · over-constrain never silent on every path
+  (dim→reference, geometric infeasible→refuse, geometric inert→keep+notice, edit→revert, toggle→swap). STOP.
+
+=== NONLINEAR OVER-CONSTRAIN REFUSE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

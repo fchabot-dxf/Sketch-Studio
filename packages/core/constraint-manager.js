@@ -3,19 +3,12 @@ import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
+import { measureResidual } from './constraint-verifier.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
 let notify = () => {};
 export function setConstraintNotifier(fn) { notify = typeof fn === 'function' ? fn : () => {}; }
-
-// Geometric constraints that are REFUSED + reverted when they over-constrain (they are not measurements,
-// unlike dimensions, which become references). Scoped to the well-behaved, linear-ish types: a slow-to-
-// converge NONLINEAR constraint (e.g. tangent) must never be falsely reverted just for an imperfect solve.
-const GEOMETRIC_REFUSE_TYPES = new Set([
-    CONSTRAINT_TYPES.HORIZONTAL, CONSTRAINT_TYPES.VERTICAL,
-    CONSTRAINT_TYPES.PARALLEL, CONSTRAINT_TYPES.PERPENDICULAR, CONSTRAINT_TYPES.EQUAL
-]);
 
 // Structural constraint types — cannot be driven, must be rejected on conflict
 const STRUCTURAL_TYPES = new Set([
@@ -45,6 +38,30 @@ export class ConstraintManager {
 
         return { ok: true };
     }
+    // True if EVERY joint a constraint touches (directly via joints, or via its shapes/shape/line/circle)
+    // is fixed (or the anchored origin) — i.e. the constraint has NO degrees of freedom to satisfy it, so
+    // an unsatisfied one is genuinely infeasible (vs merely slow / not-yet-assembled).
+    static _allConstraintJointsFixed(state, c) {
+        if (!c) return false;
+        const ids = new Set();
+        (c.joints || []).forEach(id => ids.add(id));
+        const addShapeJoints = (sid) => {
+            const sh = state.shapes && state.shapes.find(s => s.id === sid);
+            if (sh && Array.isArray(sh.joints)) sh.joints.forEach(id => ids.add(id));
+        };
+        (c.shapes || []).forEach(addShapeJoints);
+        if (c.shape) addShapeJoints(c.shape);
+        if (c.line) addShapeJoints(c.line);
+        if (c.circle) addShapeJoints(c.circle);
+        if (ids.size === 0) return false;
+        for (const id of ids) {
+            const j = state.joints.get(id);
+            if (!j) return false;
+            if (!j.fixed && id !== 'j_origin') return false;
+        }
+        return true;
+    }
+
     // True if the edge/joint-pair (or radius shape) already carries a DRIVING (non-reference)
     // distance. Used to keep exactly one driving dimension per edge.
     static _edgeHasDrivingDistance(state, params) {
@@ -243,20 +260,51 @@ export class ConstraintManager {
                 dbg.log('constraints', `[ConstraintManager] over-constraining ${type} ADD kept as reference`);
                 return created;
             }
-            // Non-dimension GEOMETRIC constraint (H/V/parallel/perp/equal) → not a measurement, so
-            // REFUSE + REVERT: remove it, restore the last-valid geometry, re-solve, surface a clear error.
-            // (Other types — e.g. tangent — may just be slow to converge; never falsely revert those.)
-            if (GEOMETRIC_REFUSE_TYPES.has(type)) {
-                const clash = [...new Set((_solveRes.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
-                const ci = state.constraints.indexOf(created);
-                if (ci >= 0) state.constraints.splice(ci, 1);
-                for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
-                if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
-                    try { state.engine.solve(opts.solveIterations); } catch (_) {}
+            // Non-dimension GEOMETRIC constraint (any type) → never leave it silently non-converged, but
+            // distinguish a DESTRUCTIVE conflict from a harmlessly-unsatisfied one:
+            //  1. Re-solve with a HIGH budget so a merely SLOW nonlinear constraint (tangent, …) can settle
+            //     and the geometry gets a fair chance to re-satisfy the pre-existing constraints.
+            //  2. If it now converges → KEEP silently (it was slow).
+            //  3. Else inspect whether the add MANGLED the sketch — i.e. a PRE-EXISTING (non-driven)
+            //     constraint that was satisfied is now violated:
+            //       • mangled  → REFUSE + REVERT (remove + restore last valid) + a clear error.
+            //       • not mangled (the new constraint is just unsatisfied/inert — e.g. a constraint the
+            //         solver can't assemble) → KEEP it but show a soft notice (never silent, never deforms).
+            const HIGH = Math.max(4000, (SolverConfig.ITERATIONS || 500) * 8);
+            let highRes = _solveRes;
+            if (state.engine && typeof state.engine.solve === 'function') {
+                try { highRes = state.engine.solve(HIGH); } catch (_) {}
+            }
+            if (highRes && highRes.converged === false) {
+                // REFUSE + REVERT when the add is genuinely infeasible — either its geometry is FULLY PINNED
+                // (no DOF, so it can never be satisfied) or it MANGLED a pre-existing constraint (deformed the
+                // sketch). Otherwise it's merely unsatisfied WITHOUT deforming anything (free DOF remain, or
+                // the solver can't assemble it, like a line-circle-shapes tangent) → KEEP it with a soft
+                // notice. Never silent, never destructive.
+                const tol = SolverConfig.CONFLICT_THRESHOLD || 0.005;
+                const pinned = this._allConstraintJointsFixed(state, created);
+                let mangled = null;
+                if (!pinned) {
+                    for (const oc of state.constraints) {
+                        if (oc === created || oc.isDriven || oc.driven) continue;
+                        if (measureResidual(oc, state.joints, state.shapes) > tol) { mangled = oc; break; }
+                    }
                 }
-                notify(`Can't add ${this._friendlyName(type)} — conflicts with ${clash || 'existing constraints'}. Reverted.`, 'warning', 3500);
-                dbg.warn('constraints', `[ConstraintManager] over-constraining ${type} ADD refused + reverted`);
-                return null;
+                if (pinned || mangled) {
+                    const reason = pinned ? 'the geometry is fully fixed' : `conflicts with ${this._friendlyName(mangled.type)}`;
+                    const ci = state.constraints.indexOf(created);
+                    if (ci >= 0) state.constraints.splice(ci, 1);
+                    for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+                    if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                        try { state.engine.solve(opts.solveIterations); } catch (_) {}
+                    }
+                    notify(`Can't add ${this._friendlyName(type)} — ${reason}. Reverted.`, 'warning', 3500);
+                    dbg.warn('constraints', `[ConstraintManager] infeasible ${type} ADD refused + reverted (${pinned ? 'fully pinned' : 'mangled ' + mangled.type})`);
+                    return null;
+                }
+                // Unsatisfied but non-destructive (free DOF / solver can't assemble it) → keep, never silent.
+                notify(`${this._friendlyName(type)} added, but it can't be fully satisfied with the current constraints.`, 'warning', 3000);
+                dbg.log('constraints', `[ConstraintManager] ${type} ADD kept (unsatisfied but non-destructive)`);
             }
         }
 

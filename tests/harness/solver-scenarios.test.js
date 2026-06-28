@@ -259,6 +259,46 @@ run('15. toggleDriving — non-redundant promote keeps the other driver', 'PASS'
   };
 });
 
+// 16 — a SATISFIABLE geometric add still APPLIES (don't over-refuse). (Valid-tangent-kept is covered by
+//      the tracked tests/tangent-sandbox.test.js, which stays green.)
+run('16. satisfiable coincident ADD → applied (not over-refused)', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true);  // fixed anchor
+  const b = s.point(2, 0, false); // free, near a → coincident is satisfiable (b merges to a)
+  s.solve();
+  ConstraintManager.createConstraint(s.state, T.COINCIDENT, { joints: [a, b] }, { source: 'scenario' });
+  s.solve();
+  const kept = s.state.constraints.some(c => c.type === T.COINCIDENT);
+  return { pass: kept && s.converged === true && s.edgeLen(a, b) < 0.01, nums: { kept, converged: s.converged, dist: s.edgeLen(a, b) } };
+});
+
+// 17 — INFEASIBLE tangent ADD → refuse + revert (center + line pinned so tangency can't be reached)
+run('17. infeasible tangent ADD → refuse + revert', 'PASS', () => {
+  const s = createSketch();
+  const la = s.point(0, 0, true), lb = s.point(0, 100, true); // pinned vertical line at x=0
+  s.engine.addShape({ id: 'Li', type: 'line', joints: [la, lb] });
+  const cc = s.point(20, 50, true);                           // center PINNED at x=20 (dist 20 != radius 10)
+  s.engine.addShape({ id: 'Ci', type: 'circle', joints: [cc], radius: 10 });
+  s.solve();
+  const before = s.constraintCount;
+  ConstraintManager.createConstraint(s.state, T.TANGENT, { shapes: ['Li', 'Ci'] }, { source: 'scenario' });
+  s.solve();
+  const kept = s.state.constraints.some(c => c.type === T.TANGENT);
+  return { pass: !kept && s.constraintCount === before && s.lastError !== null, nums: { kept, delta: s.constraintCount - before, lastError: s.lastError || 'none' } };
+});
+
+// 18 — INFEASIBLE coincident ADD (two pinned, distinct joints) → refuse + revert
+run('18. infeasible coincident ADD → refuse + revert', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true), b = s.point(10, 0, true); // both pinned, distinct → can't coincide
+  s.solve();
+  const before = s.constraintCount;
+  ConstraintManager.createConstraint(s.state, T.COINCIDENT, { joints: [a, b] }, { source: 'scenario' });
+  s.solve();
+  const kept = s.state.constraints.some(c => c.type === T.COINCIDENT);
+  return { pass: !kept && s.constraintCount === before && s.lastError !== null, nums: { kept, delta: s.constraintCount - before, lastError: s.lastError || 'none' } };
+});
+
 // BRIDGE — serialize → load → solve round-trip (proves s.load replays a real exported sketch)
 run('bridge: serialize → load → solve round-trip', 'PASS', () => {
   const a = createSketch();

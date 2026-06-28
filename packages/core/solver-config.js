@@ -19,6 +19,12 @@ const DEFAULTS = {
     QUICK_SOLVE: 8,              // Lightweight re-solve after delete / minor edits
     RELAXATION: 1.0,             // Global Stiffness (1.0 = Rigid)
     DRAG_STRENGTH: 1.0,          // Mouse Pull Force
+    STRUCTURAL_DRAG_RATIO: 1000, // Structural/dimension constraints are weighted this many x
+                                 // stiffer than the drag mouse-spring, so dragging a dimensioned
+                                 // shape RESIZES it within its feasible manifold instead of
+                                 // SHEARING (breaking H/V/perp/coincident). A ratio (not an
+                                 // absolute weight) keeps normal-equation conditioning bounded
+                                 // regardless of the spring's stiffness. Only applied during drags.
     CONSTRAINT_BIAS: 0.9,        // 0.9 = Dragged point pulls shape
     CONSTRAINT_RATE: 0.5,        // Error correction aggressiveness (0.1=Soft, 1.0=Hard)
 

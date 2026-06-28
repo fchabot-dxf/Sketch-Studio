@@ -203,6 +203,25 @@ export class NewtonSolver {
     jIdx = 0;
     for (const [id, j] of this.joints.entries()) { densePositions[jIdx*2] = (this._varIndex.has(id) ? x[this._varIndex.get(id)*2] : j.x); densePositions[jIdx*2+1] = (this._varIndex.has(id) ? x[this._varIndex.get(id)*2+1] : j.y); jIdx++; }
 
+    // --- Drag-time structural weighting ---------------------------------------
+    // A temporary mouse-spring (added by InteractionSolver during a drag) carries
+    // weight sqrt(stiffness) (~100 by default). At unit weight, the shape-defining
+    // constraints (H/V/perp/parallel/coincident) and dimensions LOSE that tug and the
+    // shape SHEARS. Lift every real constraint to RATIO * the spring weight so geometry
+    // and dimensions DOMINATE: the drag can only move the joint within the feasible
+    // manifold (resize), never break structure. Using a ratio to the spring (rather than
+    // an absolute weight) keeps J^TJ conditioning bounded whatever the spring stiffness.
+    // No spring present (every normal solve) => wStruct = 1, so this path is inert and the
+    // oracle / convergence semantics are unchanged.
+    let wStruct = 1;
+    {
+      let springW = 0;
+      for (const sc of this.constraints) {
+        if (sc.type === 'mouse_spring') springW = Math.max(springW, Math.sqrt(sc.stiffness || 1e3));
+      }
+      if (springW > 0) wStruct = springW * (SolverConfig.STRUCTURAL_DRAG_RATIO || 1);
+    }
+
     for (let ci = 0; ci < this.constraints.length; ++ci) {
       const c = this.constraints[ci];
 
@@ -350,7 +369,7 @@ export class NewtonSolver {
         for (let k = 0; k < outRows.length; ++k) outRows[k].fill(0.0);
         def.computeJacobian(params, densePositions, outRows);
         for (let k = 0; k < e.length; ++k) {
-          r[row] = e[k];
+          r[row] = e[k] * wStruct;
           const rowBuf = outRows[k];
           // copy applicable columns into J
           for (let vi = 0; vi < this._freeIds.length; ++vi) {
@@ -363,13 +382,13 @@ export class NewtonSolver {
               sumX += rowBuf[denseIdx + 0];
               sumY += rowBuf[denseIdx + 1];
             }
-            J[row * n + base + 0] = sumX;
-            J[row * n + base + 1] = sumY;
+            J[row * n + base + 0] = sumX * wStruct;
+            J[row * n + base + 1] = sumY * wStruct;
           }
           row++;
         }
       } else {
-        r[row] = e;
+        r[row] = e * wStruct;
         const rowBuf = new Float64Array(denseLen); rowBuf.fill(0.0);
         def.computeJacobian(params, densePositions, rowBuf);
         for (let vi = 0; vi < this._freeIds.length; ++vi) {
@@ -381,8 +400,8 @@ export class NewtonSolver {
             sumX += rowBuf[denseIdx + 0];
             sumY += rowBuf[denseIdx + 1];
           }
-          J[row * n + base + 0] = sumX;
-          J[row * n + base + 1] = sumY;
+          J[row * n + base + 0] = sumX * wStruct;
+          J[row * n + base + 1] = sumY * wStruct;
         }
         row++;
       }

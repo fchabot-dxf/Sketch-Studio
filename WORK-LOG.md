@@ -1061,6 +1061,47 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === SOLVER AUTO-REFERENCE DONE — HOLD ===
 
+## 2026-06-28 · drag structural fix — rect no longer shears on drag (turn 21)
+
+- **repro (scratchpad, `drag-shear-repro.mjs`, no tracked edits):** built the user's exact case with
+  `makeRectFromTwoJoints` (H top/bottom, V sides, welded corners), pinned a corner, added ONE distance dim
+  on the top edge, then dragged the opposite corner to (140,100) (the +x is a shearing pull; +y a legit
+  resize). BEFORE: corner snapped to (140,100), **max VERTICAL residual ≈ 20** → SHEARED. AFTER: corner
+  lands at (100,100) — width locked, follows the drag in y — **vertical & horizontal residuals 0.0000** →
+  rectangular. (The repro drives the identical path the shell uses: `createEngine().solve(iter,{dragTarget})`.)
+- **root:** the drag mouse-spring carries weight `√stiffness ≈ 100` (`interaction.js`, `engine.js:216`)
+  while H/V/perp/coincident + dimensions carried **unit weight**. With a dim removing the slack, the
+  ~100:1 spring wins and breaks verticality. The engine comment at :60-61 already named it. A wrong DEFAULT.
+- **fix (`packages/core/solver/engine.js` `_assemble` + `solver-config.js`):** when a mouse-spring is
+  present, weight every REAL constraint by `wStruct = √stiffness · STRUCTURAL_DRAG_RATIO` (new default
+  **1000**) — i.e. structural/dimensions are 1000× the spring's residual weight, so the drag can only move
+  the joint **within the feasible manifold** (resize), never shear. Chose a **ratio to the spring** (not an
+  absolute weight) so J^TJ conditioning is bounded (~1e6) regardless of the spring's stiffness — avoids the
+  old bouncy-drag trap from huge naive ratios. With the existing `MAX_DRAG_STEP=100` clamp the worst-case
+  residual is ≤ ~1e-4 (≪ tolerance). **No spring present ⇒ wStruct=1**, so every normal solve (the whole
+  oracle) is byte-for-byte unchanged; the structural weighting touches the drag path only. Authoritative
+  `converged`/`error` come from the wrapper's geometric `measureResidual` (`constraint-solver.js:62-103`),
+  so the inflated in-engine residual during a drag never leaks into reported convergence.
+- **defaults sanity pass (FLAGGED for advisor, NOT retuned):**
+  - `CONSTRAINT_BIAS` (0.9) — read by **no** solver code; only wired to a tuning-wizard slider. Dead knob
+    the user can drag with zero effect.
+  - `CONSTRAINT_RATE` (0.5) — read by nothing anywhere. Dead.
+  - `RELAXATION` (1.0, "Global Stiffness") — read by nothing. Dead.
+  - `QUICK_SOLVE` (8) — `delete-manager.js` re-solves after a delete with only 8 LM iters; may be too few
+    for a complex sketch to re-settle. Worth advisor's call.
+  - `SANDBOX_ITERATIONS` (50) — `constraint-manager.js:197` comment says it "must align with solver's
+    convergence check interval (k%20)" with a `|| 20` fallback; default 50 may break that assumption.
+  - `STRUCTURAL_DRAG_RATIO` (1000, new) — flagging the value itself for blessing (rationale above).
+- **also:** reverted the auto-reference (`d60e3c3`) per dispatch — separate commit; restores the prior
+  `ERR-SOLVE-01` branch in `numeric-input-manager.js`.
+- **verify:** repro RECTANGULAR (residuals 0) · `mouse-spring-structural` GREEN (was green; still green) ·
+  no-dim drags still smooth (`mouse-spring-move`, `drag-step-cap`, `force-drag`, `line-drag`, `arc-drag`
+  all PASS) · oracle **12/12** · baseline-diff = the 8 pre-existing, **0 net-new** · headless app-load OK.
+- **state:** branch `carve-out` · oracle 12/12 · app loads · drag-shear fixed, defaults flagged, auto-ref
+  reverted. STOP — hold for advisor.
+
+=== DRAG STRUCTURAL FIX DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -2446,6 +2446,36 @@ Design canvas renders via the real `draw()`, it is dark automatically. ✓ (the 
 
 === P5 PLAN READY - HOLD ===
 
+## 2026-06-28 · SHAPER P5 (pre) — extract createSketchState → #ui/ (turn 93) — verbatim, byte-identical
+
+- **did (the ONE SketchStudio-touching prep step; pure relocation, no field changed):**
+  - **`packages/ui/sketch-state.js`** (new) — `createSketchState(engine, view)` wrapping the inline state object
+    VERBATIM from `main.js` (33 top-level keys: engine proxies, view, selection Sets, hover/active/drag/snap,
+    `history` + the undo-group methods saveStateForce/saveState/begin/end/cancelUndoGroup/undo). External refs
+    became params (`engine`, `view`) + imports (`addConstraintObject`, `removeOrphanJoints`, `dbg` from `#core`).
+    `#btn-undo` reach kept (guarded → no-op in a host without it; TODO(shaper) noted).
+  - **`main.js`:** `const state = createSketchState(engine, view);` (was the 140-line inline `const state = {…}`);
+    added `import { createSketchState } from '#ui/sketch-state.js'`; removed the now-dead `addConstraintObject` +
+    `removeOrphanJoints` imports (used only inside the moved state). `let view`/`updateView`/`loop` unchanged →
+    `state.view === view` (same object) → byte-identical.
+  - (Process note: a first scripted splice matched an inner indented `};` and corrupted main.js — reverted to
+    HEAD and redid with a column-0 `};` match; final `node --check` clean.)
+- **verify (exactly how):**
+  - **SketchStudio byte-identical (CDP):** world-group renders **5** (the relocated state drives the RAF
+    solve+draw loop); a direct factory unit-check — `createSketchState(createEngine({}), {w:20,…})` → **33 keys**,
+    `undo`/`saveState`/`beginUndoGroup` = function, `selectedJoints instanceof Set` = true, `joints instanceof
+    Map` = true, `currentTool='select'`, `view.w=20`; clicking `#tool-rect` activates it (tool-switch drives the
+    state). `errors=0`. **Shaper** loads (`errors=0`). (NB the state has 33 top-level keys; the "~41" earlier was
+    an estimate — verbatim move, no field lost.)
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · the rich sketch-state factory is now shared in `#ui/` (SketchStudio uses it,
+  byte-identical; Shaper's Design canvas will build its state the same way). Next per the plan: **P5a** — Shaper
+  Design renders via the real `draw()` (create the world-group `<g>`, build the Design state via the factory, a
+  RAF loop with Shaper's render ctx, dark theme; read-only). STOP — hold for advisor.
+
+=== P5 PRE (STATE EXTRACT) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

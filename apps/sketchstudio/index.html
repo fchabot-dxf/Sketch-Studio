@@ -81,13 +81,27 @@
             }
         }
         
-        /* Toolbar touch/drag scrolling improvements */
-        /* Allow horizontal native touch panning so users can scroll the ribbon with one finger */
-        #toolsRibbon { touch-action: pan-x; -webkit-overflow-scrolling: touch; cursor: grab; scroll-behavior: smooth; }
-        #toolsRibbon.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+        /* Toolbar: TWO stacked rows on mobile/tablet (row1 draw, row2 constraints); ONE row on desktop. */
+        #toolsRibbon { cursor: default; }
+        .toolbar-row { touch-action: pan-x; -webkit-overflow-scrolling: touch; min-width: 0; scroll-behavior: smooth; }
         @media (hover: none) {
-            /* On touch devices keep scrollbars hidden but allow native panning */
-            #toolsRibbon.no-scrollbar { scrollbar-width: none; }
+            /* Touch devices: hide scrollbars but allow native horizontal panning per row */
+            .toolbar-row.no-scrollbar { scrollbar-width: none; }
+        }
+        /* Mobile / tablet (<768px): two full-width stacked rows */
+        @media (max-width: 767px) {
+            #toolsRibbon { gap: 2px; }
+            .toolbar-row { width: 100%; }
+        }
+        /* Desktop (>=768px): collapse the row wrappers so every section sits in ONE row again
+           (original look). display:contents drops the wrapper box but keeps the section boxes
+           (borders/padding); `order` restores the original left-to-right order. */
+        @media (min-width: 768px) {
+            #toolsRibbon { flex-direction: row; align-items: stretch; }
+            #toolsRibbon > .toolbar-row { display: contents; }
+            .tb-constrain { order: 3; }
+            .tb-inspect   { order: 4; }
+            .tb-actions   { order: 99; }
         }
         
         /* Tool dropdown */
@@ -357,7 +371,9 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
     </svg>
 
     <!-- TOOLS RIBBON -->
-    <div id="toolsRibbon" class="bg-white border-b border-slate-300 p-1 flex gap-1 z-40 overflow-x-auto no-scrollbar shadow-sm shrink-0 relative" aria-label="Tools Ribbon">
+    <div id="toolsRibbon" class="bg-white border-b border-slate-300 p-1 flex flex-col gap-1 z-40 no-scrollbar shadow-sm shrink-0 relative" aria-label="Tools Ribbon">
+      <!-- ROW 1: draw / edit / inspect / actions -->
+      <div class="toolbar-row flex gap-1 items-stretch overflow-x-auto no-scrollbar">
         <!-- EDIT -->
         <div class="flex flex-col items-center px-1 md:px-2 border-r border-slate-200 shrink-0">
             <div class="flex gap-0.5 flex-wrap md:flex-nowrap justify-center">
@@ -442,8 +458,49 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
             <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Create</span>
         </div>
 
+
+        <!-- INSPECT -->
+        <div class="tb-inspect flex flex-col items-center px-2 border-r border-slate-200">
+            <div class="flex gap-0.5">
+                <button id="tool-dim" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
+                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <use href="#icon-tool-dim" />
+                    </svg>
+                    <span class="text-[8px] font-black uppercase mt-1">Dim</span>
+                </button>
+            </div>
+            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Inspect</span>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="tb-actions ml-auto flex items-center gap-2 pr-4 shrink-0">
+            <button id="btn-settings-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Settings" aria-label="Settings">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <use href="#icon-cog" />
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Settings</span>
+            </button>
+            <button id="btn-debug-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Debug" aria-label="Debug">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <use href="#icon-terminal" />
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Debug</span>
+            </button>
+            <button id="btn-export" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-500" title="Export" aria-label="Export">
+                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 5 17 10"/>
+                    <line x1="12" y1="5" x2="12" y2="21"/>
+                </svg>
+                <span class="text-[8px] font-black uppercase mt-1 invisible">Export</span>
+            </button>
+
+        </div>
+      </div>
+      <!-- ROW 2: constraints -->
+      <div class="toolbar-row flex gap-1 items-stretch overflow-x-auto no-scrollbar">
         <!-- CONSTRAIN -->
-        <div class="flex flex-col items-center px-2 border-r border-slate-200">
+        <div class="tb-constrain flex flex-col items-center px-2 border-r border-slate-200">
             <div class="flex gap-0.5">
         
 
@@ -498,44 +555,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
             </div>
             <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Constrain</span>
         </div>
-
-        <!-- INSPECT -->
-        <div class="flex flex-col items-center px-2 border-r border-slate-200">
-            <div class="flex gap-0.5">
-                <button id="tool-dim" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded">
-                    <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <use href="#icon-tool-dim" />
-                    </svg>
-                    <span class="text-[8px] font-black uppercase mt-1">Dim</span>
-                </button>
-            </div>
-            <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Inspect</span>
-        </div>
-
-        <!-- ACTIONS -->
-        <div class="ml-auto flex items-center gap-2 pr-4 shrink-0">
-            <button id="btn-settings-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Settings" aria-label="Settings">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <use href="#icon-cog" />
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Settings</span>
-            </button>
-            <button id="btn-debug-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Debug" aria-label="Debug">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <use href="#icon-terminal" />
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Debug</span>
-            </button>
-            <button id="btn-export" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-500" title="Export" aria-label="Export">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 5 17 10"/>
-                    <line x1="12" y1="5" x2="12" y2="21"/>
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Export</span>
-            </button>
-
-        </div>
+      </div>
     </div>
 
     <!-- MAIN VIEWPORT -->

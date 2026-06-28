@@ -38,11 +38,17 @@ function residual(s, c) {
     case T.EQUAL: { if (P.length < 4) return 0; return Math.abs(len(sub(P[0], P[1])) - len(sub(P[2], P[3]))); }
     case T.PARALLEL: { if (P.length < 4) return 0; const u = sub(P[1], P[0]), v = sub(P[3], P[2]); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.y - u.y * v.x) / d); }
     case T.PERPENDICULAR: { if (P.length < 4) return 0; const u = sub(P[1], P[0]), v = sub(P[3], P[2]); const d = (len(u) * len(v)) || 1e-9; return Math.abs((u.x * v.x + u.y * v.y) / d); }
+    case T.POINT_ON_LINE: { if (P.length < 3) return 0; const u = sub(P[2], P[1]), w = sub(P[0], P[1]); return Math.abs(u.x * w.y - u.y * w.x) / (len(u) || 1e-9); } // P on line AB
+    case T.MIDPOINT: { if (P.length < 3) return 0; return Math.hypot((P[0].x + P[1].x) / 2 - P[2].x, (P[0].y + P[1].y) / 2 - P[2].y); } // m = mid(a,b)
+    case T.ANGLE: { if (P.length < 4) return 0; const u = sub(P[1], P[0]), v = sub(P[3], P[2]); const lu = len(u) || 1e-9, lv = len(v) || 1e-9; const cr = (u.x * v.y - u.y * v.x) / (lu * lv), dt = (u.x * v.x + u.y * v.y) / (lu * lv); const t = (Number(c.value) || 0) * Math.PI / 180; return Math.abs(cr * Math.cos(t) - dt * Math.sin(t)); }
     default: return 0; // types the fuzzer doesn't generate
   }
 }
 
 const addCon = (s, type, joints, extra = {}) => ConstraintManager.createConstraint(s.state, type, { joints: [...joints], ...extra }, { source: 'fuzz' });
+// NOTE: point_on_line / angle / tangent are SHAPE-based in ConstraintManager (joint params get dropped), so
+// fuzzing them through the REAL app path needs edge→line-shape-id tracking — a follow-up. Added raw they'd
+// bypass the refuse/never-silent layer and produce artifact "failures", so they're left out for now.
 
 // Drive the REAL app placement step (dimension-tool.updateConstraintOffset) after every dimension add —
 // this is where Root1 lived: it re-evaluated isDriven and could re-promote a redundant REFERENCE back to a
@@ -135,7 +141,7 @@ function fuzzOne(seed) {
 
   const K = ri(5, 12);
   for (let k = 0; k < K && violations.length === 0; k++) {
-    const choice = ri(0, 8);
+    const choice = ri(0, 10);
     if (choice <= 1) {                                // DIMENSION an edge (consistent or new) — varied dims
       const [name, a, b] = E[ri(0, E.length - 1)];
       const cur = s.edgeLen(a, b);
@@ -168,13 +174,20 @@ function fuzzOne(seed) {
       const val = Math.max(1, Math.round(s.edgeLen(a, b)) + ri(-9, 9));
       const d = s.dimension(a, b, val); s.solve(); if (d) { placeDim(s, d, a, b); dims.push(d); }
       ops.push(`dimX(${name},${val})`); check('dimX', true);
-    } else {                                          // TOGGLE a dim driver<->reference (real toggleDriving seam)
+    } else if (choice === 8) {                        // TOGGLE a dim driver<->reference (real toggleDriving seam)
       if (dims.length) {
         const dim = dims[ri(0, dims.length - 1)];
         if (s.isDriven(dim)) s.setDriving(dim); else s.setReference(dim);
         s.solve();
         ops.push('toggle'); check('toggle', true);
       }
+    } else if (choice === 9 && D.length >= 2) {       // COINCIDENT two joints (structural — may collapse an edge)
+      let i = ri(0, D.length - 1), j = ri(0, D.length - 1); if (j === i) j = (j + 1) % D.length;
+      addCon(s, T.COINCIDENT, [D[i], D[j]]); s.solve();
+      ops.push('coincident'); check('coincident', true);
+    } else if (E.length >= 1) {                        // MIDPOINT: a fresh point = midpoint of an edge (bidirectional)
+      const [, a, b] = E[ri(0, E.length - 1)]; const M = s.point(ri(-6, 16), ri(-6, 16), false);
+      addCon(s, T.MIDPOINT, [a, b, M]); s.solve(); ops.push('midpoint'); check('midpoint', true);
     }
   }
   return { seed, shape: shape.name, ops, violations };

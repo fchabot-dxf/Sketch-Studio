@@ -1980,6 +1980,47 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === SHAPER S4e (DRAWING-TOOLS + DEAD REQUIRE) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER S4f — input-manager ROOT → #ui/ + settings-panel inversion (turn 73) — S4 COMPLETE
+
+- **did (the LAST S4 sub-slice; relocation + the dependency-inversion the whole plan was built around):**
+  - **`git mv` `input-manager.js`** (the cluster ROOT) → `packages/ui/input-manager.js`. All handler/manager deps
+    were already `#ui/` (S4a–S4e), so after the inversion the file is **`#core/*` + `#ui/*` only** — a clean shared
+    module. Removed the now-empty `apps/sketchstudio/ui/input-handlers/` dir. `TODO(shaper)` added (~54 DOM-id
+    reaches; relocation only).
+  - **Settings-panel inversion (plan risk #1).** The old code reached into the app-specific settings-panel two
+    ways, both removed: (1) `setupInput` did a lazy RELATIVE `import('./settings-panel.js').then(m=>m.default(svg,
+    state))` — a shared module must not import a per-app module (and `./settings-panel.js` would break under
+    `#ui/`); (2) a dead `require('./ui/settings-panel.js')` fallback (require undefined in browser/Node-ESM →
+    always threw, wrong path too). **Inverted via injection:** `setupInput(svg, state, opts = {})` now calls
+    `opts.openSettings?.(svg, state)`; the SketchStudio shell (`main.js`) passes
+    `openSettings: (s, st) => import('./ui/settings-panel.js').then(m => m.default?.(s, st)).catch(()=>{})` — so
+    the lazy import + settings-panel STAY in `#app`, byte-for-byte preserving the original behavior (lazy import,
+    call the default export, swallow errors). Dropped the dead `require`.
+    - NB settings-panel exports `default = setupSettingsPanel` (line 241) and is set up ONLY through this path
+      (ui-manager merely reads the element) — so preserving the call exactly was essential.
+  - **Repointed all importers → `#ui/input-manager.js`**: `main.js` + 4 tests (input-manager-equal.new,
+    input-manager-midpoint, pan-during-drawing, wheel-zoom), and the `readFileSync` PATH STRING in
+    `input-manager-routing.test.js` (`../apps/sketchstudio/ui/…` → `../packages/ui/…`) — a string the import-regex
+    can't catch (would have been a net-new fail otherwise). Used EXACT-basename matching so `numeric-input-
+    manager.js` was NOT touched. Grep: 0 stale (import + require + path string).
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN** — input-manager now lives in `packages/` with NO `#app/`
+    import; the guard ERRORS on any `#app/` inside `packages/`, so GREEN proves the inversion is clean.
+  - Browser (CDP): **SketchStudio** `errors=0`, world-group **5 children** (byte-identical); clicked
+    `#btn-settings-toggle` → `settings-panel` **normalized=true** (the injected `openSettings` fired → settings-
+    panel default ran) and **panelDisplay=block** (the Settings button still OPENS the panel). **Shaper** Design
+    `errors=0` → 6 children.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · fuzzer 400 → **400/400** · scenario tester
+    **23/23** · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · **S4 COMPLETE** — the entire input/tools cluster (input-manager + 12
+  input-handlers + managers + snap + seam) now lives in `#ui/`; `packages/core` (brain) + `packages/ui` (shared
+  sketcher: coords, svg-renderer, cursor-manager, sketch-canvas, all managers/snap/seam, input-manager +
+  input-handlers/) are both shell-free. SketchStudio drives the whole sketcher from `#core`/`#ui`; Shaper's
+  Design tab still uses the minimal S1 canvas (adopting the full renderer/input is the post-S4 DOM-parameterize
+  work the `TODO(shaper)` markers flag). STOP — hold for advisor.
+
+=== SHAPER S4f (INPUT-MANAGER ROOT) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

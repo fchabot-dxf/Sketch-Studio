@@ -1,6 +1,10 @@
 ﻿﻿// ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MANAGER - Central coordinator
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/input-manager.js). Relocated from apps/sketchstudio in slice S4f (the cluster ROOT).
+// Settings panel is app-specific -> injected via setupInput(svg, state, { openSettings }); this module no
+// longer reaches into any #app/ module.
+// TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES } from '#core/constants.js';
@@ -182,7 +186,7 @@ function edgePanLoop(svg, state) {
     edgePanFrame = requestAnimationFrame(() => edgePanLoop(svg, state));
 }
 
-export function setupInput(svg, state) {
+export function setupInput(svg, state, opts = {}) {
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
@@ -191,19 +195,10 @@ export function setupInput(svg, state) {
     setupNumericInput(svg, state);
     setupNotifications();
     try { setupMagToggle(svg, state); } catch(_) { }
-    // Dynamic import using Promise.then instead of top-level await to keep compatibility
-    try {
-        import('./settings-panel.js').then(m => {
-            try { if (m && typeof m.default === 'function') m.default(svg, state); } catch(_){}
-        }).catch(_=>{});
-    } catch(_) { }
+    // Settings panel is app-specific. The shell injects opts.openSettings (SketchStudio wires it to lazily
+    // import + init its settings-panel) so this shared module never reaches into a per-app module.
+    try { opts.openSettings?.(svg, state); } catch(_) { }
     try { initCursors(); } catch(e) { console.error('Failed to init cursors:', e); }
-    // Ensure settings panel initializes in single-file bundles (require path uses module id)
-    try {
-        const __m = require('./ui/settings-panel.js');
-        const sp = (__m && __m.default) || __m;
-        if (sp && typeof sp === 'function') try { sp(svg, state); } catch(_) { }
-    } catch(_) { }
     try { setupLiveDimensionInput(); } catch(e) { console.error('Failed to init live dim:', e); }
     
     // Apply initial zoom: 50 pixels per unit

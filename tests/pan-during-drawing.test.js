@@ -1,5 +1,5 @@
 (async () => {
-    const { setupInput } = await import('../apps/sketchstudio/ui/input-manager.js');
+    const { setupInput } = await import('#ui/input-manager.js');
     const { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp } = await import('#ui/input-handlers/pan-zoom.js');
     const { TOOL_MODES } = await import('#core/constants.js');
 

@@ -4,7 +4,7 @@ import { DEFAULT_VIEW } from '#core/constants.js';
 import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { draw } from '#ui/svg-renderer.js';
-import { setupInput, showDimInput } from './ui/input-manager.js';
+import { setupInput, showDimInput } from '#ui/input-manager.js';
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { applyDefaultState } from '#core/state.js';
@@ -253,7 +253,13 @@ function initApp(){
   // ════════════════════════════════════════════════════════════════════════
 
   setupUI(state);
-  setupInput(svg, state);
+  // Settings panel is SketchStudio-specific: inject the opener so the shared #ui/input-manager stays
+  // app-agnostic. Preserves the original lazy import + default-export init (fire-and-forget, errors swallowed).
+  setupInput(svg, state, {
+    openSettings: (s, st) => import('./ui/settings-panel.js')
+      .then(m => { if (m && typeof m.default === 'function') m.default(s, st); })
+      .catch(() => {}),
+  });
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
   window.addEventListener('focus', () => {

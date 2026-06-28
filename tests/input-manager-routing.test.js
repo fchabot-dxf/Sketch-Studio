@@ -1,6 +1,6 @@
 (async () => {
     const fs = await import('fs');
-    const path = '../apps/sketchstudio/ui/input-manager.js';
+    const path = '../packages/ui/input-manager.js';
     const src = fs.readFileSync(new URL(path, import.meta.url));
     const str = String(src);
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };

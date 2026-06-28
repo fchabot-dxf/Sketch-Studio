@@ -1,5 +1,5 @@
 (async () => {
-    const { handleWheel } = await import('../apps/sketchstudio/ui/input-manager.js');
+    const { handleWheel } = await import('#ui/input-manager.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Minimal fake svg and state

@@ -58,6 +58,26 @@ SettingsManager.subscribe((k, v, all) => applyVisualSettings(all));
 // Set to 0 - magnifier removes the need for global negative offset
 const TOUCH_OFFSET_Y = 0; // global touch offset used for snap/drag/draw
 
+// P4a DOM parameterization: the input layer's IN-CANVAS reaches, factored into an input context so a host
+// (e.g. Shaper) can supply its own (or {} to skip). Default = today's SketchStudio reaches → byte-identical.
+// setupInput captures the canvas svg so getCanvasSvg() returns the svg the input was BOUND to — fixing the old
+// document.querySelector('svg') that grabbed the first svg globally (wrong in a multi-svg host like Shaper).
+let canvasSvg = null;
+export const defaultInputCtx = {
+  getCanvasSvg() { return canvasSvg || ((typeof document !== 'undefined' && document.querySelector) ? document.querySelector('svg') : null); },
+  getWorldGroup() { return (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('world-group') : null; },
+  getMagEls() {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return {};
+    return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content'), btn: document.getElementById('btn-mag-toggle') };
+  },
+  setViewportSize(text) {
+    const el = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('viewport-size') : null;
+    if (el) el.innerText = text;
+  },
+  getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
+};
+let inputCtx = defaultInputCtx;
+
 // Global flag for magnifier toggle
 let magEnabled = false;
 
@@ -66,9 +86,8 @@ let magEnabled = false;
 // Activates whenever magEnabled AND a snap target is active (any tool mode).
 // Called from updateSnapTarget so it always has fresh snap state.
 function updateMagnifier(svg, state) {
-    const mag = document.getElementById('magnifier');
-    const magContent = document.getElementById('mag-content');
-    const worldGroup = document.getElementById('world-group');
+    const { mag, magContent } = inputCtx.getMagEls ? inputCtx.getMagEls() : {};
+    const worldGroup = inputCtx.getWorldGroup ? inputCtx.getWorldGroup() : null;
     if (!mag || !magContent || !worldGroup) return;
 
     // Show when: toggle ON + there is an active snap target with a point
@@ -112,7 +131,7 @@ function updateMagnifier(svg, state) {
     const useEl = magContent.querySelector('use');
     if (!useEl) {
         // First time: create the <use> element
-        magContent.innerHTML = `<g id="mag-translate"><use href="#world-group"/></g>`;
+        magContent.innerHTML = `<g id="mag-translate"><use href="#${worldGroup.id}"/></g>`;
     }
     // Update translation to center on the snap point
     const translateG = magContent.querySelector('#mag-translate');
@@ -123,7 +142,7 @@ function updateMagnifier(svg, state) {
 
 // Setup a footer button that toggles the magnifier on/off
 function setupMagToggle(svg, state) {
-    const btn = document.getElementById('btn-mag-toggle');
+    const btn = (inputCtx.getMagEls ? inputCtx.getMagEls() : {}).btn;
     if (!btn) return;
     btn.addEventListener('click', () => {
         magEnabled = !magEnabled;
@@ -187,6 +206,9 @@ function edgePanLoop(svg, state) {
 }
 
 export function setupInput(svg, state, opts = {}) {
+    // P4a: bind the canvas svg + the (optional) host input context. Defaults = SketchStudio globals → byte-identical.
+    canvasSvg = svg;
+    inputCtx = opts.inputCtx || defaultInputCtx;
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
@@ -775,9 +797,8 @@ function handlePointerUp(e, svg, state) {
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
     // Force-hide magnifier on pointer up to ensure it doesn't persist after drag ends
     try {
-        const mag = document.getElementById('magnifier');
+        const { mag, magContent } = inputCtx.getMagEls ? inputCtx.getMagEls() : {};
         if (mag) mag.style.display = 'none';
-        const magContent = document.getElementById('mag-content');
         if (magContent) magContent.innerHTML = '';
     } catch(_) { }
     try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -850,11 +871,10 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
                     try { updateHover(svg, sx, sy, state); } catch(_) { }
                 }
 
-                // Update viewport size display
-                const vpEl = document.getElementById('viewport-size');
-                if(vpEl && state.view) {
+                // Update viewport size display (ancillary P4a: host's setViewportSize; default writes #viewport-size)
+                if(state.view) {
                      const r = svg.getBoundingClientRect();
-                     vpEl.innerText = `VIEW: ${Math.round(state.view.w)} x ${Math.round(state.view.h)} / ${Math.round(r.width)}px x ${Math.round(r.height)}px`;
+                     inputCtx.setViewportSize?.(`VIEW: ${Math.round(state.view.w)} x ${Math.round(state.view.h)} / ${Math.round(r.width)}px x ${Math.round(r.height)}px`);
                 }
             } catch(_) { }
         });
@@ -946,10 +966,7 @@ function updateViewBox(svg, view) {
     view.h = view.w / (rect.width / rect.height);
     svg.setAttribute('viewBox', `${view.x - view.w/2} ${view.y - view.h/2} ${view.w} ${view.h}`);
 
-    const vpEl = document.getElementById('viewport-size');
-    if(vpEl) {
-        vpEl.innerText = `VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`;
-    }
+    inputCtx.setViewportSize?.(`VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`);
 }
 
 function setupKeyboardShortcuts(state) {
@@ -965,7 +982,7 @@ function setupKeyboardShortcuts(state) {
                     // Stop placement mode and open input so numeric entry starts immediately
                     try { const pending = state.placingConstraint; if (pending) { try { pending.__placing = false; } catch(_){} try { if (state && state.placingConstraint && state.placingConstraint === pending) state.placingConstraint = null; } catch(_){} } } catch(_){}
                     // Open input and pass the initial key so it can decide caret vs select behavior
-                    showEditInput(document.querySelector('svg'), state, pending, e.key);
+                    showEditInput(inputCtx.getCanvasSvg(), state, pending, e.key);
 
                 } catch(_){ }
                 e.preventDefault();
@@ -974,18 +991,18 @@ function setupKeyboardShortcuts(state) {
         }
 
         if (state.currentTool === TOOL_MODES.LINE) {
-            try{ if (handleLineKeyDown(e, document.querySelector('svg'), state)) { e.preventDefault(); return; } }catch(_){ }
+            try{ if (handleLineKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.RECT) {
             // Use new live dimension handler instead of the old one
             dbg.log('input', '[DEBUG INPUT] Calling handleLiveRectKeyDown', e.key);
-            if (handleLiveRectKeyDown(e, document.querySelector('svg'), state)) { e.preventDefault(); return; }
+            if (handleLiveRectKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; }
         }
         if (state.currentTool === TOOL_MODES.CIRCLE) {
-            try{ if (handleCircleKeyDown(e, document.querySelector('svg'), state)) { e.preventDefault(); return; } }catch(_){ }
+            try{ if (handleCircleKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.ARC) {
-            try{ if (handleArcKeyDown(e, document.querySelector('svg'), state)) { e.preventDefault(); return; } }catch(_){ }
+            try{ if (handleArcKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }

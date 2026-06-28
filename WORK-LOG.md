@@ -2304,6 +2304,42 @@ redirect where they append; not load-bearing for the split).
 
 === P4 PLAN READY - HOLD ===
 
+## 2026-06-28 · SHAPER P4a — input-manager IN-CANVAS reaches → defaultInputCtx + svg-ambiguity fix (turn 87)
+
+- **did (P4a; behavior-preserving + the latent svg bug fixed):**
+  - **`defaultInputCtx`** (new `export const` in `input-manager.js`) with the P4a methods, each doing EXACTLY
+    today's reach: `getCanvasSvg()` [R], `getWorldGroup()`→`#world-group` [R], `getMagEls()`→{`#magnifier`,
+    `#mag-content`,`#btn-mag-toggle`} [R], `setViewportSize(text)`→writes `#viewport-size` [W], `getInputHost()`
+    →`document.body` [R]. Module state `let canvasSvg`/`let inputCtx = defaultInputCtx`.
+  - **`setupInput(svg, state, opts)`** now captures `canvasSvg = svg` + `inputCtx = opts.inputCtx ||
+    defaultInputCtx`. Omitting `opts.inputCtx` ⇒ SketchStudio defaults ⇒ byte-identical.
+  - **Routed the reaches:** `updateMagnifier` + the pointer-up force-hide + `setupMagToggle` source their els via
+    `inputCtx.getMagEls()`/`getWorldGroup()`; the magnifier `<use href="#world-group">` → `#${worldGroup.id}`
+    (host-portable, byte-identical since the id is `world-group`); both `#viewport-size` writes →
+    `inputCtx.setViewportSize(...)`.
+  - **Fixed the svg-ambiguity (plan risk):** the 5 keydown→tool reaches used `document.querySelector('svg')`
+    (grabs the FIRST svg globally — wrong in a multi-svg host). Now `inputCtx.getCanvasSvg()`, which returns the
+    svg PASSED to `setupInput` (falls back to the global query only if unset). SketchStudio's bound svg IS the
+    first/only svg → byte-identical; Shaper will correctly target its Design canvas at P5.
+  - **Left as direct DOM (per plan):** P4b (tool-button sync, `#modeText`) + `window.ug.*` debug. dimInput/liveDim
+    untouched (self-provisioning).
+  - **Caught + fixed a self-inflicted bug:** the scripted `document.querySelector('svg')`→`getCanvasSvg()` replace
+    also hit `getCanvasSvg`'s own fallback (→ infinite recursion) and a comment; both reverted to the literal.
+- **verify (exactly how):**
+  - **SketchStudio byte-identical (CDP, exercising each method on the live `defaultInputCtx`):** `getCanvasSvg()
+    .id === "svgCanvas"` (returns the BOUND svg, not a global guess — the fix), `getWorldGroup().id ===
+    "world-group"`, `getMagEls()` returns mag+magContent, clicking `#btn-mag-toggle` toggles its label
+    (`magBtnToggled:true` — setupMagToggle wired via ctx), `setViewportSize('VIEW: ctxtest')` →
+    `#viewport-size` shows it (`"VIEW: CTXTEST"`, uppercased by the element's CSS — write confirmed); world-group
+    renders **5**; `errors=0`. **Shaper** Design mounts (6), `errors=0`.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · input-manager's canvas reaches (magnifier/world-group/viewport/svg) are now
+  host-injectable + the svg-ambiguity is fixed. Next per the plan: **P4b** — toolbar/status (tool-button sync +
+  `#modeText`) → opts (opt-in; Shaper omits). STOP — hold for advisor.
+
+=== P4a (INPUT CANVAS CTX) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

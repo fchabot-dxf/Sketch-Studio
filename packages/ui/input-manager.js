@@ -75,6 +75,53 @@ export const defaultInputCtx = {
     if (el) el.innerText = text;
   },
   getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
+  // P4b TOOLBAR/STATUS (app-specific; a host with its own toolbar supplies these, or omits to skip the sync).
+  // setActiveTool — switch via the toolbar button (primary path); returns true if it handled the switch.
+  setActiveTool(toolName) {
+    try {
+      const toolButton = document.getElementById('tool-' + toolName);
+      if (toolButton) {
+        try {
+          const activeEl = document.activeElement;
+          if (activeEl && activeEl !== toolButton && activeEl.classList && activeEl.classList.contains('tool-btn')) {
+            try { activeEl.blur(); } catch(_) {}
+          }
+        } catch(_) {}
+        try { document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(b => b.classList.remove('active','selected','bg-blue-500','text-white')); } catch(_) {}
+        try { toolButton.click(); } catch(_) {}
+        try { document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
+        try { toolButton.classList.add('active'); toolButton.focus(); setTimeout(()=>{ try{ toolButton.blur(); }catch(_){ } }, 0); } catch(_) {}
+        return true;
+      }
+    } catch(_) {}
+    return false;
+  },
+  // highlightActiveTool — manual active-state highlight (fallback when there's no toolbar button to click).
+  highlightActiveTool(toolName) {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    const toolEl = document.getElementById('tool-' + toolName);
+    if (toolEl) toolEl.classList.add('active');
+  },
+  // setModeText — write the status/mode readout.
+  setModeText(text) {
+    const el = document.getElementById('modeText');
+    if (el) el.innerText = text;
+  },
+  // resetToSelectTool — clear all toolbar buttons + activate Select; returns true if the select button was found.
+  resetToSelectTool() {
+    document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(btn => {
+      btn.classList.remove('active', 'selected', 'bg-blue-500', 'text-white');
+    });
+    const selectBtn = document.getElementById('tool-select') ||
+                      document.querySelector('[data-tool="select"]') ||
+                      document.querySelector('.tool-btn[data-tool="select"]');
+    if (selectBtn) {
+      selectBtn.click();
+      try { document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
+      return true;
+    }
+    return false;
+  },
 };
 let inputCtx = defaultInputCtx;
 
@@ -1133,45 +1180,20 @@ export const showDimInput = showEditInput;
 
 // Helper: Switch the active tool programmatically with UI update fallback
 function switchToTool(state, toolName) {
-    // Import setTool from ui-manager if not available
-    try {
-        // First try to find the tool button and click it (this ensures proper UI update)
-        const toolButton = document.getElementById('tool-' + toolName);
-        if (toolButton) {
-            // Blur any currently focused tool button (prevents lingering focus outlines)
-            try {
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl !== toolButton && activeEl.classList && activeEl.classList.contains('tool-btn')) {
-                    try { activeEl.blur(); } catch(_) {}
-                }
-            } catch(_) {}
+    // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
+    // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
+    if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
 
-            // Clear other active states and set this button active so UI updates consistently
-            try { document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(b => b.classList.remove('active','selected','bg-blue-500','text-white')); } catch(_) {}
-            try { toolButton.click(); } catch(_) {}
-            try { /* Ensure no tool retains keyboard focus (prevents persistent focus ring) */ document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
-            try { toolButton.classList.add('active'); /* briefly focus then blur to ensure focus ring doesn't remain */ toolButton.focus(); setTimeout(()=>{ try{ toolButton.blur(); }catch(_){ } }, 0); } catch(_) {}
-            return;
-        }
-    } catch(_) {}
-    
     // Fallback: set tool directly
     try {
         state.currentTool = toolName;
         // Clear any preview state when switching tools
         try { clearPreview(state); } catch(_) {}
-        // Update UI manually
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-        const toolEl = document.getElementById('tool-' + toolName);
-        if (toolEl) {
-            toolEl.classList.add('active');
-        }
-        
+        // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
+        inputCtx.highlightActiveTool?.(toolName);
+
         // Update mode text
-        const modeText = document.getElementById('modeText');
-        if (modeText) {
-            modeText.innerText = 'MODE: ' + toolName.toUpperCase();
-        }
+        inputCtx.setModeText?.('MODE: ' + toolName.toUpperCase());
 
         // Fallback preselection for constraint tools (matches toolbar behavior)
         const constraintTools = [
@@ -1205,14 +1227,11 @@ function switchToTool(state, toolName) {
             const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
             state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
 
-            const mt = document.getElementById('modeText');
-            if (mt) {
-                let modeText = toolName.toUpperCase();
-                if (toolName === TOOL_MODES.COLLINEAR) modeText += ' - 1/3 Points';
-                else if (firstEl) modeText += ' - Select 2nd Element';
-                else modeText += ' - Select 1st Element';
-                mt.innerText = 'MODE: ' + modeText;
-            }
+            let modeText = toolName.toUpperCase();
+            if (toolName === TOOL_MODES.COLLINEAR) modeText += ' - 1/3 Points';
+            else if (firstEl) modeText += ' - Select 2nd Element';
+            else modeText += ' - Select 1st Element';
+            inputCtx.setModeText?.('MODE: ' + modeText);
         }
     } catch(_) {}
 }
@@ -1260,22 +1279,9 @@ function handleEscape(state) {
 
     // 6. Unified UI Update: Ensure all toolbar buttons are properly reset
     try {
-        // Clear ALL possible active classes from ALL buttons
-        document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(btn => {
-            btn.classList.remove('active', 'selected', 'bg-blue-500', 'text-white');
-        });
-        
-        // Find and activate the select button
-        const selectBtn = document.getElementById('tool-select') || 
-                          document.querySelector('[data-tool="select"]') ||
-                          document.querySelector('.tool-btn[data-tool="select"]');
-        
-        if (selectBtn) {
-            // Click to trigger proper state management
-            selectBtn.click();
-            try { document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
-        } else {
-            // Fallback if select button not found
+        // Reset the toolbar buttons to Select (app-specific; default = SketchStudio toolbar). If the host has no
+        // toolbar (no resetToSelectTool, or no select button), fall back to the direct tool switch.
+        if (!(inputCtx.resetToSelectTool && inputCtx.resetToSelectTool())) {
             switchToTool(state, 'select');
         }
     } catch(err) {

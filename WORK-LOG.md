@@ -2340,6 +2340,40 @@ redirect where they append; not load-bearing for the split).
 
 === P4a (INPUT CANVAS CTX) DONE — HOLD ===
 
+## 2026-06-28 · SHAPER P4b — input-manager TOOLBAR/STATUS reaches → defaultInputCtx (turn 89) — P4 COMPLETE
+
+- **did (P4b, the last DOM-coupling piece; behavior-preserving, opt-in):**
+  - **Extended `defaultInputCtx`** with 4 toolbar/status methods, each capturing today's logic VERBATIM:
+    - `setActiveTool(name)` [W] — the PRIMARY switch path (find `#tool-<name>`; if present: clear `.tool-btn,
+      .tool-button,[class*=tool]` active states, `.click()` the button, blur others, add `active`; **returns
+      true** if handled, false if no button).
+    - `highlightActiveTool(name)` [W] — the FALLBACK manual highlight (clear `.tool-btn` active + add to
+      `#tool-<name>`).
+    - `setModeText(text)` [W] — write `#modeText`.
+    - `resetToSelectTool()` [W] — clear all toolbar buttons + activate Select (`#tool-select` / `[data-tool=
+      select]` fallbacks + blur); returns true if the select button was found.
+  - **Routed the 3 sites:** `switchToTool` primary → `if (inputCtx.setActiveTool?.(toolName)) return;`; its
+    fallback highlight → `inputCtx.highlightActiveTool?.(toolName)`; both `#modeText` writes (plain + constraint-
+    mode) → `inputCtx.setModeText?.(...)`; `handleEscape`'s toolbar reset → `if (!inputCtx.resetToSelectTool?.())
+    switchToTool(state,'select')`. Grep confirms the toolbar/status reaches now live ONLY in defaultInputCtx.
+  - **Opt-in:** a host omitting these (Shaper, with its own toolbar/none) just skips the sync — `setActiveTool`
+    absent → switchToTool falls through to the direct state switch. Default = SketchStudio DOM → byte-identical.
+  - **Left:** `window.ug.*` debug (intentional). dimInput/liveDim self-provisioning (untouched).
+- **verify (exactly how):**
+  - **SketchStudio byte-identical (CDP, exercising each method on the live `defaultInputCtx`):**
+    `setActiveTool('line')` → true + `#tool-line` gains `active`; `setModeText('MODE: P4BTEST')` → `#modeText`
+    shows it; `highlightActiveTool('rect')` → `#tool-rect` active + `#tool-line` cleared; `resetToSelectTool()`
+    → true. `errors=0`. **Shaper** Design mounts (6), `errors=0`.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · **P4 COMPLETE** — EVERY input-manager app-specific DOM reach (canvas P4a +
+  toolbar/status P4b) is now behind `defaultInputCtx` (only `window.ug.*` debug left, by design). The shared
+  `#ui/` sketcher (renderer P2/P3 + input P4) is now fully theme-var-driven + host-injectable; SketchStudio
+  byte-identical throughout. Next per the plan: **P5** — Shaper's Design tab adopts the full renderer + input
+  (replace the S1 minimal canvas; pass Shaper's render/input ctx + dark theme). STOP — hold for advisor.
+
+=== P4b (INPUT TOOLBAR CTX) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

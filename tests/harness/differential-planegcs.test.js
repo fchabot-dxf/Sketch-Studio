@@ -32,6 +32,15 @@ const SCENARIOS = [
     lines: [{ id: 'top', p1: '1', p2: '2' }, { id: 'right', p1: '2', p2: '3' }, { id: 'bot', p1: '4', p2: '3' }, { id: 'left', p1: '1', p2: '4' }],
     constraints: [{ type: 'horizontal', line: 'top' }, { type: 'vertical', line: 'right' }, { type: 'horizontal', line: 'bot' }, { type: 'vertical', line: 'left' },
       { type: 'distance', a: '1', b: '2', value: 5 }, { type: 'equal', line1: 'top', line2: 'right' }] },
+  { name: 'point-on-line', points: [{ id: '1', x: 0, y: 0, fixed: true }, { id: '2', x: 10, y: 0, fixed: true }, { id: 'p', x: 5, y: 3 }],
+    lines: [{ id: 'ab', p1: '1', p2: '2' }],
+    constraints: [{ type: 'point_on_line', p: 'p', line: 'ab' }, { type: 'distance', a: '1', b: 'p', value: 5 }] },
+  { name: 'angle 60° between lines', points: [{ id: '1', x: 0, y: 0, fixed: true }, { id: '2', x: 10, y: 0, fixed: true }, { id: '3', x: 7, y: 3 }],
+    lines: [{ id: 'l1', p1: '1', p2: '2' }, { id: 'l2', p1: '1', p2: '3' }],
+    constraints: [{ type: 'angle', line1: 'l1', line2: 'l2', value: 60 }, { type: 'distance', a: '1', b: '3', value: 8 }] },
+  { name: 'circle tangent to line', points: [{ id: '1', x: 0, y: 0, fixed: true }, { id: '2', x: 10, y: 0, fixed: true }, { id: 'c', x: 5, y: 1.5 }],
+    lines: [{ id: 'ab', p1: '1', p2: '2' }],
+    constraints: [{ type: 'tangent_line', center: 'c', line: 'ab', radius: 3 }] },
 ];
 
 const lineMap = (sc) => Object.fromEntries(sc.lines.map(l => [l.id, l]));
@@ -50,6 +59,9 @@ function solveOurs(sc) {
     else if (c.type === 'parallel') engine.addConstraint({ id, type: T.PARALLEL, joints: [L[c.line1].p1, L[c.line1].p2, L[c.line2].p1, L[c.line2].p2] });
     else if (c.type === 'perpendicular') engine.addConstraint({ id, type: T.PERPENDICULAR, joints: [L[c.line1].p1, L[c.line1].p2, L[c.line2].p1, L[c.line2].p2] });
     else if (c.type === 'equal') engine.addConstraint({ id, type: T.EQUAL, joints: [L[c.line1].p1, L[c.line1].p2, L[c.line2].p1, L[c.line2].p2] });
+    else if (c.type === 'point_on_line') engine.addConstraint({ id, type: T.POINT_ON_LINE, joints: [c.p, L[c.line].p1, L[c.line].p2] });
+    else if (c.type === 'angle') engine.addConstraint({ id, type: T.ANGLE, joints: [L[c.line1].p1, L[c.line1].p2, L[c.line2].p1, L[c.line2].p2], value: c.value });
+    else if (c.type === 'tangent_line') engine.addConstraint({ id, type: T.TANGENT, joints: [c.center, L[c.line].p1, L[c.line].p2], radius: c.radius });
   }
   engine.solve(SolverConfig.ITERATIONS || 500);
   const j = engine.getJoints(); const out = {};
@@ -72,6 +84,9 @@ function solvePlanegcs(sc, mod) {
     else if (c.type === 'parallel') prims.push({ id, type: 'parallel', l1_id: c.line1, l2_id: c.line2 });
     else if (c.type === 'perpendicular') prims.push({ id, type: 'perpendicular_ll', l1_id: c.line1, l2_id: c.line2 });
     else if (c.type === 'equal') prims.push({ id, type: 'equal_length', l1_id: c.line1, l2_id: c.line2 });
+    else if (c.type === 'point_on_line') prims.push({ id, type: 'p2l_distance', p_id: c.p, l_id: c.line, distance: 0 });
+    else if (c.type === 'angle') prims.push({ id, type: 'l2l_angle_ll', l1_id: c.line1, l2_id: c.line2, angle: c.value * Math.PI / 180 });
+    else if (c.type === 'tangent_line') { const cId = 'circ_' + id; prims.push({ id: cId, type: 'circle', c_id: c.center, radius: c.radius }); prims.push({ id: 'cr_' + id, type: 'circle_radius', c_id: cId, radius: c.radius }); prims.push({ id, type: 'tangent_lc', l_id: c.line, c_id: cId }); }
   }
   w.push_primitives_and_params(prims);
   w.solve(); w.apply_solution();

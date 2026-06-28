@@ -644,6 +644,49 @@ Slice 1, then Slice 1 (and the mass move) proceed unchanged.
 
 === GEOMETRY SPLIT DONE — HOLD ===
 
+## 2026-06-27 · `5d972a2` — ENTRY-PAIR: move index.html + main.js → apps/sketchstudio (+ _redirects) (turn 7)
+
+- **deploy approach CHANGED by advisor (this turn):** earlier plan was "move index.html in + change Pages
+  output dir / → apps/sketchstudio (dashboard)." New ruling: **output dir STAYS `/`** (core must stay
+  served at repo root), and a Cloudflare **`_redirects`** rule serves the app at the root URL — NO
+  dashboard change. Uses RELATIVE import-map paths so resolution is identical in local dev and on deploy.
+- **did:**
+  - `git mv index.html → apps/sketchstudio/index.html` · `git mv src/main.js → apps/sketchstudio/main.js`.
+  - `index.html`: re-based import map for the new depth — `#core/` `./src/core/`→`../../src/core/`,
+    `#app/` `./apps/sketchstudio/`→`./`; `<script src>` `src/main.js`→`./main.js`. (Node's package.json
+    `imports` is unchanged — it resolves from the repo-root package.json regardless of index.html's location.)
+  - `main.js`: `./core/*`→`#core/*` (7 imports); `./constraint-solver.js`→`../../src/constraint-solver.js`
+    (constraint-solver is core but sits at `src/` root, not `src/core/`, so no `#core/` alias — relative
+    until the core batch moves it). `./svg-renderer.js`, `./ui/*`, dynamic `./ui/tuning-wizard|debug-panel`
+    LEFT relative — from the new `apps/sketchstudio/main.js` they now resolve DIRECTLY to the real moved
+    files (bypassing the WAVE-A shims; those shims now serve only stragglers/tests).
+  - `_redirects` (repo root): `/    /apps/sketchstudio/    302`.
+  - `server.js`: local-dev parity — `/` → 302 `/apps/sketchstudio/` (mirrors `_redirects`; a plain static
+    server doesn't read `_redirects`).
+  - repointed 3 source-TEXT-reading tests (`header-icons`, `settings-panel-html`, `settings-panel-style`):
+    `../index.html`→`../apps/sketchstudio/index.html`. **These would have been NET-NEW failures** (they
+    `readFile` the HTML, which a move relocates) — the same Wave-A source-read trap, caught by grep.
+- **count/scope notes:** no test imports `main.js` (it's the entry — no shim needed). Docs (`docs/**`,
+  README) mention `main.js`/`8-main.js` but are non-functional + already stale (old `8-` naming) — left
+  out of scope.
+- **VERIFY (deploy-touching — BOTH path bases):**
+  - **GET `/` → 302 → `/apps/sketchstudio/`** (server honoring `_redirects`); **`/apps/sketchstudio/index.html` → 200**.
+  - **resolution probe at the apps base** (a page served at `/apps/sketchstudio/` with the SAME re-based
+    import map, `import('./main.js')`) → `{status:"OK", importErrs:[]}`, no 404s — proves the relative
+    `#core/`(`../../src/core/`) + `#app/`(`./`) paths + `../../src/constraint-solver.js` resolve at the
+    deployed base.
+  - **baseline-diff:** all 109 tests; FAILING = the same 8 ⊆ pre-existing 9 → **0 net-new** (the 3 repointed
+    HTML tests now PASS). **oracle 12/12.** **leak clean** (no `src/core/`→`#app/`/`apps/`).
+  - ⚠ MERGE note (carried from advisor, not now): `sketch-studio.pages.dev/` will depend on `_redirects` —
+    confirm on the deploy preview before merging to `main`.
+- **state:** 0 net-new (≤9 pre-existing) · oracle 12/12 · app loads at both `/` (302) and the apps base ·
+  branch `carve-out`@`5d972a2`. The shell — including its entry — now lives entirely under
+  `apps/sketchstudio/`; `src/` holds only core (core/**, constraint-solver, solver-core*) + WAVE-A shims +
+  dead stubs. Coordinating via `handoff.py` (turn 7). next: STOP. Remaining gate: rewire/cleanup (delete
+  shims + dead files) — advisor's call.
+
+=== ENTRY-PAIR DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

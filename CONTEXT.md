@@ -10,12 +10,58 @@
 
 A 2D CAD sketch application with constraint solving (Newton-Raphson + Levenberg-Marquardt). Browser-based, ES modules, no bundler. Used personally for designing G-code paths for an Ultimate Bee CNC running a DDCS Expert 1.1 controller.
 
-**Current direction — platform pivot.** SketchStudio is becoming the **first shell of a shared "one brain, many shells" CAD platform**: a headless, app-agnostic core (model · constraint solver · geometry · units · interaction) reused by SketchStudio, a **Shaper Origin** cut-path editor, and future apps (laser / 3D-print / other CNC). The solver in this repo *is* that brain and is being **reused, not rewritten**. We're in **Phase 0** — finishing solver honesty/robustness (the blockers) in the current structure, before the Phase 1 monorepo carve-out. Plan + principles live in `ROADMAP.md`.
+**Current direction.** The Phase 1 **monorepo carve-out is DONE.** The headless brain lives in
+`packages/core/` (model · solver · geometry · constraints); the apps are peers — `apps/sketchstudio/`
+(the sketcher shell) + `apps/shaper/` (a Shaper Origin SVG editor) + `tests/`. No build step;
+browser-native ESM + an importmap, with isomorphic `#core/` / `#app/` aliases (package.json `imports`
+resolve in Node, the importmap resolves in the browser). The solver IS the shared brain — reused, not
+rewritten. **This session** drove a large solver-correctness run (see "This session" below) and is now
+starting the **Shaper ← shared-sketcher integration** (Shaper gains the shared Design tab — see
+`NEXT-SESSION.md`). Plan + principles: `ROADMAP.md`. Current working branch: **`carve-out`** (pushed to origin).
 
-- **GitHub:** https://github.com/fchabot-dxf/Sketch-Studio
+- **GitHub:** https://github.com/fchabot-dxf/Sketch-Studio  (branch `carve-out`)
 - **Live:** https://sketch-studio.pages.dev (Cloudflare Pages, auto-deploys on push to `main`)
-- **Local:** `C:\Users\danse\APPS\SketchStudio\SketchStudio Newton Raphson\Sketch-Studio`
+- **Local:** `C:\Users\danse\APPS\SketchStudio\Sketch-Studio`  (the wrapper folder was flattened away)
 - **Backup elsewhere:** `C:\Users\danse\Dropbox\DDCS Expest repo\Sketch-Studio` (do not modify)
+
+## This session — solver correctness run + testing apparatus  ⭐ (most current)
+
+> The sections further down ("Solver state", "What got done this session", "Test suite status") predate the
+> carve-out and this run — treat them as **historical**. This block is the current truth.
+
+A long run making the sketch **"rectangle-or-refuse, never deform, never silent."** ~14 fixes, each driven
+through the REAL app path and scenario-locked:
+- drag no longer shears a dimensioned rect (structural constraints outrank the mouse-spring drag).
+- **one driving dimension per edge**; a 2nd — same-edge OR rank-redundant cross-edge — comes in as a
+  **REFERENCE** (a useful live readout, never a silent 2nd driver, never deleted).
+- over-constraining EDIT or geometric ADD → **refuse + revert** (never mangled); an over-constraining
+  **dimension** ADD → **kept as a driven reference** (don't delete a measurement).
+- **references are truly FREE**: the engine skips driven rows in `_assemble`, so a reference never affects
+  geometry — it displays the actual measured value.
+- toggle driver↔reference **swaps** (rank-redundancy aware). Edit/toggle logic extracted to shared headless
+  seams (`apps/sketchstudio/ui/dimension-seams.js`) so the harness drives the REAL code, not a mirror.
+- nonlinear over-constrain (tangent/coincident/…) → refuse only if **destructive** (fully-pinned, or mangles
+  an already-satisfied constraint), else keep + soft notice — never false-reverts a slow-but-valid tangent.
+- **collinear anchors a currently axis-aligned line** (a vertical stays vertical); a vertical+horizontal
+  (perpendicular) pair is **refused**.
+- **midpoint Jacobian completed (bidirectional)** — a shape can now be centered on the origin.
+
+**Testing apparatus — `tests/harness/` (gating):**
+- `solver-scenarios.test.js` — 23 user-level scenarios (every fix above, scenario-locked).
+- `constraint-conformance.test.js` — every constraint type + canonical shapes survive a drag (15/15).
+- `solver-fuzz.test.js` — fuzzer: 4 shapes (rect/polyline/polygon/circle) × REAL app paths
+  (placement/edit/toggle) × adversarial ops, checking no-explode / no-lie / never-silent / no-redundant-driver.
+  400 sims clean.
+- `differential-planegcs.test.js` — **differential oracle vs FreeCAD's PlaneGCS** (`@salusoft89/planegcs`, a
+  devDependency). 9/9 exact across the constraint space — a wrong-math detector (caught the midpoint class).
+- `sketch.js` — the harness (real `#core` engine + ConstraintManager + the seams). `s.load()` replays a
+  Copy/exported live-app sketch as a scenario.
+
+**Baseline: 104 pass / 8 fail, 0 net-new.** The failures are the known pre-existing DOM-stub / stale set
+(ai-vision-label-spacing, debug-panel, debug-whisker-align, input-manager-midpoint, settings-panel-ui,
+settings-project-config, tuning-wizard, wizard-base, wizard-placement) — none from this session.
+
+**In flight:** Shaper ← shared-sketcher integration — worker is producing a PLAN first (gated). See NEXT-SESSION.
 
 ## Architecture in one paragraph
 

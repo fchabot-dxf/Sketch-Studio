@@ -1,14 +1,14 @@
-import { SolverConfig } from './core/solver-config.js';
-import { dbg } from './core/debug.js';
-import { DEFAULT_VIEW } from './core/constants.js';
-import { addConstraintObject } from './core/constraints.js';
-import { removeOrphanJoints } from './core/joints.js';
+import { SolverConfig } from '#core/solver-config.js';
+import { dbg } from '#core/debug.js';
+import { DEFAULT_VIEW } from '#core/constants.js';
+import { addConstraintObject } from '#core/constraints.js';
+import { removeOrphanJoints } from '#core/joints.js';
 import { draw } from './svg-renderer.js';
 import { setupInput, showDimInput } from './ui/input-manager.js';
 import { setupUI } from './ui/ui-manager.js';
-import { createEngine } from './constraint-solver.js';
-import { applyDefaultState } from './core/state.js';
-import { setConstraintNotifier } from './core/constraint-manager.js';
+import { createEngine } from '../../src/constraint-solver.js';
+import { applyDefaultState } from '#core/state.js';
+import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from './ui/notification-manager.js';
 
 let svg = document.getElementById('svgCanvas');

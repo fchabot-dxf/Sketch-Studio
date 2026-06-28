@@ -1,6 +1,6 @@
 (async () => {
   const fs = await import('fs/promises');
-  const html = await fs.readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const html = await fs.readFile(new URL('../apps/sketchstudio/index.html', import.meta.url), 'utf8');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Settings header should match unified wizard header styling (allows optional gear prefix and uppercase)

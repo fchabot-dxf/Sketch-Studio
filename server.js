@@ -15,6 +15,13 @@ function mimeType(file){
 
 const server = http.createServer((req, res) => {
   try{
+    // Local-dev parity with the Cloudflare _redirects rule: root → the SketchStudio shell.
+    if (((req.url || '/').split('?')[0]) === '/') {
+      res.statusCode = 302;
+      res.setHeader('Location', '/apps/sketchstudio/');
+      res.end();
+      return;
+    }
     const safePath = path.normalize(decodeURIComponent(req.url.split('?')[0] || '/'));
     let filePath = path.join(root, safePath);
 

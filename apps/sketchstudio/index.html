@@ -292,6 +292,9 @@
         #svgCanvas { position: relative; z-index: 1 !important; }
         #toolsRibbon { position: relative; z-index: 100 !important; }
     </style>
+    <!-- Shared sketcher theme contract (P1). SketchStudio uses the defaults (= its current colors); nothing
+         consumes the vars until P2, so this is byte-identical today. Linked last so app rules win. -->
+    <link rel="stylesheet" href="../../packages/ui/sketcher.css">
 </head>
 <body class="flex flex-col h-screen bg-[#F0F0F0] select-none text-xs">
 

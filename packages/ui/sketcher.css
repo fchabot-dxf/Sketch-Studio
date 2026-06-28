@@ -1,0 +1,48 @@
+/* packages/ui/sketcher.css — SHARED sketcher-canvas THEME CONTRACT (slice P1).
+ *
+ * Declares the --sk-* custom properties the #ui renderer will consume in P2 (routed via inline
+ * style="...:var(--sk-…,#fallback)" — note: var() is invalid in raw SVG presentation attributes).
+ * The DEFAULTS below are SketchStudio's CURRENT colors, so linking this file changes NOTHING until P2
+ * actually references the vars — P1 is byte-identical by construction.
+ *
+ * Each app retheme = override these in its OWN :root, loaded AFTER this file (Shaper sets a dark palette).
+ * Framework-neutral plain custom properties (NO Tailwind). The JS-side glyph fallback stays in
+ * #core/constants.js CONSTRAINT_COLORS (the brain never learns about CSS).
+ */
+:root {
+  /* Canvas surface (SketchStudio: #svgCanvas bg / .snapping) */
+  --sk-canvas-bg: #ffffff;
+  --sk-canvas-bg-snapping: #fff7ed;
+
+  /* Grid (the SVG <pattern> strokes in index.html) */
+  --sk-grid-minor: #CBD5E1;
+  --sk-grid-major: #93C5FD;
+
+  /* Geometry (joints + lines) coloured by solve status */
+  --sk-geo-fixed: #202020;          /* fully rigid / fixed — near-black */
+  --sk-geo-constrained: #2563eb;    /* constrained — geometry blue */
+  --sk-geo-free: #3b82f6;           /* free / under-constrained — light blue */
+  --sk-geo-fully: #10b981;          /* fully constrained — green */
+  --sk-construction: #f97316;       /* construction geometry — orange */
+  --sk-muted: #9ca3af;              /* faint guides / muted */
+
+  /* Joints */
+  --sk-joint-fill: #ffffff;
+
+  /* Constraint glyphs (mirror #core CONSTRAINT_COLORS) */
+  --sk-constraint-fill: #60A5FA;
+  --sk-constraint-stroke: #2563eb;
+  --sk-perpendicular-stroke: #0891b2;
+
+  /* Dimensions */
+  --sk-dimension: #2563eb;
+  --sk-dimension-snap: #10b981;
+
+  /* Selection / hover / origin */
+  --sk-selection: #1e40af;
+  --sk-hover: #3B82F6;
+  --sk-origin: #3B82F6;
+
+  /* Feedback */
+  --sk-error: #ef4444;
+}

@@ -2098,6 +2098,38 @@ split per R3); P5 = integration. Each remains an independent byte-identical-for-
 
 === SHAPER PARAMETERIZATION PLAN READY - HOLD ===
 
+## 2026-06-28 · SHAPER P1 — shared #ui/sketcher.css variable contract (turn 77)
+
+- **did (P1 of the blessed parameterization plan; byte-identical because nothing consumes the vars yet):**
+  - **`packages/ui/sketcher.css`** (new) — declares the `--sk-*` sketcher-canvas theme contract on `:root`, each
+    var defaulting to SketchStudio's CURRENT color (from the audit: `CONSTRAINT_COLORS` #60A5FA/#2563eb +
+    the renderer's hex + the index.html grid `<pattern>` strokes #CBD5E1/#93C5FD + #svgCanvas bg #fff/#fff7ed).
+    ~22 vars grouped: canvas bg, grid minor/major, geometry-by-status (fixed/constrained/free/fully/
+    construction/muted), joint fill, constraint glyph fill/stroke/perpendicular, dimension(+snap), selection/
+    hover/origin, error. Framework-neutral plain custom props (NO Tailwind). `CONSTRAINT_COLORS` stays the JS
+    fallback in `#core` (R5 — brain stays theme-unaware).
+  - **Linked it in BOTH index.html AFTER each app's shell CSS:** SketchStudio (before `</head>`, after the inline
+    `<style>` shell) — uses the defaults, no override; Shaper (after `styles/main.css`).
+  - **Shaper :root override = DARK palette** (in Shaper's inline `<style>`, which comes AFTER the sketcher.css
+    link so it wins). Per the USER's direct instruction this turn ("shaper color theme is dark vs studio — keep
+    that"). Dark values keyed off Shaper's existing tokens (--accent #4c9aff, --text #e6e6e6, --panel #2b2d31):
+    dark canvas #14161a, light geometry, accent-blue glyphs/selection. **Unused until P5** (when Shaper's Design
+    tab adopts the full renderer) — declared now so that lands dark.
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN** (CSS link is not a JS #-import; guard unaffected).
+  - Browser (CDP): **SketchStudio** `errors=0`, world-group **5 children**, `#svgCanvas` computed bg =
+    `rgb(255,255,255)` (UNCHANGED) and the contract is declared (`--sk-constraint-fill` = `#60A5FA`,
+    `--sk-canvas-bg` = `#ffffff`) → **byte-identical** (vars declared, nothing consumes them). **Shaper**
+    `errors=0`, contract resolves DARK (`--sk-constraint-fill` = `#4c9aff`, `--sk-canvas-bg` = `#14161a`),
+    Design tab still mounts (6 children).
+  - baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out` · the `--sk-*` theme contract exists + is linked in both apps; SketchStudio
+  light (defaults), Shaper dark (override). Next per the plan: **P2** — route the renderer's inline colors
+  through these vars via inline `style="…:var(--sk-…,#fallback)"` (var() invalid in raw SVG presentation attrs).
+  STOP — hold for advisor.
+
+=== SHAPER P1 (SKETCHER CSS VAR CONTRACT) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

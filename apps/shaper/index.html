@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SVG Editor — Shaper Origin</title>
   <link rel="stylesheet" href="styles/main.css">
+  <!-- Shared sketcher theme contract (P1). Linked AFTER main.css so Shaper's own :root override (below) wins. -->
+  <link rel="stylesheet" href="../../packages/ui/sketcher.css">
   <!-- Isomorphic aliases (mirror SketchStudio + package.json): #core = shared brain, #ui = shared UI.
        Added for the shared Design tab (S1); Shaper's own modules keep using relative ./src imports. -->
   <script type="importmap">
@@ -16,6 +18,31 @@
   }
   </script>
   <style>
+    /* Shaper sketcher theme — DARK (kept per design; SketchStudio stays light via the #ui/sketcher.css
+       defaults). Overrides the shared contract; this :root comes AFTER the sketcher.css link so it wins.
+       Unused until Shaper's Design tab adopts the full renderer (P5) — declared now so that lands dark. */
+    :root {
+      --sk-canvas-bg: #14161a;
+      --sk-canvas-bg-snapping: #2a2416;
+      --sk-grid-minor: #2a2d33;
+      --sk-grid-major: #3a4250;
+      --sk-geo-fixed: #e6e6e6;
+      --sk-geo-constrained: #4c9aff;
+      --sk-geo-free: #7aa7e0;
+      --sk-geo-fully: #34d399;
+      --sk-construction: #fb923c;
+      --sk-muted: #9aa0a6;
+      --sk-joint-fill: #2b2d31;
+      --sk-constraint-fill: #4c9aff;
+      --sk-constraint-stroke: #93c5fd;
+      --sk-perpendicular-stroke: #22d3ee;
+      --sk-dimension: #93c5fd;
+      --sk-dimension-snap: #34d399;
+      --sk-selection: #4c9aff;
+      --sk-hover: #7aa7e0;
+      --sk-origin: #4c9aff;
+      --sk-error: #f87171;
+    }
     #design-view { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; background: #0b1020; z-index: 5; }
     #design-view[hidden] { display: none; }
     .design-bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; background: #111827; border-bottom: 1px solid #1f2937; }

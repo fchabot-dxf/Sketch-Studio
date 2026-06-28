@@ -9,6 +9,14 @@ import { SolverConfig } from './solver-config.js';
 let notify = () => {};
 export function setConstraintNotifier(fn) { notify = typeof fn === 'function' ? fn : () => {}; }
 
+// Geometric constraints that are REFUSED + reverted when they over-constrain (they are not measurements,
+// unlike dimensions, which become references). Scoped to the well-behaved, linear-ish types: a slow-to-
+// converge NONLINEAR constraint (e.g. tangent) must never be falsely reverted just for an imperfect solve.
+const GEOMETRIC_REFUSE_TYPES = new Set([
+    CONSTRAINT_TYPES.HORIZONTAL, CONSTRAINT_TYPES.VERTICAL,
+    CONSTRAINT_TYPES.PARALLEL, CONSTRAINT_TYPES.PERPENDICULAR, CONSTRAINT_TYPES.EQUAL
+]);
+
 // Structural constraint types — cannot be driven, must be rejected on conflict
 const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.COINCIDENT, CONSTRAINT_TYPES.HORIZONTAL, CONSTRAINT_TYPES.VERTICAL,
@@ -174,13 +182,11 @@ export class ConstraintManager {
             }
         }
 
-        // Snapshot positions BEFORE persisting a DISTANCE, so a genuinely over-constraining ADD can be
-        // refused + reverted to the last-valid shape (see the post-solve check below). Captured for any
-        // distance (driver OR reference): the engine enforces driven rows too, so a reference whose value
-        // can't be met still mangles the geometry — that must be reverted, not left silently broken.
-        const _preAdd = (type === CONSTRAINT_TYPES.DISTANCE)
-            ? (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })()
-            : null;
+        // Snapshot positions BEFORE persisting, so a genuinely over-constraining ADD can be handled below:
+        // an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
+        // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
+        // reverted to this last-valid shape.
+        const _preAdd = (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })();
 
         // Use existing canonical addConstraint path to validate and persist
         const added = constraints.addConstraint(state, type, normalized);
@@ -224,17 +230,34 @@ export class ConstraintManager {
         // lives in numeric-input-manager handleCommit.)
         if (_preAdd && created && typeof created === 'object' &&
             _solveRes && _solveRes.converged === false) {
-            const clash = [...new Set((_solveRes.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
-            const ci = state.constraints.indexOf(created);
-            if (ci >= 0) state.constraints.splice(ci, 1);
-            for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
-            if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
-                try { state.engine.solve(opts.solveIterations); } catch (_) {}
+            if (type === CONSTRAINT_TYPES.DISTANCE || type === CONSTRAINT_TYPES.ANGLE) {
+                // Over-constraining DIMENSION → KEEP it as a driven REFERENCE (never delete a measurement).
+                // The engine skips driven rows, so re-solving lets the geometry settle (the reference no
+                // longer fights) and the reference displays the actual measured value.
+                created.isDriven = true; created.driven = true;
+                created.drivenReason = 'over-constrained — kept as reference (driven by geometry)';
+                if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                    try { state.engine.solve(opts.solveIterations); } catch (_) {}
+                }
+                notify('Added as reference (driven by geometry).', 'warning', 3000);
+                dbg.log('constraints', `[ConstraintManager] over-constraining ${type} ADD kept as reference`);
+                return created;
             }
-            const val = normalized.value != null ? normalized.value : '';
-            notify(`Can't add ${val} — conflicts with ${clash || 'existing constraints'}. Reverted.`, 'warning', 3500);
-            dbg.warn('constraints', `[ConstraintManager] over-constraining ${type} ADD refused + reverted`);
-            return null;
+            // Non-dimension GEOMETRIC constraint (H/V/parallel/perp/equal) → not a measurement, so
+            // REFUSE + REVERT: remove it, restore the last-valid geometry, re-solve, surface a clear error.
+            // (Other types — e.g. tangent — may just be slow to converge; never falsely revert those.)
+            if (GEOMETRIC_REFUSE_TYPES.has(type)) {
+                const clash = [...new Set((_solveRes.conflicts || []).map(c => c.type).filter(Boolean))].join(', ');
+                const ci = state.constraints.indexOf(created);
+                if (ci >= 0) state.constraints.splice(ci, 1);
+                for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+                if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                    try { state.engine.solve(opts.solveIterations); } catch (_) {}
+                }
+                notify(`Can't add ${this._friendlyName(type)} — conflicts with ${clash || 'existing constraints'}. Reverted.`, 'warning', 3500);
+                dbg.warn('constraints', `[ConstraintManager] over-constraining ${type} ADD refused + reverted`);
+                return null;
+            }
         }
 
         dbg.log('constraints', `[ConstraintManager] Added ${type} constraint from ${opts.source}:`, created || { type, params: normalized });

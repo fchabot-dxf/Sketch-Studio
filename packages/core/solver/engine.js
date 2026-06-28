@@ -158,6 +158,7 @@ export class NewtonSolver {
     const denseLen = this.joints.size * 2;
     for (let i = 0; i < this.constraints.length; ++i) {
       const c = this.constraints[i];
+      if (c.isDriven || c.driven) { rowsPerConstraint[i] = 0; continue; } // references are FREE — no rows
       const def = Definitions[c.type];
       if (def && typeof def.rows === 'number') {
         rowsPerConstraint[i] = def.rows;
@@ -224,6 +225,7 @@ export class NewtonSolver {
 
     for (let ci = 0; ci < this.constraints.length; ++ci) {
       const c = this.constraints[ci];
+      if (c.isDriven || c.driven) continue; // skip driven (reference) rows — a reference never affects geometry
 
       // --- Special-case: temporary mouse-spring added by InteractionSolver ---
       if (c.type === 'mouse_spring') {

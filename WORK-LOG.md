@@ -1268,6 +1268,40 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === DIMENSION-ADD REFUSE+REVERT DONE — HOLD ===
 
+## 2026-06-28 · references are FREE + over-constraining dimension → kept as reference (engine root fix) (turn 33)
+
+- **user correction:** dimensions must NOT be removed — driven (reference) dims are useful. So an
+  over-constraining DIMENSION is KEPT as a reference showing the actual value; only non-dimension geometric
+  constraints refuse+revert. The previous task removed dims only because of the flagged DEBT (engine enforced
+  driven rows). This fixes that root.
+- **FIX1 — engine root (`packages/core/solver/engine.js` `_assemble`):** skip `c.isDriven || c.driven` in
+  BOTH the row-precount and the assembly loop (mirrors the rank basis filter) → references are TRULY FREE,
+  they never contribute residual/Jacobian rows, so they can't affect geometry. The renderer already shows a
+  driven dim's ACTUAL measured value (`svg-renderer.js:2105`), so display "recompute each solve" is inherent.
+- **FIX2 — `constraint-manager.js` `createConstraint` over-constrain post-hoc, split by type:**
+  - DIMENSION (distance/angle) non-converged → KEEP as a driven REFERENCE (`isDriven=driven=true`), re-solve
+    (now skipped → converges), notify "Added as reference (driven by geometry)". NEVER removed.
+  - GEOMETRIC in `{horizontal, vertical, parallel, perpendicular, equal}` non-converged → REFUSE + REVERT
+    (remove + restore + re-solve + "Can't add <type> — conflicts… Reverted"). This is the seed-311 case.
+  - Snapshot is now taken for ALL adds (geometric revert needs it).
+- **regression caught + fixed:** my first cut reverted ANY non-dimension non-converged add → falsely reverted
+  a VALID `tangent` (nonlinear, slow to fully converge) → `tests/tangent-sandbox.test.js` went net-new RED.
+  Fix: scope the geometric refuse to the linear-ish named set `GEOMETRIC_REFUSE_TYPES` (H/V/parallel/perp/
+  equal); tangent/collinear/etc. are never falsely reverted. Baseline back to the 8.
+- **scenarios:** #8 now "conflicting dimension ADD → KEPT as driven reference" (kept +1, `isDriven`, converged,
+  rect, measured shows the ACTUAL 100 not the typed 50); #9 NEW "conflicting GEOMETRIC add → refuse+revert"
+  (H on two pinned diagonal joints → not kept, error); #10 NEW "reference is free" (drag a referenced edge →
+  geometry moves freely 10→28, value tracks). #6 (redundant→reference) still green.
+- **verify:** scenario tester **11/11, backlog EMPTY**; **`node tests/harness/solver-fuzz.test.js 400` →
+  `400/400 clean`** (incl. seed-311 geometric); constraint-conformance **15/15 (gating)**; oracle **12/12**;
+  baseline-diff = the 8 pre-existing, **0 net-new** (tangent-sandbox green again); `node --check` clean;
+  headless app-load OK. A reference shows the actual value AND does not affect geometry (#10); a normal
+  satisfiable dim still drives (#2).
+- **state:** branch `carve-out` · oracle 12/12 · fuzzer 400/400 · references inert at the engine root;
+  over-constrain never silent: dims→reference, geometric→revert, edit→revert. STOP.
+
+=== REFERENCES-FREE + DIM→REFERENCE DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

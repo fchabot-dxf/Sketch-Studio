@@ -6,6 +6,8 @@
 // Fixes come later, one at a time, each guarded by re-running its scenario here.
 
 import { createSketch } from './sketch.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -123,18 +125,52 @@ run('6. redundant cross-edge dimension → reference', 'PASS', () => {
   };
 });
 
-// 8 — conflicting dimension ADD → refuse + revert (not kept, sketch stays a valid converged rect)
-run('8. conflicting dimension ADD → refuse + revert', 'PASS', () => {
+// 8 — conflicting dimension ADD → KEPT as a driven reference showing the actual value (never removed)
+run('8. conflicting dimension ADD → kept as driven reference', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
   s.dimension(r.corners[0], r.corners[1], 100); // top edge = 100 (driving)
   s.solve();
   const before = s.constraintCount;
-  // the bottom edge is forced equal to the top by the verticals; dimensioning it to 50 is a CONFLICT
-  const d = s.dimension(r.corners[3], r.corners[2], 50);
+  const d = s.dimension(r.corners[3], r.corners[2], 50); // bottom = 50 conflicts → kept as a REFERENCE
+  const measured = d ? s.edgeLen(d.joints[0], d.joints[1]) : -1;
   return {
-    pass: s.constraintCount === before && s.converged === true && s.isRectangle(r.corners) && s.lastError !== null,
-    nums: { keptDelta: s.constraintCount - before, converged: s.converged, isRect: s.isRectangle(r.corners), lastError: s.lastError || 'none' },
+    pass: !!d && s.constraintCount === before + 1 && s.isDriven(d) === true && s.converged === true &&
+          s.isRectangle(r.corners) && Math.abs(measured - 100) < 0.5 && s.lastError !== null,
+    nums: { keptDelta: s.constraintCount - before, isRef: d && s.isDriven(d), measuredActual: measured, converged: s.converged, lastError: s.lastError || 'none' },
+  };
+});
+
+// 9 — conflicting GEOMETRIC constraint ADD → refuse + revert (not a measurement, so it's removed)
+run('9. conflicting GEOMETRIC constraint ADD → refuse + revert', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true);   // pinned
+  const b = s.point(10, 5, true);  // pinned on a diagonal
+  s.solve();
+  const before = s.constraintCount;
+  // a & b are pinned on a diagonal; forcing the a-b edge HORIZONTAL is unsatisfiable (and not a measurement)
+  ConstraintManager.createConstraint(s.state, T.HORIZONTAL, { joints: [a, b] }, { source: 'scenario' });
+  s.solve();
+  return {
+    pass: s.constraintCount === before && s.converged === true && s.lastError !== null,
+    nums: { keptDelta: s.constraintCount - before, converged: s.converged, lastError: s.lastError || 'none' },
+  };
+});
+
+// 10 — a reference is FREE: dragging ignores it and its value tracks the geometry (engine skips driven)
+run('10. reference is free — drag ignores it, value tracks', 'PASS', () => {
+  const s = createSketch();
+  const a = s.point(0, 0, true);
+  const b = s.point(10, 0, false);
+  const d = s.dimension(a, b, 10);   // driving distance
+  s.setReference(d);                  // → reference (driven)
+  s.solve();
+  const start = s.edgeLen(a, b);      // ~10
+  s.drag(b, 18, 0);                   // pull b far — a reference must NOT hold the distance at 10
+  const after = s.edgeLen(a, b);
+  return {
+    pass: s.isDriven(d) === true && start > 8 && start < 12 && after > 22, // geometry free; ref shows `after`
+    nums: { isRef: s.isDriven(d), startLen: start, afterLen: after, refShows: after.toFixed(1) },
   };
 });
 

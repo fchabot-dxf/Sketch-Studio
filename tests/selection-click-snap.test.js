@@ -1,6 +1,6 @@
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
-  const { TOOL_MODES } = await import('../src/core/constants.js');
+  const { TOOL_MODES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Minimal fake SVG: 1:1 world<->screen mapping

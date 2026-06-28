@@ -15,7 +15,7 @@ import { execSync } from 'child_process';
   fs.writeFileSync(TEST_P, JSON.stringify(cfg), 'utf8');
 
   // Spawn a node process to import solver-config fresh (ESM import) and print values
-  const solverPath = path.resolve(process.cwd(), 'src', 'core', 'solver-config.js').replace(/\\/g, '/');
+  const solverPath = path.resolve(process.cwd(), 'packages', 'core', 'solver-config.js').replace(/\\/g, '/');
   const script = `import('file://${solverPath}').then(m => console.log(JSON.stringify(m.SolverConfig))).catch(e => { console.error('IMPORT_ERR', e); process.exit(2); });`;
 
   const cmd = `"${process.execPath}" -e "${script.replace(/"/g, '\\"')}"`;

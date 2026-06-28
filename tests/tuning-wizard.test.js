@@ -1,7 +1,7 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
   const { setupTuningWizard } = await import('../apps/sketchstudio/ui/tuning-wizard.js');
-  const { SolverConfig } = await import('../src/core/solver-config.js');
+  const { SolverConfig } = await import('#core/solver-config.js');
 
   // Minimal fake state for initialization
   const state = { engine: { solve: () => {} } };

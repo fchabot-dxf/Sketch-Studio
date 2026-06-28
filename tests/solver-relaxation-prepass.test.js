@@ -1,5 +1,5 @@
 (async () => {
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Helper: build a triangle with three distance constraints, joints placed far

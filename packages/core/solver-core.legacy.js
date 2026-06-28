@@ -3,7 +3,7 @@
 // `src/core/solver/*`. Keeping a thin compatibility wrapper (`solveConstraints`) so
 // existing call-sites (tests and older modules) keep working unchanged.
 
-import { createNewtonSolver } from './core/solver/engine.js';
+import { createNewtonSolver } from './solver/engine.js';
 
 /**
  * solveConstraints(joints, shapes, constraints, iter)

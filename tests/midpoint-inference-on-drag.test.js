@@ -49,7 +49,7 @@
     // Simulate pointer up to finalize drag and apply the constraint
     const up = { clientX: 5, clientY: 0, pointerId: 1 };
 
-    const { INFERENCE_TYPES } = await import('../src/core/constants.js');
+    const { INFERENCE_TYPES } = await import('#core/constants.js');
     console.log('DEBUG cond:', state.inference && state.inference.type === INFERENCE_TYPES.MIDPOINT, 'targetId:', state.inference && state.inference.targetId);
 
     handleSelectionPointerUp(up, svg, state);

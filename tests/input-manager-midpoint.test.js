@@ -1,7 +1,7 @@
 (async () => {
     const { handlePointerDown } = await import('../apps/sketchstudio/ui/input-manager.js');
-    const { TOOL_MODES } = await import('../src/core/constants.js');
-    const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+    const { TOOL_MODES } = await import('#core/constants.js');
+    const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup minimal state

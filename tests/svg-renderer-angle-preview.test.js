@@ -1,6 +1,6 @@
 (async () => {
   const { draw } = await import('../apps/sketchstudio/svg-renderer.js');
-  const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+  const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   const makeSVG = () => ({ viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }), innerHTML: '' });

@@ -1,7 +1,7 @@
 (async () => {
-  const { analyzeConstraintStatus } = await import('../src/core/constraint-status.js');
+  const { analyzeConstraintStatus } = await import('#core/constraint-status.js');
   const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
-  const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+  const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // --- H/V on a line should clamp member joints to max 1 DOF ---

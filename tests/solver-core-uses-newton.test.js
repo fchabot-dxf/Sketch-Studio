@@ -1,6 +1,6 @@
 (async () => {
-  const { solveConstraints } = await import('../src/solver-core.js');
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { solveConstraints } = await import('#core/solver-core.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Simple two-joint distance constraint scenario

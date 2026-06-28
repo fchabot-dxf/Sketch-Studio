@@ -1,5 +1,5 @@
 (async () => {
-    const { addConstraintObject } = await import('../src/core/constraints.js');
+    const { addConstraintObject } = await import('#core/constraints.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     const state = { constraints: [] };

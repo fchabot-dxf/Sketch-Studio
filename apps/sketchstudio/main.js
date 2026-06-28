@@ -6,7 +6,7 @@ import { removeOrphanJoints } from '#core/joints.js';
 import { draw } from './svg-renderer.js';
 import { setupInput, showDimInput } from './ui/input-manager.js';
 import { setupUI } from './ui/ui-manager.js';
-import { createEngine } from '../../src/constraint-solver.js';
+import { createEngine } from '#core/constraint-solver.js';
 import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from './ui/notification-manager.js';

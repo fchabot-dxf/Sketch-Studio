@@ -1,6 +1,6 @@
 (async () => {
   const { draw } = await import('../apps/sketchstudio/svg-renderer.js');
-  const SettingsManager = (await import('../src/core/settings-manager.js')).default;
+  const SettingsManager = (await import('#core/settings-manager.js')).default;
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Enable debug overlay and freedom labels

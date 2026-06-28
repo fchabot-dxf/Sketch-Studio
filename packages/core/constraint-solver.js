@@ -1,6 +1,6 @@
-import { measureResidual } from './core/constraint-verifier.js';
-import { SolverConfig } from './core/solver-config.js';
-import { createNewtonSolver } from './core/solver/engine.js';
+import { measureResidual } from './constraint-verifier.js';
+import { SolverConfig } from './solver-config.js';
+import { createNewtonSolver } from './solver/engine.js';
 
 
 // Embedded store (was store.js)

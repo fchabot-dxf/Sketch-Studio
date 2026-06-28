@@ -11,8 +11,8 @@
 // Definition of done: both modes -> converged:false + a non-empty conflict list,
 // and result.error == max geometric residual.
 (async () => {
-  const { createEngine } = await import('../src/constraint-solver.js');
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { createEngine } = await import('#core/constraint-solver.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
   const TOL = 0.001; // SolverConfig.VERIFIER_TOLERANCE
 

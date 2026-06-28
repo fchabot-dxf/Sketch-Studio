@@ -1,4 +1,4 @@
-import SettingsManager from '../src/core/settings-manager.js';
+import SettingsManager from '#core/settings-manager.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -17,7 +17,7 @@ import path from 'path';
   // Set a project-level value and verify it persists
   SettingsManager.set('SNAP_MAGNETISM', 77, { persist: 'project' });
   // Reload manager to reflect file reading on disk (create a fresh instance by re-import)
-  const mod = await import('../src/core/settings-manager.js');
+  const mod = await import('#core/settings-manager.js');
   const fresh = mod.default;
   if (fresh.get('SNAP_MAGNETISM') !== 77) throw new Error('Project persisted SNAP_MAGNETISM not found');
 

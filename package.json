@@ -16,7 +16,7 @@
   "license": "ISC",
   "type": "module",
   "imports": {
-    "#core/*": "./src/core/*",
+    "#core/*": "./packages/core/*",
     "#app/*": "./apps/sketchstudio/*"
   },
   "devDependencies": {}

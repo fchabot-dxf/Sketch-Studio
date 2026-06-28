@@ -1,7 +1,7 @@
 (async () => {
-  const { ConstraintManager } = await import('../src/core/constraint-manager.js');
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
-  const { Definitions } = await import('../src/core/solver/definitions.js');
+  const { ConstraintManager } = await import('#core/constraint-manager.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
+  const { Definitions } = await import('#core/solver/definitions.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // ─── lockTangentBranch: external configuration (already near-tangent) ─

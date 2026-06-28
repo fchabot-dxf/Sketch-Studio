@@ -6,7 +6,7 @@
 // constraint type so we can fix them in one pass.
 
 (async () => {
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
 
   const results = [];
   function run(name, build, verify) {

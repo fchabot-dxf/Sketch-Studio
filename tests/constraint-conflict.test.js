@@ -1,6 +1,6 @@
 (async () => {
-  const { ConstraintManager } = await import('../src/core/constraint-manager.js');
-  const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+  const { ConstraintManager } = await import('#core/constraint-manager.js');
+  const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   function makeState() {

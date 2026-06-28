@@ -1,6 +1,6 @@
 (async () => {
-    const { solveConstraints } = await import('../src/solver-core.js');
-    const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+    const { solveConstraints } = await import('#core/solver-core.js');
+    const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Two arcs (circle-like) placed with centers too far apart; tangent should pull them together

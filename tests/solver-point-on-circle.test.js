@@ -13,7 +13,7 @@
 // DoD: a point-on-circle constraint pulls the point onto the circle (dist ~
 // radius, converged), with no NaN.
 (async () => {
-  const { createEngine } = await import('../src/constraint-solver.js');
+  const { createEngine } = await import('#core/constraint-solver.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   const eng = createEngine(null);

@@ -32,7 +32,7 @@ function makeStateArc() {
 // SVG stroke width respects SettingsManager LINE_STROKE setting
 {
   // Use dynamic import to access SettingsManager
-  const { default: SettingsManager } = await import('../src/core/settings-manager.js');
+  const { default: SettingsManager } = await import('#core/settings-manager.js');
   try { SettingsManager.set('LINE_STROKE', 1.5, { persist: 'local' }); } catch(_) {}
   const state = makeStateLine();
   const svg = buildSVG(state, { precision: 2 });

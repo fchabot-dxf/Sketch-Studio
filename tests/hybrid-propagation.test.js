@@ -1,6 +1,6 @@
 (async () => {
-  const { analyzeConstraintStatus } = await import('../src/core/constraint-status.js');
-  const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+  const { analyzeConstraintStatus } = await import('#core/constraint-status.js');
+  const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Triangle rooted at origin

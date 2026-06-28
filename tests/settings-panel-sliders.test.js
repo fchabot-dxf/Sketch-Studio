@@ -1,6 +1,6 @@
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const SettingsManager = (await import('../src/core/settings-manager.js')).default;
+  const SettingsManager = (await import('#core/settings-manager.js')).default;
   const { setupSettingsPanel } = await import('../apps/sketchstudio/ui/settings-panel.js');
 
   // Minimal DOM shim that supports the bits used by setupSettingsPanel

@@ -1,6 +1,6 @@
 import assert from 'assert';
-import { ConstraintManager } from '../src/core/constraint-manager.js';
-import { CONSTRAINT_TYPES } from '../src/core/constants.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
+import { CONSTRAINT_TYPES } from '#core/constants.js';
 
 // Horizontal case (dx > dy)
 {

@@ -1,5 +1,5 @@
 (async () => {
-  const { deleteConstraints, deleteShapes, deleteJoints } = await import('../src/core/delete-manager.js');
+  const { deleteConstraints, deleteShapes, deleteJoints } = await import('#core/delete-manager.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Test 1: deleteConstraints removes constraint and clears selection

@@ -1,6 +1,6 @@
 (async () => {
-    const { ConstraintManager } = await import('../src/core/constraint-manager.js');
-    const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+    const { ConstraintManager } = await import('#core/constraint-manager.js');
+    const { CONSTRAINT_TYPES } = await import('#core/constants.js');
 
     const state = { constraints: [], joints: new Map(), shapes: [], engine: { solve: (n) => { return { converged: true, error: 0 }; } } };
     state.joints.set('j1', { x: 0, y: 0 }); state.joints.set('j2', { x: 10, y: 0 });

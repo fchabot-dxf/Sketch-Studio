@@ -1,7 +1,7 @@
 (async () => {
   const { draw } = await import('../apps/sketchstudio/svg-renderer.js');
   const { handleSelectionPointerDown } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
-  const { CONSTRAINT_TYPES, TOOL_MODES } = await import('../src/core/constants.js');
+  const { CONSTRAINT_TYPES, TOOL_MODES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Mock SVG element

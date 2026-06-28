@@ -1,5 +1,5 @@
 (async () => {
-    const { findInference } = await import('../src/core/inference-engine.js');
+    const { findInference } = await import('#core/inference-engine.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup a simple line from (0,0) to (100,0)

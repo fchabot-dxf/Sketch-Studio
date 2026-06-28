@@ -1,6 +1,6 @@
 (async () => {
-  const { Definitions } = await import('../src/core/solver/definitions.js');
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { Definitions } = await import('#core/solver/definitions.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   function numericJacobian(def, params, positions, eps = 1e-7) {

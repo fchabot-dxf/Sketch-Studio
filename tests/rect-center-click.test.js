@@ -1,7 +1,7 @@
 (async () => {
     const { handleRectPointerDown, handleRectPointerUp, resetRectState } = await import('../apps/sketchstudio/ui/input-handlers/rect-tool.js');
-    const { TOOL_MODES, RECT_MODES } = await import('../src/core/constants.js');
-    const { makeRectFromCenter } = await import('../src/core/shapes.js');
+    const { TOOL_MODES, RECT_MODES } = await import('#core/constants.js');
+    const { makeRectFromCenter } = await import('#core/shapes.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     const createState = () => ({ joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, isConstructionMode: false, currentTool: TOOL_MODES.RECT, rectMode: RECT_MODES.CENTER, activeSnap: null, snapTarget: null });

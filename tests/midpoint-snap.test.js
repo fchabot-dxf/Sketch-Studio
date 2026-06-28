@@ -1,6 +1,6 @@
 (async () => {
     const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
-    const { applySnapConstraint, previewSnapConstraint } = await import('../src/core/snap-constraints.js');
+    const { applySnapConstraint, previewSnapConstraint } = await import('#core/snap-constraints.js');
     const { worldToScreen } = await import('../apps/sketchstudio/coords.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 

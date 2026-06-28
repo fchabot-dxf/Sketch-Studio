@@ -1,6 +1,6 @@
 import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '../apps/sketchstudio/ui/input-handlers/selection-tools.js';
 import { findSnap } from '../apps/sketchstudio/snap-detection.js';
-import { TOOL_MODES } from '../src/core/constants.js';
+import { TOOL_MODES } from '#core/constants.js';
 
 const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), viewBox: { baseVal: { x:0,y:0,width:800,height:600 } }, setPointerCapture: () => {}, releasePointerCapture: () => {} };
 function makeState(){ return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, saveState: () => {}, endUndoGroup: () => {} }; }

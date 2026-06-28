@@ -1,6 +1,6 @@
 (async () => {
-    const { applySnapConstraint } = await import('../src/core/snap-constraints.js');
-    const { CONSTRAINT_TYPES } = await import('../src/core/constants.js');
+    const { applySnapConstraint } = await import('#core/snap-constraints.js');
+    const { CONSTRAINT_TYPES } = await import('#core/constants.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup minimal state
@@ -27,7 +27,7 @@
     // New: ensure point-on-line projects to infinite line, not clamped to segment endpoints
     state.joints.set('j5', { x: 20, y: 5 });
     state.constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: 'j5', shape: sId });
-    const { solveConstraints } = await import('../src/solver-core.js');
+    const { solveConstraints } = await import('#core/solver-core.js');
     // Run solver to enforce constraint
     solveConstraints(state.joints, state.shapes, state.constraints, 20);
     const j5 = state.joints.get('j5');

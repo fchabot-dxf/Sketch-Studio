@@ -1,7 +1,7 @@
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } = await import('../apps/sketchstudio/ui/input-handlers/selection-tools.js');
   const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
-  const { TOOL_MODES } = await import('../src/core/constants.js');
+  const { TOOL_MODES } = await import('#core/constants.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), viewBox: { baseVal: { x:0,y:0,width:800,height:600 } }, setPointerCapture: () => {}, releasePointerCapture: () => {} };

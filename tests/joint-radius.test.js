@@ -1,5 +1,5 @@
 import assert from 'assert';
-import SettingsManager from '../src/core/settings-manager.js';
+import SettingsManager from '#core/settings-manager.js';
 import { computeBaseJointRadiusFor } from '../apps/sketchstudio/svg-renderer.js';
 
 // Ensure small JOINT_RADIUS values produce a visible base radius (clamped at 0.4)

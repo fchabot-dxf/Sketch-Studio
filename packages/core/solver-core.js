@@ -1,7 +1,7 @@
 // Compatibility façade: `solveConstraints` now delegates to the Newton–Raphson (LM) solver.
 // The legacy iterative relaxation implementation was archived to `solver-core.legacy.js`.
 
-import { createNewtonSolver } from './core/solver/engine.js';
+import { createNewtonSolver } from './solver/engine.js';
 
 /**
  * solveConstraints(joints, shapes, constraints, iter)

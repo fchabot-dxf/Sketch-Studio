@@ -1,5 +1,5 @@
 (async () => {
-  const { createNewtonSolver } = await import('../src/core/solver/engine.js');
+  const { createNewtonSolver } = await import('#core/solver/engine.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Test 1: free joint with no constraints → 2 unknowns, 0 equations → rank-deficient

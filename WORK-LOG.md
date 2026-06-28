@@ -1753,6 +1753,83 @@ wiring each commit) governs every slice above. Advisor to bless + dispatch S1.
 
 === IMPORT-RESOLUTION TEST DONE — HOLD ===
 
+## 2026-06-28 · S4 SUB-SLICE PLAN — input/tools layer → #ui/ (turn 61) — PLAN ONLY, no file moved
+
+Scope = the 20-file input/tools cluster (input-manager + 12 input-handlers + managers + snap + seam). Mapped
+every import edge (grep) + DOM-reach + #app coupling. **The cluster uses NO `#app/` alias today** — all
+intra-cluster refs are relative (`./ ../ ../../`); external refs are already `#core/`/`#ui/`. The only edge
+leaving the cluster is `input-manager → ./settings-panel.js` (see RISK-1).
+
+### (1) Dependency DAG (leaves → root). `[Dn]` = DOM/window reach count (relocation-only; DOM stays + TODO).
+```
+ L0  notification-manager[D22]  preview-manager[D0]  dimension-seams[D0]   <- pure leaves, no intra-cluster deps
+     snap-detection[D0](app ROOT, not ui/)  snap-magnet[D0]  constraint-tools[D0]  pan-zoom[D3]
+ L1  hover-manager[D0] -> snap-detection
+     numeric-input-manager[D22] -> dimension-seams, notification-manager
+     base-tool[D5] -> preview-manager
+     live-dimension-input[D38] -> notification-manager
+ L2  dimension-input[D11] -> numeric-input
+     dimension-tool[D1]  -> notification, numeric-input
+     arc-tool[D3]        -> numeric-input, preview, base-tool
+     rect-tool[D0]       -> snap-detection, numeric-input, preview, base-tool
+     circle-tool[D0]     -> snap-detection, numeric-input, preview, base-tool
+     line-tool[D3]       -> hover, numeric-input, preview, base-tool, live-dimension-input
+     selection-tools[D1] -> snap-detection, hover, numeric-input, snap-magnet
+ L3  drawing-tools[D2] -> hover, preview, arc, circle, line, rect, selection
+ L4  input-manager[D54] -> ALL of the above + #ui/cursor-manager(S3) + #core/* + ./settings-panel.js (LAZY)
+```
+**Acyclic** — verified no back-edges (drawing-tools imports the tools; no tool imports drawing-tools; nothing
+in the cluster imports input-manager). So a clean topological order exists. `#core-clean` (0 DOM, trivial to
+share): preview, dimension-seams, snap-detection, snap-magnet, hover, rect, circle, constraint-tools.
+
+### (2) Topological sub-slice order — leaves first, each a SMALL load-safe move into `#ui/` (mirror S3).
+Convention: preserve the `input-handlers/` subdir → `packages/ui/input-handlers/`. Same-dir sibling imports stay
+relative (`./base-tool.js`, like svg-renderer→`./cursor-manager`); CROSS-subdir/manager imports convert to the
+`#ui/` alias so the import-resolution guard actually validates them (don't leave lingering `../` across packages).
+`(N imp)` = importer blast-radius incl. tests.
+
+- **S4a — L0 leaves (managers/seam/snap):** notification-manager(5), preview-manager(8), dimension-seams(4),
+  snap-detection(13, moves app-root→`#ui/snap-detection.js`), snap-magnet(2). No intra-cluster deps → safe to
+  move together. Repoint: `../snap-detection`/`../../snap-detection` + `./notification`/`./preview`/
+  `./dimension-seams`/`./snap-magnet` everywhere → `#ui/…`. (dimension-seams is also imported by tests/harness.)
+- **S4b — L1 managers:** hover-manager(5), numeric-input-manager(9). Deps now all in `#ui/` (S4a).
+- **S4c — base + leaf handlers:** base-tool(4), constraint-tools(2), pan-zoom(2), live-dimension-input(3),
+  dimension-input(1). (constraint-tools/pan-zoom are #core-only L0 but grouped here for input-handlers/ cohesion.)
+- **S4d — per-shape tool handlers:** line-tool(12), rect-tool(4), circle-tool(3), arc-tool(5), dimension-tool(4),
+  selection-tools(17). All deps in `#ui/` after S4c. Biggest test-repoint (selection-tools 17, line-tool 12).
+- **S4e — aggregator:** drawing-tools(4). Depends on the S4d tools + hover/preview.
+- **S4f — root:** input-manager(6) + **resolve the settings-panel coupling (RISK-1)** so it carries no #app edge.
+
+### (3) Per-sub-slice invariant (every commit, same as S3 — RELOCATION ONLY):
+both `apps/*/index.html` LOAD (CDP/smoke) · **import-resolution test green** (new guard) · SketchStudio
+**byte-identical** render/interaction (verbatim moves, only import paths change) · oracle 12/12 · conformance
+15/15 · fuzzer 400/400 · differential 9/9 · baseline ⊆ the 8, **0 net-new**. DOM-id parameterization is a LATER
+slice — DOM-heavy files move with reaches intact + a `TODO(shaper):` header (exactly the svg-renderer pattern).
+
+### (4) Risks flagged
+- **RISK-1 (blocking for S4f) — settings-panel edge the guard can't see.** `input-manager.js:196`
+  `import('./settings-panel.js')` is RELATIVE + LAZY: (a) the import-resolution guard only checks `#`-specs, so
+  it will NOT flag this when it breaks; (b) lazy ⇒ load stays green but the Settings action breaks at runtime once
+  input-manager lives in `#ui/` (resolves to a non-existent `packages/ui/settings-panel.js`). settings-panel is a
+  SketchStudio panel → must stay `#app`. **Resolve at S4f by inversion:** inject an `openSettings` callback into
+  `input-manager` from the shell (main.js) so the shared module has no app/relative edge. Also `:203`
+  `require('./ui/settings-panel.js')` is dead (wrong path + CJS in a browser-ESM app) — remove/fix in S4f.
+- **RISK-2 — DOM-heavy relocation-only files** (input-manager 54, live-dimension-input 38, notification 22,
+  numeric-input 22, dimension-input 11): move VERBATIM + `TODO(shaper)`; hardest to truly share, but out of scope
+  for S4 (relocation only). Don't attempt to parameterize their `getElementById(...)` here.
+- **RISK-3 — guard blind to relative + dynamic-template imports.** The guard validates `#`-specs only. So (i)
+  convert cross-package relative imports to `#ui/` aliases as files move (else the guard silently skips them), and
+  (ii) tests/harness import the cluster via RELATIVE paths the guard never scans → rely on baseline-diff to catch
+  missed test-repoints (watch S4a snap-detection 13, S4d selection-tools 17 / line-tool 12).
+- **RISK-4 — none structural:** no circular imports; nothing in the cluster legitimately "should stay #app"
+  except the external settings-panel edge (RISK-1). All 20 files are shared-sketcher logic and belong in `#ui/`.
+
+**Recommended grouping if slices feel heavy:** S4b+S4c can merge (9 small files, all #core/#ui after S4a);
+S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as their own slices regardless
+(S4a is the foundation; S4f carries the only real coupling decision).
+
+=== S4 SUB-SLICE PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

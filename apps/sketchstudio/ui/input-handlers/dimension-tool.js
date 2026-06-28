@@ -10,7 +10,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '../numeric-input-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { showNotification } from '../notification-manager.js';
+import { showNotification } from '#ui/notification-manager.js';
 
 function logDim() { /* logging disabled */ }
 

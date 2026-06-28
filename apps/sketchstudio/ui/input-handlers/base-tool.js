@@ -2,7 +2,7 @@
 // BASE TOOL - Shared utilities for all drawing tools
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { updatePreview } from '../preview-manager.js';
+import { updatePreview } from '#ui/preview-manager.js';
 
 /**
  * Check if pointer movement exceeds drag threshold.

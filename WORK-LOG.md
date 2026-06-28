@@ -1830,6 +1830,34 @@ S4d can split per-shape if its repoint is unwieldy. Suggest keeping S4a, S4f as 
 
 === S4 SUB-SLICE PLAN READY - HOLD ===
 
+## 2026-06-28 · SHAPER S4a — L0 leaf modules → #ui/ VERBATIM (turn 63)
+
+- **did (S4a of the blessed S4 plan; relocation only — DOM parameterization stays for a later slice):**
+  - **`git mv` 5 L0 leaves VERBATIM** → `packages/ui/` (all tracked as renames, no logic change):
+    `notification-manager.js`, `preview-manager.js`, `dimension-seams.js`, `snap-magnet.js` (from `ui/`) and
+    `snap-detection.js` (from the app **root**). Confirmed each imports only `#core/*` + `#ui/coords.js` —
+    **no cross-package relative import to convert** (risk #3 a no-op here).
+  - Added a `TODO(shaper):` header to `notification-manager.js` only (22 DOM reaches — writes straight into
+    `document`); the other four are DOM-clean (0 reaches), so no TODO needed.
+  - **Repointed all 24 importers → `#ui/<name>.js`** (any spec whose basename is one of the five), app + tests
+    + harness. Notably the harness `dimension-seams` import (`#app/ui/dimension-seams.js` in
+    `tests/harness/sketch.js` + `solver-scenarios.test.js`) → `#ui/dimension-seams.js`. Grep confirms 0 stale
+    refs (no `../`/`#app/`/`apps/sketchstudio/` path to any of the five remains).
+- **verify (exactly how):**
+  - **`node tests/import-resolution.test.js` GREEN** (exit 0) — the new guard now also covers these 5 via `#ui/`.
+  - Node import smoke: all 5 `#ui/<leaf>` import OK. `node --check` clean on the moved files.
+  - Browser (CDP, error+exception capture): **SketchStudio** `errors=0`, `svgCanvas` present, world-group
+    rendered **5 children** — byte-identical (verbatim git mv, only import paths changed); **Shaper** Design
+    `errors=0` → `#design-canvas` 6 children.
+  - oracle **12/12** · conformance **15/15** · differential **9/9** · fuzzer 400 → **400/400** · scenario tester
+    **23/23** (the harness `dimension-seams` repoint is exercised here — the baseline net for the test/harness
+    repoints the guard can't see) · baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out` · `#ui/` now holds coords + svg-renderer + cursor-manager + sketch-canvas + the
+  5 L0 leaves. SketchStudio drives them all from `#ui/`. Next per the plan: **S4b** (hover-manager +
+  numeric-input-manager → `#ui/`). STOP — hold for advisor.
+
+=== SHAPER S4a (L0 LEAVES) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

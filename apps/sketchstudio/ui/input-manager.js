@@ -4,12 +4,12 @@
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES } from '#core/constants.js';
-import { hitConstraintAtScreen, findSnap } from '../snap-detection.js';
+import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from './input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
-import { toggleDriving } from './dimension-seams.js';
+import { toggleDriving } from '#ui/dimension-seams.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from './input-handlers/selection-tools.js';
 import { updateHover } from './hover-manager.js';
@@ -18,8 +18,8 @@ import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPoin
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from './input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from './input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from './numeric-input-manager.js';
-import { setupNotifications, showNotification } from './notification-manager.js';
-import { updatePreview, clearPreview, getPreviewData } from './preview-manager.js';
+import { setupNotifications, showNotification } from '#ui/notification-manager.js';
+import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
 import { handleLineKeyDown } from './input-handlers/line-tool.js';
 import { handleRectKeyDown } from './input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from './input-handlers/circle-tool.js';
@@ -29,7 +29,7 @@ import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, 
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import SettingsManager from '#core/settings-manager.js';
-import { getMagnetThreshold, isWithinMagnet } from './snap-magnet.js';
+import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 
 // Apply some visual settings to CSS variables at startup and when changed

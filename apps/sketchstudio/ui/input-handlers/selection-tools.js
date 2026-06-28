@@ -4,7 +4,7 @@
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
-import { findCoincidentCluster, hitJointAtScreen } from '../../snap-detection.js';
+import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
@@ -13,7 +13,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
-import { isWithinMagnet } from '../snap-magnet.js';
+import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 

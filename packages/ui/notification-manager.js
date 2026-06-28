@@ -1,6 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATION MANAGER - Toast notifications for errors and feedback
 // ═══════════════════════════════════════════════════════════════════════════════
+// Shared UI (#ui/notification-manager.js). Relocated VERBATIM from apps/sketchstudio/ui in slice S4a.
+// TODO(shaper): parameterize the DOM reaches (document.body / createElement / the #notification* ids)
+// before Shaper adopts this — it currently writes straight into the document.
 
 export function setupNotifications() {
     if (typeof document === 'undefined') return;

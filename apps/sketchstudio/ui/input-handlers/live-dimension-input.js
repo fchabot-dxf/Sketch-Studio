@@ -7,7 +7,7 @@ import { worldToScreen } from '#ui/coords.js';
 import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
-import { showNotification } from '../notification-manager.js';
+import { showNotification } from '#ui/notification-manager.js';
 
 let inputState = {
     active: false,

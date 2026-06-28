@@ -2,9 +2,9 @@
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
-import { updatePreview, clearPreview } from '../preview-manager.js';
+import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
-import { findSnap } from '../../snap-detection.js';
+import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 

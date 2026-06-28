@@ -11,7 +11,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '../numeric-input-manager.js';
-import { updatePreview, clearPreview } from '../preview-manager.js';
+import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from './base-tool.js';
 import { clearHover } from '../hover-manager.js';
 import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from './live-dimension-input.js';

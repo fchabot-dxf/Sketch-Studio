@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // HOVER MANAGER - Single source of truth for hover state
 // ═══════════════════════════════════════════════════════════════════════════════
-import { findSnap } from '../snap-detection.js';
+import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint

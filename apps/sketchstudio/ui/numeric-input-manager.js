@@ -1,9 +1,9 @@
 // apps/sketchstudio/ui/numeric-input-manager.js
 import { worldToScreen } from '#ui/coords.js';
-import { showNotification } from './notification-manager.js';
+import { showNotification } from '#ui/notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { commitDimensionEdit } from './dimension-seams.js';
+import { commitDimensionEdit } from '#ui/dimension-seams.js';
 
 let uiState = {
     active: false,

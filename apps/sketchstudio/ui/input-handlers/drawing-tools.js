@@ -8,7 +8,7 @@ import { addConstraint } from '#core/constraints.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
 import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from './line-tool.js';
-import { clearPreview } from '../preview-manager.js';
+import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from './rect-tool.js';
 import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from './circle-tool.js';
 // Polygon tool removed: polygon-tool.js import removed

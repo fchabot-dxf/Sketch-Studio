@@ -40,7 +40,7 @@
     handleSelectionPointerDown(eDown, svg, state, { id: 'j1', j: state.joints.get('j1') }, null, null);
 
     // Simulate an initial move beyond threshold, then move back into j2's lock radius
-    const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
+    const { findSnap } = await import('#ui/snap-detection.js');
     const eMove1 = { clientX: 65, clientY: 50, pointerId: 2 };
     // Simulate unified snap detection as input-manager would
     state.lastMouse = { x: eMove1.clientX, y: eMove1.clientY };
@@ -77,7 +77,7 @@
     handleSelectionPointerDown(eDown, svg, state, { id: 'j1', j: state.joints.get('j1') }, null, null);
 
     // Move far away from target, no visual lock will appear
-    const { findSnap } = await import('../apps/sketchstudio/snap-detection.js');
+    const { findSnap } = await import('#ui/snap-detection.js');
     const eMove = { clientX: 80, clientY: 50, pointerId: 3 };
     state.lastMouse = { x: eMove.clientX, y: eMove.clientY };
     const snap = findSnap(state.joints, state.shapes, svg, state.lastMouse, [], false, false, 1.0);

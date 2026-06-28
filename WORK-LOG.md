@@ -1012,6 +1012,28 @@ No files moved · branch `carve-out`@`5c18349` · oracle 12/12. **pass --to advi
 
 === CORE SLICE D (CLEANUP) DONE — PHASE 1 COMPLETE — HOLD ===
 
+## 2026-06-28 · `dc93ec8` — NEW BATCH, SketchStudio polish #1: 2-row toolbar (turn 15)
+
+- **did:** layout-only in `apps/sketchstudio/index.html`. Wrapped the ribbon into two `.toolbar-row`
+  groups — row1 = edit/create/inspect/actions, row2 = constraints (CONSTRAIN moved out of the middle).
+  `#toolsRibbon` is `flex-col` (stacked) by default; a `@media (min-width:768px)` collapses the wrappers
+  to a single row on desktop via `display:contents` on the rows + `order` (tb-constrain:3, tb-inspect:4,
+  tb-actions:99) to restore the original EDIT·CREATE·CONSTRAIN·INSPECT·ACTIONS order. So **mobile (<768px)
+  = 2 stacked rows; desktop = the original single row**. All tool `id`s + handler wiring untouched; no
+  `packages/core`.
+- **review iteration (live, with the human):** my first cut made it ALWAYS 2 rows — the human flagged
+  desktop looked "ugly". Re-read the task ("stacked **on mobile** via CSS breakpoint") and moved the split
+  behind the 768px breakpoint so desktop is unchanged.
+- **verify:** Edge `--screenshot` is broken in this env (both headless modes; same class as the old
+  `--dump-dom` issue), so built a **DevTools-Protocol screenshot helper** (Node-24 global WebSocket →
+  `Page.captureScreenshot`, reusable). Headless renders confirm: desktop = single clean row; mobile
+  390x844 = 2 stacked rows with constraints on row 2; `SELECT` shows active (main.js wired the handlers).
+  baseline-diff = the 8 pre-existing, **0 net-new**.
+- **state:** branch `carve-out`@`dc93ec8` · app loads, both layouts verified · handlers intact. next:
+  **Solver auto-reference** (the advisor's named next task).
+
+=== POLISH #1 (2-ROW TOOLBAR) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

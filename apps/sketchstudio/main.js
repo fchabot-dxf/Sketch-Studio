@@ -17,6 +17,7 @@ import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spr
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;
 let view = { ...DEFAULT_VIEW };
+let toolRibbon = null; // S7c-2d: the shared tool ribbon (from setupUI); the render loop refreshes its active highlight
 
 function updateView(){ 
   if(!svg) return;
@@ -115,7 +116,8 @@ function initApp(){
 
   // ════════════════════════════════════════════════════════════════════════
 
-  setupUI(state);
+  const ui = setupUI(state);
+  toolRibbon = (ui && ui.ribbon) || null; // S7c-2d: the shared tool ribbon; the render loop syncs its highlight
 
   // ── S7c-2c: the shared app header (Design|Export tabs + Style/Debug actions) + the shared style panel + a
   // Design↔Export view router. The tool ribbon + canvas + footer stay AS-IS in the Design view (the shared-ribbon
@@ -193,6 +195,9 @@ function loop(){
   try { if (typeof window !== 'undefined') window.__lastSolveStats = engine.getSolveStats(); } catch(_) {}
 
   draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup);
+  // S7c-2d: sync the shared ribbon's active highlight to state.currentTool (covers KEYBOARD switchToTool, which
+  // doesn't route through setTool). refresh() is a cheap class-toggle.
+  if (toolRibbon) toolRibbon.refresh();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

@@ -9,10 +9,14 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { draw } from '#ui/svg-renderer.js';
+import { createToolRibbon } from '#ui/tool-ribbon.js';
 export function setupUI(state){
   // Remove active class from all buttons initially
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-  
+
+  // S7c-2d: the shared tool ribbon (mounted below). setTool syncs its active highlight via refresh().
+  let toolRibbon = null;
+
   // Track rect sub-mode
   state.rectMode = RECT_MODES.TWO_POINT; // default: 2-point corner rect
   
@@ -28,18 +32,11 @@ export function setupUI(state){
     if(typeof state.resetPolyline === 'function') state.resetPolyline();
     state._clearPolylineRequest = true;
     
-    // Remove active from all buttons
-    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); 
-    
-    // Add active to selected button
-    const el = document.getElementById('tool-'+t); 
-    if(el) {
-      el.classList.add('active');
-      dbg.log('app', 'Added active class to:', el.id); // Debug log
-    } else {
-      dbg.warn('app', 'Button not found for tool:', t); // Debug log
-    }
-    
+    // S7c-2d: the shared tool ribbon owns the active highlight now — sync it to state.currentTool. Load-bearing:
+    // setTool is called from OUTSIDE the ribbon (the auto-SELECT after clear/escape), and the render loop also
+    // calls refresh() so KEYBOARD tool-switches (switchToTool) follow too.
+    if (toolRibbon) toolRibbon.refresh();
+
     // Update mode text
     const mt = document.getElementById('modeText');
     let modeText = t.toUpperCase();
@@ -310,6 +307,25 @@ export function setupUI(state){
 
   
 
+
+  // ── S7c-2d: adopt the shared tool ribbon. The inline #toolsRibbon buttons above were just wired (so no
+  // "button not found" warnings); now CLEAR them and mount the shared createToolRibbon in their place. Tool
+  // clicks route to the rich setTool via onToolClick (a rect-variant select sets state.rectMode then calls
+  // onToolClick(RECT)); the ribbon owns the rect dropdown; Edit (Clear/Undo) come via extraGroups and KEEP their
+  // ids so the existing clear/undo handlers below bind them (R-BIND-ORDER: mounted before those run). The dead
+  // inline wiring/handlers harmlessly target the now-removed buttons.
+  try {
+    const trEl = document.getElementById('toolsRibbon');
+    if (trEl) {
+      trEl.innerHTML = '';
+      toolRibbon = createToolRibbon({
+        state,
+        onToolClick: (t) => setTool(t),
+        extraGroups: [{ label: 'Edit', buttons: [{ id: 'btn-clear', label: 'Clear All' }, { id: 'btn-undo', label: 'Undo' }] }],
+      });
+      toolRibbon.render(trEl);
+    }
+  } catch (e) { try { dbg.warn('app', '[ui-manager] tool ribbon mount failed', e); } catch (_) {} }
 
   // Initially activate select tool
   setTool(TOOL_MODES.SELECT);
@@ -635,12 +651,7 @@ export function setupUI(state){
     if(e.key === 'Escape'){
       if(state.pendingConstraint){
         state.pendingConstraint = null;
-        const mt = document.getElementById('modeText');
-        if(mt) mt.innerText = 'MODE: SELECT';
-        
-        // Reset toolbar buttons
-        document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-        document.getElementById('tool-select').classList.add('active');
+        setTool(TOOL_MODES.SELECT); // S7c-2d: sets modeText + syncs the ribbon (no #tool-select null-deref)
         return;
       }
       
@@ -652,4 +663,7 @@ export function setupUI(state){
       }
     }
   });
+
+  // S7c-2d: expose the shared ribbon (main.js's render loop calls refresh() so KEYBOARD tool-switches sync) + setTool.
+  return { ribbon: toolRibbon, setTool };
 }

@@ -3408,6 +3408,47 @@ adopts it yet, so BOTH apps stay byte-identical (Studio adopts at S7c-2c; Shaper
 
 === S7c-2a (SHARED HEADER SHELL) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2b — build the shared #ui/style-panel.js (standalone) (turn 133)
+
+Second shared-shell slice: the sketcher STYLE panel, extracted to #ui/ as a DOM-OWNERSHIP INVERSION — it BUILDS
+its own DOM from a control spec + owns its open/close (settings-panel.js ADOPTS pre-existing `#s-*` HTML; a bare
+host has none). STANDALONE — settings-panel.js is left untouched + in use, so both apps stay byte-identical
+(Studio swaps to this at S7c-2c).
+
+- **did (packages/ui/style-panel.js — new; imports ONLY #core/settings-manager.js):**
+  - `createStylePanel({ settings?, onSaveProject?, onNotify?, title? }) → { el, open(), close(), toggle(),
+    render(container), destroy() }`. `settings` defaults to the shared SettingsManager singleton (injectable — the
+    smoke passes a fresh mock).
+  - **Builds 16 controls from a hardcoded spec** (the shared renderer knobs): `SHOW_GRID`=checkbox; 15 others =
+    label + number + paired range slider (slider mirrors the number; both write on input). min/max/step carried
+    from settings-panel.js `sliderSpecs`; **labels are the EXACT `#settings-panel` text** (faithful for 2c).
+  - **Binds SettingsManager (preserves the 4 guarded behaviours):** `populate()` ← `getAll()` (checkbox→checked,
+    number→value); input/change → `set(KEY, Number(v)|checked, { persist:'local' })`; `unsub =
+    settings.subscribe(()=>populate())` for live re-populate — and `unsub()` is CALLED in `destroy()` (subscribe
+    returns its unsubscribe → no leak); **Reset** → `resetToDefaults()` + populate.
+  - **Owns open/close/toggle + Esc + outside-click** (self-contained; the opening click is deferred via
+    `setTimeout(0)` so it doesn't self-close), no `#settings-panel` dependency. S7c-2c wires
+    `onStyle:()=>panel.toggle()`.
+  - **App-specific stays OUT:** "Save (Project)" renders ONLY if `onSaveProject` is passed (Studio wires
+    `saveProjectFile` in 2c; Shaper omits); a toast is an optional `onNotify(msg)` (no Tailwind); no
+    `normalizeExistingPanel`. Inject-once id-guarded `#sk-style-panel-styles`, `--sk-*` light defaults.
+- **verify (CDP smoke, isolation, fresh mock store):** `createStylePanel({ settings: mock })` render+open →
+  **16 rows** (`numbers=15` + `checks=1` + `sliders=15`); labels exact (`Selection Stroke Mult`/`Glyph Icon Size`/
+  `Line Stroke`/`Show Grid`). Writing `LINE_STROKE`=2.5 → `mock.get` reflects it + the paired slider mirrors;
+  EXTERNAL `mock.set('LINE_STROKE',3.3)` → subscribe fires → the control re-populates to 3.3; **Reset** → defaults
+  (back to 1); the `SHOW_GRID` checkbox writes false. open/close/toggle, **Esc**-close, **outside-click**-close all
+  work; **no Save** button (no `onSaveProject`). `subAfterCreate=1` → `subAfterDestroy=0` (destroy unsubscribes);
+  `elRemoved`.
+  - **Both apps byte-identical (no adopter):** no `.sk-style-panel`/`#sk-style-panel-styles`; SketchStudio
+    world-group **5**, the existing `#settings-panel` intact + in use. Both `errors=0`.
+  - existing `settings-manager` + `settings-panel-sliders` tests PASS · guard GREEN · baseline-diff = the 8
+    pre-existing, **0 net-new** · `node --check` clean · scope = `#ui/` only (style-panel.js new).
+- **state:** branch `carve-out`. The shared header (S7c-2a) + shared style panel (S7c-2b) both exist + behave; no
+  app uses them yet. Next: **S7c-2c** — SketchStudio adopts the shared header + style panel + a Design↔Export
+  router (KEEP the current `#toolsRibbon`; Style/Debug to the header). STOP — hold.
+
+=== S7c-2b (SHARED STYLE PANEL) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

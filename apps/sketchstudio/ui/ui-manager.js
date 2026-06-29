@@ -11,9 +11,6 @@ import { deleteSelection } from '#core/delete-manager.js';
 import { draw } from '#ui/svg-renderer.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 export function setupUI(state){
-  // Remove active class from all buttons initially
-  document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-
   // S7c-2d: the shared tool ribbon (mounted below). setTool syncs its active highlight via refresh().
   let toolRibbon = null;
 
@@ -112,144 +109,6 @@ export function setupUI(state){
     }
   }
 
-  // Generic dropdown helpers
-  function updateToolButtonUI(toolName, modeKey, modes){
-    // Update Icon <use> href
-    const useEl = document.getElementById(`${toolName}-tool-icon-use`);
-    if(useEl) {
-        useEl.setAttribute('href', `#icon-tool-${modeKey}`);
-    }
-
-    // Update Label
-    const label = document.getElementById(`${toolName}-label`);
-    const variant = modes[modeKey];
-    if(variant && label){
-      try{ label.innerText = variant.label; } catch(_) {}
-    }
-
-    // Update active state for dropdown items
-    try{
-      document.querySelectorAll(`#${toolName}-dropdown .tool-dropdown-item`).forEach(item => item.classList.toggle('active', item.dataset.mode === modeKey));
-    }catch(_){ }
-  }
-
-  function setupToolDropdown(toolName, modes, onModeChange){
-    const btn = document.getElementById(`tool-${toolName}`);
-    const dropdown = document.getElementById(`${toolName}-dropdown`);
-    if(!btn || !dropdown) return;
-
-    // Shared logic to toggle/show dropdown
-    const toggleDropdown = (forceShow) => {
-      // Close other dropdowns
-      document.querySelectorAll('.tool-dropdown-menu.show').forEach(d => { if(d !== dropdown) {
-        d.classList.remove('show');
-        // clear inline positioning on other menus
-        d.style.position = '';
-        d.style.left = '';
-        d.style.top = '';
-        // If previously moved to body, restore it
-        if(d.__origParent) {
-          try { d.__origParent.insertBefore(d, d.__origNextSibling || null); } catch(_){}
-          d.__origParent = null; d.__origNextSibling = null;
-        }
-      } });
-
-      // Toggle current dropdown and position it fixed so it appears above SVG/canvas
-      const willShow = (forceShow === true) || (forceShow !== false && !dropdown.classList.contains('show'));
-      if(willShow){
-        // Diagnostics
-        try{ dbg.debug('ui', '[ui-manager] Opening dropdown for', toolName); }catch(_){ }
-
-        // compute button rect and position menu using fixed coords (avoids overflow/clipping issues)
-        const rect = btn.getBoundingClientRect();
-
-        // Move dropdown into body so it's not affected by parent stacking/overflow
-        if(!dropdown.__origParent){
-          dropdown.__origParent = dropdown.parentNode;
-          dropdown.__origNextSibling = dropdown.nextSibling;
-          document.body.appendChild(dropdown);
-        }
-
-        dropdown.style.position = 'fixed';
-        dropdown.style.left = (rect.left) + 'px';
-        // add slight offset so menu doesn't overlap the button
-        dropdown.style.top = (rect.bottom + 6) + 'px';
-        dropdown.style.minWidth = Math.max(rect.width, 160) + 'px';
-        dropdown.style.zIndex = '999999';
-        dropdown.classList.add('show');
-      } else {
-        try{ dbg.debug('ui', '[ui-manager] Closing dropdown for', toolName); }catch(_){ }
-        dropdown.classList.remove('show');
-        dropdown.style.position = '';
-        dropdown.style.left = '';
-        dropdown.style.top = '';
-        dropdown.style.minWidth = '';
-        dropdown.style.zIndex = '';
-        // Restore to original container if needed
-        if(dropdown.__origParent){
-          try { dropdown.__origParent.insertBefore(dropdown, dropdown.__origNextSibling || null); }catch(_){ }
-          dropdown.__origParent = null; dropdown.__origNextSibling = null;
-        }
-      }
-    };
-
-    // Touch Long Press Logic
-    let pressTimer;
-    let isTouch = false;
-
-    btn.addEventListener('touchstart', (e) => {
-        isTouch = true;
-        pressTimer = setTimeout(() => {
-            toggleDropdown(true); // Force open on long press
-            if (navigator.vibrate) navigator.vibrate(50);
-        }, 400);
-    }, { passive: true });
-
-    btn.addEventListener('touchend', () => clearTimeout(pressTimer));
-    btn.addEventListener('touchmove', () => clearTimeout(pressTimer));
-
-    btn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      // If touch interaction, do NOT toggle dropdown on click (tap selects tool only)
-      if (isTouch) { isTouch = false; return; }
-      // Mouse click -> Toggle
-      toggleDropdown();
-    });
-
-    dropdown.querySelectorAll('.tool-dropdown-item').forEach(item => {
-      item.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const mode = item.dataset.mode;
-        onModeChange(mode);
-        updateToolButtonUI(toolName, mode, modes);
-        dropdown.classList.remove('show');
-      });
-    });
-
-    // Close on outside click and clear inline positioning
-    document.addEventListener('click', ()=>{ dropdown.classList.remove('show'); dropdown.style.position = ''; dropdown.style.left = ''; dropdown.style.top = ''; dropdown.style.minWidth = ''; dropdown.style.zIndex = ''; });
-  }
-
-  // Rectangle: setup using unified pattern
-  const RECT_MODES_CONFIG = {
-    'rect-2pt': { class: '2pt', label: 'Rect' },
-    'rect-center': { class: 'center', label: 'Rect C' },
-    'rect-3pt': { class: '3pt', label: 'Rect 3P' }
-  };
-  const RECT_MODES_MAP = {
-    'rect-2pt': RECT_MODES.TWO_POINT,
-    'rect-center': RECT_MODES.CENTER,
-    'rect-3pt': RECT_MODES.THREE_POINT
-  };
-
-  setupToolDropdown('rect', RECT_MODES_CONFIG, (modeKey) => {
-    state.rectMode = RECT_MODES_MAP[modeKey];
-    try{ dbg.debug('ui', '[ui] rect mode selected ->', state.rectMode); } catch(_) {}
-    setTool(TOOL_MODES.RECT);
-  });
-
-  const rectDefaultKey = Object.keys(RECT_MODES_CONFIG).find(k => RECT_MODES_MAP[k] === state.rectMode) || 'rect-2pt';
-  updateToolButtonUI('rect', rectDefaultKey, RECT_MODES_CONFIG);
 
   // Polygon is currently hidden in the toolbar - no click handler attached
 
@@ -260,12 +119,11 @@ export function setupUI(state){
   
 
 
-  // ── S7c-2d: adopt the shared tool ribbon. The inline #toolsRibbon buttons above were just wired (so no
-  // "button not found" warnings); now CLEAR them and mount the shared createToolRibbon in their place. Tool
-  // clicks route to the rich setTool via onToolClick (a rect-variant select sets state.rectMode then calls
+  // ── S7c-2d: mount the shared tool ribbon into the (now-empty) #toolsRibbon container. Tool clicks route to the
+  // rich handleToolActivate/setTool via onToolClick (a rect-variant select sets state.rectMode then calls
   // onToolClick(RECT)); the ribbon owns the rect dropdown; Edit (Clear/Undo) come via extraGroups and KEEP their
-  // ids so the existing clear/undo handlers below bind them (R-BIND-ORDER: mounted before those run). The dead
-  // inline wiring/handlers harmlessly target the now-removed buttons.
+  // ids so the existing clear/undo handlers below bind them (R-BIND-ORDER: mounted before those run).
+  // (S7c-2d-cleanup: the inline button markup + the dead rect-dropdown machinery have been statically removed.)
   try {
     const trEl = document.getElementById('toolsRibbon');
     if (trEl) {

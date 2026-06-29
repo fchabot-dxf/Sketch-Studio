@@ -3652,6 +3652,43 @@ Export navigation.
 
 === S7c-2e (EXPORT POPUP->TAB) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2d-cleanup — DEBT-RIBBON-CLEANUP: static removal of the dead inline ribbon (turn 145)
+
+PURE dead-code removal of the inline `#toolsRibbon` markup + the no-op rect-dropdown machinery that 2d neutralized
+at runtime (`#toolsRibbon.innerHTML=''`). NOT a refactor — behaviour is byte-identical; the runtime cleared this
+markup either way. A large NET DELETION (309 deletions / 6 insertions).
+
+- **grep-confirmed before removing** (dead vs live): #tool-* JS ref → only the guarded dead keyboard-shortcut line
+  (`getElementById('tool-'+tool)` inside the Escape block, `if(el)`-guarded — left, harmless). **`.tool-btn` CSS is
+  LIVE** (tuning-wizard.js:237 builds a `class="tool-btn …"` button) → KEPT. `.tool-dropdown` CSS → left (low-value
+  to remove; not live-referenced after the markup goes; deferred). No test asserts the inline ribbon markup.
+  `arc-icon.test.js` runs `setupUI` in a MOCK DOM + asserts only `state.arcMode='arc-cse'` (the arc default) → KEPT,
+  test still passes.
+- **did:**
+  - **index.html:** removed the inline button markup INSIDE `#toolsRibbon` (the Create/Inspect/Constrain/Edit groups
+    + the rect-dropdown markup + `#tool-*`/`#btn-clear`/`#btn-undo` buttons + group labels, lines 381-542) →
+    replaced with a one-line comment. **KEPT the `#toolsRibbon` container** (the shared ribbon's runtime mount point)
+    + the `.tool-btn`/`.tool-dropdown` CSS (the former is live via tuning-wizard).
+  - **ui-manager.js:** removed the dead rect-dropdown machinery — `updateToolButtonUI` + `setupToolDropdown` + the
+    `RECT_MODES_CONFIG`/`RECT_MODES_MAP` + `setupToolDropdown('rect',…)` + `rectDefaultKey` +
+    `updateToolButtonUI('rect',…)` (115-252) — and the now-pointless line-15 `querySelectorAll('.tool-btn')…`.
+    **KEPT** (load-bearing): the `#toolsRibbon` mount + `handleToolActivate` + `setTool` + `toolRibbon.refresh()`; the
+    clear/undo handlers (`getElementById('btn-clear')/('btn-undo')` → the shared ribbon's Edit buttons; undo
+    `.disabled` sync); the **`RECT_MODES` enum** (setTool's modeText + `state.rectMode` default) + the **arc default**.
+- **verify (pure removal → behaviour UNCHANGED):**
+  - **LOAD-SAFE:** index.html loads, console **errors=0 and no new warns**; solver oracle **12/12**.
+  - CDP **identical to post-2d-pre/2e** (`errors=0`): every tool + rect variants ("RECT CENTER") + keyboard sync +
+    Edit Clear + auto-SELECT + pre-selection ("Select 1st/2nd Element") + H/V-immediate + Design/Export router +
+    header Style + the Export tab (`#btn-export-do` → returns to Design) all work; the ribbon is mounted.
+  - **Net deletion:** `index.html` -165, `ui-manager.js` -150 → **309 deletions / 6 insertions**. No orphaned
+    references. `arc-icon.test.js` passes. **Shaper UNTOUCHED**. guard GREEN · baseline-diff = the 8 pre-existing,
+    **0 net-new** · `node --check` clean · scope = index.html + ui-manager.js.
+- **state:** branch `carve-out`. DEBT-RIBBON-CLEANUP **closed** (only `.tool-dropdown` dead-CSS left, low-value).
+  The S7c-2 shell is clean. Next: **S7c-3** — pixel-parity polish (header/ribbon/style/export visual match vs the
+  pre-S7c SketchStudio). STOP — hold.
+
+=== S7c-2d-cleanup (DEBT-RIBBON-CLEANUP) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

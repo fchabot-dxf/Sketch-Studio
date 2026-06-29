@@ -4245,6 +4245,66 @@ code written; the worker awaits a units dispatch.
   geometry/plumbing of SP1h1 (band/guide) can still proceed unit-agnostic.
 - **Advisor:** please sequence a units slice (plan-or-build) per the user's priority. Worker holding for the dispatch.
 
+## 2026-06-29 · UNITS — document unit + per-field unit-aware input: PLAN (turn 172) — WORK-LOG only, NO code
+
+Foundational (gates SP1h's offset SCALE + SP1j export): a DOCUMENT UNIT (inch | mm) where every dimension field
+defaults to it but accepts an EXPLICIT-UNIT override ('5mm' in an inch doc, '0.25in' in a mm doc — Fusion-style, and
+exactly the Shaper export format). Applies to the #core sketch DIMENSION tool AND the Shaper cut params. CORE/shared —
+touches #core dimensions (SketchStudio uses them too) → NOT Shaper-only; every commit keeps BOTH apps load-safe.
+
+**Grounding (investigated):** a sketch dimension is `parseFloat(input.value)` → stored as `constraint.value`, a raw
+number in WORLD coords (`live-dimension-input.js`; prefill `value.toFixed(1)`). `settings-manager.js` is a
+subscribe/getAll/`set({persist:'local'})` store with DEFAULTS — the natural home for the doc-unit preference. The
+Shaper cut record stores raw numbers too (toolDia 0.125, presets 1/8" — `cut-panel.js`).
+
+**(1) Storage / base-unit model.** Propose a FIXED base: **1 world unit ≡ 1 mm** (declared once, in `#core/units.js`).
+Every stored value — `constraint.value`, the cut record's depth/offset/toolDia — lives in BASE (mm = world units); the
+doc unit is a DISPLAY/INPUT lens only. **Switch semantics — RECOMMEND RE-LABEL** (flag as a likely USER call):
+changing the doc unit RE-DISPLAYS the same base value in the new unit (50mm → 1.97in), NO geometry resize/re-solve —
+standard CAD. RE-INTERPRET (resize: 50mm → 50in) is rejected (20× drift, re-solves every dimension). **Stored where:**
+base is a `#core/units.js` constant; the doc unit is a `settings-manager` setting (global + persisted now; per-document
+later when sketch-layers land). KEY UPSHOT: with base = mm, **SP1h's offset distance = toolDia/2 in world units
+directly** (no extra scale) — this is what the SP1h units flag needed.
+**(2) Unit-aware field util (`#core/units.js`, pure + oracle).** ONE shared pair: `parse(str, docUnit) → baseMM`
+(suffix mm|in|cm overrides docUnit; a BARE number = the doc unit) and `format(baseMM, docUnit, {decimals, unit?}) →
+string` (mm → docUnit, formatted; optional unit suffix for export). The same `format(..., {unit:true})` emits the
+Shaper export form ('0.25in' / '6.35mm') → SP1j reuses it.
+**(3) Doc-unit setting.** Lives in `settings-manager` (`DOC_UNIT`), persisted local, **default = the base (mm)** so
+both apps render IDENTICALLY at first (a bare number formats/parses unchanged — additive). A TOGGLE UI lands where the
+workflow needs it (Shaper first — its cut flow is unit-sensitive); SketchStudio can adopt the shared toggle later, so
+it stays UI-unchanged until it opts in. (Shaper may default to inch via an app-level setting — user call.)
+**(4) Field integration.** (a) `#core` dimension edit input (`live-dimension-input.js`): route the input through
+`units.parse` (now accepts '5mm'/'0.25in'/bare) + prefill via `units.format`. (b) Shaper cut-param fields
+(`cut-panel.js`): store the record in BASE (mm), parse/format depth/offset/bit + the presets via `units`; preset
+LABELS stay bit-size fractions (1/8") regardless of doc unit, values convert. Invasiveness: small — swap `parseFloat`/
+`toFixed` for `units.parse`/`units.format` at the field boundary.
+**(5) Export tie-in (SP1j).** `shaper:cutDepth` etc. written WITH units via `format(baseMM, docUnit, {unit:true})` —
+the SAME model; no separate path.
+**(6) SketchStudio load-safety (the shared-code risk).** The `#core` dimension change MUST be ADDITIVE: with
+`DOC_UNIT` defaulting to base (mm) and no suffix typed, `parse('5')` = 5 world units and `format(5, mm)` = `'5.0'` —
+**byte-identical to today's `parseFloat`/`toFixed(1)`**. So SketchStudio (no doc-unit UI) behaves exactly as now; the
+new capability (suffix override + toggle) is opt-in. `format`'s base-case precision must match today's `toFixed(1)`.
+**(7) Slicing (recommended).**
+- **U1** — `#core/units.js` (BASE=mm constant + unit table + parse/format) + ORACLE; the `DOC_UNIT` setting in
+  settings-manager (default mm, persisted). NO field adopts it yet → both apps byte-identical (inert util + setting).
+- **U2** — adopt in the `#core` dimension field (`live-dimension-input.js`): parse/format via units; explicit-unit
+  override works; doc=mm default keeps SketchStudio unchanged. The SHARED-code slice — extra care, verify SketchStudio
+  dimension entry/display unregressed in BOTH apps.
+- **U3** — adopt in the Shaper cut-param fields (`cut-panel.js`) — store the record in BASE, parse/format via units —
+  + the doc-unit TOGGLE UI in Shaper. Shaper-only.
+- **then SP1h** reads `toolDia` (base mm) as the world-unit offset scale — units no longer block the tool-aware look.
+**(8) Risks.** Base-unit choice = a fresh DECLARATION of existing world coords as mm (no migration for RE-LABEL; but
+any persisted dimension value now "means" mm — a one-time semantic stamp, fine since there was no prior unit). Switch
+semantics (RE-LABEL vs resize — recommend RE-LABEL, flag for the user). Not regressing SketchStudio (the U2 #core
+change — keep the base/no-suffix path byte-identical, incl. display precision). Parse robustness ('5 mm', '.25in',
+'5MM', fractions?, empty, negative). Perf negligible (per-edit parse/format).
+
+**state:** branch `carve-out`. Plan ready: U1 util+setting (byte-identical) → U2 #core dim field (shared, careful) →
+U3 Shaper cut params + toggle → SP1h. The one decision likely needing the USER: **RE-LABEL vs resize on unit switch
+(recommend RE-LABEL)** and the **base = 1 world unit = 1 mm** declaration. STOP — hold for the slice dispatch.
+
+=== UNITS PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

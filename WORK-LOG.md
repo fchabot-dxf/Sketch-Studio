@@ -2933,6 +2933,93 @@ retired for Shaper. The shared #ui factories are reused unchanged — only the c
 
 === S6b (DESIGN FIXED PANEL) DONE — HOLD ===
 
+## 2026-06-28 · PLAN S7 — extract SketchStudio's tool ribbon → shared #ui/ (turn 117) — PLAN ONLY, no code
+
+New user direction: Shaper's Design tool BUTTONS should look like SketchStudio's ribbon (grouped, icon-over-
+label), and since BOTH apps have a Design tab the ribbon should be SHARED. **The canvas is fine — do NOT touch
+it. Scope = the tool BUTTONS only.** Sliced (reset history); SketchStudio adopt LAST on a visual-parity bar.
+
+### (1) SketchStudio's ribbon — mapped (`apps/sketchstudio/index.html`)
+- **`#toolsRibbon`** (a Tailwind-classed `<div>`, `bg-white border-b … flex flex-col`) — **two rows**:
+  - **Row 1:**
+    - **EDIT** group — `#btn-clear` (Clear All), `#btn-undo` (Undo, starts `disabled`). Icons = INLINE `<svg>`
+      paths (not sprite). Group label "Edit".
+    - **CREATE** group — `#tool-select`, `#tool-line`, `#tool-rect` (+ `#rect-dropdown` variants:
+      `data-mode` rect-2pt / rect-center / rect-3pt, with `#rect-label` + `#rect-tool-icon-use`),
+      `#tool-circle`, `#tool-arc` (+ `#arc-label` + `#arc-tool-icon-use`, arc-cse default; its variant menu is
+      built in JS). Icons = sprite `#icon-tool-{select,line,rect-2pt,rect-center,rect-3pt,circle,arc-cse}`. Label
+      "Create".
+    - **INSPECT** group — `#tool-dim` (sprite `#icon-tool-dim`). Label "Inspect".
+    - **ACTIONS** group (`ml-auto`, right) — `#btn-settings-toggle` (`#icon-cog`), `#btn-debug-toggle`
+      (`#icon-terminal`), `#btn-export` (inline svg). Labels `invisible`.
+  - **Row 2:**
+    - **CONSTRAIN** group — `#tool-coincident`,`#tool-hv`,`#tool-parallel`,`#tool-perp`,`#tool-collinear`,
+      `#tool-tangent`,`#tool-equal`,`#tool-midpoint` (sprite `#icon-{coincident,hv,parallel,perpendicular,
+      collinear,tangent,equal,midpoint}`). Label "Constrain".
+- **Each button** = `.tool-btn` (Tailwind `flex flex-col … w-12 h-14 rounded`) → icon `<svg><use href>` over a
+  `<span class="text-[8px] font-black uppercase">LABEL</span>` (the icon-over-label look the user wants).
+- **Icon sprite** = an inline `<svg style="display:none"><defs><symbol id="icon-…">…` (index.html ~L302+).
+- **Styling** = Tailwind utility classes ON the elements **+** an inline `<style>` block (`.tool-btn` base/
+  hover/`.active`, `.tool-dropdown`/`.tool-dropdown-menu`/`.tool-dropdown-item`, `.dropdown-indicator`, responsive
+  `@media`, `#toolsRibbon` z-index). Colors are hard-coded light (`bg-white`, `slate-*`, `#000303`/`#ff0402`).
+- **Wiring** (`apps/sketchstudio/ui/ui-manager.js`) — a `TOOL_MODES → button-id` map; the mapped button gets
+  `.active` on tool change; clicks call **`switchToTool`** (the shared path); `#btn-undo`→`state.undo`,
+  `#btn-clear`→clear; the rect/arc dropdowns set the variant mode.
+
+### (2) SHARED vs app-specific
+- **SHARED sketcher ribbon (act on the shared sketch → `switchToTool`):** **CREATE** (Select/Line/Rect▾/Circle/
+  Arc▾) + **INSPECT** (Dim) + **CONSTRAIN** (8). Identical tools in both apps' Design → this is the shared ribbon.
+- **App-shell (NOT in the shared ribbon by default):** **ACTIONS** (Settings/Debug/Export) = SketchStudio shell
+  (Shaper has Settings/Export as separate MODES) → app-specific. **EDIT** (Clear/Undo) acts on the shared sketch
+  STATE (state.undo / clear) → shared-CAPABLE; propose it as an OPTIONAL shared group each app can opt into.
+- **Proposal:** the component renders Create+Inspect+Constrain always; the host may append app-specific groups
+  (SketchStudio appends Edit+Actions; Shaper appends Edit only, or none). "Other tabs differ per app" honored.
+
+### (3) Extraction → a `#ui/` ribbon component
+- **`#ui/tool-ribbon.js`** — `createToolRibbon({ state, extraGroups?, on? }) → { el, render(container), refresh, destroy }`.
+  Renders the group columns (icon-over-label buttons) + the **rect/arc variant dropdowns**; buttons wire to
+  `switchToTool(state, tool)` (+ the constraint tools, same path as `createDesignToolPalette`); `refresh()` syncs
+  `.active` to `state.currentTool` (reuse the TOOL_MODES→id mapping idea, but data-tool-driven like the palette).
+- **Plain CSS, de-Tailwind'd + `--sk-*`-themed** — convert the Tailwind utilities + inline `<style>` into one
+  self-injected `.sk-ribbon*` stylesheet keyed on `--sk-*` (light defaults → SketchStudio; Shaper `:root` already
+  sets dark), so the SAME component is light in SketchStudio / dark in Shaper. The `.tool-btn`/dropdown look is
+  preserved 1:1.
+- **Icon sprite shared** — move the `<symbol>` sprite into `#ui/` (a small `injectIconSprite()` that appends the
+  `<defs>` once, or a shared `sprite.svg`) so Shaper resolves `#icon-tool-*` too (today they live only in
+  SketchStudio's HTML). The component injects the sprite on first render.
+
+### (4) Adoption
+- **Shaper Design** — replace `createDesignToolPalette` (the S6b bottom-of-panel buttons) with the shared
+  `createToolRibbon` (Create+Inspect+Constrain, optional Edit). The fixed side panel stays (list/DOF on top); the
+  ribbon just becomes the bottom tool area. CANVAS untouched.
+- **SketchStudio** — replace the inline `#toolsRibbon` markup with the shared component. **VISUALLY identical, NOT
+  byte-identical** → sequence LAST, on a visual-parity acceptance bar (CDP structural + computed-style/screenshot
+  parity), like the deferred dock-adopt (S5d) plan.
+
+### (5) Slice sequence (each: both apps load + guard + baseline green)
+- **S7a — extract the shared ribbon** (`#ui/tool-ribbon.js` + sprite + plain CSS), verified STANDALONE in
+  isolation (CDP smoke on an unimported module); **both apps byte-identical** (neither adopts yet).
+- **S7b — Shaper adopts** — swap `createDesignToolPalette` → `createToolRibbon` in the Design panel. Shaper-only;
+  SketchStudio byte-identical. Verify the grouped icon-over-label ribbon renders dark + tools/dropdowns work.
+- **S7c — SketchStudio adopts** — replace inline `#toolsRibbon` with the component (VISUAL parity, not byte-
+  identical). Last + highest-care slice.
+- (Edit/Actions group wiring folded into the relevant adopt slice.)
+
+### (6) Risks
+- **R-DROPDOWNS:** the rect (2pt/center/3pt) + arc variant dropdowns — variant state, icon/label swap, the JS-built
+  arc menu. Port faithfully or the Create group regresses.
+- **R-SPRITE-SHARING:** the icon sprite lives only in SketchStudio's HTML today; sharing it (move/inject) must not
+  collide with SketchStudio's existing inline sprite (de-dup on adopt) and must reach Shaper.
+- **R-TAILWIND-FIDELITY:** de-Tailwinding the utilities + inline `<style>` into plain CSS must preserve sizing/
+  spacing/weights (w-12 h-14, text-[8px] font-black uppercase, borders, hover/active) — easy to drift.
+- **R-SKETCHSTUDIO-IDENTITY:** SketchStudio's ribbon is its signature surface — the S7c adopt must be pixel-
+  faithful (visual-parity bar, screenshot diff); SketchStudio stays light, Shaper dark, from the same component.
+- **R-RESET:** slice it (extract → Shaper → SketchStudio), SketchStudio adopt LAST; never big-bang.
+- **Out of scope / must-not-touch:** the CANVAS and the on-canvas tool behavior (only the BUTTONS move); the
+  S6b fixed panel layout (list/DOF on top) stays.
+
+=== S7 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

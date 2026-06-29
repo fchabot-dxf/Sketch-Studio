@@ -3105,6 +3105,84 @@ KEEP the constraint list/DOF as a side panel, and the side panel is COLLAPSIBLE.
 
 === S7b (SHAPER ADOPTS RIBBON) DONE — HOLD ===
 
+## 2026-06-29 · PLAN S7c — SketchStudio adopts the shared ribbon (turn 123) — PLAN ONLY, no code
+
+Riskiest slice: the POLISHED main app adopts `createToolRibbon`, replacing its inline `#toolsRibbon`. Acceptance =
+VISUAL parity (pixel-faithful), NOT byte-identical. (User noted mid-plan: the new shared module needs fixing first
+— confirmed; see §6, S7c-1.)
+
+### (1) Adoption shape — and the set DOES match
+- Replace `#toolsRibbon`'s **Create + Inspect + Constrain** with `createToolRibbon({ state, … })`; supply **Edit**
+  (clear/undo) + **Actions** (settings/debug/export) via `extraGroups`.
+- Confirmed the shared ribbon's set == SketchStudio's EXACTLY: Create = Select/Line/Rect(2pt/center/3pt▾)/Circle/
+  Arc; Inspect = Dim; Constrain = Coinc/H-V/Para/Perp/Coll/Tang/Equal/Mid. Arc single-mode in both. ✓
+
+### (2) Wiring reconciliation — THE SHARED MODULE MUST BE EXTENDED FIRST (the user's point)
+- **Problem:** S7a wires each tool button to plain `switchToTool`. But SketchStudio's tool buttons carry RICH
+  behaviour in `ui-manager.js` (lines ~77-158): the constraint **pendingConstraint dance** (pre-selection as 1st
+  element, complete/cancel), **H/V immediate-apply** when a line is selected, **dimension-from-selection**,
+  per-tool **modeText**, and constraint-tool `.active`. A plain `switchToTool` would LOSE all of it.
+- **Fix (additive, Shaper default UNCHANGED):** give `createToolRibbon` an optional **`onToolClick(tool)`** hook —
+  when provided, the ribbon calls it on a tool-button click (and on a rect-variant select) INSTEAD of the internal
+  `switchToTool`. SketchStudio passes `onToolClick` = its EXISTING rich logic, refactored from the N per-button
+  listeners into ONE `handleToolActivate(tool)`. → the rich behaviour STAYS in ui-manager (just re-entered via the
+  ribbon); zero behaviour rewrite. Shaper (S7b) keeps the default (no hook → `switchToTool`), so it's unaffected.
+- **Edit/Actions buttons** → `extraGroups` with the SAME ids (`btn-clear`/`btn-undo`/`btn-settings-toggle`/
+  `btn-debug-toggle`/`btn-export`) so the EXISTING bindings attach unchanged — clear/undo/export
+  (`ui-manager.js`), settings (`settings-panel.js`, `tuning-wizard.js`), debug (`debug-panel.js`). REQUIRES the
+  ribbon to mount BEFORE those modules bind (they `getElementById` at init) — a sequencing constraint (§7
+  R-BIND-ORDER). Fallback if fragile: `extraGroups` `onClick` callbacks invoking the toggle fns. RECOMMEND
+  same-ids + mount-first (no handler rewrites; `#btn-undo.disabled` toggling keeps working).
+
+### (3) Tool .active sync — reconcile to ONE source
+- `ui-manager.setTool` currently syncs `.active` via `document.querySelectorAll('.tool-btn')` + `#tool-{t}`. With
+  the ribbon, the buttons are `.sk-ribbon-btn[data-tool]` (no `#tool-{t}`/`.tool-btn`). **Reconcile:** `setTool`
+  sets `state.currentTool` then calls **`ribbon.refresh()`** (reads currentTool → syncs `.sk-ribbon-btn.active`),
+  REPLACING the `.tool-btn` loop AND the constraint-handlers' manual `.active` lines (128-129, 143-144). ONE truth
+  (`state.currentTool`), ONE sync (`ribbon.refresh()`). ui-manager holds the ribbon ref.
+
+### (4) Rect / Arc dropdowns — one source
+- The ribbon OWNS the rect dropdown (sets `state.rectMode` + `onToolClick(RECT)`). REMOVE ui-manager's
+  `setupToolDropdown('rect')` + `RECT_MODES_CONFIG`/`RECT_MODES_MAP` (now in the ribbon). `modeText` "RECT 2PT/
+  CENTER/3PT" still comes from `setTool` reading `state.rectMode`. Arc stays single-mode (plain button) — matches.
+
+### (5) Pixel-parity — the acceptance bar
+- BEFORE adoption, capture a CDP **screenshot of the current `#toolsRibbon` region** (the Tailwind original) as a
+  baseline. After adoption, screenshot the same region and **diff** — bar: **< ~2% differing pixels** in the
+  ribbon region. PLUS **computed-style assertions** on representative buttons: box **48×56** (w-12/h-14), label
+  `font-size 8px` / `font-weight 900` / `text-transform uppercase`, group-label style, **active bg `#3B82F6`**
+  (light), group separators, dropdown menu. Both must pass (screenshot diff is the headline; computed-style guards
+  the structural metrics). Capture on a fixed window size for determinism.
+
+### (6) Sub-slice — RECOMMEND splitting into three (smaller = safer, per reset history + the user's "fix the module first")
+- **S7c-1 — extend the shared ribbon** (additive `onToolClick` hook; confirm `refresh()`/`extraGroups`/ids cover
+  the need). Standalone CDP smoke + **Shaper STILL byte-identical** (default path unchanged). *This is the "fix the
+  new shared module" step the user flagged — it lands first, on its own.*
+- **S7c-2 — SketchStudio wire-up (behaviour parity):** replace `#toolsRibbon`; route tool clicks via `onToolClick`
+  (existing rich logic), `setTool`→`ribbon.refresh()`, rect via the ribbon, Edit/Actions `extraGroups` same-ids.
+  Verify every tool/constraint/dropdown + clear/undo/settings/debug/export + modeText behave as before.
+- **S7c-3 — visual polish (pixel parity):** match the de-Tailwind'd CSS to the Tailwind original; screenshot-diff
+  acceptance.
+- Each sub-slice: both apps load + guard + baseline green; Shaper unaffected. (One big slice is too risky here.)
+
+### (7) Risks
+- **R-BEHAVIOUR:** the rich constraint UX (pendingConstraint, H/V immediate, dimension-from-selection) MUST be
+  preserved — route through `onToolClick`, don't rewrite it.
+- **R-SYNC-CONFLICT:** double `.active` sync (ui-manager loop vs `ribbon.refresh`) — collapse to ONE.
+- **R-BIND-ORDER:** Edit/Actions same-id bindings span `ui-manager`/`settings-panel`/`debug-panel`/`tuning-wizard`,
+  bound at init → the ribbon must mount BEFORE them or the `getElementById` bindings get null. Sequence carefully;
+  fallback = `onClick` callbacks.
+- **R-VISUAL:** de-Tailwind drift (size/spacing/weight/active color) — the screenshot-diff gate catches it.
+- **R-MODETEXT/FOOTER:** `#modeText` (footer) stays ui-manager's (`setTool`) — left as-is; the ribbon never
+  manages it.
+- **R-RESPONSIVE/TOUCH:** SketchStudio's `#toolsRibbon` has a 2-row mobile layout + touch drag-to-scroll; the
+  shared ribbon is a 1-row flex — mobile parity may differ. Desktop-first; flag mobile as a follow-up, don't
+  regress desktop.
+- **R-RESET:** slice it (module → wire → polish), SketchStudio (the polished app) adopts last; each sub-slice
+  independently loads + green + revertible.
+
+=== S7c PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

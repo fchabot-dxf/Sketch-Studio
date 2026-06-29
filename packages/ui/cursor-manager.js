@@ -166,6 +166,41 @@ export function updateCursor(svg, toolName) {
     }
 }
 
+/**
+ * Inject ONLY the requested icon <symbol>s that are not already in the document (idempotent; no ID clash).
+ * Lets a SHARED component (e.g. the tool ribbon) resolve its #icon-* glyphs in ANY host: a host that already has
+ * them (SketchStudio, via initCursors() / its inline sprite) gets nothing re-injected; a bare host / Shaper gets
+ * just the ids it asks for. Reuses ICONS (the single source of truth) — same symbol attrs as injectSymbols().
+ */
+export function ensureIconSymbols(ids = Object.keys(ICONS)) {
+    if (typeof document === 'undefined' || !document.body) return;
+    let container = document.querySelector('svg[aria-hidden="true"]');
+    if (!container) {
+        container = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        container.style.display = 'none';
+        container.setAttribute('aria-hidden', 'true');
+        document.body.insertBefore(container, document.body.firstChild);
+    }
+    let defs = container.querySelector('defs');
+    if (!defs) {
+        defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        container.appendChild(defs);
+    }
+    for (const id of ids) {
+        if (!ICONS[id] || document.getElementById(id)) continue; // unknown, or already present → skip (no clash)
+        const data = ICONS[id];
+        const symbol = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
+        symbol.id = id;
+        symbol.setAttribute('viewBox', data.viewBox);
+        symbol.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        symbol.setAttribute('fill', 'none');
+        symbol.setAttribute('stroke-linecap', 'square');
+        symbol.setAttribute('stroke-linejoin', 'round');
+        symbol.innerHTML = data.content;
+        defs.appendChild(symbol);
+    }
+}
+
 // --- INTERNAL HELPERS ---
 
 function injectSymbols() {

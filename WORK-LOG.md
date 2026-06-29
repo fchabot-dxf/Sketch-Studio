@@ -3020,6 +3020,49 @@ it. Scope = the tool BUTTONS only.** Sliced (reset history); SketchStudio adopt 
 
 === S7 PLAN READY - HOLD ===
 
+## 2026-06-28 · S7a — extract the shared #ui/tool-ribbon.js (standalone, byte-identical) (turn 119)
+
+First S7 slice: the SketchStudio-style grouped icon-over-label tool ribbon, extracted to a shared #ui/ component.
+STANDALONE — no app adopts it yet, so BOTH apps stay byte-identical (S7b Shaper adopts, S7c SketchStudio adopts).
+
+- **did:**
+  - **`packages/ui/tool-ribbon.js`** (new) — `createToolRibbon({ state, extraGroups?, on? }) → { el, render, refresh,
+    destroy }`. Renders the SHARED sketcher groups (icon-over-label `.sk-ribbon-btn`): **Create**
+    (Select/Line/Rect▾/Circle/Arc) + **Inspect** (Dim) + **Constrain** (Coinc/H-V/Para/Perp/Coll/Tang/Equal/Mid).
+    Buttons wire to the SAME shared **`switchToTool`** the keyboard + the simple palette use; `refresh()` syncs
+    `.active` to `state.currentTool`. The **rect dropdown** (2pt/center/3pt) sets `state.rectMode` + swaps the
+    button's `<use href>` icon + switches to rect — faithfully mirroring ui-manager's `RECT_MODES_CONFIG`. (Arc is
+    SINGLE-MODE in the source — no variant menu — so the shared Arc is a plain button; not invented.)
+  - **`extraGroups` / `on` hooks** — a host appends its OWN app-specific groups (Edit/Actions) via
+    `extraGroups:[{label,buttons:[{icon?|svg?,label,id?,onClick?}]}]`; `on(name,detail)` surfaces events
+    ('tool'/'rectMode'/'action'). This is the north-star seam: any host wraps the shared sketcher ribbon with its
+    own groups.
+  - **Icons — inject-IF-MISSING** — added `export ensureIconSymbols(ids)` to `packages/ui/cursor-manager.js`
+    (reuses its `ICONS`, the single source of truth): injects ONLY the requested `<symbol>`s NOT already present
+    (skip-if-`getElementById`), into the hidden `svg[aria-hidden]` defs. So in SketchStudio (symbols already there
+    via initCursors) NOTHING re-injects → byte-identical; a bare host / Shaper gets just what the ribbon needs; no
+    double-inject, no ID clash. The ribbon calls it on mount with its 16 ids.
+  - **Plain CSS, --sk-*-themed** — de-Tailwind'd the `.tool-btn`/dropdown/`.dropdown-indicator` styling into one
+    self-injected `.sk-ribbon*` stylesheet; the active color is `var(--sk-selection, #3B82F6)` and the chrome uses
+    `--sk-ribbon-*` with LIGHT defaults (SketchStudio look). A dark `:root` (Shaper, S7b) will retint the SAME
+    component. Self-contained (style injected once).
+- **verify (CDP smoke in ISOLATION, bare host = Shaper — the inject path):** `createToolRibbon({state})` (state via
+  `mountSketch` on a temp svg) → groups `Create,Inspect,Constrain` (+ an `Edit` extraGroup) = 4; createBtns **5**,
+  constrainBtns **8**; **brokenIcons 0** (all `#icon-*` resolved on the bare host); click Line → `state.currentTool`
+  =`line` + button `.active`; click Coincident → `coincident`; `refresh()` after an external `currentTool` change
+  re-syncs `.active` (select on, line off); rect dropdown opens, picking Center sets `state.rectMode`=CENTER + swaps
+  `<use href>`→`#icon-tool-rect-center` + switches to rect; extraGroup button `onClick` fired (1).
+  - **Both apps byte-identical (no adopter):** Shaper has no `.sk-ribbon`/`#sk-ribbon-styles`; SketchStudio
+    world-group **5**, no `.sk-ribbon` (the cursor-manager export didn't change its load).
+  - guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · scope = `#ui/` only
+    (`tool-ribbon.js` new + `cursor-manager.js` +1 export).
+- **state:** branch `carve-out`. The shared ribbon exists + behaves; no app uses it yet. Next: **S7b** — Shaper's
+  Design adopts it (replacing the S6b simple palette). NB (advisor, for S7b): a SketchStudio ribbon is HORIZONTAL/
+  full-width → likely the TOP of Shaper's Design view, NOT the 244px left panel — surface layout options at S7b.
+  STOP — hold.
+
+=== S7a (SHARED TOOL RIBBON) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

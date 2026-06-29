@@ -86,6 +86,9 @@ function buildDock() {
   infoPanel = createDesignInfoPanel({ state, engine });
   dock = createTabbedDockPanel({
     persistKey: 'shaper-design-dock',
+    // S5-fix: render the workflow tabs in the Design view's header bar (primary nav) — the floating panel shows
+    // only the active tab's content. The .design-bar is inside #design-view so the tabs hide with the tab.
+    tabStripTarget: designView.querySelector('.design-bar'),
     tabs: [
       // Design tab: the tool palette ABOVE the live constraint-list/DOF info panel.
       { label: 'Design', icon: '✎', render: (body) => { palette.render(body); infoPanel.render(body); } },

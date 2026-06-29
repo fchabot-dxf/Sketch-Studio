@@ -2747,6 +2747,38 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5c2 (DESIGN TOOL PALETTE) DONE — HOLD ===
 
+## 2026-06-28 · S5-fix — workflow tabs in the header + strip the stale banner (turn 109) — user feedback
+
+- **did (per user feedback after seeing the dock; Shaper-only → SketchStudio byte-identical):**
+  - **`TabbedDockPanel` gained `tabStripTarget`** (a host DOM element). When provided, the tab strip is rendered
+    INTO that element (the app's nav header) instead of atop the floating panel; the panel then shows only the
+    active tab's CONTENT (its header becomes a thin centered drag grip, via a `.sk-dock-detached` style). Tab
+    clicks still switch content + sync the active highlight + persist. `destroy()` removes the (re-homed) strip
+    too. **DEFAULT (no `tabStripTarget`) = tabs atop the panel, UNCHANGED** → nothing else affected.
+  - **Shaper:** pass `designView.querySelector('.design-bar')` as `tabStripTarget`, so Design/Prepare/Export/
+    Settings render in the Design view's header bar (primary nav, next to ← Editor). The `.design-bar` is inside
+    `#design-view`, so the tabs hide with the tab.
+  - **Stripped the stale S1 banner** ("Design — shared #core sketcher (click to add line points)") from the
+    design-bar; kept the ← Editor (back-to-Editor) button.
+- **verify (exactly how) — CDP, Shaper Design:**
+  - Tabs in the HEADER: `.design-bar` has **4** `.sk-dock-tab`s; the floating `.sk-dock` has **0** internal tab
+    strips (`panelInternalTabs=0`); banner gone (`bannerGone=true`); the panel body shows the active Design
+    content (`bodyHasPalette=true`).
+  - Header-tab switches content: clicking the header **Prepare** tab → the panel body shows "Prepare…"
+    (`switchedToPrepare=true`), the header Prepare tab highlights (`prepareActive=true`), active bg
+    `rgb(76,154,255)`=`#4c9aff` (dark). **Persists** (`tab=1` saved). **Back-to-Editor** still works
+    (`#design-back` → `designView.hidden=true`).
+  - **Widget default preserved:** `createTabbedDockPanel({tabs})` with NO `tabStripTarget` → tabs atop the panel
+    (`internalTabs=1`, `tabCount=2`) — the S5a isolation behaviour is unchanged.
+  - **SketchStudio UNTOUCHED:** world-group **5**, no `.sk-dock`. Both apps `errors=0`.
+  - import-resolution guard GREEN · oracle 12/12 · conformance 15/15 · differential 9/9 · fuzzer 400/400 ·
+    scenario 23/23 · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean.
+- **state:** branch `carve-out` · Shaper's Design view now reads like a proper app: workflow tabs in the header,
+  the floating panel showing the active tab's content (tool palette + live constraint-list/DOF), dark. Next per
+  the sequence: **S5d** — SketchStudio adopts the dock (deliberate toolbar re-home, isolated last). STOP — hold.
+
+=== S5-FIX (TABS IN HEADER) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

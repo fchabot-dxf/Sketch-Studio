@@ -29,6 +29,9 @@ function injectStyles() {
 .sk-dock[data-dock="bottom"] { border-radius: 10px 10px 0 0; }
 .sk-dock-header { display: flex; align-items: center; cursor: move; padding: 3px; gap: 3px; flex: 0 0 auto;
   border-bottom: 1px solid var(--sk-dock-border, rgba(255,255,255,0.1)); touch-action: none; }
+.sk-dock-detached .sk-dock-header { justify-content: center; padding: 5px; }
+.sk-dock-detached .sk-dock-header::before { content: ''; width: 28px; height: 3px; border-radius: 2px;
+  background: var(--sk-dock-border, rgba(255,255,255,0.28)); }
 .sk-dock-tabs { display: flex; gap: 3px; flex: 1; overflow-x: auto; scrollbar-width: none; }
 .sk-dock-tabs::-webkit-scrollbar { display: none; }
 .sk-dock-tab { background: transparent; color: inherit; border: 0; border-radius: 6px; padding: 4px 9px;
@@ -62,7 +65,7 @@ function nearEdge(x, y) {
  *   persistKey: localStorage key for pos/size/active-tab/dock
  * Returns { el, setActiveTab(i), getState(), destroy() }.
  */
-export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock' } = {}) {
+export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabStripTarget = null } = {}) {
   injectStyles();
 
   const root = document.createElement('div'); root.className = 'sk-dock';
@@ -70,8 +73,11 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock' } = {}
   const tabStrip = document.createElement('div'); tabStrip.className = 'sk-dock-tabs';
   const bodyEl = document.createElement('div'); bodyEl.className = 'sk-dock-body';
   const resizeEl = document.createElement('div'); resizeEl.className = 'sk-dock-resize';
-  header.appendChild(tabStrip);
   root.append(header, bodyEl, resizeEl);
+  // Tab strip: by default atop the panel (in its header). If a host element is given (e.g. the app's nav header),
+  // render the strip THERE — the panel then shows only the active tab's content, its header becoming a thin grip.
+  if (tabStripTarget) { root.classList.add('sk-dock-detached'); tabStripTarget.appendChild(tabStrip); }
+  else { header.appendChild(tabStrip); }
 
   const st = Object.assign({ left: 80, top: 80, w: 280, h: 320, tab: 0, dock: null }, loadState(persistKey));
   let activeTab = Math.min(Math.max(0, st.tab | 0), Math.max(0, tabs.length - 1));
@@ -160,6 +166,6 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock' } = {}
     el: root,
     setActiveTab,
     getState: () => ({ ...st }),
-    destroy: () => { try { root.remove(); } catch (_) {} },
+    destroy: () => { try { root.remove(); } catch (_) {} try { tabStrip.remove(); } catch (_) {} },
   };
 }

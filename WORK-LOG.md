@@ -3217,6 +3217,81 @@ exactly Create/Inspect/Constrain, no Actions group.)
 
 === S7c-1 (RIBBON onToolClick HOOK) DONE — HOLD ===
 
+## 2026-06-29 · PLAN S7c-2 — SketchStudio shell restructure + adopt the shared ribbon (turn 127) — PLAN ONLY
+
+The POLISHED main app gets a top bar + adopts the shared ribbon. User chose: a TOP BAR with **[Design | Export]**
+tabs + **Settings/Debug** as actions; **Export becomes its own tab** (the DXF/SVG screen, replacing the
+export-panel popup); the tool ribbon = the shared **Create/Inspect/Constrain (+ Edit)**. Real restructure → sliced
+(RESET history); ribbon = VISUAL parity.
+
+### (1) Current shell (mapped — apps/sketchstudio/index.html + ui/*)
+- **`#toolsRibbon`** (2-row Tailwind ribbon): Edit (`#btn-clear`/`#btn-undo`) · Create (`#tool-select/line/rect`
+  +`#rect-dropdown` 2pt/center/3pt /`#tool-circle`/`#tool-arc`) · Inspect (`#tool-dim`) · **Actions**
+  (`#btn-settings-toggle`/`#btn-debug-toggle`/`#btn-export`) · Constrain (8). Inline `<style>` + sprite.
+- **`<main>`** = `#svgCanvas` + a top-right canvas overlay (`#btn-construct-toggle`, `#btn-recenter-view`).
+- **`<footer>`** = `#modeText` · `#btn-mag-toggle` (MAG LENS) · `#coords-text` · `#viewport-size`.
+- **Overlays (hidden, z 99999):** `#settings-panel` (grid/glyph settings + Save/Reset/Close; opened by
+  `#btn-settings-toggle` via settings-panel.js, also tuning-wizard.js) · `#export-panel` (a w-80 **popup**: the
+  export FORM — filename / type SVG|DXF / only-lines / precision / approx-arcs / segments / scale+units / invert-Y
+  / dxf-version + Cancel/Export; opened by `#btn-export` toggling `.hidden` + outside-click/Esc close) · the debug
+  overlay (debug-panel.js, `#btn-debug-toggle`).
+- **Wiring (ui-manager.js):** `setTool` (sets `state.currentTool` + syncs `.active` via a `.tool-btn` loop +
+  `#modeText`) · the RICH per-tool click handlers (pendingConstraint dance / H-V immediate / dimension-from-
+  selection) · `toolIdMap` · `setupToolDropdown('rect')` (`RECT_MODES_CONFIG`) · `#btn-clear`/`#btn-undo` ·
+  the export logic: **`#btn-export-do` reads the form → `exportToFile(state, filename, type, opts)` → notify +
+  hide** · ui-manager's OWN keydown shortcuts (`l/r/c/s`→`setTool`, Escape). Settings = settings-panel.js, debug =
+  debug-panel.js.
+
+### (2) Target
+- **TOP BAR (new):** left = **[Design | Export]** mode tabs (active highlighted); right = **Settings** + **Debug**
+  action buttons (moved out of the ribbon's Actions group).
+- **View router (Design ↔ Export):** show one container, hide the other.
+  - **Design view** = the shared ribbon (Create/Inspect/Constrain + Edit) + the canvas (`<main>`) + the footer.
+  - **Export view** = the `#export-panel` FORM content as a full tab; **reuse `exportToFile`** (the `#btn-export-do`
+    handler is unchanged); the popup open/close (toggle/outside-click/Esc) is replaced by the router.
+- **Settings / Debug** stay as OVERLAYS, opened from the top-bar buttons (same `#btn-settings-toggle`/
+  `#btn-debug-toggle` ids → existing bindings attach).
+
+### (3) Ribbon adoption (uses the S7c-1 hook)
+- Replace `#toolsRibbon`'s Create/Inspect/Constrain with `createToolRibbon({ state, onToolClick, extraGroups:[Edit] })`.
+- **`onToolClick(tool)` → ui-manager's rich activation:** refactor the N per-button listeners into ONE
+  `handleToolActivate(tool)` (pendingConstraint / H-V immediate / dimension-from-selection) that the ribbon calls
+  via the hook — behaviour STAYS in ui-manager, no rewrite.
+- **`setTool` → `ribbon.refresh()`** (ONE `.active` source; drop the `.tool-btn` loop + the constraint handlers'
+  manual `.active`).
+- **Rect via the ribbon** (drop `setupToolDropdown('rect')` + `RECT_MODES_CONFIG`/`_MAP`); `#modeText` "RECT 2PT…"
+  still from `setTool` reading `state.rectMode`. Arc stays single-mode.
+- **Edit (clear/undo) via `extraGroups`** with the SAME ids (`btn-clear`/`btn-undo`) → existing ui-manager
+  bindings attach (mount-before-bind). **Actions LEAVE the ribbon** → Settings/Debug to the top bar, Export → tab.
+
+### (4) Slice sequence (each: both apps load + SketchStudio FULLY FUNCTIONAL + guard+baseline green; Shaper unaffected)
+- **S7c-2a — top bar + router, KEEP the current ribbon.** Add the top bar ([Design|Export] tabs + Settings/Debug
+  buttons), a Design↔Export router; Design view wraps the EXISTING `#toolsRibbon`+canvas+footer; Export view = the
+  export form (moved or mirrored); move the Settings/Debug/Export controls to the top bar (same ids). Nothing lost.
+- **S7c-2b — adopt the shared ribbon** (replace Create/Inspect/Constrain via `onToolClick`→`handleToolActivate`;
+  Edit extraGroups; `setTool`→`ribbon.refresh()`; rect via the ribbon). Behaviour parity (every tool/constraint/
+  dropdown + clear/undo + modeText + keyboard).
+- **S7c-2c — Export tab from the panel** (the `#export-panel` form becomes the Export view; `exportToFile` reused;
+  remove the popup open/close).
+- **S7c-3 — pixel-parity polish** (the de-Tailwind'd ribbon matches the Tailwind original; screenshot-diff bar).
+- One big slice would be too risky on the polished app — split it.
+
+### (5) Risks
+- **R-RESET:** main-app restructure with a reset history → SLICE it; each slice keeps SketchStudio fully functional
+  + revertible; never big-bang.
+- **R-BIND-ORDER:** the Actions ids (`#btn-settings-toggle`/`#btn-debug-toggle`/`#btn-export`) + Edit ids move →
+  the top bar / extraGroups must render BEFORE settings-panel.js / debug-panel.js / ui-manager bind (they
+  `getElementById` at init). Sequence carefully; same-ids keep the handlers.
+- **R-EXPORT-CONVERSION:** popup→tab — reuse the form ids + `#btn-export-do`→`exportToFile`; drop only the
+  popup-specific open/close (toggle/outside-click/Esc). Don't lose any export option.
+- **R-PIXEL:** ribbon visual parity → the S7c-3 screenshot-diff gate.
+- **R-FOOTER/MODETEXT:** the footer + `#modeText` stay in the Design view (ui-manager owns them) — unchanged.
+- **R-KEYBOARD:** ui-manager's `l/r/c/s` shortcuts → `setTool` → `ribbon.refresh()` — preserved.
+- **R-CANVAS-OVERLAY:** `#btn-construct-toggle`/`#btn-recenter-view` + the footer mag-lens stay in the Design view.
+- **R-SHAPER:** Shaper is untouched throughout (separate shell; the ribbon's `onToolClick` is opt-in).
+
+=== S7c-2 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

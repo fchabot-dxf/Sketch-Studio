@@ -4490,6 +4490,39 @@ to Shaper's real header), so no gate.
 
 === U3b (SHAPER SETTINGS HEADER + MODAL + DOC-UNIT TOGGLE) DONE - HOLD ===
 
+## 2026-06-29 · U3c — canvas dimension LABELS re-label via units (turn 184) — shared renderer; the LAST units slice
+
+U2 made the dimension EDIT field units-aware; U3c routes the rendered canvas dim LABELS through `units.format` so they
+display in the document unit + re-label on a unit switch. SHARED (`svg-renderer.js`, affects SketchStudio labels) →
+byte-identical at mm. Completes the units arc (U1 util → U2 dim field → U3a cut params → U3b toggle → U3c labels).
+
+- **did (`packages/ui/svg-renderer.js` only):**
+  - Import `units.format`; module-level `formatLenLabel(v) = format(v, SettingsManager.get('DOC_UNIT')||'mm',
+    {decimals:1})` — at mm this is `=== v.toFixed(1)` (byte-identical).
+  - Routed the LENGTH dim labels through it: the committed RADIUS label + the 3 DISTANCE labels (aligned / horizontal /
+    vertical) where `displayVal = … valToShow.toFixed(1)`, and the dim-placement PREVIEW (`active.value`/`len`
+    @ ~1351). ANGLE dim labels stay degrees (`valToShow.toFixed(1) + '°'` — UNCHANGED).
+  - **Re-render:** NO explicit subscribe-wire — the Design canvas runs a CONTINUOUS solve→draw RAF
+    (`sketch-canvas.js`), so labels re-label on the next frame after a DOC_UNIT toggle (or on Design re-enter). An
+    explicit DOC_UNIT subscribe → re-render would be redundant; noted in the code.
+  - NOT changed (flagged): the rect/line GEOMETRY-draw preview size hints (the `w.toFixed(1)`/`h.toFixed(1)`/
+    `len.toFixed(1)` @ ~1266-1317) — those are draw-time shape-size hints, not dimension labels (no `valToShow=c.value`),
+    so they stay in base units while dragging. A minor draw-time inconsistency; a candidate follow-up if wanted.
+- **verify (CDP live, on the SketchStudio renderer — shared, errors=0):** drove `draw()` with a DISTANCE (50.8) +
+  ANGLE (90) constraint. DOC_UNIT='mm' → distance label `50.8` (= toFixed(1) → byte-identical), angle `90.0°`. Switch
+  → 'in' → distance RE-LABELS `2.0` (50.8/25.4), no `50.8`, angle STILL `90.0°` (degrees, NOT converted). Samples
+  mm=[50.8, 90.0°] / in=[2.0, 90.0°]. LOAD-SAFE: `npm run test:shell` **12/12** (SketchStudio renderer unregressed,
+  mm labels byte-identical); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check`
+  clean; scope = svg-renderer.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. UNITS ARC COMPLETE — the document unit (Shaper inch / SketchStudio mm) drives the
+  dimension edit + labels + the Shaper cut params, with a Settings-modal toggle; SketchStudio byte-identical
+  throughout. Next: **SP1h resumes** — the per-cut-type tool-aware look (offset toolpath geometry), now with the
+  world↔mm scale settled (toolDia etc. are base mm = world units). STOP — hold.
+
+=== U3c (CANVAS DIM LABELS RE-LABEL VIA UNITS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -8,6 +8,13 @@ import { calculateArcPath, perpendicularNormal, resolveJoints, isCoincidentConst
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
+import { format as formatUnit } from '#core/units.js';
+
+// U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
+// At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
+// The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
+// (no explicit re-render wire needed).
+const formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { decimals: 1 });
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
@@ -1348,7 +1355,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const dx = j2.x - j1.x, dy = j2.y - j1.y;
       const len = Math.hypot(dx, dy);
       const offset = active.offset || SolverConfig.DIMENSION_OFFSET || 30;
-      const dist = active.value ? active.value.toFixed(1) : len.toFixed(1);
+      const dist = active.value ? formatLenLabel(active.value) : formatLenLabel(len);
       
       let nx = 0, ny = -1;
       if(len > 0.01){ nx = -dy / len; ny = dx / len; }
@@ -2150,7 +2157,7 @@ switch(c.type){
           
           // If driven or placing, show actual geometry value. If driving, show target value.
           const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualRadius;
-          const displayVal = (isDrivenFlag || isPlacing) ? `(${valToShow.toFixed(1)})` : valToShow.toFixed(1);
+          const displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
 
           // Direction from center to label (use offset as radial distance)
           const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0);
@@ -2219,7 +2226,7 @@ switch(c.type){
             // Horizontal: measure X distance, dim line is horizontal, extensions are vertical
             const projDist = Math.abs(j2.x - j1.x);
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${valToShow.toFixed(1)})` : valToShow.toFixed(1);
+            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
             
             const midY = (j1.y + j2.y) / 2;
             const dimY = midY + offset;
@@ -2239,7 +2246,7 @@ switch(c.type){
             // Vertical: measure Y distance, dim line is vertical, extensions are horizontal
             const projDist = Math.abs(j2.y - j1.y);
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${valToShow.toFixed(1)})` : valToShow.toFixed(1);
+            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
             
             const midX = (j1.x + j2.x) / 2;
             const dimX = midX + offset;
@@ -2258,7 +2265,7 @@ switch(c.type){
           } else {
             // Aligned (default — existing behavior)
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : len;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${valToShow.toFixed(1)})` : valToShow.toFixed(1);
+            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
             
             nx = 0; ny = -1;
             if (len > 0.01) { nx = -dy / len; ny = dx / len; }

@@ -3975,6 +3975,43 @@ Design SELECT path, clicking a feature could throw `Cannot read properties of un
 
 === BUGFIX (SHAPER DESIGN CLICK) DONE - HOLD ===
 
+## 2026-06-29 · SP1d — declared kind-tagged Prepare selection model + loop click-select (turn 161) — Shaper-only
+
+Turns SP1c's transient hover into a persistent SELECTION, behind a DECLARED target model that's forward-safe for the
+two cut-target kinds the user settled this turn (region cuts → a closed LOOP; path cuts → a single VECTOR/'edge').
+SP1d builds the LOOP kind + declares the 'edge' slot/seam (edge resolution itself is SP1e). Shaper-only —
+prepare-view.js; main.js needs no change (mountPrepareView's return shape is unchanged + additive).
+
+- **did (`apps/shaper/src/prepare-view.js`):**
+  - **DECLARED the selection model** (declare-over-hand-roll): a target = `{ kind: 'loop' | 'edge', id }`. Selection is
+    a `Map` keyed by `` `${kind}:${id}` `` — a COLLECTION (single-select BEHAVIOR now: click → sole selection, click
+    empty → clear; but the Map shape is forward-safe for shift-click multi-select + the 'edge' kind). 'edge' is in the
+    declared union but not yet resolvable.
+  - **KIND-AWARE dispatcher `resolveTarget(worldPt) → {kind,id}|null`** — ONE seam for cursor→target. TODAY: only the
+    innermost (smallest-area) containing loop → `{kind:'loop', id}`. A CLEAR `// SP1e SEAM` marks where the on-stroke
+    'edge' branch goes FIRST (edge wins over loop within stroke tolerance; the proximity rule lives there). Not built.
+  - **CLICK-to-SELECT** (`pointerdown`): commit the loop under the cursor into the selection (clear+set = single-select);
+    click empty → clear. SELECTED render is DISTINCT from hover: a separate `#prepare-select-group` (behind the hover
+    group, both behind the edges) with a STRONGER fill + solid outline in `--sk-selection`; hover stays a LIGHT
+    `--sk-hover` fill. A hovered loop that's already selected suppresses its hover (selected style wins, no double-draw).
+    Selection PERSISTS across pointer-move/leave. Redraw on selection-change AND hover-change only — no RAF.
+  - Joints stay hidden (Prepare-local renderer, unchanged).
+- **verify (CDP live, errors=0):** nested rects (outer 80-wide + inner 20-wide). Hover inner → light `--sk-hover`
+  highlight, width 20 (SP1c intact). CLICK it → SELECTED width 20 in `--sk-selection` (distinct); `selection.size=1`,
+  key `"loop:loop_ab-bc-cd-da"`, value `{kind:'loop', id}` (kind-tag present). Move the pointer away → selection
+  PERSISTS (width 20) while hover clears. Click the ring → selection MOVES to the outer loop (width 80, size 1). Click
+  empty → selection CLEARED (size 0). `resolveTarget({0,0}) → {kind:'loop', id}`; outside → `null`. Joints = 0. No
+  console errors; event-driven redraw (no RAF). LOAD-SAFE: shared #core/#ui UNCHANGED → SketchStudio byte-identical
+  (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check`
+  clean; scope = prepare-view.js only.
+- **process hygiene:** CDP Edge/server via `run_in_background` + killed each run; `proc_health watch` before the pass =
+  clean (0 flagged in my registered tree); none kept alive.
+- **state:** branch `carve-out`. A loop can be hovered AND selected (persistent), behind a kind-tagged model with the
+  'edge' seam staged. Next: **SP1e** — resolve the 'edge' kind (on-stroke proximity → a single vector wins over the
+  loop) + assign cut types to the selected target. STOP — hold.
+
+=== SP1d (PREPARE SELECTION MODEL + LOOP CLICK-SELECT) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

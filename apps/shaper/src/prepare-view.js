@@ -99,34 +99,81 @@ function clientToWorld(svgEl, cx, cy) {
   return null;
 }
 
-function renderHighlight(hg, loop) {
-  if (!loop || !loop.polygon || loop.polygon.length < 3) { hg.innerHTML = ''; return; }
-  const pts = loop.polygon.map((p) => `${p.x},${p.y}`).join(' ');
-  hg.innerHTML = `<polygon points="${pts}" style="fill:var(--sk-hover, #7aa7e0); fill-opacity:0.25; stroke:var(--sk-hover, #7aa7e0); stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round;"/>`;
-}
+const SVG_NS_G = SVG_NS;
+const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
+const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',' + p.y).join(' ')}" style="${style}"/>`;
+// Hover = LIGHT fill; Selected = STRONGER fill + a solid outline in the selection var — visually distinct (SP1d).
+const HOVER_STYLE = 'fill:var(--sk-hover, #7aa7e0); fill-opacity:0.16; stroke:var(--sk-hover, #7aa7e0); stroke-width:1.5; stroke-opacity:0.6; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
+const SELECT_STYLE = 'fill:var(--sk-selection, #4c9aff); fill-opacity:0.30; stroke:var(--sk-selection, #4c9aff); stroke-width:2.5; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
 
-// ── Mount: render edges + compute loops + wire loop hover-highlight ───────────
+// ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select ──
 export function mountPrepareView(state, svgEl) {
-  if (!state || !svgEl) return { loops: [], destroy() {} };
+  if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   svgEl.innerHTML = ''; // clean re-mount
-  const hg = document.createElementNS(SVG_NS, 'g'); hg.id = 'prepare-hover-group'; svgEl.appendChild(hg); // behind the edges
+  // z-order (later = on top): selected (behind) < hover < edges (on top). Joints stay hidden.
+  const selectG = mkGroup('prepare-select-group'); svgEl.appendChild(selectG);
+  const hoverG = mkGroup('prepare-hover-group');   svgEl.appendChild(hoverG);
   renderPrepareGeometry(state, svgEl);
 
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loops = findLoops(state).map((l) => { const polygon = loopPolygon(l, state, shapeById); return { ...l, polygon, area: polyArea(polygon) }; });
+  const loopById = new Map(loops.map((l) => [l.id, l]));
 
-  let hoveredId = null;
-  const setHover = (loop) => { const id = loop ? loop.id : null; if (id !== hoveredId) { hoveredId = id; renderHighlight(hg, loop); } };
-  const onMove = (e) => {
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
-    if (!wp) return;
+  // SP1d — DECLARED selection model. A target is { kind: 'loop' | 'edge', id }. The selection is a COLLECTION keyed
+  // by `${kind}:${id}` — single-select BEHAVIOR this slice, but the Map shape is forward-safe for multi-select
+  // (shift-click) and for the 'edge' kind (SP1e). 'edge' is declared in the union but not yet resolvable.
+  const selection = new Map(); // key -> { kind, id }
+  const targetKey = (t) => t.kind + ':' + t.id;
+
+  // KIND-AWARE dispatcher: cursor → target. ONE seam for both kinds.
+  function resolveTarget(worldPt) {
+    // SP1e SEAM — the on-stroke 'edge' branch goes HERE, FIRST: if the cursor is within stroke tolerance of a
+    // vector (an open path, or a loop's edge), return { kind: 'edge', id: shapeId } — edge WINS over loop. The
+    // proximity rule (on the stroke → edge; in the open interior → loop) lives here. Not built this slice.
+    // TODAY — LOOP kind only: the innermost (smallest-area) loop whose boundary polygon contains the point.
     let best = null;
-    for (const l of loops) if (l.polygon.length >= 3 && pointInPoly(l.polygon, wp) && (!best || l.area < best.area)) best = l; // smallest-area (innermost)
-    setHover(best);
+    for (const l of loops) if (l.polygon.length >= 3 && pointInPoly(l.polygon, worldPt) && (!best || l.area < best.area)) best = l;
+    return best ? { kind: 'loop', id: best.id } : null;
+  }
+
+  // Resolve a target → its renderable boundary polygon (only the 'loop' kind has one today).
+  const polyOf = (t) => (t && t.kind === 'loop') ? loopById.get(t.id) : null;
+
+  const renderSelection = () => {
+    let out = '';
+    for (const t of selection.values()) { const l = polyOf(t); if (l && l.polygon.length >= 3) out += polyMarkup(l.polygon, SELECT_STYLE); }
+    selectG.innerHTML = out;
   };
+  let hovered = null; // current hovered target { kind, id } | null
+  const renderHover = () => {
+    // Show the hover outline UNLESS that target is already selected (selected style wins — no double-draw).
+    const l = (hovered && !selection.has(targetKey(hovered))) ? polyOf(hovered) : null;
+    hoverG.innerHTML = (l && l.polygon.length >= 3) ? polyMarkup(l.polygon, HOVER_STYLE) : '';
+  };
+
+  const setHover = (t) => {
+    const k = t ? targetKey(t) : null, pk = hovered ? targetKey(hovered) : null;
+    if (k !== pk) { hovered = t; renderHover(); } // redraw on hover-CHANGE only
+  };
+  const onMove = (e) => { const wp = clientToWorld(svgEl, e.clientX, e.clientY); if (!wp) return; setHover(resolveTarget(wp)); };
   const onLeave = () => setHover(null);
+  const onDown = (e) => {
+    const wp = clientToWorld(svgEl, e.clientX, e.clientY); if (!wp) return;
+    const t = resolveTarget(wp);
+    selection.clear();                       // single-select BEHAVIOR (shift-click multi-select is a later slice)
+    if (t) selection.set(targetKey(t), t);   // click empty → cleared selection
+    renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected loop drops its hover)
+  };
   svgEl.addEventListener('pointermove', onMove);
   svgEl.addEventListener('pointerleave', onLeave);
+  svgEl.addEventListener('pointerdown', onDown);
 
-  return { loops, destroy() { svgEl.removeEventListener('pointermove', onMove); svgEl.removeEventListener('pointerleave', onLeave); } };
+  return {
+    loops, selection, resolveTarget,
+    destroy() {
+      svgEl.removeEventListener('pointermove', onMove);
+      svgEl.removeEventListener('pointerleave', onLeave);
+      svgEl.removeEventListener('pointerdown', onDown);
+    },
+  };
 }

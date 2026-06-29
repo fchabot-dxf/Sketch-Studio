@@ -3856,6 +3856,39 @@ NO joints — via a Prepare-LOCAL renderer (option B), so the shared `#ui/svg-re
 
 === SP1a (PREPARE RENDER, JOINTS HIDDEN) DONE - HOLD ===
 
+## 2026-06-29 · SP1b — #core/loop-finder.js + oracle (turn 155) — the loop-detection engine
+
+The topological loop detector for Prepare's cut-region selection. PURE + ADDITIVE — nothing else imports it, so
+SketchStudio + existing #core are byte-identical. NOT wired into Prepare yet (SP1c).
+
+- **did:**
+  - **`packages/core/loop-finder.js`** (new, pure) — `findLoops(state) → Loop[]`, `Loop = { id, joints:[nodeId…],
+    edges:[shapeId…], closed:true }` (ordered boundary). Pure fn of `state.joints` (Map id→{x,y}) + `state.shapes`
+    (line: joints[0,1]; arc: start/center/end at [0]/[1]/[2]; circle: center + radius) + `state.constraints`.
+  - **ALGORITHM — planar FACE TRAVERSAL** (stated): build the joint↔edge graph — coincident joints MERGED into one
+    node (union-find over coincident constraints = `getCoincidentJoints` equivalent, canonical = min joint id);
+    EDGES = lines + arc CHORDS (joints[0]→joints[2]); CIRCLES = inherent standalone loops. At each node, sort
+    incident half-edges CCW by angle; the next face half-edge is the one immediately CLOCKWISE from the reverse
+    arrival edge → each BOUNDED face is traced CCW (signed area > 0); the unbounded outer face per component comes
+    out CW (area < 0) and is DROPPED. → the MINIMAL enclosed loops (two rects sharing an edge → the 2 small loops).
+    Open chains / dangles fall into the outer face → no loop. Deterministic ids (from the sorted edge set) + order.
+  - **ARC handling (flagged):** chord-approximated for connectivity + the angular sort; the loop keeps the arc's
+    shapeId (consumer renders the true curve). LIMITATION: two arcs sharing both endpoints with an equal chord
+    angle are ambiguous under chord-approx (tangent-disambiguation deferred).
+  - **`tests/loop-finder.test.js`** (new oracle) — builds sketches in the state shape + asserts: triangle→1 (3
+    edges); rectangle→1; **two rects sharing an edge→2 minimal loops (4 edges each)**; single circle→1; open
+    polyline→0; closed loop + dangle→1 (dangle excluded); coincident-merged triangle→1 (the merge); arc-closed→1;
+    deterministic ids.
+- **verify:** `node tests/loop-finder.test.js` **passes** (all 8 cases + determinism, first run — the CCW-keep/
+  CW-drop sign convention is correct). ADDITIVE: existing #core UNCHANGED, no SketchStudio importer → SketchStudio
+  byte-identical (`npm run test:shell` **12/12**); solver oracle **12/12**; guard GREEN; baseline-diff = the 8
+  pre-existing, **0 net-new** (the new test PASSES, not in the failing set); `node --check` clean; scope =
+  `loop-finder.js` + its test.
+- **state:** branch `carve-out`. The loop engine exists + is oracle-proven. Next: **SP1c** — wire it into Prepare:
+  point-in-loop on hover → fill/outline the loop under the cursor (the user's first target). STOP — hold.
+
+=== SP1b (LOOP-FINDER + ORACLE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

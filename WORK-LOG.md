@@ -4382,6 +4382,42 @@ field SketchStudio also uses; the default (mm, bare number) path stays byte-iden
 
 === U2 (UNITS IN THE #core DIMENSION FIELD) DONE - HOLD ===
 
+## 2026-06-29 · U3 — GATE (turn 178): scope findings + proposed split. NO code (held for advisor re-scope).
+
+Investigated U3 before building. Two dispatch assumptions don't hold + the slice is 5-part with two large/shared
+pieces, so I'm gating rather than big-banging shared code (load-safe-slice invariant + reset history).
+
+**Findings (verified by grep):**
+1. **Shaper does NOT mount the shared style-panel — and has NO Style button / app-header at all.** `createStylePanel`,
+   `createAppHeader`, `onStyle`, "Style" → ZERO hits in `apps/shaper/`. The dispatch's plan — "add the doc-unit
+   selector to `#ui/style-panel.js` (host-opt-in) … Shaper enables it" — has NO panel in Shaper to enable it in. The
+   toggle needs a HOME: either (A) Shaper ADOPTS the shared style panel (mount it + a Style affordance), or (B) a
+   Shaper-LOCAL toggle (e.g. in the Prepare cut card header, or the mode-nav).
+2. **"dimensions also re-label" = a SHARED renderer change.** The canvas dimension LABELS render raw `c.value` at ~6
+   sites in `svg-renderer.js` (`valToShow = c.value` @ 2149/2210/2221/2241/2260/2403 + the live-draw `toFixed(1)` @
+   1351). Re-labeling them on a unit switch means routing those through `units.format` + re-rendering on `DOC_UNIT`
+   change — shared (affects SketchStudio's labels; byte-identical at mm) and non-trivial.
+3. **Cut-param precision:** the fields need ~3 decimals (mockup `0.125in` / `0.500in`); today's `toFixed(3)` local
+   helper must become `units.format(baseMM, docUnit, {decimals: 3})`, and the depth STEPPER must step in the DOC unit
+   (not raw mm) or the increments are unusable.
+4. **Shaper inch-default** needs conditional persistence (`settings.set('DOC_UNIT','in')` only when the user hasn't
+   chosen) so it doesn't clobber the user's toggle each boot.
+
+**Proposed split (load-safe sub-slices):**
+- **U3a — cut params → BASE mm + units (Shaper-only, self-contained, LOW risk):** `defaultCutRecord` toolDia
+  0.125→3.175mm; `BIT_PRESETS` ×25.4 (base mm, inch labels kept); cut fields parse/format via `units` (decimals 3);
+  depth stepper steps in the doc unit; the cut panel subscribes to `DOC_UNIT` → re-label. Verify by setting `DOC_UNIT`
+  programmatically (no toggle yet). SketchStudio untouched. ← recommend FIRST.
+- **U3b — the doc-unit TOGGLE + Shaper's settings home:** add the host-opt-in `showDocUnit` control (mm|cm|in) to
+  `#ui/style-panel.js` (SketchStudio does NOT enable it → stays 16 controls / byte-identical); decide A vs B for
+  Shaper's toggle home (recommend a Shaper-local control if adopting the full style panel + Style button is too much
+  for one slice); Shaper `DOC_UNIT` default 'in' (conditional persist).
+- **U3c — dimensions re-label (shared renderer):** route the dim-label `c.value` formatting through `units.format` +
+  re-render on `DOC_UNIT` change. Shared; byte-identical at mm.
+
+**Recommendation:** dispatch **U3a** next (self-contained, no shared-UI risk, immediately verifiable), then U3b
+(toggle + home decision), then U3c (renderer relabel). Worker holding — NO code written this turn.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

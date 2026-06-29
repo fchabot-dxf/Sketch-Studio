@@ -2847,6 +2847,51 @@ this is PLANNED in load-safe slices, not big-banged.
 
 === S6 PLAN READY - HOLD ===
 
+## 2026-06-28 · S6a — Shaper 4-mode app nav + view router (turn 113) — Shaper-only, the shell SKELETON
+
+First slice of S6 (the 4-mode restructure). The SKELETON only: a header mode-nav + a view router over 4
+containers. Design KEEPS its current floating dock this slice (S6b swaps it for the fixed panel). Sliced
+deliberately — no big-bang (R-RESET).
+
+- **did (apps/shaper/index.html + src/main.js):**
+  - **Header mode-nav** — replaced the `#tab-design` Design button (and the `← Editor` back toggle) with a
+    4-mode `<nav class="mode-nav">`: **Explore | Design | Prepare | Simulate/Export** (active one highlighted via
+    `.mode-btn.active`, accent `--sk-selection`). The SVG editor's file actions (Open SVG/Fit/Export) are grouped
+    in `#explore-actions` — shown only while Explore is active.
+  - **View containers** — Explore = the existing `main.layout` (the SVG editor, untouched — just shown/hidden via
+    `display`); Design = `#design-view` (the sketcher, KEEPS the floating dock this slice); **Prepare** +
+    **Simulate/Export** = two new stub `<section>`s (absolute overlays like #design-view).
+  - **View router** (`showMode(mode)`) — shows the active container, hides the rest; toggles `#explore-actions`;
+    syncs the nav highlight; **persists** the active mode (`localStorage 'shaper-mode'`), restored on load
+    (default Explore). Replaces `showDesign`/`showEditor`. The editor is inited ONCE at module load; the router
+    only shows/hides (R-EDITOR-WIRING).
+  - **Design lifecycle + R-COEXIST** — the sketcher mounts ONCE (`ensureSketch`, idempotent); its RAF `start()`s
+    when Design becomes active and `stop()`s on leaving. The input layer's `isActive` is tied to
+    `currentMode === 'design'` (NOT mere `#design-view` visibility), so Explore/Prepare/Sim keystrokes never
+    reach the sketcher.
+  - Removed the now-dead `#tab-design.active` CSS + the `editorView`/`tabDesign`/`designBack` refs (orphans of
+    this change); the `.design-bar` is kept this slice solely to host the floating dock's tab strip.
+- **verify (CDP — the real symptom):**
+  - 4-mode nav: `navCount=4`, `modes=explore,design,prepare,simexport`; each click shows exactly its view, active
+    highlighted (`exploreActive`/`designActive` true; the off-mode views `hidden`).
+  - Explore = the SVG editor: `main.layout` visible, `#open/#fit/#export` present, `#fit` clicks without error;
+    `#explore-actions` visible in Explore, hidden in Design.
+  - Design: `#design-world-group` renders **12** elements; the floating dock is present this slice (`dockPresent`).
+  - Prepare/Sim-Export stubs show their placeholder text; switching hides the others.
+  - **R-COEXIST gate:** `'l'` dispatched while **Design** active → tool switches to `line` (gate OPEN);
+    `'c'` dispatched while **Explore** active → tool stays `line`, NOT `circle` (gate CLOSED — keystrokes don't
+    reach the sketcher off-Design).
+  - **Persist across reload:** after driving to Design, a fresh load restores `restoredActive=design`,
+    `designVisible=true` (`localStorage 'shaper-mode'='design'`).
+  - **SketchStudio byte-identical:** world-group **5**, no `.sk-dock`, no `.mode-nav`. Both apps `errors=0`.
+  - guard GREEN (77 files / 208 specs) · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean ·
+    scope = only apps/shaper (index.html + main.js).
+- **state:** branch `carve-out`. Shaper is now a 4-mode app shell; Explore=editor, Design=sketcher (floating dock
+  still, this slice), Prepare/Sim-Export stubs. Next: **S6b** — retire the floating dock for a FIXED docked side
+  panel in Design (constraint list + DOF on TOP, tool-palette at BOTTOM), reusing the #ui factories. STOP — hold.
+
+=== S6a (4-MODE NAV + ROUTER) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

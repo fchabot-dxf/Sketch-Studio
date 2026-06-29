@@ -58,12 +58,24 @@ async function loadFile(file) {
   }
 }
 
-// ── Design tab: toggle the shared #ui sketcher (real renderer, P5a); the SVG editor is left untouched. ──
-const editorView = document.querySelector('main.layout');
-const designView = document.getElementById('design-view');
-const tabDesign = document.getElementById('tab-design');
-const designBack = document.getElementById('design-back');
-let designController = null; // mounted once; controls the RAF render loop (started on show, paused on hide)
+// ── S6a: 4-mode app shell — a view router over Explore / Design / Prepare / Simulate-Export. ──
+// Replaces the old editor↔Design toggle. The SVG editor (Explore) is inited ONCE above and never re-inited; the
+// router only shows/hides containers. The shared sketcher (Design) mounts once on first entry; its RAF runs only
+// while Design is the active mode, and the input layer's isActive gate is tied to the ACTIVE MODE (not mere
+// visibility) so Explore/Prepare/Sim keystrokes never reach the sketcher (R-COEXIST).
+const VIEWS = {
+  explore:   document.querySelector('main.layout'),   // the existing SVG editor (normal flow)
+  design:    document.getElementById('design-view'),  // the shared sketcher (absolute overlay)
+  prepare:   document.getElementById('view-prepare'),
+  simexport: document.getElementById('view-simexport'),
+};
+const designView = VIEWS.design;
+const modeBtns = [...document.querySelectorAll('.mode-btn')];
+const exploreActions = document.getElementById('explore-actions');
+const MODE_KEY = 'shaper-mode';
+let currentMode = 'explore';
+
+let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
 let dock = null, infoPanel = null, palette = null, lastSig = '';
 
 // Refresh the dock's tool palette + info panel when the sketch changes (active tool / constraint count / values /
@@ -86,8 +98,8 @@ function buildDock() {
   infoPanel = createDesignInfoPanel({ state, engine });
   dock = createTabbedDockPanel({
     persistKey: 'shaper-design-dock',
-    // S5-fix: render the workflow tabs in the Design view's header bar (primary nav) — the floating panel shows
-    // only the active tab's content. The .design-bar is inside #design-view so the tabs hide with the tab.
+    // S6a keeps the floating dock for this slice; its tab strip still renders into the in-view .design-bar. (S6b
+    // retires the floating dock for a fixed side panel; the header mode-nav is now the app's primary nav.)
     tabStripTarget: designView.querySelector('.design-bar'),
     tabs: [
       // Design tab: the tool palette ABOVE the live constraint-list/DOF info panel.
@@ -100,27 +112,36 @@ function buildDock() {
   designView.appendChild(dock.el);
 }
 
-function showDesign() {
-  // Make the canvas visible BEFORE mounting/starting so the first render frame sees a laid-out svg.
-  designView.hidden = false;
-  if (editorView) editorView.style.display = 'none';
-  tabDesign.classList.add('active');
-  if (!designController) {
-    designController = mountSketch(document.getElementById('design-canvas'), {
-      // P5b: gate the shared input layer's document-level listeners to the Design tab.
-      isActive: () => !designView.hidden,
-      // S5c: refresh the dock's info panel on change, in sync with the render loop.
-      onRender: dockTick,
-    });
-    buildDock();
-  }
-  designController.start(); // idempotent (guards against a second RAF)
+// Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view
+// visibility, so the input layer's document listeners no-op unless Design is the current mode.
+function ensureSketch() {
+  if (designController) return;
+  designController = mountSketch(document.getElementById('design-canvas'), {
+    isActive: () => currentMode === 'design',
+    onRender: dockTick, // S5c: refresh the dock's panels on change, in sync with the render loop
+  });
+  buildDock();
 }
-function showEditor() {
-  if (designController) designController.stop(); // pause the RAF while the Design tab is hidden
-  designView.hidden = true; // hides #design-view AND the dock (its child)
-  if (editorView) editorView.style.display = '';
-  tabDesign.classList.remove('active');
+
+// The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the
+// other three are absolute overlays (hidden attr). Drives the Design RAF lifecycle + persists the active mode.
+function showMode(mode) {
+  if (!VIEWS[mode]) mode = 'explore';
+  currentMode = mode;
+  VIEWS.explore.style.display = (mode === 'explore') ? '' : 'none';
+  VIEWS.design.hidden    = (mode !== 'design');   // make the canvas visible BEFORE start() so frame 1 sees a laid-out svg
+  VIEWS.prepare.hidden   = (mode !== 'prepare');
+  VIEWS.simexport.hidden = (mode !== 'simexport');
+  if (exploreActions) exploreActions.style.display = (mode === 'explore') ? '' : 'none';
+  modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
+  else if (designController) designController.stop();                   // pause the RAF off Design
+  try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
 }
-tabDesign.addEventListener('click', () => (designView.hidden ? showDesign() : showEditor()));
-designBack.addEventListener('click', showEditor);
+
+modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mode)));
+
+// Restore the last active mode (default Explore).
+let initMode = 'explore';
+try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (_) { /* storage blocked */ }
+showMode(initMode);

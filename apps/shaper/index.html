@@ -43,23 +43,37 @@
       --sk-origin: #4c9aff;
       --sk-error: #f87171;
     }
-    #design-view { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; background: #0b1020; z-index: 5; }
-    #design-view[hidden] { display: none; }
-    .design-bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; background: #111827; border-bottom: 1px solid #1f2937; }
+    #design-view, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; background: #0b1020; z-index: 5; }
+    #design-view[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
+    .design-bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; background: #111827; border-bottom: 1px solid #1f2937; min-height: 18px; }
     #design-canvas { flex: 1; width: 100%; min-height: 0; }
-    #tab-design.active { background: #2563eb; color: #fff; }
+    /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
+    #view-prepare, #view-simexport { align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
+    .mode-nav { display: flex; gap: 4px; align-items: center; }
+    .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
+    .mode-btn:hover { background: rgba(255,255,255,0.08); opacity: 0.95; }
+    .mode-btn.active { background: var(--sk-selection, #4c9aff); color: #fff; opacity: 1; }
   </style>
 </head>
 <body>
   <header class="toolbar">
-    <strong>SVG Editor</strong>
-    <span class="subtitle">Shaper Origin</span>
+    <strong>Shaper</strong>
+    <!-- S6a: 4-mode app nav (primary navigation) — replaces the old Design button + the back-to-Editor toggle. -->
+    <nav id="mode-nav" class="mode-nav">
+      <button class="mode-btn" data-mode="explore">Explore</button>
+      <button class="mode-btn" data-mode="design">Design</button>
+      <button class="mode-btn" data-mode="prepare">Prepare</button>
+      <button class="mode-btn" data-mode="simexport">Simulate/Export</button>
+    </nav>
     <span class="spacer"></span>
-    <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
-    <button id="open">Open SVG</button>
-    <button id="fit">Fit</button>
-    <button id="export">Export</button>
-    <button id="tab-design">Design</button>
+    <!-- Explore-mode actions (SVG editor file ops) — shown only while Explore is active (router toggles). -->
+    <span id="explore-actions">
+      <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
+      <button id="open">Open SVG</button>
+      <button id="fit">Fit</button>
+      <button id="export">Export</button>
+    </span>
   </header>
 
   <main class="layout">
@@ -73,12 +87,15 @@
   <!-- Shared #core-backed Design canvas (S1 proof). Hidden until the Design tab is toggled. -->
   <section id="design-view" hidden>
     <div class="design-bar">
-      <button id="design-back">← Editor</button>
-      <!-- The workflow tabs (Design/Prepare/Export/Settings) render here as primary nav (S5-fix): the dock's
-           tabStripTarget is this bar; the floating panel shows only the active tab's content. -->
+      <!-- S6a: the back-to-Editor toggle is replaced by the header mode-nav. This bar still hosts the floating
+           dock's tab strip (S5 tabStripTarget) for THIS slice; S6b swaps the floating dock for a fixed panel. -->
     </div>
     <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
   </section>
+
+  <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->
+  <section id="view-prepare" hidden>Prepare — cut type + toolpath (coming soon).</section>
+  <section id="view-simexport" hidden>Simulate / Export — cut simulation + export (coming soon).</section>
 
   <script type="module" src="src/main.js"></script>
 </body>

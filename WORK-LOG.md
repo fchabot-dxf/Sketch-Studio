@@ -3374,6 +3374,40 @@ settings STORE + the renderer reacting to it are ALREADY shared — only the PAN
 
 === S7c-2 (SHARED HEADER) PLAN READY - HOLD ===
 
+## 2026-06-29 · S7c-2a — build the shared #ui/app-header.js shell (standalone) (turn 131)
+
+First slice of the shared-header arc: the configurable app-header chrome, extracted to #ui/. STANDALONE — no app
+adopts it yet, so BOTH apps stay byte-identical (Studio adopts at S7c-2c; Shaper folds its S6 mode-nav in later).
+
+- **did (packages/ui/app-header.js — new):**
+  - `createAppHeader({ tabs, actions?, onTabChange?, activeTab?, onStyle?, styleButton?, styleLabel?, styleIcon? })
+    → { el, render(container), setActiveTab(id), getActiveTab(), destroy }`.
+  - **Tab strip** from `tabs:[{ id, label, icon? }]` — a `.sk-header-tab` per tab; active-highlighted. A USER click →
+    `setActive(id, true)` = highlight + **`onTabChange(id)`** (the host routes its view). The public
+    **`setActiveTab(id)` is programmatic-only — it updates the highlight but does NOT fire `onTabChange`** (so a
+    host syncing the header to its router can't cause a loop).
+  - **Actions area** (right, after a flex spacer): a built-in **Style** button (`.sk-header-style`) whose click
+    fires **`onStyle()`** (the host opens the shared style panel in S7c-2c; `styleButton:false` hides it) + per-app
+    **`actions:[{ id, label, icon?, title?, onClick }]`** (e.g. Debug) rendered as `.sk-header-action` (keeps the
+    `id` so a host can also bind by id).
+  - **Plain CSS, --sk-* themed** — self-injected `#sk-header-styles` once; `--sk-header-*` chrome vars with LIGHT
+    defaults (SketchStudio look), active tab = `var(--sk-selection, #3B82F6)`; a dark `:root` (Shaper, later)
+    retints the SAME component. Imports nothing; mirrors the dock/ribbon widget conventions.
+- **verify (CDP smoke, isolation):** `createAppHeader({ tabs:[Design,Export], actions:[Debug], onTabChange, onStyle,
+  activeTab:'design' })` → tab strip (`tabCount=2`) + Style + Debug render; `initialActive=design`; clicking the
+  Export tab → `afterClickActive=export` + `onTabChangeFired`; programmatic `setActiveTab('design')` →
+  `afterSetActive=design` + `setActiveNoFire` (NO onTabChange) + `getActive=design`; the Debug action `onClick`
+  fired; the Style button click fired (`styleFired`); `changes=[export]` (only the user click routed).
+  - **Both apps byte-identical (no adopter):** Shaper + SketchStudio have no `.sk-header`/`#sk-header-styles`;
+    SketchStudio world-group **5**. Both `errors=0`.
+  - guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · scope = `#ui/` only
+    (app-header.js new).
+- **state:** branch `carve-out`. The shared header shell exists + behaves; no app uses it yet. Next: **S7c-2b** —
+  the shared style panel (`#ui/style-panel.js`), extracted from settings-panel.js, bound to the already-shared
+  `#core/settings-manager.js`. STOP — hold.
+
+=== S7c-2a (SHARED HEADER SHELL) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

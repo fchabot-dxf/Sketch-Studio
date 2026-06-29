@@ -4305,6 +4305,38 @@ U3 Shaper cut params + toggle → SP1h. The one decision likely needing the USER
 
 === UNITS PLAN READY - HOLD ===
 
+## 2026-06-29 · U1 — pure #core/units.js (parse/format + oracle) + inert DOC_UNIT setting (turn 174)
+
+The units FOUNDATION. Decisions settled by the advisor: base = 1 world unit = 1 mm (a #core constant); switching the
+doc unit RE-LABELS (no resize); the toggle UI is a later slice (U3, a 'Units' section of a settings modal). U1 ships
+ONLY the pure util + oracle + an INERT setting — nothing adopts it → both apps BYTE-IDENTICAL.
+
+- **did:**
+  - **`packages/core/units.js`** (new, pure, no DOM): `BASE = 'mm'` (1 world unit = 1 mm). `parse(str, docUnit) →
+    baseMM | null` — a trailing unit suffix (mm|cm|in, case-insensitive, optional space) OVERRIDES docUnit; a BARE
+    number = docUnit; handles `'5' '5mm' '0.25in' '5 mm' '.25in' '5MM' '5.'` + negatives; empty/invalid → null.
+    `format(baseMM, docUnit, opts) → string` — converts mm→docUnit; `opts.decimals` default 1 (= today's
+    `toFixed(1)`); `opts.unit:true` → the Shaper EXPORT form (minimal precision, trailing zeros trimmed, + suffix:
+    `'0.25in'`/`'6.35mm'`/`'1in'`) so SP1j reuses it. Conversions 1in=25.4mm, 1cm=10mm. FRACTIONS ('1/8') NOT
+    supported here (→ null) — noted for the U3 cut-param presets (which already store decimals).
+  - **`tests/units.test.js`** (new oracle): parse (bare uses docUnit; suffix overrides; in↔mm; cm; tolerant
+    `.25in`/`5 mm`/`5MM`/`5.`/neg; invalid + `1/8` → null); format precision — **`format(5,'mm') === '5.0'` (toFixed(1)
+    parity)**, edges → `''`; `{unit:true}` emits `6.35mm`/`0.25in`/`1in`; round-trips. All pass.
+  - **`packages/core/settings-manager.js`**: added `DOC_UNIT: 'mm'` to `DEFAULT_SETTINGS` (persisted like other
+    settings, default = base so a bare number is unchanged). NO UI (toggle is U3).
+- **verify:** `node tests/units.test.js` PASSES (all parse/format + edges + export-form + round-trips). INERT —
+  units.js has NO importer (grep: only a comment reference in settings-manager); the dimension field + cut params
+  UNCHANGED → both apps BYTE-IDENTICAL. `npm run test:shell` **12/12** (SketchStudio loads, errors=0; DOC_UNIT inert,
+  the 16-control style panel unchanged); solver oracle **12/12**; guard GREEN; baseline 8 pre-existing **0 net-new**
+  (the new units test PASSES); `node --check` clean; scope = units.js + units.test.js + settings-manager.js (one
+  DEFAULTS key).
+- **process hygiene:** no servers/browsers spawned this slice (pure Node tests); `proc_health watch` clean.
+- **state:** branch `carve-out`. The units util + base/doc model + inert setting exist + are oracle-proven. Next:
+  **U2** — adopt in the #core dimension field (live-dimension-input.js): parse/format via units, explicit-unit
+  override; doc=mm default keeps SketchStudio byte-identical (the SHARED slice — verify BOTH apps). STOP — hold.
+
+=== U1 (CORE UNITS UTIL + SETTING, INERT) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

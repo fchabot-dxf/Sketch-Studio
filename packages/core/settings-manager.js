@@ -64,7 +64,12 @@ const DEFAULT_SETTINGS = {
     AI_VISION: false,
 
     // Preset name
-    PRESET: 'CAD'
+    PRESET: 'CAD',
+
+    // Document unit (U1, INERT): the display/input unit for dimension + cut-param fields. Base = 1 world unit = 1 mm
+    // (see #core/units.js); switching RE-LABELS (no resize). Default 'mm' = the base, so a bare number is unchanged.
+    // Nothing reads it yet (the toggle UI is U3) → additive, both apps byte-identical.
+    DOC_UNIT: 'mm'
 };
 
 class SettingsManager {

@@ -40,10 +40,10 @@ export function cutTypeById(id) {
   return CUT_TYPES.find((t) => t.id === id) || null;
 }
 
-// A fresh per-target cut record. FULL shape declared now (forward-safe for SP1g's depth/offset/bit-dia rows);
-// SP1f only ever writes cutType.
+// A fresh per-target cut record. Numeric fields are in BASE mm (U3a; 1 world unit = 1 mm) — the cut panel
+// displays/parses them through the document unit. toolDia default 3.175 mm = 1/8 in.
 export function defaultCutRecord() {
-  return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 0.125 };
+  return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 };
 }
 
 // Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'edge').

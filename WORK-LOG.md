@@ -4418,6 +4418,39 @@ pieces, so I'm gating rather than big-banging shared code (load-safe-slice invar
 **Recommendation:** dispatch **U3a** next (self-contained, no shared-UI risk, immediately verifiable), then U3b
 (toggle + home decision), then U3c (renderer relabel). Worker holding — NO code written this turn.
 
+## 2026-06-29 · U3a — Shaper cut params → BASE mm + units (turn 180) — Shaper-only, self-contained
+
+The safe first slice of the re-scoped U3 (advisor accepted the split). Brings the Shaper cut-param fields into the
+units model: values stored in BASE mm, parsed/formatted through `#core/units.js` per the document unit, with NO
+toggle yet (DOC_UNIT stays the global default 'mm'). Shaper-only → SketchStudio UNTOUCHED.
+
+- **did:**
+  - **`apps/shaper/src/shaper.js`** — `defaultCutRecord()` `toolDia` 0.125 → **3.175** (= 1/8 in in base mm).
+    cutOffset 0, cutDepth 'unset' unchanged. No data migration (CUT_PLAN is in-memory).
+  - **`apps/shaper/src/cut-panel.js`** — `BIT_PRESETS` VALUES → base mm (×25.4: .02→0.508, 1/8→3.175, 1/4→6.35,
+    1/2→12.7); LABELS kept as imperial bit sizes. Imports `SettingsManager` + `units.parse/format`. `getDocUnit()` =
+    `SettingsManager.get('DOC_UNIT') || 'mm'`. Display: `units.format(baseMM, docUnit, {decimals: 3})` (mockup shows
+    0.125/0.500). Commit: `units.parse(value, docUnit)` (suffix overrides; bare = doc unit). The depth STEPPER steps
+    in the DOC unit (convert base→doc number via a 6-dp format, ±DEPTH_STEP, convert back via parse) so increments are
+    usable in any unit. The 3 unit-suffix labels re-label to the doc unit. A `renderFields()` re-formats the displayed
+    values; the panel SUBSCRIBES to `DOC_UNIT` → `renderFields()` so the fields RE-LABEL live on a unit switch (no
+    resize — base values unchanged); `unsub` in `destroy`.
+- **verify (CDP live, component-level on the real cut-panel, errors=0):** DOC_UNIT='mm' → bit `3.175` (1/8" base),
+  depth `''` (unset), offset `0.000`, unit labels `mm`. Set DOC_UNIT='in' → fields RE-LABEL: bit `0.125` (÷25.4),
+  labels `in` (no resize). 1/8 preset → emits `toolDia` 3.175 base. Type `5mm` in the bit field (inch doc) → 5 base
+  (suffix overrides). Depth stepper from 'unset' (inch doc) → DEPTH_START 0.1 in → 2.54 base. toolDia 5 base displays
+  `0.197` in inch doc. LOAD-SAFE: shared #core/#ui UNCHANGED + cut-panel/shaper are Shaper-only → SketchStudio
+  UNTOUCHED (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new;
+  `node --check` clean; scope = cut-panel.js + shaper.js.
+- **process hygiene:** CDP Edge/server via `run_in_background` + killed each run; **manually confirmed no stray
+  Edge/servers** (proc_health.py watch still throws the JSONDecodeError from U2 — a system process's control-char argv;
+  flagged there).
+- **state:** branch `carve-out`. Cut params are units-aware (base mm, doc-unit display/parse), re-labeling on
+  DOC_UNIT change — but DOC_UNIT is still global 'mm' (no toggle). Next: **U3b** — the doc-unit toggle + its home in
+  Shaper (adopt the shared style panel vs a Shaper-local control) + Shaper inch-default. STOP — hold.
+
+=== U3a (SHAPER CUT PARAMS -> BASE mm + UNITS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

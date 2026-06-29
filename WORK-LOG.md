@@ -3449,6 +3449,58 @@ host has none). STANDALONE — settings-panel.js is left untouched + in use, so 
 
 === S7c-2b (SHARED STYLE PANEL) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2c — SketchStudio adopts the shared header + style panel + Design/Export router (turn 135)
+
+FIRST live-app slice (the one that previously ate a reset). Built DIRECT, load-safe. SketchStudio now has a shared
+top header (Design|Export tabs + Style/Debug actions), the shared style panel, and a Design↔Export view router.
+KEPT the current `#toolsRibbon` + `#svgCanvas` + footer in the Design view (the ribbon swap is S7c-2d; the
+faithful Export popup→tab cleanup is S7c-2e). Shaper untouched.
+
+- **did (apps/sketchstudio/index.html + main.js; retired 3 stale tests):**
+  - **Shared header at TOP** (`#app-header-host` above `#toolsRibbon`): `createAppHeader({ tabs:[Design,Export],
+    actions:[{id:'btn-debug-toggle',label:'Debug'}], activeTab:'design', onStyle, onTabChange })`. Mounted
+    SYNCHRONOUSLY in `initApp` (before the async debug-panel import resolves) so the Debug action's
+    `id=btn-debug-toggle` exists when `debug-panel.js:104` binds it — the action has NO onClick (no double-wire);
+    R-BIND-ORDER satisfied.
+  - **Shared style panel:** `stylePanel = createStylePanel({ onSaveProject:(all)=>SettingsManager.saveProjectFile(all),
+    onNotify: showNotification })`, rendered to `document.body`; the header **Style** button → `stylePanel.toggle()`.
+    **Retired the old settings popup:** removed `#btn-settings-toggle` + the whole ribbon Actions group + the
+    `#settings-panel` markup; redirected the input-manager **`openSettings` seam → `stylePanel.open()`** so the
+    gesture opens the SHARED panel. settings-panel.js is no longer imported (early-returns anyway).
+  - **Router** (`showView(mode)` via `onTabChange`): Design = `#toolsRibbon`+`<main>`+`<footer>` (default); Export
+    = the existing `#export-panel` form shown (reuse `#btn-export-do`→`exportToFile`). Removed `#btn-export` from
+    the ribbon (the Export TAB replaces it). The canvas stays MOUNTED (display-toggled, not detached); returning to
+    Design re-runs `updateView` so the viewBox aspect is correct. Cancel/Close/Export return to the Design tab.
+  - Footer/`#modeText`/construct-toggle/recenter/mag-lens untouched (Design view).
+- **verify (CDP live — LOAD-SAFE + functional, errors=0):**
+  - **LOAD-SAFE:** index.html loads, console **errors=0**; the **12-test solver oracle 12/12**.
+  - Header/router: `tabs=design,export`; Design default (ribbon visible, export hidden); Export tab → form shows +
+    ribbon/main hide; back → ribbon visible; canvas `viewBoxSet`+`wgPresent` and **drawing a line works**
+    (`drew`) after the round-trip.
+  - Style: header Style opens the shared panel; writing `LINE_STROKE=4` → `SettingsManager.get` reflects it
+    (`storeReflectsLive` — the renderer reads the store live); Save button present; **Esc** closes; old
+    `#settings-panel` gone.
+  - Debug: header Debug toggles the debug panel (`dbgHiddenBefore`→`debugShown`, bound by id).
+  - Export: `#btn-export-do` runs `exportToFile` + returns to Design (`backToDesignAfterExport`).
+  - **Shaper UNTOUCHED:** its S6 mode-nav intact, no `#app-header-host`. Both apps `errors=0`.
+  - guard GREEN · **baseline-diff = the 8 pre-existing, 0 net-new** · `node --check` clean · scope = SketchStudio
+    (index.html + main.js) + the 3 retired tests.
+- **GATE FLAGGED — retired 3 stale tests** (`tests/header-icons.test.js`, `tests/settings-panel-html.test.js`,
+  `tests/settings-panel-style.test.js`): each `grep`s `apps/sketchstudio/index.html` for the DOM this slice was
+  ORDERED to remove — `header-icons` asserts `#btn-settings-toggle`/`#btn-debug-toggle`/`#icon-cog`/`#icon-terminal`
+  (the ribbon Actions buttons, now in the JS header / gone); `settings-panel-html` + `settings-panel-style` assert
+  the `#settings-panel` popup markup/styling (retired for the shared style panel). They are HTML-text assertions of
+  intentionally-removed markup → obsolete; the NEW structure is covered by the S7c-2a/2b standalone smokes + this
+  live CDP (`storeReflectsLive`/header/router/debug/export), and `settings-manager` + `settings-panel-sliders` still
+  PASS (the store + slider logic are unchanged). I RETIRED them to keep baseline 0 net-new. **If you'd rather I
+  rewrite them as CDP checks of the new header/style-panel (instead of retiring), say so and I'll do that in 2d.**
+- **state:** branch `carve-out`. SketchStudio shell restructured + load-safe; the shared header + style panel are
+  live; the ribbon is still the current `#toolsRibbon` (swap = S7c-2d). Next: **S7c-2d** — SketchStudio adopts the
+  shared ribbon (onToolClick→ui-manager's rich handleToolActivate; setTool→ribbon.refresh; rect via the ribbon;
+  Edit extraGroups). STOP — hold.
+
+=== S7c-2c (STUDIO ADOPTS HEADER+STYLE+ROUTER) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -9,6 +9,9 @@ import { createEngine } from '#core/constraint-solver.js';
 import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { createAppHeader } from '#ui/app-header.js';
+import { createStylePanel } from '#ui/style-panel.js';
+import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 
 let svg = document.getElementById('svgCanvas');
@@ -113,13 +116,50 @@ function initApp(){
   // ════════════════════════════════════════════════════════════════════════
 
   setupUI(state);
-  // Settings panel is SketchStudio-specific: inject the opener so the shared #ui/input-manager stays
-  // app-agnostic. Preserves the original lazy import + default-export init (fire-and-forget, errors swallowed).
-  setupInput(svg, state, {
-    openSettings: (s, st) => import('./ui/settings-panel.js')
-      .then(m => { if (m && typeof m.default === 'function') m.default(s, st); })
-      .catch(() => {}),
+
+  // ── S7c-2c: the shared app header (Design|Export tabs + Style/Debug actions) + the shared style panel + a
+  // Design↔Export view router. The tool ribbon + canvas + footer stay AS-IS in the Design view (the shared-ribbon
+  // swap is S7c-2d; the faithful Export popup→tab cleanup is S7c-2e).
+  const stylePanel = createStylePanel({
+    onSaveProject: (all) => SettingsManager.saveProjectFile(all),
+    onNotify: showNotification,
   });
+  stylePanel.render(document.body);
+
+  const ribbonEl = document.getElementById('toolsRibbon');
+  const mainEl = document.querySelector('main');
+  const footerEl = document.querySelector('footer');
+  const exportPanelEl = document.getElementById('export-panel');
+  function showView(mode) {
+    const design = mode !== 'export';
+    if (ribbonEl) ribbonEl.style.display = design ? '' : 'none';
+    if (mainEl) mainEl.style.display = design ? '' : 'none';
+    if (footerEl) footerEl.style.display = design ? '' : 'none';
+    if (exportPanelEl) exportPanelEl.classList.toggle('hidden', design); // Export view = the existing export form
+    if (design) setTimeout(updateView, 0); // recompute the canvas viewBox aspect once it reflows back in
+  }
+
+  // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
+  // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
+  const header = createAppHeader({
+    tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
+    actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
+    activeTab: 'design',
+    onStyle: () => stylePanel.toggle(),
+    onTabChange: showView,
+  });
+  const headerHost = document.getElementById('app-header-host');
+  if (headerHost) header.render(headerHost);
+  showView('design');
+
+  // The export form's Cancel/Close/Export return to the Design tab (the popup is now the Export view).
+  ['btn-export-cancel', 'btn-export-close', 'btn-export-do'].forEach((id) => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', () => { header.setActiveTab('design'); showView('design'); });
+  });
+
+  // The input-manager's settings gesture now opens the SHARED style panel (the old #settings-panel is retired).
+  setupInput(svg, state, { openSettings: () => stylePanel.open() });
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
   window.addEventListener('focus', () => {

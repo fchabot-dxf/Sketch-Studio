@@ -373,6 +373,9 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
       </defs>
     </svg>
 
+    <!-- S7c-2c: the shared app header (Design|Export tabs + Style/Debug actions) mounts here, above the ribbon. -->
+    <div id="app-header-host"></div>
+
     <!-- TOOLS RIBBON -->
     <div id="toolsRibbon" class="bg-white border-b border-slate-300 p-1 flex flex-col gap-1 z-40 no-scrollbar shadow-sm shrink-0 relative" aria-label="Tools Ribbon">
       <!-- ROW 1: draw / edit / inspect / actions -->
@@ -475,30 +478,8 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
             <span class="text-[8px] font-black uppercase text-slate-300 mt-1">Inspect</span>
         </div>
 
-        <!-- ACTIONS -->
-        <div class="tb-actions ml-auto flex items-center gap-2 pr-4 shrink-0">
-            <button id="btn-settings-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Settings" aria-label="Settings">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <use href="#icon-cog" />
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Settings</span>
-            </button>
-            <button id="btn-debug-toggle" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-700" title="Debug" aria-label="Debug">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <use href="#icon-terminal" />
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Debug</span>
-            </button>
-            <button id="btn-export" class="tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-500" title="Export" aria-label="Export">
-                <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 5 17 10"/>
-                    <line x1="12" y1="5" x2="12" y2="21"/>
-                </svg>
-                <span class="text-[8px] font-black uppercase mt-1 invisible">Export</span>
-            </button>
-
-        </div>
+        <!-- S7c-2c: the Actions group (Settings/Debug/Export) moved to the shared app header — Settings→Style
+             (shared style panel), Debug→header action, Export→its own header tab. -->
       </div>
       <!-- ROW 2: constraints -->
       <div class="toolbar-row flex gap-1 items-stretch overflow-x-auto no-scrollbar">
@@ -614,40 +595,8 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
         <div><span id="coords-text">X: 0 Y: 0</span><span id="viewport-size" class="ml-4 border-l border-slate-300 pl-4 text-slate-500">VIEW: - x -</span></div>
     </footer>
 
-    <div id="settings-panel" style="z-index:99999" class="hidden" aria-hidden="true">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <div style="color:#60a5fa; font-size:13px; font-weight:600; text-transform:uppercase;">⚙ Settings</div>
-            <button id="btn-settings-close" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;">✕</button>
-        </div>
-        <div class="space-y-2">
-            <label class="flex justify-between"><span>Show Grid</span><input id="s-show-grid" type="checkbox"/></label>
-            <label class="flex justify-between"><span>Snap Magnetism</span><input id="s-snap-mag" type="number" class="w-20 text-right" step="1" min="0"/></label>
-            <label class="flex justify-between"><span>Grid Magnetism</span><input id="s-grid-mag" type="number" class="w-20 text-right" step="1" min="0"/></label>
-            <label class="flex justify-between"><span>Grid Size</span><input id="s-grid-size" type="number" class="w-20 text-right" step="0.5" min="0.5"/></label>
-            <label class="flex justify-between"><span>Grid Major Step</span><input id="s-grid-major" type="number" class="w-20 text-right" step="1" min="1"/></label>
-            <label class="flex justify-between"><span>Line Stroke</span><input id="s-line-stroke" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
-            <label class="flex justify-between"><span>Joint Radius</span><input id="s-joint-radius" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
-            <label class="flex justify-between"><span>Joint Stroke Mult</span><input id="s-joint-stroke-mult" type="number" class="w-20 text-right" step="0.1" min="0.1"/></label>
-            <label class="flex justify-between"><span>Selection Stroke Mult</span><input id="s-selection-mult" type="number" class="w-20 text-right" step="0.1" min="0.1" value="2"/></label>
-            <label class="flex justify-between"><span>Hover Stroke Mult</span><input id="s-hover-mult" type="number" class="w-20 text-right" step="0.1" min="0.1" value="3"/></label>
-            <label class="flex justify-between"><span>Glyph Icon Size</span><input id="s-glyph-icon" type="number" class="w-20 text-right" step="1" min="8"/></label>
-            <label class="flex justify-between"><span>Glyph Inference Size</span><input id="s-glyph-infer" type="number" class="w-20 text-right" step="1" min="8"/></label>
-            <label class="flex justify-between"><span>Glyph Offset</span><input id="s-glyph-offset" type="number" class="w-20 text-right" step="1" min="0"/></label>
-            <label class="flex justify-between"><span>Glow Width</span><input id="s-glow-width" type="number" class="w-20 text-right" step="1" min="0"/></label>
-            <label class="flex justify-between"><span>Dash Length</span><input id="s-dash-length" type="number" class="w-20 text-right" step="1" min="1"/></label>
-            <label class="flex justify-between"><span>Dash Gap</span><input id="s-dash-gap" type="number" class="w-20 text-right" step="1" min="1"/></label>
-        </div>
-        <div class="flex justify-between mt-4">
-            <div>
-                <button id="s-save-project" class="px-2 py-1 bg-blue-600 text-white rounded" title="Save project config">Save (Project)</button>
-                <div id="s-save-help" class="text-xs text-slate-400 mt-1">In standalone builds this will try to save back to the original file (if your browser supports it); otherwise it downloads an updated HTML you can save manually.</div>
-            </div>
-            <div class="flex gap-2">
-                <button id="s-reset" class="px-2 py-1 border rounded">Reset</button>
-                <button id="s-close" class="px-2 py-1 border rounded">Close</button>
-            </div>
-        </div>
-    </div>
+    <!-- S7c-2c: the old #settings-panel popup is retired — its stroke/style controls live in the SHARED style
+         panel (#ui/style-panel.js), opened from the header's Style button. settings-panel.js early-returns now. -->
 
     <!-- EXPORT PANEL -->
     <div id="export-panel" style="z-index:99999" class="hidden bg-white border border-slate-200 rounded shadow-lg p-4 w-80" aria-hidden="true">

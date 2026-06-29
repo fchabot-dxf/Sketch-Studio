@@ -234,33 +234,22 @@ export function setupTuningWizard(state) {
 
     const toggleBtn = document.createElement('button');
     toggleBtn.id = 'btn-tuning-toggle';
-    toggleBtn.className = 'tool-btn flex flex-col items-center justify-center w-12 h-14 rounded text-slate-500';
+    // S7c-fix-tuning-dock: a small FOOTER button (matches #btn-mag-toggle), not a chunky floating tool-btn. Its
+    // old #btn-settings-toggle anchor was removed in S7c-2c, which sent it to a position:fixed float over the canvas.
+    toggleBtn.className = 'ml-4 px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-200 transition-all text-[9px] font-bold inline-flex items-center gap-1';
     toggleBtn.title = 'Solver Tuning (T)';
     toggleBtn.setAttribute('aria-label', 'Solver Tuning');
-    toggleBtn.innerHTML = `
-        <svg class="w-[18px] h-[18px] mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="4" y1="21" x2="4" y2="14"/>
-            <line x1="4" y1="10" x2="4" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12" y2="3"/>
-            <line x1="20" y1="21" x2="20" y2="16"/>
-            <line x1="20" y1="12" x2="20" y2="3"/>
-            <line x1="1" y1="14" x2="7" y2="14"/>
-            <line x1="9" y1="8" x2="15" y2="8"/>
-            <line x1="17" y1="16" x2="23" y2="16"/>
-        </svg>
-        <span class="text-[8px] font-black uppercase mt-1 invisible">Tune</span>
-    `;
+    toggleBtn.innerHTML = `<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>TUNE`;
     toggleBtn.onclick = togglePanel;
 
-    // Insert before settings button
-    const settingsBtn = document.getElementById('btn-settings-toggle');
-    if (settingsBtn && settingsBtn.parentNode) {
-        settingsBtn.parentNode.insertBefore(toggleBtn, settingsBtn);
+    // S7c-fix-tuning-dock: DOCK it in the FOOTER next to MAG LENS (the #btn-settings-toggle anchor is gone). No
+    // position:fixed float — re-anchor to #btn-mag-toggle (same footer cluster).
+    const magBtn = document.getElementById('btn-mag-toggle');
+    if (magBtn) {
+        magBtn.insertAdjacentElement('afterend', toggleBtn);
     } else {
-        // Fallback: append to body as floating button
-        toggleBtn.style.cssText = 'position:fixed; bottom:20px; right:320px; z-index:99998;';
-        document.body.appendChild(toggleBtn);
+        const footerLeft = document.querySelector('footer .flex.gap-4') || document.querySelector('footer');
+        if (footerLeft) footerLeft.appendChild(toggleBtn);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

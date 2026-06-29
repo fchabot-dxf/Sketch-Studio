@@ -3717,6 +3717,33 @@ Added a COMMITTED, re-runnable smoke so it's guarded going forward.
 
 === S7c-3 (DURABLE SHELL SMOKE) DONE — HOLD ===
 
+## 2026-06-29 · S7c-fix-tuning-dock — dock the dev tuning toggle into the footer (turn 149) — FIX
+
+Latent 2c bug the user spotted: the dev-only SOLVER-TUNING toggle (`#btn-tuning-toggle`, the sliders button)
+FLOATED over the canvas. Cause: tuning-wizard.js anchored it via `insertBefore(#btn-settings-toggle)`, but S7c-2c
+removed `#btn-settings-toggle` → it hit the fallback (`position:fixed; bottom:20px; right:320px`) + appended to
+body. (This is the dev solver-tuning toggle, NOT the Style settings — Style is in the header.)
+
+- **did (apps/sketchstudio/ui/tuning-wizard.js, the toggle-button block only):**
+  - **Re-anchored into the FOOTER** next to MAG LENS: `insertAdjacentElement('afterend', toggleBtn)` on
+    `#btn-mag-toggle` (same footer left cluster). **Dropped the `position:fixed` floating fallback** — if
+    `#btn-mag-toggle` is missing, it falls into the footer's left cluster (no float). Kept `id=btn-tuning-toggle`,
+    the title, and `onclick = togglePanel`.
+  - **Restyled to footer size:** was a chunky `tool-btn flex flex-col w-12 h-14` (48×56); now a small footer button
+    matching `#btn-mag-toggle` (`ml-4 px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-200 text-[9px]
+    font-bold inline-flex items-center gap-1`) — a compact sliders icon (`w-3 h-3`) + `TUNE` label.
+- **verify (CDP, dev mode on localhost):** `#btn-tuning-toggle` exists, is **inside `<footer>`** (`inFooter`),
+  **not floating** (`position!=='fixed'`), sits **right after `#btn-mag-toggle`** (`afterMag`); clicking opens the
+  tuning panel (`opensOnClick`); the **T shortcut** still opens it (`opensOnT`); console **errors=0**. The committed
+  **`npm run test:shell` still passes 12/12** (it loads on 127.0.0.1, so it exercises the docked toggle's load).
+  Non-dev: tuning wizard isn't loaded → no toggle (unchanged). solver oracle **12/12** · baseline-diff = the 8
+  pre-existing, **0 net-new** · `node --check` clean · scope = tuning-wizard.js only · **Shaper UNTOUCHED**.
+- **note:** after this fix the tuning toggle no longer uses `.tool-btn`, so the `.tool-btn` CSS now has NO live user
+  either → it joins the `.tool-dropdown` dead-CSS as a future low-value CSS cleanup (with DEBT-RIBBON-CLEANUP).
+- **state:** branch `carve-out`. The S7c shared-shell arc + its loose ends are done. STOP — hold.
+
+=== S7c-fix-tuning-dock DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

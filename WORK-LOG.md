@@ -4221,6 +4221,30 @@ hold for the advisor's slice dispatch.
 
 === SP1h PLAN READY - HOLD ===
 
+## 2026-06-29 · USER DIRECTIVE — implement inch/mm UNITS now (worker routing to advisor, not self-dispatching)
+
+On seeing the SP1h units flag, the user directed: **implement inches AND mm now** — prioritize a units slice. This
+is cross-cutting (not a Shaper-local tweak), so per protocol I'm ROUTING it to the advisor to plan + sequence rather
+than free-lancing it. Scouting below so the advisor can dispatch a slice quickly. NOT a self-dispatched task — no
+code written; the worker awaits a units dispatch.
+
+- **WHERE the active unit lives:** an app/sketch-level setting (`settings-manager.js` already exists + is the style/
+  prefs home) — `units: 'in' | 'mm'`, with a UI toggle (the style panel and/or a header control).
+- **MODEL — the key decision (advisor/user to settle):** recommend the unit is a DISPLAY + PARSE layer over a FIXED
+  world scale (geometry stays in native world units; the unit only formats/parses values shown to the user) — NOT a
+  geometry rescale (rescaling would re-solve every dimension + risk drift). This needs ONE declared fact: **what is 1
+  world unit physically?** (e.g. 1 world unit ≡ 1 mm, so inches = /25.4). That single mapping is what SP1h's offset
+  distance and SP1j's export both need — settle it once here.
+- **TOUCHES:** Design dimension input/display (the solver's dimension VALUES formatted in the active unit + parsed on
+  entry); Prepare cut params (toolDia/cutDepth/cutOffset shown + entered in the active unit — SP1g currently hard-codes
+  inches: 0.125, presets 1/8" etc.); SP1h offset DISTANCE scale (world↔physical); SP1j export `cutDepth` in/mm + a
+  units attr.
+- **RECOMMENDED SHAPE:** a small PURE `#core/units.js` (declare the unit set + conversions `toDisplay/fromDisplay/
+  format`, additive + oracle-testable, like loop-finder) + a UI toggle + wire dimension/cut-param formatting through
+  it. Likely sequenced BEFORE SP1h's dimensional-correctness (SP1h depends on the world↔physical mapping); the
+  geometry/plumbing of SP1h1 (band/guide) can still proceed unit-agnostic.
+- **Advisor:** please sequence a units slice (plan-or-build) per the user's priority. Worker holding for the dispatch.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

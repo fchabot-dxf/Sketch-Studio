@@ -3826,6 +3826,36 @@ joint↔edge graph); intersection-derived arrangement faces are OUT (single sele
 
 === SP1 (SHAPER PREPARE LOOP-SELECT) PLAN READY - HOLD ===
 
+## 2026-06-29 · SP1a — Prepare renders the Design geometry, joints hidden (turn 153) — Shaper-only
+
+The foundation for loop hover-select: Shaper's Prepare tab now paints the shared #core sketch geometry (edges) with
+NO joints — via a Prepare-LOCAL renderer (option B), so the shared `#ui/svg-renderer.draw()` stays byte-identical.
+
+- **did (Shaper-only):**
+  - **`apps/shaper/src/prepare-view.js`** (new) — `renderPrepareGeometry(state, svgEl)`: paints `state.shapes`'
+    EDGES into a `#prepare-world-group` — lines (`<line>` from joints[0,1]), circles (`<circle>` center+`s.radius`),
+    arcs (`<path>` via `calculateArcPath` from `#core/geometry.js`) — and **NO joints**. Edge stroke is themed to
+    Shaper dark (`--sk-geo-free`), `vector-effect:non-scaling-stroke` for a consistent screen width. Does NOT call
+    the shared `draw()` (which draws joints + serves SketchStudio).
+  - **`apps/shaper/index.html`** — `#view-prepare` now holds a `#prepare-canvas` SVG (`viewBox="-60 -45 120 90"`,
+    same as the Design canvas so geometry lines up); split its CSS from `#view-simexport` (the canvas fills; the
+    sim-export stub stays centered).
+  - **`apps/shaper/src/main.js`** — `showMode('prepare')` now `ensureSketch()`s (so `designController.state` exists
+    even if Design was never opened), **REUSES that state** (no 2nd engine/mountSketch), `engine.solve(500)` once
+    (so the geometry is converged even on Explore→Prepare), then `renderPrepareGeometry(...)`. **No solve-RAF in
+    Prepare** — render-on-demand on enter.
+- **verify (CDP live, errors=0):** enter Design → 1 geometry edge (`.shape-elem` line at `0,0→48.51,12.13`) + 4
+  joint dots; enter Prepare → `#prepare-world-group` has **1 edge, 0 joint circles** (joints hidden), and the edge
+  coords **exactly match** Design (`geometryMatches=true`) — same geometry, no joints. Design world-group stays
+  intact (no 2nd engine). **SketchStudio byte-identical** + shared #core/#ui UNCHANGED → `npm run test:shell`
+  **12/12**; solver oracle **12/12**; guard GREEN; baseline-diff = the 8 pre-existing, **0 net-new**; `node --check`
+  clean; scope = apps/shaper (index.html + main.js + new prepare-view.js).
+- **state:** branch `carve-out`. Prepare shows the sketch geometry with joints hidden — the canvas for loop
+  hover-select. Next: **SP1b** — `#core/loop-finder.js` (topological loops of the current sketch, + a #core oracle
+  test). STOP — hold.
+
+=== SP1a (PREPARE RENDER, JOINTS HIDDEN) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

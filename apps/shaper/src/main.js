@@ -10,6 +10,7 @@ import * as inspector from './inspector.js';
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { renderPrepareGeometry } from './prepare-view.js'; // SP1a: Prepare-local geometry render (edges, no joints)
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -141,6 +142,13 @@ function showMode(mode) {
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
   else if (designController) designController.stop();                   // pause the RAF off Design
+  // SP1a: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then paint a
+  // Prepare-local render of the geometry (edges only, joints hidden). Render-on-demand — no solve loop in Prepare.
+  if (mode === 'prepare') {
+    ensureSketch();
+    try { designController.engine.solve(500); } catch (_) {}
+    renderPrepareGeometry(designController.state, document.getElementById('prepare-canvas'));
+  }
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
 }
 

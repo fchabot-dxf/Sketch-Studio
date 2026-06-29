@@ -65,7 +65,10 @@
     #design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }
     #design-canvas { flex: 1; min-width: 0; min-height: 0; }
     /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
-    #view-prepare, #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */
+    #view-prepare { flex-direction: column; }
+    #prepare-canvas { flex: 1; width: 100%; min-height: 0; }
     /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
@@ -115,7 +118,8 @@
   </section>
 
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->
-  <section id="view-prepare" hidden>Prepare — cut type + toolpath (coming soon).</section>
+  <!-- SP1a: Prepare = a Prepare-local render of the shared #core sketch (edges, joints hidden) — loop-select next. -->
+  <section id="view-prepare" hidden><svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg></section>
   <section id="view-simexport" hidden>Simulate / Export — cut simulation + export (coming soon).</section>
 
   <script type="module" src="src/main.js"></script>

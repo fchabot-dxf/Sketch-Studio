@@ -51,114 +51,66 @@ export function setupUI(state){
     if(mt) mt.innerText = 'MODE: ' + modeText; 
   }
   
-  // Map internal tool constants to HTML IDs where they differ or for explicit clarity
-  const toolIdMap = {
-    [TOOL_MODES.HORIZONTAL_VERTICAL]: 'tool-hv',
-    [TOOL_MODES.PERPENDICULAR]: 'tool-perp',
-    [TOOL_MODES.DIMENSION]: 'tool-dim',
-    [TOOL_MODES.COINCIDENT]: 'tool-coincident',
-    [TOOL_MODES.MIDPOINT]: 'tool-midpoint',
-    // Map standard tools for safety, though 'tool-'+mode handles them
-    [TOOL_MODES.LINE]: 'tool-line',
-    [TOOL_MODES.RECT]: 'tool-rect',
-    [TOOL_MODES.CIRCLE]: 'tool-circle',
-    [TOOL_MODES.ARC]: 'tool-arc',
-    [TOOL_MODES.SELECT]: 'tool-select',
-    [TOOL_MODES.PARALLEL]: 'tool-parallel',
-    [TOOL_MODES.COLLINEAR]: 'tool-collinear',
-    [TOOL_MODES.TANGENT]: 'tool-tangent',
-    [TOOL_MODES.EQUAL]: 'tool-equal'
-  };
+  // S7c-2d-pre: the rich tool-activation logic (migrated from the old per-button click handlers, made
+  // DOM-button-INDEPENDENT — every .tool-btn/#tool-select/.classList active management is now setTool(), which
+  // refreshes the shared ribbon). The shared ribbon's onToolClick routes here, so the CAD pre-selection workflows
+  // (pre-selection as 1st element, H/V-immediate, dimension-from-selection) survive the ribbon adoption.
+  function handleToolActivate(t){
+    const constraintTools = [TOOL_MODES.COINCIDENT,TOOL_MODES.MIDPOINT,TOOL_MODES.HORIZONTAL_VERTICAL,TOOL_MODES.PARALLEL,TOOL_MODES.PERPENDICULAR,TOOL_MODES.COLLINEAR,TOOL_MODES.TANGENT,TOOL_MODES.EQUAL];
+    if(constraintTools.includes(t)){
+      // 1. Pre-selection: a single selected joint/shape becomes the constraint's first element
+      let firstEl = null;
+      if(state.selectedJoints.size === 1 && state.selectedShapes.size === 0) firstEl = { type: 'joint', id: [...state.selectedJoints][0] };
+      else if(state.selectedShapes.size === 1 && state.selectedJoints.size === 0) firstEl = { type: 'shape', id: [...state.selectedShapes][0] };
 
-  // Attach click handlers to all tool buttons
-  Object.values(TOOL_MODES).forEach(t=>{ 
-    const id = toolIdMap[t] || ('tool-' + t);
-    const el=document.getElementById(id); 
-    if(el) {
-      el.addEventListener('click', (e) => {
-        dbg.log('app', 'Tool button clicked:', t); // Debug log
-        
-        // For constraint tools, check if there's a pending selection
-        const constraintTools = [TOOL_MODES.COINCIDENT,TOOL_MODES.MIDPOINT,TOOL_MODES.HORIZONTAL_VERTICAL,TOOL_MODES.PARALLEL,TOOL_MODES.PERPENDICULAR,TOOL_MODES.COLLINEAR,TOOL_MODES.TANGENT,TOOL_MODES.EQUAL];
-        if(constraintTools.includes(t)){
-          
-          // 1. Check for existing selection to use as first element
-          let firstEl = null;
-          if(state.selectedJoints.size === 1 && state.selectedShapes.size === 0) firstEl = { type: 'joint', id: [...state.selectedJoints][0] };
-          else if(state.selectedShapes.size === 1 && state.selectedJoints.size === 0) firstEl = { type: 'shape', id: [...state.selectedShapes][0] };
-
-          // H/V Immediate Application: If a line is selected, apply H/V immediately
-          if(t === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape'){
-              const s = state.shapes.find(x => x.id === firstEl.id);
-              if(s && s.type === 'line'){
-                  ConstraintManager.addHorizontalOrVertical(state, s.joints);
-                  setTool(TOOL_MODES.SELECT);
-                  return;
-              }
-          }
-
-          // For coincident: just switch to the tool, let the sequential click method handle it
-          // Clear any selection so user starts fresh
-          if(t === TOOL_MODES.COINCIDENT){
-            // If we have a valid pre-selection, keep it and enter tool with pending state
-            if (!firstEl) {
-                state.selectedJoints.clear();
-                if(state.selectedConstraints) state.selectedConstraints.clear();
-                if(state.selectedShapes) state.selectedShapes.clear();
-                setTool(t);
-                return;
-            }
-          }
-          
-          // Determine effective type for pending constraint
-          // Ensure H/V uses 'horizontal' so solver recognizes it if passed directly
-          const effectiveType = (t === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : t;
-
-          // For other constraint tools: if we have a pending constraint with the same type, complete it
-          if(state.pendingConstraint && state.pendingConstraint.type === effectiveType){
-            // We already have a first element selected, so clicking the tool again should cancel
-            state.pendingConstraint = null;
-            const mt = document.getElementById('modeText');
-            if(mt) mt.innerText = 'MODE: SELECT';
-            
-            // Reset toolbar buttons
-            document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-            document.getElementById('tool-select').classList.add('active');
-            return;
-          }
-          
-          // Otherwise, switch to the tool and wait for first element selection
-          state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
-          setTool(t);
-          
-          // Update mode text to indicate we're waiting for first element
-          const mt = document.getElementById('modeText');
-          let modeText = t === TOOL_MODES.COLLINEAR ? (t.toUpperCase() + ' - 1/3 Points') : (t.toUpperCase() + (firstEl ? ' - Select 2nd Element' : ' - Select 1st Element'));
-          if(mt) mt.innerText = 'MODE: ' + modeText;
-          
-          // Highlight the first element visually by keeping tool active
-          document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
-          el.classList.add('active');
+      // H/V Immediate Application: a selected line + H/V → apply immediately, return to SELECT
+      if(t === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape'){
+        const s = state.shapes.find(x => x.id === firstEl.id);
+        if(s && s.type === 'line'){
+          ConstraintManager.addHorizontalOrVertical(state, s.joints);
+          setTool(TOOL_MODES.SELECT);
           return;
         }
-        
-        // For all tools: just switch to the tool (rect dropdown handled separately)
-        setTool(t);
-
-        // If Dimension tool is activated with preselection, start it immediately
-        if (t === TOOL_MODES.DIMENSION) {
-          try {
-            const svgEl = document.querySelector('svg');
-            if (svgEl) startDimensionFromSelection(svgEl, state);
-          } catch(_) {}
-        }
-      });
-    } else {
-      if (t !== TOOL_MODES.PAN) {
-        console.warn('[ui-manager] Button not found for tool:', t, 'Expected ID:', id);
       }
+
+      // Coincident: fresh-start (clear selection) when there's no usable pre-selection
+      if(t === TOOL_MODES.COINCIDENT){
+        if (!firstEl) {
+          state.selectedJoints.clear();
+          if(state.selectedConstraints) state.selectedConstraints.clear();
+          if(state.selectedShapes) state.selectedShapes.clear();
+          setTool(t);
+          return;
+        }
+      }
+
+      // H/V uses 'horizontal' so the solver recognizes it if passed directly
+      const effectiveType = (t === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : t;
+
+      // Clicking the same pending constraint tool again cancels it
+      if(state.pendingConstraint && state.pendingConstraint.type === effectiveType){
+        state.pendingConstraint = null;
+        setTool(TOOL_MODES.SELECT); // sets modeText SELECT + refreshes the ribbon
+        return;
+      }
+
+      // Enter the tool, wait for the first element; mode-text hint (overrides setTool's plain modeText)
+      state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
+      setTool(t);
+      const mt = document.getElementById('modeText');
+      const hint = t === TOOL_MODES.COLLINEAR ? (t.toUpperCase() + ' - 1/3 Points') : (t.toUpperCase() + (firstEl ? ' - Select 2nd Element' : ' - Select 1st Element'));
+      if(mt) mt.innerText = 'MODE: ' + hint;
+      return;
     }
-  });
+
+    // Non-constraint tools: just switch
+    setTool(t);
+
+    // Dimension tool with a preselection starts immediately
+    if (t === TOOL_MODES.DIMENSION) {
+      try { const svgEl = document.querySelector('svg'); if (svgEl) startDimensionFromSelection(svgEl, state); } catch(_) {}
+    }
+  }
 
   // Generic dropdown helpers
   function updateToolButtonUI(toolName, modeKey, modes){
@@ -320,7 +272,7 @@ export function setupUI(state){
       trEl.innerHTML = '';
       toolRibbon = createToolRibbon({
         state,
-        onToolClick: (t) => setTool(t),
+        onToolClick: (t) => handleToolActivate(t), // S7c-2d-pre: the rich activation (pre-selection workflows)
         extraGroups: [{ label: 'Edit', buttons: [{ id: 'btn-clear', label: 'Clear All' }, { id: 'btn-undo', label: 'Undo' }] }],
       });
       toolRibbon.render(trEl);

@@ -3574,6 +3574,43 @@ exact pixels = the separate S7c-3 gate. Shaper untouched (rides the default `swi
 
 === S7c-2d (STUDIO ADOPTS SHARED RIBBON) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2d-pre — restore the 3 CAD pre-selection workflows (turn 141) — ui-manager.js only, load-safe
+
+S7c-2d's `onToolClick:(t)=>setTool(t)` dropped the per-button rich workflows (the dance was dead-bound to the
+cleared inline buttons). User confirmed to RESTORE them. Migrated the per-button logic into a DOM-button-
+INDEPENDENT `handleToolActivate(tool)`.
+
+- **did (apps/sketchstudio/ui/ui-manager.js):**
+  - **Added `handleToolActivate(t)`** — migrated the old per-button click body (the constraint dance), with every
+    `document.querySelectorAll('.tool-btn')…` / `getElementById('tool-select')` / `el.classList.add('active')`
+    replaced by `setTool(...)` (which refreshes the shared ribbon). Preserves ALL of: **pre-selection** (1 selected
+    joint/shape → the constraint's `firstElement`); **H/V-immediate** (selected line + H/V →
+    `ConstraintManager.addHorizontalOrVertical` then `setTool(SELECT)`); **pendingConstraint** setup + the mode-text
+    hints ("… - Select 1st/2nd Element", COLLINEAR "1/3 Points"); coincident fresh-start clear; **cancel** (same
+    pending tool again → SELECT); **dimension-from-selection** (Dimension + preselection →
+    `startDimensionFromSelection`); non-constraint tools → just `setTool` (+ the Dimension check).
+  - **Wired `onToolClick:(t)=>handleToolActivate(t)`** (was `setTool(t)`).
+  - **Removed the now-redundant per-button binding loop** (`Object.values(TOOL_MODES).forEach(... addEventListener
+    'click' ...)`) + the `toolIdMap` it used — its logic now lives in `handleToolActivate`, and it only bound the
+    cleared inline buttons. (The broader index.html markup + rect-dropdown static cleanup stays DEBT-RIBBON-CLEANUP
+    — NOT done here.)
+- **verify (CDP live — LOAD-SAFE + the workflows, errors=0):**
+  - **LOAD-SAFE:** index.html loads, console **errors=0**; solver oracle **12/12**.
+  - **Pre-selection:** draw a line, select it, click Parallel → mode-text "PARALLEL - Select 2nd Element"
+    (`preselHint`); with no selection → "… - Select 1st Element" (`seqHint`).
+  - **H/V-immediate:** select the line, click H/V → applies (a constraint glyph added, `hvAddedConstraint`) and
+    returns to "MODE: SELECT" (`hvBackToSelect`).
+  - (Dimension-from-selection = the same migrated branch.) No regressions: `drew`, rect dropdown ("RECT CENTER"),
+    keyboard sync, Clear, Design/Export router, header Style all work.
+  - **Shaper UNTOUCHED** (ui-manager.js is Studio-only). guard GREEN · baseline-diff = the 8 pre-existing,
+    **0 net-new** · `node --check` clean · scope = **ui-manager.js only**.
+- **state:** branch `carve-out`. SketchStudio's shared-ribbon adoption now keeps the full CAD tool UX (pre-selection
+  / H-V-immediate / dimension-from-selection / sequential). Open DEBT: **DEBT-RIBBON-CLEANUP** (static removal of the
+  dead inline `#toolsRibbon` markup + the no-op rect-dropdown machinery). Next: **S7c-2e** — the Export popup→tab
+  faithful cleanup; then **S7c-3** — pixel-parity polish. STOP — hold.
+
+=== S7c-2d-pre (RESTORE PRE-SELECTION) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

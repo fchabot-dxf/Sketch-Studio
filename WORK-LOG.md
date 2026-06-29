@@ -3744,6 +3744,88 @@ body. (This is the dev solver-tuning toggle, NOT the Style settings — Style is
 
 === S7c-fix-tuning-dock DONE — HOLD ===
 
+## 2026-06-29 · PLAN SP1 — Shaper Prepare: loop-select over the cut-type encoding (turn 151) — PLAN ONLY
+
+NEW ARC: make Shaper's **Prepare** tab consume the cut-type encoding. First target: in Prepare the sketch JOINTS
+disappear and HOVER highlights the LOOP (closed region) under the cursor — loops are the selection feedback (a cut
+type applies to a closed region). LOCKED: the selectable region = a TOPOLOGICAL loop (a closed cycle in the
+joint↔edge graph); intersection-derived arrangement faces are OUT (single selection model). PLAN ONLY.
+
+### (1) Which geometry does Prepare show — the shared #core sketch (NOT the Explore SVG)
+- Shaper's Design tab mounts the shared sketcher via `#ui/sketch-canvas.js` `mountSketch(#design-canvas)` →
+  builds an engine + `createSketchState` + a `#design-world-group`, seeds a demo, and runs a **RAF solve→draw**
+  loop (`draw()` from `#ui/svg-renderer.js`). `main.js` holds it as `designController = { state, engine, worldGroup,
+  start, stop }`; `showMode()` `start()`s the RAF on entering Design and `stop()`s it on leaving.
+- **Prepare must render the SAME #core sketch state** (`designController.state` — the joints/edges the Design tab
+  edits), NOT the Explore SVG-editor canvas (a separate `main.layout`/`#core` SVG document). **Caveat:** `mountSketch`
+  creates its OWN engine+state, so Prepare must NOT re-mount — it REUSES `designController.state` (entering Prepare
+  must `ensureSketch()` first so the state exists even if Design was never opened).
+- The Design RAF is a SOLVE loop (only needed while editing in Design). Prepare doesn't edit → it needs
+  **render-on-demand** (redraw on hover), NOT the continuous solve loop. So: keep the solve-RAF Design-only; Prepare
+  reads the already-solved state + paints loop overlays on mousemove.
+
+### (2) Loop detection — TOPOLOGICAL, and it is NET-NEW
+- Core has NO cycle/loop finder. The shape model: each `shape` (line/arc/circle/polygon) stores `shape.joints[]`
+  (ids); `joints.js` offers `computeTrueVertexSet`, `isTrueVertex`, `getCoincidentJoints(jointId, constraints)`,
+  `mergeJoints`. `geometry.js`/`inference-engine.js` have no region/loop logic.
+- **Propose `#core/loop-finder.js`** (pure, testable): build the joint↔edge graph — NODES = joints (coincident
+  joints merged into one node via `getCoincidentJoints`), EDGES = lines/arcs between their endpoint joints (arc =
+  a curved edge with 2 endpoints; **circle = an inherent standalone loop**). Find the **minimal closed cycles**
+  (a minimal-cycle-basis / bounded simple-cycle enumeration — the "intentional shapes"). Each loop → an ordered
+  list of edges (shapes) + joints + a closed boundary (for point-in-loop + fill). Recompute on GEOMETRY change
+  (cache), not per-frame. Cost: O(V+E) build + cycle basis, fine for sketch sizes.
+
+### (3) Render mode — hide joints, highlight the hovered loop
+- `draw()` renders shapes as `.shape-elem` edges (`<line>` L860, `<circle>` L874, arc `<path>` L896) and draws
+  JOINTS separately (circles at `BASE_JOINT_RADIUS`, `computeTrueVertexSet`). Hover today = `hover-manager.js`
+  (`applyHoverPriority` sets `state.hoveredJoint/hoveredShape/hoveredConstraint`; the renderer highlights them).
+- **Two options to suppress joints + add loop-hover:** (A) a **gated render-MODE flag** on `draw()`
+  (`ctx.prepareMode`/`suppressJoints`) that skips joints + constraint glyphs — a SHARED `#ui` change, justified but
+  must default-off so SketchStudio/Design are byte-identical; (B) a **Prepare-ONLY lightweight render** that paints
+  just the edges + the hovered-loop fill/outline (reusing the line/arc→path math), NO `draw()`, NO shared change.
+  **RECOMMEND (B)** for SP1 (Shaper-only, lowest risk; the shared renderer stays untouched). Hover = a NEW
+  point-in-loop test (cursor world-point inside a loop's closed boundary, even-odd) → fill+outline that loop;
+  joints never drawn.
+
+### (4) Tie to the cut-type encoding — a loop is a DERIVED REGION, not one SVG element
+- `apps/shaper/src/shaper.js` is the encoding source of truth but operates **PER SVG ELEMENT**
+  (`classify(el)`/`applyCutType(el, id)` read/write `el` fill/stroke + `shaper:*` attrs; CUT_TYPES =
+  exterior/interior/pocket/online/guide). That targets the **Explore SVG editor's** elements (inspector.js +
+  svgio.js round-trip).
+- A Prepare **loop is a DERIVED region** — a cycle of #core sketch edges — NOT one SVG `<path>`. So loop↔cutType is
+  a NEW per-loop model (loop id → cut type), stored in Prepare; the SVG encoding is the **export OUTPUT** (a later
+  Sim/Export slice serializes each cut-loop → an SVG path with the `applyCutType` colors/attrs). **Open question to
+  settle at the cut-type slice:** does the Design #core sketch correspond to Explore's SVG geometry (so loops map
+  back to SVG elements), or is Prepare's cut model independent until export? SP1 is loop-SELECTION only — cut-type
+  assignment is deferred.
+
+### (5) Load-safe slices (Shaper-only; SketchStudio + shared #core/#ui byte-identical unless gated; each: both apps load + guard+baseline green + `npm run test:shell` 12/12)
+- **SP1a — Prepare renders the sketch geometry, joints HIDDEN:** entering Prepare `ensureSketch()`s + renders
+  `designController.state`'s edges into `#view-prepare` (option B render), no joints, no solve-RAF.
+- **SP1b — loop detection:** add `#core/loop-finder.js` (+ a #core oracle test) computing the current sketch's
+  topological loops.
+- **SP1c — loop hover-highlight:** point-in-loop on mousemove → fill/outline the hovered loop (the user's first
+  target).
+- **SP1d — loop selection:** click a loop → selected; selection feedback distinct from hover.
+- **SP1e — cut-type assignment (later):** a selected loop → a CUT_TYPE (shaper.js), stored per-loop; (export
+  serialization is a separate Sim/Export arc).
+- `#core/loop-finder.js` is additive + consumed only by Shaper → SketchStudio unaffected; if option (A) is chosen
+  for any slice, the `draw()` flag is gated default-off.
+
+### Risks
+- **R-SHARED-RENDERER:** suppressing joints in the shared `draw()` would touch SketchStudio/Design — prefer the
+  Prepare-only render (B); if a `draw()` flag is used, gate it default-off + re-verify the shell smoke + SketchStudio.
+- **R-LOOP-COST:** don't run cycle-finding per frame/hover — compute loops once per geometry change (cache), only
+  point-in-loop on hover.
+- **R-RAF-LIFECYCLE:** keep the Design SOLVE-RAF off in Prepare (no editing); Prepare renders on-demand. Entering
+  Prepare must `ensureSketch()` (mount) so the state exists even if Design wasn't opened.
+- **R-STATE-SHARING:** Explore (SVG editor) ↔ Design (#core sketch) ↔ Prepare (loops). Prepare reads the DESIGN
+  #core sketch, not Explore's SVG; the cut-type encoding (shaper.js) currently targets Explore SVG elements — the
+  loop→cutType→SVG mapping (whether the Design sketch IS Explore's geometry) must be settled at SP1e, not now.
+- **R-ARC/CIRCLE:** the loop-finder + point-in-loop must handle curved edges (arcs) + standalone circles as loops.
+
+=== SP1 (SHAPER PREPARE LOOP-SELECT) PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -43,12 +43,16 @@
       --sk-origin: #4c9aff;
       --sk-error: #f87171;
     }
-    #design-view, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; background: #0b1020; z-index: 5; }
+    #design-view, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
-    .design-bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; background: #111827; border-bottom: 1px solid #1f2937; min-height: 18px; }
-    #design-canvas { flex: 1; width: 100%; min-height: 0; }
+    /* S6b: Design = a FIXED side panel (LEFT) beside the canvas — not floating, not draggable. */
+    #design-view { flex-direction: row; }
+    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; }
+    .design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }   /* list + DOF on TOP */
+    .design-panel-tools { flex: 0 0 auto; padding: 8px; border-top: 1px solid #1f2937; }  /* tool buttons at BOTTOM */
+    #design-canvas { flex: 1; min-width: 0; min-height: 0; }
     /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
-    #view-prepare, #view-simexport { align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    #view-prepare, #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
     /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
@@ -86,10 +90,8 @@
 
   <!-- Shared #core-backed Design canvas (S1 proof). Hidden until the Design tab is toggled. -->
   <section id="design-view" hidden>
-    <div class="design-bar">
-      <!-- S6a: the back-to-Editor toggle is replaced by the header mode-nav. This bar still hosts the floating
-           dock's tab strip (S5 tabStripTarget) for THIS slice; S6b swaps the floating dock for a fixed panel. -->
-    </div>
+    <!-- S6b: the FIXED Design side panel (list/DOF on top, tools at the bottom) — populated by src/main.js. -->
+    <aside id="design-panel"></aside>
     <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
   </section>
 

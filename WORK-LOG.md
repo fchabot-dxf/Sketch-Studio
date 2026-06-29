@@ -2892,6 +2892,47 @@ deliberately — no big-bang (R-RESET).
 
 === S6a (4-MODE NAV + ROUTER) DONE — HOLD ===
 
+## 2026-06-28 · S6b — Design mode's FIXED side panel (retire the floating dock) (turn 115) — Shaper-only
+
+Second S6 slice: Design mode now has a FIXED docked side panel (the user's target), and the floating dock is
+retired for Shaper. The shared #ui factories are reused unchanged — only the container/order changed.
+
+- **did (apps/shaper/index.html + src/main.js):**
+  - **`#design-view` → flex ROW:** a fixed `<aside id="design-panel">` on the LEFT (flex column, `flex:0 0 244px`,
+    `border-right`, dark `#111827`) beside the canvas (`flex:1`). NOT floating, NOT draggable, NOT a `.sk-dock`.
+  - **Panel contents (the user's order):** `createDesignInfoPanel` (constraint list + DOF) in `.design-panel-info`
+    on **TOP** (`flex:1`, scrolls); `createDesignToolPalette` (tool buttons) in `.design-panel-tools` at the
+    **BOTTOM** (`flex:0`, top border). This REVERSES S5c2's dock order (palette was above). `buildDesignPanel()`
+    just mounts the two existing factories into the fixed wraps — no new panel code.
+  - **Retired the floating dock for Shaper:** removed `buildDock`/`createTabbedDockPanel` usage + the now-dead
+    `#ui/tabbed-dock-panel.js` import + the `dock`/`designView` locals (orphans of this change), and dropped the
+    `.design-bar` element + CSS. **Kept** `packages/ui/tabbed-dock-panel.js` (advisor ruling — other/later uses).
+  - **Live refresh carried over + WIDENED:** the `onRender → panelTick` wiring stays (renamed from `dockTick`).
+    CDP exposed that the old refresh `sig` (carried from S5c) tracked only constraints/value/selection/tool, so
+    DRAWING geometry that adds no constraint did NOT refresh the DOF readout. Widened the sig to include
+    `shapes.length` + `joints.size` (state.shapes = array, state.joints = Map) → the list/DOF now live-update as
+    you draw. Dark theming automatic (`--sk-*`).
+- **verify (CDP — the real symptom):**
+  - FIXED panel: no floating `.sk-dock`; `#design-panel` `position:static` (not `fixed`); on the LEFT of the
+    canvas (`panelLeftOfCanvas`); `.design-panel-info` ABOVE `.design-panel-tools` (`infoOnTop`); the info has
+    `.sk-info`/`.sk-info-dof`, the tools have `.sk-tool-btn`.
+  - Tool switches + draws: clicking the LINE button → `.sk-tool-btn.active[data-tool=line]`, accent
+    `rgb(76,154,255)`=`#4c9aff` (dark); a drag gesture on the canvas grows the world-group (12→21, `drew`).
+  - **Live-update on draw:** the `.sk-info-dof` text changes after drawing (`liveUpdated`); `rowCount=5` rows.
+  - **Row → canvas highlight:** clicking a `.sk-info-row` adds `.sel` (live-queried) AND the renderer emits the
+    selection disc on canvas (`fill-opacity="0.28"` appears, `canvasHighlighted`); a 2nd click clears it
+    (`rowDeselected`).
+  - Other modes/nav: Explore/Prepare/Sim-Export still switch (`exploreWorks`/`prepareWorks`/`simWorks`).
+  - **SketchStudio byte-identical:** world-group **5**, no `.sk-dock`, no `#design-panel`. Both apps `errors=0`.
+  - guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · scope = only
+    apps/shaper (index.html + main.js).
+- **state:** branch `carve-out`. Shaper's Design mode now reads as the user drew it: a fixed left panel (live
+  constraint list + DOF on top, tools at the bottom), dark, no floating overlay; the 4-mode nav drives it. The
+  shared TabbedDockPanel is no longer used by Shaper (kept in #ui). S6 structural slices done — next per the
+  advisor (e.g. flesh the Prepare / Sim-Export stubs). STOP — hold.
+
+=== S6b (DESIGN FIXED PANEL) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

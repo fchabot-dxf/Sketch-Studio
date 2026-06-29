@@ -8,7 +8,6 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
-import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createDesignToolPalette } from '#ui/design-tool-palette.js';
 
@@ -69,47 +68,40 @@ const VIEWS = {
   prepare:   document.getElementById('view-prepare'),
   simexport: document.getElementById('view-simexport'),
 };
-const designView = VIEWS.design;
 const modeBtns = [...document.querySelectorAll('.mode-btn')];
 const exploreActions = document.getElementById('explore-actions');
 const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
-let dock = null, infoPanel = null, palette = null, lastSig = '';
+let infoPanel = null, palette = null, lastSig = '';
 
-// Refresh the dock's tool palette + info panel when the sketch changes (active tool / constraint count / values /
-// selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap.
-function dockTick() {
+// Refresh the Design panel's tool palette + info panel when the sketch changes (active tool / constraint count /
+// values / selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap.
+function panelTick() {
   if (!designController) return;
   const s = designController.state;
   let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
-  const sig = s.constraints.length + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
+  // Include shapes/joints counts so DRAWING geometry (which may add no constraint) still refreshes the DOF readout.
+  const nShapes = (s.shapes && s.shapes.length) || 0;
+  const nJoints = (s.joints && s.joints.size) || 0;
+  const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
   if (sig !== lastSig) { lastSig = sig; if (palette) palette.refresh(); if (infoPanel) infoPanel.refresh(); }
 }
 
-// Build the floating dock ONCE: Design tab = the live constraint-list/DOF info panel (off Shaper's live
-// state/engine); Prepare/Export/Settings = v1 stubs (per UI_SHELL.md). Re-parented INTO #design-view so it
-// floats over the Design canvas + hides with the tab. Dark theming is automatic — the dock/info use
-// --sk-*/--sk-dock-*, which Shaper's :root sets dark. The on-canvas glyphs/dim-edit are untouched (additive).
-function buildDock() {
+// Build the FIXED Design side panel ONCE (S6b): a left column beside the canvas (not floating) — the live
+// constraint-list/DOF info panel on TOP (scrolls), the tool-palette buttons at the BOTTOM. Reuses the shared #ui
+// factories. Dark theming is automatic (the panels use --sk-*, which Shaper's :root sets dark).
+function buildDesignPanel() {
   const { state, engine } = designController;
-  palette = createDesignToolPalette({ state });
   infoPanel = createDesignInfoPanel({ state, engine });
-  dock = createTabbedDockPanel({
-    persistKey: 'shaper-design-dock',
-    // S6a keeps the floating dock for this slice; its tab strip still renders into the in-view .design-bar. (S6b
-    // retires the floating dock for a fixed side panel; the header mode-nav is now the app's primary nav.)
-    tabStripTarget: designView.querySelector('.design-bar'),
-    tabs: [
-      // Design tab: the tool palette ABOVE the live constraint-list/DOF info panel.
-      { label: 'Design', icon: '✎', render: (body) => { palette.render(body); infoPanel.render(body); } },
-      { label: 'Prepare', icon: '▦', render: (body) => { body.textContent = 'Prepare — cut type + toolpath (coming soon).'; } },
-      { label: 'Export', icon: '⤓', render: (body) => { body.textContent = 'Export / Simulate (coming soon).'; } },
-      { label: 'Settings', icon: '⚙', render: (body) => { body.textContent = 'Settings (coming soon).'; } },
-    ],
-  });
-  designView.appendChild(dock.el);
+  palette = createDesignToolPalette({ state });
+  const panelEl = document.getElementById('design-panel');
+  const infoWrap = document.createElement('div'); infoWrap.className = 'design-panel-info';
+  const toolWrap = document.createElement('div'); toolWrap.className = 'design-panel-tools';
+  infoPanel.render(infoWrap); // list + DOF on TOP
+  palette.render(toolWrap);   // tools at the BOTTOM
+  panelEl.append(infoWrap, toolWrap);
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view
@@ -118,9 +110,9 @@ function ensureSketch() {
   if (designController) return;
   designController = mountSketch(document.getElementById('design-canvas'), {
     isActive: () => currentMode === 'design',
-    onRender: dockTick, // S5c: refresh the dock's panels on change, in sync with the render loop
+    onRender: panelTick, // S5c/S6b: refresh the Design panel on change, in sync with the render loop
   });
-  buildDock();
+  buildDesignPanel();
 }
 
 // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the

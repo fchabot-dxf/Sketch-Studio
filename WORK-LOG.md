@@ -4012,6 +4012,45 @@ prepare-view.js; main.js needs no change (mountPrepareView's return shape is unc
 
 === SP1d (PREPARE SELECTION MODEL + LOOP CLICK-SELECT) DONE - HOLD ===
 
+## 2026-06-29 · SP1e — proximity EDGE target: on-stroke hover/click selects a single vector (turn 163) — Shaper-only
+
+Fills the SP1d 'edge' seam so the user's PROXIMITY rule comes alive: ON the ink → the EDGE (a single vector) WINS
+over the LOOP; in the open interior → the LOOP. This makes OPEN paths (vectors in no loop) selectable for path cuts.
+The selection MODEL is unchanged (SP1d already declared `{kind:'edge',id}`); SP1e just resolves + renders that kind.
+Shaper-only — prepare-view.js.
+
+- **did (`apps/shaper/src/prepare-view.js`):**
+  - **EDGE branch in `resolveTarget`, FIRST** (the documented seam): hit-test the cursor against every shape's stroke;
+    the NEAREST within tolerance → `{kind:'edge', id:shapeId}` (edge wins). Else fall through to the existing
+    innermost-loop containment. Tolerance is `EDGE_TOL_PX` (6 screen px) → WORLD units via the live CTM scale
+    (`worldTolerance`), so it's ZOOM-stable. Hit math: line → point-segment; circle → `|dist(center) − r|`; arc →
+    nearest of its sampled segments (reuses `sampleArc` / the [center,start,end] convention). Hit geometry is
+    PRECOMPUTED once at mount (`edgeHits`) since Prepare's geometry is static — no per-mousemove arc sampling.
+  - **Rendering generalized by kind** — replaced the loop-only `polyOf` with ONE `targetMarkup(t, loopStyle,
+    edgeStyle)`: `loop` → filled polygon (SP1d); `edge` → the TRUE geometry as a STROKE via the renderer's own
+    builders (`edgeStrokeMarkup` → `<line>/<circle>/<path>` with `calculateArcPath`). `renderHover`/`renderSelection`
+    now call it for both kinds. Edge highlight = a glowing thick stroke (`--sk-hover` hover / `--sk-selection`
+    selected) — visually DISTINCT from the loop fills.
+  - Single-select behavior, persistence, click-empty-clear, redraw-on-change-only (no RAF), joints-hidden — all
+    unchanged (the selection Map + the click/hover wiring already handle both kinds).
+- **verify (CDP live, errors=0):** a rectangle (1 loop) + an OPEN line (in no loop). `resolveTarget`: on edge AB
+  `{kind:'edge',id:'AB'}`; interior `{kind:'loop','loop_AB-BC-CD-DA'}`; on the open line `{kind:'edge',id:'OL'}`;
+  outside → `null`. Hover ON a stroke → an `--sk-hover` `<line>` (no polygon); hover interior → the loop `<polygon>`
+  (kind switches at the stroke boundary). CLICK a stroke → SELECTED `--sk-selection` `<line>` (`{kind:'edge',id:'AB'}`),
+  PERSISTS after the pointer moves away. CLICK the OPEN path → selects the `OL` vector (`{kind:'edge'}`). CLICK
+  interior → loop `<polygon>` selected (`{kind:'loop'}`). CLICK empty → cleared (size 0). Joints = 0. No console
+  errors; event-driven (no RAF). LOAD-SAFE: shared #core/#ui UNCHANGED → SketchStudio byte-identical (`npm run
+  test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean;
+  scope = prepare-view.js only.
+- **process hygiene:** re-registered FROM THE REPO ROOT (last turn's split-brain `.proc/` fixed — `worker.pid` now in
+  the repo's `.proc/` beside `advisor.pid`); CDP Edge/server via `run_in_background` + killed each run; `watch` before
+  the pass = clean (0 flagged); none kept alive.
+- **state:** branch `carve-out`. Prepare resolves BOTH cut targets (loop region + edge vector) by proximity, with the
+  kind-tagged selection persisting. Next: cut-type ASSIGNMENT to the selected target (apply the CUT_TYPES encoding to
+  a loop/edge). STOP — hold.
+
+=== SP1e (PROXIMITY EDGE SELECT) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -105,6 +105,39 @@ const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',
 // Hover = LIGHT fill; Selected = STRONGER fill + a solid outline in the selection var — visually distinct (SP1d).
 const HOVER_STYLE = 'fill:var(--sk-hover, #7aa7e0); fill-opacity:0.16; stroke:var(--sk-hover, #7aa7e0); stroke-width:1.5; stroke-opacity:0.6; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
 const SELECT_STYLE = 'fill:var(--sk-selection, #4c9aff); fill-opacity:0.30; stroke:var(--sk-selection, #4c9aff); stroke-width:2.5; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
+// SP1e: an 'edge' (vector) highlight is a glowing STROKE overlay following the true geometry — visually distinct
+// from the loop FILLS (loop = filled region; edge = thick stroke).
+const EDGE_HOVER_STYLE = 'fill:none; stroke:var(--sk-hover, #7aa7e0); stroke-width:3.5; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;';
+const EDGE_SELECT_STYLE = 'fill:none; stroke:var(--sk-selection, #4c9aff); stroke-width:4; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;';
+const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
+
+// World-space tolerance from screen px, derived from the live CTM scale (zoom-stable).
+function worldTolerance(svgEl, screenPx) {
+  try { const ctm = svgEl.getScreenCTM && svgEl.getScreenCTM(); if (ctm) { const sx = Math.hypot(ctm.a, ctm.b); if (sx > 0) return screenPx / sx; } } catch (_) {}
+  return screenPx;
+}
+// point → segment distance (world units)
+function distPointSeg(p, a, b) {
+  const vx = b.x - a.x, vy = b.y - a.y, wx = p.x - a.x, wy = p.y - a.y;
+  const len2 = vx * vx + vy * vy; let t = len2 > 0 ? (wx * vx + wy * vy) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
+}
+// distance from a world point to a precomputed edge-hit struct (line: segment; circle: |d−r|; arc: nearest sample seg)
+function edgeDistAt(h, pt) {
+  if (h.kind === 'seg') return distPointSeg(pt, h.a, h.b);
+  if (h.kind === 'circle') return Math.abs(Math.hypot(pt.x - h.c.x, pt.y - h.c.y) - h.r);
+  if (h.kind === 'poly') { let best = Infinity; for (let i = 0; i < h.samples.length - 1; i++) best = Math.min(best, distPointSeg(pt, h.samples[i], h.samples[i + 1])); return best; }
+  return Infinity;
+}
+// edge highlight markup — the TRUE geometry as a stroke (reuses the renderer's path builders / calculateArcPath)
+function edgeStrokeMarkup(s, state, style) {
+  const J = state.joints;
+  if (s.type === 'line') { const a = J.get(s.joints[0]), b = J.get(s.joints[1]); return (a && b) ? `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="${style}"/>` : ''; }
+  if (s.type === 'circle') { const c = J.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? `<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="${style}"/>` : ''; }
+  if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" fill="none" style="${style}"/>` : ''; }
+  return '';
+}
 
 // ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select ──
 export function mountPrepareView(state, svgEl) {
@@ -125,30 +158,45 @@ export function mountPrepareView(state, svgEl) {
   const selection = new Map(); // key -> { kind, id }
   const targetKey = (t) => t.kind + ':' + t.id;
 
-  // KIND-AWARE dispatcher: cursor → target. ONE seam for both kinds.
+  // Precompute per-edge hit geometry once (Prepare geometry is static) — lines/circles analytic, arcs sampled.
+  const edgeHits = (state.shapes || []).map((s) => {
+    if (s.type === 'line') { const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]); return (a && b) ? { id: s.id, kind: 'seg', a, b } : null; }
+    if (s.type === 'circle') { const c = state.joints.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? { id: s.id, kind: 'circle', c, r } : null; }
+    if (s.type === 'arc') { const samples = sampleArc(s, state, 32); return (samples.length >= 2) ? { id: s.id, kind: 'poly', samples } : null; }
+    return null;
+  }).filter(Boolean);
+
+  // KIND-AWARE dispatcher: cursor → target. The user's PROXIMITY rule — ON the ink → the EDGE (vector);
+  // in the open interior → the LOOP.
   function resolveTarget(worldPt) {
-    // SP1e SEAM — the on-stroke 'edge' branch goes HERE, FIRST: if the cursor is within stroke tolerance of a
-    // vector (an open path, or a loop's edge), return { kind: 'edge', id: shapeId } — edge WINS over loop. The
-    // proximity rule (on the stroke → edge; in the open interior → loop) lives here. Not built this slice.
-    // TODAY — LOOP kind only: the innermost (smallest-area) loop whose boundary polygon contains the point.
+    // EDGE first: the nearest shape stroke within tolerance WINS over the loop (makes OPEN paths selectable too).
+    const tol = worldTolerance(svgEl, EDGE_TOL_PX);
+    let bestEdge = null, bestDist = tol;
+    for (const h of edgeHits) { const d = edgeDistAt(h, worldPt); if (d <= bestDist) { bestDist = d; bestEdge = h; } }
+    if (bestEdge) return { kind: 'edge', id: bestEdge.id };
+    // else LOOP: the innermost (smallest-area) loop whose boundary polygon contains the point.
     let best = null;
     for (const l of loops) if (l.polygon.length >= 3 && pointInPoly(l.polygon, worldPt) && (!best || l.area < best.area)) best = l;
     return best ? { kind: 'loop', id: best.id } : null;
   }
 
-  // Resolve a target → its renderable boundary polygon (only the 'loop' kind has one today).
-  const polyOf = (t) => (t && t.kind === 'loop') ? loopById.get(t.id) : null;
+  // ONE render path, branched by kind: loop → filled region; edge → glowing stroke overlay (true geometry).
+  const targetMarkup = (t, loopStyle, edgeStyle) => {
+    if (!t) return '';
+    if (t.kind === 'loop') { const l = loopById.get(t.id); return (l && l.polygon.length >= 3) ? polyMarkup(l.polygon, loopStyle) : ''; }
+    if (t.kind === 'edge') { const s = shapeById.get(t.id); return s ? edgeStrokeMarkup(s, state, edgeStyle) : ''; }
+    return '';
+  };
 
   const renderSelection = () => {
     let out = '';
-    for (const t of selection.values()) { const l = polyOf(t); if (l && l.polygon.length >= 3) out += polyMarkup(l.polygon, SELECT_STYLE); }
+    for (const t of selection.values()) out += targetMarkup(t, SELECT_STYLE, EDGE_SELECT_STYLE);
     selectG.innerHTML = out;
   };
   let hovered = null; // current hovered target { kind, id } | null
   const renderHover = () => {
-    // Show the hover outline UNLESS that target is already selected (selected style wins — no double-draw).
-    const l = (hovered && !selection.has(targetKey(hovered))) ? polyOf(hovered) : null;
-    hoverG.innerHTML = (l && l.polygon.length >= 3) ? polyMarkup(l.polygon, HOVER_STYLE) : '';
+    // Show the hover highlight UNLESS that target is already selected (selected style wins — no double-draw).
+    hoverG.innerHTML = (hovered && !selection.has(targetKey(hovered))) ? targetMarkup(hovered, HOVER_STYLE, EDGE_HOVER_STYLE) : '';
   };
 
   const setHover = (t) => {

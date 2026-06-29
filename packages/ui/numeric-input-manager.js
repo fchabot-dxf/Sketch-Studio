@@ -6,6 +6,12 @@ import { showNotification } from '#ui/notification-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import SettingsManager from '#core/settings-manager.js';
+import { parse as parseUnit, format as formatUnit } from '#core/units.js';
+
+// U2: the active document unit for LENGTH dimension display/parse. Defaults to 'mm' = the world base (1 unit = 1 mm),
+// so a bare number round-trips byte-identically to the old parseFloat/toFixed(1) until the U3 toggle changes it.
+const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
 let uiState = {
     active: false,
@@ -236,7 +242,13 @@ export function showEditInput(svg, state, constraint, initialKey) {
         const jb = state.joints.get(constraint.joints[1]);
         if (ja && jb) prefillValue = Math.abs(jb.y - ja.y);
     }
-    uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : (typeof prefillValue === 'number' ? prefillValue.toFixed(1) : '');
+    // U2: LENGTH dims format through the document unit; ANGLE dims stay in degrees (raw toFixed). docUnit defaults
+    // 'mm' (= the world base), so for a LENGTH dim formatUnit(v,'mm') === v.toFixed(1) — byte-identical to before.
+    const isAngleDim = constraint.type === CONSTRAINT_TYPES.ANGLE;
+    uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey
+        : (typeof prefillValue === 'number'
+            ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, getDocUnit()))
+            : '');
 
     requestAnimationFrame(() => {
         uiState.singleInput.focus();
@@ -273,8 +285,12 @@ export function updateInputPosition(x, y) {
 function handleCommit() {
     if (!uiState.active) return;
     if (uiState.mode === 'edit' && uiState.target) {
-        const val = parseFloat(uiState.singleInput.value);
-        if (!isNaN(val)) {
+        // U2: LENGTH dims parse through the document unit (a suffix like '0.25in' overrides; a bare number = docUnit,
+        // default 'mm' = the world base); ANGLE dims parse raw degrees. parseUnit returns null on invalid → the
+        // (val != null && !isNaN) guard rejects it exactly as NaN did, and stays byte-identical for the angle path.
+        const isAngleDim = uiState.target.type === CONSTRAINT_TYPES.ANGLE;
+        const val = isAngleDim ? parseFloat(uiState.singleInput.value) : parseUnit(uiState.singleInput.value, getDocUnit());
+        if (val != null && !isNaN(val)) {
             if (uiState.appState.saveState) uiState.appState.saveState();
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;

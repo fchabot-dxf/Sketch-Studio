@@ -4337,6 +4337,51 @@ ONLY the pure util + oracle + an INERT setting — nothing adopts it → both ap
 
 === U1 (CORE UNITS UTIL + SETTING, INERT) DONE - HOLD ===
 
+## 2026-06-29 · U2 — units in the #core dimension EDIT field (LENGTH dims) (turn 176) — shared, both apps load-safe
+
+Wires U1's units into the dimension EDIT input: a LENGTH dim's value parses/formats through `#core/units.js` with the
+document unit, so you can type `0.25in` in a mm doc (and `5mm` in an inch doc). SHARED — touches the #core dimension
+field SketchStudio also uses; the default (mm, bare number) path stays byte-identical.
+
+- **DISPATCH-FILE CORRECTION (flagged):** the dispatch named `live-dimension-input.js`, but its `showEditInput` has
+  NO importers (dead). The REAL dimension-edit path is `numeric-input-manager.js` `showEditInput` (prefill) →
+  `handleCommit` (edit branch, parse) → `commitDimensionEdit` (dimension-seams.js). I implemented at the REAL seam
+  (adapting to the code, like the line→line-midpoint bugfix), not the named-but-dead file.
+- **did (`packages/ui/numeric-input-manager.js` only):**
+  - Imports `SettingsManager` (the singleton) + `units.parse/format`. `getDocUnit()` = `SettingsManager.get('DOC_UNIT')
+    || 'mm'`.
+  - **FORMAT (prefill, :239):** a LENGTH dim → `formatUnit(prefillValue, docUnit)`; an ANGLE dim
+    (`type === CONSTRAINT_TYPES.ANGLE`) → raw `toFixed(1)` (degrees). With docUnit='mm', `formatUnit(v,'mm') ===
+    v.toFixed(1)` → byte-identical.
+  - **PARSE (commit, :276):** LENGTH → `parseUnit(input.value, docUnit)` (a suffix overrides; bare = docUnit); ANGLE →
+    raw `parseFloat` (degrees). Guard changed `!isNaN(val)` → `val != null && !isNaN(val)` so `parseUnit`'s null
+    (invalid) rejects exactly like the old NaN — and it stays byte-identical for the parseFloat/angle path.
+  - Storage UNCHANGED: `constraint.value` still holds the base (mm = world units) → NO migration, NO resize.
+- **FINDING (flagged for U3/SketchStudio):** SketchStudio's `#dimInput` is `<input type="number">` (its
+  `index.html:417`) — it REJECTS suffix strings at the input level (`'0.25in'` → `''`), so SketchStudio can't TYPE a
+  unit suffix (which is exactly its byte-identical, no-suffix-needed state — it has no doc-unit UI yet). Shaper has no
+  `#dimInput` → `setupNumericInput` creates a **text** input → suffixes work. So no input-type change is needed for
+  U2; when SketchStudio adopts the doc-unit toggle (U3) its `#dimInput` should become `type="text"`.
+- **verify (CDP live, BOTH apps, errors=0):**
+  - **Shaper (text input):** `0.25in` → 6.35 base; `5mm` → 5; bare `5` → 5; (inch doc) bare `2` → 50.8; ANGLE `45` →
+    45 (degrees, NOT converted, even in an inch doc); `abc` → rejected (unchanged); format len `50.0`/`1.0`in, angle
+    `90.0`.
+  - **SketchStudio (number input):** bare `5` → 5, format `50.0` = byte-identical; suffix `0.25in`/`5mm` rejected by
+    the number input (stays 50) — SAME as before (no regression); angle `45` → 45; format identical.
+  - `npm run test:shell` **12/12** (SketchStudio shell unregressed); solver oracle **12/12**; guard GREEN; baseline 8
+    pre-existing **0 net-new**; `node --check` clean; scope = `numeric-input-manager.js` only.
+- **process hygiene:** CDP Edge/servers via `run_in_background` + killed each run; **manually confirmed no stray
+  Edge/servers** (`pkill` checks: none). NOTE — `proc_health.py watch` is currently THROWING a
+  `json.decoder.JSONDecodeError: Invalid control character at … (char 309853)` — it chokes JSON-parsing a ~300 KB
+  process command line that contains a control char (a system process's argv, NOT my tree; persists after I kill my
+  strays). Flagged for the advisor: proc_health needs to sanitize/escape control chars in captured command lines. My
+  spawned procs are clean regardless.
+- **state:** branch `carve-out`. Length dims edit through the document unit (suffix override) where the input is text;
+  SketchStudio byte-identical (number input). Next: **U3** — adopt in the Shaper cut-param fields (cut-panel.js, store
+  in base mm) + the doc-unit toggle UI (and SketchStudio's `#dimInput` → text when it opts in). STOP — hold.
+
+=== U2 (UNITS IN THE #core DIMENSION FIELD) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

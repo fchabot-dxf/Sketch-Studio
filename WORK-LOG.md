@@ -4051,6 +4051,49 @@ Shaper-only — prepare-view.js.
 
 === SP1e (PROXIMITY EDGE SELECT) DONE - HOLD ===
 
+## 2026-06-29 · SP1f — cut-type panel + assign (turn 165) — Shaper-only
+
+The cut-settings card's TYPE control: select a Prepare target → pick a cut type → the target shows its cut PREVIEW
+color on the canvas, persisting as a cut plan. Every field maps to the EXISTING shaper.js encoding — the panel is the
+EDITOR for the declared cut data (declare-over-hand-roll: the panel writes records; it owns no cut state). SP1f =
+the card chrome + the cut-TYPE dropdown ONLY (depth/offset/bit-dia rows are SP1g). Shaper-only.
+
+- **did:**
+  - **`apps/shaper/src/shaper.js`** — DECLARED additively on each `CUT_TYPES` entry (export fill/stroke UNTOUCHED —
+    that's SP1i): `targetKind` ('region' for exterior/interior/pocket, 'path' for online/guide), `menuLabel`, and a
+    DARK-canvas-legible `previewFill`/`previewStroke` (green family — the export #000/#fff/gray are invisible on dark).
+    Added helpers: `cutTypeById`, `defaultCutRecord()` (the FULL record `{cutType:null, cutDepth:'unset',
+    cutOffset:0, toolDia:0.125}` — forward-safe for SP1g; SP1f only writes cutType), and `availableTypes(kind)` (the
+    GATING: a 'loop' accepts all 5; an 'edge' accepts only the 'path' types).
+  - **`apps/shaper/src/prepare-view.js`** — a module-level `CUT_PLAN` Map (keyed by `${kind}:${id}`) that PERSISTS
+    across the re-mounting controller; a 4th SVG group `#prepare-cut-group` BEHIND select/hover (z: cut < select <
+    hover < edges) painting every assigned target in its preview color via the shared `targetMarkup` (loop = filled
+    region, edge = colored stroke); and controller methods `selectedTarget()`, `recordFor(t)`, `availableTypesFor(t)`,
+    `applyCutTypeToSelected(cutType)` + an `onSelectionChange` callback so the panel tracks the selection.
+  - **`apps/shaper/src/cut-panel.js`** (new) — `createCutPanel(host, {onPickType})`: a dark `.cut-card` with the
+    cut-type dropdown (current type w/ a preview swatch + a menu of the 5 in Shaper's order, gated — unavailable types
+    disabled). Pure view: reflects the record, emits picks; leaves a `.cut-rows` slot for SP1g. `update(model|null)`
+    (null → hide).
+  - **`apps/shaper/index.html`** — a `#prepare-panel` host (floating top-right card) + the dark `.cut-card` CSS.
+  - **`apps/shaper/src/main.js`** — creates the panel once; on each Prepare enter mounts the view with
+    `onSelectionChange: refreshCutPanel`; `onPickType → prepareView.applyCutTypeToSelected(id)`.
+- **verify (CDP live, errors=0):** (A) REAL flow on the seed line (an EDGE): no selection → card HIDDEN; click the
+  line → card SHOWS; menu gating = enabled {online,guide}, disabled {exterior,interior,pocket}; pick "On line" → the
+  edge strokes the online preview (#34d399), trigger reads "On line"; leave→return Prepare → the cut PERSISTS (color
+  survives the re-mount) while the selection does not (card hidden again). (B) LOOP assignment: click interior →
+  loop; `availableTypesFor`=5; pick exterior → loop FILLS #22c55e, `record.cutType='exterior'`; pick pocket → recolors
+  #15803d, record='pocket'. (C) panel gating for a loop → all 5 enabled. LOAD-SAFE: shared #core/#ui UNCHANGED →
+  SketchStudio byte-identical (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing
+  0 net-new; `node --check` clean; scope = shaper.js + prepare-view.js + cut-panel.js (new) + index.html + main.js (all
+  apps/shaper). SketchStudio code UNTOUCHED.
+- **process hygiene:** CDP Edge/server via `run_in_background` + killed each run; `proc_health watch` before the pass =
+  clean; `worker.pid` in the repo `.proc/`; none kept alive.
+- **state:** branch `carve-out`. A target can be assigned a cut TYPE; the cut plan previews on the canvas + persists.
+  Next: **SP1g** — the depth / offset (+flip) / bit-diameter rows (the rest of the record), into the `.cut-rows` slot.
+  STOP — hold.
+
+=== SP1f (CUT-TYPE PANEL + ASSIGN) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

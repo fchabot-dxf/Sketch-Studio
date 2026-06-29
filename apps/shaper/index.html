@@ -69,6 +69,23 @@
     /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */
     #view-prepare { flex-direction: column; }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; }
+    /* SP1f: the cut-settings card — a floating panel, top-right of the Prepare view (shown when a target is selected). */
+    #prepare-panel { position: absolute; top: 12px; right: 12px; width: 232px; z-index: 6; pointer-events: none; }
+    #prepare-panel .cut-card { pointer-events: auto; background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+    .cut-card-title { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #9aa0a6; margin-bottom: 10px; }
+    .cut-field-label { display: block; font-size: 12px; color: #9aa0a6; margin-bottom: 5px; }
+    .cut-type-dd { position: relative; }
+    .cut-type-trigger { display: flex; align-items: center; gap: 8px; width: 100%; background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 7px 9px; color: #e6e6e6; cursor: pointer; font: 13px system-ui, sans-serif; }
+    .cut-type-trigger:hover { border-color: var(--sk-selection, #4c9aff); }
+    .cut-type-cur { flex: 1; text-align: left; }
+    .cut-caret { color: #9aa0a6; }
+    .cut-sw { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.15); }
+    .cut-type-menu { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #1b2030; border: 1px solid #2a2d31; border-radius: 6px; padding: 4px; z-index: 10; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .cut-type-opt { display: flex; align-items: center; gap: 8px; width: 100%; background: transparent; border: 0; border-radius: 4px; padding: 7px 8px; color: #e6e6e6; cursor: pointer; font: 13px system-ui, sans-serif; text-align: left; }
+    .cut-type-opt:hover:not(.is-disabled) { background: rgba(255,255,255,0.07); }
+    .cut-type-opt.is-current { background: rgba(76,154,255,0.18); }
+    .cut-type-opt.is-disabled { opacity: 0.4; cursor: not-allowed; }
+    .cut-rows:empty { display: none; }
     /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
@@ -118,8 +135,12 @@
   </section>
 
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->
-  <!-- SP1a: Prepare = a Prepare-local render of the shared #core sketch (edges, joints hidden) — loop-select next. -->
-  <section id="view-prepare" hidden><svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg></section>
+  <!-- SP1a/d/e/f: Prepare = a Prepare-local render of the shared #core sketch (edges, joints hidden) + loop/edge
+       select + the cut-settings card (#prepare-panel, mounted by main.js). -->
+  <section id="view-prepare" hidden>
+    <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="prepare-panel"></div>
+  </section>
   <section id="view-simexport" hidden>Simulate / Export — cut simulation + export (coming soon).</section>
 
   <script type="module" src="src/main.js"></script>

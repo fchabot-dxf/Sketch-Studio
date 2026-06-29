@@ -10,7 +10,8 @@ import * as inspector from './inspector.js';
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
-import { mountPrepareView } from './prepare-view.js'; // SP1a/SP1c: Prepare-local edge render + loop hover-highlight
+import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
+import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -75,7 +76,15 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
-let prepareView = null;      // SP1c: Prepare-local view (edges + loop hover); torn down + re-mounted on each Prepare enter
+let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
+// SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
+const refreshCutPanel = () => {
+  const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
+  cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t) } : null);
+};
+const cutPanel = createCutPanel(document.getElementById('prepare-panel'), {
+  onPickType: (id) => { if (prepareView) prepareView.applyCutTypeToSelected(id); refreshCutPanel(); },
+});
 let infoPanel = null, ribbon = null, lastSig = '';
 
 // Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /
@@ -150,7 +159,8 @@ function showMode(mode) {
     ensureSketch();
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
-    prepareView = mountPrepareView(designController.state, document.getElementById('prepare-canvas'));
+    prepareView = mountPrepareView(designController.state, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    refreshCutPanel(); // no selection yet → the card stays hidden
   }
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
 }

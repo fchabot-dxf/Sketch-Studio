@@ -7,6 +7,7 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops } from '#core/loop-finder.js';
+import { cutTypeById, defaultCutRecord, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -139,11 +140,21 @@ function edgeStrokeMarkup(s, state, style) {
   return '';
 }
 
-// ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select ──
-export function mountPrepareView(state, svgEl) {
+// ── Cut plan (SP1f): per-target cut assignments keyed by `${kind}:${id}`. Module-level so it PERSISTS across
+// Prepare re-mounts (Design↔Prepare, re-enter) — loop ids are deterministic (SP1b) + edge ids are stable. ──
+const keyOf = (kind, id) => kind + ':' + id;
+const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
+const CUT_PLAN = new Map();
+function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
+function setCutTypeFor(key, cutType) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec.cutType = cutType; CUT_PLAN.set(key, rec); return rec; }
+
+// ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select + cut-plan preview ──
+export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
+  const onSelectionChange = opts.onSelectionChange || (() => {});
   svgEl.innerHTML = ''; // clean re-mount
-  // z-order (later = on top): selected (behind) < hover < edges (on top). Joints stay hidden.
+  // z-order (later = on top): cut preview (behind) < selected < hover < edges (on top). Joints stay hidden.
+  const cutG = mkGroup('prepare-cut-group');       svgEl.appendChild(cutG);
   const selectG = mkGroup('prepare-select-group'); svgEl.appendChild(selectG);
   const hoverG = mkGroup('prepare-hover-group');   svgEl.appendChild(hoverG);
   renderPrepareGeometry(state, svgEl);
@@ -156,7 +167,7 @@ export function mountPrepareView(state, svgEl) {
   // by `${kind}:${id}` — single-select BEHAVIOR this slice, but the Map shape is forward-safe for multi-select
   // (shift-click) and for the 'edge' kind (SP1e). 'edge' is declared in the union but not yet resolvable.
   const selection = new Map(); // key -> { kind, id }
-  const targetKey = (t) => t.kind + ':' + t.id;
+  const targetKey = (t) => keyOf(t.kind, t.id);
 
   // Precompute per-edge hit geometry once (Prepare geometry is static) — lines/circles analytic, arcs sampled.
   const edgeHits = (state.shapes || []).map((s) => {
@@ -188,6 +199,22 @@ export function mountPrepareView(state, svgEl) {
     return '';
   };
 
+  // SP1f: persistent cut-plan preview — every assigned target painted in its dark-canvas preview color
+  // (loop → filled region; edge → colored stroke). Re-read from CUT_PLAN on mount + whenever a cut changes.
+  const renderCuts = () => {
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) {
+      if (!rec || !rec.cutType) continue;
+      const ct = cutTypeById(rec.cutType); if (!ct) continue;
+      const { kind, id } = parseKey(key);
+      if (kind === 'loop' ? !loopById.has(id) : !shapeById.has(id)) continue; // only targets present in THIS view
+      const loopStyle = `fill:${ct.previewFill}; fill-opacity:0.45; stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.75; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
+      const edgeStyle = `fill:none; stroke:${ct.previewStroke}; stroke-width:3; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;`;
+      out += targetMarkup({ kind, id }, loopStyle, edgeStyle);
+    }
+    cutG.innerHTML = out;
+  };
+
   const renderSelection = () => {
     let out = '';
     for (const t of selection.values()) out += targetMarkup(t, SELECT_STYLE, EDGE_SELECT_STYLE);
@@ -211,13 +238,21 @@ export function mountPrepareView(state, svgEl) {
     selection.clear();                       // single-select BEHAVIOR (shift-click multi-select is a later slice)
     if (t) selection.set(targetKey(t), t);   // click empty → cleared selection
     renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected loop drops its hover)
+    onSelectionChange(t || null);            // notify the cut panel (selected target | null)
   };
   svgEl.addEventListener('pointermove', onMove);
   svgEl.addEventListener('pointerleave', onLeave);
   svgEl.addEventListener('pointerdown', onDown);
 
+  renderCuts(); // paint any cut plan persisted from a prior visit
+
+  const selectedTarget = () => [...selection.values()][0] || null;
   return {
-    loops, selection, resolveTarget,
+    loops, selection, resolveTarget, selectedTarget,
+    recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
+    availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
+    // Write the cut type onto the current single selection + repaint the cut layer (panel calls this).
+    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setCutTypeFor(targetKey(t), cutType); renderCuts(); return rec; },
     destroy() {
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

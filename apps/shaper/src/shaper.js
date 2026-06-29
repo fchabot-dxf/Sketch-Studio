@@ -11,17 +11,46 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 
 // Hex is UPPERCASE to round-trip byte-for-byte with Shaper's own exporter.
 // Match is case-insensitive (see classify), so lowercase input still works.
+//
+// fill/stroke = the EXPORT encoding (black/white/gray/blue — never change these here; the SVG export reads them).
+// SP1f adds three DECLARED-but-additive fields used only by Shaper's Prepare tab (they never touch export):
+//   targetKind  — 'region' (acts on a closed area) | 'path' (acts on a single vector). Drives the gating rule:
+//                 a LOOP target accepts all 5; an EDGE target accepts only the 'path' types (online/guide).
+//   menuLabel   — the cut-menu label (matches Shaper's wording).
+//   previewFill / previewStroke — a DARK-canvas-legible palette (green family) for the Prepare cut-plan preview;
+//                 the export colors (e.g. exterior=#000) are invisible/illegible on the dark Prepare canvas.
 export const CUT_TYPES = [
-  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)' },
-  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)' },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)' },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path' },
-  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut' },
+  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a' },
+  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e' },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80' },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399' },
+  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635' },
 ];
 
 // shaper:* attributes Shaper writes per element (besides cutType, which we
 // derive from color). Order = inspector display order.
 export const SHAPER_FIELDS = ['cutDepth', 'cutOffset', 'toolDia'];
+
+// --- Prepare cut-plan helpers (SP1f) -------------------------------------
+// The Prepare tab assigns a cut to a topological TARGET (a loop or an edge), not to an SVG element. These helpers
+// declare the per-target cut RECORD shape + the type gating; the live assignments (keyed by targetKey) live in
+// prepare-view.js so they persist across Prepare re-mounts.
+
+export function cutTypeById(id) {
+  return CUT_TYPES.find((t) => t.id === id) || null;
+}
+
+// A fresh per-target cut record. FULL shape declared now (forward-safe for SP1g's depth/offset/bit-dia rows);
+// SP1f only ever writes cutType.
+export function defaultCutRecord() {
+  return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 0.125 };
+}
+
+// Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'edge').
+// A LOOP is both a closed region AND a closed path → all 5. An EDGE is a single vector → only the 'path' types.
+export function availableTypes(selectedKind) {
+  return CUT_TYPES.filter((t) => t.targetKind === 'path' || selectedKind === 'loop');
+}
 
 const NAMED = {
   black: '#000000', white: '#ffffff', gray: '#808080', grey: '#808080',

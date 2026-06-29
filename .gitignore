@@ -42,3 +42,4 @@ Thumbs.db
 # --- advisor/worker handoff coordination (local, two-window dance) ---
 .handoff/
 HANDOFF.md
+.proc/

@@ -3929,6 +3929,52 @@ into the Prepare-local view; joints stay hidden; the highlight redraws only on h
 
 === SP1c (PREPARE LOOP HOVER-HIGHLIGHT) DONE - HOLD ===
 
+## 2026-06-29 · BUGFIX — Shaper Design click "Cannot read properties of undefined (reading 'id')" (turn 159)
+
+A PRE-EXISTING shared-code bug the user hit while eyeballing SP1c (NOT SP1 — Prepare/loop-finder were fine). In the
+Design SELECT path, clicking a feature could throw `Cannot read properties of undefined (reading 'id')` + raise an
+"Input Error" toast.
+
+- **root cause (traced, then PROVEN with the live findSnap):** `findSnap` (`packages/ui/snap-detection.js:138-141`)
+  builds a **line→line midpoint** snap as `{ type:'midpoint', joints:bestCombo, ... }` with **NO `.shape`** (unlike
+  the per-line midpoint at :177 which has `shape: s`). `input-manager.js` (locked/fresh/fallback hitShape builds,
+  ~589/602/610/623) treats EVERY `line|shape|midpoint` snap as a shape-hit: `hitShape = { shape: clickSnap.shape }`
+  = `{ shape: undefined }`. Then `selection-tools.js handleShapeSelection:398` reads `hitShape.shape.id` → throw.
+  It needs **≥2 lines** (the `i<j` visibleLines loop), which is WHY it shows after the user draws (a rect = 4 lines)
+  and the 1-line seed never triggers it. Shared code → SketchStudio is equally exposed; the user just hit it in Shaper.
+- **fix (source, minimal):** in `input-manager.js`, right after the hitShape-build try/catch, ONE guard:
+  `if (hitShape && !hitShape.shape) hitShape = null;`. A line→line midpoint is a VIRTUAL draw-aid, not a selectable
+  feature — nulling a shape-less hitShape makes the SELECT/DIMENSION path fall through (marquee), exactly as a click
+  on empty space. Drawing is UNAFFECTED (it reads `clickSnap` directly, never `hitShape`). Chose the single
+  finalize-point guard over patching all 4 build sites (covers every path) and over a try/catch in
+  handleShapeSelection (fixes the malformed-object SOURCE, not the symptom).
+- **also (dispatch):** removed the stray `console.log('[DEBUG] SVG pointerdown fired'…)` (was line 864) and
+  `console.log('[DEBUG input-manager] pointerdown findSnap:'…)` + its comment (was 595-596). Left the `console.error`
+  in the findSnap catch (real error path, not stray noise). No `[DEBUG]` logs in selection-tools.
+- **verify (live CDP + Node, errors=0):**
+  - REAL `findSnap` on a 2-line state at the between-midpoint → `type:'midpoint', shape:undefined`; the OLD build+access
+    throws the **exact** `Cannot read properties of undefined (reading 'id')`; the guarded NEW path does **not** throw.
+  - Shaper Design live: clicking the seed line SELECTS it (selection glow persists after the pointer moves away) with
+    **0 caught errors / no toast**.
+  - **Shared-handler proof (app-agnostic, Node):** the EXPORTED `handlePointerDown` driven with a locked shape-less
+    midpoint snap in SELECT mode → `threw:false` (was the crash). Covers **SketchStudio** (which has no seed geometry
+    to click) + Shaper via the one shared handler.
+  - **SketchStudio UNREGRESSED:** `npm run test:shell` **12/12** (loads, errors=0); the guard only nullifies a
+    shape-*less* hitShape, so well-formed line/shape selection is byte-for-byte unchanged.
+  - **Shaper Prepare (SP1c) still works:** re-ran the SP1c hover verify post-fix → identical (loopCount=2, inner=20,
+    ring=80, arc poly=26, errors=0) — input-manager is not on Prepare's path.
+  - Solver oracle **12/12**; guard GREEN; baseline-diff = the 8 pre-existing, **0 net-new** (`input-manager-midpoint`
+    stays pre-existing-failing — it's the MIDPOINT *constraint tool*, unrelated to this SELECT-path fix); `node --check`
+    clean; scope = `packages/ui/input-manager.js` (+ `.gitignore`: ignore `.proc/`, the new proc_health state dir).
+- **process hygiene (new worker-skill section):** registered my tree (`proc_health register --role worker`); `watch`
+  before this pass = clean (0 flagged in my tree). The CDP verify spawns headless Edge + a static server — those run
+  in the Bash tool's own tree (not my registered tree); I run them via `run_in_background` so the tool doesn't block
+  on their pipes, and kill them at the end of each run. None kept alive.
+- **state:** branch `carve-out`. Shaper Design click-select works again; SketchStudio + Prepare intact. Back to SP1d
+  (loop click-select) when the advisor dispatches. STOP — hold.
+
+=== BUGFIX (SHAPER DESIGN CLICK) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

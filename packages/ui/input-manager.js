@@ -592,8 +592,6 @@ function handlePointerDown(e, svg, state) {
         if (!hitJoint && !hitShape) {
             const snapBoost = isTouch ? 2.0 : 1.0;
             clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
-            // DEBUG: Log what findSnap returns when clicking
-            console.log('[DEBUG input-manager] pointerdown findSnap:', clickSnap, 'at screen:', screenX, screenY, 'joints count:', state.joints.size);
             if (clickSnap) {
                 if (clickSnap.type === 'joint') {
                     const jid = clickSnap.targetId;
@@ -624,6 +622,12 @@ function handlePointerDown(e, svg, state) {
             }
         }
     }
+
+    // A line→line 'midpoint' snap (snap-detection.js) is a VIRTUAL draw-aid between two lines and carries NO `.shape`.
+    // It must not become a malformed shape-hit: handleShapeSelection reads `hitShape.shape.id` and would throw
+    // "Cannot read properties of undefined (reading 'id')". Drawing reads clickSnap directly, so dropping it here only
+    // affects the SELECT/DIMENSION path — where a virtual midpoint is not a selectable feature (falls through to marquee).
+    if (hitShape && !hitShape.shape) hitShape = null;
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
@@ -861,7 +865,6 @@ function setupEventListeners(svg, state) {
     dbg.log('input', '[input-manager] Attaching pointer listeners to svg', !!svg);
     if(!svg) return;
         svg.addEventListener('pointerdown', (e) => {
-            console.log('[DEBUG] SVG pointerdown fired', { x: e.clientX, y: e.clientY, tool: state.currentTool });
             dbg.log('input', '[input-manager] svg pointerdown', {x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName});
             // debug: verify unified snap format on pointerdown
             try{ /* noop */ }catch(_){ }

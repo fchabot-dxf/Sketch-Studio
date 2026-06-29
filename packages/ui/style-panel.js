@@ -6,6 +6,7 @@
 // --sk-* (light defaults → SketchStudio); self-contained <style>. Imports ONLY the settings store.
 
 import SettingsManager from '#core/settings-manager.js';
+import { UNITS } from '#core/units.js';
 
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
 // for the S7c-2c swap. min/max/step carried from settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
@@ -72,7 +73,7 @@ function injectStyles() {
  *   onNotify(msg): optional toast hook (no Tailwind dependency here).
  *   title: header text (default 'Style').
  */
-export function createStylePanel({ settings = SettingsManager, onSaveProject = null, onNotify = null, title = 'Style' } = {}) {
+export function createStylePanel({ settings = SettingsManager, onSaveProject = null, onNotify = null, title = 'Style', showDocUnit = false } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
   let isOpen = false, escHandler = null, outsideHandler = null;
@@ -90,6 +91,20 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
   // Body (16 controls from the spec)
   const body = document.createElement('div'); body.className = 'sk-style-body';
   for (const spec of CONTROLS) body.appendChild(buildControl(spec));
+
+  // HOST-OPT-IN: document-unit selector (U3b). Rendered ONLY when showDocUnit:true (Shaper) — SketchStudio omits it,
+  // so its panel stays exactly the 16 CONTROLS / byte-identical. Writes DOC_UNIT; units-aware fields (cut params,
+  // dimension edit) re-read it on change.
+  let docUnitSelect = null;
+  if (showDocUnit) {
+    const row = document.createElement('div'); row.className = 'sk-style-row';
+    const top = document.createElement('div'); top.className = 'sk-style-rowtop';
+    const lab = document.createElement('span'); lab.className = 'sk-style-label'; lab.textContent = 'Document Unit';
+    docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
+    for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = u; docUnitSelect.appendChild(o); }
+    docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
+    top.append(lab, docUnitSelect); row.appendChild(top); body.appendChild(row);
+  }
 
   // Footer (Reset + Close, + optional Save)
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
@@ -139,6 +154,7 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
+    if (docUnitSelect) docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
   }
 
   // Live re-populate on any external change. subscribe RETURNS its unsubscribe — keep it; call it in destroy().

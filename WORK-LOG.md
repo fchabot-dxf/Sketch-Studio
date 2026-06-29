@@ -4451,6 +4451,45 @@ toggle yet (DOC_UNIT stays the global default 'mm'). Shaper-only → SketchStudi
 
 === U3a (SHAPER CUT PARAMS -> BASE mm + UNITS) DONE - HOLD ===
 
+## 2026-06-29 · U3b — Shaper settings: header gear → the shared style-panel MODAL + doc-unit toggle (turn 182)
+
+Gives Shaper its settings HOME: a Settings button in the header opens the SHARED `#ui/style-panel.js` as a modal,
+with a host-opt-in doc-unit toggle; Shaper defaults to INCH (conditionally). SketchStudio stays byte-identical (the
+toggle is host-opt-in → SketchStudio's panel stays the 16 controls). No header/style-panel FORK was needed (adapted
+to Shaper's real header), so no gate.
+
+- **did:**
+  - **`packages/ui/style-panel.js`** (shared, ADDITIVE host-opt-in): `createStylePanel({…, showDocUnit = false})`.
+    When `showDocUnit:true`, append ONE doc-unit row — a `Document Unit` `<select>` (mm|cm|in, from `units.UNITS`) that
+    writes `DOC_UNIT` (`persist:'local'`) + repopulates on `subscribe`. SketchStudio does NOT pass it → no doc-unit
+    control → its panel stays exactly the 16 CONTROLS / byte-identical (the import of `units.UNITS` is inert there).
+  - **`apps/shaper/index.html`** — a header `#btn-settings` gear button (always visible) + `.settings-btn` CSS.
+  - **`apps/shaper/src/main.js`** — mount `createStylePanel({ showDocUnit: true })` into `document.body` (fixed modal);
+    wire the gear → `stylePanel.toggle()`. Shaper INCH DEFAULT (conditional): at boot, if the persisted
+    `'sketch-studio-settings'` localStorage has NO `DOC_UNIT`, `SettingsManager.set('DOC_UNIT','in',{persist:false})`
+    — **in-memory only**, so the default never writes localStorage and can't leak to a same-origin SketchStudio; only
+    an explicit toggle persists.
+  - SketchStudio UNTOUCHED (host-opt-in off; `#dimInput` stays type=number — deferred to when it opts in).
+- **CAVEAT (flagged):** the doc-unit lives in the shared `SettingsManager` + the shared `localStorage` key
+  `'sketch-studio-settings'` (per-ORIGIN). The inch DEFAULT is in-memory (no leak), but an explicitly-TOGGLED choice
+  PERSISTS to that shared key — so if Shaper + SketchStudio are served from the SAME origin, a toggled Shaper unit
+  would be read by SketchStudio. In separate-origin deploys (the real target) they're independent. Verified
+  SketchStudio-safe by leaving localStorage at 'mm' after the test.
+- **verify (CDP live, Shaper, errors=0):** boot `DOC_UNIT='in'`, `persistedAtBoot=null` (inch in-memory, not
+  persisted); `#btn-settings` exists, panel hidden → click → modal OPENS; the modal has the doc-unit `<select>` = 'in';
+  switch → 'mm' writes `DOC_UNIT='mm'` AND persists ('mm' in localStorage → reload keeps it); cut params re-label
+  3.175 (mm) ↔ 0.125 (in). Host-opt-in OFF (`createStylePanel({})`) → 16 `.sk-style-input`, NO doc-unit control.
+  LOAD-SAFE: `npm run test:shell` **12/12** (SketchStudio panel = 16 controls, byte-identical); solver oracle 12/12;
+  guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = style-panel.js + index.html + main.js.
+  (The dimension EDIT field re-reads `DOC_UNIT` per open already (U2); the canvas dim LABELS are still raw → U3c.)
+- **process hygiene:** CDP via `run_in_background` + killed each run; manually confirmed no stray Edge/servers
+  (proc_health.py watch still throws the JSONDecodeError — system-process argv; flagged at U2).
+- **state:** branch `carve-out`. Shaper has a settings modal + a working doc-unit toggle, defaults to inch; cut params
+  + dim edit are units-aware. Next: **U3c** — the canvas dimension LABELS re-label via `units.format` on `DOC_UNIT`
+  change (shared renderer; byte-identical at mm). STOP — hold.
+
+=== U3b (SHAPER SETTINGS HEADER + MODAL + DOC-UNIT TOGGLE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

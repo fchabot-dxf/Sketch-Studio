@@ -12,6 +12,8 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
+import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
+import SettingsManager from '#core/settings-manager.js';
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -86,6 +88,22 @@ const cutPanel = createCutPanel(document.getElementById('prepare-panel'), {
   onPickType: (id) => { if (prepareView) prepareView.applyCutTypeToSelected(id); refreshCutPanel(); },
   onSetField: (field, value) => { if (prepareView) prepareView.setFieldOnSelected(field, value); refreshCutPanel(); },
 });
+
+// U3b: Shaper defaults to INCH — but ONLY when the user hasn't persisted a doc-unit choice. persist:false keeps it
+// in-memory (the default never writes to the shared 'sketch-studio-settings' localStorage, so it can't leak to a
+// same-origin SketchStudio); only an explicit toggle in the Settings modal persists.
+try {
+  const persisted = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}');
+  if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
+} catch (_) { /* localStorage blocked */ }
+
+// U3b: the shared style-panel as a header-opened MODAL, with the host-opt-in doc-unit toggle. SketchStudio does NOT
+// pass showDocUnit → its panel stays the 16 controls / byte-identical.
+const stylePanel = createStylePanel({ showDocUnit: true });
+stylePanel.render(document.body);
+const settingsBtn = document.getElementById('btn-settings');
+if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());
+
 let infoPanel = null, ribbon = null, lastSig = '';
 
 // Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /

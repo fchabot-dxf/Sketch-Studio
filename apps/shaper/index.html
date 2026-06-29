@@ -104,6 +104,9 @@
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
     .mode-btn:hover { background: rgba(255,255,255,0.08); opacity: 0.95; }
     .mode-btn.active { background: var(--sk-selection, #4c9aff); color: #fff; opacity: 1; }
+    /* U3b: header Settings (gear) button → the shared style-panel modal. */
+    .settings-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font: 15px system-ui, sans-serif; opacity: 0.75; }
+    .settings-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
   </style>
 </head>
 <body>
@@ -124,6 +127,8 @@
       <button id="fit">Fit</button>
       <button id="export">Export</button>
     </span>
+    <!-- U3b: Settings → the shared style-panel MODAL (with the doc-unit toggle). Always visible. -->
+    <button id="btn-settings" class="settings-btn" title="Settings" aria-label="Settings">&#9881;</button>
   </header>
 
   <main class="layout">

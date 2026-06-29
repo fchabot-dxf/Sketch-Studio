@@ -598,12 +598,11 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
     <!-- S7c-2c: the old #settings-panel popup is retired — its stroke/style controls live in the SHARED style
          panel (#ui/style-panel.js), opened from the header's Style button. settings-panel.js early-returns now. -->
 
-    <!-- EXPORT PANEL -->
-    <div id="export-panel" style="z-index:99999" class="hidden bg-white border border-slate-200 rounded shadow-lg p-4 w-80" aria-hidden="true">
-        <div class="flex justify-between items-center mb-2" style="align-items:center;">
-            <div style="color:#60a5fa; font-size:13px; font-weight:600;">Export</div>
-            <button id="btn-export-close" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;">✕</button>
-        </div>
+    <!-- S7c-2e: EXPORT TAB VIEW — an in-flow, router-owned view (no floating popup). The form + all #export-* ids
+         + #btn-export-do are unchanged; only the popup chrome (z-index/shadow/w-80/border/close-x) is dropped. -->
+    <div id="export-panel" class="hidden flex-1 overflow-auto p-6" aria-hidden="true">
+      <div class="max-w-md mx-auto">
+        <div class="mb-3" style="color:#60a5fa; font-size:13px; font-weight:600;">Export</div>
         <div class="space-y-3">
             <label class="block"><span class="text-xs">File name</span><input id="export-filename" class="w-full mt-1 p-1 border rounded" type="text" value="sketch"/></label>
             <label class="block"><span class="text-xs">File type</span>
@@ -629,6 +628,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
             <button id="btn-export-cancel" class="px-2 py-1 border rounded">Cancel</button>
             <button id="btn-export-do" class="px-3 py-1 bg-blue-600 text-white rounded">Export</button>
         </div>
+      </div>
     </div>
 
     <script>

@@ -3611,6 +3611,47 @@ INDEPENDENT `handleToolActivate(tool)`.
 
 === S7c-2d-pre (RESTORE PRE-SELECTION) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2e — Export popup → router-owned tab view (turn 143) — LIVE-APP, load-safe
+
+The LAST shell slice before pixel-polish: faithfully convert `#export-panel` from the 2c-interim floating POPUP
+into a proper in-flow Export TAB view owned by the router. The router is now the single source of truth for
+Export navigation.
+
+- **did (index.html + ui-manager.js + main.js + the test):**
+  - **`#export-panel` popup → in-flow view** (index.html): root `class="hidden bg-white border rounded shadow-lg
+    p-4 w-80" style="z-index:99999"` → **`class="hidden flex-1 overflow-auto p-6"`** (fills the view area below
+    the header in the `flex-col h-screen` body; the router's `.hidden` toggle stays). Wrapped the form in a
+    `max-w-md mx-auto` column for readability. The Export title + ALL `#export-*` ids + `#btn-export-do` are
+    unchanged; **dropped the popup close-x** (`#btn-export-close`).
+  - **Removed the dead popup-open machinery** (ui-manager.js): the `#btn-export` block (null since 2c) +
+    `closeExport()` + the outside/Esc handlers + the `#btn-export-close`/`#btn-export-cancel`→closeExport handlers.
+    Kept ONLY the Export action (`#btn-export-do` → gather form → `exportToFile` → `showNotification`); removed its
+    `p.classList.add('hidden')` (the router returns to Design instead).
+  - **Single source of truth = the router** (main.js): the back-to-Design wiring drops `btn-export-close` from its
+    id array → `['btn-export-cancel','btn-export-do']` (Cancel + a successful export → header `setActiveTab('design')`
+    + `showView('design')`).
+  - **Test** (tests/export-panel-html.test.js): updated to assert the NEW tab-view structure — the Export title
+    styling remains; the root has `flex-1` and NO `w-80`/`shadow-lg`; `#btn-export-close` is gone; `#btn-export-do`
+    remains. Real, passing check.
+- **verify (CDP live — LOAD-SAFE + functional, errors=0, NO dead-handler errors):**
+  - **LOAD-SAFE:** index.html loads, console **errors=0**; solver oracle **12/12**.
+  - Export tab → the form shows as an in-flow view (`exportVisible`), **no popup shadow** (`noShadow`), **fills wide**
+    (not w-80, `fillsWide`), **no close-x** (`noCloseX`), form present.
+  - **`#btn-export-do` → `exportToFile` runs + returns to Design** (`doBackToDesign`); **Cancel → Design**
+    (`cancelBackToDesign`).
+  - No regressions: ribbon tool (`ribbonWorks`), header Style (`styleOpens`), **pre-selection 2d-pre**
+    (`preselWorks`) all still work.
+  - **Shaper UNTOUCHED** (no `#export-panel`); `node tests/export-panel-html.test.js` passes (updated); guard GREEN ·
+    baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · scope = index.html + main.js +
+    ui-manager.js + the test.
+- **state:** branch `carve-out`. The S7c-2 SHELL arc is COMPLETE — SketchStudio rides the shared header + style
+  panel + tool ribbon (with the full CAD UX) + the Export tab; the Design/Export router owns navigation; Shaper
+  untouched throughout. Open DEBT: **DEBT-RIBBON-CLEANUP** (the dead inline `#toolsRibbon` markup + no-op
+  rect-dropdown machinery). Next: **S7c-3** — pixel-parity polish (header/ribbon/style/export visual match; the
+  DEBT-RIBBON-CLEANUP could fold in). STOP — hold.
+
+=== S7c-2e (EXPORT POPUP->TAB) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

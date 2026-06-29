@@ -522,44 +522,10 @@ export function setupUI(state){
     });
   }
 
-  // EXPORT button
-  const exportBtn = document.getElementById('btn-export');
-  function closeExport() {
-    const p = document.getElementById('export-panel');
-    if (!p) return;
-    p.classList.add('hidden');
-    p.setAttribute('aria-hidden', 'true');
-    if (p._outsideHandler) { document.removeEventListener('click', p._outsideHandler); p._outsideHandler = null; }
-    if (p._escHandler) { document.removeEventListener('keydown', p._escHandler); p._escHandler = null; }
-  }
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      const panel = document.getElementById('export-panel');
-      const settings = document.getElementById('settings-panel');
-      if (settings) settings.classList.add('hidden');
-      if (!panel) return;
-      panel.classList.toggle('hidden');
-      panel.setAttribute('aria-hidden', panel.classList.contains('hidden'));
-      if (!panel.classList.contains('hidden')) {
-        const outsideHandler = (e) => { if (!panel.contains(e.target) && e.target !== exportBtn && !exportBtn.contains(e.target)) closeExport(); };
-        const escHandler = (e) => { if (e.key === 'Escape') closeExport(); };
-        panel._outsideHandler = outsideHandler;
-        panel._escHandler = escHandler;
-        setTimeout(()=> document.addEventListener('click', outsideHandler), 0);
-        document.addEventListener('keydown', escHandler);
-      } else {
-        if (panel._outsideHandler) { document.removeEventListener('click', panel._outsideHandler); panel._outsideHandler = null; }
-        if (panel._escHandler) { document.removeEventListener('keydown', panel._escHandler); panel._escHandler = null; }
-      }
-    });
-  }
-
-  // Export panel controls
-  const exportClose = document.getElementById('btn-export-close');
-  const exportCancel = document.getElementById('btn-export-cancel');
+  // S7c-2e: Export is a router-owned TAB now (no popup). The dead popup-open machinery (#btn-export, closeExport,
+  // outside/Esc handlers) is removed; #btn-export-close is dropped; Cancel + a successful export return to Design
+  // via the header tab (wired in main.js). Keep only the Export action.
   const exportDo = document.getElementById('btn-export-do');
-  if (exportClose) exportClose.addEventListener('click', () => { closeExport(); });
-  if (exportCancel) exportCancel.addEventListener('click', () => { closeExport(); });
   if (exportDo) exportDo.addEventListener('click', () => {
     const filename = document.getElementById('export-filename') ? document.getElementById('export-filename').value.trim() : 'sketch';
     const type = document.getElementById('export-type') ? document.getElementById('export-type').value : 'svg';
@@ -577,7 +543,7 @@ export function setupUI(state){
       const res = exportToFile(state, filename, type, opts);
       if (res && res.ok) {
         try{ showNotification('Export started', 'success'); }catch(_){ }
-        const p=document.getElementById('export-panel'); if(p) p.classList.add('hidden');
+        // S7c-2e: the router returns to Design (main.js's #btn-export-do handler) — no popup hide here.
       } else {
         try{ showNotification('Export failed: ' + (res && res.reason ? res.reason : 'unknown'), 'error'); }catch(_){}
       }

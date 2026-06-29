@@ -154,8 +154,8 @@ function initApp(){
   if (headerHost) header.render(headerHost);
   showView('design');
 
-  // The export form's Cancel/Close/Export return to the Design tab (the popup is now the Export view).
-  ['btn-export-cancel', 'btn-export-close', 'btn-export-do'].forEach((id) => {
+  // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
+  ['btn-export-cancel', 'btn-export-do'].forEach((id) => {
     const b = document.getElementById(id);
     if (b) b.addEventListener('click', () => { header.setActiveTab('design'); showView('design'); });
   });

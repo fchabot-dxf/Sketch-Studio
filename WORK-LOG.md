@@ -4132,6 +4132,95 @@ SINGLE-SELECT this slice (multi-select + 'mixed' is SP1i). Shaper-only.
 
 === SP1g (CUT PARAMS ROWS) DONE - HOLD ===
 
+## 2026-06-29 · SP1h — per-cut-type TOOL-AWARE look: PLAN (turn 169) — WORK-LOG only, NO code
+
+The centerpiece: each cut type's preview becomes real CAM geometry (the bit DIAMETER drives it), not a recolor.
+Scouted the offset math + the primitives on hand. PLAN below; nothing implemented.
+
+**What's already on hand (grounding):**
+- Each loop carries a CCW boundary POLYGON (`loopPolygon` — lines as vertices, arcs SAMPLED via calculateArcPath /
+  getPointAtLength = the true curve; ~32 pts/arc), cached at mount. Loops are CCW (loop-finder keeps positive-area
+  faces) → a CONSISTENT outward normal (rotate the edge dir −90°). The per-target record `{cutType, cutDepth,
+  cutOffset, toolDia}` persists in `CUT_PLAN`.
+- `#core/geometry.js` already exports the offset building blocks: `perpendicularNormal(a,b)` (segment normal),
+  `getLineIntersection(p1,p2,p3,p4)` (corner trim), `getDist`, `projectPointOnSegment`, `calculateArcPath`,
+  `getArcParams`. There is NO existing offset/inset/Minkowski helper — the offset is NET-NEW.
+
+**(1) Geometry approach**
+- **OUTSIDE / INSIDE = parallel offset of the boundary** by `d = toolDia/2 ± cutOffset` (cutOffset signed via the
+  SP1g flip), OUTWARD for outside / INWARD for inside → a dashed toolpath polyline. METHOD: per-segment offset
+  (shift each edge along its outward normal by d) + corner RE-JOIN — at each true vertex, the two offset segments
+  either GAP (convex side) → fill with a ROUND arc of radius d (the physically-correct tool path; miter is the
+  alternative but spikes at sharp corners), or OVERLAP (concave side) → TRIM to `getLineIntersection`. Because arcs
+  are pre-sampled into many near-collinear short segments, their "corners" are tiny-angle (trivial joins); the real
+  joins are at the polygon's actual vertices. Self-intersection (offset ≥ local feature half-width — thin necks/
+  slots) makes the naive offset invert/cross → needs global clipping (Clipper-style); DEFER (h3) — h2 targets simple
+  loops.
+- **HOME: a PURE `#core/polygon-offset.js`** (recommended, like loop-finder): `offsetPolygon(points, d, {join:'round'|
+  'miter'})` → offset polyline(s). PURE + ADDITIVE (no SketchStudio importer → byte-identical), ORACLE-testable, and
+  REUSABLE by SP1j export (toolpath export) + any future host — not Shaper-local. Built on perpendicularNormal +
+  getLineIntersection.
+- **POCKET = morphological OPENING of the interior by r=toolDia/2** (erode-by-r then dilate-by-r). The cleared-region
+  boundary = the walls returning to the original position with the CONVEX corners FILLETED by radius r — a 1/2" bit
+  visibly rounds them vs a 1/8". Practical LOOK: fillet each convex vertex of the loop with an r-radius tangent arc →
+  the cleared boundary; render as a HATCHED fill + a depth label. (Concave-vertex handling — protrusions into the
+  pocket — is a refinement; h4 v1 rounds convex corners.)
+- **ON LINE = a band of width `toolDia` centered on the path** (render: the geometry stroked at stroke-width =
+  toolDia in WORLD units, semi-transparent) + a DASHED centerline. Works for loops AND edges.
+- **GUIDE = a thin DASHED stroke** of the geometry — no toolpath, no fill. Trivial.
+- **EDGE targets** (open vectors): outside/inside N/A (no enclosed region); ON-LINE (band+centerline) + GUIDE apply —
+  matches the SP1f gating.
+
+**(2) Render + layer** — the tool-aware look mostly REPLACES the SP1f flat preview (which was the placeholder):
+pocket's HATCH replaces the flat fill; on-line's BAND replaces the flat stroke; guide's DASH replaces it. EXCEPTION:
+outside/inside KEEP a subtle region tint (the "what kind" cue) AND add the dashed toolpath on top. Add a dedicated
+`#prepare-toolpath-group`; z-order: cut-tint (behind) < edges < toolpath/hatch/band < select < hover (so the dashed
+paths read over the geometry but the selection highlight still tops everything). The existing `renderCuts` evolves
+into `renderToolAware` driven by (cutType, toolDia, cutOffset) + the boundary.
+
+**(3) Reactivity** — SP1g's `setFieldOnSelected` deliberately skips recolor; SP1h wires a look-refresh. Route every
+record change (cutType via applyCutTypeToSelected; toolDia/cutOffset via setFieldOnSelected) through one
+`refreshLook(target)` that recomputes + redraws ONLY that target's tool-aware geometry. CACHE the computed toolpath
+per target keyed by `(cutType, toolDia, cutOffset)`; invalidate on change; recompute all assigned targets on Prepare
+re-mount (Design geometry may have changed). cutDepth changes only the label (no recompute).
+
+**(4) Slicing (recommended — plumbing & low-risk looks FIRST, risky offset isolated):**
+- **SP1h1** — the `#prepare-toolpath-group` LAYER + the reactivity plumbing (refreshLook + per-target cache) + the
+  TRIVIAL looks: GUIDE (dashed) + ON-LINE (tool-width band + dashed centerline) for loops & edges. Near-zero geometry
+  risk; establishes the layer + recompute wiring that every later look needs; a quick visible win.
+- **SP1h2** — `#core/polygon-offset.js` (parallel-offset engine) + ORACLE; OUTSIDE/INSIDE dashed toolpath for SIMPLE
+  loops (convex + mild concave). The centerpiece geometry, isolated with its own oracle.
+- **SP1h3** — offset ROBUSTNESS: concave-corner correctness, arc-sample density, tiny/degenerate edges, self-
+  intersection clipping (thin necks) + oracle cases.
+- **SP1h4** — POCKET (opening / convex-corner fillet by r) + HATCH fill + depth label.
+  *(This REORDERS the dispatch's suggested "offset-first" sequence: I recommend landing the band/guide + plumbing in
+  h1 because they carry the layer + reactivity at ~zero geometry risk, so the offset engine in h2 plugs into proven
+  plumbing. Advisor to confirm — happy to do offset-first if preferred.)*
+
+**(5) Risks**
+- **Offset robustness** (the big one): concave overlap (trim), miter spikes at sharp convex corners (use round joins),
+  and self-intersection when `d ≥ feature half-width` (thin necks invert) → needs global clipping; v1 (h2) limits to
+  simple loops, h3 hardens, OR we accept artifacts with a flag.
+- **Arcs**: pre-sampled → offset works per-sample but adds many corners (perf + more self-intersection chances); the
+  offset of an arc run is itself a polyline (fine — already an approximation).
+- **Perf**: recompute per edit (every stepper/preset click). Mitigate: recompute ONLY the edited target; cache by
+  (cutType,toolDia,cutOffset); boundary polygon already cached. Offset is O(N) for simple joins; O(N²) self-intersect
+  clipping deferred.
+- **UNITS/SCALE — OPEN QUESTION (flag, may need a user call):** cut params are INCHES (toolDia 0.125", presets 1/8"…).
+  The Design sketch geometry is in WORLD units (viewBox ≈120 wide; the seed line ≈50 units long). Is 1 world unit = 1
+  inch? If the sketch unit is mm/arbitrary, a 0.125" offset is mis-scaled (invisible on a 120-unit sketch). The
+  tool-aware look needs a declared WORLD-UNIT ↔ inch mapping to be dimensionally correct (likely the SAME units
+  decision as SP1j export `cutDepth` in/mm). Plumbing/geometry can proceed with the raw number; CORRECTNESS needs this
+  settled.
+- **Dashed stroke**: `vector-effect:non-scaling-stroke` keeps width constant; use WORLD-unit dash spacing for a
+  zoom-consistent CAM look (minor).
+
+**state:** branch `carve-out`. Plan ready; recommend h1 (plumbing + band/guide) next, then the offset engine. The
+units question is the one thing that may need a user decision before the offset look is dimensionally correct. STOP —
+hold for the advisor's slice dispatch.
+
+=== SP1h PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -3292,6 +3292,88 @@ export-panel popup); the tool ribbon = the shared **Create/Inspect/Constrain (+ 
 
 === S7c-2 PLAN READY - HOLD ===
 
+## 2026-06-29 · PLAN S7c-2 (SHARED HEADER + STYLE PANEL) — REVISED (turn 129) — PLAN ONLY, supersedes the above
+
+REDIRECT: the prior S7c-2 (SketchStudio-SPECIFIC top bar) is superseded. The HEADER is SHARED too — a
+configurable `#ui/` shell handed the app's tabs, hosting the shared STYLE panel + actions — AND the style/stroke
+panel is SHARED (it configures the shared sketcher). The whole Design SHELL (header + ribbon + canvas + panels)
+becomes portable; SketchStudio is the FIRST adopter, Shaper folds its S6 mode-nav into the shared header LATER.
+
+### Key finding — the store is ALREADY shared
+`SettingsManager` lives at **`#core/settings-manager.js`** (default export) and is already read by the shared
+renderer/input/snap (`svg-renderer.js`, `input-manager.js`, `snap-magnet.js`, `selection-tools.js`). So the
+settings STORE + the renderer reacting to it are ALREADY shared — only the PANEL **UI** lives in the app
+(`apps/sketchstudio/ui/settings-panel.js`). Extracting the panel is low-risk plumbing, not a store migration.
+
+### (1) Shared header shell (#ui/app-header.js)
+- `createAppHeader({ tabs, actions?, onTabChange?, activeTab? }) → { el, render(container), setActiveTab, destroy }`.
+- **Tab strip** from `tabs` (`[{ id, label, icon? }]`) — active highlighted; click → `setActiveTab(id)` +
+  `onTabChange(id)` so the host's router shows that view. (Studio: `[Design, Export]`; Shaper later: its 4 modes —
+  the same component subsumes Shaper's S6 `.mode-nav`.) Reuses the existing tab-strip idiom (`.mode-nav` /
+  tabbed-dock tabs).
+- **Actions area** (right): the shared **Style** button (opens the shared style panel) + per-app `actions`
+  (`[{ id, label, icon?, title?, onClick }]`, e.g. Debug). Themeable `--sk-*` (light Studio / dark Shaper).
+- App-agnostic chrome; self-contained `<style>`; imports nothing app-specific.
+
+### (2) Shared style panel (#ui/style-panel.js)
+- `createStylePanel({ … }) → { el, open(), close(), toggle(), render, destroy }` — the stroke/width + rendering
+  controls bound to the SHARED `#core/settings-manager.js`, driving the shared renderer.
+- **Shared sketcher-rendering controls (ALL extractable — every current `#s-*` is a SettingsManager key the
+  renderer reads):** grid (`SHOW_GRID`,`GRID_SIZE`,`GRID_MAJOR_STEP`,`GRID_MAGNETISM`,`SNAP_MAGNETISM`), stroke
+  (`LINE_STROKE`), joints (`JOINT_RADIUS`,`JOINT_STROKE_MULT`), feedback (`SELECTION_FEEDBACK_MULT`,
+  `HOVER_FEEDBACK_MULT`), glyph (`GLYPH_SYMBOL_SIZE_PX`,`GLYPH_INFERENCE_SIZE_PX`,`GLYPH_OFFSET_PX`), glow
+  (`GLOW_WIDTH_PX`), dash (`DASH_LENGTH_PX`,`DASH_GAP_PX`). Carry over `populate()`←`getAll()`,
+  `applyLocal()`→`set(..,{persist:'local'})`, `subscribe`→live re-populate, **Reset**→`resetToDefaults()`, the
+  range-slider UX.
+- **App-specific (stays out of the shared panel / host-provided):** **"Save (Project)"** (`saveProjectFile`, the
+  standalone build's save-to-file) — pass as an optional host action, or omit (Shaper). The popup open/close
+  (toggle/outside-click/Esc) becomes the panel's own `open()/close()`, invoked by the header Style button.
+- **Storage:** SettingsManager (#core) already shared → store + persistence shared (DEBT-1 localStorage seam
+  deferred). Note: `#btn-settings-toggle` (today's Settings) maps to the header's **Style** button — the current
+  settings panel IS entirely sketcher style, so Settings == Style here.
+
+### (3) SketchStudio adoption (first adopter)
+- Studio uses: the shared **header** (tabs `Design | Export`; actions **Style** + **Debug**) + the shared **style
+  panel** + the shared **ribbon** (Create/Inspect/Constrain + Edit, `onToolClick`→ui-manager's rich
+  `handleToolActivate`/`setTool`; `setTool`→`ribbon.refresh()`; rect via the ribbon; Edit extraGroups same-ids) +
+  **Export-as-a-tab** (reuse `exportToFile`).
+- The old `#toolsRibbon` Actions group → the header (Style/Debug, Export→tab); the `#settings-panel` stroke
+  controls → the shared style panel. Footer/`#modeText`/canvas-overlay stay in the Design view.
+
+### (4) Slice sequence (each: both apps load + SketchStudio FULLY FUNCTIONAL + guard+baseline green; Shaper unaffected)
+- **S7c-2a — shared header shell** (`#ui/app-header.js`) standalone — CDP smoke (tabs render, click → onTabChange,
+  active highlight, actions fire, Style button hook); both apps byte-identical (no adopter).
+- **S7c-2b — shared style panel** (`#ui/style-panel.js`) standalone — extract from settings-panel.js, bound to the
+  shared SettingsManager; smoke (a control write → `SettingsManager.set` → renderer value changes; populate/
+  subscribe/Reset). Both apps byte-identical.
+- **S7c-2c — Studio adopts header + style + router** (Design↔Export); KEEP the current `#toolsRibbon` + canvas +
+  footer in the Design view; Style/Debug to the header; Export view = the export form (still its own logic).
+- **S7c-2d — Studio adopts the shared ribbon** (`onToolClick`→`handleToolActivate`; Edit extraGroups;
+  `setTool`→`ribbon.refresh()`; rect via the ribbon).
+- **S7c-2e — Export-as-a-tab** (the `#export-panel` form → the Export view; reuse `exportToFile`; drop the popup
+  open/close).
+- **S7c-3 — pixel-parity polish** (header + ribbon + style panel match the originals; screenshot-diff + computed-
+  style bar). [Recommend this finer split over bundling header+style+ribbon — safer on the polished app.]
+
+### (5) Risks
+- **R-RESET:** main-app restructure with reset history → SLICE; each slice keeps SketchStudio fully functional +
+  revertible; never big-bang.
+- **R-SETTINGSMANAGER-SHARING:** the store is already #core (low risk) — but the panel extraction MUST preserve
+  populate/applyLocal/subscribe + sliders + Reset; **Save(Project)/`saveProjectFile` stays app-specific**.
+- **R-BIND-ORDER:** the action ids move to the header (`#btn-settings-toggle`→Style, `#btn-debug-toggle`→Debug,
+  `#btn-export`) — keep same-ids (render header before settings-panel.js/debug-panel.js/ui-manager bind) OR wire
+  via the header's `onClick` callbacks. Pick per button.
+- **R-EXPORT-CONVERSION:** popup→tab — reuse the form ids + `#btn-export-do`→`exportToFile`; drop only the popup
+  open/close.
+- **R-SETTINGS-WORKING:** verify the extracted controls still drive the renderer live (via SettingsManager) — the
+  pre-existing settings-panel tests (`settings-panel-sliders`, `settings-manager`) guard the store/sliders.
+- **R-PIXEL:** header + ribbon + style-panel visual parity → the S7c-3 screenshot/computed-style gate.
+- **R-SHAPER:** untouched until its OWN adopt slice (keeps the S6 mode-nav; the shared header/style/ribbon are
+  opt-in). Footer/`#modeText`/canvas overlay (`#btn-construct-toggle`/`#btn-recenter-view`/mag-lens) stay in the
+  Studio Design view.
+
+=== S7c-2 (SHARED HEADER) PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

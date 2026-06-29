@@ -97,13 +97,16 @@ function iconSvg(iconId, cls = 'sk-ribbon-ic') {
 }
 
 /**
- * createToolRibbon({ state, extraGroups, on }) → { el, render(container), refresh, destroy }
- *   Renders Create + Inspect + Constrain (icon-over-label .sk-ribbon-btn) wired to switchToTool; the rect button
- *   gets a 2pt/center/3pt variant dropdown (sets state.rectMode). refresh() syncs .active to state.currentTool.
+ * createToolRibbon({ state, extraGroups, on, onToolClick }) → { el, render(container), refresh, destroy }
+ *   Renders Create + Inspect + Constrain (icon-over-label .sk-ribbon-btn); the rect button gets a 2pt/center/3pt
+ *   variant dropdown (sets state.rectMode). refresh() syncs .active to state.currentTool.
  *   extraGroups: [{ label, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended.
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
+ *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
+ *     state.rectMode is set) calls THIS instead of the internal switchToTool, so a host (e.g. SketchStudio) routes
+ *     tool activation to its OWN rich handler. When absent, the ribbon uses switchToTool (Shaper/standalone path).
  */
-export function createToolRibbon({ state, extraGroups = [], on = null } = {}) {
+export function createToolRibbon({ state, extraGroups = [], on = null, onToolClick = null } = {}) {
   injectStyles();
   ensureIconSymbols(ICON_IDS);
 
@@ -111,7 +114,12 @@ export function createToolRibbon({ state, extraGroups = [], on = null } = {}) {
   const toolBtns = []; // { btn, tool } — for active-sync
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
-  function selectTool(tool) { try { switchToTool(state, tool); } catch (_) {} fire('tool', tool); refresh(); }
+  function selectTool(tool) {
+    if (typeof onToolClick === 'function') { try { onToolClick(tool); } catch (_) {} } // host owns activation
+    else { try { switchToTool(state, tool); } catch (_) {} }                            // default: shared tool-switch
+    fire('tool', tool);
+    refresh();
+  }
 
   function group(label, frag) {
     const g = document.createElement('div'); g.className = 'sk-ribbon-group';

@@ -3183,6 +3183,40 @@ VISUAL parity (pixel-faithful), NOT byte-identical. (User noted mid-plan: the ne
 
 === S7c PLAN READY - HOLD ===
 
+## 2026-06-29 · S7c-1 — extend the shared ribbon with an onToolClick hook (turn 125)
+
+First S7c sub-slice: the additive host-override hook that lets a host (SketchStudio, S7c-2) route tool activation
+to its OWN rich handler. Purely additive — Shaper/standalone unchanged. (NOTE for S7c-2, not acted on: per user,
+Settings/Debug/Export are app chrome, NOT sketcher tools → they'll move OUT to a top bar; the shared ribbon stays
+exactly Create/Inspect/Constrain, no Actions group.)
+
+- **did (packages/ui/tool-ribbon.js — one function, surgical):**
+  - `createToolRibbon` signature gains an optional **`onToolClick`**: `({ state, extraGroups?, on?, onToolClick? })`.
+  - The single activation path, `selectTool(tool)`, now: **if `onToolClick` is a function → call `onToolClick(tool)`
+    INSTEAD of the internal `switchToTool`; else → `switchToTool(state, tool)` (the default).** Then `fire('tool',
+    tool)` + `refresh()` exactly as before. Since the rect-variant select already routes through `selectTool`
+    (after setting `state.rectMode`), it inherits the hook automatically — no change to the rect handler.
+  - Nothing else changed: `on('tool'|'rectMode')` still emit; `refresh()` unchanged; default (no hook) =
+    byte-identical behaviour.
+- **verify (CDP smoke, isolation):**
+  - **Default (no `onToolClick`):** clicking Line → `switchToTool` runs (`state.currentTool='line'`); the rect
+    dropdown still sets `state.rectMode=CENTER` + `currentTool=RECT`. UNCHANGED.
+  - **With `onToolClick` stub (records calls, leaves currentTool alone):** clicking Line → the hook is called
+    (`hookLineCalled`) and `switchToTool` is NOT (`switchNotCalled` — `currentTool` stayed `select`); `on('tool')`
+    still fired. Rect-variant select → `state.rectMode=CENTER` set (`hookRectModeSet`), `onToolClick(RECT)` called
+    (`hookRectCalled`), `on('rectMode')` fired, `switchToTool` still NOT called (`stillNoSwitch`). `refresh()` after
+    an external `currentTool` change still syncs `.active` (`refreshSyncs`). `hookCalls=[line,rect,rect]`.
+  - **Shaper byte-identical** — still uses the default path: enter Design, the Line ribbon button activates
+    (`lineActive`). **SketchStudio untouched** — world-group **5**, no `.sk-ribbon`. Both apps `errors=0`.
+  - guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** · `node --check` clean · scope = `#ui/`
+    only (tool-ribbon.js).
+- **state:** branch `carve-out`. The shared ribbon can now have its tool activation overridden by a host without
+  any change to the default (Shaper) path. Next: **S7c-2** — SketchStudio wires up (replace `#toolsRibbon`, route
+  tool clicks via `onToolClick` to its rich `setTool`, `setTool`→`ribbon.refresh()`, rect via the ribbon, Edit via
+  extraGroups; Settings/Debug/Export move OUT to a top bar — settle SketchStudio's 'main tabs' then). STOP — hold.
+
+=== S7c-1 (RIBBON onToolClick HOOK) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

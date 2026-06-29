@@ -2779,6 +2779,74 @@ apps/sketchstudio then promote" since Shaper is ready to consume now). Load-safe
 
 === S5-FIX (TABS IN HEADER) DONE — HOLD ===
 
+## 2026-06-29 · PLAN S6 — restructure Shaper into a 4-mode app shell (turn 111) — PLAN ONLY, no code
+
+User defined the target app structure (supersedes the S5 dock-tab tweaks): Shaper becomes a **4-mode app** with a
+top nav, each mode owning its tools. Given the project's reset history (a past big-bang restructure was RESET),
+this is PLANNED in load-safe slices, not big-banged.
+
+### (1) Current Shaper shell (mapped)
+- **Header** `<header class="toolbar">`: `SVG Editor` + `Shaper Origin` + spacer + `#open` Open SVG · `#fit` Fit ·
+  `#export` Export · **`#tab-design` Design** (the editor↔Design toggle).
+- **Body** `<main class="layout">`: `#tree` · `#canvas` · `#inspector` — **the SVG editor** (booted by
+  `src/main.js`: `canvas.init`/`tree.init`/`inspector.init` + Open/Fit/Export + drag-drop).
+- **`#design-view`** (hidden, `position:absolute; inset:44px 0 0 0`): `.design-bar` (← Editor + the S5 tab slot) +
+  `#design-canvas`. Shown by toggling `main.layout` off / `#design-view` on.
+- **`main.js`** Design toggle: `showDesign()`/`showEditor()` (#tab-design ↔ #design-back); `buildDock()` lazily
+  `mountSketch(#design-canvas)` + a **floating `TabbedDockPanel`** (tool palette + live info panel; `onRender`→
+  `dockTick` refreshes it). So today = a **2-mode toggle** (editor ↔ Design) + a floating dock.
+
+### (2) Target structure (4-mode app nav + view router)
+- **Header nav = 4 mode buttons:** **Explore · Design · Prepare · Sim/Export** (replaces the `#tab-design` Design
+  button AND the `← Editor` toggle). Active mode highlights.
+- **4 view containers** + a tiny **view router** (`showMode(m)` = show one, hide the others via `[hidden]`):
+  - **Explore** = today's SVG editor (`main.layout`, renamed/wrapped) — minimal change.
+  - **Design** = `#design-view` (the sketcher canvas + a FIXED docked side panel — see §3).
+  - **Prepare** = stub (cut type + toolpath placeholder).
+  - **Sim/Export** = stub (cut sim + export placeholder).
+- **Open SVG / Fit** are EXPLORE-mode actions → live in the Explore view's own bar (or show only when Explore is
+  active). The header's existing **Export** is the SVG-export (Explore action); the **Sim/Export MODE** is the
+  separate cut-path export — keep them distinct.
+
+### (3) Design mode — a FIXED docked side panel (NOT the floating dock)
+- Replace the floating `TabbedDockPanel` with a **plain fixed side panel** in `#design-view`: a flex column —
+  **`createDesignInfoPanel` (constraint list + DOF) on TOP** (scrollable), **`createDesignToolPalette` (tool
+  buttons) at the BOTTOM** (per the user). Reuses the existing S5b/S5c2 factories — only the CONTAINER changes
+  (a fixed `<aside>` instead of the floating widget). The `onRender`→refresh wiring carries over.
+  - NB this **reverses** S5c2's order (palette was on top) → info TOP, tools BOTTOM.
+- **`TabbedDockPanel` (S5a):** RETIRED from Shaper's Design (superseded by the mode-nav + fixed panel). Keep the
+  widget in `#ui/` (unused by Shaper; available for reuse or later removal — don't delete in S6).
+
+### (4) Explore mode = the existing SVG editor under the Explore tab — minimal change (don't touch its internals).
+
+### (5) Slice sequence (load-safe; each: Shaper loads + SketchStudio byte-identical + guard + baseline green)
+- **S6a — nav router + 4 view containers.** Add the 4-mode header nav + the router; wrap the editor as Explore,
+  `#design-view` as Design (KEEP the current floating dock for now), add Prepare + Sim/Export stub views. Remove
+  the `#tab-design`/`← Editor` toggle (the nav replaces it). Move Open SVG/Fit into Explore. Verify: all 4 modes
+  switch; Explore = the working editor; Design = the working sketcher.
+- **S6b — Design fixed panel.** Replace the floating `TabbedDockPanel` with the fixed docked side panel (info TOP,
+  tools BOTTOM), reusing the existing factories; wire refresh. Verify: Design has the fixed panel, not floating;
+  list/DOF + tools work; row-click highlights on canvas.
+- **(S6c, later) Prepare / Sim-Export content** — flesh the stubs (out of scope for the structural slices).
+- Each slice is small + independently verified (the anti-reset discipline).
+
+### (6) Risks
+- **R-RESET (history):** a past big restructure was RESET — so SLICE it (router first with Explore=editor
+  UNCHANGED + Design=existing; the Design-panel swap second). Never big-bang the shell. Each slice loads + green.
+- **R-EDITOR-WIRING:** Explore = the existing editor; keep `canvas/tree/inspector` init + Open/Fit/Export intact.
+  The router just shows/hides containers — don't re-init the editor on every switch (init once).
+- **R-DESIGN-LIFECYCLE:** the sketcher's RAF must start when Design is shown / stop when hidden (already the
+  start/stop pattern); the router drives it. Mount once (idempotent).
+- **R-PERSISTENCE:** persist the active MODE (localStorage) so a reload reopens the same mode (small; DEBT-1
+  adapter later).
+- **R-COEXIST:** the input layer's document listeners are gated by `isActive` — tie `isActive` to "Design mode
+  active" so Explore/Prepare keystrokes don't reach the sketcher (the P5b gate already does this; repoint it at
+  the router's active mode).
+- **Should stay:** SketchStudio is untouched throughout (it doesn't use Shaper's shell). The shared `#ui/`
+  factories (info panel, tool palette, renderer, input) are reused as-is — only Shaper's container/nav changes.
+
+=== S6 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

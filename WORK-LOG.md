@@ -3063,6 +3063,48 @@ STANDALONE — no app adopts it yet, so BOTH apps stay byte-identical (S7b Shape
 
 === S7a (SHARED TOOL RIBBON) DONE — HOLD ===
 
+## 2026-06-29 · S7b — Shaper Design adopts the shared ribbon (TOP) + collapsible info panel (turn 121)
+
+Second S7 slice (Shaper-only; SketchStudio byte-identical; canvas untouched). User chose: ribbon at the TOP +
+KEEP the constraint list/DOF as a side panel, and the side panel is COLLAPSIBLE.
+
+- **did (apps/shaper/index.html + src/main.js; deleted packages/ui/design-tool-palette.js):**
+  - **TOP ribbon:** `#design-view` is now a flex COLUMN — a full-width `#design-ribbon` bar on top hosting
+    `createToolRibbon({ state })` (the shared S7a ribbon: Create/Inspect/Constrain, icon-over-label), then a
+    `#design-body` flex ROW below. Replaces the simple `createDesignToolPalette`. Dark via Shaper's `:root` — added
+    the `--sk-ribbon-*` dark vars (bg `#111827`, sep `#1f2937`, hover, fg `#cbd5e1`, group-label, menu-bg); the
+    active accent is the existing `--sk-selection` `#4c9aff`.
+  - **Active-sync (ribbon AND keyboard):** `panelTick` (the render-tick) now calls `ribbon.refresh()` (+ the info
+    panel). Its sig already includes `currentTool`, so a KEYBOARD tool-switch refreshes the ribbon's `.active`
+    too — not just ribbon clicks.
+  - **Collapsible side panel:** `#design-body` = `[#design-panel | #design-canvas]`. The left panel now holds ONLY
+    `createDesignInfoPanel` (list + DOF) in `#design-panel-info`; tools are gone from it. A chevron
+    `#design-panel-toggle` toggles `#design-panel.collapsed` (flex-basis 244px ↔ 30px thin strip, info hidden) so
+    the canvas reflows full-width; **persisted** (`localStorage 'shaper-design-panel-collapsed'`). The canvas
+    element is NOT touched — it just reflows.
+  - **Cleanup:** Shaper no longer uses `createDesignToolPalette`; confirmed it had NO other users (SketchStudio
+    doesn't use it) → **removed `packages/ui/design-tool-palette.js`** + its import + the old `.design-panel-info`/
+    `.design-panel-tools` CSS (surgical orphan cleanup of THIS change).
+- **verify (CDP — the real symptom):**
+  - Full-width TOP ribbon: `hasRibbon`, groups `Create,Inspect,Constrain`, `ribbonFullWidth`, `ribbonOnTop`, dark
+    `ribbonBg=rgb(17,24,39)`; the left panel shows the info (`hasInfo`/`hasDOF`) and NO tools (`noToolsInPanel`).
+  - Ribbon tool switches + draws: clicking the Line button → `.active` (accent `#4c9aff`) + a drag grows the
+    world-group (`drew`).
+  - **Keyboard syncs the ribbon:** `'c'` → the Circle button becomes `.active`, Line clears.
+  - **Collapsible:** the toggle collapses the panel → the canvas reflows wider (`canvasGrew`), `persisted='1'`;
+    a 2nd click expands back.
+  - Constraint row → canvas highlight (`rowSel` + the `fill-opacity="0.28"` selection disc); the **rect dropdown**
+    opens + sets `#icon-tool-rect-center`; **other modes** still switch (`exploreWorks`).
+  - **SketchStudio byte-identical:** world-group **5**, no `#design-ribbon`. Both apps `errors=0`.
+  - guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** (no test imported the deleted palette) ·
+    `node --check` clean · scope = apps/shaper (index.html + main.js) + the palette deletion.
+- **state:** branch `carve-out`. Shaper's Design now reads like SketchStudio's surface: a full-width grouped
+  icon-over-label tool ribbon on top (dark), a collapsible live constraint-list/DOF side panel, the canvas
+  untouched. The simple palette is retired. Next: **S7c** — SketchStudio adopts the shared ribbon (replace its
+  inline `#toolsRibbon`, VISUAL-parity bar, last). STOP — hold.
+
+=== S7b (SHAPER ADOPTS RIBBON) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

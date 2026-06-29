@@ -9,7 +9,7 @@ import * as inspector from './inspector.js';
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
-import { createDesignToolPalette } from '#ui/design-tool-palette.js';
+import { createToolRibbon } from '#ui/tool-ribbon.js';
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -74,10 +74,11 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
-let infoPanel = null, palette = null, lastSig = '';
+let infoPanel = null, ribbon = null, lastSig = '';
 
-// Refresh the Design panel's tool palette + info panel when the sketch changes (active tool / constraint count /
-// values / selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap.
+// Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /
+// selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap. Since
+// the sig includes currentTool, a KEYBOARD tool-switch refreshes the ribbon's .active too (not just ribbon clicks).
 function panelTick() {
   if (!designController) return;
   const s = designController.state;
@@ -86,22 +87,34 @@ function panelTick() {
   const nShapes = (s.shapes && s.shapes.length) || 0;
   const nJoints = (s.joints && s.joints.size) || 0;
   const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
-  if (sig !== lastSig) { lastSig = sig; if (palette) palette.refresh(); if (infoPanel) infoPanel.refresh(); }
+  if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
 }
 
-// Build the FIXED Design side panel ONCE (S6b): a left column beside the canvas (not floating) — the live
-// constraint-list/DOF info panel on TOP (scrolls), the tool-palette buttons at the BOTTOM. Reuses the shared #ui
-// factories. Dark theming is automatic (the panels use --sk-*, which Shaper's :root sets dark).
-function buildDesignPanel() {
+// Build the Design UI ONCE (S7b): a full-width SketchStudio-style tool ribbon on TOP (#design-ribbon), and a
+// COLLAPSIBLE left side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
+// untouched canvas. Reuses the shared #ui factories; dark via --sk-* (Shaper's :root). The canvas is not touched —
+// collapsing the panel just reflows it wider.
+const PANEL_COLLAPSED_KEY = 'shaper-design-panel-collapsed';
+function buildDesignUI() {
   const { state, engine } = designController;
   infoPanel = createDesignInfoPanel({ state, engine });
-  palette = createDesignToolPalette({ state });
-  const panelEl = document.getElementById('design-panel');
-  const infoWrap = document.createElement('div'); infoWrap.className = 'design-panel-info';
-  const toolWrap = document.createElement('div'); toolWrap.className = 'design-panel-tools';
-  infoPanel.render(infoWrap); // list + DOF on TOP
-  palette.render(toolWrap);   // tools at the BOTTOM
-  panelEl.append(infoWrap, toolWrap);
+  infoPanel.render(document.getElementById('design-panel-info'));
+  ribbon = createToolRibbon({ state });
+  ribbon.render(document.getElementById('design-ribbon'));
+
+  // Collapsible side panel: chevron toggles a thin strip ↔ full panel (canvas reflows); persisted.
+  const panel = document.getElementById('design-panel');
+  const toggle = document.getElementById('design-panel-toggle');
+  const setCollapsed = (c) => {
+    panel.classList.toggle('collapsed', c);
+    toggle.textContent = c ? '▶' : '◀';
+    toggle.title = c ? 'Expand panel' : 'Collapse panel';
+    try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
+  };
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(PANEL_COLLAPSED_KEY) === '1'; } catch (_) {}
+  setCollapsed(collapsed);
+  toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view
@@ -110,9 +123,9 @@ function ensureSketch() {
   if (designController) return;
   designController = mountSketch(document.getElementById('design-canvas'), {
     isActive: () => currentMode === 'design',
-    onRender: panelTick, // S5c/S6b: refresh the Design panel on change, in sync with the render loop
+    onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
   });
-  buildDesignPanel();
+  buildDesignUI();
 }
 
 // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the

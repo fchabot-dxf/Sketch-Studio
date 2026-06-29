@@ -42,14 +42,27 @@
       --sk-hover: #7aa7e0;
       --sk-origin: #4c9aff;
       --sk-error: #f87171;
+      /* S7b: dark chrome for the shared tool ribbon (light defaults live in the component; this :root retints). */
+      --sk-ribbon-bg: #111827;
+      --sk-ribbon-sep: #1f2937;
+      --sk-ribbon-hover: rgba(255,255,255,0.08);
+      --sk-ribbon-fg: #cbd5e1;
+      --sk-ribbon-grouplabel: #6b7280;
+      --sk-ribbon-menu-bg: #1b2030;
     }
     #design-view, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
-    /* S6b: Design = a FIXED side panel (LEFT) beside the canvas — not floating, not draggable. */
-    #design-view { flex-direction: row; }
-    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; }
-    .design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }   /* list + DOF on TOP */
-    .design-panel-tools { flex: 0 0 auto; padding: 8px; border-top: 1px solid #1f2937; }  /* tool buttons at BOTTOM */
+    /* S7b: Design = a full-width tool ribbon on TOP, then a row of [collapsible info panel | canvas]. */
+    #design-view { flex-direction: column; }
+    #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #1f2937; }
+    #design-body { flex: 1 1 auto; display: flex; min-height: 0; }
+    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; transition: flex-basis 0.15s ease; }
+    #design-panel.collapsed { flex-basis: 30px; }
+    #design-panel.collapsed #design-panel-info { display: none; }
+    #design-panel-toggle { align-self: flex-end; background: transparent; border: 0; color: #9aa0a6; cursor: pointer; font: 13px system-ui, sans-serif; padding: 6px 8px; line-height: 1; }
+    #design-panel-toggle:hover { color: #cbd5e1; }
+    #design-panel.collapsed #design-panel-toggle { align-self: center; }
+    #design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }
     #design-canvas { flex: 1; min-width: 0; min-height: 0; }
     /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
     #view-prepare, #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
@@ -90,9 +103,15 @@
 
   <!-- Shared #core-backed Design canvas (S1 proof). Hidden until the Design tab is toggled. -->
   <section id="design-view" hidden>
-    <!-- S6b: the FIXED Design side panel (list/DOF on top, tools at the bottom) — populated by src/main.js. -->
-    <aside id="design-panel"></aside>
-    <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+    <!-- S7b: full-width tool ribbon on top; below, a row of [collapsible info panel | canvas]. Populated by main.js. -->
+    <div id="design-ribbon"></div>
+    <div id="design-body">
+      <aside id="design-panel">
+        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">◀</button>
+        <div id="design-panel-info"></div>
+      </aside>
+      <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
   </section>
 
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->

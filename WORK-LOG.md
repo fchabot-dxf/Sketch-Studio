@@ -4094,6 +4094,44 @@ the card chrome + the cut-TYPE dropdown ONLY (depth/offset/bit-dia rows are SP1g
 
 === SP1f (CUT-TYPE PANEL + ASSIGN) DONE - HOLD ===
 
+## 2026-06-29 · SP1g — cut-param rows (depth / offset / bit diameter) (turn 167) — Shaper-only
+
+Fills the SP1f card's `.cut-rows` slot with the 3 remaining record fields, wired to the SAME per-target cut record.
+SINGLE-SELECT this slice (multi-select + 'mixed' is SP1i). Shaper-only.
+
+- **did:**
+  - **`apps/shaper/src/cut-panel.js`** — built the 3 rows in `.cut-rows`, each reflecting + editing the record:
+    DEPTH = a −/+ stepper + a typed value (default 'unset'; stepping from unset jumps to a start value, then ±step;
+    writes `cutDepth`); OFFSET = a typed value + a FLIP toggle that negates the offset DIRECTION (sign of `cutOffset`,
+    with a lit state when negative); BIT DIAMETER = a typed value + quick PRESETS. The presets are DECLARED as DATA
+    (`BIT_PRESETS = [{label,value}…]`) and rendered in a loop — not hard-coded buttons (declare-over-hand-roll). The
+    panel stays a PURE view: it mirrors the record into `current` (so the steppers/flip compute from it) and emits
+    edits via `onSetField(field, value)`; `update(model)` reflects all fields (+ active-preset / flip state).
+    FORWARD-COMPAT noted: each field is structured so a later multi-select 'mixed' model just sets a blank/"mixed"
+    placeholder.
+  - **`apps/shaper/src/prepare-view.js`** — generalized the apply path: renamed `setCutTypeFor` → `setFieldFor(key,
+    field, value)`; `applyCutTypeToSelected` uses it (+ recolors), and added `setFieldOnSelected(field, value)` that
+    just persists a numeric field on the selection (NO recolor — depth/offset/toolDia drive the later tool-aware look
+    SP1h, not SP1f's cut color).
+  - **`apps/shaper/src/main.js`** — wired the panel's `onSetField → prepareView.setFieldOnSelected → refreshCutPanel`.
+  - **`apps/shaper/index.html`** — dark/--sk-* CSS for the rows (stepper, numeric inputs, flip, presets), matching the
+    SP1f card.
+- **verify (CDP live, errors=0):** REAL flow on the seed-line edge — card shows the rows reflecting the default record
+  (depth '' = unset, offset '0.000', bit '0.125' with the 1/8 preset active; 4 presets). Step DEPTH from unset →
+  '0.100' → '0.150'. Edit OFFSET → '0.050'; FLIP → '-0.050' (flip lit). Bit preset 1/4 → '0.250' (1/4 active). Click
+  empty → card hidden; re-select → values PERSIST (0.150 / -0.050 / 0.250); leave+return Prepare → still PERSIST
+  (read back from CUT_PLAN). Picking a cut TYPE still colors the edge (#34d399) — SP1f intact. Component check: an edge's
+  record after `setFieldOnSelected` = `{cutDepth:0.2, cutOffset:-0.03, toolDia:0.25}`. LOAD-SAFE: shared #core/#ui
+  UNCHANGED → SketchStudio byte-identical (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8
+  pre-existing 0 net-new; `node --check` clean; scope = cut-panel.js + prepare-view.js + main.js + index.html (apps/shaper).
+- **process hygiene:** CDP Edge/server via `run_in_background` + killed each run; `proc_health watch` before the pass =
+  clean; `worker.pid` in the repo `.proc/`; none kept alive.
+- **state:** branch `carve-out`. The cut card now edits the FULL record (type + depth + offset + bit), persisting per
+  target. Next: **SP1h** — the tool-aware preview (render the cut accounting for offset/bit) and/or **SP1i** export +
+  multi-select. STOP — hold.
+
+=== SP1g (CUT PARAMS ROWS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

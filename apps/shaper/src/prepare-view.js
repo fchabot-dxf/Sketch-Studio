@@ -146,7 +146,7 @@ const keyOf = (kind, id) => kind + ':' + id;
 const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
 const CUT_PLAN = new Map();
 function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
-function setCutTypeFor(key, cutType) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec.cutType = cutType; CUT_PLAN.set(key, rec); return rec; }
+function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
 
 // ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select + cut-plan preview ──
 export function mountPrepareView(state, svgEl, opts = {}) {
@@ -252,7 +252,10 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
     // Write the cut type onto the current single selection + repaint the cut layer (panel calls this).
-    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setCutTypeFor(targetKey(t), cutType); renderCuts(); return rec; },
+    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), 'cutType', cutType); renderCuts(); return rec; },
+    // SP1g: persist a numeric field (cutDepth / cutOffset / toolDia) on the selection. No recolor — those fields
+    // drive the LATER tool-aware look (SP1h), not SP1f's cut color.
+    setFieldOnSelected(field, value) { const t = selectedTarget(); if (!t) return null; return setFieldFor(targetKey(t), field, value); },
     destroy() {
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

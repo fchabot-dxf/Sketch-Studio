@@ -84,6 +84,7 @@ const refreshCutPanel = () => {
 };
 const cutPanel = createCutPanel(document.getElementById('prepare-panel'), {
   onPickType: (id) => { if (prepareView) prepareView.applyCutTypeToSelected(id); refreshCutPanel(); },
+  onSetField: (field, value) => { if (prepareView) prepareView.setFieldOnSelected(field, value); refreshCutPanel(); },
 });
 let infoPanel = null, ribbon = null, lastSig = '';
 

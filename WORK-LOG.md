@@ -3501,6 +3501,30 @@ faithful Export popup→tab cleanup is S7c-2e). Shaper untouched.
 
 === S7c-2c (STUDIO ADOPTS HEADER+STYLE+ROUTER) DONE — HOLD ===
 
+## 2026-06-29 · S7c-2c-fix — restore the surviving #export-panel asserts (turn 137) — tests-only
+
+Advisor caught that the retired `settings-panel-html.test.js` was OVER-deleted: it bundled 2 obsolete
+`#settings-panel` asserts WITH 2 still-valid `#export-panel` asserts. The export popup SURVIVES S7c-2c (intact +
+reused as the Export view), and its styling is NOT covered elsewhere (export.test.js only tests buildSVG/DXF).
+
+- **did:** added **`tests/export-panel-html.test.js`** (mirrors the old file's style — `fs.readFile` index.html +
+  regex) asserting the 2 surviving checks vs `apps/sketchstudio/index.html`: (a) the `#export-panel` header uses
+  the unified wizard title styling (`<div style="color:#60a5fa; font-size:13px; font-weight:600;">Export</div>`);
+  (b) `#btn-export-close` uses the wizard close styling
+  (`style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;"`). Did NOT
+  resurrect the `#settings-panel` asserts / popup markup / `header-icons` / `settings-panel-style` — those stay
+  retired (they grep intentionally-removed DOM).
+- **verify:** `node tests/export-panel-html.test.js` **passes**; `header-icons`/`settings-panel-style`/
+  `settings-panel-html` stay gone; baseline-diff = the 8 pre-existing, **0 net-new**; `node --check` clean; scope =
+  `tests/` only (no app/index.html change).
+- **note:** DEBT-SHELL-TEST (advisor-tracked, NOT this task) — the new JS-rendered header/router/style adoption has
+  no durable regression test yet; deferred to 2e/3 once the shell settles.
+- **state:** branch `carve-out`. Test baseline clean again. Next: **S7c-2d** — SketchStudio adopts the shared
+  ribbon (onToolClick→ui-manager's rich handleToolActivate; setTool→ribbon.refresh; rect via the ribbon; Edit
+  extraGroups). STOP — hold.
+
+=== S7c-2c-fix (RESTORE EXPORT-PANEL TEST) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

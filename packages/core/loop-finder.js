@@ -10,10 +10,11 @@
 // The single unbounded outer face per component comes out clockwise (negative area) and is dropped. This yields the
 // MINIMAL enclosed loops (e.g. two rects sharing an edge → the 2 small loops, not the big outer one). Open chains /
 // dangling edges fall into the outer face → no loop.
-// ARCS: chord-approximated for connectivity + the angular sort (the chord endpoints joints[0]/joints[2]; joints[1]
-// is the curve's center/through-point, not connectivity). The loop's `edges` keeps the arc's shapeId so a consumer
-// renders the true curve; the topology uses the chord. (LIMITATION: two arcs sharing both endpoints with an equal
-// chord angle are ambiguous under chord-approx — disambiguating via the arc tangent is deferred.)
+// ARCS: a 'CENTER'-subType arc stores joints[0]=center, joints[1]=start, joints[2]=end (per makeArc +
+// calculateArcPath). Chord-approximated for connectivity + the angular sort — the chord is start→end
+// (joints[1]→joints[2]); the center (joints[0]) is NOT a connectivity node. The loop's `edges` keeps the arc's
+// shapeId so a consumer renders the true curve; the topology uses the chord. (LIMITATION: two arcs sharing both
+// endpoints with an equal chord angle are ambiguous under chord-approx — disambiguating via the arc tangent is deferred.)
 
 // Build a joint→canonical-node map (coincident joints merged; canonical = the min joint id in the cluster — stable).
 // Equivalent to repeated getCoincidentJoints(), via one union-find pass.
@@ -99,7 +100,7 @@ function findFaces(edges, posOf) {
 
 /**
  * findLoops(state) → Loop[]   Loop = { id, joints:[nodeId...], edges:[shapeId...], closed:true } (ordered boundary).
- * Pure fn of state.joints (Map id→{x,y}) + state.shapes (line: 2 joints; arc: start/center/end at [0]/[1]/[2];
+ * Pure fn of state.joints (Map id→{x,y}) + state.shapes (line: 2 joints; arc: center/start/end at [0]/[1]/[2];
  * circle: center joint + radius) + state.constraints (coincident merges). Deterministic ids + order.
  */
 export function findLoops(state) {
@@ -116,7 +117,7 @@ export function findLoops(state) {
       const a = node(s.joints[0]), b = node(s.joints[1]);
       if (a && b && a !== b) edges.push({ shapeId: s.id, a, b });
     } else if (s.type === 'arc' && s.joints.length >= 3) {
-      const a = node(s.joints[0]), b = node(s.joints[2]); // start, end (chord)
+      const a = node(s.joints[1]), b = node(s.joints[2]); // chord = start (joints[1]) → end (joints[2]); joints[0] = center
       if (a && b && a !== b) edges.push({ shapeId: s.id, a, b });
     } else if (s.type === 'circle' && s.joints.length >= 1) {
       const c = node(s.joints[0]);

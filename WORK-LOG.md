@@ -3889,6 +3889,46 @@ SketchStudio + existing #core are byte-identical. NOT wired into Prepare yet (SP
 
 === SP1b (LOOP-FINDER + ORACLE) DONE - HOLD ===
 
+## 2026-06-29 · SP1c — Prepare loop HOVER-HIGHLIGHT (turn 157) — Shaper-only (+ an SP1b arc-convention fix, flagged)
+
+The user's FIRST TARGET: hovering Prepare highlights the topological LOOP under the cursor. Wires SP1b's loop-finder
+into the Prepare-local view; joints stay hidden; the highlight redraws only on hover-CHANGE (no RAF).
+
+- **did (Shaper):**
+  - **`apps/shaper/src/prepare-view.js`** — grew from a render fn into a Prepare CONTROLLER `mountPrepareView(state,
+    svgEl)`: clears the canvas, lays a `#prepare-hover-group` BEHIND the `#prepare-world-group` edges, finds the loops
+    ONCE (`findLoops` — geometry is static in Prepare), and precomputes each loop's boundary POLYGON for hit-testing.
+    Polygon = node positions for lines; **arcs sampled into points via `calculateArcPath` + `getPointAtLength`** (the
+    SAME path math the renderer uses → the TRUE curve, not the chord; oriented to the loop's walk direction); circles
+    sampled around the rim. On `pointermove`: cursor → world via the SVG `getScreenCTM().inverse()`; even-odd
+    point-in-poly; on overlap pick the **SMALLEST-area (innermost)** loop. Highlight = a semi-transparent fill +
+    outline `<polygon>` in `--sk-hover`. Redraw only when the hovered loop id CHANGES; `pointerleave` clears. Returns
+    `{loops, destroy}`.
+  - **`apps/shaper/src/main.js`** — `showMode('prepare')` now tears down the prior `prepareView` + `mountPrepareView(
+    designController.state, #prepare-canvas)` (re-finds loops each enter, since Design may have changed the geometry).
+    `let prepareView` holder added.
+- **FLAGGED — SP1b loop-finder arc-convention fix (`packages/core/loop-finder.js` + `tests/loop-finder.test.js`):**
+  wiring the live arc render exposed that a 'CENTER' arc stores `joints = [center, start, end]` (per `makeArc` +
+  `calculateArcPath`, confirmed in `svg-renderer.js`) — NOT `[start, center, end]`. SP1b's loop-finder used the arc
+  CHORD `joints[0]→joints[2]` = **center→end** (wrong: the center is not a connectivity node); corrected to
+  `joints[1]→joints[2]` = **start→end**. The SP1b oracle's arc fixture had used the same wrong convention (so it
+  passed spuriously) — fixed to `[center, start, end]`; still asserts arc-closed→1. STILL ADDITIVE: nothing in
+  SketchStudio imports loop-finder → SketchStudio byte-identical. (`computeTrueVertexSet` in joints.js has the same
+  center-vs-start latent quirk but is unrelated to this task — left untouched.)
+- **verify (CDP live, errors=0):** (A) integration — Design→Prepare with the seed (1 line→0 loops): edges render
+  (`seedEdges=1`), `seedJointCircles=0`, no errors. (B) nested rects (outer 80-wide + inner 20-wide) → `loopCount=2`;
+  hover (0,0) inside BOTH → highlight width **20** (the INNER/smallest-area loop, not the outer 80); hover the ring
+  (30,0) → width **80** (switches to the outer); hover (200,200) outside → **no highlight**. (C) rounded triangle (2
+  lines + 1 arc) → `arcLoopCount=1`; hover inside → highlight polygon has **26 points** (2 line vertices + 24 sampled
+  arc points → the outline follows the TRUE curve, not a 3-pt chord). Joints stay hidden; redraw on hover-change only
+  (no RAF). LOAD-SAFE: SketchStudio byte-identical (`npm run test:shell` **12/12**); solver oracle **12/12**;
+  `node tests/loop-finder.test.js` passes (arc fixture corrected); guard GREEN; baseline **0 net-new**; `node --check`
+  clean; scope = prepare-view.js + main.js (Shaper) + loop-finder.js/.test.js (additive #core).
+- **state:** branch `carve-out`. Prepare now highlights the loop under the cursor — the selection FEEDBACK. Next:
+  **SP1d** — click to SELECT a loop (persistent selection vs transient hover). STOP — hold.
+
+=== SP1c (PREPARE LOOP HOVER-HIGHLIGHT) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

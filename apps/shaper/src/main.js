@@ -10,7 +10,7 @@ import * as inspector from './inspector.js';
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
-import { renderPrepareGeometry } from './prepare-view.js'; // SP1a: Prepare-local geometry render (edges, no joints)
+import { mountPrepareView } from './prepare-view.js'; // SP1a/SP1c: Prepare-local edge render + loop hover-highlight
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -75,6 +75,7 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
+let prepareView = null;      // SP1c: Prepare-local view (edges + loop hover); torn down + re-mounted on each Prepare enter
 let infoPanel = null, ribbon = null, lastSig = '';
 
 // Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /
@@ -142,12 +143,14 @@ function showMode(mode) {
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
   else if (designController) designController.stop();                   // pause the RAF off Design
-  // SP1a: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then paint a
-  // Prepare-local render of the geometry (edges only, joints hidden). Render-on-demand — no solve loop in Prepare.
+  // SP1a/SP1c: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then mount
+  // a Prepare-local view: edges (no joints) + topological-loop hover-highlight. Render-on-demand — geometry is
+  // static in Prepare, so loops are found once on (re)mount; the highlight redraws only on hover-change (no RAF).
   if (mode === 'prepare') {
     ensureSketch();
     try { designController.engine.solve(500); } catch (_) {}
-    renderPrepareGeometry(designController.state, document.getElementById('prepare-canvas'));
+    if (prepareView) prepareView.destroy();
+    prepareView = mountPrepareView(designController.state, document.getElementById('prepare-canvas'));
   }
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
 }

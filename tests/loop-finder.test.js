@@ -8,7 +8,7 @@ import { findLoops } from '#core/loop-finder.js';
     return { joints, shapes, constraints };
   };
   const line = (id, a, b) => ({ id, type: 'line', joints: [a, b] });
-  const arc = (id, s, c, e) => ({ id, type: 'arc', joints: [s, c, e] }); // start/center/end at [0]/[1]/[2]
+  const arc = (id, center, s, e) => ({ id, type: 'arc', joints: [center, s, e] }); // center/start/end at [0]/[1]/[2]
   const circle = (id, c, r) => ({ id, type: 'circle', joints: [c], radius: r });
 
   // 1. Triangle -> 1 loop (3 edges)
@@ -66,11 +66,12 @@ import { findLoops } from '#core/loop-finder.js';
     assert(findLoops(st).length === 1, 'coincident-merged triangle: expected 1 loop');
   }
 
-  // 8. Arc-closed shape (an arc as one edge of a 3-edge loop) -> 1
+  // 8. Arc-closed shape (an arc as one edge of a 3-edge loop) -> 1.
+  //    Lines A-B, B-C, then an arc from C (start) to A (end) centered at M — joints [center, start, end] = [M, C, A].
   {
-    const st = mk([['A', 0, 0], ['B', 4, 0], ['C', 4, 4], ['M', 0, 4]],
-      [line('e1', 'A', 'B'), line('e2', 'B', 'C'), arc('e3', 'C', 'M', 'A')]);
-    assert(findLoops(st).length === 1, 'arc-closed loop: expected 1 loop');
+    const st = mk([['A', 0, 0], ['B', 4, 0], ['C', 4, 4], ['M', 2, 2]],
+      [line('e1', 'A', 'B'), line('e2', 'B', 'C'), arc('e3', 'M', 'C', 'A')]);
+    assert(findLoops(st).length === 1, 'arc-closed loop: expected 1 loop (arc chord = start C → end A)');
   }
 
   // Determinism: same input -> same ids/order

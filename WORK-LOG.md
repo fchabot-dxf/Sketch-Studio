@@ -3689,6 +3689,34 @@ markup either way. A large NET DELETION (309 deletions / 6 insertions).
 
 === S7c-2d-cleanup (DEBT-RIBBON-CLEANUP) DONE — HOLD ===
 
+## 2026-06-29 · S7c-3 — durable shell smoke (DEBT-SHELL-TEST) (turn 147) — the last S7c slice
+
+The JS-rendered shell (header/router/ribbon/style panel) was only covered by throwaway per-slice CDP smokes.
+Added a COMMITTED, re-runnable smoke so it's guarded going forward.
+
+- **did:**
+  - **`scripts/shell-smoke.cjs`** (new) — self-contained, NO npm deps (puppeteer isn't installed): a tiny static
+    server serves the REPO ROOT (the no-build app needs it so its `#core/#ui` importmap resolves), launches headless
+    Edge/Chrome (path auto-detected, Edge/Chrome fallbacks), and drives it over the CDP protocol via Node's built-in
+    `WebSocket` (the same flow the inline 2a-2e smokes used). It loads `apps/sketchstudio/index.html`, collects
+    console errors + uncaught exceptions, and runs in-page assertions; prints PASS/FAIL per check + exits 0/non-0.
+  - **Asserts (12 checks):** console **errors = 0**; the **Header** (`.sk-header` tabs = `design,export` + a Style
+    button + a Debug action); the **Design default** (shared ribbon groups = `Create,Inspect,Constrain,Edit` +
+    `#svgCanvas` visible); the **router** (Export tab → export view shows + Design hides; Design tab → back); the
+    **shared style panel** (Style button opens `.sk-style-panel` with **16** controls, then Esc closes it).
+  - **Wired into package.json:** `"test:shell": "node scripts/shell-smoke.cjs"` — re-runnable via `npm run test:shell`.
+- **verify:** ran it — **`shell-smoke: 12/12 passed` ✅ (exit 0)**. LOAD-SAFE (the smoke itself loads index.html with
+  errors=0). solver oracle **12/12** · guard GREEN · baseline-diff = the 8 pre-existing, **0 net-new** (the .cjs is
+  not a `.test.js`, not swept) · `node --check` clean · scope = `scripts/shell-smoke.cjs` (new) + `package.json`.
+  **Shaper UNTOUCHED** (no app code changed).
+- **state:** branch `carve-out`. **The S7c arc is COMPLETE** — the Design SHELL (header + style panel + tool ribbon
+  with the full CAD UX + Export tab) is shared in `#ui/`, SketchStudio rides it (router-owned nav), the dead inline
+  scaffolding is removed, and a durable smoke guards it. Shaper still has its S6 mode-nav (folds into the shared
+  header in a future slice). DEBT open: DEBT-1 (solver-config localStorage seam), the 2 backlog solver items, the
+  `.tool-dropdown` dead-CSS, and Shaper's eventual shared-header adoption. STOP — hold.
+
+=== S7c-3 (DURABLE SHELL SMOKE) DONE — HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

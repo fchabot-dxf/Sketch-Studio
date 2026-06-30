@@ -18,6 +18,7 @@ import { cutPlanEntries } from './cut-plan.js';            // SP1j-4: the shared
 import { CUT_TYPES } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
+import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -53,6 +54,48 @@ document.getElementById('btn-generate-svg').addEventListener('click', () => {
   const svg = exportShaperSVG({ state: designController.state, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true } });
   download('shaper-export.svg', svg);
   if (status) status.textContent = `Exported ${entries.length} cut${entries.length === 1 ? '' : 's'} → shaper-export.svg`;
+});
+
+// SKETCH-4d: the GROUP / UNGROUP action (Shaper Design only). Ctrl+G groups the selected shapes (≥2) under a NEW
+// userGroupId; Ctrl+Shift+G ungroups the selection's group(s). Operates on the Design selection (state.selectedShapes);
+// the group belongs to the active sketch (makeGroup). A transient status toast is the cue — the renderer's factory
+// groupId/fill is UNTOUCHED (we only set userGroupId). Unblocks islands (S-4e export). Shaper-only.
+let _grpStatusEl = null, _grpStatusTimer = null;
+function groupStatus(msg) {
+  if (!_grpStatusEl) {
+    _grpStatusEl = document.createElement('div'); _grpStatusEl.id = 'group-status';
+    _grpStatusEl.style.cssText = 'position:absolute; bottom:18px; left:50%; transform:translateX(-50%); background:#1b2030; color:#cbd5e1; border:1px solid #2a2d31; border-radius:8px; padding:8px 14px; font:13px system-ui,sans-serif; z-index:50; box-shadow:0 6px 20px rgba(0,0,0,0.4); pointer-events:none; opacity:0; transition:opacity 0.15s;';
+    (VIEWS.design || document.body).appendChild(_grpStatusEl);
+  }
+  _grpStatusEl.textContent = msg; _grpStatusEl.style.opacity = '1';
+  clearTimeout(_grpStatusTimer); _grpStatusTimer = setTimeout(() => { if (_grpStatusEl) _grpStatusEl.style.opacity = '0'; }, 1800);
+}
+function doGroup() {
+  if (!designController) return;
+  const st = designController.state;
+  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
+  if (sel.length < 2) { groupStatus('Select 2+ shapes to group'); return; }
+  try { st.saveState && st.saveState(); } catch (_) {}
+  const g = makeGroup(st, sel);
+  groupStatus(`Grouped ${sel.length} shapes → ${g ? g.name : 'group'}`);
+}
+function doUngroup() {
+  if (!designController) return;
+  const st = designController.state;
+  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
+  const byId = new Map((st.shapes || []).map((s) => [s.id, s]));
+  const gids = new Set(); for (const id of sel) { const gid = groupOf(byId.get(id)); if (gid) gids.add(gid); }
+  if (!gids.size) { groupStatus('No group on the selection'); return; }
+  try { st.saveState && st.saveState(); } catch (_) {}
+  for (const gid of gids) ungroup(st, gid);
+  groupStatus(`Ungrouped ${gids.size} group${gids.size === 1 ? '' : 's'}`);
+}
+document.addEventListener('keydown', (e) => {
+  if (currentMode !== 'design') return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+    e.preventDefault();
+    if (e.shiftKey) doUngroup(); else doGroup();
+  }
 });
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());

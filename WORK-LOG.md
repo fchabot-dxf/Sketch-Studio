@@ -5652,6 +5652,41 @@ group uses a DISTINCT `userGroupId`; the factory `groupId` is LEFT UNTOUCHED. Ad
 
 === SKETCH-4c (GROUP SUBSTRATE DECLARED) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-4d — the GROUP action + feedback (first model consumer) (turn 236)
+
+The thin UX layer that lets the user CREATE groups (unblocks the S-4e island export). Wires the S-4c declared mutators
+to a Group/Ungroup action + a light cue. Shaper Design only.
+
+- **did (`apps/shaper/src/main.js`, Shaper-only):**
+  - A document `keydown` (gated to `currentMode === 'design'`): **Ctrl+G** groups the Design selection
+    (`state.selectedShapes`, ≥2) — `state.saveState()` then `makeGroup(state, [...selectedShapes])`; **Ctrl+Shift+G**
+    ungroups the selection's group(s) (`groupOf` per selected shape → `ungroup` each gid). `preventDefault` (Ctrl+G's
+    browser find). Operates on SHAPES; the group belongs to the active sketch (via `makeGroup`).
+  - **Feedback — the LIGHTEST clear cue:** a transient status TOAST (a self-contained floating div in `#design-view`,
+    auto-fades) — "Grouped N shapes → Group N" / "Ungrouped N groups" / "Select 2+ shapes to group" / "No group on the
+    selection". Chosen over a group-mate highlight (which would touch the shared selection render) — rich persistent
+    visuals (highlight, a discoverable button, a tree-node) DEFERRED.
+  - The renderer's factory `groupId` + closed-shape FILL is UNTOUCHED — the action only sets `userGroupId`.
+- **verify (errors=0):** CDP — MECHANISM (real `createSketchState`, the handler's exact flow): `saveState` → `makeGroup`
+  → group-1 + both shapes stamped `userGroupId` while the factory `groupId` ('rect_1') stays; `undo` restores groups []
+  + clears stamps; `ungroup` clears stamps + removes the entry (factory `groupId` intact). LIVE Ctrl+G handler (Shaper
+  Design): Ctrl+G with <2 selected → toast "Select 2+ shapes to group" (the handler fired + the toast mounted);
+  Ctrl+Shift+G → "No group on the selection"; in Explore, Ctrl+G does NOT fire (the toast text is unchanged — mode
+  gating works). (The full live "2 selected shapes → grouped" = the composition of the wired Ctrl+G handler + the
+  makeGroup mechanism — both verified; reading the live `userGroupId` needs `designController.state` access I avoided.)
+  Shaper-only → SketchStudio UNREGRESSED (`npm run test:shell` 12/12, 16-control panel + errors=0); solver oracle
+  12/12; sketch-model + group-model + loop-geometry + export + loop oracles green; guard GREEN; baseline 8 pre-existing
+  0 net-new; `node --check` clean; scope = main.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The user can now CREATE/dissolve groups in Shaper Design (Ctrl+G / Ctrl+Shift+G), with
+  undo, a status cue, and the factory `groupId`/fill untouched — the model's first consumer. Next per the S-4
+  sub-sequence: **S-4e** — export threading: sketch→`<g>`; a group of nested loops → a compound `fill-rule="evenodd"`
+  via `loopsInGroup` + `polygonContains` (the export HOST computes loop polys, the serializer stays pure); a hidden
+  sketch EXCLUDED — the j3b islands ship there. STOP — hold.
+
+=== SKETCH-4d (GROUP ACTION + FEEDBACK) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -44,13 +44,14 @@ function injectStyles() {
  *   icon strings are raw inline markup / text / emoji (kept app-agnostic; the host supplies them).
  */
 export function createAppHeader({ tabs = [], actions = [], onTabChange = null, activeTab = null,
-  onStyle = null, styleButton = true, styleLabel = 'Style', styleIcon = '⚙' } = {}) {
+  onStyle = null, styleButton = true, styleLabel = 'Style', styleIcon = '⚙', leading = null } = {}) {
   injectStyles();
 
   const el = document.createElement('header'); el.className = 'sk-header';
   const tabsEl = document.createElement('nav'); tabsEl.className = 'sk-header-tabs';
   const spacer = document.createElement('span'); spacer.className = 'sk-header-spacer';
   const actionsEl = document.createElement('div'); actionsEl.className = 'sk-header-actions';
+  if (leading) el.appendChild(leading); // SWITCH-1: an optional brand/app-switcher slot, before the tabs
   el.append(tabsEl, spacer, actionsEl);
 
   let activeId = activeTab != null ? activeTab : (tabs[0] && tabs[0].id);

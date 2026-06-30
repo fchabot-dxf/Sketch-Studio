@@ -5422,6 +5422,45 @@ already live in one repo (root = repo root; `apps/shaper/index.html` is self-con
 
 === DEPLOY-1 (/shaper ROUTE ON THE SHARED PAGES SITE) DONE - HOLD ===
 
+## 2026-06-30 · SWITCH-1 — two-way app-switcher in both headers (turn 226)
+
+A chevron-dropdown app-switcher in BOTH the Shaper AND SketchStudio headers → hop between apps. **SketchStudio's FIRST
+deliberate change** — the user RELAXED "Studio byte-identical" to "functionally unregressed + the shared switcher".
+Built as a SHARED #ui component (the north-star) both apps mount.
+
+- **did:**
+  - **`packages/ui/app-switcher.js`** (new, shared, pure #ui): `createAppSwitcher({ current }) → { el, destroy }` — the
+    current app's name + a chevron; click → a dropdown of the apps (the current marked `✓`); selecting another →
+    `location.href = its href`; closes on outside-click. The roster is DECLARED as DATA `APPS = [{id,name,href}]`
+    (`/apps/sketchstudio/`, `/apps/shaper/` — real paths, robust regardless of the `/shaper` redirect); a 3rd host is
+    one entry. Self-contained styles, themed via the shared `--sk-*` header/ribbon vars (fits light Studio + dark Shaper).
+  - **`packages/ui/app-header.js`** — added a `leading` slot to `createAppHeader` (an element placed before the tabs)
+    — a reusable brand/switcher slot.
+  - **Shaper** (`index.html` + `main.js`) — REPLACED the static `<strong>Shaper</strong>` brand (and removed the now-
+    redundant DEPLOY-1 one-way back-link + its `.to-studio` style) with `#app-switcher-host`, mounting
+    `createAppSwitcher({ current: 'shaper' })`.
+  - **SketchStudio** (`main.js`) — passes `leading: createAppSwitcher({ current: 'sketchstudio' }).el` to
+    `createAppHeader`. The deliberate Studio change.
+- **the new invariant (shell-smoke 12/12 — NO assertion change needed):** the switcher uses DISTINCT classes
+  (`.sk-appsw-*`), so shell-smoke's assertions — header tabs (`.sk-header-tab` → still `design,export`), the Style
+  button (`.sk-header-style`), and the STYLE panel's 16 `.sk-style-row` controls — are all UNAFFECTED. The switcher is
+  purely additive (a leading element) + throws nothing → SketchStudio is functionally UNREGRESSED, shell-smoke stays
+  12/12 as-is (verified — no assertion update required; flagged here that none was needed).
+- **verify (errors=0):** CDP — SHAPER: switcher present, button "Shaper", click → menu opens listing
+  `sketchstudio,shaper` with `shaper` marked current, targets `sketchstudio=/apps/sketchstudio/ | shaper=/apps/shaper/`,
+  closes on outside-click. SKETCHSTUDIO: button "Sketch Studio", `sketchstudio` marked current, same targets. Both apps
+  load errors=0. `npm run test:shell` 12/12 (16-control style panel intact + errors=0); solver oracle 12/12;
+  sketch-model + export + loop oracles green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean;
+  scope = app-switcher.js (new) + app-header.js + Shaper index.html/main.js + Studio main.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Both apps share a two-way switcher (declared roster, north-star #ui), SketchStudio
+  intentionally + minimally changed (shell-smoke 12/12). Resuming the SKETCH arc per the blessed slicing: **S-3** —
+  cross-sketch LINKS (the panel shows a constraint spanning two sketches under both; `constraintSketch` already returns
+  the spanning Set) → S-4 (groups + islands + export threading). STOP — hold.
+
+=== SWITCH-1 (TWO-WAY APP-SWITCHER) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

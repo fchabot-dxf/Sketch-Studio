@@ -10,6 +10,7 @@ import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
+import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
 import { createStylePanel } from '#ui/style-panel.js';
 import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
@@ -144,6 +145,7 @@ function initApp(){
   // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
   const header = createAppHeader({
+    leading: createAppSwitcher({ current: 'sketchstudio' }).el, // SWITCH-1: the shared two-way app-switcher
     tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
     actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
     activeTab: 'design',

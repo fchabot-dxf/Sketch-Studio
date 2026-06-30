@@ -17,10 +17,15 @@ import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries } from './cut-plan.js';            // SP1j-4: the shared cut-plan store
 import { CUT_TYPES } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
+import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
 inspector.init(document.getElementById('inspector'));
+
+// SWITCH-1: mount the shared two-way app-switcher into the header brand slot.
+const _swHost = document.getElementById('app-switcher-host');
+if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'shaper' }).el);
 
 const fileInput = document.getElementById('file');
 document.getElementById('open').addEventListener('click', () => fileInput.click());

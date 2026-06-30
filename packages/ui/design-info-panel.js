@@ -47,7 +47,9 @@ function injectStyles() {
 .sk-info-val { opacity: 0.8; font-variant-numeric: tabular-nums; }
 /* SKETCH-1b: the gated sketch-tree — a Sketch node with its constraints nested as children. */
 .sk-sketch-node { display: flex; flex-direction: column; }
-.sk-sketch-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-weight: 600; opacity: 0.92; }
+.sk-sketch-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-weight: 600; opacity: 0.92;
+  cursor: pointer; user-select: none; border-radius: 6px; }
+.sk-sketch-head:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); }
 .sk-sketch-tw { opacity: 0.55; font-size: 0.8em; width: 1em; text-align: center; }
 .sk-sketch-name { flex: 1; }
 .sk-sketch-children { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 7px;
@@ -68,6 +70,9 @@ function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 
  */
 export function createDesignInfoPanel({ state, engine, showSketchTree = false } = {}) {
   injectStyles();
+  // SKETCH-1c: which sketch nodes are collapsed — PANEL/UI state only (survives re-renders; NOT the export-bound
+  // sketch model, which feeds the <g> export). A pure presentation concern.
+  const collapsedSketchIds = new Set();
   const el = document.createElement('div'); el.className = 'sk-info';
   const dofEl = document.createElement('div'); dofEl.className = 'sk-info-dof';
   const listEl = document.createElement('div'); listEl.className = 'sk-info-list';
@@ -115,14 +120,21 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
       for (const sk of sketches) {
         const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
+        const collapsed = collapsedSketchIds.has(sk.id);
         const node = document.createElement('div'); node.className = 'sk-sketch-node';
         const head = document.createElement('div'); head.className = 'sk-sketch-head';
-        head.innerHTML = `<span class="sk-sketch-tw">▾</span><span class="sk-sketch-name">${sk.name}</span><span class="sk-info-val">${kids.length}</span>`;
+        head.innerHTML = `<span class="sk-sketch-tw">${collapsed ? '▸' : '▾'}</span><span class="sk-sketch-name">${sk.name}</span><span class="sk-info-val">${kids.length}</span>`;
+        head.addEventListener('click', () => { // toggle collapse (the child constraint rows handle their own clicks)
+          if (collapsedSketchIds.has(sk.id)) collapsedSketchIds.delete(sk.id); else collapsedSketchIds.add(sk.id);
+          refresh();
+        });
         node.appendChild(head);
-        const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
-        if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
-        else for (const c of kids) childWrap.appendChild(buildRow(c, sel));
-        node.appendChild(childWrap);
+        if (!collapsed) {
+          const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
+          if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
+          else for (const c of kids) childWrap.appendChild(buildRow(c, sel));
+          node.appendChild(childWrap);
+        }
         listEl.appendChild(node);
       }
       return;

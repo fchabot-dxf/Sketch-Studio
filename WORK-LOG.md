@@ -5276,6 +5276,35 @@ sketch UX = S-2; cross-sketch links = S-3). Shared #ui.
 
 === SKETCH-1b (GATED PANEL SKETCH-TREE) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-1c — collapsible sketch nodes (turn 218)
+
+A small UI add on the just-shipped tree (user request, Fusion-browser-style): each Sketch node COLLAPSES. Shaper
+tree-mode only → SketchStudio byte-identical.
+
+- **did (`packages/ui/design-info-panel.js`, TREE mode only):**
+  - A panel-level `collapsedSketchIds = new Set()` in the `createDesignInfoPanel` CLOSURE — PANEL/UI state, NOT the
+    export-bound sketch model (`state.sketches` feeds the `<g>` export; collapse is a pure presentation concern). Lives
+    across re-renders because the Set is in the closure, not rebuilt per `refresh()`.
+  - Each sketch HEAD now shows a caret (`▾` expanded / `▸` collapsed), is `cursor:pointer` + hover-lit, and a head
+    CLICK toggles the sketch's id in the Set + `refresh()`. When collapsed, the children container isn't appended
+    (cheaper than hiding). Default expanded.
+  - Click separation preserved: the head (a div) toggles collapse; the constraint ROWS (buttons inside
+    `.sk-sketch-children`) still toggle `selectedConstraints` — distinct elements, no conflict.
+- **verify (errors=0):** CDP live — a Sketch node shows `▾` + 2 rows; a head click collapses (`▸`, 0 child rows); the
+  collapse SURVIVES an EXTERNAL re-render (a tool-switch keydown → the panel sig changes → `panelTick.refresh()`; still
+  `▸`, 0 rows — the closure Set held); a second head click expands (`▾`, 2 rows); a constraint row click still toggles
+  `.sel`. Flat (gated-off) mode untouched → SketchStudio UNREGRESSED (`npm run test:shell` 12/12, 16-control panel);
+  solver oracle 12/12; sketch-model + export + loop oracles green; guard GREEN; baseline 8 pre-existing 0 net-new;
+  `node --check` clean; scope = design-info-panel.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The Shaper sketch tree now has collapsible nodes (UI-only collapse state, export model
+  untouched), SketchStudio byte-identical. Next per the blessed slicing: **S-2** — multi-sketch UX (new / inline
+  rename / select-to-activate, which finally stamps `activeSketchId` at live shape creation / show-hide). Then S-3
+  (cross-sketch links) → S-4 (groups + islands + export threading). STOP — hold.
+
+=== SKETCH-1c (COLLAPSIBLE SKETCH NODES) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

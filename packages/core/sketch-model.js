@@ -9,9 +9,10 @@
 export const DEFAULT_SKETCH_ID = 'sketch-1';
 export const DEFAULT_SKETCH_NAME = 'Sketch 1';
 
-// The default container: one visible 'Sketch 1', active. Spread onto the sketch state.
+// The default container: one visible 'Sketch 1', active, and NO user groups. Spread onto the sketch state.
+// (SKETCH-4c: `groups` = the user-GROUP list — the Sketch > Group > Entity substrate; see #core/group-model.js.)
 export function createSketches() {
-  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID };
+  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID, groups: [] };
 }
 
 // An entity's sketch — its stored `sketchId`, or the default (untagged entities belong to Sketch 1; load-safe).

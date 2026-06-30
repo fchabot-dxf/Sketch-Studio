@@ -5612,6 +5612,46 @@ FLAG the explicit-group-vs-geometry fork + the inner-left-uncut + hidden-sketch-
 
 === SKETCH-4b ISLAND-FLOW PLAN READY - HOLD ===
 
+## 2026-06-30 · SKETCH-4c — declare the GROUP substrate + helpers + oracle (turn 234)
+
+The user chose EXPLICIT groups + "declare everything → the UX stays changeable." S-4c = the DECLARATION only (no
+action/UX — that's S-4d): the FULL user-group model as DATA so the Group action / tree / export become a thin
+reshapeable layer. CRITICAL (from S-4b): the factory `groupId` is the renderer's closed-shape-fill key → the user
+group uses a DISTINCT `userGroupId`; the factory `groupId` is LEFT UNTOUCHED. Additive (no consumer) → byte-identical.
+
+- **did:**
+  - **`#core/sketch-model.js`** — `createSketches()` now also returns `groups: []` (the container declares the
+    user-group list).
+  - **`#core/group-model.js`** (new, PURE): the substrate — a `userGroupId` membership tag on SHAPES (default none,
+    DISTINCT from the factory `groupId`) + `state.groups = [{ id, name, sketchId }]` (a group belongs to a sketch =
+    Sketch > Group > Entity). Helpers: `groupOf(shape)` → userGroupId|null; `makeGroup(state, shapeIds, name?)` (mint
+    a fresh 'group-N', stamp the shapes, append `{id,name,sketchId}` for the active sketch); `ungroup(state, gid)`
+    (clear the stamps + remove the entry); `renameGroup`; `shapesInGroup`; `loopsInGroup(loops, state, gid)` (a loop
+    is in the group iff ALL its edge-shapes carry the gid — a fully-grouped loop).
+  - **`#ui/sketch-state.js`** — undo: `saveStateForce` snapshots `groups` (deep), both restore paths restore it; the
+    `userGroupId` stamps already ride the shape snapshot (`{...s}`).
+  - **`tests/group-model.test.js`** (new oracle): default = no groups / all ungrouped; `makeGroup` → `group-1` +
+    `{id,name,sketchId}` + stamps members (non-members untouched) + the factory `groupId` SEPARATE & UNTOUCHED +
+    `shapesInGroup` + next-id/auto-name; `loopsInGroup` (only the fully-grouped loop); `ungroup` clears stamps +
+    removes the entry (factory `groupId` still intact); `renameGroup`.
+- **verify (errors=0):** `node tests/group-model.test.js` PASSES; sketch-model oracle still passes (createSketches +
+  `groups:[]`). CDP live (real `createSketchState`): `state.groups` = [] default; `makeGroup` mints group-1 + stamps
+  `userGroupId` while the factory `groupId` ('rect_1') stays; `undo` restores `groups` to [] + clears the stamp; Shaper
+  Design renders; SketchStudio loads errors=0. ADDITIVE — nothing reads `userGroupId`/`groups` yet; the renderer's
+  factory `groupId` + closed-shape FILL code is UNTOUCHED → both apps BYTE-IDENTICAL (`npm run test:shell` 12/12,
+  16-control panel + errors=0). Solver oracle 12/12; sketch-model + loop-geometry + export + loop oracles green; guard
+  GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = group-model.js (new) + its test +
+  sketch-model.js + sketch-state.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The user-group substrate is declared (data + pure helpers + undo), distinct from the
+  renderer's factory `groupId`, no consumer yet → byte-identical. Next per the S-4 sub-sequence: **S-4d** — the GROUP
+  ACTION (Group/Ungroup, e.g. in Prepare) + islands (the contained-loop evenodd via `polygonContains`) → **S-4e** —
+  export threading (sketch→`<g>`; group/island→nested `<g>`/evenodd; the host passes loop polys to the pure
+  serializer). STOP — hold.
+
+=== SKETCH-4c (GROUP SUBSTRATE DECLARED) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

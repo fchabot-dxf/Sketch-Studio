@@ -53,7 +53,9 @@ export function createSketchState(engine, view) {
         constraints: this.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined})),
         // SKETCH-2a: capture the sketch container so new-sketch + active changes undo/redo correctly
         sketches: Array.isArray(this.sketches) ? this.sketches.map(s => ({...s})) : undefined,
-        activeSketchId: this.activeSketchId
+        activeSketchId: this.activeSketchId,
+        // SKETCH-4c: the user-GROUP list (the userGroupId stamps ride the shape snapshot above)
+        groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined
       };
       this.history.push(snapshot);
       if(this.history.length > this.maxHistory) this.history.shift();
@@ -121,6 +123,7 @@ export function createSketchState(engine, view) {
         // SKETCH-2a: restore the sketch container with the rest of the snapshot
         if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
         if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
+        if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
       } else {
         // No prior snapshot - clear store
         this.history.splice(0);
@@ -153,6 +156,7 @@ export function createSketchState(engine, view) {
       // SKETCH-2a: restore the sketch container (new-sketch + active changes undo correctly)
       if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
       if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
+      if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
       // Cleanup after undo is disabled; trust the snapshot as saved.
       // Clear selections and active tool state
       this.selectedJoints.clear();

@@ -7,7 +7,8 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops } from '#core/loop-finder.js';
-import { cutTypeById, defaultCutRecord, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
@@ -159,13 +160,8 @@ function edgeStrokeMarkup(s, state, style) {
   return '';
 }
 
-// ── Cut plan (SP1f): per-target cut assignments keyed by `${kind}:${id}`. Module-level so it PERSISTS across
-// Prepare re-mounts (Design↔Prepare, re-enter) — loop ids are deterministic (SP1b) + edge ids are stable. ──
-const keyOf = (kind, id) => kind + ':' + id;
-const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
-const CUT_PLAN = new Map();
-function getCutRecord(key) { return CUT_PLAN.get(key) || defaultCutRecord(); }
-function setFieldFor(key, field, value) { const rec = CUT_PLAN.get(key) || defaultCutRecord(); rec[field] = value; CUT_PLAN.set(key, rec); return rec; }
+// ── Cut plan (SP1f; extracted to ./cut-plan.js in SP1j-4): the per-target store + its keyOf/getCutRecord/setFieldFor
+// now live in a shared module read by BOTH this look AND the SVG exporter. Behaviour unchanged — same Map. ──
 
 // ── Mount: render edges + compute loops + wire kind-aware hover + click-to-select + cut-plan preview ──
 export function mountPrepareView(state, svgEl, opts = {}) {

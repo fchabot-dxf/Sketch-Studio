@@ -14,6 +14,9 @@ import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare ren
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
+import { cutPlanEntries } from './cut-plan.js';            // SP1j-4: the shared cut-plan store
+import { CUT_TYPES } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
+import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -29,6 +32,20 @@ fileInput.addEventListener('change', () => {
 document.getElementById('export').addEventListener('click', () => {
   if (!store.doc) return;
   download('edited.svg', serializeSvg(store.doc));
+});
+
+// SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
+// download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
+const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
+document.getElementById('btn-generate-svg').addEventListener('click', () => {
+  const status = document.getElementById('simexport-status');
+  const entries = cutPlanEntries();
+  if (!entries.length) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
+  ensureSketch();
+  try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
+  const svg = exportShaperSVG({ state: designController.state, entries, encoding: CUT_TYPES, docUnit: getDocUnit() });
+  download('shaper-export.svg', svg);
+  if (status) status.textContent = `Exported ${entries.length} cut${entries.length === 1 ? '' : 's'} → shaper-export.svg`;
 });
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());

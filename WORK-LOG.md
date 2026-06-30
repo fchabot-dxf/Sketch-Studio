@@ -4962,6 +4962,46 @@ byte-identical.
 
 === SP1j-2 (FULL GEOMETRY + CUT-PARAM ATTRS) DONE - HOLD ===
 
+## 2026-06-29 · SP1j-4 — cut-plan store extraction + Sim/Export download (turn 206)
+
+The PAYOFF + the only Shaper UI change: extract the trapped CUT_PLAN into a shared store, then wire the Sim/Export tab
+to serialize the design + cut plan into the FIRST machine-ready Shaper SVG download. Shaper-only → SketchStudio
+byte-identical (separate app, no Sim/Export tab, no importer of shaper-export there).
+
+- **did:**
+  - **`apps/shaper/src/cut-plan.js`** (new) — the per-target cut store relocated from prepare-view.js: `CUT_PLAN` Map +
+    `keyOf`/`parseKey`/`getCutRecord`/`setFieldFor` (app STATE, not #core), PLUS `cutPlanEntries()` →
+    `[{ target:{kind,id}, rec }]` for every assigned target. Now the SINGLE source of truth read by BOTH the Prepare
+    look and the exporter.
+  - **`prepare-view.js`** — imports the store instead of defining it; same Map, behaviour unchanged. Dropped the
+    now-orphaned `defaultCutRecord` import (it moved with the store fns; cutTypeById/availableTypes still used).
+  - **`index.html`** — the `#view-simexport` stub → an Export panel: a "Generate Shaper SVG" button + a status line
+    (dark chrome).
+  - **`main.js`** — the button handler: `cutPlanEntries()` (empty → a friendly "no cuts assigned" status, no
+    download); else `ensureSketch()` + solve → `exportShaperSVG({ state: designController.state, entries,
+    encoding: CUT_TYPES, docUnit })` → `download('shaper-export.svg', svg)` + a status. Encoding INJECTED (the app's
+    CUT_TYPES) so #core stays app-agnostic; docUnit from SettingsManager.
+- **verify (errors=0):** CDP live — EMPTY plan → the button is graceful ("No cuts assigned…", NO download). Store
+  relocation INTACT: a fixture (rect loop + circle + standalone edge) selects (loop/loop/edge) and the Prepare look
+  renders (cut + toolpath layers populated); `cutPlanEntries()` = 3 after assigning. INTEGRATION (store →
+  `exportShaperSVG`, real CUT_TYPES, INCH doc unit): xmlns:shaper header + mm viewBox + exactly 3 elements — `<path …
+  shaper:cutType="outside" cutDepth="0.25in" toolDia="0.125in"/>` (rect), `<circle … cutType="pocket"
+  cutDepth="0.125in"/>`, `<line … stroke="#7F7F7F" cutType="online" toolDia="0.25in"/>`. BUTTON end-to-end: the real
+  Generate click captured a valid Shaper-SVG Blob (xmlns:shaper) + status "Exported 3 cuts → shaper-export.svg".
+  SketchStudio UNREGRESSED — `npm run test:shell` 12/12 (the 16-control style panel + errors=0); solver oracle 12/12;
+  export + loop oracles green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope =
+  Shaper-only (cut-plan.js new + prepare-view.js + index.html + main.js).
+- **note:** the status counts the ASSIGNED entries; if the live design was edited so a plan entry orphans, the file
+  silently drops it (export resolves against the live findLoops) while the status still counts it — a minor cosmetic
+  mismatch (a future refine: count emitted elements). The cut-plan store now unblocks vcarve/joints reading the plan.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The export ENGINE is END-TO-END: assign cuts in Prepare → Sim/Export → Generate → a
+  real machine-ready Shaper Origin SVG downloads. The SP1j arc is complete bar the OPTIONAL j3 (unsurfaced features:
+  group inheritance / evenodd islands / red datum triangle). STOP — hold.
+
+=== SP1j-4 (CUT-PLAN STORE + SIM/EXPORT DOWNLOAD) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -94,6 +94,13 @@
     #design-canvas.snapping { background-color: #F1E9D6; }
     /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
     #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
+    #simexport-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .simexport-title { color: #e6e6e6; font-size: 20px; margin: 0; font-weight: 600; }
+    .simexport-sub { color: #9aa0a6; margin: 0; max-width: 360px; text-align: center; line-height: 1.4; }
+    .simexport-btn { background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; }
+    .simexport-btn:hover { filter: brightness(1.1); }
+    .simexport-status { color: #9aa0a6; font-size: 13px; min-height: 18px; margin: 0; }
     /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */
     #view-prepare { flex-direction: column; }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; }
@@ -187,7 +194,14 @@
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="prepare-panel"></div>
   </section>
-  <section id="view-simexport" hidden>Simulate / Export — cut simulation + export (coming soon).</section>
+  <section id="view-simexport" hidden>
+    <div id="simexport-panel">
+      <h2 class="simexport-title">Export</h2>
+      <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>
+      <button id="btn-generate-svg" class="simexport-btn">Generate Shaper SVG</button>
+      <p id="simexport-status" class="simexport-status"></p>
+    </div>
+  </section>
 
   <script type="module" src="src/main.js"></script>
 </body>

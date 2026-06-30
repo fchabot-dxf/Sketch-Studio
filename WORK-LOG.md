@@ -5107,6 +5107,97 @@ POCKET-only, evenodd (winding-agnostic), reusing j2 subpaths. FLAG the unassigne
 
 === SP1j-3b ISLANDS PLAN READY - HOLD ===
 
+## 2026-06-30 · SKETCH-1 — the SKETCH SYSTEM foundation plan (sketches as layers) — PLAN ONLY (turn 212)
+
+Investigated the current model against the locked vision ([[project_grouping_sketches_layers]]). NO code. Sketches =
+an ORGANIZATIONAL + EXPORT OVERLAY over a GLOBAL solver (a label on entities + a `<g>`), NOT solver boundaries.
+
+### (1) GROUND — the current model (read constraint-solver / sketch-canvas / design-info-panel / input-manager)
+- **State/engine:** `#core/constraint-solver.js` `createEngine` holds FLAT lists — `joints` Map(id→{x,y,fixed}),
+  `shapes` array ({id,type,joints}), `constraints` array ({id,type,joints,value}). ONE GLOBAL solver
+  (`createNewtonSolver(joints, constraints, shapes)`; `engine.solve()` solves the WHOLE system). `createSketchState`
+  wraps the engine + UI state. There is NO sketch/document object — `ensureSketch` (Shaper main.js) just MOUNTS the one
+  sketcher ("the sketch" = the whole canvas). NO `sketchId` anywhere. NO design persistence (only mode + settings in
+  localStorage; geometry is the live engine state → no migration file to worry about, but a future save must default).
+- **`state.active`** = the in-progress TOOL gesture (drawing preview), NOT an "active sketch" — a name clash to avoid.
+- **Panel:** `createDesignInfoPanel({state, engine})` renders a FLAT constraint list (state.constraints → rows
+  icon+label, DOF via `analyzeConstraintStatus`); a row click toggles `state.selectedConstraints`, the renderer
+  auto-highlights. NO tree / grouping today.
+- **Selection:** `state.selectedJoints / selectedConstraints / selectedShapes` (Sets) on the shared state.
+- **Solver scope — CONFIRMED GLOBAL:** one engine, one Newton solver over ALL joints+constraints+shapes; nothing
+  scopes by anything. A cross-sketch coincidence would just be a constraint over two joints — the solver never branches.
+- **Export:** `shaper-export` reads `state.joints/shapes` + `findLoops`; no `sketchId`.
+
+### (2) THE DECLARED SKETCH CONTAINER — the OVERLAY HOLDS
+The overlay is sound: the global solver NEVER reads a `sketchId` (it solves all constraints over all joints), so a
+sketch is purely a label + a `<g>`. DECLARE (all additive DATA, default = ONE sketch so today is unchanged):
+- `state.sketches` = `[{ id, name, visible }]`; `state.activeSketchId`.
+- each **joint** + **shape** gains `sketchId` (= the active sketch at creation). Shapes are the primary export tag;
+  joints carry it too for clean panel bucketing + link detection. A **group** = an optional `groupId` on shapes
+  (Sketch > Group > Entity — one declared container; groups are the island/`<g>` sub-bundle).
+- a **constraint's** sketch is DERIVED from its joints' `sketchId`s: all-same → its home sketch; two distinct → a
+  cross-sketch LINK (shown under both).
+- BACKWARD-COMPATIBLE default: a single `'Sketch 1'` owns all existing geometry → byte-identical until multi-sketch UX.
+> FLAG: joint `sketchId` (stored, = active at creation) vs deriving a joint's sketch from its shape — recommend STORED
+> (a free point / a post-merge shared joint stays unambiguous; the link = a constraint whose joints' ids span 2).
+
+### (3) PANEL SKETCH-TREE REFACTOR
+Flat list → a sketch-ROOTED tree: Sketch nodes (name + a visibility toggle) → constraints as CHILDREN bucketed by
+their entities' sketch. Active-on-select (click a Sketch → `activeSketchId`); inline rename (dbl-click the name); a
+constraint SPANNING two sketches → a LINK row under BOTH. Reuse the existing row-click → `selectedConstraints`
+highlight. This is the biggest UI change — keep the FLAT render as the gated default (see §7).
+
+### (4) CROSS-SKETCH COINCIDENCE — "just works", nothing blocks it
+A COINCIDENT over joints in different sketches is a NORMAL constraint; the global solver merges/co-locates them as
+today (it doesn't know about sketches). Selection/active don't read `sketchId` either. So the overlay's LINKS = exactly
+the constraints whose joints span ≥2 `sketchId`s — derived, free. Nothing in the solver/selection blocks it. ✓
+
+### (5) GROUPS + ISLANDS FOLD-IN
+A **group** = an ad-hoc sub-container inside a sketch (`groupId` on shapes). **SP1j-3b islands** = a group of nested
+loops → ONE compound `fill-rule="evenodd"` path (outer boundary + contained holes), ordered by the DECLARED `#core`
+`pointInPolygon`/`polygonContains` + `loopPolygon`-lifted-to-#core (from the j3b plan). So "an island IS a group" — the
+j3b containment work feeds this container directly; multi-select (deferred SP1i) rides the same selection. ✓
+
+### (6) EXPORT MAPPING
+sketch → a `<g>` wrapping its cut elements (REUSE the SP1j-3a `<g>` machinery — hoist any shared cut attrs; else
+`<g id="<sketch-name>">`); group → a NESTED `<g>` or the evenodd compound (the island). So export threads
+sketch→`<g>` → group→nested`<g>`/evenodd, layering cleanly on the SP1j serializer.
+
+### (7) SCOPE — the fork to FLAG: SHARED-but-GATED (recommended) vs Shaper-first
+SketchStudio MUST stay byte-identical. RECOMMEND **SHARED-but-GATED**: build the sketch tree in the SHARED Design
+module but GATE it behind an opt-in (like `showDocUnit` on the style panel) — SketchStudio keeps its FLAT single-sketch
+panel unless it opts in; Shaper opts in. The data model (`sketchId` on entities) is additive + defaults to one sketch,
+so SketchStudio's flat panel + export are unaffected. This serves the north-star reusable Design tab
+([[project_design_tab_reusable]]). FLAG for the human: shared-gated (preferred, reusable) vs Shaper-only (simpler, but
+forks the Design tab).
+
+### (8) SLICES + RISKS
+- **S-1 (foundation):** the Sketch CONTAINER data (`state.sketches`, `activeSketchId`, `sketchId` on joints/shapes,
+  default ONE 'Sketch 1' owning all geometry) + the panel SKETCH-TREE (single sketch; constraints nested under it),
+  SOLVER + draw + export UNCHANGED; GATED so SketchStudio is byte-identical. Verify: panel shows "Sketch 1 ▸
+  constraints"; DOF/solver/export unchanged; shell-smoke 12/12.
+- **S-2 (multi-sketch UX):** new sketch / inline rename / select-to-activate (new geometry stamps `activeSketchId` —
+  touches the shape-creation path, `engine.addShape`/the tool ops) / show-hide (visibility filters the render).
+- **S-3 (cross-sketch links):** the panel renders a spanning constraint as a link under both; create + show a
+  cross-sketch coincidence.
+- **S-4 (groups + islands + export threading):** `groupId`; islands (j3b) = a nested-loop group → compound evenodd;
+  export threads sketch→`<g>`, group→nested`<g>`/evenodd.
+- Recommend **S-1 → S-2 → S-3 → S-4** (S-1 the load-bearing foundation; each load-safe).
+- **RISKS:** the PANEL refactor (flat→tree) — keep flat as the gated default. DATA-MODEL migration (`sketchId` on
+  entities; any future save/load must default missing → 'Sketch 1'; no design persistence today, so low now). ACTIVE-
+  SKETCH ROUTING — new geometry must stamp `activeSketchId` at shape creation (the draw/tool path). BYTE-IDENTITY —
+  `sketchId` additive + the tree gated → SketchStudio unchanged (guard via shell-smoke + the 16-control panel).
+  SOLVER STAYING TRULY GLOBAL — confirm nothing ever scopes solve by sketch (it doesn't today; keep it so). Selection
+  into a HIDDEN sketch — define (not-selectable vs dimmed); DEFER.
+
+**One line:** the model is FLAT with a confirmed GLOBAL solver → sketches are a cheap additive OVERLAY (`sketchId` on
+entities + `state.sketches`/`activeSketchId`, default one 'Sketch 1'), a gated SHARED panel sketch-tree, links =
+constraints spanning sketchIds, groups/islands = the j3b container, export = sketch→`<g>`. Build S-1 (container +
+tree, single sketch, solver/export unchanged, byte-identical) first. FLAG: joint-sketchId stored-vs-derived + the
+shared-gated-vs-Shaper-first scope fork for the human.
+
+=== SKETCH-1 FOUNDATION PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

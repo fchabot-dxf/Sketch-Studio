@@ -4678,6 +4678,44 @@ CLOSES the tool-aware look. Shaper-only wiring; the geometry is an additive #cor
 
 === SP1h4 (POCKET LOOK) DONE - HOLD ===
 
+## 2026-06-29 · SP1h5 — cutter PATH = tool-width BAND + dashed CENTERLINE; drop the flat tint (turn 194)
+
+Re-shapes the cut feedback per the user's two directives: (a) cut = the cutter PATH, NO filled shape EXCEPT pocket;
+(b) the dashed offset line is the CENTERLINE — add a tool-DIAMETER BAND (the kerf) around it. Shaper-only
+(prepare-view.js computeLook). No #core change → trivially SketchStudio byte-identical.
+
+- **did (one restructured `computeLook`):**
+  - **DROPPED the SP1f flat region tint.** A cut target no longer gets a solid colour FILL. The cut layer (cutG) now
+    holds ONLY the pocket hatch; for every other type cutG is empty.
+  - **Unified cutter-path look** — shared `bandStyle` (semi-transparent stroke, width = `toolDia` in WORLD units = the
+    kerf) + `centerStyle` (dashed, non-scaling 1.5 = the tool-center path), both in the cut type's `previewStroke`:
+    - **OUTSIDE / INSIDE** — CENTERLINE = the boundary offset by `toolDia/2 ± cutOffset` (`offsetPolygon`, OUT/IN);
+      `bandAndCenter(off)` = band straddling it + dashed centerline. The band's INNER edge ~ the boundary, OUTER ~
+      boundary + toolDia (the kerf). (The dashed line the user liked = the centerline; the band is new around it.)
+    - **ON-LINE** — band + dashed centerline ON the path/boundary itself (`targetMarkup`, the tool rides the line).
+    - **GUIDE** — a dashed reference only, NO band (not a cut). Unchanged.
+    - **POCKET** — the hatch-filled cleared region (`openPolygon`, SP1h4) MOVED into the cut layer (the only FILL) +
+      the depth label above the edges. Visual unchanged.
+  - `sigOf` already keys on toolDia/cutOffset/cutDepth/DOC_UNIT → the band re-widths + the outside/inside centerline
+    shifts LIVE on a bit/offset change via the existing look cache + `refreshLook`. Selection/hover (SP1d) untouched
+    (separate layers). Removed the now-unused flat-tint style strings; `previewFill` is no longer read (kept in the
+    CUT_TYPES declaration — harmless data, may feed a later legend).
+- **verify (errors=0):** CDP live (60×40 rect loop, Shaper doc unit = in): EXTERIOR → band stroke-width 3.175 (=toolDia)
+  + dashed centerline width 63.175 (= boundary 60 + toolDia), cut layer EMPTY, no solid fill; change bit → band 12.7 +
+  centerline 72.7 (re-widths + shifts LIVE); INSIDE → band 12.7 + centerline 47.3 (60 − toolDia), cut layer empty;
+  ON-LINE → band on the boundary (width 60), cut layer empty; GUIDE → dashed reference, NO band, cut layer empty;
+  POCKET → hatch in the CUT layer + `↓ 0.25in` depth label (unchanged); selection works; joints = 0; NO flat region
+  tint anywhere except the pocket hatch. Shaper-only → SketchStudio byte-identical (`npm run test:shell` 12/12); solver
+  oracle 12/12; offset oracle still passes; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope
+  = prepare-view.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Cut feedback now reads as a real toolpath — kerf band + tool-center centerline for
+  every cutting type, pocket as a hatch, guide as a reference, all live to the bit. Next per ROADMAP: **SP1j** (export
+  — the real toolpath geometry, reusing offsetPolygon + openPolygon). STOP — hold.
+
+=== SP1h5 (CUTTER PATH = TOOL-WIDTH BAND + CENTERLINE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

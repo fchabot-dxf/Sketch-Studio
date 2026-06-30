@@ -226,10 +226,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return '';
   };
 
-  // SP1f/SP1h1: per-target cut LOOK, cached by (cutType, toolDia, cutOffset). REGION types (outside/inside/pocket)
-  // paint the SP1f flat tint into the cut layer (their offset toolpath is h2–h4); PATH types paint the TOOL-AWARE
-  // look into the toolpath layer — GUIDE = a dashed reference (no cut); ON-LINE = a tool-WIDTH band (stroke-width =
-  // toolDia in WORLD units = base mm) + a dashed centerline. Reuses targetMarkup (loop polygon / edge true geometry).
+  // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit). Every CUTTING
+  // type renders a tool-WIDTH BAND (the kerf — stroke-width = toolDia in WORLD units) + a dashed CENTERLINE (the
+  // tool-center path) in the type's preview colour: ON-LINE on the path; OUTSIDE/INSIDE on the boundary offset by
+  // toolDia/2 ± cutOffset (the band straddles the boundary). GUIDE = a dashed reference (NO band — not a cut). POCKET =
+  // a hatch-filled cleared region (the ONLY fill, in the cut layer) + a depth label. NO flat region tint anymore.
   const lookCache = new Map(); // targetKey → { sig, region, path }
   const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${SettingsManager.get('DOC_UNIT')}`;
   const computeLook = (key, rec) => {
@@ -238,45 +239,39 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
     if (!ct) return { region: '', path: '' };
     const t = { kind, id };
-    if (ct.targetKind === 'region') {
-      const loopStyle = `fill:${ct.previewFill}; fill-opacity:0.45; stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.75; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
-      const edgeStyle = `fill:none; stroke:${ct.previewStroke}; stroke-width:3; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;`;
-      const region = targetMarkup(t, loopStyle, edgeStyle); // SP1f flat tint stays
-      // SP1h2: OUTSIDE/INSIDE → a DASHED offset toolpath of the loop boundary by toolDia/2 ± cutOffset (OUTWARD for
-      // exterior, INWARD for interior). SP1h4: POCKET → the hatch-filled cleared region + depth label (below). Edges
-      // never reach here (region gating is loop-only). The look recomputes on toolDia/cutOffset/cutDepth change.
-      let path = '';
-      const l = (kind === 'loop') ? loopById.get(id) : null;
-      if (l && l.polygon.length >= 3 && (ct.id === 'exterior' || ct.id === 'interior')) {
-        const r = (Number(rec.toolDia) || 0) / 2 + (Number(rec.cutOffset) || 0);
-        const off = offsetPolygon(l.polygon, ct.id === 'exterior' ? r : -r);
-        if (off.length >= 3) path = polyMarkup(off, `fill:none; stroke:${ct.previewStroke}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round;`);
-      } else if (l && l.polygon.length >= 3 && ct.id === 'pocket') {
-        // SP1h4: POCKET = the CLEARED region a round bit removes = morphological OPENING (inset by tool radius, then
-        // dilate with the tool radius rounding the convex corners). Hatch-filled + a depth label. Bigger bit → more
-        // corner rounding; bit too big for the region → empty cleared (no garbage). Replaces the flat tint's toolpath.
-        const cleared = openPolygon(l.polygon, (Number(rec.toolDia) || 0) / 2, Number(rec.cutOffset) || 0);
-        if (cleared.length >= 3) {
-          path = polyMarkup(cleared, `fill:url(#prepare-pocket-hatch); stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`);
-          const label = pocketDepthLabel(rec.cutDepth);
-          if (label) {
-            const c = polyCentroid(cleared);
-            path += `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${ct.previewStroke}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
-          }
-        }
-      }
-      return { region, path };
-    }
     const color = ct.previewStroke;
+    const toolDia = Number(rec.toolDia) || 0;
+    // shared cutter-path look: a semi-transparent BAND (world-unit kerf) + a dashed CENTERLINE (zoom-stable).
+    const bandStyle = `fill:none; stroke:${color}; stroke-width:${toolDia}; stroke-opacity:0.28; stroke-linejoin:round; stroke-linecap:round;`;
+    const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
+    const bandAndCenter = (poly) => (toolDia > 0 ? polyMarkup(poly, bandStyle) : '') + polyMarkup(poly, centerStyle);
+
+    if (ct.targetKind === 'region') { // loop-only (gating) — OUTSIDE / INSIDE / POCKET
+      const l = (kind === 'loop') ? loopById.get(id) : null;
+      if (!l || l.polygon.length < 3) return { region: '', path: '' };
+      if (ct.id === 'pocket') {
+        // POCKET (SP1h4) = the CLEARED region a round bit removes = morphological OPENING (erode by tool radius, dilate
+        // with round joins). The ONLY fill — a hatch in the CUT layer — + a depth label above the edges.
+        const cleared = openPolygon(l.polygon, toolDia / 2, Number(rec.cutOffset) || 0);
+        if (cleared.length < 3) return { region: '', path: '' };
+        const region = polyMarkup(cleared, `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`);
+        let path = '';
+        const label = pocketDepthLabel(rec.cutDepth);
+        if (label) { const c = polyCentroid(cleared); path = `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`; }
+        return { region, path };
+      }
+      // OUTSIDE / INSIDE — the CENTERLINE = the boundary offset by toolDia/2 ± cutOffset; the band straddles it (kerf).
+      const r = toolDia / 2 + (Number(rec.cutOffset) || 0);
+      const off = offsetPolygon(l.polygon, ct.id === 'exterior' ? r : -r);
+      return { region: '', path: off.length >= 3 ? bandAndCenter(off) : '' };
+    }
+    // PATH types (loop or edge) — GUIDE / ON-LINE
     if (ct.id === 'guide') {
       const dash = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
-      return { region: '', path: targetMarkup(t, dash, dash) };
+      return { region: '', path: targetMarkup(t, dash, dash) }; // dashed reference — NO band (not a cut)
     }
-    // on-line: a tool-width BAND (world units) + a dashed CENTERLINE
-    const toolDia = Number(rec.toolDia) || 0;
-    const band = `fill:none; stroke:${color}; stroke-width:${toolDia}; stroke-opacity:0.28; stroke-linejoin:round; stroke-linecap:round;`;
-    const center = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:4 3; stroke-linejoin:round; stroke-linecap:round;`;
-    return { region: '', path: (toolDia > 0 ? targetMarkup(t, band, band) : '') + targetMarkup(t, center, center) };
+    // ON-LINE — band + dashed centerline ON the path/boundary itself (the tool rides the line).
+    return { region: '', path: (toolDia > 0 ? targetMarkup(t, bandStyle, bandStyle) : '') + targetMarkup(t, centerStyle, centerStyle) };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 

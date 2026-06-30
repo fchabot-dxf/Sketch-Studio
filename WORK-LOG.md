@@ -4783,6 +4783,110 @@ paper." Shaper-only → SketchStudio untouched.
 
 === SHAPER DESIGN CREAM CANVAS + THEME DONE - HOLD ===
 
+## 2026-06-29 · SP1j — EXPORT ENGINE plan (raw machine-ready Shaper SVG) — PLAN ONLY, no code (turn 200)
+
+Scouted the codebase + the `reference-shaper-svg-encoding` memory. The export engine serializes the Prepare cut plan
+into a RAW machine-ready Shaper SVG (the rich `shaper:` namespace the on-tool Origin reads — NOT Studio's surface).
+Proposal below; advisor to synthesize the build slices. NO code this turn.
+
+### (1) WHAT GEOMETRY TO EMIT — CONFIRMED: the DESIGN shapes, NOT our preview toolpaths
+The Origin computes its OWN toolpaths from (shape + cutType + the operator's on-tool bit). So a STANDARD cut-type
+export = the DESIGN boundary geometry (loops/edges) + a `shaper:cutType` attr — we do NOT emit the SP1h offset/opening
+contours. Those (`offsetPolygon`/`openPolygon`) are the on-screen VISUALIZATION (band / centerline / hatch); the
+Origin offsets internally. They are reserved for the PREVIEW and a future VCARVE mode (vcarve is NOT a standard
+cutType the Origin offsets → there we DO emit computed contours). Confirmed against the memory + the dispatch.
+
+### (2) CUT-PLAN → SVG MAPPING
+- A Prepare **LOOP** is a DERIVED cycle of #core edges (loop-finder gives `{ joints:[orderedNodeIds],
+  edges:[orderedShapeIds] }`, `edges[i]` joins `joints[i]→joints[(i+1)%n]`). Emit it as ONE closed
+  `<path d="M x0 y0 … Z">` so the Origin reads a single closed region (required for outside/inside/pocket) — NOT one
+  path per edge. Build by walking the edges: line → `L x y`; arc → `A r r 0 largeArc sweep x y`; circle-loop → a
+  `<circle>` (its own inherent loop). DIRECTION-AWARE: an arc shape stores `joints=[center,start,end]` + `subType` +
+  `largeArc`/`sweep`; if the loop traverses it end→start (i.e. `joints[i]` == the arc's stored END node) emit the
+  REVERSED arc (swap endpoints, FLIP the sweep flag). `calculateArcPath` returns a standalone `M…A…` so it can't be
+  concatenated directly → need a small per-edge SEGMENT builder (one `M` for the loop, then `L`/`A` per edge, `Z`).
+- An **EDGE** (open vector) → its true geometry: line → `<path d="M..L..">`/`<line>`; arc → `<path>` (one `A`);
+  circle → `<circle>`. (Open shapes accept only online/guide — already gated in Prepare.)
+- **SOURCE** = the in-memory CUT_PLAN (keyed `${kind}:${id}`) + the design `state` (joints/shapes). At export time
+  re-derive `findLoops(state)`, match `loop.id` ↔ the plan key, build the path; edges via a shapeById map. Only
+  entries with `rec.cutType` set are emitted (unassigned geometry is not in the file).
+
+### (3) HEADER
+`<svg xmlns="…/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="{W}" height="{H}" viewBox="…">`
+— WITHOUT `xmlns:shaper` the interpreter ignores every custom attr (memory). W/H/viewBox from the design BBOX over
+the joints (world units = base mm). **RECOMMEND mm-CANONICAL geometry**: width/height in mm + `viewBox="minX minY W H"`
+in the SAME mm numbers → guaranteed 1:1 (1 user unit = 1 mm), the path coords stay in world units UNSCALED. The doc
+unit (inch) stays a DISPLAY/parse lens (U-arc) — it does NOT change the file's coordinate space; it only suffixes the
+cut PARAM attrs (below). (Alternative — honor inch for width/height+viewBox — forces scaling EVERY coord by 1/25.4 =
+scaling-error risk; DEFER unless a user demands an inch-unit file. Flagged in §8.)
+
+### (4) ATTRIBUTES + COLORS — ATTRIBUTE-FIRST (the color convention is ambiguous)
+Per element: `shaper:cutType` = outside|inside|pocket|online|guide (EXPLICIT, unambiguous, ALWAYS written — wins
+regardless of color); `shaper:cutDepth` = `units.format(cutDepth, docUnit, {unit:true})` → `6.35mm`/`0.25in` (only if
+≠ 'unset'); `shaper:cutOffset` = same suffix form (if ≠ 0); `shaper:toolDia` = same (passive bit hint — note the
+`toolDia` vs `toolDiameter` name ambiguity from the memory; emit `toolDia` per our SHAPER_FIELDS, optionally both).
+COLORS = the official CUT_TYPES fill/stroke (exterior #000 fill · interior #fff fill + #000 stroke · pocket #7F7F7F
+fill · online #7F7F7F stroke · guide #0068FF) as SECONDARY. **FLAG (carry from the memory):** a user source's stroke
+list conflicts (blue=outside vs official blue=GUIDE) → rely on the ATTRIBUTE; verify exact hex on a real Origin before
+trusting color. Writing both (attr + official color) is robust.
+
+### (5) UNSURFACED FEATURES — v1 vs DEFER
+- **Per-element attrs** = v1 (simplest, robust; each path carries its own cutType/depth).
+- **`<g>` group inheritance** (tag a batch `<g>` so children inherit) — an OPTIMIZATION (merged-file isolation), not
+  needed when every element is self-tagged. DEFER (nice-to-have).
+- **`fill-rule="evenodd"` islands** (a loop-with-hole → one compound `<path>`, pocket clears AROUND the island) —
+  needs nested-loop (containment) detection. DEFER to its own slice; v1 emits each loop separately (still cuts
+  correctly, just not the elegant single-island path).
+- **Red datum triangle** (a `<polygon>` right-triangle, fill #FF0000, legs on X/Y → the Origin snaps 0,0 to the 90°
+  vertex) — an optional registration aid + a "Drop Datum" toggle. DEFER to a UI slice.
+- **RECOMMENDED v1 SET:** header + per-element paths (loops closed, edges open) + `shaper:cutType` +
+  cutDepth/cutOffset/toolDia + official colors (attribute-first). DEFER: group inheritance, evenodd islands, datum.
+
+### (6) ARCHITECTURE + TRIGGER — RECOMMEND a PURE #core serializer + a Shaper Export tab
+- **A pure `#core/shaper-export.js`** — `exportShaperSVG({ state, entries, encoding, docUnit, bbox? }) → string`. NO
+  DOM, oracle-testable, reusable by VCARVE/JOINTS. `entries` = `[{ target:{kind,id}, rec }]`; `encoding` = the
+  cutType id→{shaperCutType, fill, stroke} table INJECTED by the caller (keeps #core free of the app-level
+  `apps/shaper/src/shaper.js` CUT_TYPES; a #core encoding module is the eventual home but injection avoids a refactor
+  now). A pure `#core` path-builder (`loopToPathD(loop, state)` / `edgeToPathD(shape, state)`) does the §2 geometry —
+  reusable + independently oracle-tested.
+- **CUT_PLAN access (the gap):** the plan is trapped module-level in `prepare-view.js` (not exported). RECOMMEND
+  extracting `CUT_PLAN` + `keyOf`/`getCutRecord`/`setFieldFor` into a small Shaper-local store
+  `apps/shaper/src/cut-plan.js`, imported by BOTH prepare-view and the export trigger — DECLARES the cut plan as one
+  source of truth (it is app state, not a pure algorithm → stays in the app, not #core).
+- **Trigger:** the **Sim/Export tab** (currently a stub) → a "Generate Shaper SVG" button → read the cut-plan store +
+  `designController.state` → `exportShaperSVG(...)` → a Blob + `<a download>` file save. (A live "copy SVG" is a cheap
+  bonus.)
+
+### (7) SLICING — load-safe sub-slices (recommend j1 → j2 → j4 core; j3 optional)
+- **j1** — `#core/shaper-export.js` skeleton + `loopToPathD` (LINES only) + oracle: header (svg/xmlns:shaper/width/
+  height/viewBox) + ONE cut-type, a rectangle LOOP → outside. Oracle asserts the exact SVG string. Pure, no UI.
+- **j2** — full cut-plan → SVG: all 5 cut types + ARCS (direction-aware sweep) + circles + open edges + the param
+  attrs (cutDepth/cutOffset/toolDia, unit-suffixed) + colors. Oracle per type + an arc loop (both traversal dirs) +
+  a circle + an open edge. Pure, no UI.
+- **j3** (OPTIONAL / deferrable) — one unsurfaced feature if wanted (most valuable = evenodd islands; else skip).
+- **j4** — the Export-tab UI: extract `cut-plan.js`, wire the Sim/Export button + the Blob download; live verify
+  (assign cuts in Prepare → Export → a Shaper SVG downloads, re-open/inspect the attrs + paths).
+- Each of j1–j3 is load-safe (#core + oracle, no shell change → SketchStudio byte-identical); j4 is the only UI/Shaper
+  surface change.
+
+### (8) RISKS
+- **loop→path d (arcs):** direction-aware sweep (reverse traversal must FLIP the flag); the loop-finder chord-approx
+  ambiguity (two arcs, same endpoints, equal chord — deferred there). Mitigate: use the arc shape's stored
+  center/start/end + largeArc/sweep, flip on reverse; oracle BOTH directions.
+- **color ambiguity:** blue=outside vs guide conflict → attribute-first; colors secondary; verify on a real Origin.
+- **units / viewBox scaling:** the 1:1 requirement → emit mm-canonical geometry + viewBox (no coord scaling);
+  doc-unit only suffixes the param attrs. (Inch-unit file = a deferred, scaling-heavy option.)
+- **in-memory cut-plan source:** trapped in prepare-view (needs the §6 store extraction); a plan entry can ORPHAN if
+  the design changed after assignment (loop ids are edge-set-derived → an edited loop = a new id). Mitigate: re-derive
+  `findLoops(state)` at export, match by id, SKIP + warn on orphans. Also handle the empty plan (→ a minimal/empty
+  SVG) and confirm the bbox over joints.
+
+**Recommendation in one line:** build a PURE `#core/shaper-export.js` (geometry = the design shapes, attribute-first
+`shaper:cutType` + suffixed params, mm-canonical viewBox), slice j1 (header + lines + oracle) → j2 (all types + arcs +
+params) → j4 (extract a `cut-plan.js` store + the Sim/Export download); DEFER group/evenodd/datum + the inch-unit file.
+
+=== SP1j EXPORT PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

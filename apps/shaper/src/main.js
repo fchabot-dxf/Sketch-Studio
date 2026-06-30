@@ -19,6 +19,8 @@ import { CUT_TYPES } from './shaper.js';                   // SP1j-4: injected a
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
+import { findLoops } from '#core/loop-finder.js';        // SKETCH-4e: enumerate loops for island polys
+import { loopPolygon } from '#core/loop-geometry.js';     // SKETCH-4e: HOST computes loop polys (DOM) → serializer stays pure
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -49,9 +51,15 @@ document.getElementById('btn-generate-svg').addEventListener('click', () => {
   if (!entries.length) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
-  // SP1j-3a: groupByCut ON (hoist identical cut attrs to a <g> → cleaner files). The datum triangle stays OFF pending
-  // a "Drop Datum" UI toggle — it's a deliberate registration aid, not wanted on every file.
-  const svg = exportShaperSVG({ state: designController.state, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true } });
+  const st = designController.state;
+  // SKETCH-4e: the HOST (has the DOM) computes each loop's boundary polygon for the island containment test; the
+  // serializer stays PURE (never calls the DOM-dependent sampleArc — the S-4a purity rule).
+  const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
+  const loopPolys = {};
+  for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
+  // SP1j-3a: groupByCut ON (cleaner files). SKETCH-4e: islands ON (a grouped pocket with a contained loop → evenodd
+  // compound; non-grouped/non-nested plans are unaffected). The datum triangle stays OFF pending a "Drop Datum" toggle.
+  const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true, islands: true }, loopPolys });
   download('shaper-export.svg', svg);
   if (status) status.textContent = `Exported ${entries.length} cut${entries.length === 1 ? '' : 's'} → shaper-export.svg`;
 });

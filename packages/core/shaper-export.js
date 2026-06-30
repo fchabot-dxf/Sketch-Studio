@@ -15,6 +15,8 @@
 
 import { findLoops } from './loop-finder.js';
 import { format } from './units.js';
+import { loopsInGroup, groupOfLoop } from './group-model.js'; // SKETCH-4e: explicit-group islands
+import { polygonContains } from './loop-geometry.js';          // SKETCH-4e: containment (on host-passed polys)
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
@@ -168,21 +170,55 @@ function datumPolygon(datum) {
 //                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
 //                groupByCut: true           → wrap elements sharing IDENTICAL cut attrs in one <g> (attrs hoisted off
 //                                             the children, which inherit); unique-attr elements stay ungrouped.
-export function exportShaperSVG({ state, entries, encoding, docUnit, options = {} } = {}) {
+export function exportShaperSVG({ state, entries, encoding, docUnit, options = {}, loopPolys } = {}) {
   const ents = Array.isArray(entries) ? entries : [];
   const enc = Array.isArray(encoding) ? encoding : [];
   const encOf = (id) => enc.find((t) => t && t.id === id) || null;
   const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
-  const loopById = new Map(findLoops(state || {}).map((l) => [l.id, l]));
+  const loops = findLoops(state || {});
+  const loopById = new Map(loops.map((l) => [l.id, l]));
+
+  // SKETCH-4e: ISLANDS (explicit-group, options.islands, default OFF). For a POCKET cut on a loop that is in a user
+  // GROUP, the group's OTHER loops STRICTLY CONTAINED in it (polygonContains on the HOST-passed `loopPolys`) are its
+  // HOLES → ONE compound `<path fill-rule="evenodd">` (the hole loops are absorbed, not emitted separately).
+  let holesOf = null, absorbed = null;
+  if (options.islands && loopPolys) {
+    holesOf = new Map(); absorbed = new Set();
+    for (const e of ents) {
+      if (!e || !e.target || e.target.kind !== 'loop' || !e.rec) continue;
+      const c = encOf(e.rec.cutType);
+      if (!c || c.cutType !== 'pocket') continue; // conservative: POCKET only
+      const L = loopById.get(e.target.id); if (!L) continue;
+      const gid = groupOfLoop(L, state); if (!gid) continue;
+      const outerPoly = loopPolys[L.id]; if (!outerPoly) continue;
+      const holes = [];
+      for (const hid of loopsInGroup(loops, state, gid)) {
+        if (hid === L.id) continue;
+        const hp = loopPolys[hid];
+        if (hp && polygonContains(outerPoly, hp)) { holes.push(hid); absorbed.add(hid); }
+      }
+      if (holes.length) holesOf.set(L.id, holes);
+    }
+  }
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
+    if (e.target.kind === 'loop' && absorbed && absorbed.has(e.target.id)) continue; // a hole absorbed into a pocket
     const c = encOf(e.rec.cutType);
     if (!c) continue;
     let geom = null;
-    if (e.target.kind === 'loop') { const loop = loopById.get(e.target.id); if (loop) geom = loopGeom(loop, state, shapeById); }
+    if (e.target.kind === 'loop') {
+      const loop = loopById.get(e.target.id);
+      if (loop && holesOf && holesOf.has(loop.id)) { // POCKET-with-holes → an evenodd compound
+        let d = loopToPathD(loop, state);
+        for (const hid of holesOf.get(loop.id)) { const hl = loopById.get(hid); const hd = hl ? loopToPathD(hl, state) : ''; if (hd) d += ' ' + hd; }
+        if (d) geom = { tag: 'path', a: `d="${d}" fill-rule="evenodd"` };
+      } else if (loop) {
+        geom = loopGeom(loop, state, shapeById);
+      }
+    }
     else if (e.target.kind === 'edge') { const shape = shapeById.get(e.target.id); if (shape) geom = edgeGeom(shape, state); }
     if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
   }

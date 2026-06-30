@@ -56,3 +56,12 @@ export function loopsInGroup(loops, state, gid) {
   return (loops || []).filter((l) => Array.isArray(l.edges) && l.edges.length &&
     l.edges.every((eid) => { const s = shapeById.get(eid); return s && groupOf(s) === gid; })).map((l) => l.id);
 }
+
+// groupOfLoop(loop, state) → the `userGroupId` a loop belongs to (when ALL its edge-shapes share one), else null.
+export function groupOfLoop(loop, state) {
+  if (!loop || !Array.isArray(loop.edges) || !loop.edges.length) return null;
+  const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
+  const gid = groupOf(shapeById.get(loop.edges[0]));
+  if (!gid) return null;
+  return loop.edges.every((eid) => groupOf(shapeById.get(eid)) === gid) ? gid : null;
+}

@@ -5687,6 +5687,54 @@ to a Group/Ungroup action + a light cue. Shaper Design only.
 
 === SKETCH-4d (GROUP ACTION + FEEDBACK) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-4e — ISLANDS export: a GROUP of nested loops → a compound evenodd path (turn 238)
+
+The original j3b ISLANDS, now EXPLICIT-group-driven (the user chose explicit over geometric). A POCKET cut on a loop
+that is in a user GROUP merges the group's STRICTLY-CONTAINED loops as HOLES → ONE `<path fill-rule="evenodd">`. Built
+on S-4c (`loopsInGroup`) + S-4a (`polygonContains`). The S-4a PURITY rule is honored: the HOST (has the DOM) computes
+the boundary polygons; the serializer NEVER calls `sampleArc`.
+
+- **did:**
+  - **`#core/group-model.js`** — added `groupOfLoop(loop, state)` → the `userGroupId` a loop belongs to (when ALL its
+    edge-shapes share one), else null. (Symmetric to `loopsInGroup`; the exporter needs L's gid to find its group-mates.)
+  - **`#core/shaper-export.js`** — `exportShaperSVG` takes a new `loopPolys` (host-computed `{ loopId: polygon }`) and
+    `options.islands` (default OFF). When ON: for each POCKET entry whose loop L is in a group (`groupOfLoop`), the
+    group's OTHER loops (`loopsInGroup`) STRICTLY CONTAINED in L (`polygonContains` on the passed-in polys) are its
+    HOLES → emit L + holes as ONE `<path d="<L> Z <hole> Z …" fill-rule="evenodd">` with L's cut attrs (the `d` built
+    by the PURE `loopToPathD` per subpath; evenodd is winding-agnostic → no reversal). The hole loops are ABSORBED
+    (their own entries, if any, are skipped). CONSERVATIVE: only POCKET (`c.cutType === 'pocket'`) + explicitly-grouped
+    + contained merge; everything else emits as before.
+  - **`apps/shaper/src/main.js`** (the export HOST) — before the export, compute `loopPolys` for every loop via the
+    DOM `loopPolygon` (imports `findLoops` + `loopPolygon`), and call `exportShaperSVG({ …, options:{ groupByCut:true,
+    islands:true }, loopPolys })`. So the live Shaper export gets islands; non-grouped/non-nested plans are unaffected.
+  - **`tests/shaper-export.test.js`** — island oracle: grouped+nested+islands ON → ONE evenodd compound (2 × Z, inner
+    absorbed); islands OFF → plain pocket (1 Z); NESTED-but-not-grouped → no merge; GROUPED-but-not-nested (beside) →
+    no merge; inner ASSIGNED its own cut + ungrouped → both emitted separately; the existing j1/j2/j3a exact-strings
+    STILL pass.
+- **verify (errors=0):** `node tests/shaper-export.test.js` PASSES (the j-series exact-strings + all 5 island cases).
+  CDP HOST-INTEGRATION (the exact path main.js runs — the browser `loopPolygon` (DOM) + `exportShaperSVG` islands +
+  the REAL `CUT_TYPES`): a grouped outer+inner → ONE compound `<path fill-rule="evenodd" shaper:cutType="pocket">`
+  (one path, 2 subpaths); islands OFF on the same fixture → plain (no evenodd); Shaper Design renders. SketchStudio
+  BYTE-IDENTICAL — `npm run test:shell` 12/12 (16-control panel + errors=0); standalone CDP load errors=0 (header +
+  ribbon). (SketchStudio imports NEITHER shaper-export NOR group-model → its module graph is unchanged; the
+  shaper-export change is gated behind `options.islands`/`loopPolys`, absent → unchanged.) Solver oracle 12/12;
+  sketch-model + group-model + loop-geometry + loop oracles green; guard GREEN; baseline 8 pre-existing 0 net-new;
+  `node --check` clean (export + test + main); scope = group-model.js + shaper-export.js + main.js + the test.
+- **process hygiene:** CDP via `run_in_background` + killed each run; the baseline run ALONE (shell-smoke + the full
+  baseline loop together exceed the 200s cap — split them). Manual stray-clean (proc_health.py watch still throws the
+  JSONDecodeError — system-process argv). NOTE: the first two-app CDP's SECOND navigation (SketchStudio) printed blank
+  — a harness flake on the reused Edge target; re-ran SketchStudio standalone → errors=0 (shell-smoke is the canonical
+  SketchStudio check + it passed).
+- **state:** branch `carve-out`. The SKETCH-4 arc is COMPLETE: 4a (#core loop-geometry + containment) → 4b (the
+  explicit-group plan) → 4c (the group substrate declared) → 4d (the Group action) → 4e (the islands export). A Shaper
+  user can now select an outer + inner loop, Ctrl+G to group them, pocket the outer, Generate → a machine-ready SVG
+  with the island as an evenodd compound. POSSIBLE EXTENSIONS (noted, not built): islands for exterior/interior region
+  cuts (currently POCKET only — a one-line gate widen); a hidden-sketch EXCLUDE in the export (the export currently
+  serializes all assigned cuts regardless of sketch visibility — the dispatch flagged it for here but the cut-plan
+  entries are sketch-agnostic; a visibility filter belongs at the entry-collection layer = a follow-up). STOP — hold.
+
+=== SKETCH-4e (ISLANDS EXPORT - EVENODD COMPOUND) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

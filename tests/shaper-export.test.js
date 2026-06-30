@@ -1,5 +1,6 @@
 import { exportShaperSVG, loopToPathD } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
+import { loopPolygon, polyArea } from '#core/loop-geometry.js'; // SKETCH-4e: island fixtures
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -193,6 +194,59 @@ import { findLoops } from '#core/loop-finder.js';
     const loop = findLoops(state)[0];
     const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }], encoding: ENC5, docUnit: 'mm' });
     assert(!svg.includes('<polygon') && !svg.includes('<g '), 'options default OFF → no datum / no group');
+  }
+
+  // ── SKETCH-4e: ISLANDS — an explicit GROUP of nested loops → a compound fill-rule="evenodd" path ──
+  {
+    const PK = [{ id: 'pocket', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none' }, { id: 'interior', cutType: 'inside', fill: '#FFFFFF', stroke: '#000000' }];
+    // outer 40×40 + inner 20×20, all 8 lines in 'group-1' (override per case)
+    const islandState = (innerJoints, grouped) => {
+      const J = new Map([['A', { x: 0, y: 0 }], ['B', { x: 40, y: 0 }], ['C', { x: 40, y: 40 }], ['D', { x: 0, y: 40 }], ...innerJoints]);
+      const g = grouped ? 'group-1' : undefined;
+      const Ln = (id, p, q) => ({ id, type: 'line', joints: [p, q], userGroupId: g });
+      return { joints: J, constraints: [], shapes: [
+        Ln('OA', 'A', 'B'), Ln('OB', 'B', 'C'), Ln('OC', 'C', 'D'), Ln('OD', 'D', 'A'),
+        Ln('IE', 'E', 'F'), Ln('IF', 'F', 'G'), Ln('IG', 'G', 'H'), Ln('IH', 'H', 'E'),
+      ] };
+    };
+    const INNER_IN = [['E', { x: 10, y: 10 }], ['F', { x: 30, y: 10 }], ['G', { x: 30, y: 30 }], ['H', { x: 10, y: 30 }]];   // inside
+    const INNER_OUT = [['E', { x: 50, y: 10 }], ['F', { x: 70, y: 10 }], ['G', { x: 70, y: 30 }], ['H', { x: 50, y: 30 }]]; // beside
+    const polysFor = (state) => { const sb = new Map(state.shapes.map((s) => [s.id, s])); const o = {}; for (const l of findLoops(state)) o[l.id] = loopPolygon(l, state, sb); return o; };
+    const byArea = (state) => { const sb = new Map(state.shapes.map((s) => [s.id, s])); const ls = findLoops(state).map((l) => ({ id: l.id, a: polyArea(loopPolygon(l, state, sb)) })).sort((x, y) => y.a - x.a); return { outer: ls[0].id, inner: ls[ls.length - 1].id }; };
+
+    // grouped + nested + islands ON → ONE evenodd compound (outer + hole; inner absorbed)
+    {
+      const state = islandState(INNER_IN, true); const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
+      assert((svg.match(/<path /g) || []).length === 1, 'island: ONE compound path');
+      assert(/fill-rule="evenodd"/.test(svg) && /shaper:cutType="pocket"/.test(svg), 'island: evenodd + pocket attrs');
+      const d = (svg.match(/d="([^"]+)"/) || [])[1] || '';
+      assert((d.match(/Z/g) || []).length === 2, 'island: outer + hole subpaths (2 × Z)');
+    }
+    // islands OFF (default) → plain pocket, no evenodd, one subpath
+    {
+      const state = islandState(INNER_IN, true); const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', loopPolys: polysFor(state) });
+      assert(!/fill-rule="evenodd"/.test(svg) && ((svg.match(/d="([^"]+)"/) || [])[1].match(/Z/g) || []).length === 1, 'islands OFF → plain pocket');
+    }
+    // NESTED but NOT grouped → not merged (the inner is unassigned → not emitted either)
+    {
+      const state = islandState(INNER_IN, false); const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
+      assert(!/fill-rule="evenodd"/.test(svg), 'nested but NOT grouped → no merge');
+    }
+    // GROUPED but NOT nested (beside) → not merged
+    {
+      const state = islandState(INNER_OUT, true); const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
+      assert(!/fill-rule="evenodd"/.test(svg), 'grouped but NOT nested → no merge');
+    }
+    // inner ASSIGNED its own cut + NOT grouped → both emitted separately (no merge)
+    {
+      const state = islandState(INNER_IN, false); const { outer, inner } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }, { target: { kind: 'loop', id: inner }, rec: { cutType: 'interior' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
+      assert((svg.match(/<path /g) || []).length === 2 && !/fill-rule="evenodd"/.test(svg), 'inner assigned + ungrouped → both emitted, no merge');
+    }
   }
 
   console.log('shaper-export tests passed ✅');

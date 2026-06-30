@@ -3,10 +3,12 @@
 // list is DECLARED as DATA — adding a host later is one entry, not new code. PURE #ui (no app imports); themed via the
 // shared --sk-* header/ribbon vars so it fits both Studio (light) and Shaper (dark).
 
-// The roster. Real /apps/<app>/ paths → robust regardless of the /shaper redirect.
+// The roster. RELATIVE sibling paths (SWITCH-2): both apps live at apps/<id>/, so from either app's location
+// ../<other>/ resolves to its sibling — correct from ANY server root (local dev served from a subdir, or the deployed
+// repo-root site) AND robust to the /shaper redirect. Absolute /apps/<id>/ only worked when the server root == repo root.
 export const APPS = [
-  { id: 'sketchstudio', name: 'Sketch Studio', href: '/apps/sketchstudio/' },
-  { id: 'shaper', name: 'Shaper', href: '/apps/shaper/' },
+  { id: 'sketchstudio', name: 'Sketch Studio', href: '../sketchstudio/' },
+  { id: 'shaper', name: 'Shaper', href: '../shaper/' },
 ];
 
 let stylesInjected = false;

@@ -5934,6 +5934,32 @@ joints + pushes shapes DIRECTLY, never the factories, so a flattened path can't 
 
 === IMPORT-2 (SVG IMPORT FOUNDATION) DONE - HOLD ===
 
+## 2026-06-30 · SWITCH-2 — app-switcher RELATIVE hrefs (fix local-dev navigation) (turn 244)
+
+Frederic hit the app-switcher NOT navigating on a local dev server. The SWITCH-1 roster used ABSOLUTE `/apps/<id>/`
+hrefs, which only resolve when the server root == the repo root. SWITCH-2 = RELATIVE sibling hrefs so it works from
+ANY server root (the deployed repo-root site AND local dev served from an ancestor dir). Last slice before the deploy
+pre-flight.
+
+- **did (`packages/ui/app-switcher.js`, one change):** the `APPS` roster hrefs `/apps/sketchstudio/` →
+  `../sketchstudio/`, `/apps/shaper/` → `../shaper/` (+ the comment rationale). Both apps are SIBLINGS at `apps/<id>/`,
+  so from either app's location `../<other>/` resolves to its sibling. `location.href = a.href` is unchanged (the
+  browser resolves the relative href against the page).
+- **verify (errors=0):** CDP across TWO server roots. (1) REPO root (deployed-style, app at `/apps/shaper/`): both
+  hrefs resolve to `/apps/sketchstudio/` + `/apps/shaper/` (siblings); the switcher mounts on Shaper AND SketchStudio
+  (SWITCH-1 holds), 2 items each. (2) PARENT root (the bug case, app at `/Sketch-Studio/apps/shaper/`): `../sketchstudio/`
+  resolves to `/Sketch-Studio/apps/sketchstudio/` — the relative CARRIES the `/Sketch-Studio/` prefix that the old
+  absolute `/apps/sketchstudio/` would have DROPPED (→ 404). Proves the fix is root-agnostic. `node --check` clean;
+  guard GREEN; `npm run test:shell` 12/12 (the href VALUE affects no tested invariant — additive shared component);
+  both apps load errors=0. Solver + sketch-model + group-model + loop-geometry + export + loop + svg-import oracles
+  unaffected (untouched); scope = app-switcher.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; two static servers (repo-root + parent-root) +
+  one Edge, all killed at the end. proc_health.py watch still throws the JSONDecodeError (system-process argv).
+- **state:** branch `carve-out`. The two-way app-switcher now navigates correctly from any server root. Per the
+  advisor this is the LAST slice before the **DEPLOY PLAN pre-flight** (next). STOP — hold.
+
+=== SWITCH-2 (APP-SWITCHER RELATIVE HREFS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

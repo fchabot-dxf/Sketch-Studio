@@ -5735,6 +5735,155 @@ the boundary polygons; the serializer NEVER calls `sampleArc`.
 
 === SKETCH-4e (ISLANDS EXPORT - EVENODD COMPOUND) DONE - HOLD ===
 
+## 2026-06-30 · IMPORT-1 — SVG/DXF IMPORT + VCARVING arc: INVESTIGATE + ARCHITECT (NO code) (turn 240)
+
+A planning turn for the HIGH-priority arc the user picked (SVG/DXF import + vcarving, paired: "vcarve assets are
+usually imports"). The sketch system (S-1..4: sketches / groups / islands) is DONE and is the SUBSTRATE imports land
+into. NO code this turn — ground + architect + sub-slice. Refs: [[reference_shaper_svg_encoding]] (the export target),
+[[project_grouping_sketches_layers]] (the sketch/group substrate).
+
+### 1. GROUND — what exists (file:line)
+- **Geometry model (#core).** Geometry = `state.joints` (a Map `id → {x, y, fixed?, sketchId?}`) + `state.shapes`
+  (an array). Shape forms: **line** `{id, type:'line', joints:[aId,bId], groupId?, isConstruction?, sketchId?}`;
+  **circle** `{id, type:'circle', joints:[centerId, radiusJointId]}` (a 2nd joint defines r) — some call-sites use a
+  `radius:` field instead; **arc** `{id, type:'arc', subType, joints:[p1,p2,p3], sweep?}`. Constraints are separate:
+  `{type, joints:[…]}` (`packages/core/constants.js` CONSTRAINT_TYPES). The SOLVER is GLOBAL + mutates joint positions
+  in place.
+- **Shape factories** (`packages/core/shapes.js`): `makeRectFromTwoJoints`/`FromCenter`/`From3Points`, `makePolygon`,
+  `makeArc` — each takes the `joints` Map + ids + a `genJ()` id-minter, MUTATES `joints` (set new), returns
+  `{shapes, constraints}`. The factory `groupId='rect_'+Date.now()` is the RENDERER's fill key (≠ the S-4c
+  `userGroupId`). NOTE: the tool factories AUTO-ADD constraints (H/V/coincident) — an importer must NOT (see risks).
+- **How geometry lands in a sketch.** `#ui/sketch-state.js` wraps `state.shapes.push` + `state.joints.set` to STAMP
+  `sketchId = activeSketchId` on anything untagged (SKETCH-2a). So an importer just mints joints (`genJ`) + pushes
+  shape objects → they auto-join the active sketch. The sketch container (`state.sketches`/`activeSketchId`,
+  `addSketch`/`activateSketch` in `#core/sketch-model.js`) is the landing target.
+- **Existing SVG IO** (`apps/shaper/src/svgio.js`): `parseSvg(text)` → a raw SVG **DOM element** (DOMParser);
+  `serializeSvg`; `download`. **NO element→#core-shape extraction.** The Shaper holds an imported SVG as the raw
+  `store.doc` DOM (Explore/round-trip `#export`), DISCONNECTED from the #core Design sketch. → The import arc's core
+  job = BRIDGE that gap (raw SVG/DXF → real #core geometry in a sketch).
+- **Existing DXF (write only)** (`apps/sketchstudio/ui/export-manager.js` `buildDXF`, l.186): emits `LINE`
+  (10/20=start, 11/21=end) + `ARC` (10/20=center, 40=r, 50/51=start/end angle, from arc joints [center,start,end] +
+  `sweep`), with an `arcApprox` segment fallback. → the entity↔shape mapping EXISTS in the WRITE direction; the
+  importer MIRRORS it (read).
+- **Toolpath primitives for vcarve reuse** (`#core/polygon-offset.js`): `offsetPolygon(points, distance, opts)`
+  (+ outward / − inward, `{join:'round'}`, `[]` on collapse) + `openPolygon(points, radius, offset)` (erode→round-
+  dilate). The export (`#core/shaper-export.js`) currently emits the DESIGN boundary + cutType and lets the Origin
+  offset; vcarve will INVERT that (emit precomputed contours).
+- **VCARVE: nothing exists** — greenfield (the only "centerline/medial" hits are doc/plan text). The export target's
+  relevant lever ([[reference_shaper_svg_encoding]]): per-element `shaper:cutDepth` → STACKED 2.5D (overlapping paths,
+  each its own depth, one file) — the substrate the offset-contour vcarve hack rides.
+
+### 2. IMPORT architecture — proposal
+- **A DECLARED importer (the declare-form, not a hand-rolled if/else).** A pure `#core/svg-import.js` + `#core/
+  dxf-import.js`, each driven by a MAPPING TABLE from source primitive → a #core-shape emitter:
+
+  ```
+    SVG element     →  #core                         DXF entity     →  #core
+    ───────────────────────────────                  ──────────────────────────────
+    <line>          →  line (2 joints)               LINE           →  line
+    <rect>          →  4 lines (+ r → 4 arcs)        LWPOLYLINE     →  line chain (+ bulge → arc)
+    <circle>        →  circle (center + r)           CIRCLE         →  circle
+    <ellipse>       →  flatten → line chain          ARC            →  arc (center,start,end,sweep)
+    <polyline>      →  line chain (open)             POLYLINE       →  line chain
+    <polygon>       →  line chain (closed)           SPLINE         →  flatten → line chain
+    <path> d=…      →  per-command (below)           ELLIPSE        →  flatten → line chain
+  ```
+  `<path>`/SPLINE/bezier handling = a sub-table: `M/L/H/V/Z` → lines; `C/S/Q/T` (bézier) → FLATTEN (adaptive
+  subdivision) → lines (v1) [arc-FIT is a later refinement]; `A` (SVG elliptical arc) → a circular `arc` when
+  rx≈ry, else flatten. Each emitter mints joints via `genJ` + returns shape objects — the SAME currency the tools
+  produce, so the rest of the app (render / Prepare / export / group / island) "just works".
+- **Purity split (mirrors S-4a).** PARSE needs the DOM (`DOMParser`, `path.getPointAtLength` for robust flattening) →
+  the host (Shaper, has the DOM) parses + flattens to POLYLINE POINTS; the pure `#core` importer maps points → joints/
+  shapes. (Or: a pure path-`d` tokenizer in #core + a DOM fallback for `getPointAtLength`. Recommend host-parses-DOM,
+  #core-maps-data — same shape as the export's loopPolys.)
+- **WHERE it lands — RECOMMEND a NEW sketch per import.** A host **"Import"** action (Shaper; a button + file-drop —
+  the drop handler at `apps/shaper/src/main.js` l.75 already catches SVG, currently → `store.doc`) → `addSketch(state,
+  fileName)` → `activateSketch` → push the imported shapes (auto-stamped into the new sketch). Clean separation, matches
+  the "layers" model (each import = a layer the user can show/hide/rename/merge), and the existing stamp-wrap needs no
+  change. (Alt: into the active sketch — rejected as the default; messier.)
+- **Units → world mm (1 unit = 1 mm, the export's canon).** SVG: read `width`/`height` (mm|in|px) vs `viewBox` →
+  a real-unit SCALE so the imported art is physically correct; px-only / no-unit → assume 96 dpi or 1:1 + a confirm.
+  DXF: `$INSUNITS` if present, else assume mm (configurable) — DXF is often unitless. WRONG SCALE = wrong physical
+  size on the machine → make the scale VISIBLE/confirmable in the Import action. RECOMMEND a small "import scale"
+  confirm in the action (default from the file, overridable).
+- **Import as STATIC geometry, NOT auto-constrained** (key, see risks): mint joints unconstrained (no H/V/coincident)
+  → the global solver leaves them put (no constraints = no motion). The user constrains selectively. Avoids a
+  500-joint flattened path flooding the solver.
+
+### 3. VCARVING — proposal (high level; the HARD part FLAGGED)
+- **Goal.** Make imported art (outlines with NO centerline) v-carvable. A V-bit cuts a groove whose WIDTH ∝ DEPTH
+  (depth = halfWidth / tan(halfAngle)). True v-carving of a filled region needs its **MEDIAL AXIS** (skeleton /
+  centerline) + the local half-width at each skeleton point → a depth profile.
+- **⚠ THE HARD PART (its own deep plan/slice).** MEDIAL-AXIS / centerline extraction from arbitrary closed regions is
+  the genuine hard computational-geometry problem (Voronoi/Delaunay skeleton, or a distance-transform/grid approach;
+  pruning spurious branches; thin/branching/self-touching shapes). DO NOT inline it — VCARVE gets its own deep
+  research plan (survey + a spike) before any build.
+- **The shippable v1 hack (no true medial axis) — the Origin "stacked offset contours".** Generate a series of INWARD
+  offsets of each closed region (`offsetPolygon(region, −d_i)` for increasing `d_i`), each emitted as a SEPARATE path
+  with `shaper:cutDepth ∝ d_i` (a V-bit at depth d cuts width ≈ 2·d·tan(halfAngle)). The nested contour stack
+  approximates the V-groove via the per-element STACKED-2.5D lever ([[reference_shaper_svg_encoding]]). REUSES
+  `offsetPolygon` + `openPolygon` + the export's per-path cutDepth — NO new geometry engine. It's an APPROXIMATION
+  (contours don't meet in a clean apex; degrades on thin features) — but it ships without the medial axis and is the
+  honest first cut.
+- **A VCARVE space.** A Shaper **"V-Carve"** mode/tab (alongside Explore/Design/Prepare/Sim-Export) OR a vcarve op
+  inside Prepare: input = a sketch's closed regions; output = the computed contour stack (preview + export). Start as
+  a Prepare cut-MODE ('vcarve') to avoid a new shell tab; promote to its own space if it grows.
+- **Export differs from standard cuts.** Standard: emit the DESIGN boundary + `cutType`; the Origin offsets by
+  toolDia/2. VCARVE: the APP precomputes + EMITS the contour geometry, each path carrying its own `cutDepth` — a NEW
+  export MODE (`#core/shaper-export.js` gains a vcarve branch that serializes the computed contours instead of the
+  design shape). MUST be gated so the standard path stays byte-identical.
+
+### 4. Pipeline + relationship
+```
+  SVG / DXF file
+     │  [PARSE]  declared element/entity → #core (host parses DOM/flattens → #core maps to joints+shapes)
+     ▼
+  #core shapes + joints  (béziers/splines flattened; STATIC, unconstrained)
+     │  [LAND]  addSketch(file) → activate → push (auto-stamped sketchId)  ── the S-1..4 substrate
+     ▼
+  a SKETCH of editable geometry  ──(global solver; user may add constraints, group, island)
+     │
+     ├─(a) STANDARD ── Prepare assigns cutType per loop/edge ─→ shaper-export (Origin offsets boundary) ─→ SVG
+     │
+     └─(b) VCARVE ──── medial-axis (HARD, later)  OR  offset-contour stack (offsetPolygon, v1)
+                       ─→ export EMITS the computed contours, per-path cutDepth ─→ SVG
+```
+Vcarve and standard share the import→sketch foundation + `offsetPolygon`; they DIVERGE only at the export (boundary+
+cutType vs precomputed-contours+cutDepth).
+
+### 5. Sub-slices (RECOMMEND import-first) + risks
+- **Recommended slicing (foundation-first, each load-safe + oracle'd + 0 net-new):**
+  1. **IMPORT-2 — SVG foundation.** `#core/svg-import.js` (the declared mapping: line/rect/circle/polyline/polygon +
+     `<path>` M/L/Z + bézier-flatten) → #core shapes; host Import action → new sketch; units→mm; oracle (a known SVG →
+     expected joints/shapes/bbox). The MINIMUM that makes imported art real geometry.
+  2. **IMPORT-3 — SVG breadth + DXF.** Full `<path>` (`C/S/Q/T/A`, relative, transforms/`<g>`) ; `#core/dxf-import.js`
+     (LINE/ARC/CIRCLE/LWPOLYLINE/SPLINE, mirroring `buildDXF`). Oracles.
+  3. **VCARVE-1 — DEEP PLAN (its own turn).** The medial-axis survey + the offset-contour-hack design + the vcarve
+     export mode. NO build until blessed.
+  4. **VCARVE-2+ — build** the offset-contour vcarve (reuse `offsetPolygon`) → the cutDepth-stack export; LATER the
+     true medial axis.
+- **Risks.**
+  - **SVG breadth** — full `<path>` grammar (all commands, relative/absolute, `Z` subpaths), element/`<g>`/`<use>`
+    transforms (matrix/translate/scale/rotate), units (px/mm/in/%), `viewBox` scaling, styles/`<defs>`. A complete
+    parser is large → SCOPE v1 to the common subset, FLAG-and-skip the rest, iterate (don't silently drop — log/notify
+    what was skipped).
+  - **Bézier / spline / elliptical-arc** — must flatten (adaptive) or arc-fit; flatten is robust but joint-heavy,
+    arc-fit is cleaner but harder. v1 = flatten; arc-fit later.
+  - **Units / scale** — wrong mm scaling = wrong physical part. Make it confirmable.
+  - **Solver flooding** — flattened paths = many joints; import STATIC/unconstrained (above) so the solver no-ops.
+  - **Arc representation** — SVG `A` (elliptical: rx,ry,rot,large-arc,sweep) vs #core circular arc (center,start,end,
+    sweep) + the `subType` joint-ordering — map carefully (the `buildDXF` arc read is the reference); elliptical →
+    flatten when rx≠ry.
+  - **MEDIAL-AXIS hardness** — the real risk; isolate in VCARVE-1. The offset-contour hack de-risks shipping but is
+    approximate (apex, thin features, self-intersection).
+  - **Vcarve export inversion** — emitting computed contours is a new export mode; gate it so STANDARD export +
+    SketchStudio stay byte-identical.
+- **Recommendation: build IMPORT first (2 → 3), then VCARVE as its own planned arc (1 → 2+).** Import is the
+  foundation both paths need + delivers standalone value (bring outside art into the constraint/cut/export world);
+  vcarve's medial-axis is the hard, separable research problem that should not gate import.
+
+=== IMPORT/VCARVE ARC PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -379,7 +379,11 @@ function updateSnapTarget(e, svg, state) {
 
     // Determine if we need snap (active operation) or just hover (idle)
     const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
-    const needsSnap = !!(state.drag || state.active || state.placingConstraint || isDrawingTool);
+    // BUG-1: a box-select MARQUEE must show ONLY the selection box — never a snap/coincident glyph. The marquee sets
+    // state.active.type='marquee' (with NO state.drag), which would otherwise make needsSnap true → a leaked snapTarget
+    // → the renderer's icon-coincident near a line. A marquee is NOT a drag-to-snap op, so exclude it.
+    const isMarquee = !!(state.active && state.active.type === 'marquee');
+    const needsSnap = !isMarquee && !!(state.drag || state.active || state.placingConstraint || isDrawingTool);
     
     if (needsSnap) {
         // ACTIVE OPERATION: Compute snap targets for magnetic attraction

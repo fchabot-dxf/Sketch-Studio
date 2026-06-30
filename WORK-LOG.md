@@ -5960,6 +5960,42 @@ pre-flight.
 
 === SWITCH-2 (APP-SWITCHER RELATIVE HREFS) DONE - HOLD ===
 
+## 2026-06-30 · BUG-1 — marquee coincident-glyph leak: gate snap off during box-select (turn 246)
+
+A confirmed user bug: a box-select MARQUEE showed a spurious COINCIDENT snap glyph near a line (no constraint applied —
+confusing). Shared #ui sketcher → the SAME bug was in BOTH apps; this is a legit shared fix.
+
+- **trace (the leaking path):** `selection-tools.js` `handleSelectionPointerMove` returns EARLY for the marquee
+  (l.571), so selection-tools never computes the glyph during a marquee. The leak is the input-manager's pointermove:
+  `updateSnapTarget` runs at `input-manager.js:696` BEFORE the marquee handler, and its `needsSnap = !!(state.drag ||
+  state.active || …)` was TRUE during a marquee because the marquee sets `state.active.type='marquee'` (with NO
+  state.drag). So it computed a `state.snapTarget` near the line; the renderer (`svg-renderer.js:1512-1540`) draws an
+  `icon-coincident` PREVIEW glyph from `activeSnap || snapTarget` whenever `effectivePreviewSnap && active` — both true
+  during the marquee → the leak.
+- **fix (`packages/ui/input-manager.js`, 2 lines in `updateSnapTarget`):** a marquee is NOT a drag-to-snap op →
+  `const isMarquee = !!(state.active && state.active.type === 'marquee'); const needsSnap = !isMarquee && !!(state.drag
+  || state.active || state.placingConstraint || isDrawingTool);`. During a marquee → `needsSnap` false → the IDLE
+  branch clears `snapTarget`/`activeSnap` → no preview glyph. SCOPED: `isMarquee` is true ONLY for `active.type ===
+  'marquee'`; for EVERY other state (drawing, dragging, idle) `needsSnap` is byte-identical to before → provably can't
+  break the drag-to-snap / drawing-snap / cluster glyphs.
+- **verify (errors=0, CDP with POSITIVE CONTROLS so the test isn't vacuous):** Shaper Design — drove REAL synthetic
+  pointer events. (1) MARQUEE over the seed line: `marquee_box=true` (the selection box DID render → events drove a
+  genuine marquee) while `marquee_glyphs=0` (NO coincident preview glyph — THE FIX); box clears on release. (2) DRAW a
+  line hovering ON the existing line: `draw_preview=true` (a real line-draw started) AND `draw_glyphs=1` (the snap
+  coincident glyph STILL appears — NOT broken). A clean contrast at the SAME near-line position: marquee → 0 glyphs,
+  draw → 1. (An earlier run showed draw_glyphs=0 — a DRIVING artifact: I'd aimed at the line's bbox CORNER, not a
+  snappable point; hovering the midpoint fires the snap.) The fix is in the SHARED input-manager → SketchStudio gets
+  the same fix (same module; `npm run test:shell` 12/12 — no assertion targeted the leaked glyph; both apps load).
+  `node --check` clean; guard GREEN; solver + sketch-model + group-model + loop-geometry + export + loop + svg-import
+  oracles green; baseline 8 pre-existing 0 net-new; scope = input-manager.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; the eval written to a FILE (no bash-escaping of
+  nested quotes — the inline `querySelector("…\"…\"…")` escaping had broken an earlier run to `check=undefined`);
+  baseline run ALONE in the background. proc_health.py watch still throws the JSONDecodeError → manual stray-clean.
+- **state:** branch `carve-out`. A box-select marquee now shows ONLY the selection box (no phantom coincident glyph) in
+  BOTH apps; drag-to-snap + drawing-snap unchanged. STOP — hold.
+
+=== BUG-1 (MARQUEE COINCIDENT-GLYPH LEAK) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

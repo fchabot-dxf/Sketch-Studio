@@ -4593,6 +4593,42 @@ loops (the dashed offset toolpath). Concave/arc/self-intersection robustness = h
 
 === SP1h2 (POLYGON-OFFSET CORE + OUTSIDE/INSIDE TOOLPATH) DONE - HOLD ===
 
+## 2026-06-29 · SP1h3 — offset ROBUSTNESS (concave / arc-density / tiny-edge / self-intersection) (turn 190)
+
+Hardens `#core/polygon-offset.js` for REAL loops. Pure #core + oracle; the Shaper wiring already calls it (NO new
+wiring). Additive → SketchStudio byte-identical.
+
+- **approach (verified by running the oracle against the SP1h2 engine FIRST):** the SP1h2 miter offset ALREADY
+  handled concave (reflex) corners (the miter intersection trims the overlap — no spike) and arc-density (uniform
+  small sample angles → small, stable miters) and the thin-rect over-inset (the edge-direction-reversal check). The
+  ONLY failure was TINY/duplicate edges. So SP1h3 adds:
+  - **`dedupe(points, 1e-7)`** — drop consecutive near-duplicate vertices so `perpendicularNormal` never sees a
+    ~zero-length edge (no NaN normals, no runaway miters). Keeps genuine arc-sample curvature (only TRUE duplicates
+    go) — does NOT flatten arcs.
+  - **`selfIntersects(poly)`** — an O(n²) non-adjacent-edge crossing test; the THIN-NECK / concave-FOLD guard. When
+    the offset self-crosses (a fold the edge-reversal check can miss), `offsetPolygon` returns `[]` — a CLEAN empty,
+    NO garbage. STATED: full self-intersection CLIPPING (returning the valid sub-loops) is DEFERRED past this slice;
+    detect-and-empty is the contract (no gate needed — tractable). Kept the SP1h2 over-inset edge-reversal (robust to
+    the inverted ghost that keeps the same winding) + the collapsed-area guard.
+  - **`tests/polygon-offset.test.js`** — added: L-shape (reflex) out+in (correct, no spikes, no self-intersection);
+    a 32-vertex circle (arc-density — offset ~concentric r≈12/8, smooth); a thin 20×3 rect inset past half-height →
+    `[]` (modest inset still valid); a tiny/duplicate-vertex square (collapsed cleanly, no NaN). The SP1h2 simple
+    cases still pass.
+- **verify (errors=0):** `node tests/polygon-offset.test.js` PASSES (SP1h2 + all SP1h3 cases). CDP live: an L-shaped
+  CONCAVE loop + exterior → the dashed toolpath follows the boundary cleanly (NO self-intersection, wider than the L);
+  a CIRCLE loop + exterior → smooth + ~concentric (maxR 16.59 = 15 + toolDia/2); a THIN 60×4 rect interior-offset past
+  half-height (toolDia 6.35 → 3.175 > 2) → NO offset toolpath (clean empty), region tint stays; joints = 0. SP1h2
+  simple cases still correct. ADDITIVE #core (existing #core UNCHANGED) → SketchStudio byte-identical (`npm run
+  test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope
+  = polygon-offset.js + its test (the Shaper wiring is unchanged).
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The offset engine is robust for real loops (concave / arc / tiny-edge / thin-neck).
+  Next: **SP1h4** — POCKET (morphological opening: inset by toolDia/2 with convex corners rounded by the tool radius)
+  + the HATCH fill + depth label. STOP — hold.
+
+=== SP1h3 (OFFSET ROBUSTNESS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

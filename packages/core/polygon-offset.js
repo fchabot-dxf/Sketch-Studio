@@ -13,30 +13,66 @@
 
 import { perpendicularNormal, getLineIntersection } from './geometry.js';
 
+const EPS = 1e-9;
+
 function signedArea(poly) {
   let s = 0;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) s += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
   return s / 2;
 }
 
-export function offsetPolygon(points, distance) {
-  const n = points && points.length;
-  if (!n || n < 3 || !Number.isFinite(distance)) return [];
-  if (distance === 0) return points.map((p) => ({ x: p.x, y: p.y }));
+// SP1h3: drop consecutive near-duplicate vertices (tiny / zero-length edges) so perpendicularNormal never sees a
+// ~zero edge (no NaN normals, no runaway miters). Keeps genuine arc-sample curvature (only TRUE duplicates go).
+function dedupe(points, tol) {
+  const out = [];
+  for (const p of (points || [])) { const last = out[out.length - 1]; if (!last || Math.hypot(p.x - last.x, p.y - last.y) > tol) out.push({ x: p.x, y: p.y }); }
+  while (out.length >= 2 && Math.hypot(out[0].x - out[out.length - 1].x, out[0].y - out[out.length - 1].y) <= tol) out.pop();
+  return out;
+}
 
-  const area0 = signedArea(points);
-  if (area0 === 0) return []; // degenerate (collinear)
+const cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+// True crossing of segments p1p2 & p3p4 (ignores shared endpoints / mere touching).
+function segsCross(p1, p2, p3, p4) {
+  const d1 = cross3(p3, p4, p1), d2 = cross3(p3, p4, p2), d3 = cross3(p1, p2, p3), d4 = cross3(p1, p2, p4);
+  return ((d1 > EPS && d2 < -EPS) || (d1 < -EPS && d2 > EPS)) && ((d3 > EPS && d4 < -EPS) || (d3 < -EPS && d4 > EPS));
+}
+// SP1h3: does the (closed) polygon self-cross? O(n²) over non-adjacent edge pairs — the thin-neck / concave-fold guard.
+function selfIntersects(poly) {
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (j === i || (j + 1) % n === i || (i + 1) % n === j) continue; // skip shared-endpoint neighbours
+      if (segsCross(poly[i], poly[(i + 1) % n], poly[j], poly[(j + 1) % n])) return true;
+    }
+  }
+  return false;
+}
+
+// offsetPolygon(points, distance) → points[]. POSITIVE = OUTWARD, NEGATIVE = INWARD (winding-normalized).
+// SP1h2: miter-joined parallel offset for SIMPLE loops. SP1h3 hardens it: tiny-edge dedupe; over-inset detection
+// (edge-direction reversal — robust to the inverted-ghost that keeps the same winding) + collapsed-area; and a
+// SELF-INTERSECTION guard (thin necks / concave folds). When the offset would self-cross or invert, returns [] (a
+// CLEAN empty — no garbage). FULL self-intersection CLIPPING (returning the valid sub-loops) is deferred past this
+// slice; detect-and-empty is the contract here.
+export function offsetPolygon(points, distance) {
+  if (!Number.isFinite(distance)) return [];
+  const pts = dedupe(points, 1e-7);
+  const n = pts.length;
+  if (n < 3) return [];
+  if (distance === 0) return pts.map((p) => ({ x: p.x, y: p.y }));
+
+  const area0 = signedArea(pts);
+  if (Math.abs(area0) < EPS) return []; // degenerate (collinear / zero area)
   // Normalize so POSITIVE distance is OUTWARD irrespective of the input winding (loops here are CCW, but be robust).
   const d = area0 > 0 ? distance : -distance;
 
-  // Per-edge offset segment (shift both endpoints along the OUTWARD normal). For a CCW polygon the interior is to the
-  // LEFT, so perpendicularNormal (left normal) is INWARD → outward = its negation.
+  // Per-edge offset segment (shift both endpoints along the OUTWARD normal = −perpendicularNormal for CCW).
   const seg = new Array(n);
   for (let i = 0; i < n; i++) {
-    const a = points[i], b = points[(i + 1) % n];
+    const a = pts[i], b = pts[(i + 1) % n];
     const { nx, ny, len } = perpendicularNormal(a, b);
-    if (len === 0) { seg[i] = null; continue; } // degenerate edge — skip
-    const ox = -nx * d, oy = -ny * d; // outward (CCW) × distance
+    if (len < EPS) { seg[i] = null; continue; } // degenerate edge (shouldn't survive dedupe) — skip
+    const ox = -nx * d, oy = -ny * d;
     seg[i] = { a: { x: a.x + ox, y: a.y + oy }, b: { x: b.x + ox, y: b.y + oy } };
   }
 
@@ -52,14 +88,16 @@ export function offsetPolygon(points, distance) {
   }
 
   if (out.length < 3) return [];
-  // Over-inset detection: a VALID offset preserves every edge's DIRECTION. If any offset edge reversed, the offset
-  // crossed itself (offset-in > the local feature) → degenerate. (A bare winding-sign test misses this — the inverted
-  // ghost polygon can keep the same winding.) Plus a collapsed-area guard for the exact-inradius case.
-  for (let i = 0; i < n; i++) {
-    const a = points[i], b = points[(i + 1) % n], oa = out[i], ob = out[(i + 1) % n];
-    if (!oa || !ob) continue;
-    if ((b.x - a.x) * (ob.x - oa.x) + (b.y - a.y) * (ob.y - oa.y) < 0) return []; // edge reversed → inverted
+  // Over-inset: a valid offset preserves each edge's DIRECTION (parallel shift + miter; out[i] ↔ pts[i], 1:1 — no
+  // bevels). An inverted (over-inset) edge reverses, even when the ghost keeps the same winding.
+  if (out.length === n) {
+    for (let i = 0; i < n; i++) {
+      if (!seg[i]) continue;
+      const a = pts[i], b = pts[(i + 1) % n], oa = out[i], ob = out[(i + 1) % n];
+      if ((b.x - a.x) * (ob.x - oa.x) + (b.y - a.y) * (ob.y - oa.y) < -EPS) return []; // edge reversed → inverted
+    }
   }
-  if (Math.abs(signedArea(out)) < 1e-9) return []; // collapsed to a point/line
+  if (Math.abs(signedArea(out)) < EPS) return []; // collapsed to a point/line
+  if (selfIntersects(out)) return [];             // thin-neck / concave fold → clean empty (no garbage)
   return out;
 }

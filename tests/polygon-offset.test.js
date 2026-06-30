@@ -59,5 +59,54 @@ import { offsetPolygon } from '#core/polygon-offset.js';
     assert(area(offsetPolygon(CW, 1)) > area(CW), 'CW out grows too');
   }
 
+  // ── SP1h3 robustness ──
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const segsCross = (p1, p2, p3, p4) => {
+    const d1 = cross(p3, p4, p1), d2 = cross(p3, p4, p2), d3 = cross(p1, p2, p3), d4 = cross(p1, p2, p4);
+    return ((d1 > 1e-9 && d2 < -1e-9) || (d1 < -1e-9 && d2 > 1e-9)) && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9));
+  };
+  const selfIntersects = (poly) => { const n = poly.length; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { if (j === i || (j + 1) % n === i || (i + 1) % n === j) continue; if (segsCross(poly[i], poly[(i + 1) % n], poly[j], poly[(j + 1) % n])) return true; } return false; };
+  const maxR = (poly, cx, cy) => Math.max(...poly.map((p) => Math.hypot(p.x - cx, p.y - cy)));
+  const minR = (poly, cx, cy) => Math.min(...poly.map((p) => Math.hypot(p.x - cx, p.y - cy)));
+
+  // 8. L-shape (concave / reflex vertex): offset OUT + IN — correct, no spikes, no self-intersection
+  {
+    const L = [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 6 }, { x: 0, y: 6 }]; // CCW, reflex at (2,2)
+    const o = offsetPolygon(L, 0.5);
+    assert(o.length >= 3 && !selfIntersects(o), 'L out: valid, no self-intersect');
+    assert(area(o) > area(L), 'L out grows');
+    assert(maxR(o, 0, 0) < 12, 'L out: no runaway spike');
+    const inn = offsetPolygon(L, -0.5);
+    assert(inn.length >= 3 && !selfIntersects(inn), 'L in: valid, no self-intersect');
+    assert(area(inn) < area(L), 'L in shrinks');
+  }
+
+  // 9. Arc-density: a many-vertex circle-ish polygon — offset stays smooth + ~concentric
+  {
+    const N = 32, R = 10, C = [];
+    for (let i = 0; i < N; i++) { const t = (i / N) * 2 * Math.PI; C.push({ x: R * Math.cos(t), y: R * Math.sin(t) }); }
+    const o = offsetPolygon(C, 2);
+    assert(o.length >= 3 && !selfIntersects(o), 'circle out: smooth, no self-intersect');
+    assert(close(maxR(o, 0, 0), 12, 0.3) && close(minR(o, 0, 0), 12, 0.3), 'circle out ~concentric r≈12');
+    const inn = offsetPolygon(C, -2);
+    assert(close(maxR(inn, 0, 0), 8, 0.3) && close(minR(inn, 0, 0), 8, 0.3), 'circle in ~concentric r≈8');
+  }
+
+  // 10. Thin-neck self-intersection: a thin rectangle inset past half-height → clean empty (no garbage)
+  {
+    const THIN = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 3 }, { x: 0, y: 3 }]; // 20×3
+    assert(offsetPolygon(THIN, -2).length === 0, 'thin rect inset past half-height → empty (no garbage)');
+    assert(offsetPolygon(THIN, -1).length >= 3, 'thin rect modest inset is valid'); // 1 < 1.5 half
+  }
+
+  // 11. Tiny / duplicate-vertex edges: collapsed cleanly, no NaN / spikes
+  {
+    const SQd = [{ x: 0, y: 0 }, { x: 0, y: 1e-9 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }]; // a near-duplicate at start
+    const o = offsetPolygon(SQd, 2);
+    assert(o.length >= 3 && !selfIntersects(o), 'tiny-edge: valid, no self-intersect');
+    assert(o.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), 'tiny-edge: no NaN');
+    assert(area(o) > area(SQ) - 1, 'tiny-edge ~ square out');
+  }
+
   console.log('polygon-offset tests passed ✅');
 })().catch((e) => { console.error('polygon-offset tests failed ❌', e); process.exit(1); });

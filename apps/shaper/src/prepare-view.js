@@ -12,6 +12,7 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan
 import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
+import { sampleArc, loopPolygon, polyArea, pointInPolygon } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -42,59 +43,7 @@ export function renderPrepareGeometry(state, svgEl) {
   return g;
 }
 
-// ── Loop boundary polygons (for hit-test + true-curve outline) ────────────────
-const dist2 = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; };
-
-// Sample an arc shape into points (start→end) using the SAME path math the renderer uses (TRUE curve, not chord).
-function sampleArc(s, state, N = 24) {
-  const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
-  if (!p1 || !p2 || !p3) return [];
-  const d = calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep });
-  const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
-  let len = 0; try { len = path.getTotalLength(); } catch (_) {}
-  if (!len) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
-  const pts = [];
-  for (let i = 0; i <= N; i++) { try { const pt = path.getPointAtLength((i / N) * len); pts.push({ x: pt.x, y: pt.y }); } catch (_) {} }
-  return pts;
-}
-
-// Boundary polygon (ordered world points) for a loop — straight for lines, sampled for arcs, around-the-rim for circles.
-function loopPolygon(loop, state, shapeById) {
-  const J = state.joints;
-  if (loop.edges.length === 1) {
-    const s = shapeById.get(loop.edges[0]);
-    if (s && s.type === 'circle') {
-      const c = J.get(loop.joints[0]); const r = (s.radius > 0) ? s.radius : 0;
-      if (!c || !r) return [];
-      const pts = []; for (let i = 0; i < 48; i++) { const t = (i / 48) * 2 * Math.PI; pts.push({ x: c.x + r * Math.cos(t), y: c.y + r * Math.sin(t) }); }
-      return pts;
-    }
-  }
-  const pts = [];
-  for (let i = 0; i < loop.edges.length; i++) {
-    const fromPos = J.get(loop.joints[i]);
-    if (!fromPos) continue;
-    const s = shapeById.get(loop.edges[i]);
-    if (s && s.type === 'arc') {
-      let samples = sampleArc(s, state);
-      if (samples.length && dist2(samples[samples.length - 1], fromPos) < dist2(samples[0], fromPos)) samples = samples.reverse();
-      for (let k = 0; k < samples.length - 1; k++) pts.push(samples[k]); // next edge contributes its own start
-    } else {
-      pts.push({ x: fromPos.x, y: fromPos.y });
-    }
-  }
-  return pts;
-}
-
-function polyArea(poly) { let a = 0; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += poly[j].x * poly[i].y - poly[i].x * poly[j].y; return Math.abs(a / 2); }
-function pointInPoly(poly, p) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if (((a.y > p.y) !== (b.y > p.y)) && (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) inside = !inside;
-  }
-  return inside;
-}
+// ── Loop boundary polygons + hit-test — LIFTED to #core/loop-geometry.js (SKETCH-4a); re-imported above. ──
 
 function clientToWorld(svgEl, cx, cy) {
   try {
@@ -210,7 +159,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (bestEdge) return { kind: 'edge', id: bestEdge.id };
     // else LOOP: the innermost (smallest-area) loop whose boundary polygon contains the point.
     let best = null;
-    for (const l of loops) if (l.polygon.length >= 3 && pointInPoly(l.polygon, worldPt) && (!best || l.area < best.area)) best = l;
+    for (const l of loops) if (l.polygon.length >= 3 && pointInPolygon(l.polygon, worldPt) && (!best || l.area < best.area)) best = l;
     return best ? { kind: 'loop', id: best.id } : null;
   }
 

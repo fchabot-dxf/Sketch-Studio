@@ -5493,6 +5493,44 @@ tree). `constraintSketch` already returned the spanning Set (S-1a) → S-3 RENDE
 
 === SKETCH-3 (CROSS-SKETCH LINKS) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-4a — #core loop-geometry lift + containment helper + oracle (turn 230)
+
+The geometry FOUNDATION for S-4 (groups/islands/export): lift `loopPolygon`/`sampleArc` from prepare-view.js into
+#core + DECLARE the reusable `pointInPolygon`/`polygonContains` containment helpers. Additive; pure #core + oracle;
+reusable by islands (S-4d) / vcarve / joints.
+
+- **did:**
+  - **`packages/core/loop-geometry.js`** (new) — LIFTED VERBATIM from prepare-view.js: `sampleArc` (true-curve arc
+    sampling), `loopPolygon` (line/arc/circle boundary polygon), `polyArea`, `pointInPolygon` (was `pointInPoly`). NEW
+    pure `polygonContains(outer, inner)` — STRICT non-touching containment: a representative inner point inside outer
+    AND `polyArea(inner) < polyArea(outer)` AND no inner-edge crosses any outer-edge (proper-crossing test).
+  - **`apps/shaper/src/prepare-view.js`** — removed the local defs; RE-IMPORTS `{sampleArc, loopPolygon, polyArea,
+    pointInPolygon}` from #core/loop-geometry.js (renamed the one `pointInPoly` call). Behaviour-identical (same
+    functions, relocated).
+  - **`tests/loop-geometry.test.js`** (new oracle): `pointInPolygon` inside/outside (+ just-inside/just-outside an
+    edge); `polygonContains` rect-in-rect → true, disjoint/overlapping/equal/bigger/<3pts → false; `loopPolygon` for a
+    LINE loop (4 corners, area) + a CIRCLE loop (48 rim points, ≈πr²) — the PURE paths, Node-tested.
+- **PURITY NOTE (flagged):** `sampleArc` samples the TRUE rendered curve via the browser SVG path API
+  (`getPointAtLength`), so `loopPolygon` for an ARC loop needs the DOM (it now degrades to the endpoints in Node).
+  `loopPolygon` for LINE/CIRCLE loops + `polyArea` + `pointInPolygon` + `polygonContains` are PURE + Node-oracle-tested.
+  **For S-4d:** keep `shaper-export` pure by having the export HOST compute the loop polygons (it has the DOM) and pass
+  them INTO the serializer — the exporter never calls the DOM-dependent `sampleArc`.
+- **verify (errors=0):** `node tests/loop-geometry.test.js` PASSES. The LIFT is behaviour-preserving — CDP: Shaper
+  Prepare, a rect-loop click → loop (`pointInPolygon` hit-test) + an exterior offset BAND renders; a circle-loop click
+  → loop (`loopPolygon` circle branch) + a pocket HATCH renders → the tool-aware look is unchanged. ADDITIVE — the
+  containment helpers have no consumer yet; prepare-view re-imports → SketchStudio UNTOUCHED (loop-geometry is
+  additive #core; prepare-view is Shaper-only) — `npm run test:shell` 12/12 (16-control panel + errors=0). Solver
+  oracle 12/12; sketch-model + export + loop oracles green; guard GREEN (the new #core import resolves); baseline 8
+  pre-existing 0 net-new; `node --check` clean; scope = loop-geometry.js (new) + its test + prepare-view.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The loop-geometry + containment foundation is in #core, oracle-pinned, the Prepare
+  look unchanged. Next per the S-4 sub-sequence: **S-4b** — the GROUP primitive (a `groupId` sub-container inside a
+  sketch) → **S-4c** export sketch→`<g>` threading → **S-4d** islands (the evenodd compound via `polygonContains`).
+  STOP — hold.
+
+=== SKETCH-4a (CORE CONTAINMENT + LOOP-GEOMETRY LIFT) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

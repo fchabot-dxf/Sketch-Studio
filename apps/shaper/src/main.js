@@ -21,6 +21,8 @@ import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared t
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
 import { findLoops } from '#core/loop-finder.js';        // SKETCH-4e: enumerate loops for island polys
 import { loopPolygon } from '#core/loop-geometry.js';     // SKETCH-4e: HOST computes loop polys (DOM) → serializer stays pure
+import { computeImportScale, importSvgGeometry } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
+import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -105,6 +107,67 @@ document.addEventListener('keydown', (e) => {
     if (e.shiftKey) doUngroup(); else doGroup();
   }
 });
+
+// SKETCH/IMPORT-2: SVG IMPORT → a NEW sketch (Shaper-only). The host (has the DOM) extracts per-element descriptors +
+// the root size; the PURE #core/svg-import maps them → STATIC joints/shapes (no auto-constraints). Each import = one
+// named sketch (addSketch → activate → push; the wrap stamps sketchId). v1 subset: unsupported elements/features are
+// COUNTED + surfaced, never silently dropped.
+let importSeq = 0;
+const SVG_IMPORT_TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
+function svgImportDescriptors(svg) {
+  const descs = [], skippedEls = [];
+  // v1: only the DIRECT children of <svg> (no <g> recursion); transforms are flagged (geometry still imported raw).
+  for (const el of svg.children) {
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'g') { skippedEls.push('<g> (group)'); continue; }
+    if (!SVG_IMPORT_TAGS.has(tag)) { if (tag) skippedEls.push('<' + tag + '>'); continue; }
+    if (el.getAttribute && el.getAttribute('transform')) skippedEls.push('<' + tag + '> transform ignored');
+    const a = (n) => el.getAttribute(n);
+    if (tag === 'line') descs.push({ tag, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
+    else if (tag === 'rect') descs.push({ tag, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
+    else if (tag === 'circle') descs.push({ tag, cx: a('cx'), cy: a('cy'), r: a('r') });
+    else if (tag === 'ellipse') descs.push({ tag, cx: a('cx'), cy: a('cy'), rx: a('rx'), ry: a('ry') });
+    else if (tag === 'polyline' || tag === 'polygon') descs.push({ tag, points: a('points') });
+    else if (tag === 'path') descs.push({ tag, d: a('d') });
+  }
+  return { descs, skippedEls };
+}
+function importSvgToSketch(svgText, fileName) {
+  ensureSketch();
+  const st = designController.state;
+  let svg; try { svg = parseSvg(svgText); } catch (e) { groupStatus('Import failed: ' + e.message); return; }
+  const { descs, skippedEls } = svgImportDescriptors(svg);
+  const { scale, label, assumed } = computeImportScale({ width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') });
+  const { joints, shapes, stats } = importSvgGeometry(descs, { genJ: () => st.genJ(), scale, idPrefix: 'svg' + (importSeq++) });
+  const skipN = skippedEls.length + (stats.skipped || []).reduce((n, s) => n + s.count, 0);
+  if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
+  try { st.saveState && st.saveState(); } catch (_) {}
+  const sk = addSketch(st, (fileName || 'Imported').replace(/\.svg$/i, '') || 'Imported');
+  activateSketch(st, sk.id);
+  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
+  for (const s of shapes) st.shapes.push(s);
+  if (infoPanel) infoPanel.refresh();
+  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${label}${assumed ? ' (assumed)' : ''}${skipN ? ` · ${skipN} skipped` : ''}`);
+}
+// The Import ACTION: a button at the TOP of the left side panel (#design-panel-info) + a drag-drop on the Design
+// canvas. Wired in buildDesignUI (after the panel renders). The button sits ABOVE the info panel's content (it's a
+// sibling, so the panel's refresh() — which only rebuilds its own root — never removes it).
+function wireSvgImport() {
+  const dropHost = VIEWS.design;
+  const panel = document.getElementById('design-panel-info');
+  if (!dropHost || !panel || panel.querySelector('#svg-import-btn')) return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.svg,image/svg+xml'; input.style.display = 'none';
+  input.addEventListener('change', async () => { const f = input.files && input.files[0]; if (f) { importSvgToSketch(await f.text(), f.name); input.value = ''; } });
+  const btn = document.createElement('button');
+  btn.id = 'svg-import-btn'; btn.textContent = '⬇ Import SVG'; btn.title = 'Import an SVG into a new sketch';
+  btn.style.cssText = 'display:block; width:calc(100% - 16px); box-sizing:border-box; margin:8px 8px 6px; padding:7px 10px; background:#1b2030; color:#cbd5e1; border:1px solid #2a2d31; border-radius:7px; font:13px system-ui,sans-serif; cursor:pointer; text-align:left;';
+  btn.addEventListener('click', () => input.click());
+  panel.insertBefore(btn, panel.firstChild); // top of the sidebar, above the SKETCHES tree
+  panel.appendChild(input);
+  dropHost.addEventListener('dragover', (e) => { e.preventDefault(); });
+  dropHost.addEventListener('drop', async (e) => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) importSvgToSketch(await f.text(), f.name); });
+}
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());
 
@@ -220,6 +283,8 @@ function buildDesignUI() {
   try { collapsed = localStorage.getItem(PANEL_COLLAPSED_KEY) === '1'; } catch (_) {}
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
+
+  wireSvgImport(); // IMPORT-2: the Import-SVG button + a drop on the Design view
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view

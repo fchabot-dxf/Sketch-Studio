@@ -5884,6 +5884,56 @@ cutType vs precomputed-contours+cutDepth).
 
 === IMPORT/VCARVE ARC PLAN READY - HOLD ===
 
+## 2026-06-30 · IMPORT-2 — SVG import foundation: a declared parser → #core shapes → a NEW sketch (turn 242)
+
+The first build of the import arc (IMPORT-1 plan blessed). A v1-subset SVG→#core-shapes parser that lands imported
+geometry as a NEW named sketch — STATIC + UNCONSTRAINED (the factories auto-add H/V/coincident, so the importer mints
+joints + pushes shapes DIRECTLY, never the factories, so a flattened path can't flood the global solver).
+
+- **did:**
+  - **`#core/svg-import.js`** (new, PURE — no DOM): the DECLARED mapping. `parseLength` / `computeImportScale` (the
+    documented mm policy: physical-width+viewBox → widthMm/vbW exact; viewBox-only → 1 mm/unit assumed; no viewBox →
+    25.4/96 px@96dpi assumed — each SURFACED) / `parsePoints` / `parsePathSubpaths` (M/L/H/V/C/Q/Z abs+rel; C/Q flatten
+    via pure de Casteljau; S/T/A FLAGGED + drawn as a line to their endpoint) / `importSvgGeometry(descriptors,
+    {genJ,scale,idPrefix})` → `{joints, shapes, stats}` via a declared element table (line / rect→4 lines / circle→
+    center+radius / polyline / polygon / path; ellipse + unknown → counted in `stats.skipped`). World is Y-DOWN (==SVG)
+    → no Y-flip, scale only. Output is STATIC: plain joints + `{type:'line'|'circle'}` shapes, NO constraints.
+  - **`apps/shaper/src/main.js`** (host, Shaper-only): `svgImportDescriptors(svg)` — the DOM extraction (top-level
+    children → `{tag, rawAttrs}`; `<g>` / unknown / transforms FLAGGED-not-dropped; v1 = no `<g>` recursion).
+    `importSvgToSketch(text, file)` — parse (reuse `svgio.parseSvg`) → compute scale → `importSvgGeometry` → `saveState`
+    → `addSketch(file)` → `activateSketch` → push joints/shapes (the wrap stamps the new sketchId) → `infoPanel.refresh()`
+    → a status toast ("Imported N shapes → <sketch> @ X mm/unit · K skipped"). `wireSvgImport()` (in `buildDesignUI`):
+    an **Import-SVG button at the TOP of the left side panel** (`#design-panel-info`) + a drag-drop on the Design canvas.
+  - **`tests/svg-import.test.js`** (oracle): parseLength; computeImportScale (all 3 policy branches + the ×2 case);
+    parsePoints; parsePathSubpaths (M/L/Z closed, cubic→many pts, multi-subpath, relative, A→flagged); importSvgGeometry
+    (rect+circle+polyline+path → exact joint/shape counts + the circle = center+radius + STATIC no-constraints + origin
+    coord); scale ×2 applies to coords + radius; ellipse/text flagged not dropped.
+- **mid-task USER feedback (Frederic, direct):** the Import button first rendered as a FLOATING overlay at the Design
+  view's top-left, COVERING the SELECT/LINE ribbon tools (screenshot). Moved it INTO the left side panel
+  (`#design-panel-info`, top, above the SKETCHES tree) — a sibling of the info-panel root so `refresh()` (which only
+  rebuilds its own root) never removes it. → memory [[feedback_dock_buttons_in_panel]]: dock app-action buttons in the
+  side panel, never floating over the ribbon/canvas.
+- **verify (errors=0):** `node tests/svg-import.test.js` PASSES. CDP — PURE importer in-browser (rect+circle → 5
+  shapes/5 joints, 1 circle; scale exact). LIVE host import via a synthetic file-DROP on `#design-view`: a fixture
+  (rect+circle+polyline+path, width=100mm viewBox 0 0 100 80) → toast "Imported 10 shapes → mypart @ 1 mm/unit", the
+  Design world-group grew 12→33 (rendered), a NEW sketch 'mypart' in the panel, a 2nd import → a 2nd sketch 'second',
+  the Import button is IN the sidebar (`btn.closest('#design-panel-info')`), Prepare still works, NO solver explosion
+  (errors=0). SketchStudio loads errors=0; UNREGRESSED `npm run test:shell` 12/12 (svg-import is additive #core, the
+  host action Shaper-only). Solver oracle 12/12; sketch-model + group-model + loop-geometry + export + loop oracles
+  green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = svg-import.js (new) + its test +
+  main.js.
+- **fix mid-verify:** the first CDP threw `addSketch is not defined` — main.js had NO sketch-model import; added
+  `import { addSketch, activateSketch } from '#core/sketch-model.js'`. Re-verified green.
+- **process hygiene:** CDP via `run_in_background` + killed each run; baseline run ALONE (background). proc_health.py
+  watch still throws the JSONDecodeError (system-process argv) → manual stray-clean.
+- **state:** branch `carve-out`. SVG art now becomes REAL #core geometry in a sketch (editable / constrainable / Prepare
+  / export / group / island) — the import foundation. v1 subset only; unsupported features are flagged-not-dropped.
+  Next per the IMPORT-1 plan: **IMPORT-3** — SVG breadth (full `<path>` C/S/T/A + transforms + `<g>` recursion) +
+  `#core/dxf-import.js` (LINE/ARC/CIRCLE/LWPOLYLINE/SPLINE, mirroring `buildDXF`); then **VCARVE-1** (its own deep
+  plan). STOP — hold.
+
+=== IMPORT-2 (SVG IMPORT FOUNDATION) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

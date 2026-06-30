@@ -4923,6 +4923,45 @@ arcs/circles/edges/params (j2).
 
 === SP1j-1 (CORE EXPORT SERIALIZER + LINE-LOOP + ORACLE) DONE - HOLD ===
 
+## 2026-06-29 · SP1j-2 — full geometry (arcs/circles/edges) + cut-param attrs (turn 204)
+
+Completes the serializer's GEOMETRY + the cut-param attributes. Pure #core; still no importer (j4) → both apps
+byte-identical.
+
+- **did (`packages/core/shaper-export.js`):**
+  - **ARCS in `loopToPathD`** — an arc edge → an `A r r 0 largeArc sweep x y` segment, DIRECTION-AWARE. `arcSeg` reads
+    the arc's stored `[center,start,end]` + `largeArc`/`sweep` (falls back to the signed center-angle if no stored
+    sweep); the loop may walk the arc start→end or end→start → the sweep flag FLIPS on reverse (detected by which
+    endpoint `fromPos` is nearer, so it's robust to coincident-joint id remapping). r/largeArc are direction-invariant.
+    KEY for byte-identity: the CLOSING edge is emitted explicitly ONLY when it's an arc — a line closing edge is left
+    to `Z`, so a pure-LINE loop is byte-identical to SP1j-1 (verified — the j1 exact-string still passes).
+  - **CIRCLES** — a single-circle loop → `<circle cx cy r>`; `boundsOf` now expands the bbox by circle extents
+    (center ± r) so the header sizes a circle correctly (arc bulge beyond endpoints = a noted deferred approximation).
+  - **Open EDGES** ('edge' kind, online/guide) → the shape's true geometry: line → `<line>`, arc → `<path d="M..A..">`
+    (start→end as stored), circle → `<circle>` — NOT a closed loop.
+  - **Cut-param attrs (attribute-first)** — `shaper:cutDepth` / `cutOffset` / `toolDia` via
+    `units.format(baseMM, docUnit, {unit:true})` → docUnit FINALLY drives the param SUFFIXES (`6.35mm` vs `0.25in`),
+    geometry stays mm-canonical. Emission rule (stated): cutDepth omitted when 'unset'; cutOffset omitted when 0 (the
+    implicit finish-pass default — a non-zero offset is the meaningful roughing case); toolDia emitted when > 0.
+  - **All 5 cut types** via the injected encoding — exterior/interior/pocket on loops; online/guide on loops+edges;
+    correct fill (always) / stroke (omit 'none') / `shaper:cutType` per type.
+  - Shared `colorAttrs(enc)` + `shaperAttrs(rec, enc, docUnit)` so every element (path/circle/line) tags identically.
+- **verify (errors=0):** `node tests/shaper-export.test.js` PASSES — new cases: an ARC loop in BOTH traversal
+  directions (`M 50 0 A 50 50 0 0 1 0 50 Z` forward vs `M 0 50 A 50 50 0 0 0 50 0 Z` reverse — the sweep flips 1↔0);
+  a CIRCLE loop → exact `<circle cx="10" cy="20" r="25" … shaper:cutType="pocket" shaper:cutDepth="6.35mm"
+  shaper:toolDia="3.175mm"/>` with a center±r bbox; an open EDGE (online) → `<line … fill="none" stroke="#7F7F7F"
+  shaper:cutType="online" shaper:toolDia="3.175mm"/>`; cut-param suffixes (mm `6.35mm`/`3.175mm`, inch `0.25in`/
+  `0.125in`/`0.0197in`; cutOffset 0 + cutDepth 'unset' omitted); all 5 types' attrs/colors; the SP1j-1 line/exact-
+  string STILL passes. ADDITIVE #core (existing untouched, no importer) → SketchStudio byte-identical (`npm run
+  test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope
+  = shaper-export.js + its test only.
+- **state:** branch `carve-out`. The export serializer now emits the FULL design geometry (lines + arcs + circles +
+  open edges) with all 5 cut types + the unit-suffixed cut params — pure, oracle-pinned, still additive. Next per the
+  blessed slicing: **SP1j-4** — the Sim/Export-tab UI (extract a `cut-plan.js` store from prepare-view, wire the
+  "Generate Shaper SVG" button + the Blob download, live verify). (j3 unsurfaced features = optional.) STOP — hold.
+
+=== SP1j-2 (FULL GEOMETRY + CUT-PARAM ATTRS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

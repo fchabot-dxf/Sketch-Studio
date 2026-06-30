@@ -5531,6 +5531,87 @@ reusable by islands (S-4d) / vcarve / joints.
 
 === SKETCH-4a (CORE CONTAINMENT + LOOP-GEOMETRY LIFT) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-4b — group primitive + end-to-end island flow plan — PLAN ONLY (turn 232)
+
+Investigated the GROUP primitive + the pocket-with-island flow BEFORE building. NO code. The flow spans Design /
+Prepare / export with real UX forks. Grounded against the code + the `project_grouping_sketches_layers` +
+`reference_shaper_svg_encoding` memories.
+
+### (1) GROUND — selection, loops, and the EXISTING `groupId`
+- **`groupId` is ALREADY TAKEN.** The shape factories (`#core/shapes.js` makeRect/makePolygon/makeArc) auto-assign a
+  per-primitive `groupId` (a rect's 4 lines share `rect_<ts>`), and the RENDERER consumes it: `svg-renderer.js`
+  `groupLines` buckets line shapes by `groupId`, requires a simple closed loop (every vertex degree == 2), and FILLS
+  it (the closed-shape fill). ⇒ re-purposing `groupId` for a USER group would put e.g. an outer+inner rect's 8 lines
+  in one bucket — two degree-2 components — and confuse the fill. **A user group must NOT overwrite the factory
+  `groupId`** (use a separate field, or go group-LESS — §2/§3).
+- **Selection differs per surface:** Design selects SHAPES (`state.selectedShapes`, a Set of shape ids — click/box in
+  `selection-tools.js`); Prepare selects LOOPS/EDGES (`prepare-view.resolveTarget` → the smallest-area loop, or an
+  edge). The Prepare CUT_PLAN is keyed by `loop`/`edge`.
+- **Loops are DERIVED** (a cycle of #core edges; `loop.edges` = shapeIds). So "the loops in a group" = loops whose
+  shapes carry the group tag → loop.edges → shapes → tag.
+
+### (2) THE GROUP ACTION — RECOMMEND geometry-driven (NO group field); explicit group is the flagged alternative
+The MINIMAL that serves ISLANDS needs NO group primitive at all — the export can DETECT a pocket's holes
+GEOMETRICALLY (the loops contained in the pocketed loop, via the S-4a `polygonContains`). So:
+- **RECOMMEND (minimal): GEOMETRY-DRIVEN islands** — no group action, no new field. The pocketed OUTER loop's holes =
+  the loops geometrically STRICTLY inside it (`polygonContains` on their boundary polygons) that are NOT separately
+  assigned a cut. Reuses S-4a; zero new model/UI. This effectively FOLDS S-4b away (no group slice) — S-4 becomes
+  export-`<g>` (S-4c) + geometry-islands (S-4d).
+- **ALTERNATIVE (explicit, the vision's "Sketch > Group > Entity"): a USER GROUP** — a Group/Ungroup action that
+  stamps a NEW field (e.g. `userGroupId`, distinct from the factory `groupId`) onto selected shapes; the group
+  designates the island. WHERE: most naturally in PREPARE (select 2 loops → Group), since islands are a Prepare/cut
+  concern and Prepare already selects loops (the action stamps the loops' shapes). Anonymous `userGroupId` (minimal)
+  beats a named-groups list + tree node (richer; defer). Cost: a new field + the action + the cross-tab nuance.
+> **FLAG — the central UX fork for the human:** GEOMETRY-DRIVEN (auto, minimal, but infers "unassigned-inner-in-pocket
+> = island") vs EXPLICIT GROUP (intentional, but +field +action +UI). Recommend geometry-driven for v1, gated by an
+> export `options.islands` (default off) so the inference only bites when opted in; add an explicit Group later if the
+> user wants named islands. Either way: do NOT reuse the factory `groupId`.
+
+### (3) THE END-TO-END ISLAND FLOW (geometry-driven, recommended)
+1. **Design** — draw the OUTER boundary + the INNER boundary (any loops; e.g. a rect with an inner circle). They're
+   independent loops (S-1j-3b traced: nested = two independent loops, the hole is geometric).
+2. **Prepare** — assign **POCKET** to the OUTER loop. The INNER loop is left UNASSIGNED (no separate cut). (An inner
+   loop the user DOES assign — e.g. `interior`/through-hole — is its OWN cut, NOT an island hole.)
+3. **Export** — for each assigned POCKET P: its HOLES = the loops STRICTLY inside P (`polygonContains`) that are
+   unassigned → emit P + holes as ONE compound `<path fill-rule="evenodd" d="<outer> <hole1> …">` (the pocket clears
+   AROUND the islands; the inner is left UNCUT). The cut LIVES on the OUTER loop (the Prepare plan is loop-keyed).
+> **FLAG:** "the inner is left uncut" is the island semantic (a boss/island stands). If the user instead wants the
+> inner CUT (a through-window), they assign it its own cut → it is NOT an island. The disambiguator = "assigned ⇒ own
+> cut; unassigned-inside-pocket ⇒ hole." Confirm this reads right to the user.
+
+### (4) EXPORT THREADING (the convergence)
+- **sketch → `<g>`** — group the emitted elements by `sketchId` into a `<g>` per sketch (reuse the SP1j-3a `<g>`
+  machinery; a `<g>` per sketch, optionally `<g id="<sketch-name>">`). Hoist shared cut attrs where possible.
+- **island → an evenodd compound `<path>`** (per §3), NESTED inside its sketch's `<g>`. Ordered boundary-vs-holes via
+  `polygonContains` (the outer = the one containing the others).
+- **PURITY (the S-4a flag):** the export HOST (Shaper main.js, which has the DOM) computes each loop's boundary polygon
+  via `loopPolygon` and passes them INTO the pure serializer (e.g. `exportShaperSVG({ …, loopPolys })`); the serializer
+  never calls the DOM-dependent `sampleArc`. So `shaper-export` stays pure + Node-oracle-tested.
+- **hidden-sketch export — DECISION (flag):** RECOMMEND a hidden sketch is EXCLUDED from the SVG export (a hidden layer
+  = not part of this cut — intuitive, like toggling a layer off), via the same `hiddenSketchIds` filter the canvas uses.
+  FLAG: the user might hide a sketch for clarity yet still want it cut → make it an export toggle / confirm. Default
+  exclude.
+
+### (5) SUB-SLICES + RISKS
+- **slices (recommended, geometry-driven):** **S-4c** — export sketch→`<g>` threading (group elements by `sketchId`;
+  host passes loop polys in; the hidden-sketch exclude decision) + oracle (multi-sketch → multiple `<g>`). **S-4d** —
+  geometry-driven ISLANDS: an assigned POCKET + a contained unassigned loop → ONE evenodd compound, gated by
+  `options.islands` + oracle (pocket-with-hole → evenodd; non-nested unchanged; assigned-inner NOT merged). (The
+  explicit GROUP action becomes an OPTIONAL later slice if the human picks it.)
+- **risks:** the loop→shapes→tag mapping IF an explicit group is chosen (avoid the factory-`groupId` clash → a new
+  field); the cross-tab flow (group in one surface, cut in another) for the explicit path; the unassigned=island
+  INFERENCE (option-gated); containment on ARC-sampled polygons (the host samples; `polygonContains` is robust to
+  sampling); PURITY (host computes polys, serializer pure); the bbox already covers holes; multi-level nesting
+  (island-in-hole) DEFER one level; a hole shared by/contained in multiple pockets → assign to the SMALLEST containing
+  pocket.
+
+**One line:** `groupId` is already the renderer's fill key, so DON'T reuse it — RECOMMEND geometry-driven islands (no
+group primitive; the export detects a pocket's contained unassigned loops via `polygonContains` → evenodd; host passes
+loop polys to the pure serializer), slice S-4c (export sketch→`<g>`) → S-4d (islands evenodd, `options.islands`-gated);
+FLAG the explicit-group-vs-geometry fork + the inner-left-uncut + hidden-sketch-exclude decisions for the human.
+
+=== SKETCH-4b ISLAND-FLOW PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

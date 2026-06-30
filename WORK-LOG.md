@@ -5996,6 +5996,100 @@ confusing). Shared #ui sketcher → the SAME bug was in BOTH apps; this is a leg
 
 === BUG-1 (MARQUEE COINCIDENT-GLYPH LEAK) DONE - HOLD ===
 
+## 2026-06-30 · VCARVE-1 — the VCARVE arc: medial-axis survey + offset-hack + export mode (DEEP plan, NO code) (turn 248)
+
+The high-value VCARVE arc: make imported outlines (no centerline) V-carvable — a V-bit's groove WIDTH ∝ DEPTH. The
+medial-axis/centerline is the HARD geometry problem → its own plan. WORK-LOG only this turn. Refs:
+[[reference_shaper_svg_encoding]] (stacked-2.5D cutDepth, online cuts, the export target), [[project_grouping_sketches_layers]]
+(the region/sketch/island substrate). (Live deploy works at sketch-studio.pages.dev; IMPORT-3 + HOME-1 deferred.)
+
+### 1. GROUND — reusable primitives (file:line)
+- **The offset engine — `#core/polygon-offset.js`** (THE hack engine, PURE): `offsetPolygon(points, distance, opts)`
+  — + outward / − INWARD, winding-normalized; `opts.join:'round'`. CRUCIAL for vcarve: it returns `[]` (a CLEAN empty)
+  precisely when an inset OVER-COLLAPSES — edge-reversal / collapsed-area / SELF-INTERSECTION guards (SP1h3, l.111-122).
+  So insetting `−d` by growing `d` until `[]` TERMINATES AT THE MEDIAL AXIS — the last non-empty contour ≈ the ridge.
+  The engine IMPLICITLY uses the medial axis (the collapse point) without computing it. SCOPE caveat: "SIMPLE loops"
+  (convex/mild concave); full self-intersection CLIPPING deferred. `openPolygon(pts, r, off)` = erode→round-dilate.
+- **Region model:** `findLoops` (`#core/loop-finder.js`) → closed loops; `loopPolygon` (`#core/loop-geometry.js`, DOM
+  for arcs) → a region's boundary polygon (the vcarve INPUT). `polyArea`/`polygonContains` (islands).
+- **Export — `#core/shaper-export.js`:** `shaperAttrs` (l.118-121) emits `shaper:cutDepth="Xmm"` PER ELEMENT (unit via
+  `format`) — the per-path STACKED-2.5D substrate the vcarve contour-stack needs (each contour = a path, its own depth).
+  `loopToPathD` (pure path-`d` from a loop); the S-4e island purity split (HOST computes polys → pure serializer).
+  The cut record = `{cutType, cutDepth, cutOffset, toolDia:3.175}`; CUT_TYPES include `online` (cut centered ON the path).
+- **VCARVE / a V-bit ANGLE record: GREENFIELD** — no `vbit`/`tipAngle`/`includedAngle` anywhere; the cut record has
+  `toolDia` but NO angle. A declared V-bit record (angle → depth) is NEW.
+
+### 2. MEDIAL-AXIS / centerline — survey (the HARD part)
+- **Distance transform (raster):** rasterize the region, distance-to-boundary per pixel, the ridge = the axis. + simple,
+  robust to messy boundaries; − raster resolution (stair-step), memory, not vector.
+- **Voronoi of the boundary:** the medial axis ⊂ the Voronoi diagram of the boundary. + vector, ~exact; − SEGMENT
+  Voronoi is hard; point-sampled needs dense sampling + spurious-branch PRUNING. Robust libs are heavy.
+- **Straight skeleton:** parallel-edge shrink; the skeleton traced by vertices — KIN to our `offsetPolygon` (parallel
+  offset!). + vector; − the true straight skeleton needs edge/split EVENT handling (complex/fragile), and it ≠ the
+  medial axis for CURVED/arc boundaries (straight bisectors vs parabolic arcs at reflex vertices).
+- **RECOMMEND: DEFER the true medial axis** (a hard research slice). SHIP the OFFSET-HACK first — it's a discrete,
+  sampled straight-skeleton-ish approximation that REUSES `offsetPolygon` and delivers the V-carve WITHOUT an explicit
+  centerline (the collapse-to-`[]` is the implicit axis).
+
+### 3. The OFFSET-CONTOUR HACK (shippable v1) — design
+For a closed region, emit a STACK of inward offset contours at increasing depth. At a point d inside the boundary, a
+V-bit cutting to depth `h = d / tan(halfAngle)` makes a groove whose half-width = d just reaches the boundary. So:
+```
+  boundary ─────────────────────────────         cross-section of the V-groove the stack approximates:
+  C(0.5) ──────────────────────────              surface  ╲___________________________╱   ← C(0.5), depth h1 (shallow, wide-open)
+  C(1.0) ────────────────────────                          ╲_______________________╱      ← C(1.0), depth h2
+  C(1.5) ──────────────────────      depth↓                 ╲___________________╱          ← C(1.5), depth h3
+  C(2.0) ──────────────────  (collapses next = medial axis)  ╲_______________╱             ← C(2.0), depth h4 (deepest, at axis)
+  C(d) = offsetPolygon(boundary, −d)                          V-bit center rides each C(d) at depth d/tan(halfAngle)
+```
+- **Algorithm (PURE, `#core/vcarve.js`):** `vcarveContours(boundary, { dStep, halfAngleTan, dMax? })` → `[{ polygon,
+  depth }]`: for `d = dStep, 2·dStep, …`, `c = offsetPolygon(boundary, −d)`; while `c.length ≥ 3`, push `{ polygon:c,
+  depth: d / halfAngleTan }`; STOP when `offsetPolygon` returns `[]` (the medial axis). Reuses the engine entirely.
+- **Depth math (the declared V-BIT record):** `{ kind:'vbit', angle }` (INCLUDED angle); `halfAngle = angle/2`;
+  `tan(halfAngle)` → `depth(d) = d / tan(halfAngle)`. 90° → tan45=1 → depth = d (1:1). 60° → tan30≈0.577 → depth ≈
+  1.73·d (deeper, narrower groove). `dStep` = the contour spacing (≈ depth resolution; finer = smoother but more
+  paths) — configurable.
+
+### 4. The VCARVE EXPORT mode (INVERTED, gated)
+Standard cuts emit the DESIGN boundary + cutType; the Origin offsets. VCARVE INVERTS: the APP precomputes + EMITS the
+contour stack, each a path carrying its OWN `shaper:cutDepth`. Threading (mirrors the S-4e islands purity split):
+- The HOST (DOM) computes the region's boundary polygon (`loopPolygon`) → passes it in (the serializer never calls the
+  DOM `sampleArc`). The PURE serializer runs `vcarveContours` (offsetPolygon stack) + emits each contour as
+  `<path d="<polyToPathD(contour)>" shaper:cutType="online" shaper:cutDepth="<depth>mm"/>` (cutType ONLINE = the V-bit
+  rides the contour centered; the stack of increasing-depth online passes = the V-groove). `toolDia` OMITTED for vcarve
+  (a V-bit's Ø varies with depth). A NEW GATED branch (`options.vcarve` / a per-entry vcarve flag) → standard export +
+  SketchStudio stay BYTE-IDENTICAL (the j-series exact-strings unchanged).
+
+### 5. UX + pipeline
+- **Where it lives — a Prepare cut-MODE `'vcarve'`** (RECOMMEND over a new tab): reuse the Prepare cut-plan target model
+  + the cut record. Assign `vcarve` to a closed LOOP (a region); the record gains a `vcarve` flag + the V-bit angle.
+  PREVIEW the nested contours in Prepare (depth-shaded). Promote to a dedicated space later only if it grows.
+- **Pipeline:** import/draw a closed region → Prepare: mark `vcarve` + pick a V-bit (angle) → the app precomputes the
+  offset-stack (preview) → export emits the stack (online paths, per-path cutDepth) → the Origin V-carves.
+```
+  region (loop)  →  Prepare: vcarve + V-bit(angle)  →  vcarveContours (offsetPolygon stack)  →  gated export (online + cutDepth)  →  SVG
+```
+
+### 6. Sub-slices (RECOMMEND offset-stack first) + risks
+- **Slices:** **VCARVE-2** — the PURE offset-stack core (`#core/vcarve.js` `vcarveContours` + oracle: a square → nested
+  contours + depths + collapse-termination). **VCARVE-3** — the V-bit record + depth math + the Prepare `'vcarve'`
+  cut-mode (assign + a contour preview). **VCARVE-4** — the GATED vcarve export mode (host boundary poly → serializer
+  emits the online+cutDepth stack; standard + SketchStudio byte-identical). **VCARVE-5+ (LATER)** — the true medial axis
+  (cleaner centerlines), holes/islands vcarve, flat-tip bits, finishing passes.
+- **Risks:** (a) the hack is an APPROXIMATION — discrete stair-stepped depth, the apex isn't a clean 1-D ridge (the last
+  contour is a thin polygon); fine `dStep` → many paths → big files. (b) `offsetPolygon` ROBUSTNESS — it's "SIMPLE loops"
+  scope + returns `[]` on self-intersection/thin-neck, so REAL imported art (complex curves, thin features) may collapse
+  EARLY → an incomplete carve; the robust self-intersection CLIPPING (Clipper-style) is deferred — FLAG. (c) V-bit depth
+  math assumes an IDEAL V — real bits have a flat tip (`tipDia` → a max depth / flat bottom) — flag. (d) the export
+  INVERSION — a new gated mode; oracle the standard path stays byte-identical. (e) HOLES/ISLANDS — a region with a hole
+  needs offsetting BOTH boundaries toward the medial axis between them (offsetPolygon is single-polygon); reuse the S-4e
+  evenodd/containment — a later refinement. (f) the MEDIAL-AXIS hardness — isolate in VCARVE-5; the hack de-risks
+  shipping but is approximate.
+- **Recommendation: build the OFFSET-STACK first** (VCARVE-2 → 3 → 4) — it reuses `offsetPolygon` + the per-path
+  cutDepth, ships a real V-carve without the medial axis, and isolates the hard centerline as a later research slice.
+
+=== VCARVE-1 PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

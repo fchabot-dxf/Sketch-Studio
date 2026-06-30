@@ -8,6 +8,7 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops } from '#core/loop-finder.js';
 import { cutTypeById, defaultCutRecord, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2: parallel offset for outside/inside toolpaths
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -215,7 +216,18 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (ct.targetKind === 'region') {
       const loopStyle = `fill:${ct.previewFill}; fill-opacity:0.45; stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.75; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
       const edgeStyle = `fill:none; stroke:${ct.previewStroke}; stroke-width:3; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;`;
-      return { region: targetMarkup(t, loopStyle, edgeStyle), path: '' };
+      const region = targetMarkup(t, loopStyle, edgeStyle); // SP1f flat tint stays
+      // SP1h2: OUTSIDE/INSIDE → a DASHED offset toolpath of the loop boundary by toolDia/2 ± cutOffset (OUTWARD for
+      // exterior, INWARD for interior). pocket (h4) keeps only the tint. Edges never reach here (region gating is
+      // loop-only). The offset recomputes on toolDia/cutOffset change via the look cache.
+      let path = '';
+      const l = (kind === 'loop') ? loopById.get(id) : null;
+      if (l && l.polygon.length >= 3 && (ct.id === 'exterior' || ct.id === 'interior')) {
+        const r = (Number(rec.toolDia) || 0) / 2 + (Number(rec.cutOffset) || 0);
+        const off = offsetPolygon(l.polygon, ct.id === 'exterior' ? r : -r);
+        if (off.length >= 3) path = polyMarkup(off, `fill:none; stroke:${ct.previewStroke}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round;`);
+      }
+      return { region, path };
     }
     const color = ct.previewStroke;
     if (ct.id === 'guide') {

@@ -4559,6 +4559,40 @@ ON-LINE band. Shaper-only (prepare-view.js) → SketchStudio byte-identical.
 
 === SP1h1 (TOOLPATH LAYER + REACTIVITY + GUIDE + ON-LINE) DONE - HOLD ===
 
+## 2026-06-29 · SP1h2 — #core/polygon-offset.js + OUTSIDE/INSIDE offset toolpath (turn 188)
+
+The first offset-geometry slice: a PURE, oracle-tested parallel-offset engine, wired for outside/inside on SIMPLE
+loops (the dashed offset toolpath). Concave/arc/self-intersection robustness = h3; pocket = h4.
+
+- **did:**
+  - **`packages/core/polygon-offset.js`** (new, PURE, no DOM, ADDITIVE — nothing else imports it → SketchStudio
+    byte-identical; reused by SP1j export): `offsetPolygon(points, distance)` — POSITIVE = OUTWARD, NEGATIVE = INWARD
+    (winding-normalized). Per-edge OUTWARD-normal shift (outward = −`perpendicularNormal` for CCW) + MITER join at the
+    intersection of adjacent offset lines (`getLineIntersection`, line-based). One offset vertex per input vertex.
+    **Over-inset detected** via per-edge DIRECTION reversal (a bare winding-sign test missed the inverted ghost
+    polygon) + a collapsed-area guard → returns `[]`. SIMPLE loops this slice; thin-neck self-intersection clipping is
+    h3 (flagged in the file).
+  - **`tests/polygon-offset.test.js`** (new oracle): square OUT by d → larger (corners +d, area 14²); IN by d →
+    smaller (6²); sign/direction; triangle grows; **degenerate over-inset (−6, −5) → []**; edge cases (distance 0,
+    <3 pts, null); CW-input robustness. All pass.
+  - **`apps/shaper/src/prepare-view.js`** (Shaper wiring): `computeLook` for EXTERIOR/INTERIOR loops now adds a DASHED
+    offset toolpath (path layer) — `offsetPolygon(loop.polygon, ±(toolDia/2 + cutOffset))` (OUTWARD exterior / INWARD
+    interior) — while KEEPING the SP1f flat region tint. Reuses the SP1h1 look cache, so the offset re-computes on a
+    toolDia/cutOffset change. pocket still flat-tint (h4); edges never hit this branch (region gating is loop-only).
+- **verify (errors=0):** `node tests/polygon-offset.test.js` PASSES. CDP live (60×40 rect loop, tint width 60):
+  EXTERIOR → dashed toolpath, width **63.175** (= 60 + toolDia 3.175) → BIGGER, region tint stays; change toolDia →
+  **72.7** (re-widens LIVE); INTERIOR → width **47.3** (= 60 − 12.7) → SMALLER; joints = 0. ADDITIVE #core (existing
+  #core UNCHANGED, no SketchStudio importer) → SketchStudio byte-identical (`npm run test:shell` 12/12); solver oracle
+  12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = polygon-offset.js + its test +
+  prepare-view.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Outside/inside show a real, reactive offset toolpath for simple loops. Next: **SP1h3**
+  — offset ROBUSTNESS (concave corners, arc-sampled density, tiny edges, thin-neck self-intersection clipping) +
+  oracle cases. STOP — hold.
+
+=== SP1h2 (POLYGON-OFFSET CORE + OUTSIDE/INSIDE TOOLPATH) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

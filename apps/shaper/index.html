@@ -139,6 +139,9 @@
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
     .mode-btn:hover { background: rgba(255,255,255,0.08); opacity: 0.95; }
     .mode-btn.active { background: var(--sk-selection, #4c9aff); color: #fff; opacity: 1; }
+    /* DEPLOY-1: a small cross-link back to SketchStudio (the shared Pages site serves it at /). */
+    .to-studio { color: #9aa0a6; font: 12px system-ui, sans-serif; text-decoration: none; padding: 4px 8px; border-radius: 6px; opacity: 0.8; }
+    .to-studio:hover { opacity: 1; color: #cbd5e1; background: rgba(255,255,255,0.08); }
     /* U3b: header Settings (gear) button → the shared style-panel modal. */
     .settings-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font: 15px system-ui, sans-serif; opacity: 0.75; }
     .settings-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
@@ -162,6 +165,8 @@
       <button id="fit">Fit</button>
       <button id="export">Export</button>
     </span>
+    <!-- DEPLOY-1: front-door cross-link back to SketchStudio (root of the shared Pages site). -->
+    <a id="to-studio" class="to-studio" href="/" title="Open SketchStudio">SketchStudio ↗</a>
     <!-- U3b: Settings → the shared style-panel MODAL (with the doc-unit toggle). Always visible. -->
     <button id="btn-settings" class="settings-btn" title="Settings" aria-label="Settings">&#9881;</button>
   </header>

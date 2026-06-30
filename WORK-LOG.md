@@ -5394,6 +5394,34 @@ sketch's geometry is filtered from the canvas, like a layer). Shaper (gated tree
 
 === SKETCH-2b (RENAME + VISIBILITY) DONE - HOLD ===
 
+## 2026-06-30 · DEPLOY-1 — a /shaper route on the shared Pages site (turn 224)
+
+Ship Shaper on SketchStudio's EXISTING git-connected Cloudflare Pages site — no 2nd project, no shell merge. Both apps
+already live in one repo (root = repo root; `apps/shaper/index.html` is self-contained with its own importmap →
+`../../packages`), so Shaper just needs a FRONT DOOR: one redirect.
+
+- **did:**
+  - **`_redirects`** (repo-root INFRA, not the app) — ADDED `/shaper    /apps/shaper/    302` (placed FIRST, kept the
+    existing `/    /apps/sketchstudio/    302`). `/shaper` opens Shaper; `/` stays Studio. No collision — Cloudflare
+    Pages `/` matches ONLY the exact root path, and `/shaper` is listed first regardless.
+  - **`apps/shaper/index.html`** (Shaper-only, optional cross-link) — a small `<a id="to-studio" href="/">SketchStudio
+    ↗</a>` in the header (before the settings gear) + a `.to-studio` style. A trivial, low-risk anchor that completes
+    the cross-navigation; SketchStudio is NOT touched.
+- **verify (errors=0):** `_redirects` has BOTH rules, syntactically correct (`/shaper` first). CDP — Shaper loads
+  errors=0, the back-link resolves to `/` (text "SketchStudio ↗"); SketchStudio loads errors=0. `apps/sketchstudio/` +
+  `packages/` UNTOUCHED → SketchStudio byte-identical (`npm run test:shell` 12/12, 16-control panel + errors=0). Solver
+  oracle 12/12; sketch-model + export + loop + offset oracles green; baseline 8 pre-existing 0 net-new; both apps load;
+  scope = `_redirects` + `apps/shaper/index.html` only.
+- **DEPLOYMENT = the user's PUSH:** the git-connected Pages site auto-deploys on push; this task is the repo change
+  ONLY. After the user pushes, Shaper is live at **`<site>/shaper`** (Studio stays at `<site>/`). The live `/shaper`
+  URL is verifiable only post-push (noted).
+- **state:** branch `carve-out`. Shaper now has a front door on the shared deploy (a one-line `_redirects` route +
+  a Shaper-only back-link); SketchStudio byte-identical. Resuming the SKETCH arc next per the blessed slicing: **S-3**
+  — cross-sketch LINKS (the panel shows a constraint spanning two sketches under both; `constraintSketch` already
+  returns the spanning Set) → S-4 (groups + islands + export threading). STOP — hold.
+
+=== DEPLOY-1 (/shaper ROUTE ON THE SHARED PAGES SITE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

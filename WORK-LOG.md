@@ -4887,6 +4887,42 @@ params) → j4 (extract a `cut-plan.js` store + the Sim/Export download); DEFER 
 
 === SP1j EXPORT PLAN READY - HOLD ===
 
+## 2026-06-29 · SP1j-1 — #core/shaper-export.js serializer + LINE-loop + oracle (turn 202)
+
+The FOUNDATION of the export engine: a PURE #core serializer that turns a cut plan into a raw Shaper SVG STRING.
+Additive — nothing imports it yet → both apps byte-identical; reusable by vcarve/joints. No app wiring (j4), no
+arcs/circles/edges/params (j2).
+
+- **did:**
+  - **`packages/core/shaper-export.js`** (new, PURE, no DOM): `exportShaperSVG({ state, entries, encoding, docUnit })`
+    → SVG string. HEADER `<svg xmlns … xmlns:shaper="…/shaper" width="{W}mm" height="{H}mm" viewBox="minX minY W H">`
+    — mm-CANONICAL: the viewBox AND the path coords are world units = base mm, UNSCALED; width/height labelled mm. The
+    docUnit is a DISPLAY lens only (reserved; from j2 it suffixes the cut PARAMS) — it never scales geometry. Per LOOP
+    entry: a closed `<path d>` via `loopToPathD` + ATTRIBUTE-FIRST `shaper:cutType` (from the INJECTED encoding, so
+    #core never imports the app CUT_TYPES) + the official fill (always) + stroke (omitted when 'none'). `loopToPathD`
+    (#core helper): the loop's ordered `joints[]` → `M x y L x y … Z` (LINES only). `boundsOf` = the bbox over all
+    design joints. Robust skips: orphaned loop (target.id not in `findLoops` — the design changed after assignment),
+    missing encoding, missing joint pos, non-loop kind (edges = j2).
+  - **`tests/shaper-export.test.js`** (new oracle): a 100×50 rect loop (4 line edges) + outside + a STUB encoding →
+    the EXACT string (`xmlns:shaper` header, closed `<path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000"
+    shaper:cutType="outside"/>`, mm viewBox); `loopToPathD` direct; empty plan → a valid empty SVG; mm-canonical
+    (docUnit 'in' === 'mm' output → no geometry scaling); orphaned target → skipped, still valid SVG.
+- **why a few specifics:** confirmed the loop walk order empirically (a one-off `findLoops` probe on the rect →
+  `joints ["A","B","C","D"]`) so the exact-string assert is correct, not guessed. `num()` rounds ≤4dp + trims trailing
+  zeros + kills `-0` (stable coords). Chose mm-canonical (no coord scaling) over an inch-unit file = zero
+  scaling-error surface (per the blessed plan); the inch file stays a deferred option.
+- **verify (errors=0):** `node tests/shaper-export.test.js` PASSES (exact-string for the rect-loop case + the four
+  others). ADDITIVE #core — nothing imports shaper-export.js → existing #core untouched, SketchStudio byte-identical
+  (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN (the new #core import resolves); baseline 8
+  pre-existing 0 net-new (shaper-export passes → not a new failure); `node --check` clean; scope = shaper-export.js +
+  its test only.
+- **state:** branch `carve-out`. The export serializer exists + is oracle-pinned for line loops. Next per the blessed
+  slicing: **SP1j-2** — all 5 cut types + ARCS (direction-aware sweep) + circles + open EDGES + the cut-param attrs
+  (cutDepth/cutOffset/toolDia via `units.format({unit:true})`). Then j4 (the Sim/Export-tab UI + a `cut-plan.js`
+  store + the download). STOP — hold.
+
+=== SP1j-1 (CORE EXPORT SERIALIZER + LINE-LOOP + ORACLE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

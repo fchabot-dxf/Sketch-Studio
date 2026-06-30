@@ -72,6 +72,9 @@ function injectStyles() {
 .sk-sketch-children { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 7px;
   border-left: 1px solid var(--sk-info-head, rgba(127,127,127,0.18)); }
 .sk-sketch-empty { opacity: 0.5; padding: 3px 6px; font-style: italic; font-size: 0.95em; }
+/* SKETCH-3: a cross-sketch LINK row — a constraint whose joints span sketches; the reference names the other sketch. */
+.sk-link-to { color: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); font-size: 0.85em; margin-left: 4px;
+  white-space: nowrap; opacity: 0.95; }
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -103,13 +106,15 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
   }
 
   // One constraint row (icon + label + value), click toggles state.selectedConstraints (the renderer auto-highlights).
-  function buildRow(c, sel) {
+  // SKETCH-3: `linkTo` (the other sketch name(s)) marks a CROSS-SKETCH link — a `⇄ Sketch N` reference + a .sk-link-row.
+  function buildRow(c, sel, linkTo) {
     const m = typeMeta(c.type);
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row';
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row' + (linkTo ? ' sk-link-row' : '');
     if (sel && sel.has(c)) row.classList.add('sel');
     const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
     const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${c.value.toFixed(1)}</span>` : '';
-    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}`;
+    const link = linkTo ? ` <span class="sk-link-to" title="Cross-sketch link">⇄ ${linkTo}</span>` : '';
+    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}${link}`;
     row.addEventListener('click', () => {
       if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
       if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
@@ -143,6 +148,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
 
       const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
       const activeId = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
+      const nameById = new Map(sketches.map((s) => [s.id, s.name])); // SKETCH-3: for the cross-sketch link reference
       for (const sk of sketches) {
         const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
         const collapsed = collapsedSketchIds.has(sk.id);
@@ -178,7 +184,11 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         if (!collapsed) {
           const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
           if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
-          else for (const c of kids) childWrap.appendChild(buildRow(c, sel));
+          else for (const c of kids) {
+            const cs = constraintSketch(c, state); // a Set → spanning → a cross-sketch link naming the OTHER sketch(es)
+            const linkTo = (cs instanceof Set) ? [...cs].filter((id) => id !== sk.id).map((id) => nameById.get(id) || id).join(', ') : null;
+            childWrap.appendChild(buildRow(c, sel, linkTo));
+          }
           node.appendChild(childWrap);
         }
         listEl.appendChild(node);

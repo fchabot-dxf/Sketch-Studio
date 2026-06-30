@@ -5461,6 +5461,38 @@ Built as a SHARED #ui component (the north-star) both apps mount.
 
 === SWITCH-1 (TWO-WAY APP-SWITCHER) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-3 — cross-sketch LINKS in the panel tree (turn 228)
+
+The user's "show links to other sketch when they exist": a constraint whose joints SPAN two sketches (a cross-sketch
+coincidence — already possible via the GLOBAL solver) renders as a LINK in the tree, under BOTH sketches. Shaper (gated
+tree). `constraintSketch` already returned the spanning Set (S-1a) → S-3 RENDERS it; no model change.
+
+- **did (`packages/ui/design-info-panel.js`, tree mode):**
+  - The tree loop now resolves each kid's `constraintSketch(c, state)`: a STRING (home) → a plain nested row (as
+    before); a SET (spans ≥2) → a cross-sketch LINK. The link's reference names the OTHER sketch(es) — `[...set]` minus
+    the current sketch id, mapped through a `nameById` map → e.g. `Sketch 2`.
+  - `buildRow(c, sel, linkTo)` gained an optional `linkTo`: when set, the row gets a `.sk-link-row` class + a
+    `⇄ <other sketch>` reference span (`.sk-link-to`, accent-coloured), reading as a cross-sketch tie distinct from a
+    local constraint. The row CLICK still toggles `selectedConstraints` (the canvas highlight) — unchanged.
+  - A spanning constraint already appeared under EACH member (the S-1b `set.has(sk.id)` filter); now each appearance is
+    MARKED as a link with the OTHER sketch named from that sketch's perspective.
+- **verify (errors=0):** CDP — a controlled fixture (joint `a∈sketch-1` coincident with `b∈sketch-2`, plus a local
+  `a–c` distance in sketch-1) rendered via `createDesignInfoPanel({showSketchTree:true})`: 2 nodes (Sketch 1, Sketch
+  2); the coincident shows as a LINK under BOTH — `⇄ Sketch 2` under Sketch 1 and `⇄ Sketch 1` under Sketch 2
+  (`link_refs=2`, `link_rows=2`); 3 total rows (cross ×2 + local ×1); the local Distance is PLAIN (not a link);
+  clicking a link SELECTS the constraint. LIVE Shaper (single sketch, seedDemo): 1 node, ZERO links, constraints nest
+  normally (unchanged). SketchStudio doesn't use this panel → `npm run test:shell` 12/12 (16-control panel + errors=0);
+  solver oracle 12/12; sketch-model + export + loop oracles green; guard GREEN; baseline 8 pre-existing 0 net-new;
+  `node --check` clean; scope = design-info-panel.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The sketch tree now surfaces cross-sketch ties as links under both sketches (the
+  global-solver overlay made visible), single-sketch unchanged, SketchStudio unregressed. Next per the blessed
+  slicing: **S-4** — groups + ISLANDS (the SP1j-3b nested-loop containment) + EXPORT threading (sketch→`<g>`,
+  group→nested`<g>`/evenodd, incl. the deferred hidden-sketch export decision). STOP — hold.
+
+=== SKETCH-3 (CROSS-SKETCH LINKS) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

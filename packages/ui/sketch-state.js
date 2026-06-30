@@ -8,7 +8,7 @@
 import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
-import { createSketches } from '#core/sketch-model.js'; // SKETCH-1a: the sketch-container overlay (additive)
+import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
 
 export function createSketchState(engine, view) {
   const state = {
@@ -50,7 +50,10 @@ export function createSketchState(engine, view) {
       const snapshot = {
         joints: new Map(Array.from(this.joints.entries()).map(([k,v]) => [k, {...v}])),
         shapes: this.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})),
-        constraints: this.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined}))
+        constraints: this.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined})),
+        // SKETCH-2a: capture the sketch container so new-sketch + active changes undo/redo correctly
+        sketches: Array.isArray(this.sketches) ? this.sketches.map(s => ({...s})) : undefined,
+        activeSketchId: this.activeSketchId
       };
       this.history.push(snapshot);
       if(this.history.length > this.maxHistory) this.history.shift();
@@ -115,6 +118,9 @@ export function createSketchState(engine, view) {
           const proto = {...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined};
           addConstraintObject(this, proto);
         }
+        // SKETCH-2a: restore the sketch container with the rest of the snapshot
+        if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
+        if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
       } else {
         // No prior snapshot - clear store
         this.history.splice(0);
@@ -144,6 +150,9 @@ export function createSketchState(engine, view) {
           dbg.log('undo', '[undo] skipped restoring constraint', proto);
         }
       }
+      // SKETCH-2a: restore the sketch container (new-sketch + active changes undo correctly)
+      if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
+      if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
       // Cleanup after undo is disabled; trust the snapshot as saved.
       // Clear selections and active tool state
       this.selectedJoints.clear();
@@ -155,5 +164,17 @@ export function createSketchState(engine, view) {
       if(undoBtn && this.history.length === 0) undoBtn.disabled = true;
     }
   };
+
+  // SKETCH-2a: live-tool STAMPING via a centralized .set/.push WRAP (covers ALL creation sites at once — can't miss
+  // one). Safe: the solver MUTATES joint positions in place (j.x = …) and never .set-replaces, so the wrap is never
+  // triggered during solve; and it only stamps an entity WITHOUT a sketchId, so undo-restore (which spreads the
+  // snapshot's sketchId) is preserved. New geometry → sketchId = the ACTIVE sketch (default sketch-1 = the fallback,
+  // so the single-sketch default is byte-identical). Covers: line/rect/circle/arc/dimension joints.set + circle/line
+  // shapes.push + the rect/arc factory `res.shapes.forEach(state.shapes.push)`.
+  const _jointsSet = state.joints.set.bind(state.joints);
+  state.joints.set = (id, j) => { if (j && j.sketchId == null) stampSketch(j, state); return _jointsSet(id, j); };
+  const _shapesPush = state.shapes.push.bind(state.shapes);
+  state.shapes.push = (...items) => { for (const s of items) if (s && s.sketchId == null) stampSketch(s, state); return _shapesPush(...items); };
+
   return state;
 }

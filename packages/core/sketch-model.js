@@ -39,6 +39,21 @@ export function constraintSketch(constraint, state) {
   return ids; // spans ≥2 sketches → the LINK
 }
 
+// SKETCH-2a: append a new sketch ('Sketch N' with the lowest free 'sketch-N' id) and return it (does NOT activate —
+// the caller activates). activateSketch sets the active sketch (new geometry stamps with it). Both MUTATE state.
+export function addSketch(state, name) {
+  if (!state.sketches) Object.assign(state, createSketches());
+  const used = new Set(state.sketches.map((s) => s.id));
+  let n = 1; while (used.has('sketch-' + n)) n++;
+  const sk = { id: 'sketch-' + n, name: name || ('Sketch ' + n), visible: true };
+  state.sketches.push(sk);
+  return sk;
+}
+export function activateSketch(state, id) {
+  if (state && Array.isArray(state.sketches) && state.sketches.some((s) => s.id === id)) state.activeSketchId = id;
+  return state && state.activeSketchId;
+}
+
 // All entity ids in a sketch: { joints:[id…], shapes:[id…] }.
 export function entitiesInSketch(state, id) {
   const joints = [], shapes = [];

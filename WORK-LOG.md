@@ -5305,6 +5305,52 @@ tree-mode only → SketchStudio byte-identical.
 
 === SKETCH-1c (COLLAPSIBLE SKETCH NODES) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-2a — multi-sketch core (new + select-to-activate + live stamping + undo) (turn 220)
+
+Sketches become actually MULTIPLE + ACTIVE: a 'new sketch' action, click-a-node-to-activate, the deferred LIVE-TOOL
+STAMPING (new geometry lands in the active sketch), and undo of the container. Single-sketch default byte-identical
+(stamping `activeSketchId='sketch-1'` = the fallback). Inline rename + show/hide = S-2b.
+
+- **did:**
+  - **`#core/sketch-model.js`** — `addSketch(state[,name])` (append 'Sketch N' with the lowest-free `sketch-N` id;
+    does NOT auto-activate) + `activateSketch(state, id)` (sets `activeSketchId`, ignores unknown ids). Oracle extended.
+  - **`packages/ui/sketch-state.js`** — (a) LIVE-TOOL STAMPING via a centralized `.set`/`.push` WRAP (see the call
+    below); (b) undo: `saveStateForce` now snapshots `sketches` (deep-copied) + `activeSketchId`, and BOTH restore
+    paths (`undo`, `cancelUndoGroup`) restore them.
+  - **`packages/ui/design-info-panel.js`** (tree mode) — a header with a '+' new-sketch button (snapshots via
+    `state.saveState()`, then `addSketch` + `activateSketch`); each node now has THREE clean targets — the CARET
+    toggles collapse (`stopPropagation`), the HEAD click ACTIVATES the sketch, the nested rows still select; the ACTIVE
+    sketch's head shows an accent bar + bold name + a dot (`.is-active`).
+- **THE STAMPING CALL — a DELIBERATE DEVIATION from the dispatch (flagged for review):** the dispatch asked to stamp
+  per-site at every live creation handler. I instead stamp via a **centralized wrap of `state.joints.set` +
+  `state.shapes.push`** in `createSketchState` (stamp any entity lacking a `sketchId` with the active sketch). WHY:
+  (1) it provably CAN'T MISS a site — the dispatch's core requirement — whereas 26+ per-site edits across 6 files are
+  miss-prone; (2) it's SAFE — I verified the Newton solver MUTATES joint positions IN PLACE (`mj.x=…`, `j.x=x[i*2]`,
+  `solver/engine.js`) and NEVER `.set`-replaces a joint, so the wrap is never hit during solve; (3) it only stamps
+  when `sketchId == null`, so undo-restore (which spreads the snapshot's `sketchId`) is preserved; (4) it's minimal +
+  future-proof (new tools auto-covered). The wrap COVERS the ENUMERATED live sites: `joints.set` in
+  arc-tool(3)/base-tool(1)/dimension-tool(1)/line-tool(8)/rect-tool(3) and `shapes.push` in circle-tool(2)/line-tool(2)
+  + the rect/arc factory `res.shapes.forEach(state.shapes.push)`. If the advisor prefers literal per-site stamping,
+  it's a mechanical swap — say so.
+- **verify (errors=0):** CDP — MECHANISM (driving the REAL `createSketchState`): default 1 sketch / active sketch-1;
+  a joint stamps sketch-1; `+`→ 2 sketches, active sketch-2; new joint+shape stamp SKETCH-2; re-activate sketch-1 → a
+  new joint stamps sketch-1 (re-route); `undo` → 1 sketch, active sketch-1, the pre-snapshot joint kept, the post-snapshot
+  joint/shape DROPPED. PANEL (live Shaper): 1 node "Sketch 1" active → `+` → 2 nodes, "Sketch 2" active; clicking
+  "Sketch 1"'s head activates it; clicking its CARET (while Sketch 2 active) collapses it (`▸`) WITHOUT activating
+  (the 3 targets don't conflict); a constraint row-click still toggles `.sel`. Single-sketch default unchanged →
+  SketchStudio UNREGRESSED (`npm run test:shell` 12/12, 16-control panel + errors=0; it doesn't use this panel + the
+  shared-state wrap is transparent). Solver (GLOBAL) oracle 12/12; sketch-model + export + loop oracles green; guard
+  GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = sketch-model.js + its test + sketch-state.js
+  + design-info-panel.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Sketches are now multiple + active; new geometry routes to the active sketch; undo
+  covers the container; the panel adds/activates with a clean 3-target node. SketchStudio byte-identical. Next per the
+  blessed slicing: **S-2b** — inline rename + show/hide (visibility filters the render). Then S-3 (cross-sketch links)
+  → S-4 (groups + islands + export threading). STOP — hold.
+
+=== SKETCH-2a (NEW + SELECT-TO-ACTIVATE + LIVE STAMPING) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -64,6 +64,34 @@
     #design-panel.collapsed #design-panel-toggle { align-self: center; }
     #design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }
     #design-canvas { flex: 1; min-width: 0; min-height: 0; }
+    /* Shaper DESIGN canvas = CREAM paper (warm, NOT white) with a LIGHT-on-cream geometry theme. Scoped to
+       #design-canvas so the surrounding chrome (ribbon / info panel / mode-nav) stays DARK and SketchStudio is
+       untouched. The renderer routes geometry colours through var(--sk-*, fallback); the Shaper :root sets them dark
+       (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
+       light defaults, but with a cream surface + cream-hollow joints. (No grid on this canvas — render ctx omits it.) */
+    #design-canvas {
+      background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
+      --sk-canvas-bg: #F4EFE1;
+      --sk-canvas-bg-snapping: #F1E9D6;
+      --sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896;
+      --sk-geo-fixed: #202020;               /* near-black — high contrast on cream */
+      --sk-geo-constrained: #2563eb;
+      --sk-geo-free: #3b82f6;
+      --sk-geo-fully: #10b981;
+      --sk-construction: #f97316;
+      --sk-muted: #8a8170;                   /* warm muted grey (reads on cream) */
+      --sk-joint-fill: #F4EFE1;              /* cream-hollow joints (fill = surface, dark ring) */
+      --sk-constraint-fill: #60A5FA;
+      --sk-constraint-stroke: #2563eb;
+      --sk-perpendicular-stroke: #0891b2;
+      --sk-dimension: #2563eb;
+      --sk-dimension-snap: #10b981;
+      --sk-selection: #1e40af;
+      --sk-hover: #3B82F6;
+      --sk-origin: #3B82F6;
+      --sk-error: #ef4444;
+    }
+    #design-canvas.snapping { background-color: #F1E9D6; }
     /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
     #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
     /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */

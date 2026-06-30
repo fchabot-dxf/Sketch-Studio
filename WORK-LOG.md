@@ -4748,6 +4748,41 @@ Shaper-only (prepare-view.js pocket branch).
 
 === SP1h6 (POCKET HATCH = TOOL-CENTER REGION) DONE - HOLD ===
 
+## 2026-06-29 · Shaper DESIGN canvas → CREAM + light-on-cream geometry theme (turn 198)
+
+User: make the Shaper Design canvas a warm CREAM paper surface (explicitly NOT white) AND re-theme the canvas
+geometry so it's legible on cream (the sketcher was themed for Shaper's DARK bg → would wash out). "Dark shell, cream
+paper." Shaper-only → SketchStudio untouched.
+
+- **mechanism (confirmed before touching anything):** the #ui svg-renderer routes geometry colours through
+  `var(--sk-NAME, <fallback>)` (a COLOR_TO_VAR map). Shaper's `:root` (index.html) overrides those `--sk-*` to a DARK
+  palette. CSS custom properties inherit, so RE-overriding them on a CLOSER ancestor (`#design-canvas`, the SVG) wins
+  for that canvas' geometry only. The canvas BG is a plain CSS `background-color` on the SVG (same as SketchStudio's
+  `#svgCanvas`), NOT a rendered rect. The Design render ctx OMITS the grid (sketch-canvas.js: "host has no #grid") →
+  no grid to theme here. So the whole task = ONE scoped CSS block — well under the gate threshold (no JS, no #core).
+- **did (apps/shaper/index.html only):** added `#design-canvas { background-color:#F4EFE1; --sk-*: <light> }` — a
+  warm paper cream + the sketcher.css LIGHT (dark-on-cream) palette: `--sk-geo-fixed:#202020` (near-black),
+  `--sk-geo-free:#3b82f6`, `--sk-dimension:#2563eb`, `--sk-construction:#f97316`, cream-HOLLOW joints
+  (`--sk-joint-fill:#F4EFE1` = surface, so joints read as a dark ring on cream, mirroring SketchStudio's white-on-
+  white), warm muted grey, cream-toned grid vars (unused here but consistent). Plus `#design-canvas.snapping` → a
+  warmer cream (mirrors the existing snapping-bg concept). Scoped to `#design-canvas` → the ribbon / info panel /
+  mode-nav keep their DARK chrome; Prepare/Explore canvases untouched; the shared sketcher.css defaults (which
+  SketchStudio reads) are NOT edited.
+- **verify (errors=0):** CDP live — Shaper Design: canvas `background-color` = rgb(244,239,225) (#F4EFE1, warm R>G>B,
+  NOT white); the geometry `--sk-*` resolve LIGHT on #design-canvas (geo-free #3b82f6 not the dark #7aa7e0, geo-fixed
+  #202020, dimension #2563eb, joint-fill #F4EFE1) → dark-on-cream, legible; the canvas rendered geometry (16 children
+  — origin + axes); chrome stays DARK (panel #111827, view #0b1020); the PREPARE canvas is unchanged (transparent;
+  still inherits the dark :root #7aa7e0 — proving the override is scoped). SketchStudio loads errors=0 with its
+  `#svgCanvas` bg still rgb(255,255,255) white → byte-identical (`npm run test:shell` 12/12). Solver oracle 12/12;
+  offset oracle still passes; baseline 8 pre-existing 0 net-new; guard GREEN; scope = apps/shaper/index.html only.
+  (Change is pure CSS — drawing/constraints are structurally unaffected; the canvas mounts + renders as before.)
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Shaper is now "dark shell, cream paper" — the Design canvas is a warm cream surface
+  with legible dark-on-cream geometry, the rest of the shell stays dark, and SketchStudio is untouched. STOP — hold.
+
+=== SHAPER DESIGN CREAM CANVAS + THEME DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

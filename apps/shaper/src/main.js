@@ -146,7 +146,7 @@ function panelTick() {
 const PANEL_COLLAPSED_KEY = 'shaper-design-panel-collapsed';
 function buildDesignUI() {
   const { state, engine } = designController;
-  infoPanel = createDesignInfoPanel({ state, engine });
+  infoPanel = createDesignInfoPanel({ state, engine, showSketchTree: true }); // SKETCH-1b: Shaper opts into the tree
   infoPanel.render(document.getElementById('design-panel-info'));
   ribbon = createToolRibbon({ state });
   ribbon.render(document.getElementById('design-ribbon'));

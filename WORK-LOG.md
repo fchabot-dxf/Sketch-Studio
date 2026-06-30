@@ -5241,6 +5241,41 @@ NO consumer (the gated panel sketch-tree = S-1b) → both apps byte-identical. F
 
 === SKETCH-1a (SKETCH CONTAINER DATA MODEL) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-1b — the GATED panel SKETCH-TREE (first consumer) (turn 216)
+
+The first CONSUMER + the visible payoff: the Design info panel's flat constraint list becomes a sketch-ROOTED tree.
+GATED (default OFF) so SketchStudio keeps its flat behaviour byte-identical; Shaper opts in. Single sketch (multi-
+sketch UX = S-2; cross-sketch links = S-3). Shared #ui.
+
+- **did:**
+  - **`packages/ui/design-info-panel.js`** — added `showSketchTree=false` (a gate like `showDocUnit`/`showGrid`).
+    Extracted the row builder into `buildRow(c, sel)` (reused by both modes — byte-identical row markup + the same
+    click→`selectedConstraints` toggle). When the gate is ON: render a Sketch NODE per `state.sketches` (name +
+    a child count) with its constraints NESTED as children, bucketed via `constraintSketch(c, state)` (a HOME id, or a
+    spanning Set → matched under each member). The DOF/status header is unchanged. Default OFF → the original FLAT
+    list, untouched. Imports `constraintSketch` + the default-sketch consts from `#core/sketch-model.js`. Added the
+    tree styles (`.sk-sketch-node/-head/-children`) to the existing injected block.
+  - **`apps/shaper/src/main.js`** — `createDesignInfoPanel({ state, engine, showSketchTree: true })` (Shaper opts in).
+- **scope note:** `createDesignInfoPanel` is called ONLY by Shaper — SketchStudio has its own constraint display and
+  never mounts this panel, so the default-OFF gate keeps SketchStudio doubly byte-identical (default flat + it doesn't
+  use the panel anyway). The shell-smoke 16-control assertion is the STYLE panel, also untouched.
+- **verify (errors=0):** CDP live — Shaper Design panel: the constraints now NEST under a `Sketch 1` node (flat list →
+  tree); `nested_row_count` = 2 (the seedDemo coincident + distance), `flat_rows_direct` = 0 (no flat rows); the
+  DOF/status header kept (`2 constraints · DOF 1 · 1 free · ✓ solved`); a row click toggles `.sel` (the
+  highlight/`selectedConstraints` path works). SketchStudio UNREGRESSED (gated off + doesn't use this panel) —
+  `npm run test:shell` 12/12 (16-control panel + errors=0). Solver oracle 12/12; sketch-model + export + loop oracles
+  green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = design-info-panel.js + a
+  one-line main.js opt-in.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The sketch container now has its first consumer — the Shaper Design panel reads as a
+  sketch tree (single sketch), the overlay is visibly working, SketchStudio byte-identical. Next per the blessed
+  slicing: **S-2** — multi-sketch UX (new / inline rename / select-to-activate which finally stamps `activeSketchId`
+  at live shape creation / show-hide). Then S-3 (cross-sketch links) → S-4 (groups + islands + export threading).
+  STOP — hold.
+
+=== SKETCH-1b (GATED PANEL SKETCH-TREE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

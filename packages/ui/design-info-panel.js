@@ -7,6 +7,7 @@
 // App-agnostic: imports only #core (constraint-status). Themed via --sk-*/--sk-dock-*. Self-contained styles.
 
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
+import { constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js'; // SKETCH-1b: gated tree
 
 // constraint type → row icon + label (keys = CONSTRAINT_TYPES values from #core/constants.js)
 const TYPE_META = {
@@ -44,6 +45,14 @@ function injectStyles() {
 .sk-info-ic { width: 1.1em; text-align: center; opacity: 0.85; }
 .sk-info-lbl { flex: 1; }
 .sk-info-val { opacity: 0.8; font-variant-numeric: tabular-nums; }
+/* SKETCH-1b: the gated sketch-tree — a Sketch node with its constraints nested as children. */
+.sk-sketch-node { display: flex; flex-direction: column; }
+.sk-sketch-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-weight: 600; opacity: 0.92; }
+.sk-sketch-tw { opacity: 0.55; font-size: 0.8em; width: 1em; text-align: center; }
+.sk-sketch-name { flex: 1; }
+.sk-sketch-children { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 7px;
+  border-left: 1px solid var(--sk-info-head, rgba(127,127,127,0.18)); }
+.sk-sketch-empty { opacity: 0.5; padding: 3px 6px; font-style: italic; font-size: 0.95em; }
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -57,7 +66,7 @@ function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 
  *   render(container) appends el (drop into a TabbedDockPanel tab: render: (body) => infoPanel.render(body)).
  *   refresh() re-renders from current state (host calls it on constraint changes).
  */
-export function createDesignInfoPanel({ state, engine } = {}) {
+export function createDesignInfoPanel({ state, engine, showSketchTree = false } = {}) {
   injectStyles();
   const el = document.createElement('div'); el.className = 'sk-info';
   const dofEl = document.createElement('div'); dofEl.className = 'sk-info-dof';
@@ -71,6 +80,23 @@ export function createDesignInfoPanel({ state, engine } = {}) {
     } catch (_) { return null; }
   }
 
+  // One constraint row (icon + label + value), click toggles state.selectedConstraints (the renderer auto-highlights).
+  function buildRow(c, sel) {
+    const m = typeMeta(c.type);
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row';
+    if (sel && sel.has(c)) row.classList.add('sel');
+    const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
+    const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${c.value.toFixed(1)}</span>` : '';
+    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}`;
+    row.addEventListener('click', () => {
+      if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
+      if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
+      else state.selectedConstraints.add(c);
+      refresh(); // update the row highlight; the canvas auto-highlights via the renderer reading the Set
+    });
+    return row;
+  }
+
   function refresh() {
     const cons = (state && Array.isArray(state.constraints)) ? state.constraints : [];
     const sel = (state && state.selectedConstraints instanceof Set) ? state.selectedConstraints : null;
@@ -81,22 +107,29 @@ export function createDesignInfoPanel({ state, engine } = {}) {
     dofEl.innerHTML = `<b>${cons.length}</b> constraint${cons.length === 1 ? '' : 's'}${dofTxt}${solved}`;
 
     listEl.innerHTML = '';
+
+    // SKETCH-1b: when opted in, a sketch-ROOTED tree — a Sketch node per state.sketches with its constraints nested as
+    // children (bucketed via constraintSketch; single-sketch → all under 'Sketch 1'). DEFAULT (off) = the FLAT list →
+    // SketchStudio byte-identical. (Multi-sketch UX = S-2; cross-sketch links = S-3.)
+    if (showSketchTree) {
+      const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
+      for (const sk of sketches) {
+        const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
+        const node = document.createElement('div'); node.className = 'sk-sketch-node';
+        const head = document.createElement('div'); head.className = 'sk-sketch-head';
+        head.innerHTML = `<span class="sk-sketch-tw">▾</span><span class="sk-sketch-name">${sk.name}</span><span class="sk-info-val">${kids.length}</span>`;
+        node.appendChild(head);
+        const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
+        if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
+        else for (const c of kids) childWrap.appendChild(buildRow(c, sel));
+        node.appendChild(childWrap);
+        listEl.appendChild(node);
+      }
+      return;
+    }
+
     if (!cons.length) { const e = document.createElement('div'); e.className = 'sk-info-empty'; e.textContent = 'No constraints yet.'; listEl.appendChild(e); return; }
-    cons.forEach((c) => {
-      const m = typeMeta(c.type);
-      const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row';
-      if (sel && sel.has(c)) row.classList.add('sel');
-      const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
-      const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${c.value.toFixed(1)}</span>` : '';
-      row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}`;
-      row.addEventListener('click', () => {
-        if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
-        if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
-        else state.selectedConstraints.add(c);
-        refresh(); // update the row highlight; the canvas auto-highlights via the renderer reading the Set
-      });
-      listEl.appendChild(row);
-    });
+    cons.forEach((c) => listEl.appendChild(buildRow(c, sel)));
   }
 
   refresh();

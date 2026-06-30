@@ -10,6 +10,7 @@ import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
+import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a: the sketch-container overlay
 import { draw } from '#ui/svg-renderer.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
@@ -26,15 +27,17 @@ export function createSketch() {
     constraints: engine.getConstraints(),
     engine,
     genJ: engine.genJ,
+    ...createSketches(), // SKETCH-1a: state.sketches + activeSketchId (default single 'Sketch 1')
   };
   let lastError = null;
   setConstraintNotifier((msg) => { lastError = msg; });
 
-  const point = (x, y, fixed = false) => { const id = engine.genJ(); engine.addJoint(id, x, y, fixed); return id; };
+  // SKETCH-1a: stamp new entities with the active sketch (default sketch-1). Additive — nothing reads sketchId yet.
+  const point = (x, y, fixed = false) => { const id = engine.genJ(); engine.addJoint(id, x, y, fixed); stampSketch(state.joints.get(id), state); return id; };
   const line = (x1, y1, x2, y2) => {
     const a = point(x1, y1), b = point(x2, y2);
     const id = 'L_' + a + '_' + b;
-    engine.addShape({ id, type: 'line', joints: [a, b] });
+    engine.addShape(stampSketch({ id, type: 'line', joints: [a, b] }, state));
     return { id, a, b };
   };
   const coincident = (a, b) => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [a, b] }, { source: 'design' });

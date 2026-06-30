@@ -1,0 +1,49 @@
+// packages/core/sketch-model.js — the SKETCH CONTAINER data model + pure derived helpers. PURE (no DOM).
+//
+// Sketches are an ORGANIZATIONAL + EXPORT OVERLAY over the GLOBAL solver — a `sketchId` LABEL on entities + a sketches
+// list + an active sketch. The solver NEVER reads any of this (it stays one global system over flat
+// joints/constraints/shapes). ADDITIVE — declared here, NO consumer yet (the panel sketch-tree = S-1b; export
+// sketch→<g> = a later slice) → both apps byte-identical. Default = a single 'Sketch 1' owning everything; an UNTAGGED
+// entity resolves to Sketch 1 via the `sketchOf` fallback, so today's flat single-sketch behaviour is unchanged.
+
+export const DEFAULT_SKETCH_ID = 'sketch-1';
+export const DEFAULT_SKETCH_NAME = 'Sketch 1';
+
+// The default container: one visible 'Sketch 1', active. Spread onto the sketch state.
+export function createSketches() {
+  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID };
+}
+
+// An entity's sketch — its stored `sketchId`, or the default (untagged entities belong to Sketch 1; load-safe).
+export function sketchOf(entity) {
+  return (entity && entity.sketchId) || DEFAULT_SKETCH_ID;
+}
+
+// Stamp an entity (joint / shape) with the state's ACTIVE sketch at creation. Returns the entity (chainable).
+export function stampSketch(entity, state) {
+  if (entity) entity.sketchId = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
+  return entity;
+}
+
+// A constraint's sketch: the HOME id (a string) when all its joints share one sketch; else the SET of the spanning
+// sketchIds (the cross-sketch LINK signal — the constraint shows under each). null when it resolves no joints.
+export function constraintSketch(constraint, state) {
+  const joints = state && state.joints;
+  const ids = new Set();
+  for (const jid of ((constraint && constraint.joints) || [])) {
+    const j = (joints && typeof joints.get === 'function') ? joints.get(jid) : null;
+    ids.add(sketchOf(j));
+  }
+  if (ids.size === 0) return null;
+  if (ids.size === 1) return [...ids][0];
+  return ids; // spans ≥2 sketches → the LINK
+}
+
+// All entity ids in a sketch: { joints:[id…], shapes:[id…] }.
+export function entitiesInSketch(state, id) {
+  const joints = [], shapes = [];
+  const J = state && state.joints;
+  if (J && typeof J.forEach === 'function') J.forEach((j, jid) => { if (sketchOf(j) === id) joints.push(jid); });
+  if (state && Array.isArray(state.shapes)) for (const s of state.shapes) if (sketchOf(s) === id) shapes.push(s.id);
+  return { joints, shapes };
+}

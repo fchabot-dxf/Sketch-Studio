@@ -5198,6 +5198,49 @@ shared-gated-vs-Shaper-first scope fork for the human.
 
 === SKETCH-1 FOUNDATION PLAN READY - HOLD ===
 
+## 2026-06-30 · SKETCH-1a — the Sketch CONTAINER data model + helpers + oracle (turn 214)
+
+The load-bearing FOUNDATION: DECLARE the sketch container in the shared state + the pure derived helpers. ADDITIVE,
+NO consumer (the gated panel sketch-tree = S-1b) → both apps byte-identical. Flags resolved by the advisor: joint
+`sketchId` STORED; scope SHARED-but-GATED.
+
+- **did:**
+  - **`packages/core/sketch-model.js`** (new, PURE, no DOM, reusable by the panel / export / vcarve): the OVERLAY model
+    — `DEFAULT_SKETCH_ID='sketch-1'`/`NAME='Sketch 1'`; `createSketches()` → `{sketches:[{id,name,visible:true}],
+    activeSketchId}` (the default single container); `sketchOf(entity)` = `entity.sketchId || DEFAULT` (the FALLBACK —
+    untagged entities resolve to Sketch 1, so the single-sketch default is correct without stamping every site);
+    `stampSketch(entity, state)` sets `sketchId = state.activeSketchId`; `constraintSketch(constraint, state)` → the
+    HOME id (string) when all its joints share one sketch, else the SET of spanning sketchIds (the cross-sketch LINK
+    signal); `entitiesInSketch(state, id)`.
+  - **`packages/ui/sketch-canvas.js`** (`createSketch`, headless): `...createSketches()` on the state + `stampSketch`
+    in `point`/`line` (the headless creation the oracle exercises → entities get `sketchId='sketch-1'`).
+  - **`packages/ui/sketch-state.js`** (`createSketchState`, the LIVE state SHARED by both apps): `...createSketches()`
+    → `state.sketches` + `activeSketchId`. Additive; nothing reads it; the GLOBAL solver never reads `sketchId`.
+  - **`tests/sketch-model.test.js`** (new oracle): the default container = exactly one Sketch 1; `sketchOf` fallback;
+    `stampSketch`; a fixture → every entity stamped sketch-1 + a same-sketch constraint → its home + `entitiesInSketch`;
+    a cross-sketch coincidence (two joints in different sketches) → the spanning `Set{sketch-1, sketch-2}`.
+- **the minimal-touch call (stated):** live drawing tools commit geometry by DIRECT `state.joints.set` /
+  `state.shapes.push` across 6+ handlers (line/rect/circle/arc-tool…) — stamping ALL of them now would be a big, risky,
+  NON-minimal surface. The `sketchOf` FALLBACK makes every untagged entity resolve to Sketch 1 (exactly right for the
+  single-sketch default), and the blessed slicing puts "stamp `activeSketchId` at shape creation" in **S-2** (coupled
+  to select-to-activate). So S-1a stamps only the clean headless path + declares `stampSketch` as THE mechanism;
+  live-tool stamping lands at S-2. (Undo snapshots already `{...v}`/`{...s}` so they carry `sketchId`; the sketches
+  LIST isn't snapshotted — fine for one sketch, an S-2 note.)
+- **verify (errors=0):** `node tests/sketch-model.test.js` PASSES. ADDITIVE — nothing reads `sketchId`/`sketches`; the
+  solver stays GLOBAL. Both apps BYTE-IDENTICAL: `npm run test:shell` 12/12 (SketchStudio 16-control panel + errors=0);
+  CDP — Shaper loads errors=0 + the Design canvas renders (12 geo children, unbroken), SketchStudio loads errors=0
+  (shared state + container, unchanged). Solver oracle 12/12; export + loop oracles green; guard GREEN; baseline 8
+  pre-existing 0 net-new; `node --check` clean; scope = sketch-model.js + its test + sketch-canvas.js + sketch-state.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The sketch container + helpers exist (declared, oracle-pinned), the global solver is
+  untouched, both apps byte-identical. Next per the blessed slicing: **S-1b** — the GATED panel SKETCH-TREE (the first
+  consumer; single sketch; constraints nested under their sketch via `constraintSketch`; SketchStudio keeps its flat
+  panel unless opted in). Then S-2 (multi-sketch UX + live-tool stamping) → S-3 (links) → S-4 (groups + islands +
+  export threading). STOP — hold.
+
+=== SKETCH-1a (SKETCH CONTAINER DATA MODEL) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

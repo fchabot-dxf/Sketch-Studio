@@ -8,9 +8,14 @@
 import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
+import { createSketches } from '#core/sketch-model.js'; // SKETCH-1a: the sketch-container overlay (additive)
 
 export function createSketchState(engine, view) {
   const state = {
+    // SKETCH-1a: the sketch container — state.sketches + activeSketchId (default single 'Sketch 1'). ADDITIVE; nothing
+    // reads it yet (the panel sketch-tree is S-1b). The GLOBAL solver never reads sketchId. Live-tool entity stamping
+    // lands at S-2 (until then untagged entities resolve to Sketch 1 via sketchOf's fallback).
+    ...createSketches(),
     // expose engine proxies for modules to use
     engine,
     model: { solveConstraints: (iter=20) => engine.solve(iter) },

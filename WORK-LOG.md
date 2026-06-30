@@ -5002,6 +5002,44 @@ byte-identical (separate app, no Sim/Export tab, no importer of shaper-export th
 
 === SP1j-4 (CUT-PLAN STORE + SIM/EXPORT DOWNLOAD) DONE - HOLD ===
 
+## 2026-06-29 · SP1j-3a — datum triangle + <g> group-inheritance (declared options) (turn 208)
+
+The two CLEAN unsurfaced features as DECLARED `exportShaperSVG` options, default OFF (the harder evenodd ISLANDS = j3b,
+needs the hole/face model investigated). Pure #core + oracle + a minimal main.js wire; additive → both apps
+byte-identical.
+
+- **did (`packages/core/shaper-export.js`):**
+  - **DECLARED the options** — `exportShaperSVG({ …, options = {} })` with `{ datum, groupByCut }`, data-driven (no
+    branches sprinkled about). DEFAULT OFF → existing callers/oracles unchanged (the j1/j2 EXACT-strings still pass).
+    Refactored the element builders to return GEOMETRY only (`{ tag, a }`) so the cut attrs can be carried per-element
+    OR hoisted to a `<g>` — the default assembly (`<${tag} ${a}${common}/>`) is byte-identical to before.
+  - **`options.datum`** — `datumPolygon`: `<polygon points="0,0 20,0 0,10" fill="#FF0000" stroke="none"/>` (the spec's
+    right triangle at the 0,0 origin = the Origin's registration anchor; the 90° vertex is 0,0, short leg = X, long
+    leg = Y). Emitted FIRST. Size = the spec's 20×10 mm default; `{legX,legY}` overrides. `boundsOf` expands by the
+    datum extent so the anchor fits the viewBox.
+  - **`options.groupByCut`** — groups elements sharing IDENTICAL cut attrs (the full `common` string = fill/stroke +
+    shaper:cutType/cutDepth/cutOffset/toolDia) into ONE `<g${common}>`, dropping those attrs off the children (they
+    INHERIT — parser-level). Grouping by a Map keyed on `common` → first-seen order (deterministic). Unique-attr
+    elements stay ungrouped (a group of 1 → `<${tag} ${a}${common}/>`, unchanged).
+  - **`main.js`** (minimal wire) — the Generate button passes `options: { groupByCut: true }` (cleaner files). The
+    datum stays OFF, NOTED for a "Drop Datum" UI toggle (a deliberate registration aid, not wanted on every file).
+- **verify (errors=0):** `node tests/shaper-export.test.js` PASSES — NEW: `options.datum` → the exact string with the
+  red triangle first; `options.groupByCut` → two same-attr cuts in ONE `<g fill="#000000" shaper:cutType="outside">`
+  with 2 attr-less `<path d="…"/>` children + the unique pocket left ungrouped (keeps its attrs), and the default
+  (OFF) leaves each rect with its own attrs / no `<g>`; options-OFF → no datum / no group; the j1/j2 cases UNCHANGED.
+  CDP live: Shaper loads errors=0, the Generate button is present + graceful on an empty plan, and `groupByCut` groups
+  two same-attr rects through the LIVE module path. SketchStudio byte-identical (`npm run test:shell` 12/12); solver
+  oracle 12/12; loop oracle green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope =
+  shaper-export.js + its test + a one-line main.js wire.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The exporter now offers the registration DATUM + group-inheritance as clean declared
+  options (groupByCut live in the download). Next in the j3 sub-sequence: **SP1j-3b** — evenodd ISLANDS (a
+  loop-with-hole → one compound `<path fill-rule="evenodd">`), which first needs the hole/face containment model
+  investigated. (A "Drop Datum" UI toggle is a small separate follow-up.) STOP — hold.
+
+=== SP1j-3a (DATUM TRIANGLE + GROUP INHERITANCE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -43,7 +43,9 @@ document.getElementById('btn-generate-svg').addEventListener('click', () => {
   if (!entries.length) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
-  const svg = exportShaperSVG({ state: designController.state, entries, encoding: CUT_TYPES, docUnit: getDocUnit() });
+  // SP1j-3a: groupByCut ON (hoist identical cut attrs to a <g> → cleaner files). The datum triangle stays OFF pending
+  // a "Drop Datum" UI toggle — it's a deliberate registration aid, not wanted on every file.
+  const svg = exportShaperSVG({ state: designController.state, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true } });
   download('shaper-export.svg', svg);
   if (status) status.textContent = `Exported ${entries.length} cut${entries.length === 1 ? '' : 's'} → shaper-export.svg`;
 });

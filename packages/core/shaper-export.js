@@ -87,9 +87,9 @@ export function loopToPathD(loop, state) {
   return d + ' Z';
 }
 
-// Bounding box over the design: joint positions + circle extents (center ± r). Empty → 0,0,0,0. (Arc bulge beyond
-// its endpoints is approximated by the endpoints — a deferred refinement.)
-function boundsOf(state) {
+// Bounding box over the design: joint positions + circle extents (center ± r) + (when present) the datum triangle
+// at the origin. Empty → 0,0,0,0. (Arc bulge beyond its endpoints is approximated by the endpoints — deferred.)
+function boundsOf(state, datumExtent) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
   if (state && state.joints && typeof state.joints.values === 'function') {
@@ -101,6 +101,7 @@ function boundsOf(state) {
       if (c && r > 0) { ext(c.x - r, c.y - r); ext(c.x + r, c.y + r); }
     }
   }
+  if (datumExtent) { ext(0, 0); ext(datumExtent.legX, datumExtent.legY); } // the registration anchor must fit the viewBox
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, w: 0, h: 0 };
   return { minX, minY, w: maxX - minX, h: maxY - minY };
 }
@@ -123,60 +124,89 @@ function shaperAttrs(rec, enc, docUnit) {
   return s;
 }
 
-function circleEl(s, state, common) {
+// Element builders return the GEOMETRY only ({ tag, a }) so the cut attrs can be carried per-element OR hoisted to a
+// <g> (options.groupByCut). circle = a single-circle loop or a circle edge.
+function circleGeom(s, state) {
   const c = state.joints.get(s.joints[0]); const r = Number(s.radius) || 0;
-  return (c && r > 0) ? `<circle cx="${num(c.x)}" cy="${num(c.y)}" r="${num(r)}"${common}/>` : '';
+  return (c && r > 0) ? { tag: 'circle', a: `cx="${num(c.x)}" cy="${num(c.y)}" r="${num(r)}"` } : null;
 }
-// A loop → <circle> (a single-circle loop) or a closed <path>.
-function loopElement(loop, state, shapeById, common) {
+function loopGeom(loop, state, shapeById) {
   if (Array.isArray(loop.edges) && loop.edges.length === 1) {
     const s = shapeById.get(loop.edges[0]);
-    if (s && s.type === 'circle') return circleEl(s, state, common);
+    if (s && s.type === 'circle') return circleGeom(s, state);
   }
   const d = loopToPathD(loop, state);
-  return d ? `<path d="${d}"${common}/>` : '';
+  return d ? { tag: 'path', a: `d="${d}"` } : null;
 }
-// An open edge → its true geometry (online/guide cut along the vector).
-function edgeElement(shape, state, common) {
+function edgeGeom(shape, state) {
   if (shape.type === 'line') {
     const a = state.joints.get(shape.joints[0]), b = state.joints.get(shape.joints[1]);
-    return (a && b) ? `<line x1="${num(a.x)}" y1="${num(a.y)}" x2="${num(b.x)}" y2="${num(b.y)}"${common}/>` : '';
+    return (a && b) ? { tag: 'line', a: `x1="${num(a.x)}" y1="${num(a.y)}" x2="${num(b.x)}" y2="${num(b.y)}"` } : null;
   }
-  if (shape.type === 'circle') return circleEl(shape, state, common);
-  if (shape.type === 'arc') { const d = arcPathFull(shape, state); return d ? `<path d="${d}"${common}/>` : ''; }
-  return '';
+  if (shape.type === 'circle') return circleGeom(shape, state);
+  if (shape.type === 'arc') { const d = arcPathFull(shape, state); return d ? { tag: 'path', a: `d="${d}"` } : null; }
+  return null;
 }
 
-// exportShaperSVG({ state, entries, encoding, docUnit }) → an SVG string.
+// SP1j-3a: the red DATUM registration triangle — a right triangle at the 0,0 origin, legs on X/Y, fill #FF0000, no
+// stroke. The Origin snaps (0,0) to the 90° vertex (short leg = X, long leg = Y). Spec example = 20×10 mm (the default).
+function datumDims(datum) {
+  const o = (datum && typeof datum === 'object') ? datum : {};
+  return { legX: Number(o.legX) > 0 ? Number(o.legX) : 20, legY: Number(o.legY) > 0 ? Number(o.legY) : 10 };
+}
+function datumPolygon(datum) {
+  const { legX, legY } = datumDims(datum);
+  return `<polygon points="0,0 ${num(legX)},0 0,${num(legY)}" fill="#FF0000" stroke="none"/>`;
+}
+
+// exportShaperSVG({ state, entries, encoding, docUnit, options }) → an SVG string.
 //   state    — { joints: Map(id→{x,y}), shapes, constraints }   (loops re-derived via findLoops at export time)
 //   entries  — [{ target:{kind,id}, rec:{cutType, cutDepth, cutOffset, toolDia} }]   (the Prepare cut plan)
 //   encoding — [{ id, cutType, fill, stroke }, …] INJECTED       (cutType id → the Shaper machine encoding)
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
-export function exportShaperSVG({ state, entries, encoding, docUnit } = {}) {
+//   options  — { datum?, groupByCut? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
+//                datum: true | {legX,legY}  → emit the red registration triangle FIRST.
+//                groupByCut: true           → wrap elements sharing IDENTICAL cut attrs in one <g> (attrs hoisted off
+//                                             the children, which inherit); unique-attr elements stay ungrouped.
+export function exportShaperSVG({ state, entries, encoding, docUnit, options = {} } = {}) {
   const ents = Array.isArray(entries) ? entries : [];
   const enc = Array.isArray(encoding) ? encoding : [];
   const encOf = (id) => enc.find((t) => t && t.id === id) || null;
   const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
   const loopById = new Map(findLoops(state || {}).map((l) => [l.id, l]));
 
-  const body = [];
+  // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
+  const items = [];
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     const c = encOf(e.rec.cutType);
     if (!c) continue;
-    const common = colorAttrs(c) + shaperAttrs(e.rec, c, docUnit);
-    let el = '';
-    if (e.target.kind === 'loop') {
-      const loop = loopById.get(e.target.id);
-      if (loop) el = loopElement(loop, state, shapeById, common); // orphaned (design changed) → '' → skipped
-    } else if (e.target.kind === 'edge') {
-      const shape = shapeById.get(e.target.id);
-      if (shape) el = edgeElement(shape, state, common);
-    }
-    if (el) body.push('  ' + el);
+    let geom = null;
+    if (e.target.kind === 'loop') { const loop = loopById.get(e.target.id); if (loop) geom = loopGeom(loop, state, shapeById); }
+    else if (e.target.kind === 'edge') { const shape = shapeById.get(e.target.id); if (shape) geom = edgeGeom(shape, state); }
+    if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
   }
 
-  const b = boundsOf(state);
+  const body = [];
+  if (options.datum) body.push('  ' + datumPolygon(options.datum));
+
+  if (options.groupByCut) {
+    const groups = new Map(); // common → items (Map preserves first-seen order → deterministic)
+    for (const it of items) { if (!groups.has(it.common)) groups.set(it.common, []); groups.get(it.common).push(it); }
+    for (const [common, group] of groups) {
+      if (group.length >= 2) { // hoist the shared cut attrs to a <g>; the children inherit (drop their attrs)
+        body.push(`  <g${common}>`);
+        for (const it of group) body.push(`    <${it.tag} ${it.a}/>`);
+        body.push('  </g>');
+      } else {
+        body.push(`  <${group[0].tag} ${group[0].a}${common}/>`);
+      }
+    }
+  } else {
+    for (const it of items) body.push(`  <${it.tag} ${it.a}${it.common}/>`);
+  }
+
+  const b = boundsOf(state, options.datum ? datumDims(options.datum) : null);
   const header = `<svg xmlns="${SVG_NS}" xmlns:shaper="${SHAPER_NS}" width="${num(b.w)}mm" height="${num(b.h)}mm" viewBox="${num(b.minX)} ${num(b.minY)} ${num(b.w)} ${num(b.h)}">`;
   return [header, ...body, '</svg>'].join('\n');
 }

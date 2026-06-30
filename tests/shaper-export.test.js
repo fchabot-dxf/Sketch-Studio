@@ -137,5 +137,63 @@ import { findLoops } from '#core/loop-finder.js';
     assert(edge('guide').includes('fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"'), 'guide → #0068FF');
   }
 
+  // ── SP1j-3a: datum triangle + <g> group inheritance (DECLARED options, default OFF) ──
+
+  // 11. options.datum → the red registration triangle at 0,0, emitted FIRST (mm-canonical, default 20×10)
+  {
+    const state = rectState();
+    const loop = findLoops(state)[0];
+    const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }], encoding: ENC5, docUnit: 'mm', options: { datum: true } });
+    const want = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="100mm" height="50mm" viewBox="0 0 100 50">',
+      '  <polygon points="0,0 20,0 0,10" fill="#FF0000" stroke="none"/>',
+      '  <path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000" shaper:cutType="outside"/>',
+      '</svg>',
+    ].join('\n');
+    eq(svg, want, 'options.datum → red triangle first');
+  }
+
+  // 12. options.groupByCut → two same-attr cuts in ONE <g> (attrs hoisted off the children); a unique cut ungrouped
+  {
+    const state = {
+      joints: new Map([
+        ['A', { x: 0, y: 0 }], ['B', { x: 40, y: 0 }], ['C', { x: 40, y: 30 }], ['D', { x: 0, y: 30 }],
+        ['E', { x: 60, y: 0 }], ['F', { x: 100, y: 0 }], ['G', { x: 100, y: 30 }], ['H', { x: 60, y: 30 }],
+        ['Z', { x: 50, y: 60 }],
+      ]),
+      constraints: [],
+      shapes: [
+        { id: 'AB', type: 'line', joints: ['A', 'B'] }, { id: 'BC', type: 'line', joints: ['B', 'C'] }, { id: 'CD', type: 'line', joints: ['C', 'D'] }, { id: 'DA', type: 'line', joints: ['D', 'A'] },
+        { id: 'EF', type: 'line', joints: ['E', 'F'] }, { id: 'FG', type: 'line', joints: ['F', 'G'] }, { id: 'GH', type: 'line', joints: ['G', 'H'] }, { id: 'HE', type: 'line', joints: ['H', 'E'] },
+        { id: 'circ', type: 'circle', joints: ['Z'], radius: 10 },
+      ],
+    };
+    const loops = findLoops(state);
+    const rects = loops.filter((l) => l.edges.length === 4);
+    const circle = loops.find((l) => l.edges.length === 1);
+    const entries = [
+      { target: { kind: 'loop', id: rects[0].id }, rec: { cutType: 'exterior' } },
+      { target: { kind: 'loop', id: rects[1].id }, rec: { cutType: 'exterior' } },
+      { target: { kind: 'loop', id: circle.id }, rec: { cutType: 'pocket' } },
+    ];
+    const grouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm', options: { groupByCut: true } });
+    assert(grouped.includes('<g fill="#000000" shaper:cutType="outside">'), 'group: <g> with hoisted attrs');
+    assert((grouped.match(/<g /g) || []).length === 1 && grouped.includes('</g>'), 'group: exactly one <g>…</g>');
+    assert((grouped.match(/<path d="[^"]*"\/>/g) || []).length === 2, 'group: 2 children with NO cut attrs (inherited)');
+    assert(/<circle cx="50" cy="60" r="10" fill="#7F7F7F" shaper:cutType="pocket"\/>/.test(grouped), 'group: the unique pocket stays ungrouped (keeps its attrs)');
+
+    const ungrouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm' }); // default OFF
+    assert(!ungrouped.includes('<g '), 'default: no grouping');
+    assert((ungrouped.match(/<path d="[^"]*" fill="#000000" shaper:cutType="outside"\/>/g) || []).length === 2, 'default: each rect keeps its own attrs');
+  }
+
+  // 13. options OFF (default) → no datum polygon, no <g> (the j1/j2 cases above already pin the exact strings)
+  {
+    const state = rectState();
+    const loop = findLoops(state)[0];
+    const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }], encoding: ENC5, docUnit: 'mm' });
+    assert(!svg.includes('<polygon') && !svg.includes('<g '), 'options default OFF → no datum / no group');
+  }
+
   console.log('shaper-export tests passed ✅');
 })().catch((e) => { console.error('shaper-export tests failed ❌', e); process.exit(1); });

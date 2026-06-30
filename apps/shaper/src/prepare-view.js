@@ -8,7 +8,9 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops } from '#core/loop-finder.js';
 import { cutTypeById, defaultCutRecord, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2: parallel offset for outside/inside toolpaths
+import { offsetPolygon, openPolygon } from '#core/polygon-offset.js'; // SP1h2/h4: offset toolpaths + pocket opening
+import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
+import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -104,6 +106,22 @@ function clientToWorld(svgEl, cx, cy) {
 const SVG_NS_G = SVG_NS;
 const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
 const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',' + p.y).join(' ')}" style="${style}"/>`;
+// SP1h4 (pocket): area-weighted centroid for label placement (vertex-average fallback for a near-degenerate ring).
+function polyCentroid(poly) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const f = poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+    a += f; cx += (poly[j].x + poly[i].x) * f; cy += (poly[j].y + poly[i].y) * f;
+  }
+  if (Math.abs(a) < 1e-9) return poly.reduce((s, p) => ({ x: s.x + p.x / poly.length, y: s.y + p.y / poly.length }), { x: 0, y: 0 });
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+// SP1h4: pocket depth → a ↓-prefixed label in the document unit (export form, e.g. '↓ 0.500in'). 'unset' → no label.
+const pocketDepthLabel = (cutDepth) => {
+  const v = Number(cutDepth);
+  if (cutDepth == null || cutDepth === 'unset' || !Number.isFinite(v)) return '';
+  return '↓ ' + fmtUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { unit: true });
+};
 // Hover = LIGHT fill; Selected = STRONGER fill + a solid outline in the selection var — visually distinct (SP1d).
 const HOVER_STYLE = 'fill:var(--sk-hover, #7aa7e0); fill-opacity:0.16; stroke:var(--sk-hover, #7aa7e0); stroke-width:1.5; stroke-opacity:0.6; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
 const SELECT_STYLE = 'fill:var(--sk-selection, #4c9aff); fill-opacity:0.30; stroke:var(--sk-selection, #4c9aff); stroke-width:2.5; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
@@ -154,6 +172,13 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
   svgEl.innerHTML = ''; // clean re-mount
+  // SP1h4: a diagonal HATCH pattern (pocket preview colour) for the cleared region. userSpaceOnUse → world-unit
+  // spacing (scales with the geometry). One <defs> per mount; referenced by the pocket cleared-region fill.
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  const pocketCt = cutTypeById('pocket');
+  const hatchColor = (pocketCt && pocketCt.previewStroke) || '#5fb87a';
+  defs.innerHTML = `<pattern id="prepare-pocket-hatch" patternUnits="userSpaceOnUse" width="3.2" height="3.2" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3.2" style="stroke:${hatchColor}; stroke-width:0.7; stroke-opacity:0.85;"/></pattern>`;
+  svgEl.appendChild(defs);
   // z-order (later = on top): cut TINT (behind) < edges < toolpath (tool-aware look) < selected < hover. Joints hidden.
   const cutG = mkGroup('prepare-cut-group');           svgEl.appendChild(cutG);
   renderPrepareGeometry(state, svgEl);                 // edges — above the cut tint
@@ -206,7 +231,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // look into the toolpath layer — GUIDE = a dashed reference (no cut); ON-LINE = a tool-WIDTH band (stroke-width =
   // toolDia in WORLD units = base mm) + a dashed centerline. Reuses targetMarkup (loop polygon / edge true geometry).
   const lookCache = new Map(); // targetKey → { sig, region, path }
-  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}`;
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${SettingsManager.get('DOC_UNIT')}`;
   const computeLook = (key, rec) => {
     const { kind, id } = parseKey(key);
     if (kind === 'loop' ? !loopById.has(id) : !shapeById.has(id)) return { region: '', path: '' }; // only THIS view's targets
@@ -218,14 +243,27 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const edgeStyle = `fill:none; stroke:${ct.previewStroke}; stroke-width:3; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;`;
       const region = targetMarkup(t, loopStyle, edgeStyle); // SP1f flat tint stays
       // SP1h2: OUTSIDE/INSIDE → a DASHED offset toolpath of the loop boundary by toolDia/2 ± cutOffset (OUTWARD for
-      // exterior, INWARD for interior). pocket (h4) keeps only the tint. Edges never reach here (region gating is
-      // loop-only). The offset recomputes on toolDia/cutOffset change via the look cache.
+      // exterior, INWARD for interior). SP1h4: POCKET → the hatch-filled cleared region + depth label (below). Edges
+      // never reach here (region gating is loop-only). The look recomputes on toolDia/cutOffset/cutDepth change.
       let path = '';
       const l = (kind === 'loop') ? loopById.get(id) : null;
       if (l && l.polygon.length >= 3 && (ct.id === 'exterior' || ct.id === 'interior')) {
         const r = (Number(rec.toolDia) || 0) / 2 + (Number(rec.cutOffset) || 0);
         const off = offsetPolygon(l.polygon, ct.id === 'exterior' ? r : -r);
         if (off.length >= 3) path = polyMarkup(off, `fill:none; stroke:${ct.previewStroke}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round;`);
+      } else if (l && l.polygon.length >= 3 && ct.id === 'pocket') {
+        // SP1h4: POCKET = the CLEARED region a round bit removes = morphological OPENING (inset by tool radius, then
+        // dilate with the tool radius rounding the convex corners). Hatch-filled + a depth label. Bigger bit → more
+        // corner rounding; bit too big for the region → empty cleared (no garbage). Replaces the flat tint's toolpath.
+        const cleared = openPolygon(l.polygon, (Number(rec.toolDia) || 0) / 2, Number(rec.cutOffset) || 0);
+        if (cleared.length >= 3) {
+          path = polyMarkup(cleared, `fill:url(#prepare-pocket-hatch); stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`);
+          const label = pocketDepthLabel(rec.cutDepth);
+          if (label) {
+            const c = polyCentroid(cleared);
+            path += `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${ct.previewStroke}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
+          }
+        }
       }
       return { region, path };
     }

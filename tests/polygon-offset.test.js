@@ -1,4 +1,4 @@
-import { offsetPolygon } from '#core/polygon-offset.js';
+import { offsetPolygon, openPolygon } from '#core/polygon-offset.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -106,6 +106,47 @@ import { offsetPolygon } from '#core/polygon-offset.js';
     assert(o.length >= 3 && !selfIntersects(o), 'tiny-edge: valid, no self-intersect');
     assert(o.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)), 'tiny-edge: no NaN');
     assert(area(o) > area(SQ) - 1, 'tiny-edge ~ square out');
+  }
+
+  // ── SP1h4 round join + morphological opening (pocket) ──
+  const maxR2 = (poly, cx, cy) => Math.max(...poly.map((p) => Math.hypot(p.x - cx, p.y - cy)));
+
+  // 12. Round-join OUTSET: a square grown by 2 with round joins — corners are arcs (extra verts), no corner pokes
+  //     past radius √? (a mitered corner would reach (12,-2)=√(...)≈12.2 from centre; a round corner stays ≤ ~11.4).
+  {
+    const m = offsetPolygon(SQ, 2);                    // miter: 4 verts
+    const r = offsetPolygon(SQ, 2, { join: 'round' }); // round: many verts (arcs)
+    assert(m.length === 4, 'miter outset still 4 verts (default unchanged)');
+    assert(r.length > 8, 'round outset adds arc verts');
+    // mitered corner is at (12,-2) etc → dist from centre (5,5) = √(49+49)=9.9; round corner caps at edge+radius.
+    assert(maxR2(r, 5, 5) < maxR2(m, 5, 5) + 1e-6, 'round corners do not exceed the miter reach');
+    assert(maxR2(r, 5, 5) < 10, 'round corner reach bounded (no spike)');
+  }
+
+  // 13. Default join is MITER — every earlier oracle used the 2-arg form; assert the 3-arg miter ≡ 2-arg.
+  {
+    const a = offsetPolygon(SQ, -2), b = offsetPolygon(SQ, -2, { join: 'miter' });
+    assert(a.length === b.length && a.every((p, i) => close(p.x, b[i].x) && close(p.y, b[i].y)), 'explicit miter ≡ default');
+  }
+
+  // 14. openPolygon (pocket clearing): a 20×20 square opened by a 3-radius tool → rounded-corner square; straight
+  //     walls ~reach the boundary (extent ≈ 20), corners rounded (area a bit < 400). Bigger tool → more rounding.
+  {
+    const BIG = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+    const o3 = openPolygon(BIG, 3);
+    assert(o3.length > 8 && !selfIntersects(o3), 'open: rounded region, no self-intersect');
+    const xs = o3.map((p) => p.x), ext = Math.max(...xs) - Math.min(...xs);
+    assert(close(ext, 20, 0.01), 'open: straight walls reach the boundary (extent ≈ 20)');
+    assert(area(o3) < 400 && area(o3) > 360, 'open: corners rounded → area a bit under the 400 square');
+    const o6 = openPolygon(BIG, 6);
+    assert(area(o6) < area(o3), 'bigger tool rounds more → smaller cleared area');
+  }
+
+  // 15. openPolygon degenerate: tool radius ≥ half the feature → erosion collapses → clean empty
+  {
+    const BIG = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }];
+    assert(openPolygon(BIG, 10).length === 0, 'open: tool radius = half-width → empty (no garbage)');
+    assert(openPolygon(BIG, 0).length >= 3, 'open: no tool → the region itself');
   }
 
   console.log('polygon-offset tests passed ✅');

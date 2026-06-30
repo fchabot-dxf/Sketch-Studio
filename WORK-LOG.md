@@ -4629,6 +4629,55 @@ wiring). Additive → SketchStudio byte-identical.
 
 === SP1h3 (OFFSET ROBUSTNESS) DONE - HOLD ===
 
+## 2026-06-29 · SP1h4 — POCKET look (cleared region + hatch + depth label) (turn 192)
+
+CLOSES the tool-aware look. Shaper-only wiring; the geometry is an additive #core capability.
+
+- **declare-or-hand-roll:** DECLARED two reusable #core concepts rather than hand-rolling pocket-local geometry —
+  (a) a `{join:'round'}` option on `offsetPolygon` (additive; miter is the default and is byte-unchanged), and
+  (b) `openPolygon(points, radius, offset)` = the morphological OPENING. Both are reused by SP1j export.
+- **INTERPRETATION (stated — the dispatch granted "your call, STATE it"):** the dispatch described the cleared region
+  as "inset by toolDia/2 with convex corners rounded." I implemented the **morphological OPENING** instead (erode by
+  the tool radius, then dilate by the tool radius with ROUND joins): straight walls REACH the boundary, only the
+  CONVEX corners are left rounded by the bit radius. Reason: that is the physically-correct footprint a round bit
+  actually clears — a literal "inset by toolDia/2" region would draw a false uncut margin along straight walls and
+  MISLEAD a CNC user (the bit cuts right up to the wall; only corners are left). Matches the user's rectangle-with-
+  rounded-corners mockup. FLAGGED for advisor — if the literal inset-region visual was wanted, it's a one-line swap
+  (drop the dilate step).
+- **did:**
+  - **`#core/polygon-offset.js`:** `offsetPolygon(points, distance, opts)` — `opts.join==='round'` fills a CONVEX gap
+    with a tool-radius arc (`pushArc`, ~22.5°/seg) while reflex corners still trim at the intersection; gap test =
+    `sign(distance)·turn·sign(area0) > 0`. Miter path untouched (default). With round joins out.length>n so the
+    1:1 over-inset check self-skips (the opening's outset never over-insets; self-intersection + collapsed-area still
+    guard). New `openPolygon(points, radius, offset=0)` = `offsetPolygon(loop, -(radius+offset))` then
+    `offsetPolygon(eroded, radius, {join:'round'})`; erosion collapses → `[]` (clean empty).
+  - **`tests/polygon-offset.test.js`:** round-join outset (arc verts, corner reach ≤ miter, no spike); explicit
+    miter ≡ default 2-arg (regression lock); `openPolygon` 20×20 (rounded square, walls reach extent 20, area a bit
+    < 400, bigger tool → smaller); degenerate (radius = half-width → `[]`, radius 0 → the region). SP1h2/h3 cases
+    still pass.
+  - **`apps/shaper/src/prepare-view.js`:** a `<defs>` diagonal HATCH `<pattern>` (pocket colour, userSpaceOnUse →
+    world-unit spacing) per mount. `computeLook` pocket branch → `openPolygon(loop, toolDia/2, cutOffset)` →
+    hatch-filled cleared polygon + a centroid DEPTH label (`polyCentroid`, `pocketDepthLabel` → `↓ ` +
+    `units.format(cutDepth, DOC_UNIT, {unit:true})`; 'unset' → none). `sigOf` now keys on `cutDepth` + `DOC_UNIT`
+    too, so depth/unit changes repaint via the existing look cache + `refreshLook`. outside/inside/on-line/guide and
+    the SP1f region tint are unchanged (pocket replaces only its empty toolpath slot).
+- **verify (errors=0):** offset oracle PASSES (miter unchanged + round + opening). CDP live (40×40 rect, Shaper doc
+  unit = in): pocket → HATCH-filled cleared region, corners rounded (arc verts), area 1597.6 (≈1600 less corner
+  rounding); depth unset → no label, 6.35mm → `↓ 0.25in`, 12.7mm → `↓ 0.5in` (updates live); bit 12.7 → area 1562.7
+  (MORE rounding), bit 0.5 → 1599.9 (near-sharp); an 8×8 rect + bit 12.7 (radius 6.35 ≥ half-width 4) → EMPTY cleared
+  (no garbage), region tint stays; exterior still dashed; joints = 0. ADDITIVE #core → SketchStudio byte-identical
+  (`npm run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check`
+  clean.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The tool-aware look is COMPLETE — exterior/interior (dashed offset toolpath), pocket
+  (rounded cleared region + hatch + depth), on-line (tool-width band), guide (dashed reference), all live-reactive to
+  the bit. Next per ROADMAP: **SP1j** (export — reuse #core/polygon-offset.js + openPolygon for the real toolpath
+  geometry). Follow-ups noted: a literal inset-region pocket variant if the advisor prefers it; DOC_UNIT-change live
+  relabel isn't wired to a Prepare refresh (only repaints on the next field change). STOP — hold.
+
+=== SP1h4 (POCKET LOOK) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

@@ -4523,6 +4523,42 @@ byte-identical at mm. Completes the units arc (U1 util → U2 dim field → U3a 
 
 === U3c (CANVAS DIM LABELS RE-LABEL VIA UNITS) DONE - HOLD ===
 
+## 2026-06-29 · SP1h1 — tool-aware look: toolpath LAYER + reactivity + GUIDE + ON-LINE band (turn 186) — Shaper-only
+
+SP1h resumes (units arc done → toolDia/cutOffset are base mm = world units, so the offset SCALE is real). SP1h1 is
+the FOUNDATION + the two looks that need NO offset geometry: the toolpath layer, the reactive refresh, GUIDE, and the
+ON-LINE band. Shaper-only (prepare-view.js) → SketchStudio byte-identical.
+
+- **did (`apps/shaper/src/prepare-view.js`):**
+  - **New toolpath LAYER** `#prepare-toolpath-group`; re-ordered the groups to the spec z-order: cut TINT (behind) <
+    edges < toolpath < selected < hover. (The SP1f flat cut-color stays as the REGION tint below the edges; the
+    tool-aware look draws above the edges; selection/hover now top everything.)
+  - **Cached look engine + ONE `refreshLook()`** — a per-target `lookCache` keyed by `(cutType, toolDia, cutOffset)`;
+    `computeLook` returns `{region, path}` markup (recomputed only when a target's sig changes). `renderCuts()` paints
+    `.region` into the cut layer, `renderToolpaths()` paints `.path` into the toolpath layer; `refreshLook()` repaints
+    both. Wired BOTH `applyCutTypeToSelected` (cutType) AND `setFieldOnSelected` (toolDia/cutOffset — previously a
+    no-op for the look) through `refreshLook`, so the look updates LIVE on any cut-field change without a re-mount.
+    All targets recompute on mount.
+  - **GUIDE look:** a thin DASHED reference along the target geometry (loop boundary polygon / edge true geometry) —
+    NO fill, NO band, NO region tint (not a cut). **ON-LINE look:** a tool-WIDTH BAND (`stroke-width = toolDia` in
+    WORLD units = base mm — now dimensionally correct) + a DASHED centerline; applies to LOOP and EDGE targets. Both
+    reuse `targetMarkup` (loop → `<polygon>`, edge → `<line>/<circle>/<path>` via `calculateArcPath`).
+  - **outside/inside/pocket** keep the SP1f flat cut-tint (their offset toolpath is h2–h4). Joints stay hidden.
+- **verify (CDP live, errors=0):** z-order = `[cut, edges, toolpath, select, hover]`. Loop + GUIDE → 1 dashed element
+  in the toolpath layer, no band, cut layer empty. Loop + ON-LINE → 2 elements: a band (`stroke-width 3.175` = toolDia)
+  + a dashed centerline. Change toolDia → **band re-widths LIVE to 6.35** (refreshLook). EXTERIOR (region) → flat
+  `#22c55e` fill in the cut layer, toolpath empty. OPEN edge + ON-LINE → band + centerline as 2 `<line>`s (the edge's
+  own record, toolDia 3.175). Joints = 0. LOAD-SAFE: shared #core/#ui UNCHANGED → SketchStudio byte-identical (`npm
+  run test:shell` 12/12); solver oracle 12/12; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean;
+  scope = prepare-view.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The tool-aware layer + reactivity + guide/on-line are live; the cache is forward-safe
+  for the expensive offset looks. Next: **SP1h2** — `#core/polygon-offset.js` (parallel offset) + oracle → the
+  OUTSIDE/INSIDE dashed toolpath for simple loops. STOP — hold.
+
+=== SP1h1 (TOOLPATH LAYER + REACTIVITY + GUIDE + ON-LINE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

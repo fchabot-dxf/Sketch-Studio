@@ -153,11 +153,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
   svgEl.innerHTML = ''; // clean re-mount
-  // z-order (later = on top): cut preview (behind) < selected < hover < edges (on top). Joints stay hidden.
-  const cutG = mkGroup('prepare-cut-group');       svgEl.appendChild(cutG);
-  const selectG = mkGroup('prepare-select-group'); svgEl.appendChild(selectG);
-  const hoverG = mkGroup('prepare-hover-group');   svgEl.appendChild(hoverG);
-  renderPrepareGeometry(state, svgEl);
+  // z-order (later = on top): cut TINT (behind) < edges < toolpath (tool-aware look) < selected < hover. Joints hidden.
+  const cutG = mkGroup('prepare-cut-group');           svgEl.appendChild(cutG);
+  renderPrepareGeometry(state, svgEl);                 // edges — above the cut tint
+  const toolpathG = mkGroup('prepare-toolpath-group'); svgEl.appendChild(toolpathG); // SP1h: tool-aware look (above edges)
+  const selectG = mkGroup('prepare-select-group');     svgEl.appendChild(selectG);
+  const hoverG = mkGroup('prepare-hover-group');       svgEl.appendChild(hoverG);
 
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loops = findLoops(state).map((l) => { const polygon = loopPolygon(l, state, shapeById); return { ...l, polygon, area: polyArea(polygon) }; });
@@ -199,21 +200,41 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return '';
   };
 
-  // SP1f: persistent cut-plan preview — every assigned target painted in its dark-canvas preview color
-  // (loop → filled region; edge → colored stroke). Re-read from CUT_PLAN on mount + whenever a cut changes.
-  const renderCuts = () => {
-    let out = '';
-    for (const [key, rec] of CUT_PLAN) {
-      if (!rec || !rec.cutType) continue;
-      const ct = cutTypeById(rec.cutType); if (!ct) continue;
-      const { kind, id } = parseKey(key);
-      if (kind === 'loop' ? !loopById.has(id) : !shapeById.has(id)) continue; // only targets present in THIS view
+  // SP1f/SP1h1: per-target cut LOOK, cached by (cutType, toolDia, cutOffset). REGION types (outside/inside/pocket)
+  // paint the SP1f flat tint into the cut layer (their offset toolpath is h2–h4); PATH types paint the TOOL-AWARE
+  // look into the toolpath layer — GUIDE = a dashed reference (no cut); ON-LINE = a tool-WIDTH band (stroke-width =
+  // toolDia in WORLD units = base mm) + a dashed centerline. Reuses targetMarkup (loop polygon / edge true geometry).
+  const lookCache = new Map(); // targetKey → { sig, region, path }
+  const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}`;
+  const computeLook = (key, rec) => {
+    const { kind, id } = parseKey(key);
+    if (kind === 'loop' ? !loopById.has(id) : !shapeById.has(id)) return { region: '', path: '' }; // only THIS view's targets
+    const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
+    if (!ct) return { region: '', path: '' };
+    const t = { kind, id };
+    if (ct.targetKind === 'region') {
       const loopStyle = `fill:${ct.previewFill}; fill-opacity:0.45; stroke:${ct.previewStroke}; stroke-width:1.25; stroke-opacity:0.75; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
       const edgeStyle = `fill:none; stroke:${ct.previewStroke}; stroke-width:3; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;`;
-      out += targetMarkup({ kind, id }, loopStyle, edgeStyle);
+      return { region: targetMarkup(t, loopStyle, edgeStyle), path: '' };
     }
-    cutG.innerHTML = out;
+    const color = ct.previewStroke;
+    if (ct.id === 'guide') {
+      const dash = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
+      return { region: '', path: targetMarkup(t, dash, dash) };
+    }
+    // on-line: a tool-width BAND (world units) + a dashed CENTERLINE
+    const toolDia = Number(rec.toolDia) || 0;
+    const band = `fill:none; stroke:${color}; stroke-width:${toolDia}; stroke-opacity:0.28; stroke-linejoin:round; stroke-linecap:round;`;
+    const center = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:4 3; stroke-linejoin:round; stroke-linecap:round;`;
+    return { region: '', path: (toolDia > 0 ? targetMarkup(t, band, band) : '') + targetMarkup(t, center, center) };
   };
+  const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
+
+  const renderCuts = () => { let out = ''; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType) out += getLook(key, rec).region; cutG.innerHTML = out; };
+  const renderToolpaths = () => { let out = ''; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType) out += getLook(key, rec).path; toolpathG.innerHTML = out; };
+  // ONE reactive refresh: repaint BOTH layers (getLook recomputes only the changed target — its sig changed). Wired
+  // to every cut-field change (cutType / toolDia / cutOffset) so the look updates LIVE without a re-mount.
+  const refreshLook = () => { renderCuts(); renderToolpaths(); };
 
   const renderSelection = () => {
     let out = '';
@@ -244,18 +265,18 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   svgEl.addEventListener('pointerleave', onLeave);
   svgEl.addEventListener('pointerdown', onDown);
 
-  renderCuts(); // paint any cut plan persisted from a prior visit
+  refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
 
   const selectedTarget = () => [...selection.values()][0] || null;
   return {
     loops, selection, resolveTarget, selectedTarget,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
-    // Write the cut type onto the current single selection + repaint the cut layer (panel calls this).
-    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), 'cutType', cutType); renderCuts(); return rec; },
-    // SP1g: persist a numeric field (cutDepth / cutOffset / toolDia) on the selection. No recolor — those fields
-    // drive the LATER tool-aware look (SP1h), not SP1f's cut color.
-    setFieldOnSelected(field, value) { const t = selectedTarget(); if (!t) return null; return setFieldFor(targetKey(t), field, value); },
+    // Write the cut type onto the current single selection + refresh the tool-aware look (panel calls this).
+    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), 'cutType', cutType); refreshLook(); return rec; },
+    // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) on the selection + refresh the look LIVE — the
+    // on-line band re-widths on a toolDia change; offset/depth feed h2–h4.
+    setFieldOnSelected(field, value) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), field, value); refreshLook(); return rec; },
     destroy() {
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);

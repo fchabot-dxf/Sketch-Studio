@@ -4716,6 +4716,38 @@ Re-shapes the cut feedback per the user's two directives: (a) cut = the cutter P
 
 === SP1h5 (CUTTER PATH = TOOL-WIDTH BAND + CENTERLINE) DONE - HOLD ===
 
+## 2026-06-29 · SP1h6 — pocket hatch = the TOOL-CENTER region (inset by toolDia/2) (turn 196)
+
+The one-line swap I flagged at SP1h4: the user (3×, with images) wants the pocket hatch to fill only UP TO the tool
+CENTRE — inset by toolDia/2 from the wall — NOT the wall-reaching morphological opening. "Drop the dilate step."
+Shaper-only (prepare-view.js pocket branch).
+
+- **did:**
+  - pocket cleared geometry `openPolygon(loop, toolDia/2, cutOffset)` (erode+dilate → reaches the wall) →
+    **`offsetPolygon(loop, -(toolDia/2 + cutOffset))`** — the ERODED (tool-center reachable) region only, inset by
+    toolDia/2 from the wall. Keeps empty-on-over-inset (toolDia/2 ≥ half-width → `offsetPolygon` returns `[]`).
+  - Hatch fill (cut layer) + depth label otherwise UNCHANGED. outside/inside/on-line/guide (SP1h5 bands) UNCHANGED.
+  - Removed the now-orphaned `openPolygon` import from prepare-view.js (my swap made it unused). `openPolygon` stays
+    in #core (still oracle-tested cases 14/15) for SP1j export — only the unused import went.
+- **FLAG (advisor invited):** inset corners are miter/SHARP — CORRECT at CONVEX corners (the tool centre does reach a
+  sharp inset corner). A CONCAVE pocket's REFLEX corners would ideally ROUND by the tool radius (the bit can't pivot
+  into them); that's a one-word follow-up — pass `{join:'round'}` to `offsetPolygon` (inward round joins round exactly
+  the reflex gaps). Left miter per the dispatch ("sharp/miter is fine; the key is the inset").
+- **verify (errors=0):** CDP live (60×40 rect loop, doc unit in): pocket default bit 3.175 → hatch 56.825 × 36.825,
+  margin to wall = 1.587 (= toolDia/2) → NOT reaching the wall; depth label `↓ 0.25in` unchanged; bigger bit 12.7 →
+  hatch 47.3 (insets MORE, live); toolDia/2 ≥ half-width (bit 40) → EMPTY; exterior still a band (sw 40) + dashed
+  centerline, cut layer empty (SP1h5 unchanged); joints = 0. Shaper-only → SketchStudio byte-identical (`npm run
+  test:shell` 12/12); solver oracle 12/12; offset oracle still passes (incl. openPolygon); guard GREEN; baseline 8
+  pre-existing 0 net-new; `node --check` clean; scope = prepare-view.js only.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. Pocket now reads as the tool-center clearable area (margin to the wall), per the
+  user's images. The tool-aware look is settled (bands + centerlines, pocket tool-center hatch, guide reference, all
+  live to the bit). Next per ROADMAP: **SP1j** (export — real toolpath geometry, reuse offsetPolygon + openPolygon).
+  STOP — hold.
+
+=== SP1h6 (POCKET HATCH = TOOL-CENTER REGION) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

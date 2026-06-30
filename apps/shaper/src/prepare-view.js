@@ -8,7 +8,7 @@
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops } from '#core/loop-finder.js';
 import { cutTypeById, defaultCutRecord, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { offsetPolygon, openPolygon } from '#core/polygon-offset.js'; // SP1h2/h4: offset toolpaths + pocket opening
+import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 
@@ -250,9 +250,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const l = (kind === 'loop') ? loopById.get(id) : null;
       if (!l || l.polygon.length < 3) return { region: '', path: '' };
       if (ct.id === 'pocket') {
-        // POCKET (SP1h4) = the CLEARED region a round bit removes = morphological OPENING (erode by tool radius, dilate
-        // with round joins). The ONLY fill — a hatch in the CUT layer — + a depth label above the edges.
-        const cleared = openPolygon(l.polygon, toolDia / 2, Number(rec.cutOffset) || 0);
+        // POCKET (SP1h6) = the TOOL-CENTER reachable region = the loop INSET by toolDia/2 (+ cutOffset). The hatch
+        // fills only UP TO the tool centre, leaving a toolDia/2 margin to the wall (the bit centre can't get closer).
+        // The ONLY fill — a hatch in the CUT layer — + a depth label. toolDia/2 ≥ half-width → empty (no garbage).
+        // (Inset corners are miter/sharp — correct at CONVEX corners; a CONCAVE pocket's reflex corners would ideally
+        // round by the tool radius — a one-word follow-up: pass {join:'round'} to round the reflex gaps.)
+        const cleared = offsetPolygon(l.polygon, -((toolDia / 2) + (Number(rec.cutOffset) || 0)));
         if (cleared.length < 3) return { region: '', path: '' };
         const region = polyMarkup(cleared, `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`);
         let path = '';

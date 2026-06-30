@@ -1,4 +1,4 @@
-import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
+import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSketch, addSketch, activateSketch, hiddenSketchIds, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -64,6 +64,16 @@ import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSket
     assert(state.activeSketchId === 'sketch-2', 'activate ignores an unknown id');
     const s3 = addSketch(state);
     assert(s3.id === 'sketch-3', 'next free id');
+  }
+
+  // 7. hiddenSketchIds — default (all visible) empty; a hidden sketch is listed
+  {
+    const state = createSketches();
+    assert(hiddenSketchIds(state).size === 0, 'default all-visible → none hidden');
+    addSketch(state); // sketch-2
+    state.sketches.find((s) => s.id === 'sketch-2').visible = false;
+    const h = hiddenSketchIds(state);
+    assert(h.size === 1 && h.has('sketch-2') && !h.has('sketch-1'), 'sketch-2 hidden');
   }
 
   console.log('sketch-model tests passed ✅');

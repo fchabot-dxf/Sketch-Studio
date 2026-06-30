@@ -10,7 +10,7 @@ import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a: the sketch-container overlay
+import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
 import { draw } from '#ui/svg-renderer.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
@@ -97,7 +97,16 @@ export function mountSketch(svgEl, opts = {}) {
   let rafId = null;
   const frame = () => {
     engine.solve(SolverConfig.ITERATIONS || 500);
-    draw(state.joints, state.shapes, svgEl, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, renderCtx);
+    // SKETCH-2b: hide a HIDDEN sketch's geometry from the canvas (a layer filter). Default (all visible) → empty set →
+    // the originals pass through UNCHANGED → byte-identical. A constraint stays if ANY of its joints is still visible.
+    let dJoints = state.joints, dShapes = state.shapes, dConstraints = state.constraints;
+    const hidden = hiddenSketchIds(state);
+    if (hidden.size) {
+      dJoints = new Map(); for (const [id, j] of state.joints) if (!hidden.has(sketchOf(j))) dJoints.set(id, j);
+      dShapes = state.shapes.filter((s) => !hidden.has(sketchOf(s)));
+      dConstraints = state.constraints.filter((c) => !(c.joints && c.joints.length) || c.joints.some((jid) => { const j = state.joints.get(jid); return j && !hidden.has(sketchOf(j)); }));
+    }
+    draw(dJoints, dShapes, svgEl, state.active, state.snapTarget, dConstraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, renderCtx);
     try { opts.onRender && opts.onRender(); } catch (_) { /* host hook (e.g. dock refresh) */ }
     rafId = requestAnimationFrame(frame);
   };

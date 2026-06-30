@@ -5351,6 +5351,49 @@ STAMPING (new geometry lands in the active sketch), and undo of the container. S
 
 === SKETCH-2a (NEW + SELECT-TO-ACTIVATE + LIVE STAMPING) DONE - HOLD ===
 
+## 2026-06-30 · SKETCH-2b — inline rename + show/hide visibility (turn 222)
+
+Completes the layers-node UX: inline RENAME (the user's "allow naming of sketches") + show/hide VISIBILITY (a hidden
+sketch's geometry is filtered from the canvas, like a layer). Shaper (gated tree); default byte-identical.
+
+- **did:**
+  - **`#core/sketch-model.js`** — `hiddenSketchIds(state)` → the Set of `visible===false` sketch ids (default all
+    visible → empty → nothing filtered). Oracle extended.
+  - **`packages/ui/sketch-canvas.js`** (`mountSketch` frame) — the canvas VISIBILITY FILTER: when `hiddenSketchIds`
+    is non-empty, draw FILTERED joints/shapes (skip a hidden sketch via `sketchOf`) + constraints (kept if ANY of its
+    joints is still visible); EARLY-OUT when nothing is hidden → the originals pass through UNCHANGED → byte-identical.
+  - **`packages/ui/design-info-panel.js`** (tree mode) — (a) inline RENAME: dbl-click the name → an `<input>` (Enter/
+    blur commits to `sketch.name` after `state.saveState()`; Escape cancels; the keydown `stopPropagation`s so typing
+    doesn't fire tool shortcuts); (b) an EYE toggle (`◉`/`◌`) flips `sketch.visible` (snapshot first) + dims the node
+    (`.is-hidden`). FOUR clean targets now (each sub-element stops propagation): caret→collapse, name-dblclick→rename,
+    eye→visibility, head→activate, rows→select.
+  - **undo** rides the SKETCH-2a container snapshot (it deep-copies `sketches`, so `name` + `visible` restore) — both
+    rename and visibility call `state.saveState()` before mutating.
+- **active+hidden guard — CHOICE (stated):** visibility (the render filter) and active (routing) are ORTHOGONAL —
+  hiding a sketch never changes the active sketch, and geometry created in a hidden ACTIVE sketch is created/stamped
+  but renders only once the sketch is shown (the dispatch's option b). Simplest, no coupling; an auto-show-on-activate
+  nicety could come later.
+- **export semantics — DEFERRED + FLAGGED:** S-2b visibility is the CANVAS render filter ONLY. Whether a hidden sketch
+  is EXCLUDED from the Shaper SVG export is an export-threading decision for **S-4** (note it; export is NOT threaded
+  here — `exportShaperSVG` is unchanged).
+- **verify (errors=0):** CDP — MECHANISM (real `createSketchState`): rename → undo restores the name; hide → undo
+  restores `visible`. PANEL (live Shaper): dbl-click a name → an inline input; Enter commits (`Sketch 1`→`Body`); Esc
+  cancels (stays `Body`); the EYE hides `Body` (= the sketch holding the seedDemo geometry) → the canvas world-group
+  children drop 12 → 2 (geometry filtered), the node dims; un-hide → geometry returns (≥12); caret-collapse + a
+  constraint row-click still work. Default all-visible → the renderer EARLY-OUT → SketchStudio UNREGRESSED (`npm run
+  test:shell` 12/12, 16-control panel + errors=0). Solver oracle 12/12; sketch-model + export + loop oracles green;
+  guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean; scope = sketch-model.js + its test +
+  sketch-canvas.js + design-info-panel.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; manual stray-clean (proc_health.py watch still
+  throws the JSONDecodeError — system-process argv).
+- **state:** branch `carve-out`. The layers-node UX is complete — sketches are nameable + hideable (canvas filter),
+  with undo; the global solver is untouched, SketchStudio byte-identical. Next per the blessed slicing: **S-3** —
+  cross-sketch LINKS (the panel shows a constraint spanning two sketches as a link under both; `constraintSketch`
+  already returns the spanning Set). Then S-4 (groups + islands + export threading, incl. the hidden-sketch export
+  decision). STOP — hold.
+
+=== SKETCH-2b (RENAME + VISIBILITY) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

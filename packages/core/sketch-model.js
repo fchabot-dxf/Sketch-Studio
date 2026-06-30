@@ -54,6 +54,14 @@ export function activateSketch(state, id) {
   return state && state.activeSketchId;
 }
 
+// SKETCH-2b: the set of HIDDEN sketch ids (visible === false). Default (all visible) → empty → nothing filtered →
+// byte-identical. The canvas render filter skips entities whose sketch is in this set.
+export function hiddenSketchIds(state) {
+  const ids = new Set();
+  if (state && Array.isArray(state.sketches)) for (const s of state.sketches) if (s && s.visible === false) ids.add(s.id);
+  return ids;
+}
+
 // All entity ids in a sketch: { joints:[id…], shapes:[id…] }.
 export function entitiesInSketch(state, id) {
   const joints = [], shapes = [];

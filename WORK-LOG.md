@@ -5040,6 +5040,73 @@ byte-identical.
 
 === SP1j-3a (DATUM TRIANGLE + GROUP INHERITANCE) DONE - HOLD ===
 
+## 2026-06-29 · SP1j-3b — evenodd ISLANDS plan (hole/face model + island rule + containment) — PLAN ONLY (turn 210)
+
+Investigated the hole/face model BEFORE building. NO code this turn. The j3 correctness win: a loop-with-a-hole → ONE
+compound `<path fill-rule="evenodd" d="<outer> Z <inner> Z">` so a pocket clears AROUND the inner island.
+
+### (1) HOW IS A REGION-WITH-A-HOLE REPRESENTED? — TRACED (probe): TWO independent loops, NOT a holed face
+Ran `findLoops` on a rect-with-an-inner-rect (disconnected): it returns **TWO independent loops** — the outer
+(`loop_AB-BC-CD-DA`, joints A,B,C,D) and the inner (`loop_EF-FG-GH-HE`). The outer loop's boundary is the OUTER
+rectangle ONLY — the planar face traversal walks each disconnected component separately, so the hole is NOT in the
+topology; it is purely GEOMETRIC nesting. In Prepare both loops are independently selectable (`resolveTarget` picks
+the SMALLEST-area loop containing the cursor → clicking inside the inner selects the inner; clicking the ring between
+selects the outer). For a holed pocket the user assigns POCKET to the OUTER loop and the INNER is a separate loop they
+leave UNASSIGNED (or give its own cut). ⇒ candidate **(a) "the face encodes the hole" is RULED OUT.**
+
+### (2) THE ISLAND RULE — RECOMMEND (b-refined), option-gated, with a flagged UX fork
+Geometry-driven (the face model can't help). RECOMMEND: when a loop **P is assigned POCKET**, any OTHER loop that is
+(i) geometrically STRICTLY inside P's boundary AND (ii) NOT itself assigned a cut type → is a HOLE of P → merged into
+ONE compound evenodd path (P clears around it; the inner stays an island). Loops inside P that ARE assigned keep their
+own cut (separate). This matches the memory ("no separate inner cut type" — the hole is unassigned) + is conservative
+(only unassigned-inside-pocket merges) + zero new UI.
+> **FLAG — a real UX fork the human should pick:** the "unassigned inner = island" INFERENCE is the risk — a user who
+> simply hasn't assigned the inner loop YET would get a surprise island. Options: **(b)** infer from unassigned-inside-
+> pocket (zero UI, inference-y); **explicit marker** — a 6th "Island" cut type / an island flag (clean intent, +UI);
+> **opt-in** — an export `options.islands` (default OFF) so the inference only bites when toggled. RECOMMEND shipping
+> (b) BEHIND `options.islands` (default OFF) for j3b; a UI toggle / explicit "Island" type can refine later.
+
+### (3) CONTAINMENT — no #core helper exists → DECLARE a small reusable one
+HUNTED: there is NO #core containment / point-in-polygon helper. `pointInPoly` (ray-crossing), `loopPolygon` (the
+boundary polygon, arc-sampled), `polyArea`, `sampleArc` are ALL app-local in `prepare-view.js`; polygon-offset has
+`segsCross`/`selfIntersects` but no point-in-polygon. ⇒ PROPOSE:
+- a tiny pure `#core` containment helper (DECLARED, reusable by vcarve/joints) — `pointInPolygon(poly, pt)` (lift the
+  prepare-view ray-crossing) + `polygonContains(outer, inner)` (a representative inner point inside outer AND
+  `polyArea(inner) < polyArea(outer)` AND no edge crossing, for strict non-touching nesting).
+- LIFT `loopPolygon` + `sampleArc` into a `#core` module (the exporter needs each loop's boundary polygon to run
+  containment); `prepare-view.js` then re-imports them (DRY; behaviour-identical). FLAG: this touches prepare-view (a
+  refactor) — keep it byte-behaviour-identical + guard via the existing Prepare CDP look.
+
+### (4) WHICH CUT TYPES ISLAND-MERGE? — POCKET only (conservative)
+POCKET = YES (the canonical case; the island stays standing). INTERIOR (through-hole) — an island inside a through-cut
+is unusual → NO. EXTERIOR (cut-out) — an inner loop = a window in the cut-out PIECE; COULD be evenodd but is a
+different semantic → DEFER (a possible j3c). ONLINE/GUIDE — path types, no region → NO. ⇒ j3b merges ISLANDS for
+POCKET ONLY; flag exterior-with-hole as a future extension.
+
+### (5) BUILD SLICE + ORACLE + RISKS
+- **j3b build:** add `options.islands` (default OFF). When ON: gather all loops (`findLoops`) + their polygons
+  (`loopPolygon`) + the assigned set (the plan). For each assigned POCKET P: find OTHER loops STRICTLY inside P that
+  are UNASSIGNED → P's holes (consume them). Emit P as a compound `<path fill-rule="evenodd" d="<P> <hole1> …">` —
+  REUSE j2's `loopToPathD` per subpath (each is already `M..Z`; concatenate). evenodd is WINDING-AGNOSTIC → NO subpath
+  reversal needed (recommend evenodd over nonzero; the memory lists both). Holes are NOT emitted separately.
+- **oracle plan:** a pocket-with-a-hole (outer rect pocket + inner UNASSIGNED rect) + `options.islands` → ONE `<path
+  d="M..Z M..Z" fill="#7F7F7F" fill-rule="evenodd" shaper:cutType="pocket"/>` (the inner not a separate element); the
+  inner ASSIGNED its own cut → NOT merged (both emitted); `options.islands` OFF (default) → UNCHANGED; a non-nested
+  plan → UNCHANGED. + a `polygonContains` unit oracle (inside / outside / touching).
+- **risks:** the unassigned=island INFERENCE (UX surprise) — option-gated + flagged (the headline). Containment on
+  ARC-sampled polygons (loopPolygon samples arcs → parity test on samples) + touching/overlapping loops → require
+  STRICT containment (representative point + area + no crossing). New data dependency (the exporter now needs ALL loops
+  + containment, not just the plan → O(pockets×loops)). Multi-level nesting (island-within-hole / pocket-in-island) →
+  DEFER one level. Multiple pockets containing the same inner → assign to the SMALLEST containing pocket. Lifting
+  loopPolygon to #core touches prepare-view (guard it). The bbox already covers all joints (holes in the viewBox).
+
+**One line:** our holes are TWO independent geometrically-nested loops (not a face) → j3b = an OPT-IN
+(`options.islands`, default OFF) rule "UNASSIGNED loop strictly inside an assigned POCKET = its evenodd hole",
+needing a DECLARED `#core` containment helper (`pointInPolygon`/`polygonContains`) + `loopPolygon` lifted to #core;
+POCKET-only, evenodd (winding-agnostic), reusing j2 subpaths. FLAG the unassigned-inference UX fork for the human.
+
+=== SP1j-3b ISLANDS PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

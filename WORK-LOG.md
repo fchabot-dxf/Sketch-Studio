@@ -6121,6 +6121,87 @@ stacked inward offset contours + depths. Additive (no consumer) → both apps by
 
 === VCARVE-2 (OFFSET-STACK CORE) DONE - HOLD ===
 
+## 2026-06-30 · VCARVE-3 — the VCARVE TAB: a new shell mode + workspace (plan, NO code) (turn 252)
+
+The user wants Vcarve as its OWN space, BEFORE Prepare: Explore · Design · **Vcarve** · Prepare · Sim/Export — two
+halves: (1) ADAPT the SVG, (2) HACK the offset-stack. A new shell mode + workspace = meaty UI → plan first. WORK-LOG
+only. Refs: [[reference_shaper_svg_encoding]] (online cuts + stacked cutDepth), [[feedback_shaper_dock_layout]] (docked
+panel, the mode-nav — now 5 modes), [[project_grouping_sketches_layers]] (the region/sketch substrate).
+
+### 1. GROUND — the shell / modes (file:line)
+- **Mode nav (`apps/shaper/index.html`):** `<nav id="mode-nav">` with `.mode-btn data-mode="explore|design|prepare|
+  simexport"` (l.152-156); views `main.layout` (explore) + `#design-view` + `#view-prepare` + `#view-simexport`
+  (absolute `inset:44px 0 0 0`, `[hidden]` toggled, l.53-54).
+- **Router (`apps/shaper/src/main.js`):** `VIEWS = {explore, design, prepare, simexport}` (l.144); `modeBtns =
+  [...querySelectorAll('.mode-btn')]` (l.213) → `showMode(mode)` (l.303: validate → hide all → show VIEWS[mode] →
+  toggle `.active` → MOUNT on first entry: design = `ensureSketch`+`start`; prepare = `mountPrepareView(state, #prepare-
+  canvas, …)` l.321); `modeBtns.forEach(b => b.onclick = () => showMode(b.dataset.mode))` (l.327) — so a NEW `.mode-btn`
+  in the HTML is AUTO-WIRED. → inserting 'vcarve' BEFORE prepare = a nav btn + a `#view-vcarve` section + CSS + a
+  `VIEWS.vcarve` + a `showMode` mount branch (`mountVcarveView`). All Shaper-only → SketchStudio byte-identical.
+- **Bit model (`apps/shaper/src/cut-panel.js` l.15 `BIT_PRESETS`):** DIAMETER presets only (.02"/.06"/.125"… in base
+  mm) for `toolDia`; the cut record (`shaper.js` `defaultCutRecord`) = `{cutType, cutDepth, cutOffset, toolDia:3.175}`.
+  NO angle anywhere → a V-bit ANGLE record is GREENFIELD.
+
+### 2. The VCARVE TAB workspace — proposal
+Docked left panel (per [[feedback_shaper_dock_layout]]: docked, NOT floating) + the cream Design canvas
+([[project_shaper_dark_theme]]) showing the region + the depth-shaded contour stack.
+```
+  ┌ Explore │ Design │ [Vcarve] │ Prepare │ Sim/Export ───────────────────────────┐
+  ├──────────────────────────┬──────────────────────────────────────────────────┤
+  │ ── 1 · ADAPT ──          │                                                    │
+  │  Region: [Sketch 1 ▾]    │            (cream canvas)                          │
+  │   ▣ loop A   ☐ loop B     │        region boundary + nested contour           │
+  │   [pick closed loop]     │        stack, DEPTH-SHADED (shallow→deep):         │
+  │                          │            ▓▓▓▓▓▓▓▓▓▓▓▓▓▓  outer (shallow)          │
+  │ ── 2 · HACK ──           │              ▒▒▒▒▒▒▒▒▒▒                            │
+  │  V-bit:  [90° ▾] (60/45) │                ░░░░░░       inner (deep)           │
+  │  depth-step: [0.5 mm]     │                  ·         ← contours vanish =      │
+  │  max-depth:  [ 6  mm]     │                              the medial axis        │
+  │  [ Recompute ]           │                                                    │
+  │  12 contours · max 3.0mm │                                                    │
+  └──────────────────────────┴──────────────────────────────────────────────────┘
+```
+- **HALF 1 — ADAPT (v1 minimal):** a REGION picker — pick a closed loop (or loops) from the sketch tree as the vcarve
+  region. Richer SVG-cleaning (heal open paths, drop strays, join) = LATER.
+- **HALF 2 — HACK:** V-bit (angle preset) + depth-step (`dStep`) + max-depth controls → the live CONTOUR-STACK PREVIEW
+  (host computes the boundary poly via `loopPolygon` → `vcarveContours` [VCARVE-2] → render nested contours shaded by
+  depth) + a recompute + a readout (contour count / max depth). The medial-axis ridge = where the contours vanish.
+
+### 3. The V-BIT record
+A declared tool `{ kind:'vbit', angle }` (INCLUDED angle) + a `VBIT_PRESETS` list (90°/60°/45°/30°/20°), declared in
+`shaper.js` alongside `BIT_PRESETS`/`CUT_TYPES`. A helper `vbitHalfAngleTan(angle) = Math.tan((angle/2)·π/180)` feeds
+`vcarveContours({ halfAngleTan })`. (90° → 1 → depth=d; 60° → tan30 ≈ 0.577 → depth ≈ 1.73·d.)
+
+### 4. The flow downstream (Vcarve → Prepare → export) — the data-model call
+Vcarve is UPSTREAM of Prepare. **RECOMMEND: a declared vcarve RECORD on the region; the EXPORT (VCARVE-4) DERIVES +
+emits the stack** (over materializing the contours as online cut entries in Prepare):
+- **The record (declare-over-hand-roll):** `state.vcarves = [{ id, region (loop/shape ref), vbit:{angle}, dStep,
+  maxDepth }]` — declared DATA (like `state.groups`/`state.sketches`). The Vcarve tab creates/edits it + previews;
+  VCARVE-2's `vcarveContours` derives the stack at PREVIEW and at EXPORT from the SAME record (one source of truth).
+- **Why not materialize contours as cut entries:** N contours per region would clutter the cut plan + the geometry,
+  aren't design geometry (they're toolpaths), and would need regenerating on any region edit. Deriving-at-export keeps
+  the record declarative + reuses the pure core.
+- **Prepare:** sees a vcarve region as VCARVE-HANDLED — a read-only badge; excluded from standard cut-type assignment.
+  The contours live only in the Vcarve preview + the export (VCARVE-4 emits them as `online` + per-path `cutDepth`).
+
+### 5. Sub-slices + risks
+- **Slices:** **VCARVE-3a** — the shell mode + workspace SKELETON (the 'vcarve' nav btn + `#view-vcarve` + `showMode`
+  mount, BEFORE Prepare; a static docked-panel + cream-canvas layout; Shaper-only). **VCARVE-3b** — the V-bit record
+  (`VBIT_PRESETS` + `vbitHalfAngleTan`) + the region picker + the LIVE contour-stack preview + the `state.vcarves`
+  record. **VCARVE-4** — the gated vcarve EXPORT (derive from the record → emit online + per-path cutDepth; standard +
+  SketchStudio byte-identical).
+- **Risks:** (a) shell-mode insertion — Vcarve is Shaper-only (index.html + main.js) → SketchStudio byte-identical (its
+  own shell); the nav is auto-wired; FLAG-verify `shell-smoke` has no Shaper mode-count assertion that the 5th mode
+  breaks (it's SketchStudio-focused — low risk). (b) the preview render — N depth-shaded contours per region; cap N /
+  `dStep` for perf on complex art. (c) ADAPT scope — v1 = pick a closed loop (minimal); SVG-cleaning deferred. (d)
+  purity — the host computes `loopPolygon` (DOM); `vcarveContours` stays pure (the S-4a/4e split). (e) the offset-hack
+  approximation + `offsetPolygon` robustness on real art (from VCARVE-1) still apply. (f) the 4→5 mode shell updates
+  [[feedback_shaper_dock_layout]] (memory refreshed to note the Vcarve mode).
+- **Recommendation: VCARVE-3a first** (the shell mode + skeleton, byte-identical) → 3b (bit + live preview) → 4 (gated
+  export). Keep the vcarve record declarative + derive the stack (reuse VCARVE-2) at both preview and export.
+
+=== VCARVE-3 TAB PLAN READY - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

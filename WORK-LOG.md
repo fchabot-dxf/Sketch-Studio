@@ -6090,6 +6090,37 @@ contour stack, each a path carrying its OWN `shaper:cutDepth`. Threading (mirror
 
 === VCARVE-1 PLAN READY - HOLD ===
 
+## 2026-06-30 · VCARVE-2 — the PURE offset-stack core (#core/vcarve.js + oracle) (turn 250)
+
+The VCARVE foundation (VCARVE-1 plan blessed; the advisor verified the crux: `offsetPolygon` returns [] on over-inset
+→ insetting until [] TERMINATES at the medial axis). VCARVE-2 = a PURE module that turns a region boundary into the
+stacked inward offset contours + depths. Additive (no consumer) → both apps byte-identical; reuses `offsetPolygon`.
+
+- **did (`#core/vcarve.js`, new, PURE no-DOM):** `vcarveContours(boundary, { dStep, halfAngleTan, maxIters=1000 })` →
+  `[{ polygon, depth }]` — loop `d = dStep, 2·dStep, …`: `contour = offsetPolygon(boundary, −d)`; while it's a valid
+  loop (≥3 pts) push `{ polygon: contour, depth: d / halfAngleTan }`; STOP when `offsetPolygon` returns [] (the
+  over-collapse = the local MEDIAL AXIS → FINITE). `depth(d) = d / halfAngleTan` (a V-bit at inset d cuts to that depth
+  so the groove half-width = d reaches the boundary; `halfAngleTan = tan(angle/2)` — the bit record is VCARVE-3).
+  Guards: `<3`-pt boundary / non-positive dStep|tan → []; a `maxIters` cap (no pathological infinite loop). PURITY: the
+  HOST computes `boundary` (`loopPolygon`, DOM for arcs); this module never touches the DOM (the S-4a/S-4e split).
+- **verify (errors=0):** `node tests/vcarve.test.js` PASSES — a 40×40 square @ dStep 2, 90° (tan 1): a stack of NESTED
+  inward contours (first = 36×36; areas strictly decreasing), depths increasing = d/tan (2,4,6,…), FINITE (terminates
+  well before maxIters — the last contour is small, near the center; the next inset → []); the depth math (90° →
+  depth=d 1:1; 60° → tan30 ≈ 0.577 → depth ≈ 1.732·d, deeper than 90° at the same inset); a too-small region (1×1) →
+  empty; the bad-input guards. ADDITIVE — NO consumer (the Prepare cut-mode = VCARVE-3, the gated export = VCARVE-4) →
+  both apps BYTE-IDENTICAL: `npm run test:shell` 12/12; solver oracle 12/12; sketch-model + group-model + loop-geometry
+  + shaper-export + svg-import oracles green; guard GREEN; baseline 8 pre-existing 0 net-new; `node --check` clean;
+  scope = vcarve.js (new) + its test.
+- **process hygiene:** no CDP needed (a PURE #core module, no app consumer to drive — the oracle is the verify);
+  baseline run ALONE in the background. proc_health.py watch still throws the JSONDecodeError → manual stray-clean.
+- **state:** branch `carve-out`. A region boundary → the stacked offset contours + per-contour depths, terminating at
+  the implicit medial axis — the V-carve foundation, additive + pure. Next per the VCARVE plan: **VCARVE-3** — the
+  V-bit record (angle → `halfAngleTan`) + depth math + the Prepare `'vcarve'` cut-mode (assign + a contour preview);
+  then **VCARVE-4** — the gated vcarve export (host boundary poly → the serializer emits the online + per-path cutDepth
+  stack; standard + SketchStudio byte-identical). STOP — hold.
+
+=== VCARVE-2 (OFFSET-STACK CORE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

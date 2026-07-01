@@ -6202,6 +6202,38 @@ emits the stack** (over materializing the contours as online cut entries in Prep
 
 === VCARVE-3 TAB PLAN READY - HOLD ===
 
+## 2026-06-30 · VCARVE-3a — the Vcarve shell mode + workspace skeleton (turn 254)
+
+The Vcarve space inserted BETWEEN Design and Prepare (VCARVE-3 plan blessed). 3a = the SKELETON: a new shell mode + a
+static docked-panel + cream-canvas frame. The live region-picker / controls / contour preview + `state.vcarves` are
+VCARVE-3b. Shaper-only → SketchStudio byte-identical.
+
+- **did (`apps/shaper` — index.html + main.js, Shaper-only):**
+  - **The 'vcarve' shell mode** (before Prepare): a `<button class="mode-btn" data-mode="vcarve">Vcarve</button>` in
+    `#mode-nav` between Design and Prepare → Explore · Design · **Vcarve** · Prepare · Sim/Export (the nav is AUTO-WIRED
+    via `modeBtns.forEach`); a `#view-vcarve` section (absolute-inset, `[hidden]`-toggled like the others) + its CSS;
+    `VIEWS.vcarve`; a `showMode` toggle `VIEWS.vcarve.hidden = (mode !== 'vcarve')` (static skeleton — no mount branch
+    needed yet).
+  - **The workspace SKELETON:** a docked LEFT panel `#vcarve-panel` (per [[feedback_shaper_dock_layout]]: docked, NOT
+    floating) with two placeholder sections — **1 · Adapt** (a Region picker) + **2 · Carve** (V-bit / depth-step /
+    max-depth / Recompute / a readout), controls DISABLED (non-functional placeholders) — beside a cream `#vcarve-canvas`
+    that REUSES the Design cream theme (added `#vcarve-canvas` to the existing `#design-canvas` cream selector — DRY).
+- **verify (errors=0):** CDP — the nav order is `explore,design,vcarve,prepare,simexport` (Vcarve BETWEEN Design &
+  Prepare); clicking Vcarve shows `#view-vcarve` (the panel docked left — width>100, left<60 — + the cream canvas
+  rgb(244,239,225) + 2 sections + the btn `.active`); Design switches back + still RENDERS (vcarve hidden); Prepare
+  still works (vcarve hidden). SketchStudio UNREGRESSED — `npm run test:shell` 12/12 (no Shaper mode-count assertion —
+  it's SketchStudio-focused), standalone load errors=0 (header + ribbon). `node --check` clean; guard GREEN; solver +
+  sketch-model + group-model + loop-geometry + shaper-export + svg-import + vcarve oracles green; baseline 8
+  pre-existing 0 net-new; scope = index.html + main.js.
+- **process hygiene:** CDP via `run_in_background` + killed each run; the eval written to a FILE; baseline run ALONE.
+  proc_health.py watch still throws the JSONDecodeError → manual stray-clean.
+- **state:** branch `carve-out`. The Vcarve tab exists (a real 5th shell mode + a docked skeleton), Shaper-only,
+  byte-identical. Next per the VCARVE plan: **VCARVE-3b** — the V-bit record (`VBIT_PRESETS` + `vbitHalfAngleTan`) +
+  the region picker + the LIVE contour-stack preview (host `loopPolygon` → `vcarveContours` → depth-shaded render) +
+  the `state.vcarves` record; then **VCARVE-4** — the gated vcarve export. STOP — hold.
+
+=== VCARVE-3a (VCARVE SHELL MODE + SKELETON) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

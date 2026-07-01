@@ -50,8 +50,19 @@
       --sk-ribbon-grouplabel: #6b7280;
       --sk-ribbon-menu-bg: #1b2030;
     }
-    #design-view, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
-    #design-view[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
+    #design-view, #view-vcarve, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
+    /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
+    #view-vcarve { flex-direction: row; }
+    #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
+    #vcarve-canvas { flex: 1; min-width: 0; min-height: 0; }
+    .vcarve-section { margin-bottom: 16px; }
+    .vcarve-h { font-weight: 700; color: #e6e6e6; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; margin: 6px 0 8px; }
+    .vcarve-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0; }
+    .vcarve-row select, .vcarve-row input { background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 4px 8px; font: inherit; width: 96px; }
+    .vcarve-btn { width: 100%; background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; margin-top: 6px; }
+    .vcarve-btn:disabled, .vcarve-row select:disabled, .vcarve-row input:disabled { opacity: 0.5; cursor: default; }
+    .vcarve-hint { color: #6b7280; font-size: 12px; margin: 6px 0 0; }
     /* S7b: Design = a full-width tool ribbon on TOP, then a row of [collapsible info panel | canvas]. */
     #design-view { flex-direction: column; }
     #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #1f2937; }
@@ -69,7 +80,7 @@
        untouched. The renderer routes geometry colours through var(--sk-*, fallback); the Shaper :root sets them dark
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
        light defaults, but with a cream surface + cream-hollow joints. (No grid on this canvas — render ctx omits it.) */
-    #design-canvas {
+    #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
       background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;
       --sk-canvas-bg-snapping: #F1E9D6;
@@ -148,10 +159,11 @@
   <header class="toolbar">
     <!-- SWITCH-1: the shared two-way app-switcher (replaces the static brand + the DEPLOY-1 one-way back-link). -->
     <span id="app-switcher-host"></span>
-    <!-- S6a: 4-mode app nav (primary navigation) — replaces the old Design button + the back-to-Editor toggle. -->
+    <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->
     <nav id="mode-nav" class="mode-nav">
       <button class="mode-btn" data-mode="explore">Explore</button>
       <button class="mode-btn" data-mode="design">Design</button>
+      <button class="mode-btn" data-mode="vcarve">Vcarve</button>
       <button class="mode-btn" data-mode="prepare">Prepare</button>
       <button class="mode-btn" data-mode="simexport">Simulate/Export</button>
     </nav>
@@ -186,6 +198,28 @@
       </aside>
       <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
+  </section>
+
+  <!-- VCARVE-3a: the Vcarve space (before Prepare) — (1) ADAPT the SVG: pick a region; (2) HACK the offset-stack:
+       V-bit + depth-step → a live depth-shaded contour preview. SKELETON only — the live region-picker / controls /
+       contour preview + the state.vcarves record land in VCARVE-3b (the controls are disabled placeholders here). -->
+  <section id="view-vcarve" hidden>
+    <aside id="vcarve-panel">
+      <div class="vcarve-section">
+        <div class="vcarve-h">1 · Adapt</div>
+        <label class="vcarve-row">Region <select id="vcarve-region" disabled><option>—</option></select></label>
+        <p class="vcarve-hint">Pick a closed loop to carve.</p>
+      </div>
+      <div class="vcarve-section">
+        <div class="vcarve-h">2 · Carve</div>
+        <label class="vcarve-row">V-bit <select id="vcarve-vbit" disabled><option>90°</option></select></label>
+        <label class="vcarve-row">Depth step <input id="vcarve-dstep" type="text" value="0.5 mm" disabled></label>
+        <label class="vcarve-row">Max depth <input id="vcarve-maxdepth" type="text" value="6 mm" disabled></label>
+        <button id="vcarve-recompute" class="vcarve-btn" disabled>Recompute</button>
+        <p id="vcarve-readout" class="vcarve-hint">— contours</p>
+      </div>
+    </aside>
+    <svg id="vcarve-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
   </section>
 
   <!-- S6a stub views (Prepare / Simulate-Export) — fleshed out in a later slice. -->

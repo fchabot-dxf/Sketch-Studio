@@ -207,6 +207,7 @@ async function loadFile(file) {
 const VIEWS = {
   explore:   document.querySelector('main.layout'),   // the existing SVG editor (normal flow)
   design:    document.getElementById('design-view'),  // the shared sketcher (absolute overlay)
+  vcarve:    document.getElementById('view-vcarve'),   // VCARVE-3a: the Vcarve space (skeleton)
   prepare:   document.getElementById('view-prepare'),
   simexport: document.getElementById('view-simexport'),
 };
@@ -305,6 +306,7 @@ function showMode(mode) {
   currentMode = mode;
   VIEWS.explore.style.display = (mode === 'explore') ? '' : 'none';
   VIEWS.design.hidden    = (mode !== 'design');   // make the canvas visible BEFORE start() so frame 1 sees a laid-out svg
+  VIEWS.vcarve.hidden    = (mode !== 'vcarve');   // VCARVE-3a: static skeleton — no mount needed yet (live view = 3b)
   VIEWS.prepare.hidden   = (mode !== 'prepare');
   VIEWS.simexport.hidden = (mode !== 'simexport');
   if (exploreActions) exploreActions.style.display = (mode === 'explore') ? '' : 'none';

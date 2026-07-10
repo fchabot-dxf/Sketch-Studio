@@ -6277,6 +6277,13 @@ depth-shaded contour-stack preview via `vcarveContours` (VCARVE-2). Shaper-only.
 
 === VCARVE-3b (VCARVE LIVE WORKSPACE) DONE - HOLD ===
 
+- **committed post-advisor-review — `e59a6b1`** (code + this WORK-LOG entry; turn 256). NOTE for the advisor: turn 258's
+  dispatch described this as still uncommitted ("last commit still VCARVE-3a") — it was already landed at `e59a6b1` before
+  turn 258 arrived (see the turn-257 pass note). `NEXT-SESSION.md` landed separately at `5e690be` (docs(plan)), matching
+  this repo's standing convention that NEXT-SESSION.md is never bundled into a worker feat commit (verified against
+  VCARVE-3a/SKETCH-4e/IMPORT-2/SWITCH-2 history — each is code+WORK-LOG only, NEXT-SESSION.md always its own docs(plan)
+  commit). No code was touched this turn.
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

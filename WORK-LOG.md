@@ -7222,3 +7222,66 @@ new ADDITIVE file (+ its oracle); every existing `#core`/`#ui` file stays byte-i
   `coreShapeToPolyline` seam so `#core` sketch geometry bakes into art and plots as real DDCS G-code. STOP — hold.
 
 === PP-7b (coreShapeToPolyline SEAM) DONE — PP-7 + THE PENPLOTTER EPIC COMPLETE — HOLD ===
+
+## turn 302 — PP-8 ASSESS: from-path -> parsePathSubpaths reconcile — RISKY CASE, gating for blessing (no code changed)
+
+Assessed first, per the dispatch. The reconcile is NOT the clean case: it would REGRESS curve fidelity for S/T/A
+paths in the LIVE gcode path, and full closure would touch Shaper's shared importer. So I did NOT swap — I'm gating
+with the trade-off + options. NO code changed this turn.
+
+**FINDINGS (ground truth, read the code):**
+- `#core/svg-import.js parsePathSubpaths` is a PARTIAL curve sampler: **M/L/H/V + C + Q** are handled (C/Q via 16-step
+  de Casteljau `flattenCubic`/`flattenQuad`), but **S/T/A are DEGRADED to a single line to their endpoint** + flagged
+  in `skipped` (its own header: "full smooth-curve / elliptical-arc handling is IMPORT-3"). It is NOT line-only, but it
+  is NOT full-fidelity either.
+- `#core/plot/polylines/from-path.js fromPath` (getTotalLength, ~0.4 mm) samples EVERY command incl. S/T/A faithfully
+  (browser), returns null in Node. It is LIVE in the gcode path: `pipeline.js toolpathToPolylines` (l.16) ->
+  `polylines/index.js shapeToPolyline` -> `case "path": fromPath` = the final flatten before vpype (hot for a `normal`
+  outline, which passes shapes through unflattened; the plot-outlines oracle confirms normal = passthrough).
+- There are in fact THREE DOM path samplers tracking this same debt: `fromPath` (0.4), `outlines/utils.js samplePath`
+  (0.5, used by dashed/jagged expansion), and the fills-utils reference. The dispatch scopes only `fromPath`.
+- Shaper DIRECTLY depends on `parsePathSubpaths` (main.js:25/150, `importSvgGeometry`). So EXTENDING the parser to
+  sample S/T/A would CHANGE Shaper's SVG-import output → not byte-identical.
+
+**VERDICT — RISKY (both triggers hit):**
+1. A swap onto `parsePathSubpaths` LOSES S/T/A curve fidelity (S = smooth-cubic is common in real SVG exports; A =
+   arcs common in rounded art). This is a real regression in the LIVE gcode path — the plotter samples S/T/A faithfully
+   today (getTotalLength) and would emit chords after the swap.
+2. Closing that gap properly = EXTEND `parsePathSubpaths` (S/T/A sampling) = touch Shaper's shared importer. Both are
+   explicit STOP conditions in the dispatch; `parsePathSubpaths` must stay byte-identical for Shaper.
+- EXTRA finding: reconciling ONLY `fromPath` (leaving `outlines/samplePath` on getTotalLength) would make `normal`-
+  outline paths (chord) INCONSISTENT with `dashed/jagged`-outline paths (full curve) — a new inconsistency. The S/T/A
+  policy should be decided across all three samplers together, not just `fromPath`.
+
+**OPTIONS (recommend B for the correct full closure; A for a fast, #core-consistent close):**
+
+```
+                                | S/T/A fidelity | Node path->poly | touches Shaper | closes #2 debt
+  A) swap all 3 -> pure parser  | LOST (->chord) | YES (win)       | no (parser     | YES (one home)
+     (accept degrade; surface     [= #core's       [C/Q sampled]     unchanged)        but S/T/A
+      skips like Shaper does)      established                                          regressed vs today
+                                   semantics]
+  B) IMPORT-3 first: extend the | KEPT (full)    | YES (win)       | YES -> its own | YES (best, but a
+     pure parser to sample S/T/A,  [pure S/T/A]                      blessed slice     Shaper-affecting
+     THEN swap all 3                                                 + byte-identical  slice)
+                                                                     -for-non-S/T/A
+  C) pure-first + DOM fallback  | KEPT (browser) | partial (C/Q)   | no             | PARTIAL (keeps
+     for S/T/A only (from-path:    [Node degrades   [Node: C/Q ok,                     getTotalLength as
+      pure; if skipped S/T/A &&     S/T/A to chord]  S/T/A chord]                       the S/T/A fallback)
+      document -> getTotalLength)
+  D) don't reconcile; DECLARE   | KEPT (browser) | no              | no             | NO (debt stays,
+     the boundary (from-path is    [unchanged]                                        documented)
+      browser-only by design)
+```
+
+- **Recommendation: B** (IMPORT-3) is the only option that closes the debt AND keeps full fidelity AND unifies to one
+  pure home — but it's a Shaper-affecting slice needing its own blessing (byte-identical for non-S/T/A paths; the
+  S/T/A improvement is the intended change, oracle + Shaper import regression check). If a fast close without touching
+  Shaper is preferred, **A** is defensible: S/T/A-as-line is already #core's established path semantics (Shaper does
+  exactly this + surfaces the skip reasons), so routing the plotter onto it makes the plotter CONSISTENT + Node-capable
+  at the price of S/T/A fidelity the pure parser doesn't support anywhere yet. **C** is the no-regression compromise if
+  we want progress now but keep browser fidelity (retains getTotalLength as an S/T/A fallback — partial debt closure).
+- Awaiting a blessed synthesis (which option; and whether to fold in `outlines/samplePath` + fills for a consistent
+  S/T/A policy). NO code changed; parsePathSubpaths untouched (Shaper byte-identical). STOP — await blessing.
+
+=== PP-8 PLAN (PATH RECONCILE) — AWAIT BLESSING ===

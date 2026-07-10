@@ -6432,3 +6432,44 @@ ported NO engines and mounted NO Design tab (those are PP-2..PP-5).
   pure engines (vpype optimize / fills / outlines / gcode+zip) to `#core/plot/`. STOP — hold.
 
 === PP-1 (PENPLOTTER SCAFFOLD) DONE — HOLD ===
+
+## 2026-07-10 · PP-2a — vpype PIPELINE ported to #core/plot (pure) + DDCS profile + golden oracle (turn 266)
+
+PP-2 of the penplotter epic (design: `penplotter/INTEGRATION.md`). Brought the plotter's client-side vpype port into
+the shared brain as `#core/plot/`. PIPELINE ONLY (optimize · polylines · gcode · zip) — NOT fills/outlines (PP-2b/c),
+NO shell wiring (PP-4). Purely ADDITIVE — no consumers yet, no existing file touched.
+
+- **did — copy (`C:/Users/danse/APPS/penplotter/app/js/vpype/**` -> `packages/core/plot/`):** 22 files, substructure
+  preserved (optimize/ polylines/ gcode/ geom/ zip/ index.js pipeline.js). `#core/plot/index.js` re-exports the public
+  surface: `shapeToPolyline`, `linemerge`/`linesort`/`linesimplify`/`optimize`, `renderGcode`, `buildZip`, the
+  pipeline convenience fns (`flattenToolpath`/`optimizePolylines`/`toolpathToPolylines`/`toolpathToGcode`), + `DDCS`.
+- **did — DECLARE the machine profile (`gcode/profiles.js`, NEW):** lifted the hardcoded DDCS Expert M350 strings out
+  of header/footer/path into ONE declared `DDCS` object (`{ id, name, header(), footer(), rapidTo(), penDown(),
+  drawTo(), penUp() }`). `render.js` reads `opts.profile || DDCS`; header/footer/path take `(settings, profile=DDCS)`.
+  **The file STRUCTURE (the `\n` join conventions) is unchanged, so the emitted bytes are identical** (proven by the
+  oracle). This is INTEGRATION.md's "machine profile" registry SHAPE — **ONE profile only; NO selector, NO 2nd
+  profile** (rule of three: declare the shape, defer the engine). `DDCS` is exported → injection-ready for PP-4.
+- **PURITY (verified):** grep of `packages/core/plot/` for `window` / app imports / cross-package (`../../`) = NONE.
+  The ONLY DOM touch is `polylines/from-path.js` (SVG `getTotalLength` path sampling) — inherent (needs the browser
+  SVG engine). GUARDED with `typeof document === 'undefined' -> return null` so the module is import- AND run-safe in
+  `#core`/Node (the oracle). **FLAG:** a PURE replacement already exists — `#core/svg-import.js` `parsePathSubpaths`
+  (de Casteljau) — reconciling `fromPath` onto it is a later slice (like the PP-2b clipper/offset gate), NOT PP-2a
+  ("port as-is; don't touch shape formats"). `node --check` clean on all 23 files.
+- **verify — ORACLE (`packages/core/tests/plot-pipeline.test.js`, auto-discovered):** captured the GOLDEN from the
+  ORIGINAL penplotter (imported its pure `optimize`+`renderGcode` in Node) for a known 3-stroke input, then asserted
+  the PORT reproduces it: (a) `optimize` output byte-JSON-exact (`linemerge` joined strokes 1+2 at the shared (10,10),
+  `linesort` ordered, `linesimplify` kept all) = `[[[0,0],[10,0],[10,10],[20,10]],[[50,50],[60,50],[60,60]]]`;
+  (b) `renderGcode` **BYTE-EXACT** (511 chars, Y-flipped via docH=200) vs the golden — this is what proves the DDCS
+  profile-factoring changed nothing on the wire; (c) `DDCS` is a declared object; (d) `buildZip` smoke -> a nonzero
+  zip Blob. GREEN.
+- **verify — UNREGRESSED:** purely ADDITIVE (new `packages/core/plot/**` + the new oracle; NO existing `#core`/app
+  file modified — confirmed `git diff --name-only` shows only advisor docs). `npm run test:shell` **12/12**;
+  `node --check` clean; new oracle green; full-suite baseline unchanged (halts at the pre-existing
+  `tests/ai-vision-label-spacing`; the new test is green standalone) -> 0 net-new. No consumers wire to it yet.
+- **process hygiene:** golden capture + checks ran from scratchpad `.mjs`/`.cjs` (no long-lived procs); `proc_health
+  mark --turn 266`; `watch` clean before the pass.
+- **state:** branch `carve-out`. `#core/plot/` is live — the pure vpype pipeline + a declared DDCS profile + a
+  byte-exact oracle. NEXT per the epic: **PP-2b** — fill patterns -> `#core/plot/fills/` as a declared registry
+  (GATE first: reconcile offsetting vs `#core/polygon-offset.js` before porting `clipper.js`). STOP — hold.
+
+=== PP-2a (VPYPE PIPELINE -> #core/plot) DONE — HOLD ===

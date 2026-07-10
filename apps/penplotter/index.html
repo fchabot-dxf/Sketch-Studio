@@ -28,6 +28,7 @@
       --sk-header-sep: #d8cbb2;
       --sk-header-hover: rgba(47, 143, 127, 0.12);
       --sk-ribbon-menu-bg: #fbf6ec;
+      --canvas-bg: #fdfcf8;               /* PP-3a: the Draw-stage paper fill (read by render-art buildPaper) */
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
@@ -49,6 +50,14 @@
     .stage h2 { margin: 0; font-size: 24px; font-weight: 700; color: #3a352b; }
     .stage p { margin: 0; color: #8a8067; max-width: 42ch; line-height: 1.5; }
     .stage .badge { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sk-selection); font-weight: 700; }
+    /* PP-3a — the Draw stage: a full-bleed canvas (the plotter's own freeform art surface). The scaffold's
+       #canvasWrap is absolutely positioned, so the .stage flex-centering (used by the other stubs) ignores it. */
+    #canvasWrap { position: absolute; inset: 0; overflow: hidden; background: #efe9dd; }
+    #canvas { display: block; }
+    #docInfo { position: absolute; left: 12px; bottom: 10px; font: 12px system-ui, sans-serif; color: #8a8067; pointer-events: none; }
+    #toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: #2f8f7f; color: #fff;
+      padding: 6px 12px; border-radius: 8px; font: 13px system-ui, sans-serif; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>

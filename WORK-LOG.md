@@ -6753,3 +6753,47 @@ changed (pure source read, no probe needed). Awaiting blessing.
 consume `#core/plot` downstream.
 
 === PP-3 PLAN (DRAW-STAGE SLICING) — AWAIT BLESSING ===
+
+## 2026-07-10 · PP-3a — Draw-stage scaffold + state/dom/viewport + trimmed art render (turn 282)
+
+First Draw-stage slice (blessing 059b44a). The plotter's freeform art canvas RENDERS in the Draw tab — NO interaction
+yet (PP-3b). Draw is the plotter's OWN store (`state.artLayers`); the `#core` solver never sees it. Additive
+(apps/penplotter only; no `#core`/`#ui`/shared file touched).
+
+- **did — ported VERBATIM (apps/penplotter/src/):** `state.js` (the plotter singleton; artLayers/pens/viewport/doc),
+  `shapes.js` (`makeShapeElement` etc), `viewport.js` (fit/pan/zoom + screenToSvg). `diff` = identical; they use
+  dom.js's named exports at CALL time, so no edits needed.
+- **did — `dom.js` MADE MOUNT-ORDER-SAFE (the synthesis):** the Draw stage mounts DYNAMICALLY via the router, so the
+  original eager `export const canvas = $("#canvas")` would capture null (scaffold not yet in the DOM — the
+  import-hoisting trap, same class as the clipper self-shim). Rewrote the 7 element refs as ESM `let` LIVE bindings +
+  `initDom(root)` that resolves them from the mounted container. Consumers keep `import { canvas }` and read the live
+  value post-mount — so PP-3b/c ports need ZERO import changes. `SVG_NS`/`INK_NS` stay plain consts. Dropped the
+  cloud-only `API_BASE`/`api` (not Draw).
+- **did — `render-art.js` REBUILT (trimmed):** paper + grid + art layers (raw drawn shapes via
+  `shapes.makeShapeElement`) + the selection halo. Deliberately does NOT touch render.js's downstream entanglements
+  (fill/outline expansion, toolpath/simulation preview, the 5 side panels, stats, banners) — those are the
+  Fill/Toolpath/Export stages. Draw stays drawing-only.
+- **did — `draw-stage.js` `mountDrawStage(view)`:** injects the canvas scaffold (`#canvasWrap` > `#canvas` +
+  `#docInfo`/`#toast`/`#layers`/`#dropOverlay`), `initDom(view)`, `initLayers()` (the default art layer), fit +
+  renderArt. **GRIEVANCE-1 ResizeObserver** on `#canvasWrap` re-fits + redraws on element resize (window.resize
+  misses the router show/hide + panel drags); + fit-on-ENTER (a hidden absolute stage has a 0-size rect, so a
+  load-time fit is stale — mirrors Shaper's mount-on-enter). Exposes a `window.__draw` dev/test seam (state +
+  renderArt + fitViewport) so PP-3a is verifiable before interaction exists.
+- **did — router wiring (`main.js`):** a per-stage `STAGE_MOUNT` map ({ draw: mountDrawStage }); `showStage` mounts
+  ONCE on first entry + calls `onEnter` each entry. Declaration-first (other stages stay stubs). + Draw-stage CSS +
+  `--canvas-bg` in index.html (paper fill; the canvas wrap fills the stage).
+- **verify — LIVE (CDP, headless):** console errors **0**. Entered Draw: `#canvas`+`#canvasWrap` present, the viewBox
+  is a real fit of the 200x200 doc into the wrap. Seeded 3 shapes via `window.__draw` -> they RENDER as
+  `rect,line,ellipse` in the `g[data-layer-id]`. Switched to Fill (Draw hidden) and BACK -> re-renders, 3 shapes
+  persist (from state). Resized the window 1200x800 -> 700x1000 -> the **viewBox RE-FIT** (ResizeObserver fired). All
+  four blessing checks (render / fit / survive stage-switch / survive window-resize) pass.
+- **verify — UNREGRESSED:** ADDITIVE, apps/penplotter only (no `#core`/`#ui`/shared file touched). `npm run
+  test:shell` **12/12** (Studio); penplotter loads errors 0 (CDP); Shaper untouched. `node --check` clean on all new
+  src. 0 net-new.
+- **process hygiene:** CDP verify from a scratchpad `.cjs` (headless browser killed in `finally`); `proc_health mark
+  --turn 282`; `watch` clean.
+- **state:** branch `carve-out`. The Draw stage shows the plotter's canvas (paper + grid + fit + art render),
+  resize-safe, backed by the plotter's own `state`. NEXT per the blessed slicing: **PP-3b** — interaction + tools
+  (tools/interaction/keyboard/snapping/history) so the user draws LIVE. STOP — hold.
+
+=== PP-3a (DRAW SCAFFOLD + STATE + ART RENDER) DONE — HOLD ===

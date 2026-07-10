@@ -1,0 +1,89 @@
+// Trimmed DRAW-stage renderer (PP-3a). REBUILT from render.js's artwork path ONLY — paper + grid + the art layers
+// (raw drawn shapes via shapes.makeShapeElement) + the selection halo. Deliberately does NOT touch render.js's
+// downstream entanglements (fill/outline expansion, the toolpath/simulation preview, the 5 side panels, stats,
+// banners) — those belong to the Fill / Toolpath / Export stages. Draw stays drawing-only.
+
+import { state } from "./state.js";
+import { findShape } from "./state.js";
+import { canvas, SVG_NS } from "./dom.js";
+import { makeShapeElement } from "./shapes.js";
+
+export function renderArt() {
+    if (!canvas) return;
+    while (canvas.firstChild) canvas.removeChild(canvas.firstChild);
+
+    canvas.appendChild(buildPaper());
+    canvas.appendChild(buildGrid());
+
+    for (const layer of state.artLayers) {
+        if (!layer.visible) continue;
+        const g = document.createElementNS(SVG_NS, "g");
+        g.setAttribute("data-layer-id", layer.id);
+        g.setAttribute("stroke", layer.color);
+        g.setAttribute("fill", "none");
+        g.setAttribute("stroke-width", "0.3");
+        for (const shape of layer.shapes) g.appendChild(makeShapeElement(shape));
+        canvas.appendChild(g);
+    }
+
+    // Selection halo (empty until PP-3b's interaction populates state.selectedShapeIds).
+    if (state.selectedShapeIds && state.selectedShapeIds.size > 0) {
+        canvas.appendChild(buildSelectionOverlay());
+    }
+}
+
+function buildSelectionOverlay() {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("data-overlay", "selection");
+    g.setAttribute("pointer-events", "none");
+    g.setAttribute("fill", "none");
+    g.setAttribute("stroke", "#111111");
+    g.setAttribute("stroke-opacity", "0.65");
+    g.setAttribute("stroke-width", "2");
+    g.setAttribute("stroke-linejoin", "round");
+    g.setAttribute("stroke-linecap", "round");
+    for (const sid of state.selectedShapeIds) {
+        const s = findShape(sid);
+        if (!s) continue;
+        const el = makeShapeElement(s);
+        el.removeAttribute("fill"); el.style.fill = "none";
+        el.removeAttribute("stroke");
+        el.setAttribute("vector-effect", "non-scaling-stroke");
+        el.classList.remove("shape");
+        g.appendChild(el);
+    }
+    return g;
+}
+
+function buildPaper() {
+    const r = document.createElementNS(SVG_NS, "rect");
+    r.setAttribute("x", 0); r.setAttribute("y", 0);
+    r.setAttribute("width", state.doc.w);
+    r.setAttribute("height", state.doc.h);
+    r.style.fill = "var(--canvas-bg)";
+    r.setAttribute("stroke", "#c8bfa8");
+    r.setAttribute("stroke-width", "1");
+    r.setAttribute("vector-effect", "non-scaling-stroke");
+    r.setAttribute("pointer-events", "none");
+    return r;
+}
+
+function buildGrid() {
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("stroke", "#e6ddc8");
+    g.setAttribute("stroke-width", "0.1");
+    g.setAttribute("vector-effect", "non-scaling-stroke");
+    for (let x = 0; x <= state.doc.w; x += 10) {
+        const l = document.createElementNS(SVG_NS, "line");
+        l.setAttribute("x1", x); l.setAttribute("y1", 0);
+        l.setAttribute("x2", x); l.setAttribute("y2", state.doc.h);
+        g.appendChild(l);
+    }
+    for (let y = 0; y <= state.doc.h; y += 10) {
+        const l = document.createElementNS(SVG_NS, "line");
+        l.setAttribute("x1", 0); l.setAttribute("y1", y);
+        l.setAttribute("x2", state.doc.w); l.setAttribute("y2", y);
+        g.appendChild(l);
+    }
+    return g;
+}

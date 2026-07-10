@@ -2,6 +2,7 @@
 // 5-stage pipeline router built ENTIRELY by iterating STAGES, plus the shared two-way app-switcher. SKELETON
 // ONLY — no engines, no Design tab yet (PP-2..PP-5). Design record: penplotter/INTEGRATION.md. No #core imports.
 import { createAppSwitcher } from '#ui/app-switcher.js';
+import { mountDrawStage } from './draw-stage.js'; // PP-3a: the Draw stage mounts its canvas on first entry
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
@@ -14,6 +15,11 @@ const STAGES = [
   { id: 'export',   label: 'Export',   part: 'PP-2', blurb: 'G-code per pen + a zip.' },
 ];
 const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads (mirrors Shaper's MODE_KEY)
+
+// Per-stage MOUNTERS: a stage that needs live wiring registers a mount(view) here; the router calls it ONCE on
+// first entry (returning an optional { onEnter } re-run each entry). PP-3a wires 'draw'; other stages stay stubs.
+const STAGE_MOUNT = { draw: mountDrawStage };
+const mounted = {};
 
 // Mount the shared app-switcher (marks Pen Plotter current; navigates to Sketch Studio / Shaper).
 const swHost = document.getElementById('app-switcher-host');
@@ -54,6 +60,13 @@ function showStage(id) {
     btns.get(s.id).classList.toggle('active', s.id === id);
   }
   try { localStorage.setItem(STAGE_KEY, id); } catch (_) { /* storage blocked */ }
+  // Mount-on-first-entry + re-fit-on-entry for stages that wire live content (PP-3a: draw). The view is now
+  // visible (hidden toggled above), so a mounter reading the container size gets a real rect.
+  const mounter = STAGE_MOUNT[id];
+  if (mounter) {
+    if (!mounted[id]) mounted[id] = mounter(views.get(id)) || {};
+    if (mounted[id].onEnter) mounted[id].onEnter();
+  }
 }
 
 // Initial stage: the persisted one if still valid, else the first.

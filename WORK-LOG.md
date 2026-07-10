@@ -7860,3 +7860,47 @@ the art store / render-art / svg-import->art / bake / interaction art tools stay
   makeBezier) + selection reconcile. STOP — hold.
 
 === UNIFY-4a (DESIGN SHELL 5->4 + PERF PROBE) DONE — HOLD ===
+
+## turn 318 — UNIFY-4b: the Freehand tool (plotter-side) — stroke -> #core beziers, on the shared sketcher canvas
+
+The Design tab gains Freehand. Composed PLOTTER-SIDE (keeps #ui BYTE-IDENTICAL — no #ui tool-mode added): a
+capture-phase pointer listener on the sketcher canvas fits the stroke to cubic beziers and adds them to the #core
+store. The blessed capture approach WON over #ui's pan-zoom — no fallback to a #ui switch-mode needed.
+
+- **did — `freehand-tool.js` (new, plotter-side):** `installFreehandTool(svg, controller, opts)`. CAPTURE-PHASE
+  (useCapture=true) pointerdown/move/up on #design-canvas; active only when `state.currentTool==='freehand'`. On down/
+  move it collects world points (`screenToWorld` from #ui/coords) + `stopImmediatePropagation()` so #ui's bubble-phase
+  svg + document listeners (pan-zoom) never fire; on up it runs `fitCubic(points, tol=1.5)` (Schneider, UNIFY-3-fit)
+  and for each segment `makeBezier` (create 2 endpoint joints, control points as [x,y] data) -> `engine.addShape` ->
+  the #core store. CONNECTED chain: consecutive segments SHARE the endpoint joint (N segs -> N+1 joints). When
+  freehand is inactive the listener no-ops (doesn't stopPropagation), so #ui's line/rect/circle/arc/select/pan-zoom
+  behave normally.
+- **did — `sketch-stage.js` wiring:** a FREEHAND ribbon button via the host `extraGroups` seam (an action button, #ui
+  unchanged) that sets `currentTool='freehand'` + highlights; the ribbon's `on('tool')` hook de-highlights it when a
+  #core tool is picked. `installFreehandTool` on the #design-canvas. SELECTION RECONCILE: panelTick mirrors the #core
+  selection (`state.selectedShapes`, a Set of ids) -> the plotter `state.selectedShapeIds` each frame (only while
+  Design is active), so a selected #core shape (incl. a freehand bezier) flows into the existing selection-based
+  toolpath targeting (collectToolpathShapes fallback + resolveCoreShapes from UNIFY-2).
+- **DEFERRED (per the blessed plan):** Node = reuse #ui joint-drag (select-mode); Scissors/Rotate/Scale stay deferred
+  (they conflict with the constraint solver). FLAG: #ui SNAP-picking may not yet hit-test a bezier for click-select
+  (the snap engine handles line/circle/arc) — the freehand bezier is still targetable by id + via the mirror when
+  selectable; bezier snap-picking is a later #ui-touch slice (near UNIFY-3-tool).
+- **verify — LIVE (CDP, headless): console errors 0.** Design tab: the Freehand ribbon button exists; clicking it ->
+  `currentTool='freehand'` + button `.active`. Draw a curved (semicircle) stroke on the canvas -> ONE COMPACT #core
+  bezier (`bezierCount:1`, `compact:true`, `shapesAdded:1` — a stroke becomes compact bezier geometry, NOT a dense
+  polyline). **CAPTURE WON: `viewUnchanged:true`** — the view did NOT pan during the stroke, i.e. stopImmediate
+  Propagation beat #ui's pan-zoom (no #ui switch-mode fallback needed). The bezier PLOTS: target the toolpath at it ->
+  Export -> `gcodeEntries:1`, 16 `G1 X` curve segments + `M30`; snippet shows the arc walked (G0 to the stroke start,
+  pen down, G1s arcing). SELECTION RECONCILE: selecting the bezier in #core -> `state.selectedShapeIds` has its id
+  (`selectionMirrored:true`).
+- **verify — UNREGRESSED:** penplotter-only (freehand-tool.js + sketch-stage.js wiring); `git status packages/` clean =
+  NO #core/#ui edits (fitCubic/makeBezier/screenToWorld/extraGroups all reused as-is). `npm run test:shell` **12/12**;
+  `node --check` clean. 0 net-new.
+- **process hygiene:** CDP verify from scratchpad `verify-unify4b.cjs`; `proc_health mark --turn 318`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The merged Design tab now has Freehand (stroke -> compact #core beziers), targetable
+  by a toolpath -> gcode, with the pen-color parts still to come. NEXT (blessed): **UNIFY-4c** the pen model + color
+  underlay (folds UNIFY-3b: shapeColors digital + Design color UI + pen underlay + Toolpath nearest-pen map) — and the
+  dense-import PERF throttle is due before UNIFY-5. STOP — hold.
+
+=== UNIFY-4b (FREEHAND TOOL) DONE — HOLD ===

@@ -15,6 +15,9 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b: the #core sketch -> polyline seam
 import { state, makeArtLayer, uid } from './state.js';                  // PP-7b: bake into the plotter art store
+import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
+
+const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 
@@ -46,6 +49,10 @@ export function mountSketchStage(view, ctx = {}) {
   const panelTick = () => {
     if (!controller) return;
     const s = controller.state;
+    // UNIFY-4b selection reconcile: mirror the #core selection -> the plotter's selectedShapeIds each frame (only
+    // runs while Design is active, so it can't clobber a pen-stage selection), so a selected #core shape (incl. a
+    // freehand bezier) flows into the existing selection-based toolpath targeting (collectToolpathShapes fallback).
+    if (s.selectedShapes) state.selectedShapeIds = new Set(s.selectedShapes);
     let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
     const nShapes = (s.shapes && s.shapes.length) || 0;
     const nJoints = (s.joints && s.joints.size) || 0;
@@ -66,8 +73,21 @@ export function mountSketchStage(view, ctx = {}) {
   // beside the untouched canvas. Both are the SAME #ui factories Studio & Shaper use, read from the shared state.
   infoPanel = createDesignInfoPanel({ state: controller.state, engine: controller.engine, showSketchTree: true });
   infoPanel.render(view.querySelector('#design-panel-info'));
-  ribbon = createToolRibbon({ state: controller.state });
+  // UNIFY-4b: add a FREEHAND button to the shared ribbon via the host extraGroups seam (#ui unchanged). It is an
+  // action button (not a #ui tool-mode) that sets state.currentTool='freehand'; the plotter-side capture listener
+  // (installFreehandTool) does the drawing. A real #core tool click ('tool' event) deactivates it.
+  const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };
+  ribbon = createToolRibbon({
+    state: controller.state,
+    extraGroups: [{ label: 'Draw', buttons: [{
+      id: 'freehand-btn', label: 'Freehand', svg: FREEHAND_ICON, title: 'Freehand — draw a stroke, fitted to smooth beziers',
+      onClick: () => { controller.state.currentTool = 'freehand'; ribbon.refresh(); freehandActive(true); },
+    }] }],
+    on: (name) => { if (name === 'tool') freehandActive(false); }, // a #core tool switch turns Freehand off
+  });
   ribbon.render(view.querySelector('#design-ribbon'));
+  // The plotter-side Freehand capture tool on the sketcher's OWN canvas: stroke -> fitCubic -> makeBezier -> #core.
+  installFreehandTool(view.querySelector('#design-canvas'), controller);
 
   // Collapsible side panel: chevron toggles a thin strip <-> full panel (canvas reflows wider); persisted.
   const panel = view.querySelector('#design-panel');

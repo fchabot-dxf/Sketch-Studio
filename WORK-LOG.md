@@ -7557,12 +7557,22 @@ PROPOSED unified pen model (refines the single `shapePens` side-table in B/F abo
 - **Design-tab pen UI (item #10):** a per-shape color control (sets the DIGITAL color + shows the mapped PHYSICAL pen);
   the plot-colors/"Pens" panel edits the palette + the digital->physical mapping. The pen-color UNDERLAY draws each
   shape in its PHYSICAL pen color = a true preview of what will plot.
-- Add to OPEN DECISIONS: pen LOCATION (geometry-carries-pen [rec] vs today's toolpath-carries-pen); pen as
-  DERIVED-from-digital-color [rec] vs an explicit per-shape pen; how `tp.plotColorId` reconciles (derived default +
-  overridable). New slice — **UNIFY-3b (pen model: shapeColors + digital->physical + toolpath derive)**, sequenced
-  with import (UNIFY-3/5).
+**RESOLVED (amendment 3 — this is the blessed pen split, supersedes the "open decision" above):**
+- **DESIGN tab = the DIGITAL color.** Geometry carries a per-shape digital color (SVG/RGB), edited in the Design tab
+  (`state.shapeColors: Map<shapeId,'#rgb'>`, plotter-side; #core stays pure). This is the source design color.
+- **TOOLPATH tab = the PHYSICAL pen palette + the digital->physical MAPPING.** The owned pen palette
+  (`state.plotColors`) AND the color->pen mapping live in the Toolpath tab — KEEPS PP-3c (the palette/pen is a toolpath
+  concern, NOT on the geometry). No per-shape physical-pen field; the pen is DERIVED.
+- **NEAREST-PEN matching:** fewer pens than colors (e.g. 8 SVG colors -> 4 physical pens) => match each digital color to
+  the NEAREST physical pen (color-distance) to derive which pen plots a shape. (import's findOrCreatePlotColor extends
+  to nearest-match rather than always-create.)
+- So: Design=digital color (per shape), Toolpath=physical-pen palette + digital->physical map. New slice **UNIFY-3b
+  (digital shapeColors in Design; nearest-pen digital->physical map in Toolpath)**, sequenced with import (UNIFY-3/5).
+- **PARKED — punch-list #11 (NOT scoped into the migration):** color-MIXING ("hash color mixes") — approximate an
+  UNREACHABLE color by COMBINING pens via cross-hatch/stipple (reuses `#core/plot/fills`). A separate future feature,
+  after the migration.
 
-NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. the bezier branch, the canvas model, and
-the pen-location decision) before building UNIFY-2. STOP — await blessing.
+NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. the bezier branch + the canvas model; the
+pen split is RESOLVED above) before building UNIFY-2. STOP — await blessing.
 
 === UNIFY-1b PLAN (MERGED-TAB MIGRATION) — AWAIT BLESSING ===

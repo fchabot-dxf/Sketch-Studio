@@ -7,7 +7,9 @@
 // (C/Q) flatten via pure de Casteljau. The world is Y-DOWN (== SVG), so no Y-flip — only a mm scale.
 //
 // v1 subset: <line> <rect> <circle> <polyline> <polygon> <path>(M/L/H/V/C/Q/Z, abs+rel). FLAGGED-not-dropped:
-// <ellipse>, <path> S/T/A (→ line-to-endpoint + a skip note), transforms, <g> (the host flags these). IMPORT-3 widens.
+// ellipse, path S/T/A (drawn as a line-to-endpoint + a skip note). GRIEVANCE-2: group (g) nesting + a transform=
+// attribute are now APPLIED: the host recurses the tree and threads a composed CTM (per element) into each
+// descriptor; parseTransform / multiplyMatrix / applyMatrix below build + bake it. IMPORT-3 widens coverage.
 
 const PHYS = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72 }; // physical units → mm
 const PX_MM = 25.4 / 96;                                  // 1 CSS px → mm (SVG default, 96 dpi)
@@ -118,7 +120,10 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
   const joints = [], shapes = [], skipped = [];
   let nShape = 0;
   const bump = (tag, reason, n = 1) => { const e = skipped.find((s) => s.tag === tag && s.reason === reason); if (e) e.count += n; else skipped.push({ tag, reason, count: n }); };
-  const J = (x, y) => { const id = genJ(); joints.push({ id, x: x * scale, y: y * scale }); return id; };
+  let curCtm = IDENTITY_MATRIX; // the current descriptor's composed CTM (host-threaded); identity = untransformed
+  // J mints a joint at (x,y) SVG user coords: apply the element's CTM (group + element transforms) THEN the mm
+  // scale. Default identity CTM keeps the no-transform path byte-identical with the pre-GRIEVANCE-2 importer.
+  const J = (x, y) => { const p = applyMatrix(curCtm, x, y); const id = genJ(); joints.push({ id, x: p.x * scale, y: p.y * scale }); return id; };
   const SID = () => idPrefix + '_s' + (nShape++);
   // a connected chain of line shapes through fresh joints; closed → also link last→first.
   const polyline = (pts, closed) => {
@@ -130,6 +135,7 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
 
   for (const d of (descriptors || [])) {
     if (!d || !d.tag) continue;
+    curCtm = d.ctm || IDENTITY_MATRIX; // GRIEVANCE-2: bake the host-composed group/element transform per descriptor
     switch (d.tag) {
       case 'line': { const a = J(num(d.x1), num(d.y1)), b = J(num(d.x2), num(d.y2)); shapes.push({ id: SID(), type: 'line', joints: [a, b] }); break; }
       case 'rect': {
@@ -138,7 +144,7 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
         polyline([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], true);
         break;
       }
-      case 'circle': { const c = J(num(d.cx), num(d.cy)); shapes.push({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale }); break; }
+      case 'circle': { const c = J(num(d.cx), num(d.cy)); shapes.push({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale * linearScaleOf(curCtm) }); break; }
       case 'polyline': polyline(parsePoints(d.points), false); break;
       case 'polygon': polyline(parsePoints(d.points), true); break;
       case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) polyline(sp.pts, sp.closed); for (const r of sk) bump('path', r.reason, r.count); break; }
@@ -147,4 +153,77 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
     }
   }
   return { joints, shapes, stats: { shapeCount: shapes.length, jointCount: joints.length, skipped } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// GRIEVANCE-2: SVG transform layer. An SVG affine transform is a 2x3 matrix [a,b,c,d,e,f] with
+//   x' = a*x + c*y + e ,  y' = b*x + d*y + f .
+// potrace/Illustrator/Inkscape exports nest ALL art inside a transformed group (e.g. the potrace idiom
+// "translate(0,H) scale(0.1,-0.1)" = a 10x downscale + a Y-flip); the importer MUST parse+compose+apply
+// it or the geometry lands 10x off and mirrored — or, with the group skipped, does not import at all.
+// A matrix is DECLARED DATA: the host composes parent-then-child down the tree and hands each descriptor
+// its CTM; importSvgGeometry bakes it (above). PURE — no DOM.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
+
+// multiplyMatrix(outer, inner) = outer*inner. A point maps as outer*(inner*p), so parent-then-child
+// composition down the tree is multiplyMatrix(parentCTM, childTransform).
+export function multiplyMatrix(m1, m2) {
+  const [a1, b1, c1, d1, e1, f1] = m1;
+  const [a2, b2, c2, d2, e2, f2] = m2;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+// applyMatrix(m, x, y) returns the transformed point { x, y }.
+export function applyMatrix(m, x, y) {
+  return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
+}
+
+// linearScaleOf(m) returns the uniform linear scale factor sqrt(|det|) — for scaling a circle radius or a
+// length. Exact for a uniform scale (potrace scale(0.1,-0.1): sqrt(0.01)=0.1); an approximation under a
+// non-uniform scale or shear (a true ellipse is IMPORT-3).
+export function linearScaleOf(m) {
+  return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+}
+
+// parseTransform(str) returns the composed matrix for an SVG transform= attribute. Supports translate /
+// scale / rotate / matrix / skewX / skewY; multiple primitives compose LEFT-to-RIGHT as written (SVG
+// semantics). Empty/null gives identity; an unknown primitive is skipped (its geometry still imports).
+const DEG = Math.PI / 180;
+export function parseTransform(str) {
+  let m = IDENTITY_MATRIX;
+  if (!str) return m;
+  const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+  let t;
+  while ((t = re.exec(String(str)))) {
+    const fn = t[1].toLowerCase();
+    const n = t[2].trim().split(/[\s,]+/).map(Number).filter((v) => isFinite(v));
+    let prim = null;
+    switch (fn) {
+      case 'translate': prim = [1, 0, 0, 1, n[0] || 0, n[1] || 0]; break;
+      case 'scale': { const sx = n[0] != null ? n[0] : 1; const sy = n[1] != null ? n[1] : sx; prim = [sx, 0, 0, sy, 0, 0]; break; }
+      case 'rotate': {
+        const c = Math.cos((n[0] || 0) * DEG), s = Math.sin((n[0] || 0) * DEG);
+        const rot = [c, s, -s, c, 0, 0];
+        prim = (n[1] != null && n[2] != null)
+          ? multiplyMatrix(multiplyMatrix([1, 0, 0, 1, n[1], n[2]], rot), [1, 0, 0, 1, -n[1], -n[2]])
+          : rot;
+        break;
+      }
+      case 'skewx': prim = [1, 0, Math.tan((n[0] || 0) * DEG), 1, 0, 0]; break;
+      case 'skewy': prim = [1, Math.tan((n[0] || 0) * DEG), 0, 1, 0, 0]; break;
+      case 'matrix': if (n.length === 6) prim = n.slice(0, 6); break;
+      default: break;
+    }
+    if (prim) m = multiplyMatrix(m, prim);
+  }
+  return m;
 }

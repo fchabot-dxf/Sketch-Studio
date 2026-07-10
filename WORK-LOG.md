@@ -6288,3 +6288,59 @@ depth-shaded contour-stack preview via `vcarveContours` (VCARVE-2). Shaper-only.
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by
   advisor ruling.
+
+## 2026-07-09 · GRIEVANCE-2 — SVG import applies group (g) nesting + transforms (potrace files) (turn 260)
+
+**⚠ DEVIATION FROM DISPATCH (human-directed).** Turn 260 was DISPATCHED as GRIEVANCE-1 (the cursor offset /
+ResizeObserver fix). Mid-turn the HUMAN redirected: "you can do the svg import fix." He believed the cursor fix was
+already done — I verified against ground truth it is NOT (no `ResizeObserver` anywhere in `packages/ui`; the only
+related commit is `5e690be`, a docs commit that merely QUEUES GRIEVANCE-1) and told him so; he confirmed (via a
+one-question prompt) he still wants the **SVG import fix** now. So this turn delivers **GRIEVANCE-2** instead.
+**GRIEVANCE-1 (cursor offset) is STILL OPEN — deprioritized by the user this turn, not done. Re-queue it.**
+
+**⚠ Also combined the advisor's planned split (SVG-A core + SVG-B host) into ONE turn** — the user wanted the import
+actually WORKING on his files, not just the core layer. Justified (not a big-bang): the change is ADDITIVE (identity
+CTM ⇒ the old path is byte-identical) and each half is independently verified — an oracle for the matrix (SVG-A) and a
+live real-file import for the wiring (SVG-B). Flagging it so the diff (two files at once) reads as intentional.
+
+ROOT CAUSE (confirmed): `svgImportDescriptors` (host) scanned only the DIRECT children of the root and SKIPPED every
+`g`, and transforms were flagged-then-ignored. potrace/Illustrator/Inkscape wrap ALL art in one transformed group
+(`2462889.svg`: a `g transform="translate(0,930) scale(0.1,-0.1)"` around ~28 paths) → the importer saw zero
+importable direct children → **"Nothing imported"** (empty). Even a group with no transform (`logo-*.svg`) imported
+empty for the same reason.
+
+- **did — SVG-A (`#core/svg-import.js`, PURE, DECLARED):** a transform is DECLARED DATA, not a hand-rolled per-file
+  patch. Added a 2×3 affine matrix `[a,b,c,d,e,f]` layer: `parseTransform(str)` (translate/scale/rotate/matrix/skewX/
+  skewY; multiple primitives compose LEFT-to-RIGHT), `multiplyMatrix(outer,inner)` (parent∘child down the tree),
+  `applyMatrix`, `linearScaleOf` = √|det| (radius/length scaling; exact for a uniform scale), `IDENTITY_MATRIX`.
+  Threaded a per-descriptor `ctm` through `importSvgGeometry`: `J(x,y)` now applies the element CTM THEN the mm scale;
+  circle radius ×= `linearScaleOf(ctm)`. **Default identity CTM ⇒ the no-transform path is byte-identical** (oracle
+  sections 5/6 still pass verbatim). No DOM in `#core`.
+- **did — SVG-B (`apps/shaper/src/main.js`, Shaper-only):** rewrote `svgImportDescriptors` from a flat scan into a
+  recursive `walk(parent, ctm)`: recurse into `g` (and a nested `svg`); each element's CTM = parent CTM ∘ its own
+  `transform=`; attach that CTM to every leaf descriptor so `#core` bakes it. Removed the now-obsolete `g skipped` /
+  `transform ignored` skip-flags. Added `SKIP_SILENT` (metadata/title/desc/defs/style) so structural non-geometry
+  elements no longer inflate the "N skipped" toast.
+- **verify — oracle (11/11, added sections 8–11):** parseTransform primitives; compose + linearScaleOf; **THE REAL
+  potrace string** `translate(0.000000,930.000000) scale(0.100000,-0.100000)` → `[0.1,0,0,-0.1,0,930]`, mapping the
+  first path start `(4402,8990)` → `(440.2, 31)` — INSIDE the 1280×930 viewBox, un-flipped (was ~10× off + mirrored);
+  ctm baking of coords + radius; and a no-ctm=identity byte-identical guard.
+- **verify — LIVE (CDP, real DROP of `2462889.svg` into Shaper Design):** toast **"Imported 6716 shapes → 2462889 @
+  0.3528 mm/unit"** (was "Nothing imported"); 6722 lines rendered; bbox x∈[−60,436] y∈[−45,315] mm ≈ viewBox
+  1280×930 × 0.3528 = 451×328 mm → confirms BOTH the `scale(0.1)` downscale AND the Y-flip applied (raw coords would be
+  ~10× / mirrored). console errors 0. The `logo-*.svg` case (group, no transform) rides the same recursion.
+- **verify — SketchStudio UNREGRESSED:** `npm run test:shell` **12/12**. `svg-import.js` is `#core` imported ONLY by
+  Shaper `main.js` + the oracle (SketchStudio never imports it) and `main.js` is Shaper-only ⇒ SketchStudio
+  byte-identical. `node --check` clean on both files. Full unit suite baseline UNCHANGED (halts at the pre-existing
+  `tests/ai-vision-label-spacing` failure, unrelated to this change; the svg-import oracle is green standalone) — 0
+  net-new failures.
+- **process hygiene:** the CDP live-check ran from a scratchpad `.cjs` (its own headless browser, killed in `finally`).
+  `proc_health mark --turn 260` set at wake; ran `watch`/`reap` before the pass.
+- **untracked (left as-is):** `2462889.svg` + `logo-of-letter-shape-svgrepo-com.svg` — the user's import test assets;
+  NOT committed (a fixtures-dir placement is an advisor call, and the oracle hardcodes the transform string so it needs
+  no fixture). `NEXT-SESSION.md` stays modified (advisor-owned — the GRIEVANCE-1 dispatch text).
+- **state:** branch `carve-out`. SVG import now handles nested groups + transforms end-to-end (a real potrace file
+  lands placed + un-flipped). NEXT per the plan is the still-open **GRIEVANCE-1 (cursor offset)**; further grievances +
+  VCARVE-4 after. STOP — hold.
+
+=== GRIEVANCE-2 (SVG IMPORT: GROUP + TRANSFORMS) DONE - HOLD ===

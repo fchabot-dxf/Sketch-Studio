@@ -22,7 +22,7 @@ import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared t
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
 import { findLoops } from '#core/loop-finder.js';        // SKETCH-4e: enumerate loops for island polys
 import { loopPolygon } from '#core/loop-geometry.js';     // SKETCH-4e: HOST computes loop polys (DOM) → serializer stays pure
-import { computeImportScale, importSvgGeometry } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
+import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
 
 canvas.init(document.getElementById('canvas'));
@@ -115,22 +115,30 @@ document.addEventListener('keydown', (e) => {
 // COUNTED + surfaced, never silently dropped.
 let importSeq = 0;
 const SVG_IMPORT_TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
+const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style']); // structural, not dropped geometry
 function svgImportDescriptors(svg) {
   const descs = [], skippedEls = [];
-  // v1: only the DIRECT children of <svg> (no <g> recursion); transforms are flagged (geometry still imported raw).
-  for (const el of svg.children) {
-    const tag = (el.tagName || '').toLowerCase();
-    if (tag === 'g') { skippedEls.push('<g> (group)'); continue; }
-    if (!SVG_IMPORT_TAGS.has(tag)) { if (tag) skippedEls.push('<' + tag + '>'); continue; }
-    if (el.getAttribute && el.getAttribute('transform')) skippedEls.push('<' + tag + '> transform ignored');
-    const a = (n) => el.getAttribute(n);
-    if (tag === 'line') descs.push({ tag, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
-    else if (tag === 'rect') descs.push({ tag, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
-    else if (tag === 'circle') descs.push({ tag, cx: a('cx'), cy: a('cy'), r: a('r') });
-    else if (tag === 'ellipse') descs.push({ tag, cx: a('cx'), cy: a('cy'), rx: a('rx'), ry: a('ry') });
-    else if (tag === 'polyline' || tag === 'polygon') descs.push({ tag, points: a('points') });
-    else if (tag === 'path') descs.push({ tag, d: a('d') });
-  }
+  // GRIEVANCE-2: recurse the tree threading a composed CTM down it, so nested group art (potrace / Illustrator /
+  // Inkscape wrap ALL art in one transformed group) imports placed + un-flipped instead of empty. Each element's
+  // CTM = the parent CTM composed with its own transform=; leaf descriptors carry it so #core can bake it in.
+  const walk = (parent, ctm) => {
+    for (const el of parent.children) {
+      const tag = (el.tagName || '').toLowerCase();
+      const tf = (el.getAttribute && el.getAttribute('transform')) || '';
+      const elCtm = tf ? multiplyMatrix(ctm, parseTransform(tf)) : ctm;
+      if (tag === 'g' || tag === 'svg') { walk(el, elCtm); continue; } // groups (and a nested svg) recurse
+      if (!SVG_IMPORT_TAGS.has(tag)) { if (tag && !SKIP_SILENT.has(tag)) skippedEls.push('<' + tag + '>'); continue; }
+      const a = (n) => el.getAttribute(n);
+      const base = { tag, ctm: elCtm };
+      if (tag === 'line') descs.push({ ...base, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
+      else if (tag === 'rect') descs.push({ ...base, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
+      else if (tag === 'circle') descs.push({ ...base, cx: a('cx'), cy: a('cy'), r: a('r') });
+      else if (tag === 'ellipse') descs.push({ ...base, cx: a('cx'), cy: a('cy'), rx: a('rx'), ry: a('ry') });
+      else if (tag === 'polyline' || tag === 'polygon') descs.push({ ...base, points: a('points') });
+      else if (tag === 'path') descs.push({ ...base, d: a('d') });
+    }
+  };
+  walk(svg, IDENTITY_MATRIX);
   return { descs, skippedEls };
 }
 function importSvgToSketch(svgText, fileName) {

@@ -1,4 +1,4 @@
-import { parseLength, computeImportScale, parsePoints, parsePathSubpaths, importSvgGeometry } from '#core/svg-import.js';
+import { parseLength, computeImportScale, parsePoints, parsePathSubpaths, importSvgGeometry, parseTransform, multiplyMatrix, applyMatrix, linearScaleOf, IDENTITY_MATRIX } from '#core/svg-import.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -81,6 +81,53 @@ import { parseLength, computeImportScale, parsePoints, parsePathSubpaths, import
   {
     const { shapes, stats } = importSvgGeometry([{ tag: 'ellipse', cx: 0, cy: 0, rx: 5, ry: 3 }, { tag: 'text' }], { genJ: genJ() });
     assert(shapes.length === 0 && stats.skipped.length === 2, 'ellipse + text both flagged');
+  }
+
+  // 8. GRIEVANCE-2: parseTransform primitives → the 2x3 matrix [a,b,c,d,e,f]
+  {
+    const nearM = (m, e) => m.every((v, i) => near(v, e[i]));
+    assert(nearM(parseTransform('translate(10,20)'), [1, 0, 0, 1, 10, 20]), 'translate');
+    assert(nearM(parseTransform('translate(5)'), [1, 0, 0, 1, 5, 0]), 'translate 1-arg (ty=0)');
+    assert(nearM(parseTransform('scale(2,3)'), [2, 0, 0, 3, 0, 0]), 'scale xy');
+    assert(nearM(parseTransform('scale(2)'), [2, 0, 0, 2, 0, 0]), 'scale 1-arg (uniform)');
+    assert(nearM(parseTransform('matrix(1,2,3,4,5,6)'), [1, 2, 3, 4, 5, 6]), 'matrix passthrough');
+    const r90 = parseTransform('rotate(90)'); const rp = applyMatrix(r90, 1, 0);
+    assert(near(rp.x, 0) && near(rp.y, 1), 'rotate(90): (1,0) maps to (0,1)');
+    assert(parseTransform('') === IDENTITY_MATRIX, 'empty transform gives identity');
+    assert(nearM(parseTransform('wobble(3)'), [1, 0, 0, 1, 0, 0]), 'unknown primitive skipped (identity)');
+  }
+
+  // 9. compose (parent-then-child) + linearScaleOf
+  {
+    const m = multiplyMatrix(parseTransform('translate(100,0)'), parseTransform('scale(2)'));
+    const p = applyMatrix(m, 3, 4);
+    assert(near(p.x, 106) && near(p.y, 8), 'compose translate then scale: (3,4) maps to (106,8)');
+    assert(near(linearScaleOf(parseTransform('scale(0.1,-0.1)')), 0.1), 'linearScaleOf(scale 0.1,-0.1) = 0.1');
+    assert(near(linearScaleOf(IDENTITY_MATRIX), 1), 'linearScaleOf(identity) = 1');
+  }
+
+  // 10. THE REAL potrace transform (the exact string 2462889.svg emits) — the user's empty-import bug
+  {
+    const nearM = (m, e) => m.every((v, i) => near(v, e[i]));
+    const T = parseTransform('translate(0.000000,930.000000) scale(0.100000,-0.100000)');
+    assert(nearM(T, [0.1, 0, 0, -0.1, 0, 930]), 'potrace CTM = [0.1,0,0,-0.1,0,930]');
+    // first path start M4402 8990 -> inside the 1280 x 930 viewBox, un-flipped (near the top). Was 10x off before.
+    const q = applyMatrix(T, 4402, 8990);
+    assert(near(q.x, 440.2) && near(q.y, 31), 'potrace maps (4402,8990) to (440.2, 31) in viewBox space');
+  }
+
+  // 11. importSvgGeometry BAKES a per-descriptor ctm (coords + radius); no ctm = identity = byte-identical
+  {
+    const ctm = multiplyMatrix(parseTransform('translate(5,5)'), parseTransform('scale(2)'));
+    const { joints, shapes } = importSvgGeometry([{ tag: 'rect', ctm, x: 0, y: 0, width: 10, height: 10 }], { genJ: genJ(), scale: 1 });
+    const xs = joints.map((j) => j.x), ys = joints.map((j) => j.y);
+    assert(Math.min(...xs) === 5 && Math.max(...xs) === 25, 'rect X baked by ctm (5..25)');
+    assert(Math.min(...ys) === 5 && Math.max(...ys) === 25, 'rect Y baked by ctm (5..25)');
+    assert(shapes.filter((s) => s.type === 'line').length === 4, 'rect is still 4 lines');
+    const cg = importSvgGeometry([{ tag: 'circle', ctm: parseTransform('scale(2)'), cx: 0, cy: 0, r: 3 }], { genJ: genJ(), scale: 1 });
+    assert(cg.shapes[0].radius === 6, 'circle radius baked by linearScaleOf (3 -> 6)');
+    const nc = importSvgGeometry([{ tag: 'rect', x: 0, y: 0, width: 4, height: 4 }], { genJ: genJ(), scale: 1 });
+    assert(Math.max(...nc.joints.map((j) => j.x)) === 4, 'no ctm gives identity (coords unchanged)');
   }
 
   console.log('svg-import tests passed ✅');

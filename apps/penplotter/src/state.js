@@ -178,12 +178,11 @@ export function makeToolpath(name, type, targetArtLayerId = null) {
 }
 
 export function initLayers() {
-    const layer = makeArtLayer("layer 1");
-    state.artLayers = [layer];
-    state.activeArtLayerId = layer.id;
-
-    // Create a default Outline toolpath targeting this art layer
-    const toolpath = makeToolpath("layer 1 (outline)", "outline", layer.id);
+    // UNIFY-7: seed ONLY the default toolpath (the art store is retired). It targets #core geometry by SELECTION
+    // (targetShapeIds), resolved via resolveCoreShapes — no art layer to target.
+    state.artLayers = [];
+    state.activeArtLayerId = null;
+    const toolpath = makeToolpath("Outline", "outline");
     state.toolpaths = [toolpath];
     state.activeToolpathId = toolpath.id;
 }

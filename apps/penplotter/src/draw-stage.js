@@ -9,13 +9,12 @@ import { state, initLayers } from "./state.js";
 import { initDom, canvasWrap } from "./dom.js";
 import { fitViewport, applyViewport, needsFit, installWheelZoom } from "./viewport.js"; // UNIFY-6: shared-view fit + wheel-zoom
 import { renderArt } from "./render-art.js";
-import { installToolbar, setTool } from "./tools.js";
-import { installCanvasHandlers, installTransformHud } from "./interaction.js";
+import { installCanvasHandlers } from "./interaction.js";       // UNIFY-7: canvas pan + toolpath selection (art tools retired)
 import { installKeyboard } from "./keyboard.js";
 import { installHistory } from "./history.js";
-import { installLayerButtons } from "./layers-panel.js";       // PP-3c
-import { installPlotColorsPanel } from "./plot-colors-panel.js"; // PP-3c
-import { installSvgImport } from "./svg-import.js";             // PP-3c
+import { installPlotColorsPanel } from "./plot-colors-panel.js"; // the pen palette editor (pipeline)
+// UNIFY-7: retired the art-UI installers — installToolbar/setTool (tools.js), installTransformHud (rotate/scale HUD),
+// installLayerButtons (layers-panel, DELETED), installSvgImport (art importer; import goes to #core via the Design tab).
 
 const TOOLS = [
   ["select", "Select"], ["line", "Line"], ["rect", "Rect"], ["ellipse", "Ellipse"],
@@ -71,22 +70,16 @@ export function mountDrawStage(view) {
   initDom(view);                          // resolve #canvas / #canvasWrap / #layers / #plotColors / HUD
   state.preview.showToolpath = false;     // Draw is ART-ONLY (the toolpath overlay is the Toolpath stage)
 
-  // Interaction (PP-3b) — render -> renderArt.
-  installToolbar();
-  setTool(state.tool || "select");
+  // Canvas interaction: pan + toolpath selection/target-editing (installCanvasHandlers), wheel-zoom, keyboard
+  // (pan/Esc), and undo/redo history. The art drawing tools (draw/rotate/scale/node/scissors/freehand-to-art) are
+  // dormant in interaction.js — retired fully in UNIFY-7b.
   installCanvasHandlers();
-  installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas (was never wired)
-  installTransformHud();
+  installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas
   installKeyboard();
   installHistory(() => renderArt());
+  installPlotColorsPanel();               // the pen palette editor (pipeline)
 
-  // Side panels (PP-3c): art layers, pens, SVG import. Their actions call render() (= renderArt), which also
-  // refreshes the layers + pens lists.
-  installLayerButtons();
-  installPlotColorsPanel();
-  installSvgImport();
-
-  initLayers();                           // the plotter's default art layer (its OWN store)
+  initLayers();                           // UNIFY-7: now seeds ONLY the default toolpath (no art layer)
   fitViewport();
   renderArt();                            // renders the canvas + the layers/pens panels
 

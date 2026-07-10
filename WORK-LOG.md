@@ -8094,3 +8094,53 @@ Design/Fill/Toolpath/Export (like Studio/Shaper). Plotter-side; #core/#ui untouc
   STOP — hold.
 
 === UNIFY-6 (PAN/ZOOM CONVERGENCE) DONE — HOLD ===
+
+## turn 328 — UNIFY-7: retire the dormant ART side (SAFE SUBSET) + remove Bake-to-Draw (punch #3). ~427 net LOC gone.
+
+The two-store era's ART side is retired where SAFE + isolated. The deeply-ENTANGLED gut (interaction.js pan/toolpath
+vs art branches; svg-import's paint helpers that core-import needs) is FLAGGED for UNIFY-7b — the map showed those are
+"gut in place," and cutting them risks the pen pipeline the dispatch says NOT to break.
+
+- **did — DELETED `layers-panel.js`** (358 LOC, the art layers panel) — orphaned once render-art + draw-stage stopped
+  importing it.
+- **did — GUT `render-art.js`** (-74/+~18): removed the `state.artLayers` draw loop + the selection halo
+  (buildSelectionOverlay) + the renderLayersPanel call + the findShape/makeShapeElement/layersEl imports. KEPT paper +
+  grid + the toolpath/simulation overlay + the pen panels — the pen stages' renderer is intact.
+- **did — GUT `draw-stage.js`**: removed the art-UI installers (installToolbar/setTool, installTransformHud,
+  installLayerButtons [module deleted], installSvgImport) + their imports. KEPT initDom + installCanvasHandlers (canvas
+  pan + toolpath selection) + installWheelZoom + installKeyboard + installHistory + installPlotColorsPanel + initLayers
+  + fitViewport + the shared-canvas ResizeObserver — the pen infra.
+- **did — GUT `state.js initLayers`**: seeds ONLY the default toolpath now (no art layer); `state.artLayers = []`.
+- **did — REMOVED Bake-to-Draw** (sketch-stage.js, punch #3): the button + handler + `window.__sketch.bake` +
+  makeArtLayer/uid from the import. One store now -> toolpaths target #core directly (UNIFY-2), so the bake bridge is
+  meaningless.
+- **verify — LIVE FULL PIPELINE (CDP, headless): console errors 0 (loads clean = no broken imports from the deletes).**
+  4-tab shell [design,fill,toolpath,export]; NO Bake button (bakeButtonGone:true); Design has line + circle + a
+  Freehand BEZIER (hasLineCircleBezier:true — draw + freehand still work); IMPORT a multi-color SVG -> 8 #core shapes,
+  static, underlay shows the mapped PEN colors (red/blue); a toolpath targeting #core geometry -> Export = valid DDCS
+  gcode (header, the LINE stroke `G0 X20 Y180 -> G1 X70 Y180 F2000`, `M30`); all 4 tabs switch cleanly; state.artLayers
+  is EMPTY. `npm run test:shell` **12/12**; all core oracles **21/21** green STANDALONE; `node --check` clean (every app
+  src file); `git status packages/` clean. NET **~427 LOC removed** (458 del / 31 ins across 5 files).
+- **FLAG #1 (pre-existing pipeline bug, discovered here — NOT caused by UNIFY-7):** a CIRCLE (closed polyline) UNDER-
+  exports. Localized: `resolveCoreShapes('C1')` -> 65 correct points (span 30mm); `expandLayerOutline` -> 65 points; but
+  `toolpathToPolylines` -> a **2-point** stroke (EVEN with lineSimplify:false) -> gcode has 1 curve move for the whole
+  circle. So a closed polyline (first==last) collapses inside the #core/plot vpype `optimize` (likely linemerge
+  self-merging the coincident start/end of a lone closed loop). UNIFY-7 did NOT touch #core/plot or preview/export's
+  toolpathToPolylines/gcode call — so this is downstream + pre-existing. LINES export fine. Recommend a dedicated
+  #core/plot fix next (handle closed polylines in optimize, or don't emit a duplicate closing vertex) — it makes
+  circles/imported closed shapes plot at full fidelity. (The bezier/open polylines are unaffected.)
+- **FLAG #2 (entangled art code deferred to UNIFY-7b):** still-present but DORMANT/unreachable (no UI triggers them):
+  the art-tool branches in `interaction.js` (draw/rotate/scale/node/scissors/freehand-to-art/polyline/drag/marquee-shape
+  — interwoven with the KEEP pan + toolpath selection in `installCanvasHandlers`), the art-import half of `svg-import.js`
+  (KEEP its inheritPaint/penColorFor which core-import imports — RELOCATE then delete), `tools.js` / `shapes.js` /
+  `trim.js` / `snapping.js` (still imported by interaction/keyboard), the `state.js` art helpers (makeArtLayer/
+  activeArtLayer/findShape/remapToolpathTargets), history.js's artLayers serialize fields, and the draw SCAFFOLD's art
+  DOM (#allTools/#transformHud/#drawPanel). These are safe to leave (dormant); a follow-up UNIFY-7b guts them in place
+  with the pen pan/toolpath preserved.
+- **process hygiene:** CDP verify + diagnostics from scratchpad (verify-unify7 / diag-circle / diag-pipe);
+  `proc_health mark --turn 328`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The art store is retired (empty) + Bake is gone; the pen pipeline runs on #core
+  geometry, unbroken. FLAGGED: the CIRCLE-export collapse (a #core/plot fix, recommend NEXT) + the UNIFY-7b dormant-code
+  gut. STOP — hold.
+
+=== UNIFY-7 (RETIRE ART STORE + BAKE) DONE — HOLD ===

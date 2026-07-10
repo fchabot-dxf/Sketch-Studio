@@ -13,7 +13,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
-import { state, makeArtLayer, uid, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
+import { state, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 
@@ -32,7 +32,6 @@ const SCAFFOLD = `
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
           <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
           <div id="importStatus" class="dp-note"></div>
-          <button id="bakeToDraw" class="dp-btn" title="Solve, then bake the sketch geometry into a Draw art layer">Bake to Draw</button>
           <div id="shape-color-row" class="dp-field">
             <label for="shapeColor">Pen color</label>
             <input id="shapeColor" type="color" value="#000000" disabled title="Select a shape, then pick its digital color">
@@ -184,20 +183,10 @@ export function mountSketchStage(view, ctx = {}) {
     });
   }
 
-  // PP-7b "Bake to Draw" — DORMANT (one store; toolpaths target #core directly). Kept until UNIFY-7 retires it.
-  const bake = () => {
-    controller.engine.solve(500);
-    const s = controller.state, shapes = [];
-    for (const sh of s.shapes) { const pts = coreShapeToPolyline(sh, s.joints); if (pts.length >= 2) shapes.push({ id: uid('s'), type: 'polyline', points: pts }); }
-    if (!shapes.length) return;
-    const layer = makeArtLayer('Sketch bake'); layer.shapes = shapes;
-    state.artLayers.push(layer); state.activeArtLayerId = layer.id;
-    if (ctx.navigate) ctx.navigate('draw');
-  };
-  const bakeBtn = view.querySelector('#bakeToDraw');
-  if (bakeBtn) bakeBtn.addEventListener('click', bake);
+  // UNIFY-7: "Bake to Draw" REMOVED (punch #3) — one store now; toolpaths target #core geometry directly (UNIFY-2),
+  // so the bake bridge is meaningless.
 
-  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, bake, renderUnderlay, importSvg: doImport }; // dev/test seam
+  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, renderUnderlay, importSvg: doImport }; // dev/test seam
 
   // RAF lifecycle tied to the active stage. onEnter re-renders the underlay (catches palette edits made on other tabs).
   return {

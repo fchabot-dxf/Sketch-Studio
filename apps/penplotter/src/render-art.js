@@ -1,23 +1,13 @@
-// Trimmed DRAW-stage renderer (PP-3a). REBUILT from render.js's artwork path ONLY — paper + grid + the art layers
-// (raw drawn shapes via shapes.makeShapeElement) + the selection halo. Deliberately does NOT touch render.js's
-// downstream entanglements (fill/outline expansion, the toolpath/simulation preview, the 5 side panels, stats,
-// banners) — those belong to the Fill / Toolpath / Export stages. Draw stays drawing-only.
+// apps/penplotter/src/render-art.js — the plotter-CANVAS renderer for Fill/Toolpath/Export: paper + grid + the
+// optimized toolpath / pen-width simulation overlay. UNIFY-7 retired the dormant art-layer drawing + selection halo:
+// geometry now lives in the #core sketch (drawn by the Design sketcher + the pen-color underlay); the plotter canvas
+// only shows the toolpath preview over the paper/grid. Toolpaths resolve #core geometry via UNIFY-2 (resolveCoreShapes).
 
 import { state } from "./state.js";
-import { findShape } from "./state.js";
-import { canvas, SVG_NS, layersEl } from "./dom.js";
-import { makeShapeElement } from "./shapes.js";
-// PP-3c: refresh the Draw side panels each render (layer shape-counts, pen list). Circular with these panels (they
-// import renderArt), but the calls are runtime-only so it resolves. Guarded — the panels only exist post-mount.
-import { renderLayersPanel } from "./layers-panel.js";
-import { renderPlotColorsPanel } from "./plot-colors-panel.js";
-// PP-4a: the optimized toolpath overlay (drawn over the art in the Toolpath stage). preview computes via #core/plot
-// and honors autoRecalc; circular (preview late-imports renderArt) but runtime-only, so it resolves.
+import { canvas, SVG_NS } from "./dom.js";
 import { requestPreview, buildToolpathOverlay, buildSimulationOverlay } from "./preview.js";
-import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js"; // PP-4b: refresh the Toolpath ops panel too
-// PP-5: the Fill panel (#activeLayerContent) is NOT refreshed here on purpose — a param edit -> recalc -> renderArt
-// would rebuild the panel and blow away the focused input. The Fill panel self-refreshes on stage-enter + on a
-// structural change (pattern/style/toolpath switch); a value edit only updates the overlay.
+import { renderPlotColorsPanel } from "./plot-colors-panel.js";
+import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
 
 export function renderArt() {
     if (!canvas) return;
@@ -26,29 +16,13 @@ export function renderArt() {
     canvas.appendChild(buildPaper());
     canvas.appendChild(buildGrid());
 
-    for (const layer of state.artLayers) {
-        if (!layer.visible) continue;
-        const g = document.createElementNS(SVG_NS, "g");
-        g.setAttribute("data-layer-id", layer.id);
-        g.setAttribute("stroke", layer.color);
-        g.setAttribute("fill", "none");
-        g.setAttribute("stroke-width", "0.3");
-        for (const shape of layer.shapes) g.appendChild(makeShapeElement(shape));
-        canvas.appendChild(g);
-    }
-
-    // Selection halo (empty until PP-3b's interaction populates state.selectedShapeIds).
-    if (state.selectedShapeIds && state.selectedShapeIds.size > 0) {
-        canvas.appendChild(buildSelectionOverlay());
-    }
-
-    // PP-4a: the OPTIMIZED toolpath overlay — Toolpath stage only (state.preview.showToolpath). requestPreview
-    // recomputes via #core/plot (vpype linemerge/sort/simplify), gated by autoRecalc; buildToolpathOverlay reads
-    // the cache. Draw keeps showToolpath=false, so this is a no-op there.
+    // The OPTIMIZED toolpath overlay (Toolpath/Fill) or the pen-width sim (Export). requestPreview recomputes via
+    // #core/plot (vpype linemerge/sort/simplify), gated by autoRecalc; it resolves #core geometry (UNIFY-2). Fill/
+    // Toolpath set showToolpath=true; Export also sets simulatePens.
     if (state.preview && state.preview.showToolpath) {
         requestPreview();
         if (state.preview.simulatePens) {
-            const g = buildSimulationOverlay();  // PP-6: pen-width "ink on paper" sim (Export stage) — returns a <g>
+            const g = buildSimulationOverlay();  // pen-width "ink on paper" sim (Export)
             if (g) canvas.appendChild(g);
         } else {
             const r = buildToolpathOverlay();    // returns { overlay, stats }
@@ -56,33 +30,9 @@ export function renderArt() {
         }
     }
 
-    // PP-3c/4b: keep the side panels in sync with state each render (Draw: layers + pens; Toolpath: the ops list).
-    if (layersEl) renderLayersPanel();
+    // Keep the pen panels in sync each render (guarded — they only exist post-mount).
     if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
     if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
-}
-
-function buildSelectionOverlay() {
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("data-overlay", "selection");
-    g.setAttribute("pointer-events", "none");
-    g.setAttribute("fill", "none");
-    g.setAttribute("stroke", "#111111");
-    g.setAttribute("stroke-opacity", "0.65");
-    g.setAttribute("stroke-width", "2");
-    g.setAttribute("stroke-linejoin", "round");
-    g.setAttribute("stroke-linecap", "round");
-    for (const sid of state.selectedShapeIds) {
-        const s = findShape(sid);
-        if (!s) continue;
-        const el = makeShapeElement(s);
-        el.removeAttribute("fill"); el.style.fill = "none";
-        el.removeAttribute("stroke");
-        el.setAttribute("vector-effect", "non-scaling-stroke");
-        el.classList.remove("shape");
-        g.appendChild(el);
-    }
-    return g;
 }
 
 function buildPaper() {

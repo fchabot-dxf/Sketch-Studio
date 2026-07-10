@@ -14,7 +14,8 @@ import { generate as concentricGenerate } from '#core/plot/fills/concentric.js';
   const dumbbell = { type: 'polyline', points: [[0,0],[20,0],[20,8],[40,8],[40,0],[60,0],[60,20],[40,20],[40,12],[20,12],[20,20],[0,20],[0,0]] };
 
   // 1. registry SHAPE — a list of entries, each carrying id/label/params/generate (single source for UI + defaults).
-  assert(Array.isArray(FILL_PATTERNS) && FILL_PATTERNS.length === 2, 'FILL_PATTERNS = 2 archetypes this slice');
+  // Assert the 2 archetypes exist BY ID (not a fixed count — PP-2b-3 grew the registry to 6, PP-2c will add more).
+  assert(Array.isArray(FILL_PATTERNS) && fillPattern('hatch') && fillPattern('concentric'), 'FILL_PATTERNS declares hatch + concentric');
   const H = fillPattern('hatch'), C = fillPattern('concentric');
   assert(H && typeof H.generate === 'function' && Array.isArray(H.params), 'hatch entry has params + generate');
   assert(H.params.map((p) => p.key).join(',') === 'angle,spacing,offset', 'hatch params: angle,spacing,offset');

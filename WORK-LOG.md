@@ -6628,3 +6628,25 @@ Additive; hatch/concentric definitions untouched.
   `OUTLINE_STYLES` registry. STOP — hold.
 
 === PP-2b-3 (REMAINING FILL PATTERNS) DONE — HOLD ===
+
+## 2026-07-10 · PP-2b-3-fix — stale oracle assertion (test-only) (turn 276)
+
+Advisor caught a regression I introduced + MIS-REPORTED. PP-2b-3 grew `FILL_PATTERNS` from 2 to 6, but the PP-2b-2
+oracle `plot-fills.test.js` hard-asserted `FILL_PATTERNS.length === 2` -> it now FAILS. My PP-2b-3 pass note claimed
+"PP-2b-2 oracle still green" — that was WRONG: I ran the NEW `plot-fills3` but did NOT re-run `plot-fills`, and the
+test runner HALTS at the pre-existing `tests/ai-vision-label-spacing` failure BEFORE reaching any plot oracle, so
+`npm test` never surfaced it. Reproduced the failure standalone before fixing. LESSON: after changing a shared
+declaration (the registry), re-run EVERY dependent oracle STANDALONE — the runner's early halt hides plot-suite
+breakage; never claim an oracle green without running it.
+
+- **fix (test-only, `packages/core/tests/plot-fills.test.js`):** replaced the brittle `length === 2` assert with a
+  BY-ID presence check — `fillPattern('hatch') && fillPattern('concentric')`. Robust to added patterns (PP-2b-3's 6,
+  PP-2c's more) — won't re-break on the next addition. NOT a bump to 6 (that would just re-break later).
+- **verify — ALL FOUR plot oracles GREEN STANDALONE** (the runner can't reach them past the ai-vision halt):
+  `plot-pipeline` ✓, `plot-clip` ✓, `plot-fills` ✓ (now fixed), `plot-fills3` ✓. `shell-smoke` **12/12**.
+  `node --check` clean. Test-only — NO source change, 0 net-new.
+- **process hygiene:** `proc_health mark --turn 276`; `watch` clean.
+- **state:** branch `carve-out`. The plot oracle suite is honest + green again. PP-2b (fills) remains complete.
+  NEXT per the epic: **PP-2c** — outline styles -> `#core/plot/outlines/`. STOP — hold.
+
+=== PP-2b-3-fix (STALE ORACLE ASSERTION) DONE — HOLD ===

@@ -7285,3 +7285,129 @@ with the trade-off + options. NO code changed this turn.
   S/T/A policy). NO code changed; parsePathSubpaths untouched (Shaper byte-identical). STOP — await blessing.
 
 === PP-8 PLAN (PATH RECONCILE) — AWAIT BLESSING ===
+
+## turn 304 — UNIFY-1 PLAN (GATE): survey of the two-store geometry model + proposed migration to ONE #core store (no code)
+
+Plan-only per the dispatch. Surveyed both stores (ground truth, file:line) + Shaper's importSvgToSketch (the reuse
+target). NO code changed. Below: the current wiring, the proposed unified model, the migration slicing, and risks +
+open decisions for blessing.
+
+### A) CURRENT TWO-STORE WIRING (what exists)
+
+```
+  FREEFORM ART STORE (plotter-only)                 #core SKETCH (shared, Studio/Shaper too)
+  state.artLayers[] (state.js:10)                   controller.state {shapes,joints,constraints}
+   each shape: {id,type,...} where type =            each shape: {id,type,joints[],radius?,subType?}
+     line/rect/ellipse/polyline/path                   type = line | circle | arc  (NO rect/ellipse/path)
+     + _fill/_stroke/_strokeWidth (paint)            mounted by #ui/sketch-canvas.js mountSketch()
+  PRODUCERS:                                          in sketch-stage.js (its OWN #design-canvas)
+   - interaction.js tools: line/rect/ellipse/        the ONLY bridge OUT:
+     polyline; FREEHAND -> path{d} (:584-595)         coreShapeToPolyline(shape,joints) -> [[x,y],...]
+   - svg-import.js: import wipes+rebuilds artLayers    (line->ends, circle->64-seg rim, arc->sampleArc)
+     + plotColors + toolpaths; color via              + "Bake to Draw" button (sketch-stage.js:88-104):
+     inheritPaint/readPaint -> _fill/_stroke +          solve -> polyline art shapes -> NEW artLayer
+     findOrCreatePlotColor -> tp.plotColorId            -> state.artLayers.push -> navigate('draw')
+   - layers-panel mergeSelectedShapes -> path{d}
+  CONSUMERS:
+   - render-art.js: draws artLayers per shape type
+   - preview.resolveToolpathShapes(tp) (:149): tp.targetShapeIds scanned across state.artLayers[].shapes
+   - export.collectToolpathShapes (:86): same -> expandLayerOutline/Fill -> toolpathToPolylines -> gcode
+  PEN MODEL: pens live on TOOLPATHS ONLY. tp.plotColorId -> state.plotColors[] (makePlotColor /
+   findOrCreatePlotColor / toolpathColor / penWidthFor). No per-shape pen today.
+```
+
+The two stores meet ONLY at the bake seam (coreShapeToPolyline). Import lands in the ART store, so imported art is
+NOT in Sketch and NOT constrainable — the main thing the user wants changed.
+
+REUSE TARGET — Shaper's importSvgToSketch (apps/shaper/src/main.js:130-160): svgImportDescriptors(svg) (host/DOM
+extracts per-element {tag, raw attrs, composed CTM}) -> PURE importSvgGeometry(descs,{genJ,scale,idPrefix})
+(svg-import.js:119) -> addSketch/activateSketch -> push joints/shapes. It maps rect->4 lines, circle->#core circle,
+polygon/polyline->line chains, path->parsePathSubpaths line chains. It is GEOMETRY-ONLY (no color) and it DROPS
+ellipse ("not supported in v1", svg-import.js:166) and degrades path S/T/A to chords (the PP-8 debt).
+
+### B) PROPOSED UNIFIED MODEL
+
+```
+  ONE geometry store = the #core sketch (controller.state.shapes/joints/constraints)
+      |
+      +-- PLOTTER-SIDE overlays (do NOT push plotter concepts into shared #core):
+      |     state.shapePens : Map<shapeId, penId>        <- the per-shape PEN attribute (side-table)
+      |     state.plotColors[] (unchanged pen model)
+      |     toolpaths: tp.targetShapeIds now reference #core shape ids
+      |
+      +-- IMPORT SVG -> #core sketch (reuse importSvgToSketch): the plotter extends the descriptor
+      |     extractor to ALSO capture color (reuse its own inheritPaint/readPaint/normalizeColor),
+      |     imports per color-group so returned shape ids map to a pen -> fills state.shapePens +
+      |     findOrCreatePlotColor. #core/importSvgGeometry stays BYTE-IDENTICAL (reused as-is).
+      |
+      +-- FREEHAND -> non-constrainable #core geometry (0 constraints = solver-light). [shape-kind: OPEN]
+      |
+      +-- SKETCH TAB = the geometry home. Host-side PEN-COLOR UNDERLAY <svg> BENEATH #design-canvas
+      |     (same viewBox) renders the #core geometry in pen colors; the shared #ui renderer draws the
+      |     joints/dims/DOF scaffold on the transparent #design-canvas ON TOP. #ui BYTE-IDENTICAL.
+      |
+      +-- TOOLPATHS target #core geometry DIRECTLY: resolveToolpathShapes/collectToolpathShapes read
+            controller.state.shapes and run coreShapeToPolyline AT COLLECT-TIME (the bake moves here).
+            No "Bake to Draw" button; Sketch stage no longer "optional".
+```
+
+### C) MIGRATION SLICING (UNIFY-2..) + reuse vs replace
+
+- UNIFY-2 (foundation): toolpaths target #core geometry directly. Add state.shapePens side-table; make
+  resolve/collectToolpathShapes read the #core sketch's shapes + coreShapeToPolyline at collect-time (the bake logic
+  moves here). Prove a #core sketch shape -> toolpath -> gcode WITHOUT the bake button. Art store still present.
+  REUSE: coreShapeToPolyline, fill/outline/vpype pipeline, export, pen model. (Removes the bake dependency.)
+- UNIFY-3: import SVG -> #core sketch (colors preserved). Reuse Shaper's importSvgToSketch; extend the plotter's
+  descriptor extractor to capture per-element color; import per color-group -> shapeId->pen side-table. REUSE:
+  importSvgGeometry (byte-identical), the plotter's paint/normalize helpers, findOrCreatePlotColor. REPLACE: the
+  plotter svg-import->art path. FLAG: ellipse gap + path S/T/A fidelity (below).
+- UNIFY-4: pen-color underlay in Sketch (host-side). Add an underlay <svg> beneath #design-canvas, same viewBox;
+  render #core geometry in pen colors (coreShapeToPolyline + shapePens). Confirm #ui byte-identical + the sketcher
+  draws strokes (not opaque fills) so the underlay shows through. REUSE: coreShapeToPolyline, pen model. #ui UNTOUCHED.
+- UNIFY-5: freehand -> #core (non-constrainable, solver-light). [shape-kind decision, see OPEN]. REUSE: the
+  sketcher's input; ADD a freehand tool path that lands #core geometry with 0 constraints.
+- UNIFY-6: remove Bake-to-Draw + "optional"; retire the art store. Sketch = geometry home. Remove state.artLayers,
+  render-art's art drawing, svg-import->art, interaction.js art tools (line/rect/ellipse move to the shared sketcher
+  ribbon). Decide the Draw stage's fate (retire, or rename Sketch->Draw as the one geometry tab). The big delete.
+- UNIFY-7 (perf, conditional): dense-import render optimization if the probe shows jank (see risks).
+
+REUSED wholesale: the #core solver/sketcher + #ui Design tab; coreShapeToPolyline (now the collect-time seam);
+importSvgGeometry + the matrix/CTM layer + parsePathSubpaths + computeImportScale; the pen model; toolpath ops +
+panels (target by shapeId); fill/outline/vpype pipeline; export. REPLACED/RETIRED: state.artLayers as the store;
+render-art art drawing; svg-import->art; the bake button; the "optional" flag; interaction.js art-shape tools.
+
+### D) RISKS / FLAGS
+
+1. Solver + render perf on dense imports (TOP RISK). Import lands 0-constraint geometry, so SOLVE is ~free — but
+   the #ui renderer redraws ALL shapes + joint glyphs every RAF frame. Shaper imported 6716 shapes; importSvgGeometry
+   decomposes polylines/paths into MANY line shapes + joints, so a real SVG can be thousands of shapes/joints ->
+   per-frame draw jank. Mitigation options: render static/imported geometry into the pen-underlay ONCE (not per-frame)
+   and keep only the interactive scaffold on the RAF; dirty-flag; suppress joint glyphs for static geometry. PROBE
+   recommended (mount ~6716 #core shapes, measure frame time) before committing UNIFY-4/6.
+2. #core/#ui byte-identical guardrail. Underlay + import reuse the shared code UNCHANGED (byte-identical — Studio/
+   Shaper safe). The ONE place a #core change may be needed is freehand's shape-kind (a new #core "polyline" kind) —
+   if chosen, it must be ADDITIVE (Shaper never creates it; serialization/existing call sites unaffected) and gated.
+3. Underlay alignment. The underlay <svg> and #design-canvas must share the exact viewBox/transform or pen-art and
+   scaffold misalign. Today the sketcher viewBox is STATIC (no pan/zoom UI) -> feasible; if pan/zoom lands later, both
+   must sync. Also confirm the #ui renderer doesn't opaquely fill shapes (else the underlay is hidden).
+4. ellipse import gap. importSvgGeometry DROPS ellipse (v1). The current plotter art import supports ellipse ->
+   migrating import to #core REGRESSES ellipse unless #core import gains it (ties to IMPORT-3).
+5. path S/T/A fidelity (PP-8 deferred debt). #core import uses parsePathSubpaths (S/T/A -> chord). Today the
+   plotter keeps path{d} and samples the TRUE curve at gcode time (getTotalLength). Migrating path import to #core
+   applies the chord degradation at import time -> the same IMPORT-3 trade-off resurfaces here.
+
+### E) OPEN DECISIONS (need blessing)
+
+- Freehand storage: (a) a NEW additive #core "polyline" shape kind (points inline, 0 constraints — reusable, ONE
+  store, but a gated #core change) vs (b) decompose to a #core line-chain (many joints — perf) vs (c) a plotter-side
+  static-polyline holdover (the ONE freeform exception — keeps #core unchanged but not fully one-store). RECOMMEND (a)
+  if a gated additive #core kind is acceptable; else (c).
+- Draw stage fate: retire it (Sketch becomes the single geometry tab) vs rename Sketch->Draw. RECOMMEND retire/merge.
+- ellipse + path fidelity: accept the #core-import limitations now (ellipse dropped / S/T/A chord) and fold the fix
+  into IMPORT-3, or block UNIFY-3 on IMPORT-3 first. RECOMMEND accept-now + track (don't block the unify on it).
+- Perf: run the 6716-shape probe before UNIFY-4/6? RECOMMEND yes.
+
+NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (the model + the open decisions + slicing
+order) before building UNIFY-2. STOP — await blessing.
+
+=== UNIFY-1 PLAN (GEOMETRY-UNIFY MIGRATION) — AWAIT BLESSING ===

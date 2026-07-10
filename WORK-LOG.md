@@ -6687,3 +6687,69 @@ declared registry shape blessed for fills (PP-2b-2). Additive. **Completes PP-2 
   solver never sees it). STOP — hold.
 
 === PP-2c (OUTLINE_STYLES -> #core/plot) DONE — PP-2 ENGINE PORTS COMPLETE — HOLD ===
+
+## 2026-07-10 · PP-3 GATE (plan-first) — Draw-stage module-graph survey + load-safe slicing (turn 280)
+
+GATE for PP-3 (the Draw stage: the plotter's OWN freeform art canvas + art layers + pens; `state.artLayers`, the
+solver NEVER sees it — INTEGRATION.md). Surveyed the Draw-side graph from `C:/penplotter/app/js/`; NO code ported/
+changed (pure source read, no probe needed). Awaiting blessing.
+
+**MODULE GRAPH (Draw subset + import edges):**
+- `state.js` (203) — the SINGLETON `state` (`Keep this file dumb — no DOM`). Draw store = `state.artLayers` +
+  `activeArtLayerId` + `plotColors` (pens) + `tool` / `selectedShapeIds` / `activeNode` / `viewport` / `doc` /
+  `preview` / `interaction`. Also holds toolpath/cloud/project fields (other stages). Imports: none.
+- `dom.js` (31) — **the central DOM coupling.** Captures 7 element refs AT MODULE-EVAL: `#canvas #canvasWrap #layers
+  #coords #docInfo #toast #dropOverlay` + `toast()`. Imports: none.
+- `viewport.js` (78) — fit/pan/zoom via `canvasWrap.getBoundingClientRect()` + the `canvas` viewBox; `screenToSvg`
+  (getScreenCTM); `installWheelZoom` on canvasWrap. Imports state, dom.
+- `shapes.js` (271) — `makeShapeElement` (shape -> SVG), bounds, nodes. Imports dom (SVG_NS). DOM-producing.
+- `render.js` (265) — rebuilds the SVG tree into `canvas`. **ENTANGLED:** imports shapes + fill/index + outline/index
+  + preview + FIVE panels (layers/toolpath/style/plotColors/activeLayer) and calls them every render.
+- `tools.js` (69) — `installToolbar` (`.tool` buttons, floats `#allTools` into `#canvasWrap`); `setTool` toggles
+  `tool-*` classes on canvas + body. Imports state, dom.
+- `interaction.js` (916, the big one) — canvas pointer handlers, all draw gestures, the transform HUD
+  (`#transformHud` + `Input/Label/Unit/Ok/Cancel`). Imports state, dom, viewport, shapes, snapping, preview,
+  toolpath-panel, fill/utils, trim, render, tools, history.
+- `keyboard.js` (77), `snapping.js` (90), `history.js` (89) — import state/dom (+ render/tools/interaction for kb).
+- `layers-panel.js` (358, `#layers`) / `active-layer-panel.js` (276) / `svg-import.js` (416, art import) — panels +
+  import; reach state/dom/render/history (+ fill/outline for the active-layer style controls).
+- `main.js` (54) `boot()` — wires ~18 modules then `initLayers(); fitViewport(); render(); window.resize`. Auto-runs.
+
+**DOM IDS the Draw subset needs** (must exist in `#stage-draw` before dom.js evaluates, or be remapped): `#canvas`,
+`#canvasWrap`, `#layers`, `#coords`, `#docInfo`, `#toast`, `#dropOverlay`, `#allTools` + `.tool` (toolbar),
+`#transformHud`(+Input/Label/Unit/Ok/Cancel), `#targetEditBanner`.
+
+**RISKS (flagged):**
+1. **dom.js eager singleton** — refs captured at import, so the ids must exist BEFORE it loads. PLAN: PP-3a ships a
+   Draw-stage HTML scaffold (canvas + wrap + toolbar + panel mounts) carrying those ids; dom.js loads after. (Avoids
+   refactoring dom.js to lazy getters — a bigger change.)
+2. **state.js singleton** — ONE shared plotter store across Draw/Fill/Toolpath/Export. Import once; it is the
+   plotter's own world, DISTINCT from the `#ui` sketcher state (that is the optional Sketch stage, PP-5). Good.
+3. **Resize = window-only (the GRIEVANCE-1 class):** `viewport.fitViewport` reads `canvasWrap` rect on window.resize
+   only — an ELEMENT-only resize (router show/hide of `#stage-draw`, panel drag) is missed. PLAN: reuse the
+   GRIEVANCE-1 ResizeObserver pattern on `#canvasWrap` -> fit/apply; and fit ON STAGE-ENTER (a hidden absolute stage
+   has a 0-size rect, so fit-at-load is wrong — mirrors Shaper's mount-on-enter for design/vcarve).
+4. **render.js entanglement** — it pulls fill/outline/preview + 5 panels. A Draw slice must NOT drag in Fill/Toolpath.
+   PLAN: REBUILD a trimmed `renderArt()` (artLayers + selection halo only); wire fills/outlines/preview later in the
+   Fill/Toolpath/Export stages. Draw stays drawing-only.
+5. **boot() monolith auto-runs** — do NOT import main.js. Write a `mountDraw(container)` that wires ONLY the Draw
+   subset (state/dom/viewport/renderArt/shapes/tools/interaction/keyboard/snapping/history + the layers +
+   plot-colors panels), invoked from the PP-1 router's `draw` stage.
+6. **CSS/theme** — the plotter's canvas/tools/panel CSS must be ported + scoped to the Draw stage (fit the
+   paper-light theme). Placeholder-level; flag.
+
+**PROPOSED LOAD-SAFE SLICING (each mounts something VERIFIABLE in the Draw tab; additive — other stages stay stubs):**
+- **PP-3a — scaffold + state + trimmed art render (no interaction).** Add the Draw-stage DOM scaffold (the ids above)
+  to `#stage-draw`; port state.js + dom.js (scaffold-backed) + viewport.js + a trimmed `renderArt()`. Seed a layer
+  with shapes -> they RENDER in Draw, fit-to-doc ON ENTER, + the ResizeObserver re-fit (risk 3). VERIFY: shapes
+  visible, fits, survives stage switches + a window resize.
+- **PP-3b — interaction + tools (draw live).** Port tools.js + interaction.js + keyboard.js + snapping.js +
+  shapes.js + history.js. VERIFY: draw freehand/line/rect/ellipse/polyline + select/drag/node-edit live; undo/redo.
+- **PP-3c — art layers + pens + SVG import.** Port layers-panel.js + active-layer-panel.js + plot-colors-panel.js +
+  svg-import.js. VERIFY: add/rename/hide a layer, assign a pen, import an SVG into a layer.
+- (fills/outlines/export are Fill/Toolpath/Export stages — NOT Draw. The bake seam to `#core/plot` is PP-4.)
+
+**WIRES to `#core/plot`:** NONE in Draw (drawing only). PP-4's `bakeToPolylines` is the seam; Fill/Toolpath/Export
+consume `#core/plot` downstream.
+
+=== PP-3 PLAN (DRAW-STAGE SLICING) — AWAIT BLESSING ===

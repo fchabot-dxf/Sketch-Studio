@@ -7904,3 +7904,46 @@ store. The blessed capture approach WON over #ui's pan-zoom — no fallback to a
   dense-import PERF throttle is due before UNIFY-5. STOP — hold.
 
 === UNIFY-4b (FREEHAND TOOL) DONE — HOLD ===
+
+## turn 320 — UNIFY-4c: the PEN MODEL (digital shapeColors + nearest physical pen) + the color UNDERLAY. Folds UNIFY-3b.
+
+The Design tab's pen/color story (punch-list #5/#6/#10). Done in ONE slice (cohesive; no split needed). SPARSE
+canvases (the dense THROTTLE is the next slice). The underlay is the dirty-flagged render substrate that throttle builds on.
+
+- **did — nearest-pen matcher (#core/color-match.js, NEW additive #core) + oracle:** `parseHex` (#rgb/#rrggbb),
+  `colorDistanceSq` (RGB), `nearestColorIndex(hex, palette)` -> index of the nearest palette color. Pure, app-agnostic
+  (the pen PALETTE stays plotter-side; this is just the color math). Oracle color-match.test.js: 8 digital colors ->
+  a 4-pen palette -> the expected pen each time + hex parse + guards. Green STANDALONE.
+- **did — pen DATA model (state.js, folds UNIFY-3b):** `state.shapeColors: Map<shapeId,'#rgb'>` = per-shape DIGITAL
+  color (plotter-side; #core pure). `penIdForShape(id)` = nearest physical pen id for the shape's digital color;
+  `penColorForShape(id)` = that pen's color (fallback: raw digital, then neutral #333); `toolpathPenId(tp)` = the
+  toolpath's explicit plotColorId ELSE derived from its target geometry's digital color (gated: art toolpaths
+  unchanged). REWIRED `toolpathColor`/`penWidthFor` to use `toolpathPenId` -> the MAPPED pen now drives the pen
+  color + width (export/sim). PP-3c preserved (palette + mapping is a Toolpath concern).
+- **did — the color UNDERLAY (sketch-stage.js + index.html, host-side, #ui byte-identical):** the Design canvas is
+  now a WRAP holding an `<svg id="pen-underlay">` BENEATH the (transparent) sketcher `<svg id="design-canvas">`, same
+  viewBox. `renderUnderlay()` flattens each #core shape (coreShapeToPolyline) -> a `<path data-shape-id=..>` stroked
+  in `penColorForShape(id)`; the sketcher draws the DOF/scaffold on the transparent canvas ON TOP. DIRTY-FLAGGED:
+  rendered ON CHANGE (geometry sig change / color-control edit / freehand commit / stage-enter), NOT per RAF frame;
+  the viewBox is synced per frame (cheap attribute copy) so it stays aligned during pan/zoom. This dirty-flag render
+  is the SUBSTRATE the dense-import throttle (next slice) builds on.
+- **did — the Design-tab color control:** a per-shape `<input type=color>` in the panel; enabled when a #core shape
+  is selected, reflects the selected shape's digital color, and on input writes `state.shapeColors` for every selected
+  shape + re-renders the underlay.
+- **verify — LIVE (CDP, headless): console errors 0.** Design tab, palette = {Black, Red, Blue}, a #core line L1:
+  select L1 (color control enables) -> pick digital #ee0000 -> `shapeColors['L1']='#ee0000'`, nearest pen = Red
+  (`penIdForShape` -> pen4 `#ff0000`); **the UNDERLAY draws L1 in the MAPPED pen color #ff0000** (not the raw digital)
+  = underlayShowsMappedPen:true. **MAPPED PEN DRIVES EXPORT:** a toolpath targeting L1 (no explicit pen) derives Red
+  (`toolpathPenId`->pen4, `toolpathColor`='#ff0000'); export still emits gcode. LIVE RE-MAP: change the digital color
+  to #2222dd -> the underlay re-maps L1 to the Blue pen #0000ff. 0 errors.
+- **verify — UNREGRESSED:** `git status packages/` = ONLY the 2 NEW color-match files (additive #core; no existing
+  #core/#ui edits). ALL core oracles **21/21** green STANDALONE (incl. color-match); `npm run test:shell` **12/12**;
+  `node --check` clean. The `toolpathColor`/`penWidthFor` rewire is ADDITIVE-gated (art toolpaths keep their explicit
+  pen / type default; only #core-targeting toolpaths with digital colors derive). 0 net-new.
+- **process hygiene:** CDP verify from scratchpad `verify-unify4c.cjs`; `proc_health mark --turn 320`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The merged Design tab now has the full pen model: per-shape digital color -> nearest
+  physical pen -> a dirty-flagged color underlay + export. NEXT (per the PERF NOTE): the DENSE-IMPORT THROTTLE (make
+  the #ui scaffold skip static geometry; the underlay already renders it once) BEFORE UNIFY-5 (import->#core). STOP — hold.
+
+=== UNIFY-4c (PEN MODEL + COLOR UNDERLAY) DONE — HOLD ===

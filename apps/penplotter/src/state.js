@@ -1,6 +1,8 @@
 // Single source of truth for app state. Other modules import this directly.
 // Keep this file dumb — no DOM, no rendering.
 
+import { nearestColorIndex } from "#core/color-match.js"; // UNIFY-4c: digital -> physical pen (nearest match)
+
 let nextId = 1;
 export const uid = (prefix = "id") => `${prefix}${nextId++}`;
 
@@ -15,6 +17,9 @@ export const state = {
     // Lets a toolpath TARGET #core geometry DIRECTLY (resolveCoreShapes -> coreShapeToPolyline at collect-time), no
     // bake. COEXISTS with the art store (UNIFY-7 retires artLayers). null until the Design/Sketch tab mounts.
     coreSketch: null,
+    // UNIFY-4c: per-shape DIGITAL color (source RGB), edited in the Design tab. Plotter-side (#core stays pure). Maps
+    // to a PHYSICAL pen via nearest-match (penIdForShape). Keyed by shape id (art OR #core sketch shape).
+    shapeColors: new Map(),
     toolpaths: [],
     activeToolpathId: null,
     // Plot colors = the pens the user actually owns. Discovered from
@@ -84,13 +89,38 @@ export function makePlotColor(name, color, width = DEFAULT_PEN_WIDTH) {
     return { id: uid("pen"), name, color, width };
 }
 
-/** Effective pen width (mm) for a toolpath — the width of its pen. Pen
- *  width is the single source of truth. Falls back to a toolpath's legacy
- *  per-toolpath width (older projects/pens saved before pens had a width),
- *  then the default. */
+/** UNIFY-4c: the PHYSICAL pen id for a shape's DIGITAL color — nearest match over the owned palette. Null when the
+ *  shape has no digital color or the palette is empty. Pen stays a plotter concept (state.plotColors + shapeColors). */
+export function penIdForShape(shapeId) {
+    const hex = state.shapeColors.get(shapeId);
+    if (!hex || !state.plotColors.length) return null;
+    const idx = nearestColorIndex(hex, state.plotColors.map(p => p.color));
+    return idx >= 0 ? state.plotColors[idx].id : null;
+}
+
+/** UNIFY-4c/3b: a toolpath's effective PHYSICAL pen id — its explicit plotColorId if set, else DERIVED from its
+ *  target geometry's digital colors (the first target shape that maps to a pen). Gated: art toolpaths keep their
+ *  explicit pen (or fall through to the type default in toolpathColor), so nothing existing changes. */
+export function toolpathPenId(tp) {
+    if (!tp) return null;
+    if (tp.plotColorId) return tp.plotColorId;
+    for (const id of (tp.targetShapeIds || [])) { const p = penIdForShape(id); if (p) return p; }
+    return null;
+}
+
+/** UNIFY-4c: the color the color-underlay draws a shape in — its MAPPED physical pen color; falls back to the raw
+ *  digital color when there's no palette, or a neutral when uncolored. */
+export function penColorForShape(shapeId) {
+    const penId = penIdForShape(shapeId);
+    if (penId) { const pc = state.plotColors.find(p => p.id === penId); if (pc) return pc.color; }
+    return state.shapeColors.get(shapeId) || "#333333";
+}
+
+/** Effective pen width (mm) for a toolpath — the width of its (possibly derived) pen. Pen width is the single source
+ *  of truth. Falls back to a toolpath's legacy per-toolpath width, then the default. */
 export function penWidthFor(tp) {
     if (!tp) return DEFAULT_PEN_WIDTH;
-    const pen = state.plotColors.find(p => p.id === tp.plotColorId);
+    const pen = state.plotColors.find(p => p.id === toolpathPenId(tp));
     if (pen && pen.width != null) return pen.width;
     return tp.penWidth != null ? tp.penWidth : DEFAULT_PEN_WIDTH;
 }
@@ -110,8 +140,9 @@ export function findOrCreatePlotColor(color, suggestedName) {
  *  reasonable default if unlinked. */
 export function toolpathColor(tp) {
     if (!tp) return "#111111";
-    if (tp.plotColorId) {
-        const pc = state.plotColors.find(p => p.id === tp.plotColorId);
+    const penId = toolpathPenId(tp); // UNIFY-4c: explicit pen, else derived from the target geometry's digital color
+    if (penId) {
+        const pc = state.plotColors.find(p => p.id === penId);
         if (pc) return pc.color;
     }
     return tp.type === "fill" ? "#ff8a3d" : "#3aa3ff";

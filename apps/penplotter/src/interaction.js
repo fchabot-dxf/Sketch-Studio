@@ -6,10 +6,8 @@ import { canvas, coordsEl, SVG_NS, toast } from "./dom.js";
 import { screenToSvg, applyViewport } from "./viewport.js";
 import { translateShape, rotateShape, scaleShape, shapeCenter, deepCopyShape, combinedBounds, shapeBounds, getNodes, setNodes, makeShapeElement } from "./shapes.js";
 import { gatherSnapCandidates, shapeVertices, findSnapDelta } from "./snapping.js";
-import { resolveToolpathShapes } from "./preview.js"; // PP-4a: UN-STUBBED — the real compute bridge (Toolpath stage)
-// PP-4b STUB (still): syncTargetEditingSelection is a toolpath-layers-panel target-editing feature — un-stubbed in
-// PP-4b when the ops panel lands. The drag-commit call stays a harmless no-op until then.
-function syncTargetEditingSelection() {}
+import { resolveToolpathShapes } from "./preview.js"; // PP-4a: the real compute bridge (Toolpath stage)
+import { syncTargetEditingSelection } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing (un-stubbed)
 import { closedPolygonFor, pointInPolygon } from "#core/plot/fills/utils.js";
 import { crossingParams, trimSpanAt, removedSpanAt } from "./trim.js";
 

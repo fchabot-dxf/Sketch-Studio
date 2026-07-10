@@ -99,6 +99,9 @@
     #toolpathPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
       color: #3a352b; padding: 10px; font: 13px system-ui, sans-serif; }
     .tp-note { color: #8a8067; font-size: 12px; line-height: 1.5; margin: 6px 0; }
+    /* PP-4b — target-editing cue (double-click a toolpath row -> pick its target shapes; Esc exits). */
+    body.target-editing #canvas { outline: 2px dashed var(--sk-selection); outline-offset: -2px; }
+    #toolpathLayers select, #toolpathLayers input { font: inherit; border: 1px solid #d8cbb2; border-radius: 4px; padding: 1px 4px; }
   </style>
 </head>
 <body>

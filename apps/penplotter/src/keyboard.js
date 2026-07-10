@@ -6,9 +6,7 @@ import { setTool, cancelInteraction } from "./tools.js";
 import { renderArt as render } from "./render-art.js"; // PP-3b: Draw's trimmed renderer, not render.js
 import { commitPolyline, deleteActiveNode } from "./interaction.js";
 import { snapshot } from "./history.js";
-// PP-3b STUB: exitTargetEditing is a Toolpath-stage feature; Draw has no target-editing (targetEditingToolpathId
-// stays null), so the guarded call never fires. Local no-op keeps keyboard free of the toolpath-layers-panel dep.
-function exitTargetEditing() {}
+import { exitTargetEditing } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing exit (un-stubbed)
 
 const TOOL_KEYS = {
     v: "select", t: "rotate", s: "scale",

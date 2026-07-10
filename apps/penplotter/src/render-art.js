@@ -14,6 +14,7 @@ import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 // PP-4a: the optimized toolpath overlay (drawn over the art in the Toolpath stage). preview computes via #core/plot
 // and honors autoRecalc; circular (preview late-imports renderArt) but runtime-only, so it resolves.
 import { requestPreview, buildToolpathOverlay } from "./preview.js";
+import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js"; // PP-4b: refresh the Toolpath ops panel too
 
 export function renderArt() {
     if (!canvas) return;
@@ -47,9 +48,10 @@ export function renderArt() {
         if (r && r.overlay) canvas.appendChild(r.overlay);
     }
 
-    // PP-3c: keep the Draw side panels in sync with the art (layer tree + pen list) on every render.
+    // PP-3c/4b: keep the side panels in sync with state each render (Draw: layers + pens; Toolpath: the ops list).
     if (layersEl) renderLayersPanel();
     if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
+    if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
 }
 
 function buildSelectionOverlay() {

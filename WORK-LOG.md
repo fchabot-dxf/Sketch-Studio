@@ -6999,3 +6999,43 @@ ops panel). Draw art -> Toolpath tab -> the OPTIMIZED toolpath overlay renders o
   STOP — hold.
 
 === PP-4a (TOOLPATH PREVIEW + OPTIMIZED OVERLAY) DONE — HOLD ===
+
+## 2026-07-10 · PP-4b — the full Toolpath ops panel + pen assign + the last un-stubs (turn 292)
+
+Completes the Toolpath stage (PP-4a was the backbone). Ported the ops panel; pens ASSIGN to toolpaths; the last 2
+target-editing stubs are now real. penplotter-only additive.
+
+- **did — port `toolpath-layers-panel.js` (680)** -> `apps/penplotter/src/`; ONE repoint: `render` -> `renderArt`
+  (it imports state/dom/history/preview otherwise — no fill/outline/vpype imports, the dispatch's caution was moot).
+  Pens-as-folders -> role (outline/fill) -> toolpath rows; create (`#addOutlineTp`/`#addFillTp` ->
+  `createToolpathAndEdit`), target (layer/selection), reorder (draggable pen headers + rows), feeds/up-down + export
+  flags (row inputs), and pen ASSIGN (`tp.plotColorId` via the selected pen folder / drag-onto-folder).
+- **did — `toolpath-stage.js`:** the PP-4a minimal panel -> the full ops scaffold (`#addOutlineTp` `#addFillTp`
+  `#exportAll` `#exportNone` `#recalcBtn` `#toolpathLayers`) + `installToolpathLayersPanel()` on mount +
+  `renderToolpathLayersPanel()` on enter. `render-art` refreshes `#toolpathLayers` each render (like the Draw panels).
+- **did — UN-STUB the last 2 (per PP-4a's deferral):** `interaction.syncTargetEditingSelection` +
+  `keyboard.exitTargetEditing` -> the real `toolpath-layers-panel` fns. Target-editing now works: double-click a
+  toolpath row -> `enterTargetEditing` (its target shapes become the canvas selection, body `.target-editing`); Esc
+  -> `exitTargetEditing`; canvas selection changes sync into `tp.targetShapeIds`.
+- **did — `active-layer-panel.js` STUB (new, flag):** `enterTargetEditing` + 3 other sites do
+  `import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel())` — that panel is the FILL stage (PP-5),
+  deferred, so the dynamic import THREW ("Failed to fetch dynamically imported module"). Added a no-op stub
+  (`renderActiveLayerPanel`/`installActiveLayerPanel`) so the imports RESOLVE; PP-5 replaces it with the real
+  (registry-adapted) panel. Caught this in the live verify (1 console error -> 0 after the stub).
+- **honor autoRecalc:** the panel's Recalculate button + stage-enter force `recalcPreview`; edits mark stale in
+  manual mode (unchanged from PP-4a).
+- **verify — LIVE (CDP, headless): console errors 0.** Draw a rect + add a pen -> Toolpath tab: the ops panel
+  renders (pen folder + role + the default toolpath). Selected the named pen -> **`+ Outline`** created a toolpath
+  (1->2) ASSIGNED to that pen (`tp.plotColorId` = the pen) + entered target-editing (`body.target-editing`); **Esc
+  EXITED** target-editing (the un-stubbed keyboard path). The optimized overlay renders (8 elems, vpype cache). The
+  rows carry reorder handles (`[draggable]` x4) + feeds/export inputs (x6).
+- **verify — UNREGRESSED:** ADDITIVE, penplotter only (reads `#core/plot`; no `#core` edit). `npm run test:shell`
+  **12/12**; penplotter loads errors 0; Shaper untouched. `node --check` clean (21 src files). 0 net-new.
+- **process hygiene:** CDP verifies from scratchpad `.cjs`; `proc_health mark --turn 292`; `watch` clean.
+- **state:** branch `carve-out`. **PP-4 TOOLPATH STAGE COMPLETE** — the toolpath ops panel (create / target-edit /
+  pen assign / reorder / feeds / export) over `state.toolpaths`, the optimized overlay via `#core/plot` vpype, on the
+  shared re-parented canvas. All PP-3b/PP-4a toolpath stubs are now real (except the `active-layer-panel` stub, which
+  PP-5 replaces). NEXT: **PP-5 Fill stage** — `active-layer-panel` (per-toolpath fill pattern + outline style pickers)
+  adapted to the `#core/plot` object-registries; the 2nd tab over the same `state.toolpaths`. STOP — hold.
+
+=== PP-4b (TOOLPATH OPS PANEL) DONE — PP-4 TOOLPATH STAGE COMPLETE — HOLD ===

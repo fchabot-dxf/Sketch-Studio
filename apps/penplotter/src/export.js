@@ -7,6 +7,7 @@ import { $, toast } from "./dom.js";
 import { expandLayerWithFill } from "#core/plot/fills/index.js";   // PP-6: shared fill registry
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-6: shared outline registry
 import { toolpathToGcode, buildZip } from "#core/plot/index.js";   // PP-6: shared vpype gcode + zip
+import { resolveCoreShapes } from "./core-geometry.js";           // UNIFY-2: target #core geometry directly
 
 export function installExportButton() {
     $("#exportBtn").onclick = onExportClick;
@@ -91,11 +92,15 @@ export function collectToolpathShapes(tp) {
     const selectedIds = new Set(tp.targetShapeIds.length ? tp.targetShapeIds : state.selectedShapeIds);
     if (selectedIds.size === 0) return [];
     const out = [];
+    const found = new Set();
     for (const layer of state.artLayers) {
         for (const s of layer.shapes) {
-            if (selectedIds.has(s.id)) out.push(s);
+            if (selectedIds.has(s.id)) { out.push(s); found.add(s.id); }
         }
     }
+    // UNIFY-2: unmatched ids may name #core SKETCH geometry -> resolve directly (no bake). Coexists with art.
+    const rest = [...selectedIds].filter(id => !found.has(id));
+    if (rest.length) out.push(...resolveCoreShapes(rest));
     return out;
 }
 

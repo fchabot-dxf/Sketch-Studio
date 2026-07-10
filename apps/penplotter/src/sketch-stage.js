@@ -60,6 +60,7 @@ export function mountSketchStage(view, ctx = {}) {
     isActive: ctx.isActive || (() => true),
     onRender: panelTick,
   });
+  state.coreSketch = controller.state; // UNIFY-2: expose the #core sketch store so a toolpath can target it directly
 
   // Design UI (buildDesignUI mirror): the shared full-width tool ribbon on top + the live constraint/DOF info panel
   // beside the untouched canvas. Both are the SAME #ui factories Studio & Shaper use, read from the shared state.

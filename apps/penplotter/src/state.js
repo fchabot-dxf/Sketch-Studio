@@ -11,6 +11,10 @@ export const state = {
     get layers() { return this.artLayers; },
     set layers(value) { this.artLayers = value; },
     activeArtLayerId: null,
+    // UNIFY-2: handle to the #core SKETCH store (controller.state: shapes + joints), set by sketch-stage on mount.
+    // Lets a toolpath TARGET #core geometry DIRECTLY (resolveCoreShapes -> coreShapeToPolyline at collect-time), no
+    // bake. COEXISTS with the art store (UNIFY-7 retires artLayers). null until the Design/Sketch tab mounts.
+    coreSketch: null,
     toolpaths: [],
     activeToolpathId: null,
     // Plot colors = the pens the user actually owns. Discovered from

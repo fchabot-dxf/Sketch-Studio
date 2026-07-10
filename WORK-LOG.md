@@ -7576,3 +7576,44 @@ NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. th
 pen split is RESOLVED above) before building UNIFY-2. STOP — await blessing.
 
 === UNIFY-1b PLAN (MERGED-TAB MIGRATION) — AWAIT BLESSING ===
+
+## turn 308 — UNIFY-2: a toolpath TARGETS #core sketch geometry DIRECTLY (no bake) — first migration slice, ADDITIVE
+
+Plan BLESSED (Branch A shared bezier; one #ui canvas; fitter in #core/curve-fit; import limits tracked; perf-probe
+before the delete; pen model resolved). UNIFY-2 is the foundation slice: the toolpath collect-time resolvers now ALSO
+read the #core sketch store and flatten via coreShapeToPolyline (PP-7b), so a toolpath -> optimize -> gcode works on
+#core geometry WITHOUT the bake button. Purely ADDITIVE, coexists with the art store (UNIFY-7 retires that later).
+
+- **did — `core-geometry.js` (NEW, plotter-side):** `resolveCoreShapes(ids)` maps #core sketch shape ids ->
+  `{id,type:'polyline',points}` via `coreShapeToPolyline(shape, state.coreSketch.joints)` (KEEPS the #core id, so
+  toolpath targeting/overlays key off it). `coreSketchSig()` = a compact id/type/radius + resolved-joint-coords hash
+  for preview's recompute gate. Reads `state.coreSketch`; imports the pure `#core/core-shape-to-polyline`.
+- **did — `state.js`:** declared `coreSketch: null` — the handle to the #core sketch's `controller.state`
+  (shapes + joints). Set by sketch-stage on mount; the ONE plotter-side field bridging to the #core store.
+- **did — `sketch-stage.js`:** on mount, `state.coreSketch = controller.state` (one line, additive).
+- **did — `preview.js resolveToolpathShapes`:** after matching target ids against `state.artLayers`, any UNMATCHED id
+  is resolved against #core geometry via `resolveCoreShapes` (art + #core COEXIST). `sourceHash` gains
+  `core: coreSketchSig()` so autoRecalc recomputes when a targeted #core shape moves/changes.
+- **did — `export.js collectToolpathShapes`:** same additive fall-through — unmatched selected ids -> `resolveCoreShapes`.
+- **DECLARE-not-hand-roll:** the #core->polyline conversion is the EXISTING coreShapeToPolyline (PP-7b), reused at
+  collect-time; `resolveCoreShapes` is the one small plotter-side adapter both consumers (preview + export) share.
+- **verify — LIVE END-TO-END (CDP, headless): console errors 0. #core geometry -> gcode with NO bake.** Open the
+  Sketch tab (mounts the sketcher -> `state.coreSketch` set = `coreSketchSet:true`); draw a #core CIRCLE (center
+  50,50 r20) beside the seeded constrained #core LINE -> `coreTypes=[line,circle]`. Target the default outline toolpath
+  at the #core shape ids (`L_...`, `C_...`) DIRECTLY — `sk.bake()` NEVER called. Export -> a valid 1377-byte DDCS
+  gcode (`1_layer_1__outline_.gcode`): bounds `X[0..70] Y[130.1..200]` = the circle (X30-70, Y-flip 130-170) + the
+  distance-50 line (origin -> X0/Y200); header G21/G90/G17/G94, pen up/down Z, F2000, walks the circle rim, M30.
+  **PROOF OF "NO BAKE": `artLayersBefore === artLayersAfter === 1`** — no new art layer was created, yet the #core
+  geometry reached gcode. The seam is collect-time resolution, not a bake.
+- **verify — ADDITIVE + UNREGRESSED:** penplotter-only; `git status packages/` clean = NO #core/#ui edits this slice
+  (coreShapeToPolyline reused as-is). `npm run test:shell` **12/12**; all 6 oracles green STANDALONE; `node --check`
+  clean (core-geometry/state/sketch-stage/preview/export). The art-store + bake button + stages are UNTOUCHED (they
+  still work); UNIFY-7 removes them. 0 net-new.
+- **process hygiene:** CDP verify from scratchpad `verify-unify2.cjs`; `proc_health mark --turn 308`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. A toolpath can now target #core geometry directly (foundation for the merged Design
+  tab). Bake is now redundant for #core targeting (kept until UNIFY-7). NEXT (blessed slicing): **UNIFY-3** — the
+  `bezier` shape kind (Branch A shared, additive) + the Schneider fitter (`#core/curve-fit.js`) + coreShapeToPolyline
+  bezier case + oracle. STOP — hold.
+
+=== UNIFY-2 (TOOLPATHS TARGET #core DIRECTLY, NO BAKE) DONE — HOLD ===

@@ -8,6 +8,7 @@ import { toolpathColor, orderedToolpaths, penWidthFor } from "./state.js";
 import { toolpathToPolylines } from "#core/plot/index.js";        // PP-4a: shared vpype pipeline
 import { expandLayerWithFill } from "#core/plot/fills/index.js";  // PP-4a: shared fill registry
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-4a: shared outline registry
+import { resolveCoreShapes, coreSketchSig } from "./core-geometry.js"; // UNIFY-2: target #core geometry directly
 
 const DEBOUNCE_MS = 350;
 
@@ -47,6 +48,7 @@ function sourceHash() {
             pw: penWidthFor(tp), do: tp.drawOutline,
             fill: tp.fill, outline: tp.outline,
         })),
+        core: coreSketchSig(), // UNIFY-2: recompute when targeted #core geometry moves/changes
     });
 }
 
@@ -150,9 +152,14 @@ export function resolveToolpathShapes(tp) {
     if (tp.targetShapeIds && tp.targetShapeIds.length) {
         const ids = new Set(tp.targetShapeIds);
         const out = [];
+        const found = new Set();
         for (const al of state.artLayers) {
-            for (const s of al.shapes) if (ids.has(s.id)) out.push(s);
+            for (const s of al.shapes) if (ids.has(s.id)) { out.push(s); found.add(s.id); }
         }
+        // UNIFY-2: any target id NOT in the art store may name #core SKETCH geometry -> resolve it directly
+        // (coreShapeToPolyline at collect-time, no bake). Coexists with art targeting.
+        const rest = tp.targetShapeIds.filter(id => !found.has(id));
+        if (rest.length) out.push(...resolveCoreShapes(rest));
         return out;
     }
     if (tp.targetArtLayerId) {

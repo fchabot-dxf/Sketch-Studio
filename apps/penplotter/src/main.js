@@ -1,19 +1,19 @@
-// apps/penplotter/src/main.js — Pen Plotter shell (PP-1 scaffold). App #3, "a tab like Shaper": a DECLARED
-// 5-stage pipeline router built ENTIRELY by iterating STAGES, plus the shared two-way app-switcher. SKELETON
-// ONLY — no engines, no Design tab yet (PP-2..PP-5). Design record: penplotter/INTEGRATION.md. No #core imports.
+// apps/penplotter/src/main.js — Pen Plotter shell. A DECLARED stage-pipeline router built ENTIRELY by iterating
+// STAGES, plus the shared two-way app-switcher. UNIFY-4a: Draw + Sketch MERGED into ONE 'Design' tab (the shared
+// #core/#ui sketcher); shell = Design -> Fill -> Toolpath -> Export (4 tabs). The plotter #canvasWrap is re-homed to
+// a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
 import { createAppSwitcher } from '#ui/app-switcher.js';
-import { mountDrawStage } from './draw-stage.js'; // PP-3a: the Draw stage mounts its canvas on first entry
+import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas)
 import { mountFillStage } from './fill-stage.js'; // PP-5: the Fill stage (2nd tab over the same state.toolpaths)
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
-import { mountSketchStage } from './sketch-stage.js'; // PP-7a: the OPTIONAL Sketch stage = the shared #core/#ui Design tab
+import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
 // all DERIVE from this list (single source of truth), so there are no hardcoded tabs or containers to keep in sync.
 const STAGES = [
-  { id: 'draw',     label: 'Draw',     part: 'PP-3', blurb: 'Freeform art canvas, SVG import, art layers + pens.' },
-  { id: 'sketch',   label: 'Sketch',   part: 'PP-7', blurb: 'Optional precise geometry — the shared #core/#ui Design tab.', optional: true },
+  { id: 'design',   label: 'Design',   part: 'UNIFY-4', blurb: 'Draw + precise + constraint geometry — one #core store, pen colors.' },
   { id: 'fill',     label: 'Fill',     part: 'PP-2', blurb: 'Fill patterns + outline styles per region.' },
   { id: 'toolpath', label: 'Toolpath', part: 'PP-2', blurb: 'Pen assignment, order, optimize, up/down, feeds.' },
   { id: 'export',   label: 'Export',   part: 'PP-2', blurb: 'G-code per pen + a zip.' },
@@ -21,8 +21,9 @@ const STAGES = [
 const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads (mirrors Shaper's MODE_KEY)
 
 // Per-stage MOUNTERS: a stage that needs live wiring registers a mount(view) here; the router calls it ONCE on
-// first entry (returning an optional { onEnter } re-run each entry). PP-3a wires 'draw'; other stages stay stubs.
-const STAGE_MOUNT = { draw: mountDrawStage, sketch: mountSketchStage, toolpath: mountToolpathStage, fill: mountFillStage, export: mountExportStage };
+// first entry (returning an optional { onEnter } re-run each entry). UNIFY-4a: 'design' = the shared sketcher; the
+// retired Draw scaffold is mounted separately into a HIDDEN host at startup (below) — it is NOT a tab.
+const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, fill: mountFillStage, export: mountExportStage };
 const mounted = {};
 let currentStageId = null; // the showing stage; drives the isActive gate + which stage gets onLeave on a switch
 
@@ -80,9 +81,15 @@ function showStage(id) {
   }
 }
 
-// PP-4a: mount the Draw stage ONCE at startup so the SHARED plotter canvas (#canvasWrap) always exists — the
-// Toolpath/Fill/Export stages borrow it by re-parenting on entry, even when the persisted initial stage isn't Draw.
-if (STAGE_MOUNT.draw && !mounted.draw) mounted.draw = STAGE_MOUNT.draw(views.get('draw'), { isActive: () => currentStageId === 'draw', navigate: (to) => showStage(to) }) || {};
+// UNIFY-4a: the plotter #canvasWrap was owned by the retired Draw tab. Re-home it — mount the Draw scaffold ONCE into
+// a HIDDEN host at startup so #canvasWrap always exists (+ initDom + initLayers' default toolpath). Fill/Toolpath/
+// Export borrow it by re-parenting on entry; they render #core geometry via UNIFY-2. The art store + art tools +
+// the transform HUD (the '°' field) live in this hidden host = DORMANT, never shown, until UNIFY-7 retires them.
+const drawHost = document.createElement('section');
+drawHost.id = 'stage-draw';
+drawHost.hidden = true;
+stagesHost.appendChild(drawHost);
+mounted.draw = mountDrawStage(drawHost, { isActive: () => currentStageId === 'draw', navigate: (to) => showStage(to) }) || {};
 
 // Initial stage: the persisted one if still valid, else the first.
 let initial = STAGES[0].id;

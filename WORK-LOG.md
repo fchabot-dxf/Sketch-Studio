@@ -7817,3 +7817,46 @@ NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. th
 before building UNIFY-4a. STOP — await blessing.
 
 === UNIFY-4 PLAN (MERGED-TAB COMPOSITION) — AWAIT BLESSING ===
+
+## turn 316 — UNIFY-4a: Design shell 5->4 + canvas re-home + PERF PROBE + degree-field cleanup. ADDITIVE (dormant, no deletes).
+
+First build slice of the merged tab. Draw + Sketch collapse into ONE 'Design' stage (the shared #core/#ui sketcher);
+the art store / render-art / svg-import->art / bake / interaction art tools stay DORMANT (UNIFY-7 retires). No deletes.
+
+- **did — STAGES 5 -> 4 (main.js):** dropped the `draw` + `sketch` entries -> ONE `design` stage (label "Design", no
+  "optional"). STAGE_MOUNT: `design: mountSketchStage` (the shared sketcher composition). The nav + stage bodies +
+  router all derive from STAGES, so this is a one-list edit -> a 4-tab shell (Design -> Fill -> Toolpath -> Export).
+- **did — re-home the plotter #canvasWrap (main.js):** the retired Draw scaffold OWNED #canvasWrap (borrowed by
+  Fill/Toolpath/Export). Now mounted ONCE at startup into a HIDDEN `<section id="stage-draw" hidden>` host (NOT a tab)
+  so #canvasWrap + initDom + initLayers' default toolpath still exist; the pen stages re-parent it on entry (they
+  render #core geometry via UNIFY-2). Everything in that host (art tools, #transformHud) is DORMANT/never shown.
+- **did — degree-field cleanup (task 4):** the deferred Rotate/Scale transform HUD (`#transformHud`, the `°` angle
+  field) lives in the Draw scaffold -> now inside the HIDDEN draw host -> NOT in the Design tab, NOT visible. The
+  user's stray top-left degree field is GONE (verified below). No code needed beyond the re-home (it followed the
+  scaffold into the hidden host).
+- **verify — LIVE (CDP, headless): console errors 0.** 4-tab shell `[design, fill, toolpath, export]`; Design is the
+  initial stage; the shared sketcher renders (`designWorldChildren:12`, `sketchMounted:true`). DEGREE FIELD GONE:
+  `#transformHud` exists but `hudInsideDesign:false` + `hudVisible:false` (offsetParent null); `#stage-draw` host
+  `hidden:true`, not inside Design. #CORE -> GCODE STILL WORKS (no bake): inject a #core line -> target the default
+  toolpath -> Export -> `gcodeEntries:1`, has `G1 X` + `M30`; `coreSketchSet:true`, `hasDefaultToolpath:true`
+  (initLayers ran in the hidden mount).
+- **verify — PERF PROBE (task 3, the number that gates 4b/4c):** injected ~6716 #core line shapes (~13.4k joints, a
+  dense-import stand-in), measured the RAF frame time over 24 frames: **avg 1342.87 ms/frame = 0.7 fps** at
+  probeShapeCount 6718. CATASTROPHIC for dense imports — the #ui renderer rebuilds ~6718 `<path>` + ~13.4k joint
+  glyphs via innerHTML EVERY RAF frame (+ engine.solve). **CONCLUSION: dense imports REQUIRE render throttling before
+  the merge carries imported art.** Hand sketches (a few shapes) render fine (the pre-probe Design tab was smooth at
+  12 children). Mitigation (per UNIFY-1b risk #1): render STATIC/imported geometry into the pen-underlay ONCE (not
+  per-frame); dirty-flag; suppress joint glyphs for imported geometry; cap solve iterations for 0-constraint scenes.
+  Recommend a dedicated perf slice (UNIFY-8 or fold into 4c) BEFORE UNIFY-5 (import->#core) lands real dense SVGs.
+- **verify — ADDITIVE + UNREGRESSED:** penplotter-only (main.js router); `git status packages/` clean = NO #core/#ui
+  edits. `npm run test:shell` **12/12**; `node --check` clean. The art store + Draw scaffold + bake are DORMANT (still
+  present, mounted hidden). 0 net-new. (Known dormant vestige: the sketch-stage "Bake to Draw" button now navigates to
+  'draw' which isn't a tab -> showStage falls back to 'design' gracefully; harmless, retired in UNIFY-7.)
+- **process hygiene:** CDP verify from scratchpad `verify-unify4a.cjs`; `proc_health mark --turn 316`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The plotter is now a 4-tab shell with the merged Design (sketcher) tab; the plotter
+  canvas is re-homed + dormant; the degree field is gone. PERF NUMBER: **1343 ms/frame @ 6716 shapes** — throttling
+  needed before dense imports. NEXT (blessed): **UNIFY-4b** the Freehand tool (plotter-side capture -> fitCubic ->
+  makeBezier) + selection reconcile. STOP — hold.
+
+=== UNIFY-4a (DESIGN SHELL 5->4 + PERF PROBE) DONE — HOLD ===

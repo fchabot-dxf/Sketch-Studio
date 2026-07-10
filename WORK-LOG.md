@@ -7411,3 +7411,158 @@ NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (the mod
 order) before building UNIFY-2. STOP — await blessing.
 
 === UNIFY-1 PLAN (GEOMETRY-UNIFY MIGRATION) — AWAIT BLESSING ===
+
+## turn 306 — UNIFY-1b PLAN (GATE, re-scoped for the MERGE): #core bezier probe + merged "Design" tab migration (no code)
+
+Plan-only per the dispatch. Reused the turn-304 wiring map; probed #core/#ui for bezier support; surveyed the
+merged-tab composition, the Schneider fitter, pan/zoom, and slicing. NO code changed. The bezier answer is the crux.
+
+### A) THE PIVOTAL PROBE — does #core hold beziers as first-class editable geometry? => NO.
+
+Ground truth (grep + reads):
+- **Shape store:** #core shapes are `line | circle | arc` ONLY. There is NO `bezier`/`cubic`/`curve`/`spline` shape
+  kind anywhere in #core or #ui (the only "cubic" hits are `parsePathSubpaths` FLATTENING C/Q to line chains, and a
+  CSS easing string). #core does not even store `path` — importSvgGeometry DECOMPOSES paths into `line` shapes.
+- **Renderer (`#ui/svg-renderer.js`):** draws `line`, `circle`, `arc` (+ previews). No bezier/curve rendering.
+- **Tool ribbon (`#ui/tool-ribbon.js` + `TOOL_MODES`):** Select, Line, Rect(2pt/center/3pt), Circle, Arc, Dimension +
+  8 constraint tools. NO freehand / curve / spline / bezier create tool.
+
+=> #core beziers are NOT first-class. Curves only enter as `arc` (circular) or as import-flattened line chains. So the
+user's "freehand = a #core editable BEZIER" needs a REAL bezier-shape ADDITION (store + render + select + create/fit),
+not reuse. This is the biggest decision in the migration.
+
+### B) THE FORK (scope both, per the dispatch)
+
+```
+  Branch A — SHARED #core/#ui bezier (first-class, the model's true intent)
+    + #core: a `bezier` shape kind {type:'bezier', ctrl:[[x,y]x4] or joints, ...} (cubic); additive
+    + #ui/svg-renderer: a `case 'bezier'` (render as an SVG C path); additive
+    + #ui/tool-ribbon + TOOL_MODES: a Freehand (+ maybe Curve) tool; additive
+    + #ui/input-manager: freehand capture -> Schneider fit -> add bezier shape
+    PRO: beziers are first-class editable/selectable in the SAME sketcher Studio/Shaper use; ONE store; reusable.
+    CON: EDITS SHARED FILES -> breaks the FILE-level "packages/ byte-identical" guardrail. Byte-identical must be
+         RE-READ as "ADDITIVE + Studio/Shaper OUTPUT-unregressed" (Studio/Shaper never create beziers, an unknown-type
+         no-op keeps their render/solve/serialize output identical — must VERIFY: renderer skips cleanly, solver
+         ignores a joint-less shape, serialize/undo tolerate it). Precedent: SWITCH-1 was a blessed additive shared
+         change. Needs shell-smoke 12/12 + Shaper import regression proof.
+  Branch B — PLOTTER-SIDE bezier overlay (keeps #ui files byte-identical)
+    + bezier lives in the #core STORE as data (additive shape kind), but RENDER/SELECT/EDIT + the freehand tool are all
+      PLOTTER-SIDE: the pen-underlay draws the bezier (flattened via a sampler), a host freehand tool creates it, host
+      hit-testing selects it. The #ui renderer/ribbon are UNTOUCHED (skip the unknown type).
+    PRO: #ui files byte-identical (Studio/Shaper trivially safe).
+    CON: the plotter re-implements render+select for beziers (duplicates what the sketcher does for line/circle/arc);
+         beziers are NOT first-class in the shared Design tab (a plotter overlay, not a sketcher citizen). Partial
+         north-star-#2 violation (two render/select paths).
+```
+
+RECOMMEND **Branch A** — the merged model's whole point is freehand as a first-class editable #core citizen; Branch B
+re-splits render/select (the very duplication we keep fighting). Gate it as a blessed ADDITIVE shared change with the
+Studio/Shaper output-unregressed proof (reframe the guardrail from "files untouched" to "additive + output-identical",
+as SWITCH-1 already did). If shared edits are off the table, fall back to Branch B.
+
+### C) MERGED-TAB COMPOSITION ("Design" = Draw+Sketch, one canvas, #ui byte-identical for the composition)
+
+- Mount the shared sketcher (`mountSketch(#design-canvas, {isActive, onRender})`) as today; ONE ribbon grouping
+  Draw/Freehand | Precise (line/rect/circle/arc) | Constraints — via the shared `createToolRibbon` (+ the Freehand
+  tool, which is the Branch-A/B fork). Pen-color UNDERLAY <svg> beneath #design-canvas (same viewBox) draws the #core
+  geometry in pen colors; the shared #ui renderer draws the joints/dims/DOF scaffold on the transparent canvas on top
+  (NO DOF recolor; paper-light chrome). Import is a TOOL on this tab.
+- COMPOSITION itself (mount + underlay + host toolbar) is #ui byte-identical — confirmed. The ONLY parts that force a
+  #ui touch are the Freehand TOOL + bezier RENDER (Branch A) — hence the fork above.
+
+### D) THE FREEHAND -> BEZIER FITTER (Schneider)
+
+- No existing curve-fitter in the repo (grep clean) — net-new, PURE, ~150 LOC. Home: `#core/curve-fit.js` (app-agnostic
+  geometry, reusable — Studio/Shaper could fit too). Input: sampled pointer points (+ a tolerance in world mm). Output:
+  a list of cubic bezier segments (control points) => the `bezier` shape(s). Tolerance = a few px worth of mm; higher
+  tol -> fewer segments -> more solver-light. Fit on stroke-END (pointerup), not per-move.
+- The DOWNSTREAM pipeline already flattens curves to polylines (PP-2a from-path / PP-8 parsePathSubpaths), so a bezier
+  shape -> gcode reuses that path: coreShapeToPolyline would gain a `bezier` case (sample the cubic -> points; pure, de
+  Casteljau — same math as flattenCubic, REUSE it, north star #2).
+
+### E) PAN/ZOOM UNIFICATION
+
+- Two models today: **#ui** input layer uses `state.view = {x,y,w,h}` (viewBox) + `#ui/input-handlers/pan-zoom.js`
+  (wheel-zoom, pan, edge-pan, `updateViewBox`, a `panzoom:viewportChanged` event). **Plotter** uses
+  `state.viewport = {scale, panX, panY}` in `viewport.js` (viewBox derived: `panX panY wrap.w/scale wrap.h/scale`).
+- The merged Design tab IS the #ui sketcher canvas -> it already gets the #ui pan/zoom for free. Unify = converge the
+  DOWNSTREAM stages (Fill/Toolpath/Export) onto the SAME view model. Sub-question (E-open): do the 4 stages share ONE
+  canvas (the #ui sketcher canvas, overlays composed on it — cleanest, one view model) or keep the plotter canvas for
+  Fill/Toolpath/Export but drive it from the #ui `state.view` (retire `viewport.js`'s separate model)? RECOMMEND
+  converge on the #ui `state.view` model; prefer one shared canvas if the toolpath/sim overlays port cleanly.
+
+### F) MIGRATION SLICING (UNIFY-2..) — reuse vs remove
+
+- **UNIFY-2:** toolpaths target #core geometry directly (resolve/collectToolpathShapes read controller.state.shapes +
+  coreShapeToPolyline at collect-time); add the plotter-side `shapeId->pen` side-table. Prove #core shape -> toolpath ->
+  gcode with NO bake. REUSE: coreShapeToPolyline, pipeline, export, pen model.
+- **UNIFY-3:** the `bezier` shape kind + Schneider fitter + coreShapeToPolyline `bezier` case (per the blessed branch).
+  ORACLE the fitter + the bezier flatten.
+- **UNIFY-4:** the merged "Design" tab (mount sketcher + one ribbon + Freehand tool + pen underlay), shell 5->4
+  (Design/Fill/Toolpath/Export). Retire the separate Sketch stage + the Draw stage.
+- **UNIFY-5:** import SVG -> #core (reuse Shaper importSvgToSketch + capture color per group -> shapePens). FLAG ellipse
+  gap + path S/T/A (PP-8/IMPORT-3).
+- **UNIFY-6:** pan/zoom convergence (per E) across the 4 stages.
+- **UNIFY-7:** retire the art store + render-art art drawing + svg-import->art + the bake seam (the big delete).
+- **UNIFY-8 (conditional):** dense-import render perf (probe first).
+- REUSED: #core solver/sketcher + #ui Design tab; coreShapeToPolyline; importSvgGeometry + CTM + parsePathSubpaths +
+  computeImportScale; pen model; toolpath ops/panels; fill/outline/vpype pipeline; export; the #ui pan/zoom. ADDED:
+  bezier kind + Schneider fitter + Freehand tool + pen underlay. REMOVED: art store, render-art art drawing,
+  svg-import->art, the separate Draw + Sketch stages, the bake button, viewport.js's separate view model.
+
+### G) RISKS
+
+1. **The #core-bezier fork (biggest)** — Branch A edits shared files (guardrail reframed to additive+output-identical,
+   needs Studio/Shaper proof); Branch B duplicates render/select plotter-side. Blessing needed BEFORE UNIFY-3.
+2. **Dense-import render perf** — 0 constraints = solve is free, but the #ui renderer redraws all shapes+joints per RAF
+   frame; Shaper's 6716-shape import -> thousands of shapes -> jank. Mitigate: static geometry into the underlay once;
+   PROBE before UNIFY-4/7.
+3. **#ui byte-identical** — composition/underlay/import are byte-identical; only the bezier branch touches #ui files.
+4. **Underlay alignment** — underlay <svg> shares the #core canvas viewBox (now #ui-driven); confirm the sketcher draws
+   strokes (not opaque fills) so the underlay shows through.
+5. **ellipse import gap + path S/T/A** — carried from UNIFY-1 (IMPORT-3 debt); resurface at import->#core.
+
+### H) OPEN DECISIONS (need blessing)
+
+- **Bezier branch: A (shared, additive — recommended) vs B (plotter-side overlay).** Decides whether we edit
+  packages/#core+#ui (with a Studio/Shaper output-unregressed proof) or keep files byte-identical.
+- **4-stage canvas model:** ONE shared #ui canvas for all 4 stages (recommended) vs keep the plotter canvas for
+  Fill/Toolpath/Export driven by the #ui `state.view`.
+- **Freehand fitter home:** `#core/curve-fit.js` (recommended, reusable) vs plotter-side.
+- **Accept ellipse/S-T-A import limits now + track (recommended)** vs block on IMPORT-3.
+- **Run the ~6716-shape perf probe before UNIFY-4/7 (recommended).**
+
+### I) PUNCH-LIST #10 — PEN MODEL: DIGITAL color vs PHYSICAL pen (folded in from two amendments)
+
+Amendment framing: a shape carries TWO distinct things, not one —
+- **DIGITAL color** = arbitrary source RGB (the design; from the imported SVG or a color picker). Per-shape.
+- **PHYSICAL pen** = a discrete pen the user owns (the palette; what actually plots). Few pens.
+- **DIGITAL -> PHYSICAL MAPPING** = the plot-colors panel maps MANY digital colors onto FEW physical pens ("discovered
+  from imported SVGs"). One pen <- many digital colors.
+
+Current model (PP-3c): pens live on TOOLPATHS (`tp.plotColorId` -> `state.plotColors`); geometry has no pen (art shapes
+carry `_fill/_stroke` = a digital color). Import already does the digital->physical: `findOrCreatePlotColor(hex)`
+dedups/creates a physical pen per digital hex and attaches it to the TOOLPATH.
+
+PROPOSED unified pen model (refines the single `shapePens` side-table in B/F above into TWO fields):
+- **GEOMETRY carries the DIGITAL color** (per-shape) — matches SVG import + the user's "change colors in the Design
+  tab." Plotter-side `state.shapeColors: Map<shapeId,'#rgb'>` (keeps #core geometry PURE — digital color is a plotter
+  concept, not pushed into #core).
+- **GEOMETRY maps to a PHYSICAL pen** via the digital->physical map. RECOMMEND: DERIVE the pen from the shape's digital
+  color (findOrCreatePlotColor semantics: digital hex -> the mapped pen), with an optional per-shape pen OVERRIDE
+  (`state.shapePens` as the override table). So the two fields = `shapeColors` (always) + `shapePens` (override only).
+- **TOOLPATHS DERIVE/INHERIT the pen from their target geometry** (reverse of today): a toolpath plots in its target
+  shapes' pen; `tp.plotColorId` becomes a DERIVED default (from the geometry's pen) that stays OVERRIDABLE for
+  back-compat with PP-3c. resolveToolpathShapes can group targets by pen.
+- **Design-tab pen UI (item #10):** a per-shape color control (sets the DIGITAL color + shows the mapped PHYSICAL pen);
+  the plot-colors/"Pens" panel edits the palette + the digital->physical mapping. The pen-color UNDERLAY draws each
+  shape in its PHYSICAL pen color = a true preview of what will plot.
+- Add to OPEN DECISIONS: pen LOCATION (geometry-carries-pen [rec] vs today's toolpath-carries-pen); pen as
+  DERIVED-from-digital-color [rec] vs an explicit per-shape pen; how `tp.plotColorId` reconciles (derived default +
+  overridable). New slice — **UNIFY-3b (pen model: shapeColors + digital->physical + toolpath derive)**, sequenced
+  with import (UNIFY-3/5).
+
+NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. the bezier branch, the canvas model, and
+the pen-location decision) before building UNIFY-2. STOP — await blessing.
+
+=== UNIFY-1b PLAN (MERGED-TAB MIGRATION) — AWAIT BLESSING ===

@@ -6599,3 +6599,32 @@ are PP-2b-3.
   as more registry entries. STOP — hold.
 
 === PP-2b-2 (FILL REGISTRY SHAPE + 2 ARCHETYPES) DONE — HOLD ===
+
+## 2026-07-10 · PP-2b-3 — the remaining 4 fill patterns as FILL_PATTERNS entries (turn 274)
+
+Completed the fill registry (PP-2b-2 shape) by adding the 4 remaining patterns on the BLESSED shape (11c372b).
+Additive; hatch/concentric definitions untouched.
+
+- **Math.random check (per dispatch): NONE.** Grepped `app/js/fill/*.js` — no `Math.random`/random. All 4 patterns
+  are DETERMINISTIC (stipple/dots are fixed offset-grids, not random sampling), so a BYTE-EXACT golden test is valid
+  (not passing by luck) — no seeding/count-only fallback needed.
+- **did — ported 4 modules VERBATIM** (`diff` = identical to source) into `#core/plot/fills/`: `crosshatch.js` +
+  `zigzag.js` (both reuse `hatch` / `hatch.scanlineHatch` — imports resolve as-is), `stipple.js` + `dots.js` (use
+  `utils` polygonBounds/pointInPolygon/makeLineShape — already ported in PP-2b-2). No DOM, no clip dep in these 4.
+- **did — 4 more `FILL_PATTERNS` entries** in `#core/plot/fills/index.js` (APPENDED after concentric — hatch +
+  concentric entries byte-identical, in place): crosshatch + zigzag (`params` angle/spacing/offset), stipple + dots
+  (`params` spacing/offset) — matching the old `PATTERN_OPTIONS`. Registry now = all 6, one declared source.
+- **verify — ORACLE (`packages/core/tests/plot-fills3.test.js`, auto-discovered):** golden captured from the ORIGINAL
+  fills (rect 20x12, explicit params). Registry = 6 entries; the 4 new param schemas correct; hatch+concentric still
+  present. **BYTE-EXACT vs golden:** crosshatch = 3 horizontal + 5 vertical lines; zigzag = one connected chain
+  polyline `[[0,2],[20,2],[0,6],[20,10]]`; stipple = 14 staggered dots; dots = 15 square-grid dots. GREEN.
+- **verify — UNREGRESSED:** ADDITIVE — 4 new pattern files + the oracle + the 4 appended entries in index.js (no
+  existing entry/behavior changed). `npm run test:shell` **12/12**; `node --check` clean; new oracle green;
+  plot-fills (PP-2b-2) oracle still green; full-suite baseline unchanged -> 0 net-new. No app wires to the fills yet.
+- **process hygiene:** golden capture ran from a scratchpad `.mjs`; `proc_health mark --turn 274`; `watch` clean.
+- **state:** branch `carve-out`. The fill engine is COMPLETE in `#core/plot/fills/` — the declared `FILL_PATTERNS`
+  registry with all 6 patterns (hatch / crosshatch / zigzag / concentric / stipple / dots) + `expandLayerWithFill`.
+  PP-2b (fills) is done. NEXT per the epic: **PP-2c** — outline styles -> `#core/plot/outlines/` as a declared
+  `OUTLINE_STYLES` registry. STOP — hold.
+
+=== PP-2b-3 (REMAINING FILL PATTERNS) DONE — HOLD ===

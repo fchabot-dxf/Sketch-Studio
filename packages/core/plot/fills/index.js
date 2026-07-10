@@ -7,6 +7,10 @@
 
 import * as hatch from "./hatch.js";
 import * as concentric from "./concentric.js";
+import * as crosshatch from "./crosshatch.js"; // PP-2b-3
+import * as zigzag from "./zigzag.js";         // PP-2b-3
+import * as stipple from "./stipple.js";       // PP-2b-3
+import * as dots from "./dots.js";             // PP-2b-3
 import { closedPolygonFor, makePolylineShape } from "./utils.js";
 import { insetPolygon } from "../clip.js";
 
@@ -31,6 +35,45 @@ export const FILL_PATTERNS = [
       { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm" },
     ],
     generate: concentric.generate,
+  },
+  // PP-2b-3 — the remaining 4 (param schemas match the old PATTERN_OPTIONS).
+  {
+    id: "crosshatch",
+    label: "Crosshatch",
+    params: [
+      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg" },
+      { key: "spacing", label: "Spacing", type: "number", default: 2,  unit: "mm", min: 0.1 },
+      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm" },
+    ],
+    generate: crosshatch.generate,
+  },
+  {
+    id: "zigzag",
+    label: "Zigzag",
+    params: [
+      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg" },
+      { key: "spacing", label: "Spacing", type: "number", default: 2,  unit: "mm", min: 0.1 },
+      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm" },
+    ],
+    generate: zigzag.generate,
+  },
+  {
+    id: "stipple",
+    label: "Stipple",
+    params: [
+      { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1 },
+      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm" },
+    ],
+    generate: stipple.generate,
+  },
+  {
+    id: "dots",
+    label: "Dots",
+    params: [
+      { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1 },
+      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm" },
+    ],
+    generate: dots.generate,
   },
 ];
 

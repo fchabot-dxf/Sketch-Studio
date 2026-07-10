@@ -7663,3 +7663,33 @@ behavior changed.
   Schneider freehand->bezier fitter in `#core/curve-fit.js`), then UNIFY-3b (pen model). STOP — hold.
 
 === UNIFY-3 (#core BEZIER SHAPE, shared) DONE — HOLD ===
+
+## turn 312 — UNIFY-3-fit: the freehand -> bezier FITTER (#core/curve-fit.js, pure) + oracle. Additive #core.
+
+The Schneider curve-fitter: turn a freehand point stream into COMPACT cubic bezier segments (not a dense polyline).
+NEW pure #core file only — NO existing #core/#ui edits. Not wired to any tool yet (UNIFY-4's Freehand does that).
+
+- **did — `#core/curve-fit.js` `fitCubic(points, tolerance) -> [{p0,c1,c2,p3}, ...]`:** Schneider's algorithm
+  ("Automatically Fitting Digitized Curves", Graphics Gems 1990). Chord-length parameterize -> least-squares fit ONE
+  cubic honoring the endpoint tangents (generateBezier; Wu/Barsky 1/3-chord fallback for degenerate/negative alphas)
+  -> computeMaxError (actual distance); if within tolerance accept; if close, Newton-Raphson REPARAMETERIZE + refit up
+  to 4x; else SPLIT at the worst point (tangent from its neighbors) + RECURSE both halves. PURE, no DOM, ~150 LOC.
+  Points accept {x,y} or [x,y]; consecutive duplicates dropped (zero-length chords break parameterization). Each
+  segment ({x,y} points) is ready for makeBezier (endpoints -> joints, c1/c2 -> [x,y]). Guards: <2 pts -> []; exactly
+  2 -> one straight line-cubic (control points at 1/3, 2/3).
+- **did — ORACLE `#core/tests/curve-fit.test.js`:** straight run (11 collinear pts) -> exactly 1 segment reproducing
+  the line; a 1.5-period SINE (31 pts) -> a few segments (2..30) with an INDEPENDENT check (dense-sample each fitted
+  segment via a local Bernstein eval, min-distance per input point) that EVERY input point is within tolerance (max
+  dev <= tol*1.1); continuity (p3 == next p0); endpoints interpolate the stroke ends; tighter tolerance -> >= segments;
+  guards (<2 pts -> [], 2-pt cubic control points at 1/3-2/3, accepts [x,y]). Green STANDALONE.
+- **verify:** the fitter oracle + ALL core oracles (now **20/20**: 12 solver + 5 plot + core-shape-to-polyline +
+  bezier-shape + curve-fit) green STANDALONE; `npm run test:shell` **12/12**; `node --check` clean. Studio/Shaper
+  UNAFFECTED — a NEW file, no existing edits (`git status packages/` = only the 2 new files). 0 net-new.
+- **process hygiene:** pure-algorithm slice, no browser needed (the oracle IS the verification); `proc_health mark
+  --turn 312`; `watch` clean before pass.
+- **state:** branch `carve-out`. #core now has BOTH the bezier SHAPE (UNIFY-3) and the freehand->bezier FITTER
+  (UNIFY-3-fit) — the substrate for the Freehand tool. NEXT (blessed sequence): **UNIFY-4** the merged "Design" tab
+  (one canvas, one ribbon incl. the Freehand tool wiring fitCubic -> makeBezier, pen underlay; shell 5->4), then
+  UNIFY-3b (pen model) / UNIFY-5 (import->#core) / UNIFY-6 (pan/zoom) / UNIFY-7 (retire art store, perf-gated). STOP — hold.
+
+=== UNIFY-3-fit (FREEHAND->BEZIER FITTER) DONE — HOLD ===

@@ -108,7 +108,14 @@ export function mountDrawStage(view) {
 }
 
 function onEnter() {
-  if (!canvasWrap) return;
-  const r = canvasWrap.getBoundingClientRect();
+  const wrap = canvasWrap;
+  if (!wrap) return;
+  // PP-4a: reclaim the SHARED canvas (the Toolpath/Fill/Export stages borrow it) back into #drawRoot, and switch
+  // back to art-only (no toolpath overlay). insertBefore #drawPanel keeps the canvas on the left, panel on the right.
+  const root = document.getElementById("drawRoot");
+  const panel = document.getElementById("drawPanel");
+  if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel);
+  state.preview.showToolpath = false;
+  const r = wrap.getBoundingClientRect();
   if (r.width > 0 && r.height > 0) { fitViewport(); renderArt(); }
 }

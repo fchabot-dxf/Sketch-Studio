@@ -11,6 +11,9 @@ import { makeShapeElement } from "./shapes.js";
 // import renderArt), but the calls are runtime-only so it resolves. Guarded — the panels only exist post-mount.
 import { renderLayersPanel } from "./layers-panel.js";
 import { renderPlotColorsPanel } from "./plot-colors-panel.js";
+// PP-4a: the optimized toolpath overlay (drawn over the art in the Toolpath stage). preview computes via #core/plot
+// and honors autoRecalc; circular (preview late-imports renderArt) but runtime-only, so it resolves.
+import { requestPreview, buildToolpathOverlay } from "./preview.js";
 
 export function renderArt() {
     if (!canvas) return;
@@ -33,6 +36,15 @@ export function renderArt() {
     // Selection halo (empty until PP-3b's interaction populates state.selectedShapeIds).
     if (state.selectedShapeIds && state.selectedShapeIds.size > 0) {
         canvas.appendChild(buildSelectionOverlay());
+    }
+
+    // PP-4a: the OPTIMIZED toolpath overlay — Toolpath stage only (state.preview.showToolpath). requestPreview
+    // recomputes via #core/plot (vpype linemerge/sort/simplify), gated by autoRecalc; buildToolpathOverlay reads
+    // the cache. Draw keeps showToolpath=false, so this is a no-op there.
+    if (state.preview && state.preview.showToolpath) {
+        requestPreview();
+        const r = buildToolpathOverlay();      // returns { overlay, stats }
+        if (r && r.overlay) canvas.appendChild(r.overlay);
     }
 
     // PP-3c: keep the Draw side panels in sync with the art (layer tree + pen list) on every render.

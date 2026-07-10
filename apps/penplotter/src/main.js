@@ -3,6 +3,7 @@
 // ONLY — no engines, no Design tab yet (PP-2..PP-5). Design record: penplotter/INTEGRATION.md. No #core imports.
 import { createAppSwitcher } from '#ui/app-switcher.js';
 import { mountDrawStage } from './draw-stage.js'; // PP-3a: the Draw stage mounts its canvas on first entry
+import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas)
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
@@ -18,7 +19,7 @@ const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads
 
 // Per-stage MOUNTERS: a stage that needs live wiring registers a mount(view) here; the router calls it ONCE on
 // first entry (returning an optional { onEnter } re-run each entry). PP-3a wires 'draw'; other stages stay stubs.
-const STAGE_MOUNT = { draw: mountDrawStage };
+const STAGE_MOUNT = { draw: mountDrawStage, toolpath: mountToolpathStage };
 const mounted = {};
 
 // Mount the shared app-switcher (marks Pen Plotter current; navigates to Sketch Studio / Shaper).
@@ -68,6 +69,10 @@ function showStage(id) {
     if (mounted[id].onEnter) mounted[id].onEnter();
   }
 }
+
+// PP-4a: mount the Draw stage ONCE at startup so the SHARED plotter canvas (#canvasWrap) always exists — the
+// Toolpath/Fill/Export stages borrow it by re-parenting on entry, even when the persisted initial stage isn't Draw.
+if (STAGE_MOUNT.draw && !mounted.draw) mounted.draw = STAGE_MOUNT.draw(views.get('draw')) || {};
 
 // Initial stage: the persisted one if still valid, else the first.
 let initial = STAGES[0].id;

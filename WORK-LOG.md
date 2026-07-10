@@ -6953,3 +6953,49 @@ active-layer-panel deferral -> PP-4-Fill. plot-colors `cloud`/`openPicker` -> a 
 cloud save/load; stays stubbed unless the user wants it).
 
 === PP-4 PLAN (DOWNSTREAM SLICING) — AWAIT BLESSING ===
+
+## 2026-07-10 · PP-4a — Toolpath stage: preview bridge + optimized overlay (shared canvas) (turn 290)
+
+The Toolpath-stage backbone (blessed split: PP-4a = preview + overlay + create/target + un-stub; PP-4b = the full
+ops panel). Draw art -> Toolpath tab -> the OPTIMIZED toolpath overlay renders over the art. penplotter-only additive.
+
+- **⚑ ARCHITECTURE DECISION (flag for the advisor) — ONE SHARED plotter canvas, RE-PARENTED per stage.** Per
+  INTEGRATION.md (only Sketch has its own canvas; Draw/Fill/Toolpath/Export share one), I made the single
+  `#canvasWrap` (built + fully wired by the Draw stage) MOVE between stages: each stage's `onEnter` re-parents it
+  into its own root (`#drawRoot` / `#toolpathRoot`) before that stage's side panel. No duplicate `#canvas` id, no
+  duplicate art render, one shared `state`. `main.js` now mounts the Draw stage ONCE at startup so the canvas exists
+  before any stage (even if the persisted initial stage isn't Draw). This is the pattern Fill (PP-5) + Export (PP-6)
+  will reuse; Sketch (PP-7) is the one stage with its OWN canvas.
+- **did — port `preview.js`** (the compute bridge) -> `apps/penplotter/src/`, repointing `vpype/index` ->
+  `#core/plot/index.js`, `fill/index` -> `#core/plot/fills`, `outline/index` -> `#core/plot/outlines`, and the late
+  `render.js` import -> `render-art.js`. `resolveToolpathShapes` / `buildToolpathOverlay` / `requestPreview` /
+  `recalcPreview` / `isPreviewStale` + `fetchPreview` (SYNC — vpype is pure) unchanged otherwise.
+- **did — `render-art.js`:** when `state.preview.showToolpath`, `requestPreview()` then append
+  `buildToolpathOverlay().overlay` (it returns `{ overlay, stats }` — caught that; my first pass wrongly appended the
+  object -> "parameter 1 is not of type 'Node'"; fixed). Draw keeps `showToolpath=false` -> no-op there.
+- **did — `toolpath-stage.js` (new):** `mountToolpathStage` — a side panel (a **Recalculate** button + notes) + on
+  `onEnter`: adopt the shared canvas, `showToolpath=true`, `recalcPreview()` (an explicit recompute, like the button),
+  `renderArt()` (art + the optimized overlay). Draw `onEnter` reclaims the canvas + `showToolpath=false`.
+- **did — UN-STUB (partial, per split):** `interaction.resolveToolpathShapes` -> the real `preview.resolveToolpathShapes`.
+  `syncTargetEditingSelection` (interaction) + `exitTargetEditing` (keyboard) STAY no-op stubs -> un-stubbed in PP-4b
+  when `toolpath-layers-panel.js` lands (they are target-editing, a panel feature).
+- **honor autoRecalc:** `requestPreview` no-ops on edits in manual mode (`state.autoRecalc` false) once a preview
+  exists; the stage-enter `recalcPreview()` + the Recalculate button force it. (The full autoRecalc toggle UI is
+  Settings/Export, PP-6.)
+- **verify — LIVE (CDP, headless):** console errors **0**. Drew a rect in Draw -> Draw shows no overlay
+  (`showToolpath` false, canvas in `#drawRoot`). Switched to Toolpath -> canvas RE-PARENTED to `#toolpathRoot`,
+  `showToolpath` true, the **OPTIMIZED toolpath overlay renders** (`g[data-overlay=toolpath]`, 10 elements; the
+  preview cache = 1 layer / 1 stroke = the vpype-optimized rect outline). Recalculate button present. Switched BACK to
+  Draw -> canvas reclaimed to `#drawRoot`, overlay gone, `showToolpath` false.
+- **verify — UNREGRESSED:** ADDITIVE, penplotter only (imports READ `#core/plot`; no `#core` edit). `npm run
+  test:shell` **12/12**; penplotter loads errors 0; Shaper untouched. `node --check` clean (19 src files). 0 net-new.
+- **DEFERRED to PP-4b (flagged):** the full `toolpath-layers-panel.js` — create toolpaths (`#addOutlineTp`/
+  `#addFillTp`), target-editing, **pen ASSIGN** (`tp.plotColorId` — the PP-3c finding), order, feeds, up/down; +
+  un-stub `syncTargetEditingSelection`/`exitTargetEditing`. PP-4a proves the compute+overlay backbone with the DEFAULT
+  toolpath (from `initLayers`, targeting the art layer).
+- **process hygiene:** CDP verifies from scratchpad `.cjs`; `proc_health mark --turn 290`; `watch` clean.
+- **state:** branch `carve-out`. The Toolpath stage previews the optimized plot path over the art (shared canvas +
+  `#core/plot` vpype); `resolveToolpathShapes` un-stubbed. NEXT: **PP-4b** — the full toolpath ops panel + pen assign.
+  STOP — hold.
+
+=== PP-4a (TOOLPATH PREVIEW + OPTIMIZED OVERLAY) DONE — HOLD ===

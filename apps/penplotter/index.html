@@ -93,6 +93,12 @@
       background: rgba(47,143,127,0.12); border: 2px dashed var(--sk-selection); color: #2f8f7f; font: 600 15px system-ui, sans-serif;
       pointer-events: none; z-index: 8; }
     #dropOverlay.show { display: flex; }
+    /* PP-4a — the Toolpath stage: the SHARED canvas (re-parented in) + its own side panel. */
+    #stage-toolpath { padding: 0; }
+    #toolpathRoot { position: absolute; inset: 0; display: flex; }
+    #toolpathPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
+      color: #3a352b; padding: 10px; font: 13px system-ui, sans-serif; }
+    .tp-note { color: #8a8067; font-size: 12px; line-height: 1.5; margin: 6px 0; }
   </style>
 </head>
 <body>

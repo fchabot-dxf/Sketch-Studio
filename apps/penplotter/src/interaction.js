@@ -6,12 +6,9 @@ import { canvas, coordsEl, SVG_NS, toast } from "./dom.js";
 import { screenToSvg, applyViewport } from "./viewport.js";
 import { translateShape, rotateShape, scaleShape, shapeCenter, deepCopyShape, combinedBounds, shapeBounds, getNodes, setNodes, makeShapeElement } from "./shapes.js";
 import { gatherSnapCandidates, shapeVertices, findSnapDelta } from "./snapping.js";
-// PP-3b STUBS: resolveToolpathShapes (preview.js) + syncTargetEditingSelection (toolpath-layers-panel.js) are
-// TOOLPATH-stage features that bleed into interaction. Draw runs art-only (mountDrawStage sets
-// state.preview.showToolpath=false), so the branches that would call resolveToolpathShapes are skipped; the
-// syncTargetEditingSelection() call on drag-commit is a harmless no-op. Local stubs keep this module free of the
-// preview.js / toolpath-layers-panel.js deps until the Toolpath stage wires them for real.
-function resolveToolpathShapes() { return []; }
+import { resolveToolpathShapes } from "./preview.js"; // PP-4a: UN-STUBBED — the real compute bridge (Toolpath stage)
+// PP-4b STUB (still): syncTargetEditingSelection is a toolpath-layers-panel target-editing feature — un-stubbed in
+// PP-4b when the ops panel lands. The drag-commit call stays a harmless no-op until then.
 function syncTargetEditingSelection() {}
 import { closedPolygonFor, pointInPolygon } from "#core/plot/fills/utils.js";
 import { crossingParams, trimSpanAt, removedSpanAt } from "./trim.js";

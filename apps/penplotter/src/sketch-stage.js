@@ -47,7 +47,23 @@ export function mountSketchStage(view, ctx = {}) {
   const designCanvas = view.querySelector('#design-canvas');
   const colorInput = view.querySelector('#shapeColor');
 
-  let controller = null, infoPanel = null, ribbon = null, lastSig = '', underlayDirty = true;
+  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', underlayDirty = true;
+
+  // UNIFY-throttle: a shape is STATIC (drawn by the color underlay; SKIPPED by the per-frame sketcher — perf, and its
+  // joint glyphs are suppressed) ONLY when the plotter has MARKED it static (state.staticShapeIds — imported/dense
+  // geometry) AND it is not currently selected. Freehand/drawn/selected geometry is LIVE: the sketcher draws it with
+  // its JOINTS (editable). Selecting a static shape ACTIVATES it (live); deselecting returns it to static. #14: this
+  // is why a fresh freehand bezier shows its endpoint joints (it's never marked static -> live).
+  const isStatic = (sh) => state.staticShapeIds.has(sh.id) &&
+    !(controller && controller.state.selectedShapes && controller.state.selectedShapes.has(sh.id));
+
+  // UNIFY-throttle: gate the per-frame solve to when geometry is being MANIPULATED (a drag, a selected/active edit).
+  // Idle frames skip solve (each call is ~1.3s at 13k joints); the last-solved geometry stays put. Discrete changes
+  // solve explicitly (after mount / freehand commit). Studio/Shaper (no shouldSolve) always solve -> byte-identical.
+  const shouldSolve = () => {
+    const s = controller && controller.state;
+    return !!(s && (s.drag || s.active || (s.selectedShapes && s.selectedShapes.size > 0)));
+  };
 
   // UNIFY-4c: keep the underlay's viewBox aligned with the sketcher's (pan/zoom mutates the canvas viewBox). CHEAP —
   // a per-frame attribute copy, NOT a re-render; the path rebuild is dirty-flagged (renderUnderlay).
@@ -61,6 +77,7 @@ export function mountSketchStage(view, ctx = {}) {
     if (!underlay || !controller) return;
     const s = controller.state, parts = [];
     for (const sh of s.shapes) {
+      if (!isStatic(sh)) continue; // live (selected) shapes are drawn by the sketcher (DOF) — not the underlay
       const pts = coreShapeToPolyline(sh, s.joints);
       if (!pts || pts.length < 2) continue;
       const d = 'M ' + pts.map(p => p[0] + ' ' + p[1]).join(' L ');
@@ -89,14 +106,19 @@ export function mountSketchStage(view, ctx = {}) {
     const nJoints = (s.joints && s.joints.size) || 0;
     const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' +
       (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
-    if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); underlayDirty = true; }
+    if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
+    // UNIFY-throttle: dirty the underlay on shape-count / SELECTION change (a shape entering/leaving the live set),
+    // NOT on per-frame joint moves — so dragging a live shape does NOT rebuild the (static) underlay's many paths.
+    const uSig = nShapes + '|' + state.staticShapeIds.size + '|' + (s.selectedShapes ? [...s.selectedShapes].sort().join(',') : '');
+    if (uSig !== lastUSig) { lastUSig = uSig; underlayDirty = true; }
     syncUnderlayView();                                   // per frame (cheap) — alignment during pan/zoom
     if (underlayDirty) { renderUnderlay(); underlayDirty = false; } // rebuild paths only on change
   };
 
   // Mount the shared sketcher ONCE into the stage's OWN svg (isActive gates its document-level input listeners).
-  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick });
+  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve });
   state.coreSketch = controller.state; // UNIFY-2: a toolpath can target this #core geometry directly
+  try { controller.engine.solve(500); } catch (_) {} // UNIFY-throttle: converge the seed once (per-frame solve is now gated)
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.

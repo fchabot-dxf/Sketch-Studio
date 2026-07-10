@@ -64,6 +64,11 @@ function seedDemo(engine, state) {
 // ── Mount the full renderer + input into a host <svg> (P5a render + P5b interactive) ─────────────
 // opts.isActive: () => boolean — gates the input layer's document-level listeners to the host's active surface
 // (so an inactive Design tab doesn't hijack a sibling editor's keyboard/wheel). Defaults to always-active.
+// opts.isStatic: (shape) => boolean — OPTIONAL host static-skip seam (UNIFY-throttle): skip that shape + its joint
+// glyphs from the per-frame render (the host draws it elsewhere, e.g. a color underlay), so dense scenes stay
+// interactive. Omitted (default) = render everything = byte-identical. 'static' is a HOST concept, not a #core flag.
+// opts.shouldSolve: () => boolean — OPTIONAL host solve gate (UNIFY-throttle): skip the per-frame engine.solve() when
+// it returns false (e.g. idle / nothing being edited). Omitted (default) = always solve = byte-identical.
 export function mountSketch(svgEl, opts = {}) {
   const engine = createEngine(null);
   engine.init();
@@ -96,7 +101,11 @@ export function mountSketch(svgEl, opts = {}) {
   const renderCtx = {};
   let rafId = null;
   const frame = () => {
-    engine.solve(SolverConfig.ITERATIONS || 500);
+    // UNIFY-throttle: each engine.solve() call has an O(joints) setup cost (~1.3s at 13k joints) INDEPENDENT of
+    // iteration count, so calling it every frame makes dense scenes unusable even with the render skip. opts.shouldSolve
+    // lets the HOST gate solve to when geometry is actually being manipulated (drag/selection); idle frames skip it and
+    // the last-solved geometry stays put. DEFAULT (no shouldSolve) = always solve = byte-identical (Studio/Shaper).
+    if (!opts.shouldSolve || opts.shouldSolve()) engine.solve(SolverConfig.ITERATIONS || 500);
     // SKETCH-2b: hide a HIDDEN sketch's geometry from the canvas (a layer filter). Default (all visible) → empty set →
     // the originals pass through UNCHANGED → byte-identical. A constraint stays if ANY of its joints is still visible.
     let dJoints = state.joints, dShapes = state.shapes, dConstraints = state.constraints;
@@ -105,6 +114,23 @@ export function mountSketch(svgEl, opts = {}) {
       dJoints = new Map(); for (const [id, j] of state.joints) if (!hidden.has(sketchOf(j))) dJoints.set(id, j);
       dShapes = state.shapes.filter((s) => !hidden.has(sketchOf(s)));
       dConstraints = state.constraints.filter((c) => !(c.joints && c.joints.length) || c.joints.some((jid) => { const j = state.joints.get(jid); return j && !hidden.has(sketchOf(j)); }));
+    }
+    // UNIFY-throttle: a HOST-injected static-skip seam. When opts.isStatic(shape) is provided, SKIP static shapes +
+    // their joint glyphs from the per-frame render (the host draws them once in its color underlay); only the FEW
+    // live (e.g. selected/edited) shapes redraw each frame -> dense scenes stay interactive. Live joints = those used
+    // by a non-static shape, plus the origin + any selected joints (so activation/edit glyphs still show). DEFAULT
+    // (no opts.isStatic) leaves dJoints/dShapes/dConstraints UNCHANGED -> byte-identical (Studio/Shaper pass nothing).
+    if (typeof opts.isStatic === 'function') {
+      const liveShapes = [], liveJ = new Set(['j_origin']);
+      for (const s of dShapes) {
+        let st; try { st = opts.isStatic(s); } catch (_) { st = false; }
+        if (st) continue;
+        liveShapes.push(s); if (s.joints) for (const jid of s.joints) liveJ.add(jid);
+      }
+      if (state.selectedJoints) for (const jid of state.selectedJoints) liveJ.add(jid);
+      const fJ = new Map(); for (const [id, j] of dJoints) if (liveJ.has(id)) fJ.set(id, j);
+      dJoints = fJ; dShapes = liveShapes;
+      dConstraints = dConstraints.filter((c) => !(c.joints && c.joints.length) || c.joints.some((jid) => liveJ.has(jid)));
     }
     draw(dJoints, dShapes, svgEl, state.active, state.snapTarget, dConstraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup, renderCtx);
     try { opts.onRender && opts.onRender(); } catch (_) { /* host hook (e.g. dock refresh) */ }

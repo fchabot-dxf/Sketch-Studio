@@ -7947,3 +7947,64 @@ canvases (the dense THROTTLE is the next slice). The underlay is the dirty-flagg
   the #ui scaffold skip static geometry; the underlay already renders it once) BEFORE UNIFY-5 (import->#core). STOP — hold.
 
 === UNIFY-4c (PEN MODEL + COLOR UNDERLAY) DONE — HOLD ===
+
+## turn 322 — UNIFY-throttle: static-skip render + a SOLVE-GATE — dense scenes go 0.7 fps -> 60 fps. Additive #ui seams.
+
+The crux perf fix before UNIFY-5. TWO additive, byte-identical-by-default #ui seams in mountSketch; "static" + the
+gate policy stay HOST-side. The render-skip alone was NOT enough — the MEASURE proved solve() is the real bottleneck.
+
+- **did — #ui STATIC-SKIP seam (packages/ui/sketch-canvas.js, additive):** `opts.isStatic(shape)` — the frame filters
+  static shapes + their exclusive joint glyphs out of the per-frame render (keeping the origin + selected joints +
+  any live-shape joints). DEFAULT (no opts.isStatic) = render everything = BYTE-IDENTICAL.
+- **did — #ui SOLVE-GATE seam (additive):** `opts.shouldSolve()` — the frame SKIPS `engine.solve()` when it returns
+  false. DEFAULT (no opts.shouldSolve) = always solve = BYTE-IDENTICAL. **WHY (the flagged complication):** a
+  diagnostic proved each `engine.solve()` call costs ~1.3s at 13,435 joints INDEPENDENT of iteration count
+  (`solve(500)`=1318ms, `solve(1)`=1367ms) — an O(joints) per-CALL setup. So the render-skip alone still measured
+  1333ms (solve dominated); gating the per-frame solve is what makes it interactive.
+- **did — plotter policy (sketch-stage.js, host-side; REVISED per amendment #14):** `isStatic = (sh) =>
+  state.staticShapeIds.has(sh.id) && !selected(sh)` — a shape is STATIC only when the plotter MARKED it static
+  (`state.staticShapeIds` — imported/dense geometry) AND it isn't selected. Freehand/drawn/selected geometry is LIVE:
+  the sketcher draws it WITH its JOINTS (editable). Selecting a static shape ACTIVATES it (live); deselecting returns
+  it to static. `shouldSolve = () => drag || active || selectedShapes.size>0` — solve only while manipulating; idle =
+  frozen (last-solved) geometry. Solve the seed ONCE after mount (per-frame solve is now gated). The underlay draws
+  only MARKED-STATIC shapes; its dirty flag fires on shape-count / staticShapeIds-size / SELECTION change (uSig), NOT
+  per-frame joint moves — so dragging a live shape doesn't rebuild the underlay's many paths.
+- **did — AMENDMENTS (RENDER PARITY — the real issue, punch #14/#15) folded in:** the user clarified (reframe) it's
+  NORMAL SKETCH (a line + Coincident + Distance-50), NOT freehand — the DIMENSION + joints + glyphs must render on the
+  plotter Design tab like Shaper's, ALWAYS, not gated on selection. EXACT SYMPTOM: overlays showed ONLY when selected.
+  ROOT CAUSE: my first cut `isStatic = !selected` classified UNSELECTED normal-sketch geometry as STATIC -> the
+  static-skip suppressed its joints/dimension until selected. FIX: the MARKED-STATIC policy above — a shape is static
+  ONLY when the plotter explicitly MARKED it (dense import, UNIFY-5, threshold-gated) and not selected; normal/hand-
+  drawn/sketched geometry is NEVER marked -> ALWAYS LIVE -> joints + dimensions + glyphs render every frame (parity).
+  Overlays are NOT selection-gated. (This also covers the freehand-bezier-joints case — freehand = live.) Render
+  parity is prioritized over the perf skip: the skip is OFF by default, engaged only for marked dense imports.
+- **verify — MEASURE + BUG #14 (CDP, headless): console errors 0.** PERF: inject 6716 #core lines (13,435 joints) +
+  MARK them static -> the underlay draws 6716 paths (once), `class="joint-handle"` count = 0 (static joints
+  suppressed), and the RAF frame time is **16.6 ms = 60 FPS** (vs **1343 ms = 0.7 FPS** before — the perf goal HIT).
+  Diagnostic pinned the cause: `engine.solve(500)`=1318ms and `solve(1)`=1367ms (per-CALL O(joints) setup) -> the
+  solve-gate is the fix, not the render skip alone. BUG #14: draw a freehand stroke -> a LIVE bezier (`bezierIsStatic:
+  false`); its endpoint joints RENDER (`bezierJointsRendered:true` — a `<circle>` at each endpoint's coords). Earlier
+  activation also verified (select a static shape -> live in the sketcher; deselect -> back to static/underlay).
+- **verify — RENDER PARITY (the reframe's primary check, CDP): console errors 0.** The seed (a line + Coincident +
+  Distance-50), NOTHING selected + NOTHING marked static: 4 joint circles + 1 dimension `<text>` label + the line
+  (`shape-elem`) ALL render. IDENTICAL when the line is selected (jointCircles 4->4, textLabels 1->1) -> overlays are
+  NOT selection-gated = full render parity with Shaper's Design tab (plotter-themed). The user's "shows only on
+  selection" symptom is FIXED. shell-smoke re-run **12/12** after the policy change.
+- **verify — UNREGRESSED (guardrail):** both seams default to byte-identical (Studio/Shaper pass NEITHER isStatic nor
+  shouldSolve -> render-all + always-solve, unchanged). `npm run test:shell` **12/12** (Studio Design tab render);
+  ALL core oracles **21/21** green STANDALONE (the solver oracles drive the engine directly, not via mountSketch's
+  gate -> unaffected); `node --check` clean. `git status packages/` = ONLY sketch-canvas.js modified (additive). 0 net-new.
+- **FLAG (solver scalability, deeper — for a later slice):** the solve-gate makes IDLE dense scenes interactive (the
+  target), but each solve() call is still ~1.3s at 13k joints, so ACTIVELY editing/constraining amid a dense scene
+  (selected/drag -> per-frame solve) is still solver-bound. The plotter's "static-by-default; activate a SMALL subset"
+  model keeps this off the hot path for VIEWING/plotting dense imports; heavy constraint-editing of a 13k-joint sketch
+  would need a #core solver fix (the per-call O(joints) setup / a subsystem solve / a convergence early-out) — its own
+  gated slice, NOT required for UNIFY-5's import.
+- **process hygiene:** CDP verify + diagnostic from scratchpad (`verify-throttle.cjs`, `diag-solve.cjs`); `proc_health
+  mark --turn 322`; headless browser killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Dense #core scenes are now interactive (60fps idle) via the static-skip render + the
+  solve-gate; the color underlay carries the static geometry. The perf blocker before UNIFY-5 is CLEARED. NEXT
+  (blessed): **UNIFY-5** — import SVG -> #core sketch (reuse Shaper's importSvgToSketch) + colors -> shapeColors; the
+  imported geometry lands static (fast). STOP — hold.
+
+=== UNIFY-throttle (STATIC-SKIP RENDER) DONE — HOLD ===

@@ -20,6 +20,10 @@ export const state = {
     // UNIFY-4c: per-shape DIGITAL color (source RGB), edited in the Design tab. Plotter-side (#core stays pure). Maps
     // to a PHYSICAL pen via nearest-match (penIdForShape). Keyed by shape id (art OR #core sketch shape).
     shapeColors: new Map(),
+    // UNIFY-throttle: shape ids the plotter has marked STATIC (imported/dense, unedited). The sketcher SKIPS them
+    // per-frame (perf) + the color underlay draws them; NOT-marked = LIVE (drawn by the sketcher, joints visible).
+    // Freehand/drawn geometry is LIVE (joints show); imports (UNIFY-5) land static. Selecting a static shape -> live.
+    staticShapeIds: new Set(),
     toolpaths: [],
     activeToolpathId: null,
     // Plot colors = the pens the user actually owns. Discovered from

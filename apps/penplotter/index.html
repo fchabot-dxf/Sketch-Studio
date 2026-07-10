@@ -139,7 +139,9 @@
     #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
       background: #f2f4f9; border-right: 1px solid #d7dce6; color: #2b3244; transition: flex-basis 0.15s ease; }
     #design-panel.collapsed { flex-basis: 30px; }
-    #design-panel.collapsed #design-panel-info { display: none; }
+    #design-panel.collapsed #design-panel-info,
+    #design-panel.collapsed #design-panel-actions { display: none; }
+    #design-panel-actions { padding: 8px 8px 0; }
     #design-panel-toggle { align-self: flex-end; background: transparent; border: 0; color: #6b7280; cursor: pointer;
       font: 13px system-ui, sans-serif; padding: 6px 8px; line-height: 1; }
     #design-panel-toggle:hover { color: #2b3244; }

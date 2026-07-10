@@ -1,25 +1,34 @@
-// apps/penplotter/src/sketch-stage.js — PP-7a (north-star capstone): the OPTIONAL Sketch stage IS the shared
-// #core/#ui Design tab, embedded UNCHANGED — the very same sketcher Studio & Shaper mount. It gets its OWN <svg>
-// canvas (NOT the shared plotter #canvasWrap), the CAD DOF-color --sk-* palette (distinct from the warm pen
-// stages), and a RAF tied to the active stage (start on enter / stop on leave) so the solve->draw loop never runs
-// while hidden. MIRRORS apps/shaper/src/main.js's ensureSketch / buildDesignUI / panelTick. No seam to the plotter
-// art yet (that's PP-7b: coreShapeToPolyline). Host wiring ONLY — #ui/#core stay BYTE-IDENTICAL, so the Studio &
-// Shaper Design tabs cannot regress.
+// apps/penplotter/src/sketch-stage.js — PP-7a/PP-7b: the OPTIONAL Sketch stage IS the shared #core/#ui Design tab,
+// embedded UNCHANGED — the very same sketcher Studio & Shaper mount. It gets its OWN <svg> canvas (NOT the shared
+// plotter #canvasWrap), the CAD DOF-color --sk-* palette (distinct from the warm pen stages), and a RAF tied to the
+// active stage (start on enter / stop on leave) so the solve->draw loop never runs while hidden. MIRRORS
+// apps/shaper/src/main.js's ensureSketch / buildDesignUI / panelTick.
+//
+// PP-7b — the SEAM: a "Bake to Draw" action solves the sketch, flattens each solved #core shape into a plotter art
+// polyline via #core/core-shape-to-polyline, drops them into a NEW art layer, and hands off to Draw. From there the
+// existing Draw/Fill/Toolpath/Export pipeline carries the geometry to G-code (the DOF->pen-color switch happens at
+// the bake: the sketch stays DOF-colored SOURCE; the baked layer is pen-color art). Host wiring ONLY — #ui/#core
+// stay BYTE-IDENTICAL, so the Studio & Shaper Design tabs cannot regress.
 
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b: the #core sketch -> polyline seam
+import { state, makeArtLayer, uid } from './state.js';                  // PP-7b: bake into the plotter art store
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 
 // The Design-tab DOM contract (identical shape to apps/shaper/index.html #design-view): a full-width tool ribbon on
-// top, a collapsible info/DOF panel beside the sketcher's own svg canvas.
+// top, a collapsible panel (the "Bake to Draw" action + the info/DOF panel) beside the sketcher's own svg canvas.
 const SCAFFOLD = `
   <div id="design-view">
     <div id="design-ribbon"></div>
     <div id="design-body">
       <aside id="design-panel">
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
+        <div id="design-panel-actions">
+          <button id="bakeToDraw" class="dp-btn dp-primary" title="Solve, then bake the sketch geometry into a Draw art layer">Bake to Draw</button>
+        </div>
         <div id="design-panel-info"></div>
       </aside>
       <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
@@ -73,7 +82,28 @@ export function mountSketchStage(view, ctx = {}) {
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
-  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick }; // dev/test seam (headless verify)
+  // PP-7b — "Bake to Draw": solve the sketch, flatten each solved #core shape to a plotter art polyline, drop them
+  // into a NEW art layer, and hand off to Draw. The #core sketch stays the SOURCE (re-baking re-derives); the art
+  // layer is its baked projection into the pen-color world.
+  const bake = () => {
+    controller.engine.solve(500); // ensure final solved positions (belt-and-suspenders over the RAF)
+    const s = controller.state;
+    const shapes = [];
+    for (const sh of s.shapes) {
+      const pts = coreShapeToPolyline(sh, s.joints);
+      if (pts.length >= 2) shapes.push({ id: uid('s'), type: 'polyline', points: pts });
+    }
+    if (!shapes.length) return; // nothing solved to bake
+    const layer = makeArtLayer('Sketch bake');
+    layer.shapes = shapes;
+    state.artLayers.push(layer);
+    state.activeArtLayerId = layer.id;
+    if (ctx.navigate) ctx.navigate('draw'); // hand off to the pen-color pipeline (Draw/Fill/Toolpath/Export)
+  };
+  const bakeBtn = view.querySelector('#bakeToDraw');
+  if (bakeBtn) bakeBtn.addEventListener('click', bake);
+
+  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, bake }; // dev/test seam
 
   // RAF lifecycle tied to the active stage — the same start()/stop() Shaper drives from showMode: run the
   // solve->draw loop only while Sketch is showing. onEnter is idempotent (mountSketch's start guards a 2nd RAF).

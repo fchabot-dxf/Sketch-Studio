@@ -75,14 +75,14 @@ function showStage(id) {
   // closure lets a stage gate global input to itself (PP-7a: the sketcher's document listeners).
   const mounter = STAGE_MOUNT[id];
   if (mounter) {
-    if (!mounted[id]) mounted[id] = mounter(views.get(id), { isActive: () => currentStageId === id }) || {};
+    if (!mounted[id]) mounted[id] = mounter(views.get(id), { isActive: () => currentStageId === id, navigate: (to) => showStage(to) }) || {};
     if (mounted[id].onEnter) mounted[id].onEnter();
   }
 }
 
 // PP-4a: mount the Draw stage ONCE at startup so the SHARED plotter canvas (#canvasWrap) always exists — the
 // Toolpath/Fill/Export stages borrow it by re-parenting on entry, even when the persisted initial stage isn't Draw.
-if (STAGE_MOUNT.draw && !mounted.draw) mounted.draw = STAGE_MOUNT.draw(views.get('draw'), { isActive: () => currentStageId === 'draw' }) || {};
+if (STAGE_MOUNT.draw && !mounted.draw) mounted.draw = STAGE_MOUNT.draw(views.get('draw'), { isActive: () => currentStageId === 'draw', navigate: (to) => showStage(to) }) || {};
 
 // Initial stage: the persisted one if still valid, else the first.
 let initial = STAGES[0].id;

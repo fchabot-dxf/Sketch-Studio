@@ -7166,3 +7166,59 @@ look. HOST WIRING ONLY: `#ui`/`#core` untouched (byte-identical), so the other h
   geometry, closing the epic. STOP — hold.
 
 === PP-7a (SKETCH STAGE = SHARED DESIGN TAB) DONE — HOLD ===
+
+## turn 300 — PP-7b: the coreShapeToPolyline SEAM — a solved #core sketch bakes into plotter art -> G-code (CLOSES THE EPIC)
+
+The final seam: SOLVED `#core` constraint geometry now flows into the plotter pipeline as polylines. #core gets ONE
+new ADDITIVE file (+ its oracle); every existing `#core`/`#ui` file stays byte-identical.
+
+- **did — `packages/core/core-shape-to-polyline.js` (NEW, additive #core):** `coreShapeToPolyline(shape, joints, opts)`
+  -> `[[x,y],...]`. line -> the two endpoints; circle -> a closed rim polyline (64 segments via cos/sin); arc ->
+  REUSES the existing `#core` sampler `loop-geometry.sampleArc` (true curve in the browser, endpoints in Node) — north
+  star #2: NO 2nd arc sampler. Pure for line/circle; the module adds no DOM of its own. Imports only `#core`.
+- **did — `packages/core/tests/core-shape-to-polyline.test.js` (NEW oracle):** line -> exact endpoints; circle -> 65
+  pts, every vertex on radius 5, closed, bounds [5,15]x[5,15]; arc -> 2-pt Node degradation (documents the DOM-less
+  path; the browser true-curve is covered by the live verify); guards (missing joint / zero radius / unknown type ->
+  []). **Green STANDALONE**, and all 5 plot oracles STILL green standalone.
+- **did — "Bake to Draw" (sketch-stage.js):** a button in the Sketch stage panel (in `#design-panel`, above the info
+  panel — the dock-buttons-in-panel rule). On click: `engine.solve(500)` -> for each solved `#core` shape,
+  `coreShapeToPolyline` -> a plotter `{id,type:'polyline',points}` -> a NEW art layer ("Sketch bake") pushed to
+  `state.artLayers` -> `ctx.navigate('draw')`. The `#core` sketch stays the SOURCE (re-baking re-derives); the art
+  layer is its baked pen-color projection. Exposed `window.__sketch.bake` for the verify.
+- **did — `main.js` router:** pass each mounter a `navigate:(to)=>showStage(to)` in the ctx (alongside `isActive`), so
+  a stage can hand off (Sketch -> Draw at the bake) without reaching into the router.
+- **did — `index.html`:** `#design-panel-actions` padding + hide-when-collapsed. The Bake button reuses `.dp-btn
+  .dp-primary` (CAD blue inside `#stage-sketch`).
+- **why the seam is minimal:** the plotter already flattens shapes via `#core/plot/outlines` `shapeToPolyline`, whose
+  `case "polyline": return s.points` is the trivial path — so a baked polyline flows through
+  `expandLayerOutline -> toolpathToPolylines -> toolpathToGcode` UNCHANGED. No coordinate transform: sketch mm map
+  directly to art mm (both SVG-space); the exporter's existing docH Y-flip applies at gcode time. So the seam is just
+  the adapter + the bake; no pipeline edits.
+- **verify — LIVE END-TO-END (CDP, headless): console errors 0. #core geometry -> G-code.** Sketch tab: the seeded
+  CONSTRAINED line (coincident-to-origin, distance 50) + an injected circle (center 50,50 r20) -> `sketchShapes=2`
+  [line, circle]. **Bake to Draw** -> `activeStage=draw`, a NEW art layer "Sketch bake" (`artLayers=2`) with
+  `bakedTypes=[polyline,polyline]`, `bakedPts=[2, 65]` (line 2 pts; circle 64 segments + close = the browser-sampled
+  rim). Target the outline toolpath at the baked shapes -> **Export -> a valid DDCS G-code (1377 b)** whose bounds are
+  `X[0..70] Y[130.1..200]` — the circle (X30-70, Y-flipped 130-170) and the distance-50 line (origin -> X0/Y200) are
+  BOTH present. Snippet:
+  ```
+  G21 (mm)  G90  G17  G94   G1 Z5.000 F1000 (pen up to safe Z)
+  (--- layer 1 (outline) ---)
+  G0 X0.000 Y200.000 (rapid to stroke start)   G1 Z-1.000 F1000 (pen down)
+  G1 X48.507 Y187.873 F2000       <- the solved distance-50 line
+  G1 Z5.000 F1000 (pen up)
+  G0 X70.000 Y150.000 (rapid to stroke start)  G1 Z-1.000 F1000 (pen down)
+  G1 X69.904 Y148.040 F2000   G1 X69.139 Y144.194 F2000  ...   <- walking the circle rim
+  ...   G1 Z5.000 F1000 (final pen up)   M30
+  ```
+- **verify — UNREGRESSED (guardrail):** `git status packages/` shows ONLY the 2 NEW files (no existing `#core`/`#ui`
+  modified = byte-identical) — Studio & Shaper Design tabs cannot regress. `npm run test:shell` **12/12**. All 6
+  oracles (5 plot + core-shape-to-polyline) green STANDALONE. `node --check` clean (all penplotter src). 0 net-new.
+- **process hygiene:** CDP verify from scratchpad `verify-bake.cjs`; `proc_health mark --turn 300`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. **THE PENPLOTTER EPIC IS COMPLETE.** App #3 is folded in: pure engines in
+  `#core/plot` (vpype/clip/fills/outlines, oracle-pinned), a 5-stage shell (Draw/Sketch/Fill/Toolpath/Export) on the
+  shared shell, the OPTIONAL Sketch stage = the SAME shared Design tab as Studio/Shaper (north star #1), and now the
+  `coreShapeToPolyline` seam so `#core` sketch geometry bakes into art and plots as real DDCS G-code. STOP — hold.
+
+=== PP-7b (coreShapeToPolyline SEAM) DONE — PP-7 + THE PENPLOTTER EPIC COMPLETE — HOLD ===

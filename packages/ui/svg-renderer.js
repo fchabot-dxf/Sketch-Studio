@@ -4,7 +4,7 @@
 // window) before Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM.
 import { dbg } from '#core/debug.js';
 import { worldToScreen } from '#ui/coords.js';
-import { calculateArcPath, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
+import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -900,6 +900,25 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
 
       // Draw the actual arc path
+      out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
+    }
+    else if (s.type === 'bezier') {
+      // UNIFY-3: cubic bezier — endpoints are joints[0]/joints[1]; control points are shape DATA (s.c1/s.c2 = [x,y]).
+      const p0 = s.joints && s.joints[0] ? joints.get(s.joints[0]) : null;
+      const p3 = s.joints && s.joints[1] ? joints.get(s.joints[1]) : null;
+      if (!p0 || !p3 || !s.c1 || !s.c2) continue;
+      const c1 = { x: s.c1[0], y: s.c1[1] }, c2 = { x: s.c2[0], y: s.c2[1] };
+      const pathData = cubicPathD(p0, c1, c2, p3);
+
+      // Glow when the bezier is hovered/selected (mirror the arc treatment).
+      if (isSelected) {
+        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
+      }
+      if (isHovered || isSelected) {
+        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(20)}" stroke-linecap="round" stroke-opacity="0.2"/>`);
+      }
+
+      const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
       out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
     }
   }

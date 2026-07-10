@@ -242,6 +242,15 @@ export function calculateArcPath(p1, p2, p3, subType, options = {}) {
     return "";
 }
 
+/**
+ * UNIFY-3: SVG Path 'd' for a CUBIC BEZIER — start p0, control points c1/c2, end p3 (all {x,y}).
+ * Returns "M .. C .. .. ..". Pure; used by the renderer's bezier case + oracle-tested.
+ */
+export function cubicPathD(p0, c1, c2, p3) {
+    if (!p0 || !c1 || !c2 || !p3) return "";
+    return `M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`;
+}
+
 // NEW HELPER: Calculate Center and Radius from 3 points
 export function getArcParams(p1, p2, p3) {
     const x1 = p1.x, y1 = p1.y;

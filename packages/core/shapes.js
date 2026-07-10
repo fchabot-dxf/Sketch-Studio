@@ -271,3 +271,23 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
     if (isConstruction) shape.isConstruction = true;
     return { shapes: [shape], constraints: [] };
 }
+
+/**
+ * UNIFY-3: a CUBIC BEZIER shape. Endpoints are JOINTS (p0, p3 — solver-participating, so a bezier connects to other
+ * geometry and can be constrained later); the 2 control points are shape DATA (c1, c2 as [x,y]), NOT solver entities
+ * yet (MVP). No constraints created. Matches #core conventions (cf. makeArc: joints + extra data on the shape).
+ * MVP LIMITATION (flag): control points are ABSOLUTE data — they do NOT follow if the endpoint joints move (fine for
+ * the non-constrainable freehand beziers this enables; revisit when control-point constraints land).
+ */
+export function makeBezier(joints, p0, p3, c1, c2, isConstruction=false) {
+    const shape = {
+        id: `s_bezier_${Date.now()}`,
+        type: 'bezier',
+        joints: [p0, p3],
+        c1: [c1[0], c1[1]],
+        c2: [c2[0], c2[1]],
+        groupId: `bezier_${Date.now()}`
+    };
+    if (isConstruction) shape.isConstruction = true;
+    return { shapes: [shape], constraints: [] };
+}

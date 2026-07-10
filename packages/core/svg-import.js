@@ -62,7 +62,7 @@ export function parsePoints(str) {
   return pts;
 }
 
-function flattenCubic(x0, y0, x1, y1, x2, y2, x3, y3, push) {
+export function flattenCubic(x0, y0, x1, y1, x2, y2, x3, y3, push) {
   for (let s = 1; s <= FLATTEN_STEPS; s++) {
     const t = s / FLATTEN_STEPS, u = 1 - t;
     push(u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,

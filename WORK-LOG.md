@@ -7617,3 +7617,49 @@ read the #core sketch store and flatten via coreShapeToPolyline (PP-7b), so a to
   bezier case + oracle. STOP — hold.
 
 === UNIFY-2 (TOOLPATHS TARGET #core DIRECTLY, NO BAKE) DONE — HOLD ===
+
+## turn 310 — UNIFY-3: a first-class #core BEZIER shape (shared, Branch A) — the FIRST #core/#ui edit, ADDITIVE
+
+Blessed Branch A: beziers become first-class #core geometry (all apps). This slice = the SHAPE only (represent +
+render + flatten + oracle); the #ui bezier TOOL + the Schneider FITTER are the next slices. Guardrail (shifted,
+blessed): ADDITIVE + Studio/Shaper OUTPUT-unregressed — a NEW shape kind; no existing shape/constraint/solver/test
+behavior changed.
+
+- **did — `#core/shapes.js` `makeBezier(joints, p0, p3, c1, c2, isConstruction)`:** a cubic bezier factory (mirrors
+  makeArc). Shape = `{ id, type:'bezier', joints:[p0,p3], c1:[x,y], c2:[x,y], groupId }`. ENDPOINTS are JOINTS
+  (solver-participating, so a bezier connects to other geometry + can be constrained later); the 2 CONTROL POINTS are
+  shape DATA (arrays), NOT solver entities (MVP). No constraints created.
+  - **FLAGGED (MVP data-model limitation):** control points are ABSOLUTE data — they do NOT follow if the endpoint
+    joints move (solver/drag). Fine for the non-constrainable freehand beziers this enables; revisit when
+    control-point constraints land. (Not hairy enough to block — matches #core conventions: joints + extra data,
+    like circle's `radius` / arc's flags.)
+- **did — `#core/geometry.js` `cubicPathD(p0,c1,c2,p3)`:** pure SVG `d` builder ("M .. C .. .. .."), mirrors
+  calculateArcPath. Used by the renderer + oracle-tested. Additive export.
+- **did — `#ui/svg-renderer.js`:** a NEW `else if (s.type === 'bezier')` branch AFTER the arc branch (import
+  cubicPathD). Resolves p0/p3 from joints + c1/c2 from data, emits `<path d="M..C..">` via the same `--sk-*` vars +
+  glow/construction styling as arc. Existing line/circle/arc branches UNTOUCHED.
+- **did — `#core/core-shape-to-polyline.js`:** a NEW `case 'bezier'` — flatten via the SAME cubic flattener the SVG
+  importer uses (`flattenCubic`, 16-step de Casteljau; north star #2 — NO 2nd sampler). Exported `flattenCubic` from
+  svg-import.js (additive `export`, behavior identical). Prepends the start point -> 17 pts.
+- **did — ORACLE `#core/tests/bezier-shape.test.js`:** a symmetric arch cubic — cubicPathD -> exact `d`
+  ("M 0 0 C 0 10 10 10 10 0"); makeBezier -> well-formed shape (endpoints joints, ctrl [x,y] data, 0 constraints,
+  construction flag); coreShapeToPolyline -> 17 pts, start (0,0) / end (10,0) / midpoint (5,7.5), bounds
+  [0,10]x[0,7.5]; guards (missing ctrl / endpoint -> []). Green STANDALONE.
+- **verify — LIVE (CDP, headless): console errors 0.** Sketch tab: add a first-class `#core` bezier (endpoints
+  (10,10)/(60,10), ctrl (10,60)/(60,60)) -> the #ui renderer draws `<path data-shape-id="BZ1" d="M 10 10 C 10 60 60
+  60 60 10">` (`bezierPathRendered:true`, correct `d`). EXISTING geometry unaffected: the seeded demo LINE still
+  renders (`existingLineRenders:true`); `types:[line,bezier]`. BONUS — the bezier PLOTS: target a toolpath at it
+  directly (UNIFY-2 seam) -> Export -> 16 G1 curve segments (`gDrawMoves:16`), Y 152.5..190 = the arch. So shape ->
+  render -> flatten -> gcode all work.
+- **verify — ADDITIVE + OUTPUT-UNREGRESSED (the guardrail proof):** the 12 SOLVER oracles 12/12 + the 6 plot/core
+  oracles + the new bezier oracle ALL green STANDALONE; `npm run test:shell` **12/12** (Studio renders/exports via the
+  shared renderer identically); the existing line/circle/arc render branches + all shape/constraint/solver behavior
+  are untouched (new branches only fire for `type==='bezier'`, which existing content never has). `node --check` clean
+  (6 files). 0 net-new.
+- **process hygiene:** CDP verify from scratchpad `verify-bezier.cjs`; `proc_health mark --turn 310`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. #core now has a first-class bezier shape (store + render + flatten), the substrate for
+  freehand. NEXT (blessed sequence): **UNIFY-3-tool** (the #ui bezier/freehand create tool) + **UNIFY-3-fit** (the
+  Schneider freehand->bezier fitter in `#core/curve-fit.js`), then UNIFY-3b (pen model). STOP — hold.
+
+=== UNIFY-3 (#core BEZIER SHAPE, shared) DONE — HOLD ===

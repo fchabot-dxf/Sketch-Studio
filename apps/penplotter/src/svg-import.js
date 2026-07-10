@@ -237,7 +237,7 @@ function collectShapes(node, parentPaint, out) {
 
 /** Resolve effective fill + stroke for a node, inheriting from the parent
  *  paint state. Honors both XML attributes and inline `style="..."`. */
-function inheritPaint(node, parentPaint) {
+export function inheritPaint(node, parentPaint) {
     if (!node || node.nodeType !== 1) return parentPaint;
     const fill = readPaint(node, "fill");
     const stroke = readPaint(node, "stroke");
@@ -310,7 +310,7 @@ function parseStopColor(stop) {
  *  Filled shapes drive the layer color because that's the visible color
  *  the user designed with — and a pen plotter realizes "fill" as a
  *  hatching pattern in the same color. */
-function penColorFor(paint) {
+export function penColorFor(paint) {
     if (paint.fill) return paint.fill;
     if (paint.stroke) return paint.stroke;
     return null;

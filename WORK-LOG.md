@@ -8008,3 +8008,48 @@ gate policy stay HOST-side. The render-skip alone was NOT enough — the MEASURE
   imported geometry lands static (fast). STOP — hold.
 
 === UNIFY-throttle (STATIC-SKIP RENDER) DONE — HOLD ===
+
+## turn 324 — UNIFY-5: import SVG -> #core sketch (constrainable) + capture colors as the pen-layer + mark DENSE static
+
+Import now lands in the #core sketch (not the retired art store): imported art is constrainable + shows in the Design
+tab, in its colors. REUSES Shaper's importSvgToSketch pattern + the PURE #core/svg-import (no fork; no #core edits).
+
+- **did — `core-import.js` (new, plotter-side):** `importSvgToCore(svgText, fileName, controller)`. Host DOM walk
+  `extract()` threads the composed CTM (`#core` parseTransform/multiplyMatrix/IDENTITY_MATRIX) + each element's
+  resolved fill/stroke (reuses the plotter's `inheritPaint`/`penColorFor`, now exported from svg-import.js) into
+  per-element descriptors. PER-DESCRIPTOR `importSvgGeometry([d], {genJ: engine.genJ, scale, idPrefix})` (shared genJ
+  -> unique joint ids; unique idPrefix -> unique shape ids) so each element's DIGITAL color maps EXACTLY to the shapes
+  it produced -> `state.shapeColors.set(id, color)` + `findOrCreatePlotColor(color)` (seed the physical pen palette).
+  Lands in a NEW named sketch (`addSketch`/`activateSketch`, like Shaper). `computeImportScale` for mm scale.
+- **did — DENSE -> STATIC:** if the import batch > `DENSE_THRESHOLD` (200) shapes, add all ids to
+  `state.staticShapeIds` -> the UNIFY-throttle skip holds ~60 FPS + the color underlay draws them in mapped pen colors.
+  SMALL imports (<=200) stay LIVE/constrainable (DOF + joints).
+- **did — IMPORT LIMITS (IMPORT-3), surfaced never dropped:** unsupported tags (ellipse etc) + importSvgGeometry
+  stats (ellipse "not supported in v1", path S/T/A -> chord) are COUNTED into a `skippedSummary` shown in the Design
+  panel's `#importStatus`. Ellipse is FLAGGED (not yet approximated — tracked IMPORT-3).
+- **did — Design-tab Import UI (sketch-stage.js + index.html):** an "Import SVG" button + hidden file input +
+  `#importStatus` line in `#design-panel-actions`; the change handler reads the file text -> `importSvgToCore` ->
+  status + underlay redraw. Dev seam `window.__sketch.importSvg(text, name)`.
+- **did — reuse, no #core edit:** only `#core/svg-import` + `#core/sketch-model` are IMPORTED (used as-is); the two
+  exported helpers (`inheritPaint`/`penColorFor`) are on the PLOTTER's svg-import.js. `git status packages/` clean.
+- **verify — LIVE (CDP, headless): console errors 0.** SMALL multi-color SVG (line/rect/circle + an ellipse) ->
+  6 #core shapes (`smallStatic:false` = LIVE/constrainable), `shapeColors` size 6, 4 pens seeded, ellipse SURFACED
+  (`"ellipse not supported in v1 x1"`), NOT marked static. DENSE SVG (300 rects x4 colors = 1200 line shapes) ->
+  `denseStatic:true`, all 1200 in staticShapeIds; the underlay draws 1200 paths with the MAPPED PEN COLORS present
+  (red/green/blue) and the scene holds **60.1 FPS**. A toolpath targeting an IMPORTED shape -> Export = valid gcode
+  (`G1 X` + `M30`). So import -> #core -> colors -> pen -> (static/live) -> toolpath -> gcode all work.
+- **verify — UNREGRESSED:** `git status packages/` clean (#core/svg-import reused, not edited); `npm run test:shell`
+  **12/12**; all core oracles **21/21** green STANDALONE; `node --check` clean. 0 net-new.
+- **NOTE (display nuance, flag):** per the blessed rule (dense->static, small->live), a SMALL import renders LIVE (DOF
+  in the sketcher), so its pen colors live in `shapeColors` + drive the toolpath/export but the pen-color UNDERLAY
+  (which draws only static geometry) shows them only once the shapes are static (dense). If small imports should also
+  DISPLAY in pen colors by default, mark all imports static (select-to-activate) — a one-line policy flip; flagged for
+  the advisor. Also: a pen is seeded for a skipped ellipse's color (harmless orphan pen).
+- **process hygiene:** CDP verify from scratchpad `verify-import.cjs`; `proc_health mark --turn 324`; headless browser
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. SVG import now flows into the unified #core store (constrainable, colored, throttle-
+  safe). The unify is nearly whole: Design tab (draw/freehand/precise/constrain) + import + pen model + throttle +
+  toolpath/export on #core geometry. NEXT (blessed): **UNIFY-6** pan/zoom convergence (one #ui state.view across the 4
+  stages; retire viewport.js) OR **UNIFY-7** retire the art store + bake (the big delete, perf-gated). STOP — hold.
+
+=== UNIFY-5 (IMPORT SVG -> #core + COLORS + STATIC) DONE — HOLD ===

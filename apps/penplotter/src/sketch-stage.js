@@ -13,6 +13,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
 import { state, makeArtLayer, uid, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
+import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -26,7 +27,10 @@ const SCAFFOLD = `
       <aside id="design-panel">
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
         <div id="design-panel-actions">
-          <button id="bakeToDraw" class="dp-btn dp-primary" title="Solve, then bake the sketch geometry into a Draw art layer">Bake to Draw</button>
+          <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
+          <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
+          <div id="importStatus" class="dp-note"></div>
+          <button id="bakeToDraw" class="dp-btn" title="Solve, then bake the sketch geometry into a Draw art layer">Bake to Draw</button>
           <div id="shape-color-row" class="dp-field">
             <label for="shapeColor">Pen color</label>
             <input id="shapeColor" type="color" value="#000000" disabled title="Select a shape, then pick its digital color">
@@ -158,6 +162,26 @@ export function mountSketchStage(view, ctx = {}) {
     underlayDirty = true; renderUnderlay();
   });
 
+  // UNIFY-5: Import SVG -> #core sketch (constrainable). Colors -> shapeColors -> the underlay's mapped pen. Dense
+  // imports are marked static (fast). Surfaces the skipped/degraded count. Returns the result (dev/test seam).
+  const importStatus = view.querySelector('#importStatus');
+  const doImport = (text, name) => {
+    const res = importSvgToCore(text, name || 'Imported.svg', controller);
+    underlayDirty = true; // new static geometry -> redraw the underlay
+    if (importStatus) importStatus.textContent = res.error ? ('Import failed: ' + res.error)
+      : `Imported ${res.imported} -> ${res.sketchName} @ ${res.scaleLabel}${res.static ? ' (static)' : ''}${res.skippedSummary ? ' · skipped ' + res.skippedSummary : ''}`;
+    return res;
+  };
+  const importBtn = view.querySelector('#importSvgBtn'), importFile = view.querySelector('#importSvgFile');
+  if (importBtn && importFile) {
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', () => {
+      const f = importFile.files && importFile.files[0]; if (!f) return;
+      const rd = new FileReader(); rd.onload = () => doImport(String(rd.result), f.name); rd.readAsText(f);
+      importFile.value = '';
+    });
+  }
+
   // PP-7b "Bake to Draw" — DORMANT (one store; toolpaths target #core directly). Kept until UNIFY-7 retires it.
   const bake = () => {
     controller.engine.solve(500);
@@ -171,7 +195,7 @@ export function mountSketchStage(view, ctx = {}) {
   const bakeBtn = view.querySelector('#bakeToDraw');
   if (bakeBtn) bakeBtn.addEventListener('click', bake);
 
-  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, bake, renderUnderlay }; // dev/test seam
+  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, bake, renderUnderlay, importSvg: doImport }; // dev/test seam
 
   // RAF lifecycle tied to the active stage. onEnter re-renders the underlay (catches palette edits made on other tabs).
   return {

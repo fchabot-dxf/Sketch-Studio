@@ -6516,3 +6516,40 @@ GATE for north star #2 (one capability, one home). Investigated whether the plot
   hatches are pure line-clipping.
 
 === PP-2b PLAN (OFFSET GATE) — AWAIT BLESSING ===
+
+## 2026-07-10 · PP-2b-1 — Clipper into #core/plot as the robust boolean/offset engine (turn 270)
+
+Gate plan (turn 268 `fff4927`) BLESSED — Option B. Brought Clipper into `#core/plot` as the ROBUST polygon
+boolean+offset engine, KEEPING `polygon-offset` as the pure simple-loop CAD offset. Additive; NO fills yet (PP-2b-2).
+
+- **did — vendor PRISTINE:** copied `app/js/vendor/clipper.js` -> `packages/core/plot/vendor/clipper.js` UNCHANGED
+  (`diff` = identical). Vendor-don't-fork: updating Clipper later stays a drop-in.
+- **did — Node-load fix = a SHIM MODULE (not a fork):** `packages/core/plot/vendor/clipper-node-shim.js` =
+  `globalThis.self ??= globalThis;`. clipper.js is a browser UMD whose top-level does `self['ClipperLib']=...` on the
+  non-Node/non-document branch -> throws in Node ESM (no `self`). `clip.js` imports the shim BEFORE clipper, and ESM
+  evaluates a module's imports in source order, so `self` exists when the UMD loads. No-op in a browser (`self`
+  already defined there; the `document` branch is taken anyway). Confirmed: importing `#core/plot/clip.js` in Node now
+  LOADS + RUNS.
+- **did — wrapper `#core/plot/clip.js`:** ported `toClipper`/`fromClipper`/`insetPolygon`/`offsetRings`/
+  `unionPolygons`/`CLIP_SCALE`/`ClipperLib` verbatim (byte-for-byte bodies), + the shim import first. Header DECLARES
+  the boundary.
+- **did — boundary DECLARED (comment-only):** header in `#core/plot/clip.js` (robust art/fill boolean+split+holes) +
+  a 1-line cross-ref block added to `#core/polygon-offset.js`'s header (pure simple-loop CAD offset; the two are
+  distinct capabilities; do not merge; unify = tracked debt). **COMMENT-ONLY in polygon-offset.js — zero code/behavior
+  change** (confirmed: shaper-export + vcarve oracles still green -> Shaper export/vcarve byte-exact, not rerouted).
+- **verify — ORACLE (`packages/core/tests/plot-clip.test.js`, auto-discovered):** proves the robust ops RUN IN NODE
+  (via the shim) and match the source/probe golden: ClipperLib loaded; square inset 3 -> 1 ring (control);
+  **dumbbell inset 3 -> 2 rings** (the split polygon-offset can't do); **concentric spacing 2 -> 9 rings** (both
+  lobes); union of overlapping squares -> 1 ring; outer + reversed-inner -> 2 rings (a HOLE); toClipper/fromClipper
+  round-trip. GREEN.
+- **verify — UNREGRESSED:** ADDITIVE — new `packages/core/plot/vendor/**` + `clip.js` + the oracle, plus the
+  comment-only cross-ref in `polygon-offset.js`. `npm run test:shell` **12/12**; `node --check` clean on all
+  touched/new files; shaper-export + vcarve oracles green; new oracle green; full-suite baseline unchanged (halts at
+  the pre-existing `tests/ai-vision-label-spacing`) -> 0 net-new. No consumers wire to Clipper yet.
+- **process hygiene:** golden capture + load check ran from scratchpad `.mjs` (no long-lived procs); `proc_health
+  mark --turn 270`; `watch` clean before the pass.
+- **state:** branch `carve-out`. `#core/plot/clip.js` is the robust Clipper engine, Node-loadable + oracle-pinned, with
+  the polygon-offset boundary declared. NEXT per the epic: **PP-2b-2** — port the fills (`fill/**`) to
+  `#core/plot/fills/` as a DECLARED `FILL_PATTERNS` registry (concentric/inset via clip.js; hatches pure). STOP — hold.
+
+=== PP-2b-1 (CLIPPER -> #core/plot ENGINE) DONE — HOLD ===

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pen Plotter — Sketch Studio</title>
+  <!-- Shared sketcher theme contract (mirrors Shaper). The :root override BELOW is after the link, so the
+       plotter's own look wins. Placeholder-level theming for PP-1 — the real canvas theming lands in PP-3+. -->
+  <link rel="stylesheet" href="../../packages/ui/sketcher.css">
+  <!-- Isomorphic aliases (mirror Shaper + package.json): #core = shared brain, #ui = shared UI.
+       Declared now for the shared engines/Design tab that arrive in PP-2..PP-5; unused this slice. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "#core/": "../../packages/core/",
+      "#ui/": "../../packages/ui/"
+    }
+  }
+  </script>
+  <style>
+    /* Pen Plotter = a THIRD, visually distinct shell: warm PAPER-LIGHT (Studio is cool light, Shaper is dark),
+       with a teal "plotter ink" accent. Keeps the three shells distinguishable (project theme rule). */
+    :root {
+      --sk-selection: #2f8f7f;            /* plotter ink (teal) — distinct from Studio/Shaper blue */
+      --sk-hover: #57b0a1;
+      --sk-header-bg: #f0e7d4;
+      --sk-header-fg: #3a352b;
+      --sk-header-sep: #d8cbb2;
+      --sk-header-hover: rgba(47, 143, 127, 0.12);
+      --sk-ribbon-menu-bg: #fbf6ec;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { background: #f5efe1; color: #3a352b; font: 14px system-ui, sans-serif; display: flex; flex-direction: column; }
+    header.toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 12px;
+      background: var(--sk-header-bg); border-bottom: 1px solid var(--sk-header-sep); color: var(--sk-header-fg); }
+    #app-switcher-host { display: inline-flex; }
+    .mode-nav { display: flex; gap: 4px; align-items: center; }
+    .stage-btn { background: transparent; color: #6b6353; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer;
+      font: 13px system-ui, sans-serif; opacity: 0.8; }
+    .stage-btn:hover { background: var(--sk-header-hover); opacity: 1; }
+    .stage-btn.active { background: var(--sk-selection); color: #fff; opacity: 1; }
+    .stage-btn .opt { font-size: 11px; opacity: 0.65; margin-left: 5px; }
+    .spacer { flex: 1; }
+    main.stages { flex: 1 1 auto; position: relative; min-height: 0; }
+    .stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 24px; text-align: center; }
+    .stage[hidden] { display: none; }
+    .stage h2 { margin: 0; font-size: 24px; font-weight: 700; color: #3a352b; }
+    .stage p { margin: 0; color: #8a8067; max-width: 42ch; line-height: 1.5; }
+    .stage .badge { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sk-selection); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <!-- The shared two-way app-switcher (mounted in main.js): marks Pen Plotter current, navigates to the siblings. -->
+    <span id="app-switcher-host"></span>
+    <!-- The 5-stage pipeline nav — built by ITERATING the STAGES registry in main.js (never hardcoded). -->
+    <nav id="mode-nav" class="mode-nav"></nav>
+    <span class="spacer"></span>
+  </header>
+  <!-- Stage bodies are created from STAGES in main.js (one source of truth), then shown/hidden by the router. -->
+  <main id="stages" class="stages"></main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

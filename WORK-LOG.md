@@ -6391,3 +6391,44 @@ viewBox is `120×90`, so it never fires; the canvas element is a different aspec
   `37163db`. NEXT per the plan: further Design grievances / VCARVE-4. STOP — hold.
 
 === GRIEVANCE-1 (CURSOR OFFSET) DONE — HOLD ===
+
+## 2026-07-10 · PP-1 — penplotter scaffold: app #3, a DECLARED 5-stage router + the switcher entry (turn 264)
+
+Folds the pen-plotter in as app #3 (north star #6: future apps attach at the same seams, no core edits). Read
+`penplotter/INTEGRATION.md` first (the decision record). This slice = the SHELL SKELETON only — proved the wiring;
+ported NO engines and mounted NO Design tab (those are PP-2..PP-5).
+
+- **did:**
+  - **`packages/ui/app-switcher.js`** — added ONE declared roster entry `{ id:'penplotter', name:'Pen Plotter',
+    href:'../penplotter/' }`. The roster is DATA, so this is the whole change to the file (relative sibling href, per
+    SWITCH-2). This is the ONLY shared-file edit; NO `#core` touched.
+  - **`apps/penplotter/index.html`** (new) — importmap mirroring Shaper (`#core/`->`../../packages/core/`,
+    `#ui/`->`../../packages/ui/`); links `#ui/sketcher.css`; a `:root` override AFTER the link giving the plotter a
+    THIRD, visually-distinct shell: warm PAPER-LIGHT (Studio is cool-light, Shaper is dark) with a teal "plotter ink"
+    `--sk-selection: #2f8f7f`. Header holds `#app-switcher-host` + an (empty) `#mode-nav`; `#stages` is the (empty)
+    stage host. Placeholder theming only.
+  - **`apps/penplotter/src/main.js`** (new) — a DECLARED `STAGES` registry (draw / sketch[optional] / fill / toolpath
+    / export). Builds the nav buttons AND the stub stage bodies BY ITERATING `STAGES`; a router shows the active
+    stage + hides the rest + highlights its tab, persisting the choice to `localStorage['penplotter-stage']` (mirrors
+    Shaper's `MODE_KEY`); mounts `createAppSwitcher({ current:'penplotter' })` into `#app-switcher-host`. No `#core`
+    import beyond the shared switcher; no engine, no Design tab.
+- **micro-decision (FLAG for advisor):** the task listed stub containers under the `index.html` bullet (point 2), but
+  point 3 + INTEGRATION.md ("Stages/tabs is a registry") + the declaration-first directive ("never hardcoded ...
+  adding a tab later is ONE entry") point the other way. I built the stage CONTAINERS from `STAGES` in `main.js` (not
+  hardcoded in HTML) so `STAGES` is the SINGLE source of truth — adding/reordering a stage is one entry, no HTML kept
+  in sync. `#stages` is an empty host in HTML. Trivially reversible if the advisor prefers HTML containers.
+- **verify — LIVE (CDP, all headless):** ALL THREE apps load with **console errors = 0** (sketchstudio · shaper ·
+  penplotter). Penplotter: the nav renders `draw,sketch,fill,toolpath,export` (5) from `STAGES`; 5 stage sections;
+  initial visible+active = `draw`; clicking **Toolpath** -> only `toolpath` visible + active (router toggles +
+  persists). The app-switcher lists `sketchstudio,shaper,penplotter`, current label "Pen Plotter" (3-way; nav targets
+  are the declared relative hrefs, resolution already proven in SWITCH-2).
+  - **UNREGRESSED:** `npm run test:shell` **12/12** (the only shared change is the additive roster entry — Studio +
+    Shaper untouched otherwise). `node --check` clean on the new `main.js`. NO `#core` edits. Scope = new
+    `apps/penplotter/**` + the 1-line switcher entry.
+- **process hygiene:** the CDP verify ran from a scratchpad `.cjs` (its headless browser killed in `finally`).
+  `proc_health mark --turn 264`; `watch` clean (0 flagged) before the pass.
+- **state:** branch `carve-out`. Pen Plotter is live as app #3 — a 5-stage skeleton shell (Draw / Sketch / Fill /
+  Toolpath / Export) + the working 3-way switcher; NO engines or Design tab yet. NEXT per the epic: **PP-2** — port the
+  pure engines (vpype optimize / fills / outlines / gcode+zip) to `#core/plot/`. STOP — hold.
+
+=== PP-1 (PENPLOTTER SCAFFOLD) DONE — HOLD ===

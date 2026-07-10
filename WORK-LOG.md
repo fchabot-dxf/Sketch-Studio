@@ -6650,3 +6650,40 @@ breakage; never claim an oracle green without running it.
   NEXT per the epic: **PP-2c** — outline styles -> `#core/plot/outlines/`. STOP — hold.
 
 === PP-2b-3-fix (STALE ORACLE ASSERTION) DONE — HOLD ===
+
+## 2026-07-10 · PP-2c — outline styles -> #core/plot/outlines as a declared OUTLINE_STYLES registry (turn 278)
+
+The last engine port. Ported the plotter's outline styles into `#core/plot/outlines/` and CONSOLIDATED into the SAME
+declared registry shape blessed for fills (PP-2b-2). Additive. **Completes PP-2 (engine ports).**
+
+- **Math.random check: NONE** — all 3 styles deterministic (dashed = constant-speed dash walk; jagged = perpendicular
+  sawtooth displacement; normal = passthrough), so byte-exact golden holds.
+- **did — ported modules:** `#core/plot/outlines/normal.js` + `dashed.js` + `jagged.js` copied VERBATIM (`diff` =
+  identical; they import only `./utils.js`). `utils.js` (`shapeToPolyline` / `polylineShape` / `outlineId`) ported with
+  the DOM `samplePath` GUARDED (`typeof document` -> null in Node), same as PP-2a fromPath / fills utils.
+- **did — the DECLARED registry (`#core/plot/outlines/index.js`):** REPLACED the split `STYLES` (id->module) +
+  `STYLE_OPTIONS` + scattered defaults with ONE `OUTLINE_STYLES` list — each entry `{ id, label, params:[{key,label,
+  type,default,unit,min?,max?}], apply(shape, params) }`. **KEPT the `apply` verb** (an outline TRANSFORMS a shape;
+  fills GENERATE — the difference is intentional). `passes` is UNIVERSAL (like fills' offset): declared in EVERY entry
+  (default 1, min 1, max 10). normal:[passes]; dashed:[passes, dash_length 2, dash_gap 1]; jagged:[passes, amplitude
+  0.8, frequency 0.7]. Only `passes` carries min/max -> only it is clamped, matching the original expandLayerOutline
+  (which clamped passes and left the style params unbounded). `resolveParams` mirrors fills.
+- **did — `expandLayerOutline(shapes, outline)`** ported: resolve declared params, then the multi-pass loop
+  (`passes` times) calling `entry.apply`. Behaviour-identical to the original.
+- **verify — ORACLE (`packages/core/tests/plot-outlines.test.js`):** golden from the ORIGINAL outlines. Registry
+  shape (3 styles by id, param keys, apply kept, passes default1/min1/max10). BYTE-EXACT: normal passthrough
+  `[["L",0,0,10,0]]`; dashed = 4 segments `[[0,0][2,0]]..[[9,0][10,0]]`; jagged = 7 sawtooth-displaced verts. Multi-pass:
+  dashed 1 pass -> 4, 3 passes -> 12, passes 0 -> clamped 1 (4), passes 99 -> clamped 10 (40). Defaults: dashed with
+  dash_length/gap OMITTED uses 2/1 (== golden). GREEN.
+- **verify — UNREGRESSED + ALL PLOT ORACLES GREEN STANDALONE** (the runner halts at `ai-vision` before them, per
+  PP-2b-3-fix): plot-pipeline ✓ plot-clip ✓ plot-fills ✓ plot-fills3 ✓ plot-outlines ✓. `npm run test:shell`
+  **12/12**; `node --check` clean; ADDITIVE (new `#core/plot/outlines/**` + oracle; no existing file touched) -> 0
+  net-new.
+- **process hygiene:** golden capture from a scratchpad `.mjs`; `proc_health mark --turn 278`; `watch` clean.
+- **state:** branch `carve-out`. **PP-2 ENGINE PORTS COMPLETE** — `#core/plot/` now holds the full app-agnostic plotter
+  brain: the vpype pipeline + DDCS profile (PP-2a), the Clipper robust-offset engine (PP-2b-1), the declared
+  FILL_PATTERNS registry with 6 patterns (PP-2b-2/3), and the declared OUTLINE_STYLES registry with 3 styles (PP-2c).
+  NEXT per the epic: **PP-3** — the Draw stage (freeform art canvas + art layers + pens; the plotter's OWN store, the
+  solver never sees it). STOP — hold.
+
+=== PP-2c (OUTLINE_STYLES -> #core/plot) DONE — PP-2 ENGINE PORTS COMPLETE — HOLD ===

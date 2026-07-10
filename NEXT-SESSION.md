@@ -35,22 +35,55 @@ The carve-out runs as **load-safe vertical slices**, NOT "extract-all → move-a
 ESM app you run live. **Each extraction ships WITH its shell-side wiring in the same commit**, or
 behavior regresses even where load doesn't break.
 
-## TASK — (AWAITING USER GO) ⚑ DEPLOY — pre-flight GREEN. NO push until the user says GO. NOT a worker task.
+## TASK — COMMIT the already-reviewed VCARVE-3b (advisor-approved). No code changes. Then pass back.
 
-BUG-1 blessed → the deploy gate is reached. **PRE-FLIGHT GREEN** (re-verified turn 247): tree = only `NEXT-SESSION.md`
-uncommitted (planning doc; all code committed) · `carve-out` = `main` + 167, clean `--ff-only` · local `main` =
-`origin/main` (not behind) · shell-smoke 12/12 · both apps parse. Production branch = `main` (user-confirmed).
+VCARVE-3b is **DONE and advisor-APPROVED** — I reconstructed it from the diff (not the summary) and verified it myself:
+shell-smoke **12/12** (byte-identical holds), vcarve oracle green, `node --check` clean on all 5 files, and the
+`vcarveContours` depth contract (`depth = inset / halfAngleTan`) matches the view. The prior session died mid-close-out
+~8 days ago, so the work sits **UNCOMMITTED** in the tree (last commit is still VCARVE-3a `1c4554b`). This turn just lands it.
 
-**ON THE USER'S GO, the advisor runs (the ⚑ DEPLOY PLAN above):**
-```
-git add NEXT-SESSION.md && git commit -m "docs: NEXT-SESSION — deploy checkpoint"
-git checkout main && git merge --ff-only carve-out && git push origin main && git checkout carve-out
-```
-→ Cloudflare auto-deploys → `/`=Studio · `/shaper`=Shaper · switcher both ways · sketches + import live. ⮌ ROLLBACK: CF
-dashboard → prior deployment. (Do the git surgery only with the worker idle + tree settled — both true now.)
+**▶ Scope (commit-only — do NOT touch code):**
+1. **Do not modify any code.** The tree is approved as-is.
+2. Pre-commit sanity (fast): `node --check` on the 5 changed JS files + `npm run test:shell` → confirm **12/12** still green.
+3. Commit the WHOLE working tree as ONE commit — the 6 modified files + the new `apps/shaper/src/vcarve-view.js` +
+   `WORK-LOG.md` + `NEXT-SESSION.md`. Message:
+   `feat(shaper): VCARVE-3b — live Vcarve workspace (V-bit + region picker + depth-shaded preview + state.vcarves)`
+4. Append **one line** to WORK-LOG under the existing VCARVE-3b entry: `committed post-advisor-review — <short hash>`.
+   (Do NOT write a new full entry — VCARVE-3b already has one ending in its DONE marker.)
 
-**After the deploy → the IMPORT arc resumes:** IMPORT-3 SVG breadth + DXF → VCARVE-1 (own deep plan) → VCARVE-2+.
-**Deferred:** hidden-sketch EXCLUDE · group tree-node · GRID-1 (staged) · SP1i · JOINTS.
+**VERIFY:** `git log --oneline -1` shows the VCARVE-3b commit; `git status` clean; `npm run test:shell` 12/12; `node --check`
+clean. **Then pass the ball back to advisor and STOP.**
+
+> **Then (re-prioritized — Design-workspace grievances jump ahead of VCARVE-4):**
+> **GRIEVANCE-1 — cursor offset in the Design workspace.** Root cause (advisor-diagnosed): the canvas viewBox aspect goes
+> STALE when the canvas element resizes from a LAYOUT change (docked Design side-panel opening / drag-resize), because
+> nothing re-runs `updateViewBox` — there is **no `ResizeObserver`** anywhere in the repo. `updateViewBox`
+> (`#ui/input-manager.js:1026`) keeps `view.h = view.w / elementAspect`, but only fires at init / zoom / pan. Result: the
+> RENDER (preserveAspectRatio=meet) stays correct (round circles), but `screenToWorld` (`#ui/coords.js`, independent
+> scaleX/scaleY, no centering term) reads a stale viewBox → the cursor's world-point ≠ where it visually points.
+> **Fix shape = DECLARE the invariant "viewBox aspect always tracks the element aspect" in ONE place:** a `ResizeObserver`
+> on the canvas SVG that re-runs `updateViewBox` on any size change (shared `#ui` — must fix BOTH hosts, keep shell-smoke
+> 12/12). Worker must REPRODUCE + confirm the root cause live before fixing (verify-first). *(Full task written next turn.)*
+> Then further grievances TBD, then VCARVE-4 the gated vcarve export, then VCARVE-5.
+
+> **WHY vcarve at all:** the Shaper Origin / Studio have NO native v-carve (only flat-bottom cuts). Our offset-stack
+> EMULATES one using primitives the Origin DOES support — a stack of `online` cuts, each a contour offset inward + a
+> deeper `cutDepth`; the cumulative passes cut the V-groove. A feature Shaper Studio LACKS → its own tab + the hack is the
+> point (not asking the Origin to v-carve; precomputing a toolpath it can run).
+>
+> **VCARVE arc:** VCARVE-2 offset-stack core (THIS, UX-agnostic) → **VCARVE-3 a DEDICATED VCARVE TAB** (user call: vcarve is
+> a post-processing/tuning transform, NOT a Prepare cut-mode — its own space to edit + fine-tune): region select · the
+> V-bit record (angle) + depth-step/max-depth controls · a live contour-stack PREVIEW (depth-shaded) · recompute. Two
+> halves: ① ADAPT the imported SVG (clean → a usable boundary) ② HACK (the offset-stack → V-groove contours). **Placed
+> BEFORE Prepare** (user call): Explore · Design · **Vcarve** · Prepare · Sim/Export — vcarve is UPSTREAM (adapts art →
+> contours that Prepare then treats as `online` cuts). Plan the tab first (a meaty UI). → VCARVE-4 the
+> GATED inverted export (host boundary poly → `online` + per-path `cutDepth` stack; standard + SketchStudio byte-identical)
+> → VCARVE-5+ the TRUE medial axis · holes/islands vcarve · flat-tip bits. **v1 = the offset-stack APPROXIMATION** (discrete
+> depth steps; the true smooth axis is VCARVE-5) — a real usable V-carve. The CORE (VCARVE-2) is the same regardless of UX.
+
+> **Deferred (return after vcarve):** IMPORT-3 (SVG breadth full path/transforms/`<g>` + DXF) · **HOME-1** (`/` IS Studio
+> in-place [rewrite+`<base>` or move-to-root], Shaper from inside — the deploy works for now) · hidden-sketch EXCLUDE ·
+> sketch→`<g>` · widen islands · group tree-node · GRID-1 (staged) · SP1i · JOINTS.
 
 ---
 
@@ -86,9 +119,9 @@ ones (export resolves vs live `findLoops`) → a cosmetic over-count. Future ref
 > **Sequencing:** SP1 EXPORT ENGINE ✅ LIVE (j1/j2/j4; j3a datum+groups ✅) → **SKETCH SYSTEM arc (NOW)** — the Design
 > panel becomes a Fusion-style sketch tree; an additive overlay over the global solver. PLAN ✅ → S-1a container ✅ →
 > **SKETCH SYSTEM + ISLANDS arc ✅ COMPLETE**. → **IMPORT + VCARVING arc (user-picked, high)**: IMPORT-1 plan ✅ →
-> IMPORT-2 ✅ → SWITCH-2 ✅ → BUG-1 marquee glyph ✅ → **⚑ DEPLOY — pre-flight GREEN, AWAITING USER GO** → IMPORT-3 breadth
-> + DXF → VCARVE-1 (own deep plan) → VCARVE-2+. Deferred: hidden-exclude · sketch→`<g>` · widen islands · group tree-node ·
-> GRID-1 · SP1i · JOINTS.
+> VCARVE-2 core ✅ → VCARVE-3 tab plan ✅ → VCARVE-3a shell mode + skeleton ✅ → **VCARVE-3b live workspace (V-bit + region +
+> depth-shaded preview, building)** → VCARVE-4 gated export → -5 true medial axis. Deferred: IMPORT-3 breadth+DXF · HOME-1
+> root-serving · hidden-exclude · sketch→`<g>` · widen islands · group tree-node · GRID-1 · SP1i · JOINTS.
 >
 > **SWITCH-2 (queued, do right after IMPORT-2):** `packages/ui/app-switcher.js` `APPS` hrefs `/apps/<id>/` → **relative
 > `../<id>/`** (both apps are siblings under `apps/` → resolves from ANY server root AND deployed; fixes the local-dev
@@ -212,6 +245,57 @@ ones (export resolves vs live `findLoops`) → a cosmetic over-count. Future ref
 > dead rect-dropdown wiring (`setupToolDropdown`/RECT_MODES) + a few harmless leaked document listeners in
 > ui-manager.js. Static removal deferred to its own low-risk cleanup slice (after S7c-2d-pre migrates the per-button
 > logic out). Functionally inert today (no live null-deref — verified; the auto-SELECT/Escape paths were fixed).
+
+## (DONE) VCARVE-3a: the Vcarve shell mode + docked skeleton — blessed `HEAD`. Shaper-only; SketchStudio byte-identical.
+
+`apps/shaper/index.html`+`main.js`: a `data-mode="vcarve"` nav btn BETWEEN Design & Prepare (auto-wired via
+`modeBtns.forEach`) → **Explore·Design·Vcarve·Prepare·Sim/Export**; a `#view-vcarve` (absolute-inset, hidden-toggled) +
+`VIEWS.vcarve` + a `showMode` toggle (static skeleton, no mount branch yet); a docked LEFT `#vcarve-panel` (244px, per the
+dock-layout feedback) with placeholder ① Adapt (Region) + ② Carve (V-bit/dStep/max-depth/recompute, disabled) beside a
+cream `#vcarve-canvas` that REUSES the `#design-canvas` cream selector (DRY). Advisor-verified: scope = index.html+main.js;
+shell-smoke 12/12; the diff shows the `#view-vcarve` panel/canvas + `VIEWS.vcarve`. Worker CDP: nav order
+`explore,design,vcarve,prepare,simexport`; Vcarve shows the docked panel + cream canvas; other modes still work.
+
+## (DONE-plan, BLESSED) VCARVE-3 the Vcarve TAB plan — `HEAD~1` WORK-LOG (81 lines, code-free). **Declared vcarve record + derive.**
+
+Shell mode AUTO-WIRES (a `.mode-btn[data-mode]` → `modeBtns.forEach → showMode`; advisor-confirmed the nav ground) →
+insert `'vcarve'` before Prepare = nav btn + `#view-vcarve` + `VIEWS.vcarve` + a mount branch, Shaper-only → byte-identical.
+**Data-model call (blessed):** a DECLARED `state.vcarves=[{id, region, vbit:{angle}, dStep, maxDepth}]` (like sketches/
+groups) — the Vcarve tab edits+previews; `vcarveContours` DERIVES the stack at PREVIEW **and** EXPORT (one source of truth,
+NOT materializing N contours into the cut plan). Prepare sees a vcarve region as "vcarve-handled" (excluded from std cut
+assign). V-bit record `{kind:'vbit',angle}` + `VBIT_PRESETS` (90/60/45/30/20°); `vbitHalfAngleTan(angle)` feeds VCARVE-2.
+Workspace = docked panel + cream canvas + depth-shaded contour preview. Slices: 3a shell+skeleton → 3b bit+region+preview
+→ 4 gated export. (Shell is now 5 modes → [[feedback_shaper_dock_layout]] to refresh.)
+
+## (DONE) VCARVE-2: the PURE offset-stack core — `#core/vcarve.js` `vcarveContours` + oracle — blessed `HEAD~1`. Additive; byte-identical.
+
+`packages/core/vcarve.js` (PURE, no DOM): `vcarveContours(boundary, {dStep, halfAngleTan, maxIters=1000}) → [{polygon,
+depth}]` — insets `offsetPolygon(boundary, -d)` for d = dStep, 2·dStep, … pushing `{contour, depth: d/halfAngleTan}` while
+a valid loop, STOP when `offsetPolygon` returns `[]` (over-collapse = the local MEDIAL AXIS → FINITE). Guards (<3-pt
+boundary / non-positive dStep|tan → `[]`; maxIters cap). PURITY: the HOST computes the boundary poly; the module never
+touches the DOM. Advisor-verified: scope clean; **I ran the vcarve oracle (passes: a 40×40 sq → nested contours, depths
+2,4,6…=d/tan, finite termination, 60°≈1.73·d deeper, guards)** + shell-smoke 12/12 (additive, no consumer → byte-identical).
+
+## (DONE-plan, BLESSED) VCARVE-1 vcarve arc plan — `HEAD~1` WORK-LOG (94 lines, code-free, crux verified).
+
+THE KEY INSIGHT: `offsetPolygon(boundary, -d)` returns `[]` on over-inset (winding-flip + self-intersection guards,
+advisor-verified) → insetting until `[]` **TERMINATES at the medial axis** — the offset engine implicitly traces it, no
+medial-axis computation. OFFSET-HACK (v1): `vcarveContours` = the stack `C(d)=offsetPolygon(boundary,-d)` while ≥3 pts;
+`depth(d)=d/tan(halfAngle)` (V-bit groove half-width=d reaches the boundary). EXPORT (inverted+gated): the APP
+precomputes + emits each contour as `<path … shaper:cutType="online" shaper:cutDepth="Xmm">` (V-bit rides each centered;
+increasing depth = the V-groove; toolDia omitted); HOST computes the boundary poly (S-4e purity); GATED → standard +
+SketchStudio byte-identical. Declared V-BIT record `{kind:'vbit', angle}`. UX: a Prepare 'vcarve' cut-mode on a closed
+loop. MEDIAL-AXIS survey: distance-transform / Voronoi / straight-skeleton all hard → DEFER (VCARVE-5). SLICES: VCARVE-2
+core → -3 V-bit+cut-mode → -4 gated export → -5 true axis. Specs: [[reference_shaper_svg_encoding]].
+
+## (DONE ✅) DEPLOY — both apps LIVE on Cloudflare Pages — `main` @ `318ca13`, user-verified working.
+
+Pushed `origin/main` `44c6d4b → 318ca13` (clean fast-forward, 167 commits — the FIRST time main got the whole `src/→
+packages/+apps/` restructure + this session's work). CF auto-deployed; **user confirmed the site works** at
+`sketch-studio.pages.dev` (NOT `sketchstudio` — the hyphenated project name). `/` → Studio (via `_redirects` 302), `/shaper`
+→ Shaper, switcher both ways, sketches + SVG import live. Build config (user screenshot): production=main · auto-deploy ON ·
+no build command · output=`/` (repo root) · framework=None — correct for the static no-bundler site. ROLLBACK: CF
+dashboard → prior deployment. **HOME-1 (`/` IS Studio in-place, no redirect hop)** deferred to backlog — the deploy works.
 
 ## (DONE) BUG-1: box-select marquee coincident-glyph leak — gated snap OFF during a marquee — blessed `HEAD`. Both apps; surgical.
 

@@ -52,7 +52,10 @@
     .stage .badge { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sk-selection); font-weight: 700; }
     /* PP-3a — the Draw stage: a full-bleed canvas (the plotter's own freeform art surface). The scaffold's
        #canvasWrap is absolutely positioned, so the .stage flex-centering (used by the other stubs) ignores it. */
-    #canvasWrap { position: absolute; inset: 0; overflow: hidden; background: #efe9dd; }
+    /* PP-3c — the Draw stage is now canvas + a side panel (import / layers / pens). */
+    #stage-draw { padding: 0; }
+    #drawRoot { position: absolute; inset: 0; display: flex; }
+    #canvasWrap { flex: 1 1 auto; position: relative; overflow: hidden; background: #efe9dd; min-width: 0; }
     #canvas { display: block; }
     #docInfo { position: absolute; left: 12px; bottom: 10px; font: 12px system-ui, sans-serif; color: #8a8067; pointer-events: none; }
     #toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: #2f8f7f; color: #fff;
@@ -70,6 +73,26 @@
       align-items: center; background: #fbf6ec; border: 1px solid #d8cbb2; border-radius: 8px; padding: 6px 10px; z-index: 6; }
     #transformHud[hidden] { display: none; }
     #transformHud input { width: 80px; }
+    /* PP-3c — the Draw side panel (import / layers / pens) + the drag-drop overlay. */
+    #drawPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
+      color: #3a352b; padding: 10px; font: 13px system-ui, sans-serif; }
+    .dp-sec { margin-bottom: 16px; }
+    .dp-head { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; color: #6b6353; margin: 0 0 6px; }
+    .dp-row { display: flex; gap: 4px; margin-bottom: 6px; }
+    .dp-btn { background: #fbf6ec; color: #3a352b; border: 1px solid #d8cbb2; border-radius: 6px; padding: 5px 9px;
+      font: 12px system-ui, sans-serif; cursor: pointer; }
+    .dp-btn:hover { border-color: var(--sk-selection); }
+    .dp-primary { width: 100%; background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); padding: 7px; }
+    .dp-list { display: flex; flex-direction: column; gap: 2px; }
+    .dp-list .group-row, .dp-list .color-row, .dp-list .role-row, .dp-list .shape-row,
+    .dp-list > div { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 5px; cursor: default; }
+    .dp-list .chevron, .dp-list .vis { cursor: pointer; opacity: 0.7; }
+    .dp-list .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); display: inline-block; }
+    .dp-list input { font: inherit; border: 1px solid var(--sk-selection); border-radius: 4px; padding: 1px 4px; }
+    #dropOverlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(47,143,127,0.12); border: 2px dashed var(--sk-selection); color: #2f8f7f; font: 600 15px system-ui, sans-serif;
+      pointer-events: none; z-index: 8; }
+    #dropOverlay.show { display: flex; }
   </style>
 </head>
 <body>

@@ -6839,3 +6839,47 @@ surgical import trims is cleanly reviewable. penplotter-only additive.
   shared shell. NEXT per the epic: **PP-3c** — art layers + plot-colors (pens) panels + SVG import. STOP — hold.
 
 === PP-3b (DRAW INTERACTION) DONE — HOLD ===
+
+## 2026-07-10 · PP-3c — Draw panels: layers + pens + SVG import (turn 286)
+
+Completes the Draw stage. Ported the 3 Draw panels + `ui-dialog`; the Draw tab is now canvas + a side panel (import
+/ layers / pens). penplotter-only additive.
+
+- **did — ported VERBATIM:** `ui-dialog.js` (uiPrompt/uiConfirm/uiChoose modals — self-contained, no imports).
+- **did — ported + SURGICAL trims:**
+  - `layers-panel.js` — `render`->`renderArt`; `closedPolygonFor` -> `#core/plot/fills/utils.js`; `unionPolygons`
+    (the "merge shapes" op) -> `#core/plot/clip.js`. (Found: its `renderLayersPanel` tree is group->paint-color->
+    role->shape where "role" = fill/stroke SVG paint, NOT toolpath — so it is a pure art-layers view, portable.)
+  - `plot-colors-panel.js` — `render`->`renderArt`; `cloud` + `openPicker` (cloud-picker) -> local no-op STUBS
+    (cloud palette save/load is a Cloud-stage feature AND needs the `dom.API_BASE` PP-3a dropped; the Draw scaffold
+    omits the load/save-palette buttons, so the stubs are never invoked).
+  - `svg-import.js` — `render`->`renderArt`; `syncDocFields` (settings.js) -> a no-op STUB (import still sets
+    `state.doc.{w,h}`; only the Settings-modal reflection is skipped).
+- **did — `render-art.js`:** now also refreshes the Draw panels each render (guarded `renderLayersPanel()` +
+  `renderPlotColorsPanel()`) so shape-counts / the pen list stay live after any mutation. Circular with the panels
+  (they import renderArt) but the calls are runtime-only, so it resolves — same pattern as the plotter's render.js.
+- **did — `draw-stage.js`:** the scaffold is now `#drawRoot` = `#canvasWrap` (flex, canvas + tools + HUD + drop
+  overlay) + `#drawPanel` (import btn / Layers: +Layer/Clear/Merge + `#layers` tree / Pens: +Pen + `#plotColors`).
+  Wires installLayerButtons + installPlotColorsPanel + installSvgImport. + panel + drop-overlay CSS.
+- **DEFERRED (flagged, per dispatch):** `active-layer-panel.js` — it edits per-layer FILL/OUTLINE (a FILL-stage
+  concern) and imports the OLD plotter `fill/index` (FILL_PATTERNS-as-ids + PATTERN_OPTIONS) which my `#core/plot`
+  registry replaced with objects — so it needs Fill-stage adaptation anyway. NOT ported; nothing in Draw calls it.
+- **findings (honest scope):** (1) **pen ASSIGN is a Toolpath-stage op, not Draw** — art layers have NO
+  `plotColorId`; the pen->`plotColorId` links live on TOOLPATHS (`tp.plotColorId`, set in the Toolpath stage /
+  svg-import). Draw does pen CREATE + LIST; assignment defers with the Toolpath stage. (2) The layers panel is a
+  group/paint-color/role/shape TREE (auto-ordered by color), not a flat draggable list — "reorder" as a
+  drag-reorder does not map to this UI; add / hide / rename-within-the-tree + the merge op are its layer ops.
+- **verify — LIVE (CDP, headless):** console errors **0**. Draw a rect -> the layers tree renders (2 rows).
+  **+Layer** 1->2 art layers. **Hide** — clicking a row `.vis` toggles `layer.visible` (visToggled). **+Pen** 0->1
+  plot colors, renders in `#plotColors`. **Import SVG** (dropped a 3-element SVG onto the canvas) -> 3 shapes
+  (rect/line/ellipse) into a fresh layer, rendered on the canvas (canvasShapes 3). All via the ported panels.
+- **verify — UNREGRESSED:** ADDITIVE, penplotter only (the panels READ `#core/plot/fills/utils` + `#core/plot/clip`
+  — no `#core` edit). `npm run test:shell` **12/12**; penplotter loads errors 0; Shaper untouched. `node --check`
+  clean on all 17 src files. 0 net-new.
+- **process hygiene:** CDP verify from a scratchpad `.cjs`; `proc_health mark --turn 286`; `watch` clean.
+- **state:** branch `carve-out`. **PP-3 DRAW STAGE COMPLETE** — freeform drawing (5 tools + select/drag/node/
+  scissors/transform/undo), art LAYERS (add/hide/merge/tree), PENS (create/list), and SVG IMPORT, all on the shared
+  shell, backed by the plotter's own `state.artLayers` (the solver never sees it). NEXT per the epic: **PP-4** — the
+  bake seam (`bakeToPolylines(artLayers, coreState)` -> pen-tagged polylines that Fill/Toolpath/Export consume). STOP.
+
+=== PP-3c (DRAW PANELS) DONE — PP-3 DRAW STAGE COMPLETE — HOLD ===

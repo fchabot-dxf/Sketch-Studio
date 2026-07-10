@@ -5,8 +5,12 @@
 
 import { state } from "./state.js";
 import { findShape } from "./state.js";
-import { canvas, SVG_NS } from "./dom.js";
+import { canvas, SVG_NS, layersEl } from "./dom.js";
 import { makeShapeElement } from "./shapes.js";
+// PP-3c: refresh the Draw side panels each render (layer shape-counts, pen list). Circular with these panels (they
+// import renderArt), but the calls are runtime-only so it resolves. Guarded — the panels only exist post-mount.
+import { renderLayersPanel } from "./layers-panel.js";
+import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 
 export function renderArt() {
     if (!canvas) return;
@@ -30,6 +34,10 @@ export function renderArt() {
     if (state.selectedShapeIds && state.selectedShapeIds.size > 0) {
         canvas.appendChild(buildSelectionOverlay());
     }
+
+    // PP-3c: keep the Draw side panels in sync with the art (layer tree + pen list) on every render.
+    if (layersEl) renderLayersPanel();
+    if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
 }
 
 function buildSelectionOverlay() {

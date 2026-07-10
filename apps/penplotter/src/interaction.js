@@ -3,7 +3,7 @@
 
 import { state, uid, activeArtLayer, findShape, remapToolpathTargets } from "./state.js";
 import { canvas, coordsEl, SVG_NS, toast } from "./dom.js";
-import { screenToSvg, applyViewport } from "./viewport.js";
+import { screenToSvg, applyViewport, sharedView } from "./viewport.js"; // UNIFY-6: pan mutates the shared #ui view
 import { translateShape, rotateShape, scaleShape, shapeCenter, deepCopyShape, combinedBounds, shapeBounds, getNodes, setNodes, makeShapeElement } from "./shapes.js";
 import { gatherSnapCandidates, shapeVertices, findSnapDelta } from "./snapping.js";
 import { resolveToolpathShapes } from "./preview.js"; // PP-4a: the real compute bridge (Toolpath stage)
@@ -37,7 +37,7 @@ function onDown(e) {
         state.interaction = {
             kind: "pan",
             startX: e.clientX, startY: e.clientY,
-            originPanX: state.viewport.panX, originPanY: state.viewport.panY,
+            originX: sharedView().x, originY: sharedView().y, // UNIFY-6: pan the SHARED #ui view rect
         };
         canvas.classList.add("panning");
         e.preventDefault();
@@ -105,10 +105,11 @@ function onMove(e) {
         // subtract the cursor screen delta converted to user-space:
         // dragging right reveals more of the doc on the left, which
         // means the viewBox slides left.
-        const dxMm = (e.clientX - it.startX) / state.viewport.scale;
+        const dxMm = (e.clientX - it.startX) / state.viewport.scale; // scale is the synced px-per-world cache
         const dyMm = (e.clientY - it.startY) / state.viewport.scale;
-        state.viewport.panX = it.originPanX - dxMm;
-        state.viewport.panY = it.originPanY - dyMm;
+        const v = sharedView();
+        v.x = it.originX - dxMm;
+        v.y = it.originY - dyMm;
         applyViewport();
         return;
     }

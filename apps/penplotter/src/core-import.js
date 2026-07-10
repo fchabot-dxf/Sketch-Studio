@@ -68,12 +68,13 @@ export function importSvgToCore(svgText, fileName, controller) {
     if (d.color) findOrCreatePlotColor(d.color); // seed the physical pen palette (digital -> owned pen)
   }
 
-  // DENSE import -> mark STATIC so the sketcher skips it per-frame (the underlay draws it); small stays LIVE.
-  const dense = importedIds.length > DENSE_THRESHOLD;
-  if (dense) for (const id of importedIds) state.staticShapeIds.add(id);
+  // UNIFY-6 (decided): mark ALL imports STATIC so imported art DISPLAYS in its PEN colors (via the underlay) by
+  // default; the user activates a subset (select) to constrain. Dense imports especially need this for the throttle.
+  for (const id of importedIds) state.staticShapeIds.add(id);
+  const dense = importedIds.length > DENSE_THRESHOLD; // (kept only to note "dense" in the status)
 
   const skippedSummary = Object.entries(skipped).map(([k, n]) => `${k} x${n}`).join(', ');
-  return { imported: importedIds.length, sketchName: sk.name, scaleLabel: label, static: dense, skippedSummary };
+  return { imported: importedIds.length, sketchName: sk.name, scaleLabel: label, static: importedIds.length > 0, dense, skippedSummary };
 }
 
 function bumpInto(obj, k, n) { obj[k] = (obj[k] || 0) + n; }

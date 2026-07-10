@@ -10,6 +10,8 @@
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
+import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
 import { state, makeArtLayer, uid, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
@@ -199,7 +201,15 @@ export function mountSketchStage(view, ctx = {}) {
 
   // RAF lifecycle tied to the active stage. onEnter re-renders the underlay (catches palette edits made on other tabs).
   return {
-    onEnter: () => { controller.start(); underlayDirty = true; },
+    onEnter: () => {
+      controller.start(); underlayDirty = true;
+      // UNIFY-6: the FIRST canvas shown at a real size fits the SHARED view (controller.state.view) to the plotter
+      // doc. Then ALWAYS apply the shared view to #design-canvas on entry, so pan/zoom done on a pen tab reflects here
+      // (persists across tabs). updateViewBox is the #ui's own applier (center-based; adjusts h to this canvas aspect).
+      const r = designCanvas.getBoundingClientRect();
+      if (needsFit() && r.width > 0 && r.height > 0) { Object.assign(controller.state.view, fitRectForDoc(r.width, r.height)); markFitted(); }
+      try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
+    },
     onLeave: () => controller.stop(),
   };
 }

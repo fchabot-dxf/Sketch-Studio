@@ -5,7 +5,7 @@
 
 import { state } from "./state.js";
 import { canvasWrap } from "./dom.js";
-import { fitViewport } from "./viewport.js";
+import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6: fit once, then apply the shared view
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installExportButton, buildGcodeEntries } from "./export.js";
@@ -47,7 +47,7 @@ function onEnter() {
   state.preview.showToolpath = true;
   state.preview.simulatePens = true;    // the pen-width simulation view
   const r = wrap.getBoundingClientRect();
-  if (r.width > 0 && r.height > 0) fitViewport();
+  if (r.width > 0 && r.height > 0) { if (needsFit()) fitViewport(); else applyViewport(); }
   recalcPreview();
   renderArt();
 }

@@ -4,7 +4,7 @@
 
 import { state } from "./state.js";
 import { canvasWrap } from "./dom.js";
-import { fitViewport } from "./viewport.js";
+import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6: fit once, then apply the shared view
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-panel.js";
@@ -33,7 +33,7 @@ function onEnter() {
   state.preview.showToolpath = true;   // preview the toolpath (fill strokes) over the art
   state.preview.simulatePens = false;  // PP-6: diagnostic overlay here (the pen-width sim is Export only)
   const r = wrap.getBoundingClientRect();
-  if (r.width > 0 && r.height > 0) fitViewport();
+  if (r.width > 0 && r.height > 0) { if (needsFit()) fitViewport(); else applyViewport(); }
   recalcPreview();
   renderArt();
   renderActiveLayerPanel();

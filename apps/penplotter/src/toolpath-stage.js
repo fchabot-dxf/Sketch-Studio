@@ -6,7 +6,7 @@
 
 import { state } from "./state.js";
 import { canvasWrap } from "./dom.js";
-import { fitViewport } from "./viewport.js";
+import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6: fit once, then apply the shared view
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installToolpathLayersPanel, renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
@@ -44,7 +44,7 @@ function onEnter() {
   state.preview.showToolpath = true;
   state.preview.simulatePens = false; // PP-6: diagnostic overlay here (the pen-width sim is Export only)
   const r = wrap.getBoundingClientRect();
-  if (r.width > 0 && r.height > 0) fitViewport();
+  if (r.width > 0 && r.height > 0) { if (needsFit()) fitViewport(); else applyViewport(); }
   recalcPreview();            // fresh optimized path on entry (an explicit recompute, like the button)
   renderArt();                // art + the optimized overlay (renderArt also refreshes the ops panel)
   renderToolpathLayersPanel();

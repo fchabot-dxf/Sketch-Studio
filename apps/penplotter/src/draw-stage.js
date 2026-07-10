@@ -7,7 +7,7 @@
 
 import { state, initLayers } from "./state.js";
 import { initDom, canvasWrap } from "./dom.js";
-import { fitViewport } from "./viewport.js";
+import { fitViewport, applyViewport, needsFit, installWheelZoom } from "./viewport.js"; // UNIFY-6: shared-view fit + wheel-zoom
 import { renderArt } from "./render-art.js";
 import { installToolbar, setTool } from "./tools.js";
 import { installCanvasHandlers, installTransformHud } from "./interaction.js";
@@ -75,6 +75,7 @@ export function mountDrawStage(view) {
   installToolbar();
   setTool(state.tool || "select");
   installCanvasHandlers();
+  installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas (was never wired)
   installTransformHud();
   installKeyboard();
   installHistory(() => renderArt());
@@ -96,7 +97,7 @@ export function mountDrawStage(view) {
         if (!canvasWrap) return;
         const r = canvasWrap.getBoundingClientRect();
         if (!(r.width > 0 && r.height > 0)) return;
-        fitViewport();
+        if (needsFit()) fitViewport(); else applyViewport(); // UNIFY-6: keep the shared view; refit only if unfit
         renderArt();
       });
       _ro.observe(canvasWrap);
@@ -118,5 +119,5 @@ function onEnter() {
   state.preview.showToolpath = false;
   state.preview.simulatePens = false; // PP-6: only the Export stage shows the pen-width sim
   const r = wrap.getBoundingClientRect();
-  if (r.width > 0 && r.height > 0) { fitViewport(); renderArt(); }
+  if (r.width > 0 && r.height > 0) { if (needsFit()) fitViewport(); else applyViewport(); renderArt(); }
 }

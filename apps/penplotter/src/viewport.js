@@ -1,78 +1,82 @@
-// Canvas viewport: fit-to-doc, pan, zoom, and screen↔SVG coord conversion.
-//
-// Zoom model: viewBox-based. The SVG element fills the wrap at fixed
-// pixel dimensions; zoom and pan are expressed by sliding/shrinking the
-// viewBox window over the document's user-space coordinates. This
-// avoids the previous setAttribute(width, hugeNumber) approach which
-// hit browser SVG dimension limits at deep zoom and made the content
-// appear to stop growing once the canvas filled the wrap.
-//
-// Coordinate conventions:
-//   state.viewport.scale  — pixels per mm (user-space → screen)
-//   state.viewport.panX   — user-space x of the viewBox top-left (mm)
-//   state.viewport.panY   — user-space y of the viewBox top-left (mm)
+// apps/penplotter/src/viewport.js — UNIFY-6: the plotter canvas is now a THIN ADAPTER over the SHARED #ui view.
+// The single source of truth for pan/zoom is the #ui sketch's viewBox rect, state.coreSketch.view = {x,y,w,h}
+// (the same object the Design sketcher pans/zooms). So Design + Fill/Toolpath/Export share ONE view -> pan/zoom is
+// identical across all 4 tabs and persists across tab switches, like Studio/Shaper. This retires the old
+// {scale,panX,panY} model — state.viewport is now just a DERIVED CACHE (px-per-world scale + top-left) kept in sync
+// by applyViewport, so interaction.js's pick-threshold reads (state.viewport.scale) keep working unchanged.
 
 import { state } from "./state.js";
 import { canvas, canvasWrap, docInfoEl } from "./dom.js";
 
+let _fitted = false; // one initial doc-fit (whichever canvas is shown first at a real size does it)
+export function needsFit() { return !_fitted; }
+export function markFitted() { _fitted = true; }
+
+// The shared view. #ui MODEL (see #ui/input-manager updateViewBox): view = {x,y,w,h} where (x,y) is the viewBox
+// CENTER and the viewBox is "(x - w/2) (y - h/2) w h". state.coreSketch.view once the Design sketcher has mounted;
+// a doc-centered fallback before that.
+export function sharedView() {
+  const v = state.coreSketch && state.coreSketch.view;
+  if (v) return v;
+  if (!state._viewFallback) state._viewFallback = { x: state.doc.w / 2, y: state.doc.h / 2, w: state.doc.w, h: state.doc.h };
+  return state._viewFallback;
+}
+
+// Pure doc-fit in the #ui model: (x,y) = the doc CENTER, (w,h) = the world window covering the doc + margin.
+export function fitRectForDoc(wrapW, wrapH) {
+  const margin = 24;
+  const sx = (wrapW - margin * 2) / state.doc.w, sy = (wrapH - margin * 2) / state.doc.h;
+  const scale = Math.max(0.001, Math.min(sx, sy)); // px per world unit
+  return { x: state.doc.w / 2, y: state.doc.h / 2, w: wrapW / scale, h: wrapH / scale };
+}
+
 export function fitViewport() {
-    const wrap = canvasWrap.getBoundingClientRect();
-    const margin = 24;
-    const sx = (wrap.width - margin * 2) / state.doc.w;
-    const sy = (wrap.height - margin * 2) / state.doc.h;
-    state.viewport.scale = Math.max(0.001, Math.min(sx, sy));
-    // Center the doc inside the viewBox. The viewBox covers the wrap
-    // in user-space (wrap.width / scale × wrap.height / scale); the
-    // doc is centered within that window.
-    state.viewport.panX = (state.doc.w - wrap.width  / state.viewport.scale) / 2;
-    state.viewport.panY = (state.doc.h - wrap.height / state.viewport.scale) / 2;
-    applyViewport();
+  const wrap = canvasWrap && canvasWrap.getBoundingClientRect();
+  if (!wrap || !(wrap.width > 0 && wrap.height > 0)) return; // hidden host / no size -> no-op (don't mark fitted)
+  Object.assign(sharedView(), fitRectForDoc(wrap.width, wrap.height));
+  _fitted = true;
+  applyViewport();
 }
 
 export function applyViewport() {
-    const wrap = canvasWrap.getBoundingClientRect();
-    const { scale, panX, panY } = state.viewport;
-    // Canvas always fills the wrap exactly — no CSS transform pan, no
-    // ever-growing setAttribute width. All movement is in the viewBox.
-    canvas.setAttribute("width",  wrap.width);
-    canvas.setAttribute("height", wrap.height);
-    const vbW = wrap.width  / scale;
-    const vbH = wrap.height / scale;
-    canvas.setAttribute("viewBox", `${panX} ${panY} ${vbW} ${vbH}`);
-    canvas.style.transform = "";
-    const inch = state.docUnit === "in";
-    const conv = inch ? 1 / 25.4 : 1;
+  const wrap = canvasWrap && canvasWrap.getBoundingClientRect();
+  if (!wrap) return;
+  const v = sharedView();
+  canvas.setAttribute("width", wrap.width);
+  canvas.setAttribute("height", wrap.height);
+  // Center-based, IDENTICAL to #ui updateViewBox -> #canvas shows the SAME world region as #design-canvas.
+  canvas.setAttribute("viewBox", `${v.x - v.w / 2} ${v.y - v.h / 2} ${v.w} ${v.h}`);
+  canvas.style.transform = "";
+  // Sync the derived cache (px-per-world scale + top-left) so interaction.js pick thresholds keep working.
+  const scale = v.w > 0 ? wrap.width / v.w : 1;
+  state.viewport.scale = scale; state.viewport.panX = v.x; state.viewport.panY = v.y;
+  if (docInfoEl) {
+    const inch = state.docUnit === "in", conv = inch ? 1 / 25.4 : 1;
     const fmt = (mm) => (inch ? (mm * conv).toFixed(2) : Math.round(mm * conv));
-    const unit = inch ? "in" : "mm";
-    docInfoEl.textContent = `${fmt(state.doc.w)} × ${fmt(state.doc.h)} ${unit}  ·  ${(scale * 25.4 / 96).toFixed(2)}× display`;
+    docInfoEl.textContent = `${fmt(state.doc.w)} × ${fmt(state.doc.h)} ${inch ? "in" : "mm"}  ·  ${(scale * 25.4 / 96).toFixed(2)}× display`;
+  }
 }
 
 export function screenToSvg(clientX, clientY) {
-    const pt = canvas.createSVGPoint();
-    pt.x = clientX; pt.y = clientY;
-    const ctm = canvas.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-    const s = pt.matrixTransform(ctm.inverse());
-    return { x: s.x, y: s.y };
+  const pt = canvas.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const ctm = canvas.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const s = pt.matrixTransform(ctm.inverse());
+  return { x: s.x, y: s.y };
 }
 
-// Wheel zoom that keeps the point under the cursor stationary.
+// Wheel zoom that keeps the point under the cursor stationary — mutates the SHARED view (shrink/grow the viewBox).
 export function installWheelZoom() {
-    canvasWrap.addEventListener("wheel", (e) => {
-        e.preventDefault();
-        const before = screenToSvg(e.clientX, e.clientY);
-        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-        // No upper bound — viewBox-based zoom doesn't suffer from the
-        // browser's SVG max-dimension cap. Lower bound keeps the doc
-        // from vanishing.
-        state.viewport.scale = Math.max(0.001, state.viewport.scale * factor);
-        applyViewport();
-        const after = screenToSvg(e.clientX, e.clientY);
-        // Slide the viewBox so the cursor's user-space coord stays put:
-        // if `after` is left/above `before`, shift the viewBox left/up
-        // by the same user-space delta.
-        state.viewport.panX -= (after.x - before.x);
-        state.viewport.panY -= (after.y - before.y);
-        applyViewport();
-    }, { passive: false });
+  canvasWrap.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const before = screenToSvg(e.clientX, e.clientY);
+    const factor = e.deltaY < 0 ? 1 / 1.1 : 1.1; // scroll up -> zoom in -> shrink the viewBox
+    const v = sharedView();
+    v.w = Math.max(0.01, v.w * factor); v.h = Math.max(0.01, v.h * factor);
+    applyViewport();
+    const after = screenToSvg(e.clientX, e.clientY);
+    v.x -= (after.x - before.x); v.y -= (after.y - before.y); // keep the cursor's world point put
+    applyViewport();
+  }, { passive: false });
 }

@@ -81,6 +81,10 @@ function showStage(id) {
   }
 }
 
+// UNIFY-6: pre-mount the DESIGN sketcher at startup so the SHARED view (state.coreSketch.view) exists BEFORE the
+// draw host's plotter canvas reads it for pan/zoom convergence. showStage(initial) reuses this instance (mount-once).
+if (STAGE_MOUNT.design && !mounted.design) mounted.design = STAGE_MOUNT.design(views.get('design'), { isActive: () => currentStageId === 'design', navigate: (to) => showStage(to) }) || {};
+
 // UNIFY-4a: the plotter #canvasWrap was owned by the retired Draw tab. Re-home it — mount the Draw scaffold ONCE into
 // a HIDDEN host at startup so #canvasWrap always exists (+ initDom + initLayers' default toolpath). Fill/Toolpath/
 // Export borrow it by re-parenting on entry; they render #core geometry via UNIFY-2. The art store + art tools +

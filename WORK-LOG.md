@@ -8053,3 +8053,44 @@ tab, in its colors. REUSES Shaper's importSvgToSketch pattern + the PURE #core/s
   stages; retire viewport.js) OR **UNIFY-7** retire the art store + bake (the big delete, perf-gated). STOP — hold.
 
 === UNIFY-5 (IMPORT SVG -> #core + COLORS + STATIC) DONE — HOLD ===
+
+## turn 326 — UNIFY-6: pan/zoom convergence — ONE #ui state.view across all 4 tabs + a UNIFY-5 display flip
+
+Punch #9: all plotter canvases now share the #ui sketch's view, so pan/zoom is identical + persists across
+Design/Fill/Toolpath/Export (like Studio/Shaper). Plotter-side; #core/#ui untouched.
+
+- **did (part 0, one-liner):** core-import.js now marks ALL imports STATIC (not just >threshold), so an imported SVG
+  DISPLAYS in its PEN colors via the underlay by default; the user activates a subset (select) to constrain.
+- **did — viewport.js = a THIN ADAPTER over the shared view:** the single source of truth is
+  `state.coreSketch.view = {x,y,w,h}` (the #ui sketch's viewBox rect). `sharedView()` returns it (doc-centered
+  fallback pre-mount). `applyViewport()` sets #canvas viewBox = the SAME center-based formula #ui uses
+  (`(x - w/2) (y - h/2) w h`) + syncs the derived `state.viewport.scale` cache. `fitRectForDoc()` = doc-centered fit.
+  `installWheelZoom()` + pan mutate the shared view. **CAUGHT via updateViewBox: the #ui view is CENTER-based**
+  (x,y = viewBox center, not top-left) — matched it exactly so #canvas + #design-canvas show the SAME region.
+- **did — interaction.js:** the pan gesture writes `sharedView().x/y` (was `state.viewport.panX/panY`); the pick-
+  threshold reads (`state.viewport.scale`) keep working via the synced cache.
+- **did — wire installWheelZoom (draw-stage):** it was DEFINED but NEVER called — the plotter canvas had no
+  wheel-zoom. Now wired (on the shared view) so wheel-zoom is consistent with Design.
+- **did — main.js:** pre-mount the DESIGN sketcher at startup (before the draw host) so `state.coreSketch.view`
+  exists before the plotter canvas reads it.
+- **did — one shared FIT + persist:** the stages' onEnter fit ONCE (`needsFit()` -> `fitViewport()`) then
+  `applyViewport()` (preserve pan/zoom). Design's onEnter always `updateViewBox(#design-canvas, view)` so a pan/zoom
+  done on a pen tab reflects on Design. The draw-host ResizeObserver fit-once-then-apply (no refit-on-resize reset).
+- **verify — LIVE (CDP, headless): console errors 0.** Design fit = view 321.5 x 214.6 covering the ~200mm doc.
+  **Fill/Toolpath/Export/Design ALL show the SAME shared view (allConsistent:true):** the plotter #canvas viewBox ===
+  the center-based rect from `controller.state.view`; PAN the shared view (+25,+15) -> Toolpath/Export/Design all
+  reflect it (persists across tabs). Fit centers on the doc (docCenterInView:true). WHEEL-ZOOM on the plotter #canvas
+  shrinks the shared view (321.46 -> 292.24 = zoom in). PART 0: a small import is now static (smallStatic:true) and
+  shows in PEN colors (underlayHasBlue:true).
+- **verify — UNREGRESSED:** `git status packages/` clean (no #core/#ui edits — only READS #ui's exported
+  updateViewBox); `npm run test:shell` **12/12**; all core oracles **21/21** green STANDALONE; `node --check` clean
+  (9 files). 0 net-new. Studio/Shaper use their own #ui pan/zoom untouched.
+- **process hygiene:** CDP verifies from scratchpad (`verify-panzoom.cjs`, `verify-wheel.cjs`); `proc_health mark
+  --turn 326`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Pan/zoom is unified across the 4 tabs; imports display in pen colors. The two
+  physical canvases now SHARE the view model (UNIFY-7 retires the plotter one). The unify is nearly complete: Design
+  (draw/freehand/precise/constrain) + import + pen model + throttle + shared pan/zoom, all on #core geometry. NEXT
+  (blessed): **UNIFY-7** — retire the art store + bake + the separate plotter canvas (the big DELETE, perf-safe now).
+  STOP — hold.
+
+=== UNIFY-6 (PAN/ZOOM CONVERGENCE) DONE — HOLD ===

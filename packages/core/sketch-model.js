@@ -12,7 +12,9 @@ export const DEFAULT_SKETCH_NAME = 'Sketch 1';
 // The default container: one visible 'Sketch 1', active, and NO user groups. Spread onto the sketch state.
 // (SKETCH-4c: `groups` = the user-GROUP list — the Sketch > Group > Entity substrate; see #core/group-model.js.)
 export function createSketches() {
-  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID, groups: [] };
+  // VCARVE-3b: `vcarves` = the V-carve records (a region + a V-bit + params); like `groups`, additive DATA, unread by
+  // SketchStudio → byte-identical. The contour stack is DERIVED (vcarveContours), never materialized.
+  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID, groups: [], vcarves: [] };
 }
 
 // An entity's sketch — its stored `sketchId`, or the default (untagged entities belong to Sketch 1; load-safe).

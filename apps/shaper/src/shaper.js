@@ -27,6 +27,11 @@ export const CUT_TYPES = [
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635' },
 ];
 
+// VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
+// vcarveContours (depth = inset / halfAngleTan). 90° → 1 (depth = inset); 60° → tan30 ≈ 0.577 (cuts ~1.73× deeper).
+export const VBIT_PRESETS = [{ angle: 90 }, { angle: 60 }, { angle: 45 }, { angle: 30 }, { angle: 20 }];
+export function vbitHalfAngleTan(angle) { return Math.tan(((Number(angle) || 90) / 2) * Math.PI / 180); }
+
 // shaper:* attributes Shaper writes per element (besides cutType, which we
 // derive from color). Order = inspector display order.
 export const SHAPER_FIELDS = ['cutDepth', 'cutOffset', 'toolDia'];

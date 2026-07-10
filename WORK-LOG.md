@@ -6234,6 +6234,49 @@ VCARVE-3b. Shaper-only → SketchStudio byte-identical.
 
 === VCARVE-3a (VCARVE SHELL MODE + SKELETON) DONE - HOLD ===
 
+## 2026-06-30 · VCARVE-3b — the Vcarve workspace LIVE (V-bit + region picker + preview + state.vcarves) (turn 256)
+
+Wires the VCARVE-3a skeleton live: the declared V-bit record, `state.vcarves`, a region picker, and the LIVE
+depth-shaded contour-stack preview via `vcarveContours` (VCARVE-2). Shaper-only.
+
+- **did:**
+  - **`apps/shaper/src/shaper.js`** — declared `VBIT_PRESETS = [{angle:90},{60},{45},{30},{20}]` + `vbitHalfAngleTan(angle)
+    = tan((angle/2)·π/180)`. Data.
+  - **`#core/sketch-model.js` + `#ui/sketch-state.js`** — `createSketches()` now returns `vcarves: []` (like `groups`);
+    undo snapshots + restores `vcarves` (deep clone incl. the nested `vbit`). Additive → SketchStudio byte-identical
+    (an empty array it never reads).
+  - **`apps/shaper/src/vcarve-view.js`** (new, Shaper): `mountVcarveView(state)` — enables + populates the controls;
+    ONE declared record `state.vcarves[0] = { id, region, vbit:{angle}, dStep, maxDepth }`; **(1) ADAPT** a region
+    picker (a `<select>` of the sketch's closed loops via `findLoops` → labelled by area); **(2) CARVE** the V-bit /
+    depth-step / max-depth controls WRITE the record; the LIVE PREVIEW = the HOST computes the region boundary
+    (`loopPolygon`, DOM) → `vcarveContours(boundary, { dStep, halfAngleTan: vbitHalfAngleTan(angle) })` (maxIters from
+    `maxDepth·tan/dStep`, capped at 200) → a light poly render on the cream `#vcarve-canvas`, DEPTH-SHADED (deeper =
+    darker, hsl lightness 66%→22%), auto-fit viewBox + a readout (contour count / max depth). Recompute on any control
+    change + a Recompute button. `saveState()` on region pick (undoable). The stack is DERIVED, never materialized.
+  - **`apps/shaper/src/main.js`** — import + a `showMode` 'vcarve' branch (ensureSketch + solve → mount once, refresh
+    the region list on each entry).
+- **verify (errors=0):** CDP. PART A (mechanism, in-browser): `vcarveContours` @ 60° first depth > 1.5× @ 90° (the bit
+  relation, ≈1.73×); the REAL `createSketchState` — `state.vcarves` = [] default; push a record → `saveState` → mutate
+  → `undo` RESTORES the record (region reverts). PART B (LIVE tab): import a rect (a closed loop) → Vcarve → the region
+  is LISTED + picked → the cream canvas renders the DEPTH-SHADED stack (90° → 11 contours "11 contours · max 5.50 mm",
+  12 polygons) → switch to 60° → the render UPDATES live (6 contours, fewer + deeper — 7 polygons). SketchStudio
+  UNREGRESSED — `npm run test:shell` 12/12 (the `vcarves`/undo additions are additive shared data). Solver oracle
+  12/12; sketch-model + group-model + loop-geometry + shaper-export + svg-import + vcarve oracles green; guard GREEN;
+  baseline 8 pre-existing 0 net-new; `node --check` clean; scope = shaper.js + sketch-model.js + sketch-state.js +
+  vcarve-view.js (new) + main.js.
+- **fix mid-verify (undo):** the first CDP had `undo:false`. Root cause: my `state.groups` undo-restore lines have
+  DIFFERENT indentation in the two paths (cancelUndoGroup 8-space vs `undo` 6-space), so the earlier `replace_all`
+  (added `vcarves` beside `groups`) matched only ONE — the `undo` path lacked the `vcarves` restore. Added it
+  explicitly → `undo:true`. (LESSON: `replace_all` only hits byte-identical strings; verify BOTH restore paths.)
+- **process hygiene:** CDP via `run_in_background` + killed each run; the eval written to a FILE; baseline run ALONE.
+  proc_health.py watch still throws the JSONDecodeError → manual stray-clean.
+- **state:** branch `carve-out`. The Vcarve tab is LIVE — pick a closed loop, choose a V-bit + params, see the
+  depth-shaded contour stack update live, backed by a declared `state.vcarves` record with undo. Next per the VCARVE
+  plan: **VCARVE-4** — the gated vcarve EXPORT (derive the stack from the record → emit `online` + per-path `cutDepth`;
+  standard + SketchStudio byte-identical). STOP — hold.
+
+=== VCARVE-3b (VCARVE LIVE WORKSPACE) DONE - HOLD ===
+
 ## DEBT
 - **[DEBT-1]** `solver-config.js` `localStorage` → extract to an injected persistence adapter
   (#4 persistence-seam), same callback pattern as metrics/notify. Deferred from the carve-out by

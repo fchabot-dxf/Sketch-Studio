@@ -55,7 +55,9 @@ export function createSketchState(engine, view) {
         sketches: Array.isArray(this.sketches) ? this.sketches.map(s => ({...s})) : undefined,
         activeSketchId: this.activeSketchId,
         // SKETCH-4c: the user-GROUP list (the userGroupId stamps ride the shape snapshot above)
-        groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined
+        groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined,
+        // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
+        vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined
       };
       this.history.push(snapshot);
       if(this.history.length > this.maxHistory) this.history.shift();
@@ -124,6 +126,7 @@ export function createSketchState(engine, view) {
         if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
         if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
         if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
+        if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       } else {
         // No prior snapshot - clear store
         this.history.splice(0);
@@ -157,6 +160,7 @@ export function createSketchState(engine, view) {
       if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
       if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
       if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
+      if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       // Cleanup after undo is disabled; trust the snapshot as saved.
       // Clear selections and active tool state
       this.selectedJoints.clear();

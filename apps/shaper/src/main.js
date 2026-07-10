@@ -11,6 +11,7 @@ import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
+import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
@@ -218,6 +219,7 @@ let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
 let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
+let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
 // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
 const refreshCutPanel = () => {
   const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
@@ -313,6 +315,14 @@ function showMode(mode) {
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
   else if (designController) designController.stop();                   // pause the RAF off Design
+  // VCARVE-3b: the Vcarve workspace operates on the shared Design sketch — ensure it's mounted + solved, then mount the
+  // live view once (re-populate its region list on each entry, since the sketch may have changed, e.g. after an import).
+  if (mode === 'vcarve') {
+    ensureSketch();
+    try { designController.engine.solve(500); } catch (_) {}
+    if (!vcarveView) vcarveView = mountVcarveView(designController.state);
+    else vcarveView.refresh();
+  }
   // SP1a/SP1c: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then mount
   // a Prepare-local view: edges (no joints) + topological-loop hover-highlight. Render-on-demand — geometry is
   // static in Prepare, so loops are found once on (re)mount; the highlight redraws only on hover-change (no RAF).

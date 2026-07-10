@@ -7076,3 +7076,45 @@ the SAME `state.toolpaths` (Toolpath tab = pens/order/feeds; Fill tab = pattern/
   `coreShapeToPolyline` seam). STOP — hold.
 
 === PP-5 (FILL STAGE) DONE — HOLD ===
+
+## 2026-07-10 · PP-6 — the Export stage: REAL G-code out (the epic payoff) (turn 296)
+
+The penplotter now emits real DDCS G-code through `#core/plot`. penplotter-only additive.
+
+- **did — port `export.js`** -> `apps/penplotter/src/`; repointed `fill/index`/`outline/index`/`vpype/index` ->
+  `#core/plot/{fills,outlines,index}`. EXPORTED `buildGcodeEntries` (was local) so the verify can inspect the gcode.
+  `onExportClick` -> `buildGcodeEntries` (per exportable toolpath: `collectToolpathShapes` -> expand outline/fill ->
+  `toolpathToGcode`) -> `buildZip` -> download.
+- **did — port `settings.js`** (`render`->`renderArt`): doc size (#docW/#docH/#docUnit), plotter feeds
+  (#penUpZ/#penDownZ/#drawFeed/#zFeed/#tol), the `autoRecalc` toggle, `loadDefaults` (hydrate from `state.settings`),
+  and `syncDocFields`.
+- **did — UN-STUB `svg-import.syncDocFields`** -> the real `settings.syncDocFields` (the PP-3c stub). No-ops when the
+  doc-size fields aren't mounted (Draw), reflects the imported doc size when they are.
+- **did — `render-art` sim branch:** when `showToolpath && simulatePens`, draw `buildSimulationOverlay()` (pen-width
+  "ink on paper") instead of the diagnostic overlay. Draw/Toolpath/Fill onEnter now reset `simulatePens=false`; only
+  Export sets it true — so each stage shows the right overlay.
+- **did — `export-stage.js` (new):** adopts the shared canvas (`showToolpath=true`, `simulatePens=true` = the sim);
+  the panel = the settings form (doc/feeds/tolerance/autoRecalc) + the **Export G-code (.zip)** button;
+  `installSettingsPanel` + `loadDefaults` + `installExportButton` on mount. `main.js` registers `export`.
+- **verify — LIVE END-TO-END (CDP, headless): console errors 0.** Draw a rect -> target the outline toolpath at it
+  (as target-editing does) -> Export tab: the settings inputs hydrate (penUpZ 5, drawFeed 2000), the pen-width SIM
+  overlay renders (3 strokes), and `buildGcodeEntries()` -> **1 valid DDCS G-code file** (`1_layer_1__outline_.gcode`,
+  423 bytes):
+  ```
+  (--- DDCS pen plotter program ---)   G21 (mm)  G90 (absolute)  G17 (XY plane)  G94 (feed per min)
+  G1 Z5.000 F1000 (pen up to safe Z)
+  G0 X84.169 Y110.554 (rapid to stroke start)   G1 Z-1.000 F1000 (pen down)
+  G1 X115.831 Y110.554 F2000  ...  (rect outline, 4 edges)   [M30 at the end]
+  ```
+  All DDCS markers present (G21/G90/G17/G94, G0 rapid, G1 Z pen up/down, M30), Y-flipped (docH=200: drawn ~y90 ->
+  Y110), feeds from `state.settings` (F2000 draw / F1000 z). The gcode routes entirely through `#core/plot` (PP-2a's
+  vpype + DDCS profile) — the PP-2a byte-exact oracle underwrites it.
+- **verify — UNREGRESSED:** ADDITIVE, penplotter only (reads `#core/plot`; no `#core` edit). `npm run test:shell`
+  **12/12**; penplotter loads errors 0; Shaper untouched. `node --check` clean (25 src files). 0 net-new.
+- **process hygiene:** CDP verifies from scratchpad `.cjs`; `proc_health mark --turn 296`; `watch` clean.
+- **state:** branch `carve-out`. The plotter pipeline is END-TO-END: Draw art -> Toolpath (pens/order) -> Fill
+  (pattern/style) -> **Export = real DDCS gcode + zip**, all on the shared shell via `#core/plot`. NEXT: **PP-7
+  Sketch** — mount the shared `#core`/`#ui` Design tab as the optional Sketch stage + the `coreShapeToPolyline` seam
+  (the ONE remaining new geometry, so a toolpath can target #core sketch geometry). STOP — hold.
+
+=== PP-6 (EXPORT STAGE) DONE — HOLD ===

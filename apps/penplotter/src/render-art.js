@@ -13,7 +13,7 @@ import { renderLayersPanel } from "./layers-panel.js";
 import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 // PP-4a: the optimized toolpath overlay (drawn over the art in the Toolpath stage). preview computes via #core/plot
 // and honors autoRecalc; circular (preview late-imports renderArt) but runtime-only, so it resolves.
-import { requestPreview, buildToolpathOverlay } from "./preview.js";
+import { requestPreview, buildToolpathOverlay, buildSimulationOverlay } from "./preview.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js"; // PP-4b: refresh the Toolpath ops panel too
 // PP-5: the Fill panel (#activeLayerContent) is NOT refreshed here on purpose — a param edit -> recalc -> renderArt
 // would rebuild the panel and blow away the focused input. The Fill panel self-refreshes on stage-enter + on a
@@ -47,8 +47,13 @@ export function renderArt() {
     // the cache. Draw keeps showToolpath=false, so this is a no-op there.
     if (state.preview && state.preview.showToolpath) {
         requestPreview();
-        const r = buildToolpathOverlay();      // returns { overlay, stats }
-        if (r && r.overlay) canvas.appendChild(r.overlay);
+        if (state.preview.simulatePens) {
+            const g = buildSimulationOverlay();  // PP-6: pen-width "ink on paper" sim (Export stage) — returns a <g>
+            if (g) canvas.appendChild(g);
+        } else {
+            const r = buildToolpathOverlay();    // returns { overlay, stats }
+            if (r && r.overlay) canvas.appendChild(r.overlay);
+        }
     }
 
     // PP-3c/4b: keep the side panels in sync with state each render (Draw: layers + pens; Toolpath: the ops list).

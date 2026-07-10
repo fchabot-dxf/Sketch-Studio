@@ -13,9 +13,7 @@ import { canvasWrap, dropOverlay, $, toast, INK_NS } from "./dom.js";
 import { fitViewport } from "./viewport.js";
 import { renderArt as render } from "./render-art.js"; // PP-3c: Draw's trimmed renderer
 import { snapshot } from "./history.js";
-// PP-3c STUB: syncDocFields updates the SETTINGS-modal doc-size inputs (a Settings-stage concern). Import still
-// sets state.doc.{w,h}; only the settings-UI reflection is skipped in Draw. Real wiring lands with Settings.
-function syncDocFields() {}
+import { syncDocFields } from "./settings.js"; // PP-6: real (un-stubbed); no-ops if the doc-size fields aren't mounted
 
 export function installSvgImport() {
     $("#importBtn").onclick = () => $("#importFile").click();

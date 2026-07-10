@@ -31,6 +31,7 @@ function onEnter() {
   const panel = document.getElementById("activeLayerPanel");
   if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel); // adopt the shared canvas
   state.preview.showToolpath = true;   // preview the toolpath (fill strokes) over the art
+  state.preview.simulatePens = false;  // PP-6: diagnostic overlay here (the pen-width sim is Export only)
   const r = wrap.getBoundingClientRect();
   if (r.width > 0 && r.height > 0) fitViewport();
   recalcPreview();

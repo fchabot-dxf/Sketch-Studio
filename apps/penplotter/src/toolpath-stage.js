@@ -42,6 +42,7 @@ function onEnter() {
   const panel = document.getElementById("toolpathPanel");
   if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel); // adopt (canvas left, panel right)
   state.preview.showToolpath = true;
+  state.preview.simulatePens = false; // PP-6: diagnostic overlay here (the pen-width sim is Export only)
   const r = wrap.getBoundingClientRect();
   if (r.width > 0 && r.height > 0) fitViewport();
   recalcPreview();            // fresh optimized path on entry (an explicit recompute, like the button)

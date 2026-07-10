@@ -116,6 +116,7 @@ function onEnter() {
   const panel = document.getElementById("drawPanel");
   if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel);
   state.preview.showToolpath = false;
+  state.preview.simulatePens = false; // PP-6: only the Export stage shows the pen-width sim
   const r = wrap.getBoundingClientRect();
   if (r.width > 0 && r.height > 0) { fitViewport(); renderArt(); }
 }

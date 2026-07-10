@@ -6473,3 +6473,46 @@ NO shell wiring (PP-4). Purely ADDITIVE — no consumers yet, no existing file t
   (GATE first: reconcile offsetting vs `#core/polygon-offset.js` before porting `clipper.js`). STOP — hold.
 
 === PP-2a (VPYPE PIPELINE -> #core/plot) DONE — HOLD ===
+
+## 2026-07-10 · PP-2b GATE (plan-first) — offset reconciliation: polygon-offset vs Clipper (turn 268)
+
+GATE for north star #2 (one capability, one home). Investigated whether the plotter's fills can port onto
+`#core/polygon-offset.js` or genuinely need Clipper, BEFORE porting fills. NO fills ported; NO `#core` file changed
+(the gap probe was scratchpad-only, deleted). Awaiting blessing.
+
+**CONFIRMED GAP (ground truth — code + a live probe of BOTH engines in Node):**
+- `#core/polygon-offset.offsetPolygon` is by design a SIMPLE-loop parallel offset: ONE ring in -> ONE ring out
+  (one offset vertex per input vertex), with self-intersection / over-inset / winding-flip guards that return `[]`.
+  It CANNOT split one ring into several, and has no hole/boolean concept (takes a single ring).
+- The plotter's fills need exactly those: `clip.js` `insetPolygon` ("an inset can SPLIT a concave shape into
+  several"), `offsetRings` ("more than one per step when the shape pinches and splits; robust on concave shapes
+  where a naive per-vertex offset tangles"), `unionPolygons` (boolean union / holes). Consumers: `fill/index.js`
+  (insetPolygon), `fill/concentric.js` (offsetRings), `layers-panel.js` (unionPolygons).
+- **Probe results (dumbbell = two 20x20 lobes joined by a height-4 neck; inset 3 must split the neck):**
+  - control square inset 3: BOTH -> 1 ring (polygon-offset works on simple loops; not broken, just scoped).
+  - dumbbell inset 3: **polygon-offset -> ONE tangled 12-vert ring (cannot split)**; **Clipper -> 2 clean rings**.
+  - concentric fill of the dumbbell (spacing 2): **polygon-offset -> 5 rings then `[]`** (bails at the first
+    splitting step); **Clipper offsetRings -> 9 rings** (splits correctly across BOTH lobes).
+- **VERDICT: two DISTINCT capabilities, not a duplicate — the advisor's read CONFIRMED.** polygon-offset = pure
+  simple-loop CAD offset; Clipper = robust boolean/concave-split/holes. Clipper is a NEW capability `#core` lacks.
+
+**PROPOSED PLAN (build nothing yet):**
+- **Option A — port fills onto `#core/polygon-offset`: REFUTED.** It returns `[]` / a single wrong ring exactly
+  where fills must split, and has no boolean/hole support. It would break real fills (concave art, holes).
+- **Option B — bring Clipper into `#core` as the robust boolean+clip engine: RECOMMENDED.** North-star-#2 is
+  satisfied by DECLARING the boundary (each capability ONE home), not by forcing one impl:
+  - `#core/polygon-offset.js` = pure simple-loop CAD offset. **KEPT unchanged** — Shaper export + vcarve rely on it
+    (byte-exact, zero-dep). Do NOT reroute them onto Clipper (regression risk).
+  - `#core/plot/clip.js` + `#core/plot/vendor/clipper.js` (NEW) = robust art/fill polygon boolean + offset + split +
+    holes. Header + ROADMAP DECLARE the split so a reader knows which engine to reach for.
+  - The eventual UNIFY (route polygon-offset's simple case through Clipper so there's literally one offset impl) =
+    TRACKED DEBT, deferred (regression risk to export/vcarve; not worth it now).
+- **PORT-SLICE NOTES (for the blessed PP-2b-port):** (1) `vendor/clipper.js` is a browser UMD — it assigns
+  `self['ClipperLib']` at load, which THROWS in Node ESM (no `self`/`document`); it already has `export default`
+  (line 6986). The port must make it Node-loadable (a one-line guard on the `self` line, or a shim in the oracle) so
+  `#core/plot` fills stay Node-testable — I hit this in the probe (shimmed `globalThis.self`). (2) Fills land as a
+  DECLARED `FILL_PATTERNS` registry (`{id,label,params,generate}`) per INTEGRATION.md — controls + transform in one
+  entry. (3) `fill/` has hatch/crosshatch/zigzag/concentric/stipple/dots + utils; concentric/inset need Clipper, the
+  hatches are pure line-clipping.
+
+=== PP-2b PLAN (OFFSET GATE) — AWAIT BLESSING ===

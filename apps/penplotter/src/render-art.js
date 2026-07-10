@@ -15,6 +15,9 @@ import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 // and honors autoRecalc; circular (preview late-imports renderArt) but runtime-only, so it resolves.
 import { requestPreview, buildToolpathOverlay } from "./preview.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js"; // PP-4b: refresh the Toolpath ops panel too
+// PP-5: the Fill panel (#activeLayerContent) is NOT refreshed here on purpose — a param edit -> recalc -> renderArt
+// would rebuild the panel and blow away the focused input. The Fill panel self-refreshes on stage-enter + on a
+// structural change (pattern/style/toolpath switch); a value edit only updates the overlay.
 
 export function renderArt() {
     if (!canvas) return;

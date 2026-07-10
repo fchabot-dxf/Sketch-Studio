@@ -4,6 +4,7 @@
 import { createAppSwitcher } from '#ui/app-switcher.js';
 import { mountDrawStage } from './draw-stage.js'; // PP-3a: the Draw stage mounts its canvas on first entry
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas)
+import { mountFillStage } from './fill-stage.js'; // PP-5: the Fill stage (2nd tab over the same state.toolpaths)
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
@@ -19,7 +20,7 @@ const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads
 
 // Per-stage MOUNTERS: a stage that needs live wiring registers a mount(view) here; the router calls it ONCE on
 // first entry (returning an optional { onEnter } re-run each entry). PP-3a wires 'draw'; other stages stay stubs.
-const STAGE_MOUNT = { draw: mountDrawStage, toolpath: mountToolpathStage };
+const STAGE_MOUNT = { draw: mountDrawStage, toolpath: mountToolpathStage, fill: mountFillStage };
 const mounted = {};
 
 // Mount the shared app-switcher (marks Pen Plotter current; navigates to Sketch Studio / Shaper).

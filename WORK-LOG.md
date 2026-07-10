@@ -7118,3 +7118,51 @@ The penplotter now emits real DDCS G-code through `#core/plot`. penplotter-only 
   (the ONE remaining new geometry, so a toolpath can target #core sketch geometry). STOP — hold.
 
 === PP-6 (EXPORT STAGE) DONE — HOLD ===
+
+## turn 298 — PP-7a: the OPTIONAL Sketch stage IS the shared #core/#ui Design tab (NORTH-STAR capstone)
+
+The north star realized: the pen plotter now embeds the SAME Design tab as Studio & Shaper — `mountSketch` + the
+shared tool ribbon + info/DOF panel + the `#core` constraint solver — with its OWN svg canvas and a CAD DOF-color
+look. HOST WIRING ONLY: `#ui`/`#core` untouched (byte-identical), so the other hosts' Design tabs cannot regress.
+
+- **did — `sketch-stage.js` (new):** mirrors Shaper's `ensureSketch`/`buildDesignUI`/`panelTick`. Builds the Design
+  layout (`#design-ribbon` on top + collapsible `#design-panel` info panel + its OWN `<svg id="design-canvas">`),
+  then `mountSketch(#design-canvas, { isActive, onRender: panelTick })` ONCE, `createDesignInfoPanel({state,engine,
+  showSketchTree:true})` -> `#design-panel-info`, `createToolRibbon({state})` -> `#design-ribbon`. `panelTick` is the
+  signature-gated ribbon+panel refresh (constraints/geometry/values/selection/tool). Returns `{onEnter:start,
+  onLeave:stop}` — the RAF lifecycle. Its OWN canvas — it does NOT adopt the shared plotter `#canvasWrap`.
+- **did — `main.js` router (host wiring):** registered `sketch: mountSketchStage` in `STAGE_MOUNT`; added a generic
+  `onLeave` hook + a module `currentStageId` so the router PAUSES the stage being left before entering the next
+  (mirrors Shaper stopping the Design RAF off-tab). Pass each mounter a ctx `{ isActive: () => currentStageId === id }`
+  so the sketcher gates its document-level input to the Sketch stage (R-COEXIST). Sketch is lazily mounted on first
+  entry (Draw stays the startup pre-mount that owns the shared canvas). Updated the STAGES `sketch` part -> `PP-7`.
+- **did — DECLARE not hand-roll:** the pause-on-leave is a GENERIC `onLeave` on the mount contract (any stage can
+  register work-to-pause), NOT an `if (id==='sketch') stop()` special-case in the router. Cheap, reusable, keeps the
+  router stage-agnostic — the same declaration-first move as the STAGES registry itself.
+- **did — CAD theme (index.html, penplotter-only CSS):** `#stage-sketch` reverts the `:root` pen-ink overrides
+  (`--sk-selection` teal -> CAD blue `#1e40af`, plus `--sk-hover`/`--sk-origin`); the DOF greens/blues (`--sk-geo-*`)
+  are never overridden by the penplotter, so they were already CAD-correct. Cool-grey chrome
+  (`#design-view/-ribbon/-panel`) over a clean white `#design-canvas` — deliberately distinct from the warm-paper pen
+  stages (project theme rule). Mirrors `apps/shaper/index.html` `#design-view`.
+- **verify — LIVE (CDP, headless): console errors 0.** Open the Sketch tab: the SHARED renderer drew into the
+  stage's OWN `#design-world-group` (12 children); the shared tool ribbon rendered (14 tools); the info/DOF panel
+  rendered ("2 constraints - DOF 1 - 1 free - checkmark solved - Sketch 1 tree"). The seeded CONSTRAINED sketch (a
+  line coincident to origin, distance(a,b)=50) SOLVES live: `solvedDist=50`. **RAF lifecycle proven by
+  perturb-and-watch:** move joint b to (999,999) — while Sketch is active the live solver pulls it back
+  (`afterPerturb_running=50`); leave to Draw (`onLeave`->stop) then perturb -> it STAYS far
+  (`afterPerturb_paused=1412.8` = no solve, RAF paused); re-enter Sketch (`onEnter`->start) -> pulled back
+  (`afterResume=50` = RAF resumed). CAD palette confirmed: computed `--sk-selection` inside `#stage-sketch` =
+  `#1e40af` (not the teal pen ink). NB: I drove the solver by perturbing the constrained seed rather than a fresh
+  mouse-drawn line — the seed IS a drawn line under live constraints, so this exercises the exact same solve path;
+  headless pointer-coordinate mapping is fragile and would add no real coverage.
+- **verify — UNREGRESSED (guardrail):** `git status packages/` EMPTY — `#ui`/`#core` BYTE-IDENTICAL, so Studio &
+  Shaper's Design tabs run the exact same code and cannot regress. `npm run test:shell` **12/12**. `node --check`
+  clean (26 src files incl. the new sketch-stage). 0 net-new. penplotter-only additive host wiring.
+- **process hygiene:** CDP verify from scratchpad `verify-sketch.cjs`; `proc_health mark --turn 298`; the headless
+  browser procs are killed by the harness (`pr.kill` + temp user-data-dir removed); `watch` before the pass.
+- **state:** branch `carve-out`. All 5 plotter stages are now LIVE, incl. the OPTIONAL Sketch = the shared Design
+  tab (the north star: one reusable Design tab embedded by CAD / CNC / pen-plotter alike). NEXT: **PP-7b** — the
+  `coreShapeToPolyline` seam (~30 LOC, the ONE remaining new geometry) so a toolpath can TARGET this `#core` sketch
+  geometry, closing the epic. STOP — hold.
+
+=== PP-7a (SKETCH STAGE = SHARED DESIGN TAB) DONE — HOLD ===

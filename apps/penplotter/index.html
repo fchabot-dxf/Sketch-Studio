@@ -128,6 +128,25 @@
     #exportPanel select, #exportPanel input { font: inherit; border: 1px solid #d8cbb2; border-radius: 5px; padding: 3px 5px; }
     #exportPanel input[type=checkbox] { justify-self: end; }
     #exportBtn { margin-top: 12px; }
+    /* PP-7a — the Sketch stage IS the shared #core/#ui Design tab (its OWN svg canvas). CAD look, deliberately
+       distinct from the warm-paper pen stages: revert the :root pen-ink overrides so the sketcher shows its CAD
+       selection/hover blue (the DOF greens/blues in --sk-geo-* are never overridden, so they're already CAD), and
+       give the chrome a cool neutral over a clean white canvas. Mirrors apps/shaper/index.html #design-view. */
+    #stage-sketch { padding: 0; --sk-selection: #1e40af; --sk-hover: #3b82f6; --sk-origin: #3b82f6; }
+    #design-view { position: absolute; inset: 0; display: flex; flex-direction: column; background: #eef1f6; }
+    #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #d7dce6; background: #f7f9fc; }
+    #design-body { flex: 1 1 auto; display: flex; min-height: 0; }
+    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+      background: #f2f4f9; border-right: 1px solid #d7dce6; color: #2b3244; transition: flex-basis 0.15s ease; }
+    #design-panel.collapsed { flex-basis: 30px; }
+    #design-panel.collapsed #design-panel-info { display: none; }
+    #design-panel-toggle { align-self: flex-end; background: transparent; border: 0; color: #6b7280; cursor: pointer;
+      font: 13px system-ui, sans-serif; padding: 6px 8px; line-height: 1; }
+    #design-panel-toggle:hover { color: #2b3244; }
+    #design-panel.collapsed #design-panel-toggle { align-self: center; }
+    #design-panel-info { flex: 1 1 auto; overflow: auto; min-height: 0; padding: 8px; }
+    #design-canvas { flex: 1; min-width: 0; min-height: 0; background: var(--sk-canvas-bg, #ffffff); }
+    #design-canvas.snapping { background-color: var(--sk-canvas-bg-snapping, #fff7ed); }
   </style>
 </head>
 <body>

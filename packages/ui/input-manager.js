@@ -290,6 +290,32 @@ export function setupInput(svg, state, opts = {}) {
     setupEventListeners(svg, state);
     setupKeyboardShortcuts(state);
 
+    // GRIEVANCE-1: keep the viewBox aspect synced to the canvas ELEMENT on ANY size change. updateViewBox
+    // only ran at init/zoom/pan; SketchStudio also had a window-resize handler but Shaper had NONE, and
+    // neither catches an ELEMENT-only resize (a docked side-panel opening / drag-resizing the canvas, a tab
+    // show/hide). A stale viewBox aspect leaves the render correct (preserveAspectRatio=meet) but makes
+    // screenToWorld (independent scaleX/scaleY, no centering) read the wrong world point -> the cursor
+    // offset. DECLARE the invariant in ONE shared place: a ResizeObserver on the canvas svg here in
+    // setupInput, so BOTH hosts get it. ADDITIVE - a superset of Studio's window handler (kept). Guards a
+    // zero-size (hidden-tab) rect; the initial observe() fire also syncs the aspect at load.
+    try {
+      if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => {
+          try {
+            const r = svg.getBoundingClientRect();
+            if (!(r.width > 0 && r.height > 0)) return; // hidden / not yet laid out
+            updateViewBox(svg, state.view);
+            if (state.lastMouse) {
+              document.dispatchEvent(new CustomEvent('panzoom:viewportChanged', {
+                detail: { screenX: state.lastMouse.x, screenY: state.lastMouse.y }
+              }));
+            }
+          } catch (_) { }
+        });
+        ro.observe(svg);
+      }
+    } catch (_) { }
+
     // Dev helper: concise snap logger similar to 'ug log' for quick debugging
     try {
         if (typeof window !== 'undefined') {
@@ -1023,7 +1049,7 @@ function handleWheel(e, svg, state) {
 // Export core input handlers to allow programmatic tests and external wiring
 export { handlePointerDown, handlePointerMove, handlePointerUp, setupEventListeners, handleWheel };
 
-function updateViewBox(svg, view) {
+export function updateViewBox(svg, view) {
     const rect = svg.getBoundingClientRect();
     view.h = view.w / (rect.width / rect.height);
     svg.setAttribute('viewBox', `${view.x - view.w/2} ${view.y - view.h/2} ${view.w} ${view.h}`);

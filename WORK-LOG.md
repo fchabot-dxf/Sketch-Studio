@@ -6344,3 +6344,50 @@ empty for the same reason.
   VCARVE-4 after. STOP — hold.
 
 === GRIEVANCE-2 (SVG IMPORT: GROUP + TRANSFORMS) DONE - HOLD ===
+
+## 2026-07-09 · GRIEVANCE-1 — Design cursor offset: ResizeObserver re-syncs the viewBox (shared #ui) (turn 262)
+
+The dispatched task (turn 262) — and the human asked for it directly this turn too, so aligned. TDD: reproduced
+LIVE first, failing test first, fixed at the source, proved live.
+
+ROOT CAUSE (confirmed live, matches the advisor's read + one addition): the canvas viewBox aspect is never
+re-synced when the ELEMENT resizes. `updateViewBox` (`#ui/input-manager.js`) matches the world aspect to the element
+but runs only at init/zoom/pan. SketchStudio has a `window` resize handler (`apps/sketchstudio/main.js:33`); **Shaper
+had NONE** — and a `window` handler misses an ELEMENT-only resize anyway (docked panel open / drag-resize, tab
+show/hide). Stale aspect ⇒ the render stays correct (preserveAspectRatio=meet) but `screenToWorld` (coords.js:
+independent scaleX/scaleY, no centering) reads the wrong world point ⇒ the offset. **NEW FINDING:** it is already off
+**at load** in Shaper — the initial-zoom sync in `setupInput` only runs when `view.w > 400`, and Shaper's design
+viewBox is `120×90`, so it never fires; the canvas element is a different aspect from the static `-60 -45 120 90`.
+
+- **did — the fix (shared `#ui`, ADDITIVE):**
+  - `packages/ui/input-manager.js`: EXPORTED `updateViewBox` (was module-private) so the oracle can call the real
+    resync function.
+  - Added a **`ResizeObserver` on the canvas `svg` in `setupInput`** (the shared entry BOTH hosts call —
+    `mountSketch → setupInput`, verified `sketch-canvas.js:92`). On any element size change it re-runs
+    `updateViewBox(svg, state.view)` + dispatches `panzoom:viewportChanged` (the same redraw idiom pan/zoom use) so
+    overlays/hover refresh. Guards a zero-size (hidden-tab) rect. The initial `observe()` fire also syncs the aspect
+    at load (fixes the at-load drift). ADDITIVE: a SUPERSET of SketchStudio's `window` handler — I did NOT remove it.
+- **verify — RED (before the fix):** the unit test could not import `updateViewBox` (not exported) — SyntaxError; the
+  live CDP probe (drift = distance between `screenToWorld` and the browser's OWN render transform `getScreenCTM` at an
+  off-center point) read **drift 2.55 at load / 69.13 after a window resize to 1256×356**, `aspectMatch:false` both.
+- **verify — GREEN (after the fix):**
+  - **New oracle** `tests/coords-resize-viewbox.test.js` (auto-discovered by the runner): (1) POSITIVE CONTROL — a
+    stale viewBox genuinely drifts (non-vacuous); (2) after the production `updateViewBox` resync, viewBox aspect ==
+    element aspect; (3) `screenToWorld` then matches the meet render (+ center→center, corner→corner). PASSES.
+  - **Live CDP probe, same script re-run: drift 0 at load AND 0 after the resize, `aspectMatch:true` both** — the
+    cursor now lands exactly where it visually points, at load and after any resize (the exact "still fucked" symptom).
+  - SketchStudio UNREGRESSED: `npm run test:shell` **12/12** (the observer only replicates Studio's existing
+    window-resize `updateView` additively; the tested tabs/Style/ribbon/16-control panel are untouched). `node --check`
+    clean. Full unit suite baseline UNCHANGED (halts at the pre-existing `tests/ai-vision-label-spacing`; the new test
+    is green standalone) — 0 net-new.
+- **notes for the advisor:** (a) the observer uses `state.view` — for SketchStudio that IS the module `view` object
+  (so it stays consistent with its own `updateView`), for Shaper it is the design state's view. (b) NO teardown/
+  disconnect wired: `setupInput` has no teardown hook, the svg lives for the page lifetime (like Studio's
+  never-removed window handler), and the ResizeObserver only observes that svg so it is GC'd with it — flag if a
+  teardown seam is wanted. (c) the fix also corrects the pre-existing at-LOAD mismatch (2.55 units), not just resize.
+- **process hygiene:** two CDP probes ran from scratchpad `.cjs` scripts (each kills its own headless browser in
+  `finally`); `proc_health mark --turn 262` at wake; `watch` clean (0 flagged) before the pass.
+- **state:** branch `carve-out`. GRIEVANCE-1 fixed; GRIEVANCE-2 (SVG import groups+transforms) landed last turn at
+  `37163db`. NEXT per the plan: further Design grievances / VCARVE-4. STOP — hold.
+
+=== GRIEVANCE-1 (CURSOR OFFSET) DONE — HOLD ===

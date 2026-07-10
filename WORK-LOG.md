@@ -6553,3 +6553,49 @@ boolean+offset engine, KEEPING `polygon-offset` as the pure simple-loop CAD offs
   `#core/plot/fills/` as a DECLARED `FILL_PATTERNS` registry (concentric/inset via clip.js; hatches pure). STOP — hold.
 
 === PP-2b-1 (CLIPPER -> #core/plot ENGINE) DONE — HOLD ===
+
+## 2026-07-10 · PP-2b-2 — fills into #core/plot/fills as a declared FILL_PATTERNS registry (2 archetypes) (turn 272)
+
+PP-2b-2 of the epic. Ported the plotter's fill engine into `#core/plot/fills/` and CONSOLIDATED the old split
+registry into ONE declared `FILL_PATTERNS` list (the SHAPE), landing 2 archetypes. Additive; the other 4 patterns
+are PP-2b-3.
+
+- **did — ported modules (pure):**
+  - `#core/plot/fills/utils.js` — `closedPolygonFor` / `rotateForHatch` / `edgeCrossings` / `makeLineShape` /
+    `makePolylineShape` (+ `ELLIPSE_SEGMENTS` / `fillId` / `polygonBounds` / `pointInPolygon` for PP-2b-3). The one
+    DOM bit (`samplePath`, path shapes -> polygon via getTotalLength) is GUARDED (`typeof document` -> null in Node),
+    like PP-2a `fromPath` — same tracked reconciliation onto the pure `parsePathSubpaths`.
+  - `#core/plot/fills/hatch.js` (generate + `scanlineHatch`, reused by zigzag later) and
+    `#core/plot/fills/concentric.js` (rect/ellipse closed-form; polyline/path via `#core/plot/clip.offsetRings`) —
+    ported VERBATIM (same math).
+- **did — the DECLARED registry (`#core/plot/fills/index.js`):** REPLACED the split `PATTERNS` (id->module) +
+  `PATTERN_OPTIONS` (id->keys) + scattered defaults with ONE `FILL_PATTERNS` list, each entry
+  `{ id, label, params:[{key,label,type,default,unit,min?}], generate }`. **`params` is now the SINGLE source** for
+  both the (future) Fill-tab UI controls AND the pipeline defaults. hatch = the pure line-clip archetype (params
+  angle/spacing/offset); concentric = the Clipper-wrapper archetype (spacing/offset, no angle) — proves the shape
+  spans both. "none" stays a UI concern, not an entry.
+- **did — `expandLayerWithFill` ported + reading the declared params:** `resolveParams(entry, fill)` merges the
+  entry defaults with the layer's fill values (numeric-coerced; a param's `min` floors it — e.g. spacing >= 0.1);
+  the universal `offset` insets the region via `#core/plot/clip.insetPolygon` (concentric folds offset into its ring
+  schedule, as before). `generate` stays on the SELF-CONTAINED shape format + returns stroke SHAPES (the #core-sketch
+  adapter is PP-4 — shape formats untouched).
+- **verify — ORACLE (`packages/core/tests/plot-fills.test.js`, auto-discovered):** GOLDEN captured from the ORIGINAL
+  fills (same region + explicit params). (1) registry shape = 2 entries with params (hatch angle/spacing/offset;
+  concentric spacing/offset). (2) hatch(rect 20x12, angle 0, spacing 4) BYTE-EXACT = `[[0,2,20,2],[0,6,20,6],
+  [0,10,20,10]]`. (3) concentric(dumbbell, spacing 2, offset 1) -> 9 polyline rings (matches the PP-2b-1 probe).
+  (4) `expandLayerWithFill` hatch offset 2 insets the rect via clip then hatches = `[[2,4,18,4],[2,8,18,8]]` (golden).
+  (5) the declared default (hatch angle = 45) applies when angle is OMITTED (omitted output == explicit-45 output).
+  GREEN.
+- **verify — UNREGRESSED:** ADDITIVE — new `#core/plot/fills/**` + the oracle; NO existing file touched.
+  `npm run test:shell` **12/12**; `node --check` clean on all new files; new oracle green; full-suite baseline
+  unchanged -> 0 net-new. No app wires to the fills yet.
+- **note on the default (intentional):** the original's effective hatch default angle (via expandLayerWithFill's
+  `+fill.angle || 0`) was 0; the DECLARED registry default is 45 (per the blessed spec). Harmless — no consumers yet;
+  the byte-exact golden checks use EXPLICIT params so parity holds, and (5) pins the new declared-default behavior.
+- **process hygiene:** golden capture ran from scratchpad `.mjs` (with the clipper self-shim); `proc_health mark
+  --turn 272`; `watch` clean before the pass.
+- **state:** branch `carve-out`. `#core/plot/fills/` has the declared `FILL_PATTERNS` registry + 2 archetypes +
+  `expandLayerWithFill`. NEXT per the epic: **PP-2b-3** — the mechanical rest (crosshatch / zigzag / stipple / dots)
+  as more registry entries. STOP — hold.
+
+=== PP-2b-2 (FILL REGISTRY SHAPE + 2 ARCHETYPES) DONE — HOLD ===

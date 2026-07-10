@@ -58,6 +58,18 @@
     #toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: #2f8f7f; color: #fff;
       padding: 6px 12px; border-radius: 8px; font: 13px system-ui, sans-serif; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
     #toast.show { opacity: 1; }
+    /* PP-3b — the floating tool stack + transform HUD + coord readout over the Draw canvas. */
+    #canvas.tool-line, #canvas.tool-rect, #canvas.tool-ellipse, #canvas.tool-polyline, #canvas.tool-freehand { cursor: crosshair; }
+    #allTools { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+    .tool { background: #fbf6ec; color: #3a352b; border: 1px solid #d8cbb2; border-radius: 6px; padding: 4px 9px;
+      font: 12px system-ui, sans-serif; cursor: pointer; text-align: left; }
+    .tool:hover { border-color: var(--sk-selection); }
+    .tool.active { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
+    #coords { position: absolute; right: 12px; bottom: 10px; font: 12px system-ui, sans-serif; color: #8a8067; pointer-events: none; }
+    #transformHud { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px;
+      align-items: center; background: #fbf6ec; border: 1px solid #d8cbb2; border-radius: 8px; padding: 6px 10px; z-index: 6; }
+    #transformHud[hidden] { display: none; }
+    #transformHud input { width: 80px; }
   </style>
 </head>
 <body>

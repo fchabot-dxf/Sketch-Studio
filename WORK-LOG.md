@@ -6797,3 +6797,45 @@ yet (PP-3b). Draw is the plotter's OWN store (`state.artLayers`); the `#core` so
   (tools/interaction/keyboard/snapping/history) so the user draws LIVE. STOP — hold.
 
 === PP-3a (DRAW SCAFFOLD + STATE + ART RENDER) DONE — HOLD ===
+
+## 2026-07-10 · PP-3b — Draw interaction LIVE (tools/interaction/keyboard/snapping/history) (turn 284)
+
+Made the Draw tab live. Ported the interaction WHOLE (not split): interaction.js is ONE cohesive onDown/onMove/onUp
+dispatch over all tools — splitting it would mean forking the dispatch (error-prone), whereas a verbatim port with
+surgical import trims is cleanly reviewable. penplotter-only additive.
+
+- **did — ported VERBATIM:** `snapping.js`, `history.js`, `trim.js` (`diff` = identical; trim.js has NO imports — it
+  is pure geometry, so the task's "repoint clip" was moot).
+- **did — ported + SURGICAL cross-stage import trims:**
+  - `tools.js` — the lazy `import("./render.js")` -> `import("./render-art.js").renderArt`.
+  - `keyboard.js` — `render` -> `renderArt` (alias); `exitTargetEditing` (toolpath-layers-panel) -> a local no-op
+    STUB (Draw has no target-editing; the guarded call never fires).
+  - `interaction.js` (916 LOC) — `render` -> `renderArt` (alias, so call sites stay `render()`); `closedPolygonFor`/
+    `pointInPolygon` -> `#core/plot/fills/utils.js` (the ported pure utils); `resolveToolpathShapes` (preview.js) +
+    `syncTargetEditingSelection` (toolpath-layers-panel.js) -> local no-op STUBS. The diff vs source = exactly these
+    import lines + the 2 stubs; everything else identical.
+- **did — the TOOLPATH BLEED neutralised:** `mountDrawStage` sets `state.preview.showToolpath = false` (Draw is
+  art-only; the toolpath overlay is the Toolpath stage). That makes onDown/startSelect take the SVG-mode branch
+  (`e.target.dataset.shapeId` picking) and skips every `resolveToolpathShapes`/`nearestToolpathWithin` path, so the
+  stubs are never actually hit — a draw gesture has ZERO Toolpath-stage dependency.
+- **did — `draw-stage.js`:** expanded the scaffold with the floating tool stack (`#allTools` + 10 `.tool` buttons:
+  select/line/rect/ellipse/polyline/freehand/node/scissors/rotate/scale) + the transform HUD (`#transformHud` +
+  Input/Label/Unit/Ok/Cancel) + `#coords`. Wires installToolbar -> setTool('select') -> installCanvasHandlers ->
+  installTransformHud -> installKeyboard -> installHistory(renderArt). + Draw CSS (tool stack, HUD, crosshair cursors).
+- **verify — LIVE (CDP, headless, real MouseEvents):** console errors **0**. **Draw:** rect/line/ellipse/polyline/
+  freehand each commit the correct shape (types `rect,line,ellipse,path,polyline`; count 0->5). **Undo:** Ctrl+Z
+  drops the last shape (5->4). **Select:** mousedown ON a rendered shape element (dataset.shapeId, as a real click
+  targets) selects it (selCount 1). **Drag:** move+release shifts the rect (x/y 80.2,85.9 -> 88.7,92.9). **Undo of
+  the drag** reverts it exactly (-> 80.2,85.9). NOTE: an early verify dispatched on the `canvas` root, so
+  `e.target` had no shapeId and select missed — a synthetic-event-targeting artifact, NOT a code bug; dispatching on
+  the shape element (as a real click does) confirmed select/drag work.
+- **verify — UNREGRESSED:** ADDITIVE, penplotter only (the ported files READ `#core/plot/fills/utils.js` — no `#core`
+  edit). `npm run test:shell` **12/12**; penplotter loads errors 0; Shaper untouched. `node --check` clean on all
+  src. 0 net-new. NO Fill/Toolpath wiring (stubbed).
+- **process hygiene:** CDP verifies from scratchpad `.cjs` (headless browsers killed in `finally`); `proc_health mark
+  --turn 284`; `watch` clean.
+- **state:** branch `carve-out`. The Draw tab is LIVE — draw line/rect/ellipse/polyline/freehand, select+drag,
+  node-edit/scissors/rotate/scale/transform-HUD all wired, undo/redo, snapping — the plotter's freeform canvas on the
+  shared shell. NEXT per the epic: **PP-3c** — art layers + plot-colors (pens) panels + SVG import. STOP — hold.
+
+=== PP-3b (DRAW INTERACTION) DONE — HOLD ===

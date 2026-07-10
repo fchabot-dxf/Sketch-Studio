@@ -7693,3 +7693,127 @@ NEW pure #core file only — NO existing #core/#ui edits. Not wired to any tool 
   UNIFY-3b (pen model) / UNIFY-5 (import->#core) / UNIFY-6 (pan/zoom) / UNIFY-7 (retire art store, perf-gated). STOP — hold.
 
 === UNIFY-3-fit (FREEHAND->BEZIER FITTER) DONE — HOLD ===
+
+## turn 314 — UNIFY-4 PLAN (GATE): merged "Design" tab — composition survey + UNIFY-4a/b/c sub-slicing (no code)
+
+Plan-only per the dispatch. Surveyed the #ui input/tool mechanism + the plotter's tools (reusing UNIFY-1b). NO code
+changed. The crux finding drives the whole slice.
+
+### A) COMPOSITION MECHANISM — the crux: #ui has NO host seam for custom tools
+
+- The #ui sketcher routes pointer events via a hardcoded `switch (state.currentTool)` in input-manager.js
+  (handlePointerDown/Move/Up); an UNKNOWN tool value matches no case and FALLS THROUGH to pan-zoom. `inputCtx` only
+  parameterizes DOM reach + toolbar/status sync (setActiveTool/highlightActiveTool/…) — it is NOT an
+  onPointerDown/custom-tool seam. `createToolRibbon({onToolClick})` lets a host ROUTE ribbon clicks, but there's no
+  way to add a NEW tool MODE or intercept canvas pointers without editing input-manager.
+- So every plotter-unique tool (Freehand/Node/Scissors/Rotate/Scale) has exactly two homes:
+  (i) EDIT the #ui switch (additive tool modes; Studio/Shaper never activate them -> output-unregressed) — the
+      first-class shared path, but a shared edit; OR
+  (ii) a PLOTTER-SIDE capture-phase pointer listener layered on the SAME #design-canvas svg that acts only when a
+      plotter tool is active and `stopImmediatePropagation`s BEFORE #ui's pan-zoom fallback — keeps #ui byte-identical,
+      but coordinates with #ui's event model.
+- The mount composition itself (mountSketch + ribbon + info panel + a pen UNDERLAY svg beneath #design-canvas) is
+  already #ui-byte-identical (sketch-stage.js does it today). Only the TOOLS force the (i)/(ii) choice.
+
+### B) 4-STAGE CANVAS SHARING (confirm end-state + staging)
+
+```
+  END STATE (blessed): ONE #ui sketcher canvas for all 4 stages
+     Design      -> #ui canvas: geometry (sketcher) + pen underlay + scaffold
+     Fill/Toolpath/Export -> the SAME #ui canvas + the toolpath/sim overlays composed on it; pan/zoom = #ui state.view
+  STAGING (to keep slices reviewable):
+     UNIFY-4  : Design = the #ui #design-canvas (merged Draw+Sketch). Fill/Toolpath/Export KEEP the plotter #canvasWrap
+                (render-art), reading #core geometry via coreShapeToPolyline (UNIFY-2). TWO canvases coexist.
+     UNIFY-6  : converge Fill/Toolpath/Export onto the #ui canvas + unify pan/zoom on state.view (retire viewport.js).
+     UNIFY-7  : retire the art store + render-art art-draw + the plotter canvas.
+```
+Caveat: today the DRAW stage mount OWNS the shared plotter #canvasWrap (borrowed by Fill/Toolpath/Export). Removing
+Draw as a tab means RE-HOMING that canvas's creation (a startup mount, or the first pen-stage) so Fill/Toolpath/Export
+still have it until UNIFY-6.
+
+### C) FREEHAND WIRING — recommend PLOTTER-SIDE
+
+Recommend option (ii) for FREEHAND: a plotter-side listener on #design-canvas. When the Design ribbon's Freehand
+button is active, on pointerdown/move it collects raw world points (screenToWorld from #ui/coords.js) + `stopImmediate
+Propagation` so #ui doesn't pan; on pointerup it runs `fitCubic(points, tol)` -> for each segment `makeBezier` (create
+2 endpoint joints + c1/c2 data) -> `engine.addShape` -> the #core store. Justification: keeps #ui MINIMAL/byte-identical
+(the dispatch's "freehand where needed"), reuses the shape (UNIFY-3) + fitter (UNIFY-3-fit) + coords, and freehand needs
+NONE of the #ui snap/tool machinery (it's raw capture). The full first-class shared #ui bezier/freehand tool for ALL
+apps stays the DEFERRED UNIFY-3-tool. RISK: the capture-phase listener must win over #ui's svg listeners — verify the
+stopImmediatePropagation ordering; if fragile, fall back to option (i) (add FREEHAND to the #ui switch, additive).
+
+### D) TOOL PORTING (the plotter's 5 unique tools -> #core geometry)
+
+All 5 operate on the FREE-coordinate art schema (x1/y1, points[], d) with NO joints; #core geometry is joint-backed +
+constraint-solved. Verdict per tool:
+- **Freehand** -> PLOTTER-SIDE capture -> #core beziers (C above). CLEAN with the existing shape+fitter.
+- **Node (move)** -> REUSE #ui joint-drag: the #ui sketcher ALREADY drags joints in SELECT mode (selection-tools.js).
+  A #core "node" IS a joint. Node-DELETE (remove joint + its shape segment) has no #ui equivalent -> small plotter-side
+  op or a later slice. RECOMMEND: rely on #ui joint-drag for move; defer explicit node-delete.
+- **Scissors / Rotate / Scale** -> DEFER + rethink. On constraint-solved geometry a free rotate/scale FIGHTS the solver,
+  and scissors (split a line/arc/bezier + rewire joints) has no #core equivalent. They were free-art ops; on #core they
+  need real design (operate on unconstrained geometry? apply as joint moves the solver accepts?). NOT needed for the MVP
+  merged tab (draw + freehand + precise + constraints + pen colors). Flag as post-merge.
+- **Ribbon dedup:** line/rect/circle/arc/select/dimension + 8 constraints = the shared #ui ribbon (Studio/Shaper's).
+  The plotter's Design ribbon = that shared ribbon + a Freehand button. ELLIPSE GAP: #core has NO ellipse primitive
+  (nor path) — the plotter's ellipse tool + imported ellipses have no #core home. Options: add a #core ellipse (bigger,
+  later), or drop/approximate ellipse via arcs/beziers. Flag (ties to the import ellipse gap, IMPORT-3 debt).
+
+### E) PEN MODEL + UNDERLAY (folds UNIFY-3b; lands in 4c)
+
+- `state.shapeColors: Map<shapeId,'#rgb'>` — per-shape DIGITAL color, edited in the Design tab (plotter-side; #core pure).
+- Design color UI — a per-shape color control on the Design tab (select a shape -> pick its digital color).
+- Pen UNDERLAY — an <svg> BENEATH #design-canvas (same viewBox as the #ui canvas), drawing the #core geometry
+  (coreShapeToPolyline) in each shape's MAPPED PHYSICAL pen color; the #ui renderer draws the DOF/joint scaffold on the
+  transparent canvas on top. Host-side, #ui byte-identical.
+- Toolpath nearest-pen MAPPING — the physical pen palette (state.plotColors) + digital->physical nearest-match lives in
+  the TOOLPATH tab (keeps PP-3c). Parked #11 (color-mixing) stays deferred.
+
+### F) STAGE COLLAPSE 5 -> 4
+
+STAGES registry: drop the separate `draw` + `sketch` entries -> ONE `design` (drop "optional"). Router mounts the
+sketcher composition for `design`. KEEP until UNIFY-7 (dormant, so slices stay additive/reviewable): the art store
+(state.artLayers), render-art's art drawing, svg-import->art, the Bake button, interaction.js's art tools. The plotter
+#canvasWrap stays alive for Fill/Toolpath/Export (re-homed per B).
+
+### G) PROPOSED UNIFY-4a/b/c (each reviewable + verifiable)
+
+- **UNIFY-4a — Design stage shell + PERF PROBE.** Collapse STAGES 5->4: one "Design" stage mounting the #ui sketcher
+  (today's sketch-stage composition) as the primary geometry tab; re-home the plotter canvas so Fill/Toolpath/Export
+  still render #core geometry (UNIFY-2). Remove "optional". RUN THE DENSE-IMPORT PERF PROBE (~6716 #core shapes ->
+  frame time) — gates whether 4b/4c need render throttling. VERIFY: 4-tab shell; Design shows the sketcher; a #core
+  shape still flows to gcode; shell-smoke 12/12.
+- **UNIFY-4b — Freehand tool (plotter-side) + selection reconcile.** The plotter-side Freehand capture ->
+  fitCubic -> makeBezier -> #core bezier (C above), + a Freehand ribbon button. Reconcile plotter selectedShapeIds with
+  #ui selectedShapes for toolpath targeting. Node = #ui joint-drag; Scissors/Rotate/Scale deferred (flagged).
+  VERIFY (live): freehand-draw on the Design canvas -> compact #core beziers -> target a toolpath -> Export = the curve.
+- **UNIFY-4c — pen model + color underlay (folds UNIFY-3b).** shapeColors (digital) + Design color UI + the pen
+  underlay + the Toolpath nearest-pen map. VERIFY (live): imported/drawn geometry shows in pen colors under the
+  scaffold; changing a shape's digital color updates the underlay; the mapped physical pen drives the toolpath/export.
+
+Then UNIFY-5 (import->#core+colors) / UNIFY-6 (pan/zoom + converge the 4 stages onto the #ui canvas) / UNIFY-7 (retire
+art store+bake+art tools, perf-gated).
+
+### H) RISKS
+
+1. **No #ui host seam for custom tools (A)** — the biggest. Freehand via a plotter-side capture listener that must
+   `stopImmediatePropagation` before #ui's pan-zoom; verify ordering, else edit the #ui switch (additive). Node/
+   Scissors/Rotate/Scale conflict with the solver -> deferred.
+2. **Two canvases coexist 4->6** — #ui #design-canvas (Design) + plotter #canvasWrap (Fill/Toolpath/Export); re-home
+   the plotter canvas when Draw stops being a tab.
+3. **Dense-import render perf** — probe in 4a; may force render throttling (static geometry -> underlay once) before 4c.
+4. **Selection reconciliation** — plotter whole-shape ids vs #ui joint/shape/constraint sets; toolpath targeting keys
+   off shape ids (UNIFY-2 works), but the Design-tab selection UX must be reconciled.
+5. **Ellipse (+ path) gap in #core** — plotter ellipse tool + imported ellipses have no #core primitive; defer/approx.
+
+### I) OPEN DECISIONS (need blessing)
+
+- **Freehand home: plotter-side capture listener [recommended] vs a #ui FREEHAND tool-mode (additive).**
+- **Scissors/Rotate/Scale: DEFER past the merge [recommended] vs port now** (needs a constraint-reconcile design).
+- **Ellipse: drop/approximate for now [recommended] vs add a #core ellipse primitive** (ties to IMPORT-3).
+- **4a canvas re-homing: startup mount of the plotter #canvasWrap [recommended] vs first pen-stage owns it.**
+
+NO code changed; #core/#ui byte-identical. Awaiting a blessed synthesis (esp. the freehand home + the 4a/b/c shape)
+before building UNIFY-4a. STOP — await blessing.
+
+=== UNIFY-4 PLAN (MERGED-TAB COMPOSITION) — AWAIT BLESSING ===

@@ -8144,3 +8144,48 @@ vs art branches; svg-import's paint helpers that core-import needs) is FLAGGED f
   gut. STOP — hold.
 
 === UNIFY-7 (RETIRE ART STORE + BAKE) DONE — HOLD ===
+
+## turn 330 — CIRCLE-FIX: closed polylines (circles) no longer collapse in the optimize pipeline
+
+The pre-existing bug UNIFY-7 found: a circle exported as ~1 gcode move. Diagnosed to ground truth, fixed at the ACTUAL
+culprit + oracle-pinned. Byte-exact open-path golden UNCHANGED.
+
+- **DIAGNOSIS (corrected the hypothesis):** the dispatch guessed `linemerge` self-merges a lone closed loop. A pure
+  node probe DISPROVED that — `linemerge([circle])` and `linesort([circle])` leave the 65-pt circle INTACT (a lone
+  polyline never self-joins; the inner loop only joins DISTINCT `remaining` polylines). The real culprit is
+  **`douglasPeucker`** (used by `linesimplify`): a CLOSED loop's base segment is `points[0]->points[n-1]` where
+  first≈last (dist ~7e-15 for the circle's flatten). `perpDist`'s cross-product formula suffers CATASTROPHIC
+  CANCELLATION on that near-zero-length base -> every vertex reads ~0 -> `maxDist <= tolerance` -> NO split -> the loop
+  collapses to its 2 endpoints. (perpDist guards `denom === 0` EXACTLY, but a float-closed loop has denom ~7e-15, not 0.)
+- **FIX (`#core/plot/optimize/douglas-peucker.js`, surgical):** a CLOSED-LOOP GUARD — per range, if the endpoints
+  COINCIDE (`dist(points[s], points[e]) <= 1e-9`), split by DISTANCE from the shared endpoint (`dist(points[i],
+  points[s])`) instead of the degenerate perpendicular distance; the farthest vertex is a true feature, so the loop
+  splits into two OPEN halves (distinct endpoints) that then simplify normally. OPEN segments (distinct endpoints,
+  dist > 1e-9) take the UNCHANGED `perpDist` path -> open-path output is byte-identical. (Fix at the true cause;
+  linemerge left untouched.)
+- **verify — the fix (pure node):** the 65-pt circle -> `douglasPeucker @0.1` = **33 pts** (was 2), x-span **30** (=
+  the full 2r diameter, rim preserved); `linesimplify`/`optimize` keep the loop; open zigzag -> **5** (all kept),
+  near-straight open -> **2** (still simplifies). Distinct-segment `linemerge` still joins (2 touching -> 1 of 3 pts;
+  non-touching -> 2). **PP-2a BYTE-EXACT DDCS golden: PASSED** (open-path output unchanged — the guard never fires for
+  distinct endpoints).
+- **verify — LIVE (CDP, headless): console errors 0.** Draw/target a #core circle (center 50,60 r15) -> Export -> the
+  gcode WALKS THE FULL RIM: **32 `G1 X` moves** (was 1). Snippet:
+  ```
+  (--- Outline ---)
+  G0 X65.000 Y140.000 (rapid to stroke start)   G1 Z-1.000 F1000 (pen down)
+  G1 X64.712 Y137.074 F2000   G1 X63.858 Y134.260 F2000   G1 X62.472 Y131.666 F2000 ...
+  ...   G1 Z5.000 F1000 (final pen up)   M30
+  ```
+- **verify — UNREGRESSED:** ORACLE `closed-polyline.test.js` (new) + ALL core oracles now **22/22** green STANDALONE
+  (incl. the byte-exact PP-2a + the 6 plot oracles). `npm run test:shell` **12/12** (one earlier run threw a
+  headless `querySelector`-on-null FLAKE unrelated to #core/plot — 2/2 clean re-runs after; my change is #core/plot,
+  not Studio's shell). `node --check` clean. `git status packages/` = only `douglas-peucker.js` (+ the new oracle).
+  Studio/Shaper unregressed. 0 net-new.
+- **process hygiene:** pure node diag (deleted after) + CDP verify from scratchpad; `proc_health mark --turn 330`;
+  headless browser killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Circles / imported closed shapes now plot at full fidelity through the shared vpype
+  pipeline. NEXT (blessed backlog): **UNIFY-7b** (gut the dormant art code — interaction art branches, svg-import art
+  half + relocate its paint helpers, tools/shapes/trim/snapping, state art helpers, history artLayers fields, the draw
+  SCAFFOLD art DOM), then the remaining polish. STOP — hold.
+
+=== CIRCLE-FIX (closed-polyline linemerge) DONE — HOLD ===

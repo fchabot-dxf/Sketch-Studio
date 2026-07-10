@@ -6883,3 +6883,73 @@ Completes the Draw stage. Ported the 3 Draw panels + `ui-dialog`; the Draw tab i
   bake seam (`bakeToPolylines(artLayers, coreState)` -> pen-tagged polylines that Fill/Toolpath/Export consume). STOP.
 
 === PP-3c (DRAW PANELS) DONE — PP-3 DRAW STAGE COMPLETE — HOLD ===
+
+## 2026-07-10 · PP-4 GATE (plan-first) — downstream (Fill/Toolpath/Export/Sketch) slicing survey (turn 288)
+
+GATE surveying the downstream data flow from `C:/penplotter/app/js/`; NO code changed (pure source read). Awaiting
+blessing. The pipeline is TOOLPATH-centric (confirmed): pens + fill/outline live on `state.toolpaths`, one gcode per
+toolpath.
+
+**THE DATA FLOW (toolpath-centric):**
+```
+state.artLayers (self-contained art shapes)                    [+ #core sketch geometry — PP-5 only]
+   │  collectToolpathShapes(tp) / resolveToolpathShapes(tp): pick tp's targets (targetShapeIds | targetArtLayerId)
+   ▼
+tp = a toolpath { type:outline|fill, plotColorId(pen), outline:{style,..}, fill:{pattern,..}, export, visible }
+   │  expand: outline -> expandLayerOutline(#core/plot/outlines) ; fill -> expandLayerWithFill(#core/plot/fills)
+   ▼
+stroke shapes -> shapeToPolyline -> vpype optimize -> renderGcode (per pen)   [ all via #core/plot ]
+   ▼
+Toolpath overlay (preview) · pen-width Simulation (export) · G-code + zip (export)
+```
+
+**MODULE SURVEY (imports already route to the OLD plotter fill/outline/vpype — repoint to #core/plot):**
+- `preview.js` (467) — the COMPUTE bridge: `resolveToolpathShapes` + `buildToolpathOverlay` + `buildSimulationOverlay`
+  + `requestPreview`/`recalcPreview`/`isPreviewStale`. Imports vpype + fill + outline (-> #core/plot). Shared by
+  Toolpath (overlay) + Fill (preview) + Export (sim).
+- `toolpath-layers-panel.js` (680, biggest) — the Toolpath OPS panel: pens (folders) -> toolpath ops (outline/fill),
+  order, `enterTargetEditing`/`exitTargetEditing`/`syncTargetEditingSelection` (the PP-3b stubs), feeds/up-down.
+- `active-layer-panel.js` (276, DEFERRED in PP-3c) — the per-toolpath FILL pattern + OUTLINE style pickers = the FILL
+  tab. Imports the OLD `fill/index` (`FILL_PATTERNS`-as-ids + `PATTERN_OPTIONS`) which #core/plot replaced with
+  objects+`params` -> must be ADAPTED to iterate the new registry.
+- `export.js` (108) — self-contained: `buildGcodeEntries` (per exportable tp) -> `toolpathToGcode`(vpype) ->
+  `buildZip` -> download. Uses `state.settings` feeds. Routes cleanly through #core/plot.
+- `settings.js` (119) — the Settings modal: doc size, defaults (pen up/down Z, feeds, tolerance), `loadDefaults`,
+  `syncDocFields` (the PP-3c svg-import stub), `autoRecalc`.
+
+**PROPOSED LOAD-SAFE SLICING (one stage per turn; each mounts something verifiable):**
+- **PP-4 — TOOLPATH stage** (the pipeline backbone): port `toolpath-layers-panel.js` + `preview.js`
+  (resolveToolpathShapes + buildToolpathOverlay + recalc), repointed to #core/plot. UN-STUB the PP-3b toolpath bleed
+  (interaction `resolveToolpathShapes`; `syncTargetEditingSelection`; keyboard `exitTargetEditing`) -> the real
+  panel fns, and allow `state.preview.showToolpath` in this stage. Toolpaths target ART shapes (self-contained ->
+  `shapeToPolyline`, already in #core/plot). Verify: draw art -> a toolpath targets it -> the OPTIMIZED toolpath
+  overlay renders; assign a PEN to a toolpath (the PP-3c "assign" finding lands here); reorder ops; target-edit.
+- **PP-4-Fill — FILL stage** (the 2nd tab over the SAME `state.toolpaths`): port `active-layer-panel.js` ADAPTED to
+  the #core/plot registries (iterate `FILL_PATTERNS[].params` + `OUTLINE_STYLES[].params`), editing the selected
+  toolpath's `fill{pattern,params}` + `outline{style,params}`. The compute (preview) already applies them. Verify:
+  pick a fill pattern (hatch/concentric/…) + params -> the overlay shows the fill strokes; pick an outline style.
+  RECONCILE: Fill + Toolpath = TWO tabs over one data model — Fill edits pattern/style, Toolpath edits pens/order/
+  feeds; no data change, just workspaces (INTEGRATION.md).
+- **PP-4-Export — EXPORT stage**: port `export.js` (per-pen gcode -> zip -> download) via #core/plot vpype +
+  `preview.buildSimulationOverlay` (pen-width sim) + `settings.js` (doc/defaults/feeds/tolerance/autoRecalc,
+  un-stub `syncDocFields`). Verify: export -> a .zip of per-toolpath gcode (or assert the gcode string); the sim
+  overlay renders pen-width strokes.
+- **PP-5 — SKETCH stage**: mount the shared `#core`/`#ui` Design tab as the OPTIONAL Sketch stage + the
+  **`coreShapeToPolyline` seam** — the ONLY new geometry code: extend `collectToolpathShapes`/`resolveToolpathShapes`
+  so a toolpath can target #core SKETCH geometry (joint-referenced) via `coreShapeToPolyline(shape, joints)` (~30 LOC,
+  reuses #core's arc sampler). This is the ONE place the solver world meets the plotter; DOF-color (Sketch) vs
+  pen-color (all other stages) coexist — the stage boundary is the switch (INTEGRATION.md).
+
+**where the bake seam actually IS:** INTEGRATION.md's `bakeToPolylines(artLayers, coreState)` maps, in this
+toolpath-centric code, to the per-toolpath `collectToolpathShapes -> expand(outline/fill) -> shapeToPolyline ->
+optimize` recompute (already routed through #core/plot). There is NO separate bake function to add for ART — only
+`coreShapeToPolyline` (PP-5) is new. The **autoRecalc boundary** (`state.autoRecalc`, default false) is the
+art↔machine recompute gate: OFF -> edits mark the preview stale (`isPreviewStale`), the user hits Recalculate;
+ON -> recompute on change. The Toolpath/Export stages honor it via `recalcPreview`.
+
+**PP-3 stubs — un-stub map:** interaction `resolveToolpathShapes` + `syncTargetEditingSelection` + keyboard
+`exitTargetEditing` -> real (PP-4 Toolpath). svg-import `syncDocFields` -> real (PP-4-Export/settings).
+active-layer-panel deferral -> PP-4-Fill. plot-colors `cloud`/`openPicker` -> a Cloud slice OUTSIDE the epic (palette
+cloud save/load; stays stubbed unless the user wants it).
+
+=== PP-4 PLAN (DOWNSTREAM SLICING) — AWAIT BLESSING ===

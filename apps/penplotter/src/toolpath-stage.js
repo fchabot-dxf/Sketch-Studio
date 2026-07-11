@@ -10,7 +10,12 @@ import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installToolpathLayersPanel, renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
+import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-panel.js"; // MERGE-1: the fill/outline editor, inline
 
+// MERGE-1: Fill folded in. #activeLayerContent (the retired Fill tab's editor) now lives HERE, below the ops list —
+// clicking an op row (toolpath-layers-panel wires activeToolpathId + renderActiveLayerPanel) shows its pattern/style
+// editor inline next to pen/order/export. Previously renderActiveLayerPanel() ran with no container in this tab (the
+// editor mounted only in the Fill tab) -> "each toolpath has nothing to edit".
 const SCAFFOLD = `
   <div id="toolpathRoot">
     <aside id="toolpathPanel">
@@ -25,12 +30,15 @@ const SCAFFOLD = `
       </div>
       <button id="recalcBtn" class="dp-btn dp-primary">Recalculate</button>
       <div id="toolpathLayers" class="dp-list"></div>
+      <div class="dp-head">Selected op</div>
+      <div id="activeLayerContent"></div>
     </aside>
   </div>`;
 
 export function mountToolpathStage(view) {
   view.innerHTML = SCAFFOLD;
   installToolpathLayersPanel(); // wires #addOutlineTp/#addFillTp/#exportAll/#exportNone/#recalcBtn
+  installActiveLayerPanel(() => { recalcPreview(); renderArt(); }); // MERGE-1: fill/outline edits recompute the overlay live
   return { onEnter };
 }
 
@@ -48,4 +56,5 @@ function onEnter() {
   recalcPreview();            // fresh optimized path on entry (an explicit recompute, like the button)
   renderArt();                // art + the optimized overlay (renderArt also refreshes the ops panel)
   renderToolpathLayersPanel();
+  renderActiveLayerPanel();   // MERGE-1: show the selected op's fill/outline editor inline
 }

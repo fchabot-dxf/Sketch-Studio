@@ -155,11 +155,10 @@ function onMove(e) {
         return;
     }
     if (it.kind === "rotate") {
-        if (it.released) return; // post-mouseup edits go through the HUD
+        if (it.released) return;
         const delta = Math.atan2(p.y - it.center[1], p.x - it.center[0]) - it.startAngle;
         it.value = delta * 180 / Math.PI;
         applyRotate(it);
-        updateHud(it);
         return;
     }
     if (it.kind === "scale") {
@@ -167,7 +166,6 @@ function onMove(e) {
         const d = Math.hypot(p.x - it.center[0], p.y - it.center[1]);
         it.value = Math.max(0.05, d / it.startDist);
         applyScale(it);
-        updateHud(it);
         return;
     }
     if (it.kind === "polyline") {
@@ -379,34 +377,8 @@ function updateMarquee(it) {
     state.selectedShapeIds = next;
 }
 
-// -------- transform HUD (rotate / scale popup) --------
-// Shown when a rotate or scale interaction starts. While dragging,
-// updates the displayed value live. After mouseup, the user can type an
-// exact value (Enter or OK applies it; Cancel reverts to originals).
-
-function showHud(it) {
-    const hud = document.getElementById("transformHud");
-    if (!hud) return;
-    document.getElementById("transformHudLabel").textContent = it.kind === "rotate" ? "angle" : "scale";
-    document.getElementById("transformHudUnit").textContent = it.kind === "rotate" ? "°" : "×";
-    const input = document.getElementById("transformHudInput");
-    input.step = it.kind === "rotate" ? "0.1" : "0.01";
-    input.value = (it.kind === "rotate" ? 0 : 1).toFixed(it.kind === "rotate" ? 1 : 2);
-    hud.hidden = false;
-}
-
-function updateHud(it) {
-    const input = document.getElementById("transformHudInput");
-    if (!input) return;
-    input.value = (it.kind === "rotate"
-        ? it.value.toFixed(1)
-        : it.value.toFixed(3));
-}
-
-function hideHud() {
-    const hud = document.getElementById("transformHud");
-    if (hud) hud.hidden = true;
-}
+// MERGE-1: the transform HUD (rotate/scale degree popup) is DELETED — the #transformHud DOM/CSS are gone, art
+// rotate/scale is retired, and a #core-joint rotate/scale is a later restore (it won't reuse this popup).
 
 function applyRotate(it) {
     const radians = it.value * Math.PI / 180;
@@ -426,42 +398,6 @@ function applyScale(it) {
     render();
 }
 
-export function installTransformHud() {
-    const input = document.getElementById("transformHudInput");
-    const ok    = document.getElementById("transformHudOk");
-    const cncl  = document.getElementById("transformHudCancel");
-    if (!input || !ok || !cncl) return;
-
-    input.oninput = () => {
-        const it = state.interaction;
-        if (!it || (it.kind !== "rotate" && it.kind !== "scale")) return;
-        const v = parseFloat(input.value);
-        if (Number.isNaN(v)) return;
-        it.value = v;
-        if (it.kind === "rotate") applyRotate(it);
-        else applyScale(it);
-    };
-    input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); ok.click(); } };
-
-    ok.onclick = () => {
-        // Current shape state is the committed result — just dismiss.
-        state.interaction = null;
-        hideHud();
-        render();
-    };
-    cncl.onclick = () => {
-        const it = state.interaction;
-        if (it && (it.kind === "rotate" || it.kind === "scale")) {
-            for (let i = 0; i < it.shapes.length; i++) {
-                Object.assign(it.shapes[i], deepCopyShape(it.originals[i]));
-            }
-        }
-        state.interaction = null;
-        hideHud();
-        render();
-    };
-}
-
 // -------- rotate / scale (operate on the entire selection) --------
 function startRotate(e, p) {
     const targets = prepareTransformTargets(e);
@@ -477,7 +413,6 @@ function startRotate(e, p) {
         value: 0,
         released: false,
     };
-    showHud(state.interaction);
     render();
 }
 
@@ -495,7 +430,6 @@ function startScale(e, p) {
         value: 1,
         released: false,
     };
-    showHud(state.interaction);
     render();
 }
 

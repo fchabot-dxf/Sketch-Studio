@@ -4,8 +4,7 @@
 // a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
 import { createAppSwitcher } from '#ui/app-switcher.js';
 import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
-import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas)
-import { mountFillStage } from './fill-stage.js'; // PP-5: the Fill stage (2nd tab over the same state.toolpaths)
+import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
 import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 
@@ -14,8 +13,8 @@ import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'D
 // all DERIVE from this list (single source of truth), so there are no hardcoded tabs or containers to keep in sync.
 const STAGES = [
   { id: 'design',   label: 'Design',   part: 'UNIFY-4', blurb: 'Draw + precise + constraint geometry — one #core store, pen colors.' },
-  { id: 'fill',     label: 'Fill',     part: 'PP-2', blurb: 'Fill patterns + outline styles per region.' },
-  { id: 'toolpath', label: 'Toolpath', part: 'PP-2', blurb: 'Pen assignment, order, optimize, up/down, feeds.' },
+  // MERGE-1: Fill folded into Toolpath (one shared state.toolpaths record) — pipeline is Design -> Toolpath -> Export.
+  { id: 'toolpath', label: 'Toolpath', part: 'PP-2', blurb: 'Pen, fill/outline, order, optimize, up/down, feeds.' },
   { id: 'export',   label: 'Export',   part: 'PP-2', blurb: 'G-code per pen + a zip.' },
 ];
 const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads (mirrors Shaper's MODE_KEY)
@@ -23,7 +22,7 @@ const STAGE_KEY = 'penplotter-stage'; // persist the active stage across reloads
 // Per-stage MOUNTERS: a stage that needs live wiring registers a mount(view) here; the router calls it ONCE on
 // first entry (returning an optional { onEnter } re-run each entry). UNIFY-4a: 'design' = the shared sketcher; the
 // retired Draw scaffold is mounted separately into a HIDDEN host at startup (below) — it is NOT a tab.
-const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, fill: mountFillStage, export: mountExportStage };
+const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, export: mountExportStage };
 const mounted = {};
 let currentStageId = null; // the showing stage; drives the isActive gate + which stage gets onLeave on a switch
 

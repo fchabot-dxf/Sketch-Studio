@@ -8586,3 +8586,44 @@ real cause, confirmed GAP 2 (i), scoped (ii).
   decisions. STOP - hold.
 
 === HOVER-2 (IMPORT + REGION HOVER) DONE — HOLD ===
+
+## turn 348 - MERGE-1 (Part A of the toolpath-editor restore): Fill folded into Toolpath, the active-op editor un-stranded, the dead degree HUD deleted.
+
+Three exact changes (DRIVER = the original's editing UX). Verified end-to-end BY CLICKS + screenshot.
+
+- **(1) MERGE - drop the Fill stage (`main.js`):** removed 'fill' from STAGES + STAGE_MOUNT and the `mountFillStage`
+  import; DELETED `fill-stage.js`. The shell is now **Design -> Toolpath -> Export** (3 tabs). Kept `active-layer-panel.js`
+  (its editor moves into the Toolpath tab).
+- **(2) UN-STRAND THE EDITOR (`toolpath-stage.js`) - fixes "each toolpath has nothing to edit":** the active-layer
+  editor mounted ONLY in the Fill tab, so in Toolpath a row-click's `renderActiveLayerPanel()` had NO `#activeLayerContent`
+  container -> nothing rendered. Added a **"Selected op"** section with `#activeLayerContent` to the Toolpath scaffold
+  (below the ops list), `installActiveLayerPanel(() => { recalcPreview(); renderArt(); })` (so edits recompute the
+  overlay live), and `renderActiveLayerPanel()` on entry. The row-click wiring already existed
+  (toolpath-layers-panel sets activeToolpathId + calls renderActiveLayerPanel) -> selecting an op now shows its
+  fill/outline editor inline next to pen/order/export. `active-layer-panel.js` itself is UNCHANGED (only its host moved).
+- **(3) KILL the dead degree HUD (DELETE, not re-hide):** removed `#transformHud` from `draw-stage.js` SCAFFOLD (it
+  lived inside #canvasWrap and rode onto Fill/Toolpath) + its CSS from `index.html` + the driver in `interaction.js`
+  (deleted `showHud`/`updateHud`/`hideHud`/`installTransformHud` [orphan - no importers] + their 4 call sites in
+  onMove/startRotate/startScale) + the `getElementById('transformHud')` hide in `tools.js` `cancelInteraction`. The
+  dormant art rotate/scale transform bodies remain (HOLD-listed for the #core-joint restore) but no longer reference the
+  HUD. `grep transformHud|showHud|updateHud|hideHud|installTransformHud` across the app = CLEAN.
+- **VERIFY LIVE, BY CLICKS (headless CDP): console errors 0.** Tabs = **[design, toolpath, export]** (`noFillTab:true`);
+  **no #transformHud** in the DOM (`noTransformHud:true`). Design: drew a circle, colored it. Toolpath: clicked the
+  circle (selects), **+Fill** -> a fill toolpath; the **SELECTED OP editor renders INLINE** (`editorContainerInToolpathTab`
+  + `editorHasContent` + `editorHasPatternSelect`) - screenshot (merge-toolpath.png) shows the ops tree + the inline
+  Toolpath/Outline(Style,Passes)/Fill(Pattern=Hatch,Angle,Spacing,Offset) editor. **Change Pattern hatch -> crosshatch:
+  fill.pattern updates AND the overlay recomputes 25 -> 50 strokes** (crosshatch doubles the hatch). **Export** = 2 gcode
+  files, 52 G1 moves. (The initial merge run's programmatic pattern-change hit a STALE editor bound to the pre-+Fill
+  active op - re-selecting the fill op first fixed it; the product row-click rebinds correctly.)
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** green STANDALONE; `npm run test:shell` **12/12**; `node --check`
+  clean on every changed file. Plotter-only (main/toolpath-stage/draw-stage/tools/interaction/index.html + fill-stage
+  deleted) - NO #core/#ui edits -> Studio/Shaper unregressed. `git status` = only those files (did NOT stage the
+  advisor-owned NEXT-SESSION.md / ROADMAP.md / the NEW advisor PARITY-ROADMAP.md, or the user's stray svg). 0 net-new.
+- **process hygiene:** CDP verify + screenshot + a targeted pattern-change probe from scratchpad; `proc_health mark
+  --turn 348`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Shell = Design/Toolpath/Export; the fill/outline editor is inline in the Toolpath tab
+  (click an op -> edit it); the degree HUD is gone for real. HOLD for Parts B/C (per dispatch): machine-settings
+  resurface, panel hover/selected/cross-highlight, region-hover on findLoops, rotate/scale/scissors (#core-joint
+  transforms). STOP - hold.
+
+=== MERGE-1 (FILL->TOOLPATH + UN-STRAND EDITOR + KILL HUD) DONE — HOLD ===

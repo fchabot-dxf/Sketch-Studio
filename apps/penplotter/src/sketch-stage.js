@@ -17,6 +17,7 @@ import { state, penColorForShape } from './state.js'; // UNIFY-4c: mapped physic
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
+import { installDocModal } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -30,6 +31,7 @@ const SCAFFOLD = `
       <aside id="design-panel">
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
         <div id="design-panel-actions">
+          <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
           <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
           <div id="importStatus" class="dp-note"></div>
@@ -57,9 +59,10 @@ export function mountSketchStage(view, ctx = {}) {
   const designCanvas = view.querySelector('#design-canvas');
   const colorInput = view.querySelector('#shapeColor');
   const mixToggle = view.querySelector('#shapeMix');
+  const docBtn = view.querySelector('#designDocBtn'); // DOC-SIZE-IN-DESIGN: opens #docModal; label shows the size
   const mixStatus = view.querySelector('#mixStatus');
 
-  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', underlayDirty = true;
+  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', lastDocSig = '', underlayDirty = true;
 
   // UNIFY-throttle: a shape is STATIC (drawn by the color underlay; SKIPPED by the per-frame sketcher — perf, and its
   // joint glyphs are suppressed) ONLY when the plotter has MARKED it static (state.staticShapeIds — imported/dense
@@ -125,6 +128,11 @@ export function mountSketchStage(view, ctx = {}) {
       const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length;
       if (msig !== lastMixSig) { lastMixSig = msig; mixStatus.textContent = mixed ? mixSummary(one) : ''; }
     }
+    // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
+    if (docBtn) {
+      const dsig = state.doc.w + 'x' + state.doc.h;
+      if (dsig !== lastDocSig) { lastDocSig = dsig; docBtn.textContent = `Document · ${state.doc.w} × ${state.doc.h} mm`; }
+    }
     let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
     const nShapes = (s.shapes && s.shapes.length) || 0;
     const nJoints = (s.joints && s.joints.size) || 0;
@@ -159,6 +167,9 @@ export function mountSketchStage(view, ctx = {}) {
   });
   ribbon.render(view.querySelector('#design-ribbon'));
   installFreehandTool(designCanvas, controller, { onCommit: () => { underlayDirty = true; } });
+  // DOC-SIZE-IN-DESIGN: wire the shared #docModal (its fields + close + the #designDocBtn / #docInfo openers) so the
+  // Document dialog works from the first tab even before Toolpath is visited. Idempotent (settings.js guards it).
+  try { installDocModal(); } catch (_) {}
 
   // Collapsible side panel (persisted).
   const panel = view.querySelector('#design-panel');

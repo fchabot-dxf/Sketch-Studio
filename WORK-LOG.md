@@ -8816,3 +8816,35 @@ top strip -> the canvas jumped sideways (left<->right) AND up (no ribbon strip) 
   buttons, marquee/banner, import fidelity, rotate/scale/scissors). STOP — hold.
 
 === LAYOUT-UNIFY DONE — HOLD ===
+
+## turn 360 — DOC-SIZE-IN-DESIGN: a discoverable Document control in the first (Design) tab.
+
+User: "should be in first tab if we add it." Doc size (W/H/unit) lived ONLY in #docModal, reachable by clicking the
+faint #docInfo "200x200mm" canvas readout — undiscoverable, and only present on Toolpath/Export (Design uses the #ui
+canvas, so #docInfo isn't there). Added a discoverable trigger in the Design sidebar that opens the EXISTING modal.
+Plotter-side (settings.js + sketch-stage.js); #ui untouched.
+
+- **REUSE, not duplicate:** the #docModal (#docW/#docH/#docUnit) stays the SINGLE editor (in index.html); I only added a
+  trigger. No dup ids (verified: docW/docH/docUnit/designDocBtn each appear once, live DOM #docW count = 1).
+- **settings.js — extracted `installDocModal()` (idempotent):** wires the modal fields (#docW/#docH change -> state.doc +
+  fitViewport + render; #docUnit) + close + BOTH openers (the #docInfo readout AND the new #designDocBtn), guarded by a
+  module flag so calling it from BOTH the Design mount AND installSettingsPanel wires ONCE (re-syncs on later calls).
+  installSettingsPanel now calls installDocModal() + keeps the feeds/settingsModal/auto-recalc. This fixes the
+  bootstrap: the modal is functional from the FIRST tab even before Toolpath is ever visited (previously its wiring only
+  ran on toolpath mount).
+- **sketch-stage.js — the control:** a `#designDocBtn` button in #design-panel-actions labelled "Document · W × H mm";
+  `installDocModal()` called at Design mount (wires the modal + the button-as-opener); panelTick keeps the label synced
+  to state.doc (gated) so it updates after a size edit.
+- **VERIFY LIVE, BY CLICKS (CDP): console errors 0.** Design tab: the Document button shows "Document · 200 × 200 mm";
+  clicking it OPENS #docModal (fields synced to state.doc); changing Width to 150 -> `state.doc.w=150` (paper refits via
+  the wired handler) AND the button label updates to include 150; close works; no duplicate #docW in the DOM.
+- **UNREGRESSED:** ALL core oracles **23/23** STANDALONE; `npm run test:shell` **12/12**; `node --check` clean.
+  Plotter-side (settings.js + sketch-stage.js) — NO #core/#ui edits -> Studio/Shaper unregressed. Did NOT stage advisor
+  docs or the user's stray svg.
+- **process:** CDP verify (verify-docsize) + a source/live dup-id audit from scratchpad; `proc_health mark --turn 360`;
+  headless browser killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Doc size is now discoverable in the first tab (a labelled Document button -> the shared
+  dialog); still the single editor, reachable from Design AND the Toolpath/Export readout. HOLD for S4+ (Delete->#core +
+  undo/redo buttons, marquee/banner, import fidelity, rotate/scale/scissors). STOP — hold.
+
+=== DOC-SIZE-IN-DESIGN DONE — HOLD ===

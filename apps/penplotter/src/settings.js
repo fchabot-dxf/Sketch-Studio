@@ -60,7 +60,14 @@ export function syncDocFields() {
     if (sel) sel.value = state.docUnit;
 }
 
-export function installSettingsPanel() {
+let _docModalWired = false;
+/** DOC-SIZE-IN-DESIGN: wire the Document-size modal (#docModal: #docW/#docH/#docUnit) + its openers (the #docInfo
+ *  canvas readout AND #designDocBtn in the Design sidebar) + close. IDEMPOTENT — called from BOTH the Design mount (so
+ *  the modal works before Toolpath is ever visited) AND installSettingsPanel; wires once, re-syncs on later calls.
+ *  The modal HTML lives in index.html (always present), so this is the SINGLE editor; triggers just open it. */
+export function installDocModal() {
+    if (_docModalWired) { syncDocFields(); return; }
+    _docModalWired = true;
     // Restore the saved display unit before wiring the fields.
     try { const u = localStorage.getItem(DOC_UNIT_LS); if (u === "in" || u === "mm") state.docUnit = u; } catch { /* ignore */ }
 
@@ -72,11 +79,24 @@ export function installSettingsPanel() {
         applyViewport(); // refresh the dimension/zoom status text (keeps zoom)
     });
 
-    // Document settings: opened by clicking the dimension readout in the
-    // status bar. General user settings: opened by the gear in the canvas.
+    // Openers: the #docInfo dimension readout (Toolpath/Export canvas) + the #designDocBtn control (Design sidebar).
     const docInfo = $("#docInfo");
     if (docInfo) docInfo.title = "Document settings";
-    wireModal("docInfo", "docModal", "docModalClose");
+    wireModal("docInfo", "docModal", "docModalClose", syncDocFields);
+    wireModal("designDocBtn", "docModal", "docModalClose", syncDocFields);
+
+    const dw = $("#docW"), dh = $("#docH");
+    if (dw) dw.addEventListener("change", (e) => {
+        state.doc.w = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
+    });
+    if (dh) dh.addEventListener("change", (e) => {
+        state.doc.h = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
+    });
+    syncDocFields();
+}
+
+export function installSettingsPanel() {
+    installDocModal(); // doc-size modal (shared with the Design-tab trigger)
     wireModal("settingsBtn", "settingsModal", "settingsModalClose");
 
     // Auto-recalculate toggle (Settings modal). Off by default: edits leave
@@ -92,18 +112,9 @@ export function installSettingsPanel() {
             render();
         });
     }
-
-    $("#docW").addEventListener("change", (e) => {
-        state.doc.w = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
-    });
-    $("#docH").addEventListener("change", (e) => {
-        state.doc.h = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
-    });
-    syncDocFields();
     for (const [domId, key] of Object.entries(SETTINGS_MAP)) {
-        $("#" + domId).addEventListener("change", (e) => {
-            state.settings[key] = +e.target.value;
-        });
+        const el = $("#" + domId);
+        if (el) el.addEventListener("change", (e) => { state.settings[key] = +e.target.value; });
     }
 }
 

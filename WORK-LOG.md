@@ -8848,3 +8848,38 @@ Plotter-side (settings.js + sketch-stage.js); #ui untouched.
   undo/redo buttons, marquee/banner, import fidelity, rotate/scale/scissors). STOP — hold.
 
 === DOC-SIZE-IN-DESIGN DONE — HOLD ===
+
+## turn 362 — DESIGN-PAPER-BOUNDS (+ Document-button reposition): the Design canvas IS the paper.
+
+Two parts. Plotter-side (sketch-stage.js / render-art.js / index.html + a new paper-grid.js); #ui untouched. Verified by
+screenshot + measured rects (0 console errors).
+
+- **PART 0 — un-clip the Document button:** it was the first item in #design-panel-actions, cramped under the collapse
+  arrow (◀). CSS `#designDocBtn { display:block; width:100%; margin:2px 0 10px; text-align:center }` -> full-width,
+  clear of the arrow, cleanly first. (Verified full-width, y=159, below the arrow.)
+- **PART 1 — the document paper on the Design canvas (user: "document at the paper size"):** the Design area now shows
+  the paper rect (0,0)-(doc.w,doc.h) + a 10mm grid BEHIND the geometry, matching Toolpath/Export.
+  - DECLARE/REUSE (not duplicate): extracted `paperGridMarkup(doc)` into a new `paper-grid.js` (the paper rect +
+    non-scaling grid, world/mm, matching render-art's old buildPaper/buildGrid exactly — fill var(--canvas-bg), stroke
+    #c8bfa8, grid #e6ddc8 @10mm). BOTH canvases now draw from it: render-art.js replaced buildPaper()+buildGrid() with
+    a `<g data-layer=paper>` whose innerHTML = the shared markup (buildPaper/buildGrid deleted); sketch-stage.js adds a
+    `#design-paper` svg as the BACKMOST layer in #design-canvas-wrap (before #pen-underlay), innerHTML = the shared
+    markup.
+  - SYNC: `#design-paper` is viewBox-synced to the sketcher canvas every frame (extended syncUnderlayView, alongside
+    #pen-underlay) so the paper pans/zooms WITH the geometry; `renderPaper()` redraws it on doc-size change (panelTick's
+    doc-sig block, + once at mount).
+- **VERIFY LIVE (CDP + screenshot): console errors 0.** Design tab: `#design-paper` present with a `<rect>` at doc size
+  (200×200) + 42 grid lines, drawn behind the line/circle geometry; changing Width to 150 via the Document dialog
+  RESIZES the paper live (rect width 200 -> 150) AND updates the button label ("Document · 150 × 200 mm"). Toolpath tab
+  still draws its paper (`#canvas g[data-layer=paper]` with a rect) — the shared helper works on both. Screenshot
+  confirms the Design canvas reads as paper (cream fill + border + grid) with geometry on it, matching the pen stages.
+- **UNREGRESSED:** ALL core oracles **23/23** STANDALONE; `npm run test:shell` **12/12**; `node --check` clean on all
+  changed files. Plotter-side only (new paper-grid.js + render-art.js + sketch-stage.js + index.html) — NO #core/#ui
+  edits -> Studio/Shaper unregressed. Did NOT stage advisor docs or the user's stray svg.
+- **process:** CDP verify + screenshot (verify-paper) from scratchpad; `proc_health mark --turn 362`; headless browsers
+  killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The Design tab now shows the document at paper size (shared paper+grid helper),
+  pan/zoom + live-resize working, Document button clean. HOLD next: IMPORT-DOC-SIZE (import sets doc size, overridable),
+  MODAL-BUTTONS (Done/Cancel), then S4. STOP — hold.
+
+=== DESIGN-PAPER-BOUNDS DONE — HOLD ===

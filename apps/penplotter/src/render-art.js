@@ -9,6 +9,7 @@ import { requestPreview, buildToolpathOverlay, buildSimulationOverlay } from "./
 import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
 import { coreShapeToPolyline } from "#core/core-shape-to-polyline.js"; // RENDER-FIX: show the #core geometry on this canvas
+import { paperGridMarkup } from "./paper-grid.js"; // DESIGN-PAPER-BOUNDS: shared paper+grid (also drawn on the Design canvas)
 
 // S2: opts.skipPanels redraws ONLY the canvas (geometry + overlay), leaving the ops panel DOM intact — used by op-row
 // hover so a cross-highlight doesn't rebuild the panel (which would detach the row listeners under the cursor).
@@ -16,8 +17,10 @@ export function renderArt(opts = {}) {
     if (!canvas) return;
     while (canvas.firstChild) canvas.removeChild(canvas.firstChild);
 
-    canvas.appendChild(buildPaper());
-    canvas.appendChild(buildGrid());
+    const paper = document.createElementNS(SVG_NS, "g");
+    paper.setAttribute("data-layer", "paper");
+    paper.innerHTML = paperGridMarkup(state.doc); // shared helper (also used by the Design canvas)
+    canvas.appendChild(paper);
 
     // RENDER-FIX: draw the #core geometry (drawn sketch + imported SVG) in its mapped pen colors, BENEATH the toolpath
     // overlay — the same geometry the Design tab shows via its sketcher/underlay. Without this the Fill/Toolpath/Export
@@ -93,35 +96,4 @@ function buildCoreGeometry() {
     return g;
 }
 
-function buildPaper() {
-    const r = document.createElementNS(SVG_NS, "rect");
-    r.setAttribute("x", 0); r.setAttribute("y", 0);
-    r.setAttribute("width", state.doc.w);
-    r.setAttribute("height", state.doc.h);
-    r.style.fill = "var(--canvas-bg)";
-    r.setAttribute("stroke", "#c8bfa8");
-    r.setAttribute("stroke-width", "1");
-    r.setAttribute("vector-effect", "non-scaling-stroke");
-    r.setAttribute("pointer-events", "none");
-    return r;
-}
-
-function buildGrid() {
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("stroke", "#e6ddc8");
-    g.setAttribute("stroke-width", "0.1");
-    g.setAttribute("vector-effect", "non-scaling-stroke");
-    for (let x = 0; x <= state.doc.w; x += 10) {
-        const l = document.createElementNS(SVG_NS, "line");
-        l.setAttribute("x1", x); l.setAttribute("y1", 0);
-        l.setAttribute("x2", x); l.setAttribute("y2", state.doc.h);
-        g.appendChild(l);
-    }
-    for (let y = 0; y <= state.doc.h; y += 10) {
-        const l = document.createElementNS(SVG_NS, "line");
-        l.setAttribute("x1", 0); l.setAttribute("y1", y);
-        l.setAttribute("x2", state.doc.w); l.setAttribute("y2", y);
-        g.appendChild(l);
-    }
-    return g;
-}
+// (buildPaper/buildGrid were extracted to paper-grid.js `paperGridMarkup` — shared with the Design canvas.)

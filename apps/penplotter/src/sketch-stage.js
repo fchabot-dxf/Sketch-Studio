@@ -18,6 +18,7 @@ import { installFreehandTool } from './freehand-tool.js';               // UNIFY
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
+import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -47,6 +48,7 @@ const SCAFFOLD = `
         <div id="design-panel-info"></div>
       </aside>
       <div id="design-canvas-wrap">
+        <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
         <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
         <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
       </div>
@@ -56,6 +58,7 @@ const SCAFFOLD = `
 export function mountSketchStage(view, ctx = {}) {
   view.innerHTML = SCAFFOLD;
   const underlay = view.querySelector('#pen-underlay');
+  const paperSvg = view.querySelector('#design-paper'); // DESIGN-PAPER-BOUNDS: backmost paper+grid layer
   const designCanvas = view.querySelector('#design-canvas');
   const colorInput = view.querySelector('#shapeColor');
   const mixToggle = view.querySelector('#shapeMix');
@@ -85,10 +88,15 @@ export function mountSketchStage(view, ctx = {}) {
   // UNIFY-4c: keep the underlay's viewBox aligned with the sketcher's (pan/zoom mutates the canvas viewBox). CHEAP —
   // a per-frame attribute copy, NOT a re-render; the path rebuild is dirty-flagged (renderUnderlay).
   const syncUnderlayView = () => {
-    if (!underlay || !designCanvas) return;
+    if (!designCanvas) return;
     const vb = designCanvas.getAttribute('viewBox');
-    if (vb && underlay.getAttribute('viewBox') !== vb) underlay.setAttribute('viewBox', vb);
+    if (!vb) return;
+    if (underlay && underlay.getAttribute('viewBox') !== vb) underlay.setAttribute('viewBox', vb);
+    if (paperSvg && paperSvg.getAttribute('viewBox') !== vb) paperSvg.setAttribute('viewBox', vb); // DESIGN-PAPER-BOUNDS: paper follows pan/zoom
   };
+  // DESIGN-PAPER-BOUNDS: draw the document paper+grid (0,0)-(doc.w,doc.h) as the BACKMOST Design layer — same helper +
+  // world/mm coords the plotter canvas (render-art) uses, so the Design area IS the paper. Redrawn on doc-size change.
+  const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc); };
   // Rebuild the underlay paths: each #core shape flattened (coreShapeToPolyline) + stroked in its MAPPED pen color.
   const renderUnderlay = () => {
     if (!underlay || !controller) return;
@@ -131,7 +139,7 @@ export function mountSketchStage(view, ctx = {}) {
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
     if (docBtn) {
       const dsig = state.doc.w + 'x' + state.doc.h;
-      if (dsig !== lastDocSig) { lastDocSig = dsig; docBtn.textContent = `Document · ${state.doc.w} × ${state.doc.h} mm`; }
+      if (dsig !== lastDocSig) { lastDocSig = dsig; docBtn.textContent = `Document · ${state.doc.w} × ${state.doc.h} mm`; renderPaper(); }
     }
     let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
     const nShapes = (s.shapes && s.shapes.length) || 0;
@@ -170,6 +178,7 @@ export function mountSketchStage(view, ctx = {}) {
   // DOC-SIZE-IN-DESIGN: wire the shared #docModal (its fields + close + the #designDocBtn / #docInfo openers) so the
   // Document dialog works from the first tab even before Toolpath is visited. Idempotent (settings.js guards it).
   try { installDocModal(); } catch (_) {}
+  renderPaper(); // DESIGN-PAPER-BOUNDS: draw the paper immediately (panelTick also refreshes it on size change)
 
   // Collapsible side panel (persisted).
   const panel = view.querySelector('#design-panel');

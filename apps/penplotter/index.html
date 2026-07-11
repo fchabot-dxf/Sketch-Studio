@@ -176,6 +176,8 @@
     #design-panel.collapsed #design-panel-info,
     #design-panel.collapsed #design-panel-actions { display: none; }
     #design-panel-actions { padding: 8px 8px 0; }
+    /* DESIGN-PAPER-BOUNDS Part 0: the Document button — FIRST item, full-width, clear of the collapse arrow. */
+    #designDocBtn { display: block; width: 100%; box-sizing: border-box; margin: 2px 0 10px; text-align: center; }
     #importStatus { font-size: 11px; color: #6b7280; margin: 4px 0; line-height: 1.4; }
     #design-panel-toggle { align-self: flex-end; background: transparent; border: 0; color: #6b7280; cursor: pointer;
       font: 13px system-ui, sans-serif; padding: 6px 8px; line-height: 1; }
@@ -185,8 +187,8 @@
     /* UNIFY-4c — the canvas WRAP holds the pen-color underlay BENEATH the (transparent) sketcher canvas; both share
        the same viewBox so the underlay's pen-colored art sits exactly under the DOF/scaffold the sketcher draws. */
     #design-canvas-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; background: var(--sk-canvas-bg, #ffffff); }
-    #pen-underlay, #design-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #pen-underlay { pointer-events: none; }               /* clicks pass through to the sketcher canvas on top */
+    #design-paper, #pen-underlay, #design-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #design-paper, #pen-underlay { pointer-events: none; } /* backmost paper + underlay; clicks reach the sketcher on top */
     #design-canvas { background: transparent; }           /* transparent so the underlay shows through */
     #design-canvas.snapping { background-color: transparent; }
     /* UNIFY-4c — the per-shape digital color control in the Design panel. */

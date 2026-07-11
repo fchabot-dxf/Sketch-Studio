@@ -646,6 +646,7 @@ export function enterTargetEditing(toolpath) {
     state.selectedShapeIds = new Set(toolpath.targetShapeIds || []);
     document.body.classList.add("target-editing");
     toast(`Editing target for "${toolpath.name}" — click shapes, Esc to finish`);
+    showTargetBanner(toolpath.name); // BURN-DOWN-4: persistent on-canvas banner (toast fades; this stays while editing)
     render();
     import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
 }
@@ -654,7 +655,17 @@ export function exitTargetEditing() {
     if (!state.targetEditingToolpathId) return;
     state.targetEditingToolpathId = null;
     document.body.classList.remove("target-editing");
+    showTargetBanner(null); // BURN-DOWN-4: hide the banner
     render();
+}
+
+// BURN-DOWN-4: show/hide the persistent target-editing banner over the canvas. name=null hides it.
+function showTargetBanner(name) {
+    const el = $("#targetEditBanner");
+    if (!el) return;
+    if (name == null) { el.hidden = true; return; }
+    el.textContent = `Editing target for "${name}" — click shapes, Esc to finish`;
+    el.hidden = false;
 }
 
 /** Push the current canvas shape selection into the toolpath being

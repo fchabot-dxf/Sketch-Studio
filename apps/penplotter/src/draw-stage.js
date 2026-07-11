@@ -27,6 +27,7 @@ const SCAFFOLD = `
       <div id="coords"></div>
       <div id="docInfo"></div>
       <div id="toast"></div>
+      <div id="targetEditBanner" hidden></div>
       <div id="dropOverlay">Drop an SVG to import</div>
     </div>
     <aside id="drawPanel">

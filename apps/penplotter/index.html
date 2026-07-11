@@ -61,6 +61,11 @@
     #toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: #2f8f7f; color: #fff;
       padding: 6px 12px; border-radius: 8px; font: 13px system-ui, sans-serif; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
     #toast.show { opacity: 1; }
+    /* BURN-DOWN-4: persistent banner while target-editing a toolpath (top-center over the canvas). */
+    #targetEditBanner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 8;
+      background: #ff2e88; color: #fff; padding: 6px 14px; border-radius: 8px; pointer-events: none;
+      font: 13px system-ui, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap; }
+    #targetEditBanner[hidden] { display: none; }
     /* PP-3b — the floating tool stack + transform HUD + coord readout over the Draw canvas. */
     #canvas.tool-line, #canvas.tool-rect, #canvas.tool-ellipse, #canvas.tool-polyline, #canvas.tool-freehand { cursor: crosshair; }
     #allTools { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }

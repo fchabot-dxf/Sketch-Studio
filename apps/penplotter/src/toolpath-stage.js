@@ -21,6 +21,8 @@ import { installSettingsPanel, loadDefaults } from "./settings.js";             
 // Active Toolpath / Plotter Settings. (Part B relocates doc-size + auto-recalc into modals.)
 const SCAFFOLD = `
   <div id="toolpathRoot">
+    <div class="tp-strip">Toolpath</div>
+    <div class="tp-body">
     <aside id="toolpathPanel">
       <section>
         <h2>Pens</h2>
@@ -55,6 +57,7 @@ const SCAFFOLD = `
       <!-- TOOLPATH-POLISH Part B: doc size (W/H/unit) -> #docModal (opened by clicking the #docInfo readout on the
            canvas); auto-recalc -> #settingsModal (opened by the gear above). settings.js already wireModals both. -->
     </aside>
+    </div>
   </div>`;
 
 export function mountToolpathStage(view) {
@@ -71,9 +74,10 @@ export function mountToolpathStage(view) {
 function onEnter() {
   const wrap = canvasWrap;
   if (!wrap) return;
-  const root = document.getElementById("toolpathRoot");
-  const panel = document.getElementById("toolpathPanel");
-  if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel); // adopt (canvas left, panel right)
+  // LAYOUT-UNIFY: adopt the shared canvas into the body ROW AFTER the panel -> panel LEFT, canvas RIGHT (matches the
+  // Design template; the reserved .tp-strip above keeps the canvas top aligned, so it never jumps between tabs).
+  const body = document.querySelector("#toolpathRoot .tp-body");
+  if (body && wrap.parentNode !== body) body.appendChild(wrap);
   state.preview.showToolpath = true;
   state.preview.simulatePens = false; // PP-6: diagnostic overlay here (the pen-width sim is Export only)
   const r = wrap.getBoundingClientRect();

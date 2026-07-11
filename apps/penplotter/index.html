@@ -90,10 +90,17 @@
       background: rgba(47,143,127,0.12); border: 2px dashed var(--sk-selection); color: #2f8f7f; font: 600 15px system-ui, sans-serif;
       pointer-events: none; z-index: 8; }
     #dropOverlay.show { display: flex; }
-    /* PP-4a — the Toolpath stage: the SHARED canvas (re-parented in) + its own side panel. */
-    #stage-toolpath { padding: 0; }
-    #toolpathRoot { position: absolute; inset: 0; display: flex; }
-    #toolpathPanel { flex: 0 0 250px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
+    /* PP-4a — the Toolpath stage: the SHARED canvas (re-parented in) + its own side panel.
+       LAYOUT-UNIFY: mirror the Design template so the canvas never jumps between tabs — a COLUMN of
+       [reserved top strip = the #design-ribbon's 80px height | body ROW: panel LEFT 244px | #canvasWrap RIGHT].
+       The strip is a minimal labelled bar (the ribbon's reserved space; tools stay on Design per the user decision). */
+    #stage-toolpath, #stage-export { padding: 0; }
+    #toolpathRoot, #exportRoot { position: absolute; inset: 0; display: flex; flex-direction: column; }
+    .tp-strip { flex: 0 0 80px; box-sizing: border-box; display: flex; align-items: center; padding: 0 14px;
+      border-bottom: 1px solid #d8cbb2; background: #f0e7d4; color: #8a8067;
+      font: 700 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
+    .tp-body { flex: 1 1 auto; display: flex; min-height: 0; }
+    #toolpathPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-right: 1px solid #d8cbb2;
       color: #3a352b; padding: 0; font: 13px system-ui, sans-serif; }
     .tp-note { color: #8a8067; font-size: 12px; line-height: 1.5; margin: 6px 0; padding: 0 12px; }
     /* TOOLPATH-POLISH: legacy .panel LAYOUT ported to the paper-light theme (copy layout, not dark colors) — <section>
@@ -143,10 +150,9 @@
     #activeLayerPanel .field label { font-size: 12px; color: #3a352b; }
     #activeLayerPanel .field label small { color: #8a8067; }
     #activeLayerPanel select, #activeLayerPanel input { font: inherit; border: 1px solid #d8cbb2; border-radius: 5px; padding: 3px 5px; }
-    /* PP-6 — the Export stage: shared canvas (re-parented, pen-width sim) + the document/plotter settings + Export. */
-    #stage-export { padding: 0; }
-    #exportRoot { position: absolute; inset: 0; display: flex; }
-    #exportPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
+    /* PP-6 — the Export stage: shared canvas (re-parented, pen-width sim) + Export action. LAYOUT-UNIFY: uses the
+       shared #exportRoot column (strip + body) rule above; panel LEFT (border-right), canvas RIGHT. */
+    #exportPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-right: 1px solid #d8cbb2;
       color: #3a352b; padding: 10px; font: 13px system-ui, sans-serif; }
     #exportPanel .dp-head { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px;
       color: #6b6353; margin: 12px 0 6px; }

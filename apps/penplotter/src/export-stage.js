@@ -13,13 +13,17 @@ import { installExportButton, buildGcodeEntries } from "./export.js";
 // S3-2: the machine SETTINGS block (doc size / unit / feeds / pen-heights / tolerance / auto-recalc) moved to the
 // Toolpath tab ("doesn't belong in Export", user-decided). Export now shows ONLY the export action; the pen-width
 // simulation is the canvas view set in onEnter.
+// LAYOUT-UNIFY: same column template as Design/Toolpath — reserved top strip + body ROW (panel LEFT, canvas RIGHT).
 const SCAFFOLD = `
   <div id="exportRoot">
-    <aside id="exportPanel">
-      <div class="dp-head">Export</div>
-      <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Toolpath</b> tab.</div>
-      <button id="exportBtn" class="dp-btn dp-primary">Export G-code (.zip)</button>
-    </aside>
+    <div class="tp-strip">Export</div>
+    <div class="tp-body">
+      <aside id="exportPanel">
+        <div class="dp-head">Export</div>
+        <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Toolpath</b> tab.</div>
+        <button id="exportBtn" class="dp-btn dp-primary">Export G-code (.zip)</button>
+      </aside>
+    </div>
   </div>`;
 
 export function mountExportStage(view) {
@@ -32,9 +36,9 @@ export function mountExportStage(view) {
 function onEnter() {
   const wrap = canvasWrap;
   if (!wrap) return;
-  const root = document.getElementById("exportRoot");
-  const panel = document.getElementById("exportPanel");
-  if (root && panel && wrap.parentNode !== root) root.insertBefore(wrap, panel); // adopt the shared canvas
+  // LAYOUT-UNIFY: adopt the shared canvas into the body ROW AFTER the panel -> panel LEFT, canvas RIGHT.
+  const body = document.querySelector("#exportRoot .tp-body");
+  if (body && wrap.parentNode !== body) body.appendChild(wrap);
   state.preview.showToolpath = true;
   state.preview.simulatePens = true;    // the pen-width simulation view
   const r = wrap.getBoundingClientRect();

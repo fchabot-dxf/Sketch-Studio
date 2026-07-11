@@ -8777,3 +8777,42 @@ inside the editor body. Quick fix in active-layer-panel.js:
   -> Studio/Shaper unregressed. STOP — hold.
 
 === EDITOR-TIDY DONE — HOLD ===
+
+## turn 358 — LAYOUT-UNIFY: one stable workspace — the canvas occupies the IDENTICAL rectangle on Design/Toolpath/Export.
+
+User: "workspace shouldnt change that much, swap the sidebars, keep the canvas positioned." USER DECISION (per the
+advisor's AskUserQuestion): KEEP the Design ribbon, reserve its space on the other tabs, do NOT move tools to the
+sidebar. The mismatch: #design-view is a COLUMN[ribbon | body ROW[panel LEFT 244 | canvas RIGHT]], but #toolpathRoot/
+#exportRoot were a bare flex ROW whose onEnter re-parented #canvasWrap to the LEFT (insertBefore(wrap,panel)) with no
+top strip -> the canvas jumped sideways (left<->right) AND up (no ribbon strip) between tabs. Plotter-SHELL only; the
+#ui Design tab/ribbon was NOT touched.
+
+- **DID (index.html CSS + toolpath-stage.js + export-stage.js):**
+  1. #toolpathRoot/#exportRoot restructured to a COLUMN matching #design-view: a `.tp-strip` (reserved top bar) + a
+     `.tp-body` ROW. Scaffolds wrap the panel in `<div class="tp-strip">Toolpath|Export</div><div class="tp-body">…</div>`.
+  2. `.tp-strip { flex: 0 0 80px }` — EXACTLY the measured #design-ribbon height (80px) so the canvas TOP aligns; styled
+     as a minimal labelled bar (dim uppercase stage name + a bottom border, chrome bg) — the ribbon's reserved space
+     (tools stay on Design per the user decision), NOT a big empty block.
+  3. Panels set to `flex: 0 0 244px` (same as #design-panel) + `border-right` (they're LEFT now, not right).
+  4. Each stage's onEnter re-parents the shared #canvasWrap INTO `.tp-body` AFTER the panel (`body.appendChild(wrap)`,
+     was `insertBefore(wrap,panel)`) -> panel LEFT, canvas RIGHT.
+- **VERIFY (CDP, measured rects): the canvas rectangle is IDENTICAL on all three tabs** — Design/Toolpath/Export
+  #canvas(-wrap) each = {x:244, y:124, w:1056, h:705}; panels each = {x:0, y:124, w:244}; `designEqToolpath` +
+  `toolpathEqExport` + `panelsLeftAligned` all TRUE; the strip is present on Toolpath/Export; canvas is right of the
+  panel. So switching tabs = NO horizontal or vertical jump; only the left-panel CONTENT swaps; pan/zoom continuity
+  holds (shared state.view). Screenshot (layout-toolpath.png) confirms: mode-nav -> "TOOLPATH" strip -> panel LEFT +
+  canvas RIGHT, matching the Design template. 0 console errors.
+- **UNREGRESSED:** ALL core oracles **23/23** STANDALONE; `npm run test:shell` **12/12**; `node --check` clean. Pure
+  plotter SHELL (index.html + toolpath-stage.js + export-stage.js) — NO #core/#ui edits -> Studio/Shaper unregressed.
+  Did NOT stage advisor docs or the user's stray svg.
+- **note / trade-off:** the strip is 80px (= the ribbon height) so the canvas is PIXEL-identical to Design (the
+  explicit "IDENTICAL rectangle / no h/v jump" requirement). It's labelled minimally so it reads as reserved chrome, not
+  a void; if a shorter strip is preferred the canvas would sit slightly higher than Design (a small vertical jump) — the
+  advisor can trade that off later.
+- **process:** measured the ribbon height + verified rects + screenshot via CDP (measure-ribbon / verify-layout) from
+  scratchpad; `proc_health mark --turn 358`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. One stable workspace: the canvas stays put across Design/Toolpath/Export; the left
+  panel swaps; Design keeps its ribbon, the others get a minimal reserved strip. HOLD for S4+ (Delete->#core + undo/redo
+  buttons, marquee/banner, import fidelity, rotate/scale/scissors). STOP — hold.
+
+=== LAYOUT-UNIFY DONE — HOLD ===

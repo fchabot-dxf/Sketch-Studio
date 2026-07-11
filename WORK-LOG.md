@@ -8326,3 +8326,53 @@ denser for higher weight, at distinct angles so the pens interleave. Pipeline/UI
   path-parser dedup), + the two small bezier follow-ups (curve-body hit-test, first-anchor snap). STOP - hold.
 
 === COLOR-MIX-2 (MIX FILL-LAYERING) DONE — HOLD ===
+
+## turn 338 - COLOR-MIX-3 (#11 COMPLETE): WIRE color-mixing end-to-end - an opt-in "Pen-mix" that plots an out-of-palette color as interleaved per-pen cross-hatch.
+
+The payoff for #11: a shape whose digital color the pen palette can't hit is REPRODUCED as N pens' interleaved
+hatching, reusing the EXISTING fill/toolpath/export pipeline (no new pipeline). OPT-IN; nearest-single-pen (UNIFY-4c)
+stays the default.
+
+- **DECLARE over hand-roll:** the mix is expressed as DATA the existing pipeline already consumes - per pen, one FILL
+  toolpath (`makeToolpath('fill')`) with `plotColorId=penId` + `fill={pattern:'hatch', angle, spacing}`. I did NOT add a
+  plot path: `buildGcodeEntries` already emits one gcode file per toolpath, and `expandLayerWithFill` already hatches a
+  fill toolpath's target - so N fill toolpaths => N per-pen gcode files for free. The spacing/angle formula lives in ONE
+  place: a small additive refactor extracted `mixFillParams(mix, penWidth) -> [{penId,weight,spacing,angle}]` from
+  COLOR-MIX-2's `mixFillStrokes` (which now calls it), and `penWidth` accepts a `(penId)=>width` fn so per-pen physical
+  widths flow through. mixFillStrokes output is byte-identical (oracle unchanged + a new mixFillParams assertion).
+- **new `apps/penplotter/src/mix-toolpaths.js`:** `mixForShape` (shapeColor + plotColors -> mixForColor; state.plotColors
+  is accepted directly - lenient {id,color} pens), `applyMix(shapeId)` (idempotent - clears any prior mix, then one
+  fill toolpath per pen tagged `mixOf:shapeId`+`mixWeight`; a SINGLE pen within tol -> {mixed:false}, no toolpaths =
+  default), `clearMix`, `isMixed`, `mixToolpathsFor`, `mixSummary` ("Mix: Red 50% + Yellow 50%").
+- **UI (Design tab, `sketch-stage.js`):** a "Pen-mix" CHECKBOX next to the per-shape color control, enabled only for a
+  single selected COLORED shape with a non-empty palette. Check -> applyMix + surface pens/weights; a single-pen color
+  -> auto-unchecks with "Nearest single pen - no mix needed." Uncheck -> clearMix. Editing a mixed shape's color
+  RE-mixes (pens follow the edit). `panelTick` reflects the checkbox + summary (change-gated). Exposed a
+  `window.__sketch.mix` dev/test seam.
+- **VERIFY LIVE (headless CDP, plotter): console errors 0.** An orange (`#ff8000`) #core circle on a
+  {red,yellow,blue,black,white} palette: **Mix ON** -> `applyMix` = {mixed:true}, TWO fill toolpaths ("Mix Red" hatch
+  @0deg spacing 1.004, "Mix Yellow" hatch @60deg spacing 0.996; spacing ~ penWidth/weight = 0.5/0.5), summary "Mix: Red
+  50% + Yellow 50%"; **Export = TWO per-pen gcode files** (`1_Mix_Red.gcode`, `2_Mix_Yellow.gcode`), EACH **30 G1 moves**
+  + M30, labeled `(--- Mix Red ---)` / `(--- Mix Yellow ---)`, and the two CONTENTS DIFFER (red hatch horizontal, yellow
+  slanted 60deg - interleaved). **Mix OFF** (clearMix) -> 0 mix toolpaths, 0 mix export entries; the orange's nearest
+  SINGLE pen is well-defined (pen_yellow) = the default. Snippets:
+  ```
+  (--- Mix Red ---)     G0 X46.220 Y154.498   G1 X53.780 Y154.498 F2000   (horizontal)
+  (--- Mix Yellow ---)  G0 X60.623 Y150.589   G1 X64.455 Y143.951 F2000   (60deg)
+  ```
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** green STANDALONE (color-mix refactor kept mixFillStrokes identical +
+  a mixFillParams check; byte-exact PP-2a golden held). `npm run test:shell` **12/12**. `node --check` clean on every
+  changed file. Studio/Shaper UNAFFECTED by file scope - the only shared-package touch is the additive #core/color-mix
+  refactor (imported ONLY by its oracle + the plotter's mix-toolpaths.js; Studio/Shaper import neither). `git status` =
+  sketch-stage.js + color-mix.js + its oracle + new mix-toolpaths.js (did NOT stage advisor-owned NEXT-SESSION.md/
+  ROADMAP.md or the user's stray svg). 0 net-new.
+- **note (inherent, not a regression):** the pen-mix fills a CLOSED region (hatch needs a fillable area) - a circle/
+  closed shape mixes; an open line/bezier can't be hatch-filled (same as any fill). Expected for a fill-based mix.
+- **process hygiene:** CDP verify from scratchpad (verify-mix3); `proc_health mark --turn 338`; headless browser killed
+  by the harness; `watch` before pass.
+- **state:** branch `carve-out`. **#11 (color-mixing) is COMPLETE** - pure math (COLOR-MIX-1) -> fill geometry
+  (COLOR-MIX-2) -> wired opt-in + per-pen export (COLOR-MIX-3). NEXT (blessed backlog): UNIFY-7b (gut dormant art code),
+  remaining polish (bulk fill-edit, cloud palette save/load, PP-8 path-parser dedup), + the two small bezier follow-ups
+  (curve-body hit-test, first-anchor snap). STOP - hold.
+
+=== COLOR-MIX-3 (WIRE PEN-MIX) DONE — #11 COMPLETE — HOLD ===

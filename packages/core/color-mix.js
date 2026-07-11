@@ -97,17 +97,33 @@ export function mixForColor(target, palette, opts = {}) {
  *   Zero/negative-weight pens contribute nothing; empty mix / missing region -> [].
  */
 export function mixFillStrokes(region, mix, penWidth) {
-  if (!region || !Array.isArray(mix) || !mix.length) return [];
-  const w = (typeof penWidth === 'number' && penWidth > 0) ? penWidth : 1;
+  if (!region) return [];
+  return mixFillParams(mix, penWidth).map((p) => ({
+    penId: p.penId,
+    spacing: p.spacing,
+    angle: p.angle,
+    strokes: hatchGenerate(region, { angle: p.angle, spacing: p.spacing }),
+  }));
+}
+
+/**
+ * mixFillParams(mix, penWidth) -> [{ penId, weight, spacing, angle }]
+ *   The per-pen FILL PARAMETERS for a mix — the SINGLE source of the coverage->spacing + distinct-angle rule, shared
+ *   by mixFillStrokes (which hatches geometry) AND the COLOR-MIX-3 wiring (which builds fill toolpaths). spacing =
+ *   penWidth / weight (coverage = weight); angle = (i * 60) deg per pen so pens interleave. `penWidth` may be a NUMBER
+ *   (same width for all) OR a function (penId) => width (per-pen physical widths). Zero/negative-weight pens dropped.
+ */
+export function mixFillParams(mix, penWidth) {
+  if (!Array.isArray(mix)) return [];
+  const widthOf = (typeof penWidth === 'function') ? penWidth : () => penWidth;
   const out = [];
   mix.forEach((m, i) => {
     if (!m || m.penId == null) return;
     const weight = (typeof m.weight === 'number') ? Math.min(1, m.weight) : 0;
     if (weight <= 0) return;
-    const spacing = w / weight;              // coverage = weight => density proportional to weight
-    const angle = (i * ANGLE_STEP_DEG) % 180; // distinct per pen (supports the 2-3 pen model)
-    const strokes = hatchGenerate(region, { angle, spacing });
-    out.push({ penId: m.penId, strokes, spacing, angle });
+    const raw = widthOf(m.penId);
+    const w = (typeof raw === 'number' && raw > 0) ? raw : 1;
+    out.push({ penId: m.penId, weight, spacing: w / weight, angle: (i * ANGLE_STEP_DEG) % 180 });
   });
   return out;
 }

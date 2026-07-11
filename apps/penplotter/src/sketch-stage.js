@@ -16,6 +16,7 @@ import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/
 import { state, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
+import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -36,6 +37,10 @@ const SCAFFOLD = `
             <label for="shapeColor">Pen color</label>
             <input id="shapeColor" type="color" value="#000000" disabled title="Select a shape, then pick its digital color">
           </div>
+          <div id="shape-mix-row" class="dp-field">
+            <label title="Reproduce an out-of-palette color as interleaved per-pen cross-hatch (COLOR-MIX-3)"><input id="shapeMix" type="checkbox" disabled> Pen-mix</label>
+            <div id="mixStatus" class="dp-note"></div>
+          </div>
         </div>
         <div id="design-panel-info"></div>
       </aside>
@@ -51,8 +56,10 @@ export function mountSketchStage(view, ctx = {}) {
   const underlay = view.querySelector('#pen-underlay');
   const designCanvas = view.querySelector('#design-canvas');
   const colorInput = view.querySelector('#shapeColor');
+  const mixToggle = view.querySelector('#shapeMix');
+  const mixStatus = view.querySelector('#mixStatus');
 
-  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', underlayDirty = true;
+  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', underlayDirty = true;
 
   // UNIFY-throttle: a shape is STATIC (drawn by the color underlay; SKIPPED by the per-frame sketcher — perf, and its
   // joint glyphs are suppressed) ONLY when the plotter has MARKED it static (state.staticShapeIds — imported/dense
@@ -105,6 +112,16 @@ export function mountSketchStage(view, ctx = {}) {
       if (selIds.length && state.shapeColors.has(selIds[0]) && document.activeElement !== colorInput) {
         colorInput.value = state.shapeColors.get(selIds[0]);
       }
+    }
+    // COLOR-MIX-3: reflect the Pen-mix opt-in for a single selected, colored shape (needs a palette to mix over).
+    if (mixToggle) {
+      const one = selIds.length === 1 ? selIds[0] : null;
+      const canMix = !!one && state.shapeColors.has(one) && state.plotColors.length > 0;
+      mixToggle.disabled = !canMix;
+      const mixed = canMix && isMixed(one);
+      if (document.activeElement !== mixToggle) mixToggle.checked = mixed;
+      const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length;
+      if (msig !== lastMixSig) { lastMixSig = msig; mixStatus.textContent = mixed ? mixSummary(one) : ''; }
     }
     let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
     const nShapes = (s.shapes && s.shapes.length) || 0;
@@ -160,7 +177,27 @@ export function mountSketchStage(view, ctx = {}) {
   if (colorInput) colorInput.addEventListener('input', () => {
     const ids = controller.state.selectedShapes ? [...controller.state.selectedShapes] : [];
     for (const id of ids) state.shapeColors.set(id, colorInput.value);
+    // COLOR-MIX-3: if a shape is already mixed, recompute its mix for the new color so the pens follow the edit.
+    for (const id of ids) if (isMixed(id)) applyMix(id);
+    lastMixSig = ''; // force the mix status to refresh next tick
     underlayDirty = true; renderUnderlay();
+  });
+
+  // COLOR-MIX-3: the Pen-mix opt-in — reproduce the selected shape's out-of-palette color as per-pen cross-hatch fill
+  // toolpaths (Export then emits one gcode file per pen). Unchecking removes them; a single-pen color needs no mix.
+  if (mixToggle) mixToggle.addEventListener('change', () => {
+    const ids = controller.state.selectedShapes ? [...controller.state.selectedShapes] : [];
+    if (ids.length !== 1) { mixToggle.checked = false; return; }
+    const id = ids[0];
+    if (mixToggle.checked) {
+      const res = applyMix(id);
+      if (!res.mixed) { mixToggle.checked = false; mixStatus.textContent = 'Nearest single pen — no mix needed.'; }
+      else mixStatus.textContent = mixSummary(id);
+    } else {
+      clearMix(id);
+      mixStatus.textContent = '';
+    }
+    lastMixSig = ''; // panelTick recomputes on next frame
   });
 
   // UNIFY-5: Import SVG -> #core sketch (constrainable). Colors -> shapeColors -> the underlay's mapped pen. Dense
@@ -186,7 +223,7 @@ export function mountSketchStage(view, ctx = {}) {
   // UNIFY-7: "Bake to Draw" REMOVED (punch #3) — one store now; toolpaths target #core geometry directly (UNIFY-2),
   // so the bake bridge is meaningless.
 
-  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, renderUnderlay, importSvg: doImport }; // dev/test seam
+  if (typeof window !== 'undefined') window.__sketch = { controller, panelTick, renderUnderlay, importSvg: doImport, mix: { applyMix, clearMix, isMixed, mixSummary } }; // dev/test seam
 
   // RAF lifecycle tied to the active stage. onEnter re-renders the underlay (catches palette edits made on other tabs).
   return {

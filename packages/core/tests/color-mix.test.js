@@ -2,7 +2,7 @@
 // a single pen within tolerance -> [{that, 1}]; else the best 2-pen weighted blend whose linear-RGB average
 // RECONSTRUCTS the target within tolerance (orange = red+yellow ~.5/.5; grey = black+white). Weights sum to 1;
 // empty palette guarded. Deterministic, pure.
-import { mixForColor, mixFillStrokes } from '#core/color-mix.js';
+import { mixForColor, mixFillStrokes, mixFillParams } from '#core/color-mix.js';
 import { parseHex } from '#core/color-match.js';
 
 (async () => {
@@ -94,6 +94,12 @@ import { parseHex } from '#core/color-match.js';
   // The full-weight single fill is DENSER (more strokes, tighter spacing) than each half-weight mix set.
   assert(single[0].strokes.length > fills[0].strokes.length, 'single (w=1) fill is denser than a .5-weight mix set');
   assert(single[0].spacing < fills[0].spacing, 'higher weight -> tighter spacing');
+
+  // mixFillParams: the shared per-pen params. Per-pen WIDTH function -> per-pen spacing (spacing = width/weight).
+  const params = mixFillParams([{ penId: 'red', weight: 0.5 }, { penId: 'yellow', weight: 0.25 }], (id) => id === 'red' ? 1 : 2);
+  assert(params.length === 2, 'mixFillParams -> 2 entries');
+  assert(near(params[0].spacing, 2, 1e-9) && params[0].angle === 0, 'red: spacing = 1/0.5 = 2 at angle 0');
+  assert(near(params[1].spacing, 8, 1e-9) && params[1].angle === 60, 'yellow: spacing = 2/0.25 = 8 at angle 60');
 
   // Guards: empty mix -> []; missing region -> []; zero-weight pen contributes nothing.
   assert(mixFillStrokes(square, [], W).length === 0, 'empty mix -> []');

@@ -20,7 +20,7 @@ export function renderActiveLayerPanel() {
   root.innerHTML = "";
   const head = $("#activeLayerHead");
   const tps = state.toolpaths || [];
-  if (!tps.length) { if (head) head.textContent = "Selected op"; root.appendChild(msg("No toolpaths — create one above.")); return; }
+  if (!tps.length) { if (head) head.textContent = "Active Toolpath"; root.appendChild(msg("No toolpaths — create one above.")); return; }
 
   root.appendChild(toolpathSelect(tps));      // pick which toolpath (shared state.activeToolpathId)
   const tp = activeToolpath() || tps[0];

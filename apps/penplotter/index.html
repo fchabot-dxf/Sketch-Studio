@@ -93,9 +93,29 @@
     /* PP-4a — the Toolpath stage: the SHARED canvas (re-parented in) + its own side panel. */
     #stage-toolpath { padding: 0; }
     #toolpathRoot { position: absolute; inset: 0; display: flex; }
-    #toolpathPanel { flex: 0 0 244px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
-      color: #3a352b; padding: 10px; font: 13px system-ui, sans-serif; }
-    .tp-note { color: #8a8067; font-size: 12px; line-height: 1.5; margin: 6px 0; }
+    #toolpathPanel { flex: 0 0 250px; overflow: auto; background: #f0e7d4; border-left: 1px solid #d8cbb2;
+      color: #3a352b; padding: 0; font: 13px system-ui, sans-serif; }
+    .tp-note { color: #8a8067; font-size: 12px; line-height: 1.5; margin: 6px 0; padding: 0 12px; }
+    /* TOOLPATH-POLISH: legacy .panel LAYOUT ported to the paper-light theme (copy layout, not dark colors) — <section>
+       blocks with an <h2> label + border-bottom, a 2-col .field grid, .btn/.layer-actions rows, scrollable lists. */
+    #toolpathPanel section { border-bottom: 1px solid #d8cbb2; padding-bottom: 8px; }
+    #toolpathPanel section:last-child { border-bottom: 0; }
+    #toolpathPanel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #8a8067;
+      margin: 0; padding: 10px 12px 6px; font-weight: 700; }
+    #toolpathPanel .field { padding: 4px 12px; display: grid; grid-template-columns: 1fr 100px; gap: 8px; align-items: center; margin: 0; }
+    #toolpathPanel .field label { font-size: 9px; color: #8a8067; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
+    #toolpathPanel .field label small { color: #8a8067; display: block; font-size: 9px; font-style: italic; margin-top: 3px; text-transform: none; font-weight: normal; letter-spacing: 0; }
+    #toolpathPanel .field input, #toolpathPanel .field select { background: #fbf6ec; border: 1px solid #d8cbb2; color: #3a352b;
+      padding: 4px 6px; border-radius: 3px; font-size: 12px; width: 100%; box-sizing: border-box; }
+    #toolpathPanel .field input:focus, #toolpathPanel .field select:focus { outline: 1px solid var(--sk-selection); }
+    #toolpathPanel .layer-actions { display: flex; gap: 4px; padding: 4px 8px 0; }
+    #toolpathPanel .btn { flex: 1; padding: 6px; font-size: 12px; cursor: pointer; background: #fbf6ec; border: 1px solid #d8cbb2;
+      border-radius: 4px; color: #3a352b; transition: all 0.15s ease; min-height: 24px; line-height: 1.2; }
+    #toolpathPanel .btn:hover { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
+    #toolpathPanel .btn.primary { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
+    #toolpathPanel #plotColors { max-height: 22vh; overflow-y: auto; padding: 4px 6px; }
+    #toolpathPanel #toolpathLayers { max-height: 30vh; overflow-y: auto; padding: 4px 6px; }
+    #recalcBtn.stale { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
     /* PP-4b — target-editing cue (double-click a toolpath row -> pick its target shapes; Esc exits). */
     body.target-editing #canvas { outline: 2px dashed var(--sk-selection); outline-offset: -2px; }
     #toolpathLayers select, #toolpathLayers input { font: inherit; border: 1px solid #d8cbb2; border-radius: 4px; padding: 1px 4px; }

@@ -16,35 +16,46 @@ import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-
 import { installPlotColorsPanel, renderPlotColorsPanel } from "./plot-colors-panel.js";     // S3-1: pens surfaced here
 import { installSettingsPanel, loadDefaults } from "./settings.js";                          // S3-2: machine settings relocated here
 
+// TOOLPATH-POLISH: the panel reads like the LEGACY (SketchStudio/legacy pen plotter) — <section>+<h2> blocks with
+// border-bottom separation, a 2-col .field grid, scrollable lists — in the legacy order: Pens / Toolpath Operations /
+// Active Toolpath / Plotter Settings. (Part B relocates doc-size + auto-recalc into modals.)
 const SCAFFOLD = `
   <div id="toolpathRoot">
     <aside id="toolpathPanel">
-      <div class="dp-head">Toolpath ops</div>
-      <div class="dp-row">
-        <button id="addOutlineTp" class="dp-btn">+ Outline</button>
-        <button id="addFillTp" class="dp-btn">+ Fill</button>
-      </div>
-      <div class="dp-row">
-        <button id="exportAll" class="dp-btn">Export all</button>
-        <button id="exportNone" class="dp-btn">Export none</button>
-      </div>
-      <button id="recalcBtn" class="dp-btn dp-primary">Recalculate</button>
-      <div id="toolpathLayers" class="dp-list"></div>
-      <div class="dp-head" id="activeLayerHead">Selected op</div>
-      <div id="activeLayerContent"></div>
-      <div class="dp-head">Pens</div>
-      <button id="addPlotColor" class="dp-btn">+ Pen</button>
-      <div id="plotColors" class="dp-list"></div>
-      <div class="dp-head">Machine</div>
-      <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input id="docW" type="number"></div>
-      <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input id="docH" type="number"></div>
-      <div class="field"><label>Unit</label><select id="docUnit"><option value="mm">mm</option><option value="in">in</option></select></div>
-      <div class="field"><label>Pen up Z</label><input id="penUpZ" type="number" step="any"></div>
-      <div class="field"><label>Pen down Z</label><input id="penDownZ" type="number" step="any"></div>
-      <div class="field"><label>Draw feed</label><input id="drawFeed" type="number"></div>
-      <div class="field"><label>Z feed</label><input id="zFeed" type="number"></div>
-      <div class="field"><label>Tolerance <small>mm</small></label><input id="tol" type="number" step="any"></div>
-      <div class="field"><label>Auto-recalc</label><input id="autoRecalcToggle" type="checkbox"></div>
+      <section>
+        <h2>Pens</h2>
+        <div id="plotColors" class="dp-list"></div>
+        <div class="layer-actions"><button class="btn" id="addPlotColor" title="Add a pen">+ Pen</button></div>
+      </section>
+      <section>
+        <h2>Toolpath Operations</h2>
+        <div id="toolpathLayers" class="dp-list"></div>
+        <div class="layer-actions"><button class="btn" id="recalcBtn" title="Recompute the toolpath from the artwork">Recalculate</button></div>
+        <div class="layer-actions">
+          <button class="btn" id="addOutlineTp">+ Outline</button>
+          <button class="btn" id="addFillTp">+ Fill</button>
+        </div>
+        <div class="layer-actions">
+          <button class="btn" id="exportAll" title="Select every toolpath for export">Select all</button>
+          <button class="btn" id="exportNone" title="Deselect every toolpath">Deselect all</button>
+        </div>
+      </section>
+      <section id="activeLayerPanel">
+        <h2 id="activeLayerHead">Active Toolpath</h2>
+        <div id="activeLayerContent"></div>
+      </section>
+      <section>
+        <h2>Plotter Settings</h2>
+        <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input id="docW" type="number"></div>
+        <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input id="docH" type="number"></div>
+        <div class="field"><label>Unit</label><select id="docUnit"><option value="mm">mm</option><option value="in">in</option></select></div>
+        <div class="field"><label>Pen up Z <small>mm clear</small></label><input id="penUpZ" type="number" step="0.1"></div>
+        <div class="field"><label>Pen down Z <small>mm</small></label><input id="penDownZ" type="number" step="0.1"></div>
+        <div class="field"><label>Draw feed <small>mm/min</small></label><input id="drawFeed" type="number" step="100"></div>
+        <div class="field"><label>Z feed <small>mm/min</small></label><input id="zFeed" type="number" step="100"></div>
+        <div class="field"><label>Simplify tol <small>mm</small></label><input id="tol" type="number" step="0.01"></div>
+        <div class="field"><label>Auto-recalc</label><input id="autoRecalcToggle" type="checkbox"></div>
+      </section>
     </aside>
   </div>`;
 

@@ -13,9 +13,11 @@
 // and is a clean, defensible MVP. Both extensions are noted in WORK-LOG for review.
 
 import { parseHex, colorDistanceSq } from '#core/color-match.js';
+import { generate as hatchGenerate } from '#core/plot/fills/hatch.js';
 
 const DEFAULT_TOLERANCE = 16; // Euclidean RGB distance; within this of a single pen -> no mix needed.
 const ZERO_WEIGHT = 1e-3;     // a blend weight at/below this collapses to the other pen (a single pen).
+const ANGLE_STEP_DEG = 60;    // COLOR-MIX-2: distinct hatch angle per pen (0/60/120) so strokes INTERLEAVE, not overlap.
 
 // Normalize a color input (hex string | [r,g,b] | {r,g,b}) -> { r, g, b } (0..255), or null.
 function toRgb(c) {
@@ -82,4 +84,30 @@ export function mixForColor(target, palette, opts = {}) {
   if (wi <= ZERO_WEIGHT) return [{ penId: pens[best.j].id, weight: 1 }]; // projection at an endpoint -> single pen
   if (wj <= ZERO_WEIGHT) return [{ penId: pens[best.i].id, weight: 1 }];
   return [{ penId: pens[best.i].id, weight: wi }, { penId: pens[best.j].id, weight: wj }];
+}
+
+/**
+ * mixFillStrokes(region, mix, penWidth) -> [{ penId, strokes, spacing, angle }]
+ *   COLOR-MIX-2: render a color MIX (from mixForColor) as per-pen cross-hatch that INTERLEAVES optically. For each pen
+ *   in `mix` ([{penId, weight}]): a HATCH fill of `region` whose DENSITY is proportional to the pen's weight — coverage
+ *   = weight, so spacing = penWidth / weight (weight 1 -> spacing = penWidth = full coverage; weight 0.5 -> 2*penWidth =
+ *   half coverage) — at a DISTINCT ANGLE per pen (0/60/120 deg) so the pens' strokes lie beside each other (the eye
+ *   averages them) instead of painting over. REUSES #core/plot/fills hatch (no fork). Pure, no DOM.
+ *   `penId` + `strokes` are the contract; `spacing`/`angle` are the params used (recorded for COLOR-MIX-3 + the oracle).
+ *   Zero/negative-weight pens contribute nothing; empty mix / missing region -> [].
+ */
+export function mixFillStrokes(region, mix, penWidth) {
+  if (!region || !Array.isArray(mix) || !mix.length) return [];
+  const w = (typeof penWidth === 'number' && penWidth > 0) ? penWidth : 1;
+  const out = [];
+  mix.forEach((m, i) => {
+    if (!m || m.penId == null) return;
+    const weight = (typeof m.weight === 'number') ? Math.min(1, m.weight) : 0;
+    if (weight <= 0) return;
+    const spacing = w / weight;              // coverage = weight => density proportional to weight
+    const angle = (i * ANGLE_STEP_DEG) % 180; // distinct per pen (supports the 2-3 pen model)
+    const strokes = hatchGenerate(region, { angle, spacing });
+    out.push({ penId: m.penId, strokes, spacing, angle });
+  });
+  return out;
 }

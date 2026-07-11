@@ -8289,3 +8289,40 @@ no DOM.
   snap). ADVISOR: please review the additive/subtractive + 2-vs-3-pen model choice above. STOP - hold.
 
 === COLOR-MIX-1 (PURE MIX FUNCTION) DONE — HOLD ===
+
+## turn 336 - COLOR-MIX-2 (#11): the fill-layering - render a MIX color as per-pen cross-hatch, density proportional to weight. Pure #core, reuses fills.
+
+Model BLESSED (turn 335): optical/partitive mixing - interleaved pen strokes, the eye averages -> weighted average;
+weight = AREA COVERAGE. This slice renders a mix ([{penId,weight}] from COLOR-MIX-1) as geometry: one hatch set per pen,
+denser for higher weight, at distinct angles so the pens interleave. Pipeline/UI wiring stays OUT (COLOR-MIX-3).
+
+- **DECLARE over hand-roll:** `mixFillStrokes` lives in the SAME `#core/color-mix.js` as `mixForColor` (one cohesive #11
+  module) and REUSES `#core/plot/fills` `hatch.generate` (NO fork - the same scanline hatch the Fill tab already uses).
+  The coverage->spacing rule + the per-pen angle spread are DECLARED constants (`ANGLE_STEP_DEG=60`), not inlined magic.
+- **`mixFillStrokes(region, mix, penWidth) -> [{ penId, strokes, spacing, angle }]`:** per pen in the mix, a HATCH fill of
+  `region` at **spacing = penWidth / weight** (coverage = weight: weight 1 -> spacing = penWidth = full coverage;
+  weight 0.5 -> 2*penWidth = half) and a **DISTINCT ANGLE** `(i*60)%180` (0/60/120 for a 3-pen mix) so the strokes lie
+  BESIDE each other (optical blend) instead of painting over. `strokes` = the reused `#core/plot/fills` hatch line
+  shapes. `penId`+`strokes` are the contract; `spacing`+`angle` are the params used - recorded so COLOR-MIX-3 (the plot
+  wiring) and the oracle can read them without re-deriving. Zero/negative-weight pens contribute nothing; empty mix /
+  missing region -> `[]`.
+- **ORACLE (extended `color-mix.test.js`):** a 100x100 square + orange {red:.5,yellow:.5}, penWidth 2 -> **2 hatch sets**
+  (red+yellow), each with >5 strokes, recorded spacing ~2w=4, DISTINCT angles (0 vs 60), AND the GEOMETRIC spacing
+  MEASURED off the returned strokes (project each stroke start onto the hatch normal, median adjacent gap) ~4 - so the
+  strokes REALLY are 2w apart, not just a recorded number. Single-pen {p:1} -> ONE set, spacing ~w=2, geometric ~2, and
+  DENSER (more strokes, tighter spacing) than a .5 mix set (higher weight -> tighter spacing, asserted). Guards: empty
+  mix -> [], missing region -> [], zero-weight pen -> no set. (Note: #ff8000 g=128 makes the weights .498/.502 not exact
+  .5, so spacing is 4.016/3.984 - the recorded-spacing tol is 0.1; the model is exact, the hex is the rounding.)
+- **VERIFY:** the extended oracle + ALL core oracles **23/23** green STANDALONE (incl. the byte-exact PP-2a golden).
+  `npm run test:shell` **12/12**. `node --check` clean. Studio/Shaper UNAFFECTED - `color-mix.js` still has NO importers
+  (COLOR-MIX-3 wires it); its new dep (`#core/plot/fills/hatch.js`) is a pure Node-safe module already in the tree.
+  `git status` = only `color-mix.js` + its oracle (did NOT stage advisor-owned NEXT-SESSION.md/ROADMAP.md or the user's
+  stray `logo-of-letter-shape-svgrepo-com.svg`). 0 net-new.
+- **process hygiene:** `proc_health mark --turn 336`; pure node oracle (no browser/servers); `watch` before pass.
+- **state:** branch `carve-out`. The mix -> geometry step is in + oracle-pinned (measured, not just asserted). NOT wired.
+  NEXT: **COLOR-MIX-3** = wire it into the toolpath pipeline + UI (a shape whose digital color is a MIX expands to the
+  per-pen hatch sets, each set plotted with its physical pen; the Design/Toolpath UI to pick/preview a mix). Blessed
+  backlog also: UNIFY-7b (gut dormant art code), remaining polish (bulk fill-edit, cloud palette save/load, PP-8
+  path-parser dedup), + the two small bezier follow-ups (curve-body hit-test, first-anchor snap). STOP - hold.
+
+=== COLOR-MIX-2 (MIX FILL-LAYERING) DONE — HOLD ===

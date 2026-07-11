@@ -112,6 +112,11 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>`
     },
+    'icon-tool-bezier': {
+        // A cubic curve with its two endpoint anchors (currentColor) and two control-point handles (accent red).
+        viewBox: '0 0 24 24',
+        content: `<path d="M3 19 C 7 4, 17 4, 21 19" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="3" y1="19" x2="7" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><line x1="21" y1="19" x2="17" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><circle cx="3" cy="19" r="2" fill="currentColor"/><circle cx="21" cy="19" r="2" fill="currentColor"/><circle cx="7" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/><circle cx="17" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/>`
+    },
     'icon-tool-dim': {
         viewBox: '0 0 24 24',
         content: `<path d="M3 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M21 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 8l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
@@ -126,6 +131,7 @@ const TOOL_CURSOR_MAP = {
     [TOOL_MODES.RECT]: 'icon-tool-rect',
     [TOOL_MODES.CIRCLE]: 'icon-tool-circle',
     [TOOL_MODES.ARC]: 'icon-tool-arc-cse',
+    [TOOL_MODES.BEZIER]: 'icon-tool-bezier',
     [TOOL_MODES.DIMENSION]: 'icon-tool-dim',
     [TOOL_MODES.COINCIDENT]: 'icon-coincident',
     [TOOL_MODES.HORIZONTAL_VERTICAL]: 'icon-hv',

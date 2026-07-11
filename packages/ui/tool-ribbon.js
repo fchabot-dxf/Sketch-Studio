@@ -17,6 +17,7 @@ const CREATE = [
   { tool: TOOL_MODES.RECT,   icon: 'icon-tool-rect-2pt', label: 'Rect', rectDropdown: true },
   { tool: TOOL_MODES.CIRCLE, icon: 'icon-tool-circle',  label: 'Circle' },
   { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
+  { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
 ];
 const INSPECT = [
   { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim' },

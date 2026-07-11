@@ -28,6 +28,7 @@ import { handleLineKeyDown } from '#ui/input-handlers/line-tool.js';
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
+import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -264,6 +265,7 @@ export function setupInput(svg, state, opts = {}) {
     setupSelectionTools(svg, state);
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
+    setupBezierTool(svg, state);
     setupPanZoom(svg, state);
     setupDimensionTool(svg, state);
     setupNumericInput(svg, state);
@@ -687,6 +689,9 @@ function handlePointerDown(e, svg, state) {
             // Use fresh clickSnap (from findSnap) instead of possibly-stale state.snapTarget
             handled = handleDrawingPointerDown(e, svg, state, clickSnap || state.snapTarget, w);
             break;
+        case TOOL_MODES.BEZIER:
+            handled = handleBezierPointerDown(e, svg, state, w);
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -807,6 +812,7 @@ function handlePointerMove(e, svg, state) {
                 updateLiveRectPreview(svg, state);
             }
             break;
+        case TOOL_MODES.BEZIER: handled = handleBezierPointerMove(e, svg, state, w); break;
         default: handled = handlePanZoomPointerMove(e, svg, state);
     }
     return handled; 
@@ -879,6 +885,7 @@ function handlePointerUp(e, svg, state) {
             }
             if (state.currentTool === TOOL_MODES.RECT && !state.active) hideLiveInputs();
             break;
+        case TOOL_MODES.BEZIER: handled = handleBezierPointerUp(e, svg, state, w); break;
     }
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
     // Force-hide magnifier on pointer up to ensure it doesn't persist after drag ends
@@ -1093,6 +1100,9 @@ function setupKeyboardShortcuts(state) {
         if (state.currentTool === TOOL_MODES.ARC) {
             try{ if (handleArcKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
+        if (state.currentTool === TOOL_MODES.BEZIER) {
+            try{ if (handleBezierKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
+        }
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { state.undo(); e.preventDefault(); }
@@ -1305,6 +1315,7 @@ function handleEscape(state) {
 
     // 2. Ensure tool-specific cleanup runs (line tool and drawing state)
     try{ if(state.currentTool === TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
+    try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
 

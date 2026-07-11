@@ -8189,3 +8189,64 @@ culprit + oracle-pinned. Byte-exact open-path golden UNCHANGED.
   SCAFFOLD art DOM), then the remaining polish. STOP — hold.
 
 === CIRCLE-FIX (closed-polyline linemerge) DONE — HOLD ===
+
+## turn 332 - UNIFY-3-tool (punch #12): the SHARED #ui BEZIER PEN tool, for ALL 3 apps. Additive; output-unregressed.
+
+The explicit bezier pen the user asked for ("a bezier tool in all the sketch studio apps"). A NEW #ui tool mode +
+interaction; place/drag control points to draw precise cubic beziers into the ONE #core store. Studio + Shaper +
+plotter all GAIN the button. Delivered FULL (not the split MVP) - click-anchors AND handle-drag AND live preview AND
+corner/smooth AND Enter/dbl-click/Esc-end - because the makeBezier + joint plumbing already existed (freehand's proof)
+and the preview rides the existing per-tool preview pipeline, so the full pen was low-risk.
+
+- **DECLARE over hand-roll:** the tool is a DECLARED tool mode (`TOOL_MODES.BEZIER`) wired through the SAME shared
+  seams every create tool uses - the ribbon CREATE list (data), the cursor ICONS registry (data), and the
+  input-manager `switch(currentTool)` dispatch. No app-specific pen code: one `#ui` handler module, and all 3 hosts
+  inherit it because they already mount the shared ribbon + shared input-manager. The pen REUSES `makeBezier` (UNIFY-3)
+  and the #core bezier shape/renderer/flatten - it declares NO new geometry.
+- **new `#ui/input-handlers/bezier-tool.js`** (the pen interaction): a classic pen. CLICK = a CORNER anchor;
+  CLICK-DRAG = a SMOOTH anchor (symmetric tangent handles: outgoing follows the cursor, incoming is its mirror). Each
+  anchor after the first COMMITS a cubic via `makeBezier(prev.jointId, this.jointId, prev.hOut, this.hIn)` into
+  `state.shapes` - a CONNECTED chain: consecutive segments SHARE the endpoint joint (so the path stays joined) and
+  carry ONE `groupId` (so the whole stroke selects together). Corner anchors put the handle AT the anchor, so the cubic
+  degenerates to the straight segment - exactly right. Endpoints are JOINTS (solver/snap-ready later); the 2 control
+  points are shape DATA, not solver-constrained (matches the #core bezier MVP). Enter / double-click (2nd click near
+  the last anchor within the double-click window) / Escape end the path; a unique id (`s_bezier_<seq>_<now>`) avoids the
+  `Date.now()`-only collision that a fast multi-segment path would hit. SELF-HEALS if an external tool-switch clears
+  `state.active` mid-path (next click starts a fresh path, not a reconnect).
+- **wiring (all ADDITIVE):** `#core/constants.js` TOOL_MODES += `BEZIER:'bezier'`; `#ui/tool-ribbon.js` CREATE +=
+  a Bezier button; `#ui/cursor-manager.js` += an `icon-tool-bezier` symbol + a TOOL_CURSOR_MAP entry; `#ui/input-manager.js`
+  += the import, `setupBezierTool`, a `case TOOL_MODES.BEZIER` in each of pointerDown/Move/Up, an Enter keydown route,
+  and a `resetBezierState` call in `handleEscape`; `#ui/svg-renderer.js` += a preview branch that fires ONLY when
+  `active.preview.type==='bezier'` (pending dashed cubic + dragged-anchor handle bars + anchor dots). The pen suppresses
+  the stray snapTarget updateSnapTarget sets (it doesn't snap yet).
+- **VERIFY LIVE (headless CDP, ALL 3 APPS): console errors 0 in each.** Each app: the Bezier button APPEARS in the
+  ribbon Create group, CLICKING it activates the tool, and a 3-anchor pen path (corner / smooth-via-drag / corner)
+  commits **2 rendered #core bezier shapes** (`path.shape-elem[data-shape-id^="s_bezier"]` = 2 in Studio, Shaper AND the
+  plotter). PLOTTER deep-verify (via `window.__sketch` state): `currentTool='bezier'`; 2 `#core` beziers sharing ONE
+  groupId; both carry `c1`/`c2` control-point arrays; a MARQUEE box selects BOTH beziers (`selectedShapes.size=2`, all
+  `s_bezier*`); targeting a toolpath at them -> Export = a **CURVE: 18 `G1 X` moves**, valid DDCS gcode (Outline block,
+  `G0` rapid-to-start, `M30`). Snippet:
+  ```
+  (--- Outline ---)
+  G0 X63.470 Y93.912 (rapid to stroke start)
+  G1 X68.571 Y100.664 F2000   G1 X72.920 Y105.587 F2000   G1 X78.189 Y110.635 F2000 ...
+  ```
+- **VERIFY UNREGRESSED:** ALL core oracles **22/22** green STANDALONE (incl. the byte-exact PP-2a golden + the bezier
+  shape oracle). `npm run test:shell` **12/12**. `node --check` clean on every changed file. Studio/Shaper existing
+  render/export UNCHANGED: the ribbon/cursor/constants adds are inert until the tool is used; the renderer preview
+  branch is guarded by `active.preview.type==='bezier'` (never set by existing content); the new tool mode touches no
+  existing shape/constraint/tool path. `git diff --stat` = +1 constants, +6 cursor-manager, +11 input-manager, +18
+  svg-renderer, +1 tool-ribbon, + the new bezier-tool.js. 0 net-new failures.
+- **FLAG (pre-existing, NOT introduced here):** direct CLICK-on-the-curve-body selection of a bezier does not hit
+  (snap-detection.js / hover-manager.js have no `bezier` case) - so selection today is via MARQUEE (verified) or the
+  endpoint joints. This is the SAME gap UNIFY-4b flagged ("bezier click-select needs a later #ui pick slice"); a small
+  follow-up adds a bezier body hit-test to snap-detection. Also deferred (not asked this slice): routing the first
+  anchor through findSnap (snap the pen start to existing geometry) + a `b` keyboard shortcut.
+- **process hygiene:** CDP verify from scratchpad (verify-bezier2 / verify-bz-export); `proc_health mark --turn 332`;
+  headless browsers killed by the harness; `watch` before pass. Did NOT stage the advisor-owned NEXT-SESSION.md /
+  ROADMAP.md edits or the user's stray `logo-of-letter-shape-svgrepo-com.svg`.
+- **state:** branch `carve-out`. All 3 apps now have the shared bezier PEN tool (punch #12 complete). NEXT (blessed
+  backlog): UNIFY-7b (gut the dormant art code) + remaining polish (bulk fill-edit, cloud palette save/load, PP-8
+  path-parser dedup, #11 color-mixing), plus the two small bezier follow-ups flagged above. STOP - hold.
+
+=== UNIFY-3-tool (SHARED #ui BEZIER TOOL) DONE — HOLD ===

@@ -1249,6 +1249,24 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
 
+    // UNIFY-3-tool: shared bezier PEN preview — the pending cubic (dashed) + the dragged anchor's tangent handles +
+    // dots on every placed anchor. ADDITIVE: only fires while the bezier tool is mid-path (preview.type==='bezier');
+    // never for existing Studio/Shaper content, so all existing previews/output are byte-identical.
+    if (active.preview.type === 'bezier') {
+      const bp = active.preview;
+      if (bp.seg) {
+        const s = bp.seg;
+        out.push(`<path d="M ${s.p0.x},${s.p0.y} C ${s.c1.x},${s.c1.y} ${s.c2.x},${s.c2.y} ${s.p3.x},${s.p3.y}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+      }
+      (bp.handles || []).forEach(h => {
+        out.push(`<line x1="${h.ax}" y1="${h.ay}" x2="${h.hx}" y2="${h.hy}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(1)}" stroke-opacity="${previewOpacity * 0.8}"/>`);
+        out.push(`<circle cx="${h.hx}" cy="${h.hy}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+      });
+      (bp.anchorDots || []).forEach(d => {
+        out.push(`<rect x="${d.x - scale(3)}" y="${d.y - scale(3)}" width="${scale(6)}" height="${scale(6)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+      });
+    }
+
     // Resolve active.start safely (ensure joint exists) or fall back to transient startPt
     let a = null;
     if(active.start){ a = joints.has(active.start) ? joints.get(active.start) : null; }

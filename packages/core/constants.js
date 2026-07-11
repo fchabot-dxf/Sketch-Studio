@@ -76,6 +76,7 @@ export const TOOL_MODES = {
   RECT: 'rect',
   CIRCLE: 'circle',
   ARC: 'arc',
+  BEZIER: 'bezier',
   COINCIDENT: 'coincident',
   EQUAL: 'equal',
   HORIZONTAL_VERTICAL: 'hv',

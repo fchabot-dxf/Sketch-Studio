@@ -150,8 +150,9 @@ function onMove(e) {
     }
     if (it.kind === "marquee") {
         it.x = p.x; it.y = p.y;
-        updateMarquee(it);
-        render();
+        updateMarquee(it);      // sets it.mode = window | crossing
+        render();               // renderArt REBUILDS the canvas, so draw the box AFTER it (as a preview element)
+        showPreview(buildMarqueeEl(it)); // BURN-DOWN-3: visible selection box (was invisible; buildMarquee not ported)
         return;
     }
     if (it.kind === "rotate") {
@@ -216,6 +217,7 @@ function onUp() {
         // toolpath being target-edited, if any.
         if (it.scope !== "toolpath") syncTargetEditingSelection();
         state.interaction = null;
+        removePreview(); // BURN-DOWN-3: drop the selection box now the drag is done
         render();
         if (it.scope === "toolpath") {
             import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
@@ -498,6 +500,25 @@ function buildDrawPreviewEl(it) {
         el.setAttribute("rx", Math.abs(it.x - it.startX) / 2);
         el.setAttribute("ry", Math.abs(it.y - it.startY) / 2);
     }
+    return el;
+}
+
+// BURN-DOWN-3: the visible selection box. Legacy CAD tint — left->right = WINDOW (blue, solid: only fully-enclosed
+// shapes), right->left = CROSSING (green, dashed: anything touched). it.mode is set by updateMarquee each frame. Drawn
+// in world/mm coords (the canvas viewBox space) with a non-scaling stroke so it stays crisp at any zoom.
+function buildMarqueeEl(it) {
+    const minX = Math.min(it.startX, it.x), minY = Math.min(it.startY, it.y);
+    const win = it.mode !== "crossing"; // default = window until the drag goes right->left
+    const el = document.createElementNS(SVG_NS, "rect");
+    el.setAttribute("x", minX); el.setAttribute("y", minY);
+    el.setAttribute("width", Math.abs(it.x - it.startX));
+    el.setAttribute("height", Math.abs(it.y - it.startY));
+    el.setAttribute("fill", win ? "rgba(37,99,235,0.10)" : "rgba(22,163,74,0.10)");
+    el.setAttribute("stroke", win ? "#2563eb" : "#16a34a");
+    el.setAttribute("stroke-width", "1");
+    el.setAttribute("vector-effect", "non-scaling-stroke");
+    if (!win) el.setAttribute("stroke-dasharray", "5 3");
+    el.setAttribute("pointer-events", "none");
     return el;
 }
 

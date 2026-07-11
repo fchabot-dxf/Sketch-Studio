@@ -19,6 +19,12 @@ import { importSvgToCore } from './core-import.js';                     // UNIFY
 import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
+import SettingsManager from '#core/settings-manager.js';               // BURN-DOWN-6: plotter-side joint-size override (runtime only)
+
+// BURN-DOWN-6: the Design joint markers were too big for the plotter. JOINT_RADIUS is the existing #ui knob
+// (default 4 -> 16px base); shrink it plotter-side. persist:false = RUNTIME ONLY (not written to the shared
+// 'sketch-studio-settings' localStorage key), so Studio/Shaper -- separate page instances -- render the default 4.
+const PLOTTER_JOINT_RADIUS = 2;
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -61,6 +67,7 @@ const SCAFFOLD = `
 
 export function mountSketchStage(view, ctx = {}) {
   view.innerHTML = SCAFFOLD;
+  try { SettingsManager.set('JOINT_RADIUS', PLOTTER_JOINT_RADIUS, { persist: false }); } catch (_) {} // BURN-DOWN-6
   const underlay = view.querySelector('#pen-underlay');
   const paperSvg = view.querySelector('#design-paper'); // DESIGN-PAPER-BOUNDS: backmost paper+grid layer
   const designCanvas = view.querySelector('#design-canvas');

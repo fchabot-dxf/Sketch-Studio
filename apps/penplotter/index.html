@@ -218,6 +218,12 @@
     .setting-row > span { font-size: 13px; }
     .setting-row small { display: block; color: #8a8067; font-size: 11px; margin-top: 2px; }
     .setting-row input[type=checkbox] { width: 16px; height: 16px; flex: none; cursor: pointer; }
+    /* BURN-DOWN-5: Done/Cancel footer for the modals. Done keeps edits; Cancel/✕/backdrop/Esc revert. */
+    .wiz-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .wiz-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #d8cbb2; background: #fbf6ec; color: #3a352b;
+      cursor: pointer; font: 13px system-ui, sans-serif; }
+    .wiz-btn:hover { border-color: var(--sk-selection); }
+    .wiz-btn.primary { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
   </style>
 </head>
 <body>
@@ -242,6 +248,10 @@
       <div class="field"><label>Units</label><select id="docUnit"><option value="mm">mm</option><option value="in">inches</option></select></div>
       <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input type="number" id="docW" min="10" max="2000" step="1"></div>
       <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input type="number" id="docH" min="10" max="2000" step="1"></div>
+      <div class="wiz-actions">
+        <button class="wiz-btn" id="docCancel">Cancel</button>
+        <button class="wiz-btn primary" id="docDone">Done</button>
+      </div>
     </div>
   </div>
   <div id="settingsModal" class="overlay" style="display:none;">
@@ -253,6 +263,10 @@
         <span>Auto-recalculate toolpaths<small>Recompute whenever the artwork changes. Off: use the Recalculate button.</small></span>
         <input type="checkbox" id="autoRecalcToggle">
       </label>
+      <div class="wiz-actions">
+        <button class="wiz-btn" id="settingsCancel">Cancel</button>
+        <button class="wiz-btn primary" id="settingsDone">Done</button>
+      </div>
     </div>
   </div>
 

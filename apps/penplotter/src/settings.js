@@ -19,20 +19,31 @@ const MM_PER_IN = 25.4;
 const DOC_UNIT_LS = "penplotter.docUnit";
 const AUTO_RECALC_LS = "penplotter.autoRecalc";
 
-/** Open/close helper shared by the modals: ✕ button, backdrop click, Esc. */
-function wireModal(openerId, modalId, closeId, onOpen) {
-    const opener = $("#" + openerId), modal = $("#" + modalId), closeBtn = $("#" + closeId);
+/** Wire a trigger to OPEN a modal. onOpen runs first (it snapshots the modal's state + syncs the fields), then the
+ *  modal shows. Called once per opener — #docModal has two (#docInfo, #designDocBtn), so the on-open snapshot lives
+ *  per-MODAL (a module-level _docSnap/_settingsSnap set by onOpen), NOT in this closure. */
+function wireOpener(openerId, modalId, onOpen) {
+    const opener = $("#" + openerId), modal = $("#" + modalId);
+    if (!opener || !modal) return;
+    opener.style.cursor = "pointer";
+    opener.style.pointerEvents = "auto"; // status-bar parent is pointer-events:none
+    opener.addEventListener("click", () => { if (onOpen) onOpen(); modal.style.display = "flex"; });
+}
+
+/** BURN-DOWN-5: wire a modal's controls ONCE (not per opener): Done = close keeping the live edits; Cancel / the ✕ /
+ *  the backdrop / Esc = revert to the on-open snapshot, then close. `revert` restores that snapshot + refreshes. */
+function wireModalControls(modalId, { closeId, doneId, cancelId, revert } = {}) {
+    const modal = $("#" + modalId);
     if (!modal) return;
-    const close = () => { modal.style.display = "none"; };
-    if (opener) {
-        opener.style.cursor = "pointer";
-        opener.style.pointerEvents = "auto"; // status-bar parent is pointer-events:none
-        opener.addEventListener("click", () => { if (onOpen) onOpen(); modal.style.display = "flex"; });
-    }
-    if (closeBtn) closeBtn.addEventListener("click", close);
-    modal.addEventListener("mousedown", (e) => { if (e.target === modal) close(); });
+    const doClose = () => { modal.style.display = "none"; };
+    const cancel = () => { if (revert) revert(); doClose(); };
+    const bind = (id, fn) => { const b = id && $("#" + id); if (b) b.addEventListener("click", fn); };
+    bind(closeId, cancel);   // the ✕ reverts (x = Cancel)
+    bind(cancelId, cancel);
+    bind(doneId, doClose);
+    modal.addEventListener("mousedown", (e) => { if (e.target === modal) cancel(); }); // backdrop click = Cancel
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && modal.style.display !== "none") close();
+        if (e.key === "Escape" && modal.style.display !== "none") cancel();             // Esc = Cancel
     });
 }
 
@@ -60,6 +71,26 @@ export function syncDocFields() {
     if (sel) sel.value = state.docUnit;
 }
 
+// BURN-DOWN-5: on-open snapshots so Cancel/✕/backdrop/Esc revert the live edits (doc size + unit change apply
+// immediately as the user types; the Settings toggle applies on change). Set by each modal's onOpen.
+let _docSnap = null, _settingsSnap = null;
+function revertDoc() {
+    if (!_docSnap) return;
+    state.doc.w = _docSnap.w; state.doc.h = _docSnap.h;
+    if (state.docUnit !== _docSnap.unit) {
+        state.docUnit = _docSnap.unit;
+        try { localStorage.setItem(DOC_UNIT_LS, state.docUnit); } catch { /* ignore */ }
+    }
+    syncDocFields(); fitViewport(); render();
+}
+function revertSettings() {
+    if (!_settingsSnap) return;
+    state.autoRecalc = _settingsSnap.autoRecalc;
+    try { localStorage.setItem(AUTO_RECALC_LS, state.autoRecalc ? "1" : "0"); } catch { /* ignore */ }
+    const t = $("#autoRecalcToggle"); if (t) t.checked = state.autoRecalc;
+    render();
+}
+
 let _docModalWired = false;
 /** DOC-SIZE-IN-DESIGN: wire the Document-size modal (#docModal: #docW/#docH/#docUnit) + its openers (the #docInfo
  *  canvas readout AND #designDocBtn in the Design sidebar) + close. IDEMPOTENT — called from BOTH the Design mount (so
@@ -80,10 +111,13 @@ export function installDocModal() {
     });
 
     // Openers: the #docInfo dimension readout (Toolpath/Export canvas) + the #designDocBtn control (Design sidebar).
+    // Each opener snapshots the doc (size + unit) into _docSnap on open, so Cancel can revert the live edits.
     const docInfo = $("#docInfo");
     if (docInfo) docInfo.title = "Document settings";
-    wireModal("docInfo", "docModal", "docModalClose", syncDocFields);
-    wireModal("designDocBtn", "docModal", "docModalClose", syncDocFields);
+    const openDoc = () => { _docSnap = { w: state.doc.w, h: state.doc.h, unit: state.docUnit }; syncDocFields(); };
+    wireOpener("docInfo", "docModal", openDoc);
+    wireOpener("designDocBtn", "docModal", openDoc);
+    wireModalControls("docModal", { closeId: "docModalClose", doneId: "docDone", cancelId: "docCancel", revert: revertDoc });
 
     const dw = $("#docW"), dh = $("#docH");
     if (dw) dw.addEventListener("change", (e) => {
@@ -97,7 +131,9 @@ export function installDocModal() {
 
 export function installSettingsPanel() {
     installDocModal(); // doc-size modal (shared with the Design-tab trigger)
-    wireModal("settingsBtn", "settingsModal", "settingsModalClose");
+    // Snapshot auto-recalc on open so Cancel can revert it; Done keeps it.
+    wireOpener("settingsBtn", "settingsModal", () => { _settingsSnap = { autoRecalc: state.autoRecalc }; });
+    wireModalControls("settingsModal", { closeId: "settingsModalClose", doneId: "settingsDone", cancelId: "settingsCancel", revert: revertSettings });
 
     // Auto-recalculate toggle (Settings modal). Off by default: edits leave
     // the toolpath stale until Recalculate. Persisted across sessions.

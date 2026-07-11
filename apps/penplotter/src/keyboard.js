@@ -5,8 +5,8 @@ import { canvas } from "./dom.js";
 import { setTool, cancelInteraction } from "./tools.js";
 import { renderArt as render } from "./render-art.js"; // PP-3b: Draw's trimmed renderer, not render.js
 import { commitPolyline, deleteActiveNode } from "./interaction.js";
-import { snapshot } from "./history.js";
 import { exitTargetEditing } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing exit (un-stubbed)
+import { deleteSelection } from "#core/delete-manager.js"; // BURN-DOWN-1: Delete removes #core geometry (art store retired)
 
 const TOOL_KEYS = {
     v: "select", t: "rotate", s: "scale",
@@ -65,12 +65,15 @@ function onKeyUp(e) {
 
 function deleteSelected() {
     if (!state.selectedShapeIds.size) return;
-    snapshot();
-    for (const sid of state.selectedShapeIds) {
-        for (const l of state.layers) {
-            const i = l.shapes.findIndex(s => s.id === sid);
-            if (i >= 0) l.shapes.splice(i, 1);
-        }
+    // BURN-DOWN-1: geometry lives in the #core sketch (the art store is retired). Delete the selected #core shapes +
+    // their orphaned joints via the shared delete-manager. On the Design tab the #ui keydown also handles this
+    // (idempotent — it fires first and clears the selection); this branch also covers Toolpath/Export, where the #ui
+    // input layer is inactive so the plotter is the only handler.
+    const cs = state.coreSketch;
+    if (cs && cs.shapes) {
+        cs.selectedShapes = new Set(state.selectedShapeIds);
+        if (cs.selectedJoints && cs.selectedJoints.clear) cs.selectedJoints.clear();
+        try { deleteSelection(cs); } catch (_) {}
     }
     state.selectedShapeIds.clear();
     render();

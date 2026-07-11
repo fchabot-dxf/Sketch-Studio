@@ -9,7 +9,7 @@ import * as jagged from "./jagged.js";
 
 // UNIVERSAL param (like fills' offset): every style redraws its outline `passes` times. Only passes is clamped
 // (min/max) — matching the original expandLayerOutline, which clamped passes and left the style params unbounded.
-const PASSES = { key: "passes", label: "Passes", type: "number", default: 1, min: 1, max: 10 };
+const PASSES = { key: "passes", label: "Passes", type: "number", default: 1, min: 1, max: 10, step: 1 };
 
 export const OUTLINE_STYLES = [
   { id: "normal", label: "Normal", params: [PASSES], apply: normal.apply },
@@ -18,8 +18,8 @@ export const OUTLINE_STYLES = [
     label: "Dashed",
     params: [
       PASSES,
-      { key: "dash_length", label: "Dash length", type: "number", default: 2, unit: "mm" },
-      { key: "dash_gap",    label: "Dash gap",    type: "number", default: 1, unit: "mm" },
+      { key: "dash_length", label: "Dash length", type: "number", default: 2, unit: "mm", step: 0.1 },
+      { key: "dash_gap",    label: "Dash gap",    type: "number", default: 1, unit: "mm", step: 0.1 },
     ],
     apply: dashed.apply,
   },
@@ -28,8 +28,8 @@ export const OUTLINE_STYLES = [
     label: "Jagged",
     params: [
       PASSES,
-      { key: "amplitude", label: "Amplitude", type: "number", default: 0.8, unit: "mm" },
-      { key: "frequency", label: "Frequency", type: "number", default: 0.7, unit: "per mm" },
+      { key: "amplitude", label: "Amplitude", type: "number", default: 0.8, unit: "mm", step: 0.1 },
+      { key: "frequency", label: "Frequency", type: "number", default: 0.7, unit: "per mm", step: 0.1 },
     ],
     apply: jagged.apply,
   },

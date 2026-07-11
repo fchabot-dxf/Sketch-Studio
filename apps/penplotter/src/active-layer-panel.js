@@ -18,24 +18,32 @@ export function renderActiveLayerPanel() {
   const root = $("#activeLayerContent");
   if (!root) return;
   root.innerHTML = "";
+  const head = $("#activeLayerHead");
   const tps = state.toolpaths || [];
-  if (!tps.length) { root.appendChild(msg("No toolpaths — create one in the Toolpath tab.")); return; }
+  if (!tps.length) { if (head) head.textContent = "Selected op"; root.appendChild(msg("No toolpaths — create one above.")); return; }
 
   root.appendChild(toolpathSelect(tps));      // pick which toolpath (shared state.activeToolpathId)
   const tp = activeToolpath() || tps[0];
   if (!tp) return;
+  // S2 (3): dynamic header = the op's name (was a static "Selected op").
+  if (head) head.textContent = tp.name;
 
-  // OUTLINE — style dropdown + the selected style's declared params.
-  root.appendChild(subhead("Outline"));
-  root.appendChild(registrySelect("Style", tp.outline.style, OUTLINE_STYLES, false, (v) => { snapshot(); tp.outline.style = v; restructure(); }));
-  const os = outlineStyle(tp.outline.style);
-  if (os) for (const p of os.params) root.appendChild(paramField(p, tp.outline));
-
-  // FILL — pattern dropdown (+ "None") + the selected pattern's declared params.
-  root.appendChild(subhead("Fill"));
-  root.appendChild(registrySelect("Pattern", tp.fill.pattern, FILL_PATTERNS, true, (v) => { snapshot(); tp.fill.pattern = v; restructure(); }));
-  const fp = tp.fill.pattern && tp.fill.pattern !== "none" ? fillPattern(tp.fill.pattern) : null;
-  if (fp) for (const p of fp.params) root.appendChild(paramField(p, tp.fill));
+  // S2 (1): GATE the editor by op TYPE — an outline op shows the OUTLINE editor, a fill op the FILL editor. Showing
+  // both for every op (as before) meant a fill op had an inert outline editor whose edits never export (and vice
+  // versa). Matches the original's type gate.
+  if (tp.type === "outline") {
+    root.appendChild(subhead("Outline"));
+    // S2 (2): the 'Draw outline' toggle — tp.drawOutline is read downstream (preview/export) but had no control.
+    root.appendChild(checkboxField("Draw outline", tp.drawOutline !== false, (v) => { snapshot(); tp.drawOutline = v; triggerRerender(); }));
+    root.appendChild(registrySelect("Style", tp.outline.style, OUTLINE_STYLES, false, (v) => { snapshot(); tp.outline.style = v; restructure(); }));
+    const os = outlineStyle(tp.outline.style);
+    if (os) for (const p of os.params) root.appendChild(paramField(p, tp.outline)); // includes Passes (declared param)
+  } else if (tp.type === "fill") {
+    root.appendChild(subhead("Fill"));
+    root.appendChild(registrySelect("Pattern", tp.fill.pattern, FILL_PATTERNS, true, (v) => { snapshot(); tp.fill.pattern = v; restructure(); }));
+    const fp = tp.fill.pattern && tp.fill.pattern !== "none" ? fillPattern(tp.fill.pattern) : null;
+    if (fp) for (const p of fp.params) root.appendChild(paramField(p, tp.fill));
+  }
 }
 
 // Pattern/style change restructures which params show -> re-render the panel + recompute the overlay.
@@ -74,7 +82,8 @@ function paramField(p, obj) {
   const label = document.createElement("label");
   label.innerHTML = p.label + (p.unit ? " <small>" + p.unit + "</small>" : "");
   const input = document.createElement("input");
-  input.type = "number"; input.value = v; input.step = "any";
+  input.type = "number"; input.value = v;
+  input.step = (p.step !== undefined) ? p.step : "any"; // S2 (4): min/max/step from the registry schema
   if (p.min !== undefined) input.min = p.min;
   if (p.max !== undefined) input.max = p.max;
   const commit = () => {
@@ -86,6 +95,15 @@ function paramField(p, obj) {
     triggerRerender();      // recompute + redraw the overlay (fill strokes update live)
   };
   input.oninput = commit; input.onchange = commit;
+  wrap.append(label, input); return wrap;
+}
+
+// A labelled checkbox (S2: the 'Draw outline' toggle).
+function checkboxField(labelText, checked, onChange) {
+  const wrap = field(); const label = document.createElement("label"); label.textContent = labelText;
+  const input = document.createElement("input"); input.type = "checkbox"; input.checked = !!checked;
+  input.style.justifySelf = "end";
+  input.onchange = () => onChange(input.checked);
   wrap.append(label, input); return wrap;
 }
 

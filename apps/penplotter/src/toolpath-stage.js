@@ -30,7 +30,7 @@ const SCAFFOLD = `
       </div>
       <button id="recalcBtn" class="dp-btn dp-primary">Recalculate</button>
       <div id="toolpathLayers" class="dp-list"></div>
-      <div class="dp-head">Selected op</div>
+      <div class="dp-head" id="activeLayerHead">Selected op</div>
       <div id="activeLayerContent"></div>
     </aside>
   </div>`;

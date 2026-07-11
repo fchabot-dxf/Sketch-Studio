@@ -43,11 +43,13 @@ export function createSketchState(engine, view) {
     isConstructionMode: false,
     history: [],  // Store last 5 states for undo
     maxHistory: 5,
+    redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
     _undoGroupActive: false,
     _undoGroupDepth: 0,
-    // Force push a snapshot regardless of grouping (used to capture pre-group state)
-    saveStateForce: function(){
-      const snapshot = {
+    // BURN-DOWN-2: deep-clone the live store into a snapshot object (extracted from saveStateForce so undo/redo
+    // capture the current state identically — one definition of "what a snapshot is").
+    _captureSnapshot: function(){
+      return {
         joints: new Map(Array.from(this.joints.entries()).map(([k,v]) => [k, {...v}])),
         shapes: this.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})),
         constraints: this.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined})),
@@ -59,8 +61,38 @@ export function createSketchState(engine, view) {
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
         vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined
       };
-      this.history.push(snapshot);
+    },
+    // BURN-DOWN-2: restore the live store from a snapshot (extracted verbatim from undo() so redo() reuses it).
+    _restoreSnapshot: function(snapshot){
+      this.joints.clear();
+      for(const [k,v] of snapshot.joints) this.joints.set(k, {...v});
+      this.shapes.length = 0;
+      this.shapes.push(...snapshot.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})));
+      this.constraints.length = 0;
+      for(const c of snapshot.constraints){
+        // Normalize arrays to avoid shared references and run validation via helper
+        const proto = {...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined};
+        const added = addConstraintObject(this, proto);
+        if(!added){
+          dbg.log('undo', '[undo] skipped restoring constraint', proto);
+        }
+      }
+      // SKETCH-2a: restore the sketch container (new-sketch + active changes undo correctly)
+      if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
+      if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
+      if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
+      if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
+      // Clear selections and active tool state
+      this.selectedJoints.clear();
+      this.selectedConstraints.clear();
+      this.selectedShapes.clear();
+      this.active = null;
+    },
+    // Force push a snapshot regardless of grouping (used to capture pre-group state)
+    saveStateForce: function(){
+      this.history.push(this._captureSnapshot());
       if(this.history.length > this.maxHistory) this.history.shift();
+      this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       const undoBtn = document.getElementById('btn-undo');
       if(undoBtn) undoBtn.disabled = false;
     },
@@ -140,36 +172,24 @@ export function createSketchState(engine, view) {
     },
     undo: function() {
       if(this.history.length === 0) return;
-      // Get the previous state (not the current one)
+      // BURN-DOWN-2: capture the CURRENT live state so redo() can return to it, THEN restore the previous snapshot.
+      this.redoStack.push(this._captureSnapshot());
       const snapshot = this.history.pop();
-      // Restore state
-      this.joints.clear();
-      for(const [k,v] of snapshot.joints) this.joints.set(k, {...v});
-      this.shapes.length = 0;
-      this.shapes.push(...snapshot.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})));
-      this.constraints.length = 0;
-      for(const c of snapshot.constraints){
-        // Normalize arrays to avoid shared references and run validation via helper
-        const proto = {...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined};
-        const added = addConstraintObject(this, proto);
-        if(!added){
-          dbg.log('undo', '[undo] skipped restoring constraint', proto);
-        }
-      }
-      // SKETCH-2a: restore the sketch container (new-sketch + active changes undo correctly)
-      if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
-      if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
-      if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
-      if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
-      // Cleanup after undo is disabled; trust the snapshot as saved.
-      // Clear selections and active tool state
-      this.selectedJoints.clear();
-      this.selectedConstraints.clear();
-      this.selectedShapes.clear();
-      this.active = null;
+      this._restoreSnapshot(snapshot); // cleanup after undo is disabled; trust the snapshot as saved
       // Update undo button state
       const undoBtn = document.getElementById('btn-undo');
       if(undoBtn && this.history.length === 0) undoBtn.disabled = true;
+    },
+    // BURN-DOWN-2: re-apply the most recently undone state (symmetric with undo()). No-op when nothing was undone.
+    redo: function() {
+      if(!this.redoStack || this.redoStack.length === 0) return;
+      // The current state becomes undoable again, then restore the redo snapshot.
+      this.history.push(this._captureSnapshot());
+      if(this.history.length > this.maxHistory) this.history.shift();
+      const snapshot = this.redoStack.pop();
+      this._restoreSnapshot(snapshot);
+      const undoBtn = document.getElementById('btn-undo');
+      if(undoBtn) undoBtn.disabled = this.history.length === 0;
     }
   };
 

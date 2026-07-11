@@ -32,6 +32,10 @@ const SCAFFOLD = `
       <aside id="design-panel">
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
         <div id="design-panel-actions">
+          <div id="design-undo-row" class="dp-row">
+            <button id="designUndoBtn" class="dp-btn" title="Undo (Ctrl+Z)" disabled>&#8630; Undo</button>
+            <button id="designRedoBtn" class="dp-btn" title="Redo" disabled>&#8631; Redo</button>
+          </div>
           <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
           <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
@@ -64,6 +68,8 @@ export function mountSketchStage(view, ctx = {}) {
   const mixToggle = view.querySelector('#shapeMix');
   const docBtn = view.querySelector('#designDocBtn'); // DOC-SIZE-IN-DESIGN: opens #docModal; label shows the size
   const mixStatus = view.querySelector('#mixStatus');
+  const undoBtn = view.querySelector('#designUndoBtn'); // BURN-DOWN-2: docked undo/redo (same #ui history Ctrl+Z drives)
+  const redoBtn = view.querySelector('#designRedoBtn');
 
   let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', lastDocSig = '', underlayDirty = true;
 
@@ -136,6 +142,9 @@ export function mountSketchStage(view, ctx = {}) {
       const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length;
       if (msig !== lastMixSig) { lastMixSig = msig; mixStatus.textContent = mixed ? mixSummary(one) : ''; }
     }
+    // BURN-DOWN-2: reflect the #ui history depth onto the docked undo/redo buttons (disabled when nothing to do).
+    if (undoBtn) undoBtn.disabled = !(s.history && s.history.length);
+    if (redoBtn) redoBtn.disabled = !(s.redoStack && s.redoStack.length);
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
     if (docBtn) {
       const dsig = state.doc.w + 'x' + state.doc.h;
@@ -178,6 +187,10 @@ export function mountSketchStage(view, ctx = {}) {
   // DOC-SIZE-IN-DESIGN: wire the shared #docModal (its fields + close + the #designDocBtn / #docInfo openers) so the
   // Document dialog works from the first tab even before Toolpath is visited. Idempotent (settings.js guards it).
   try { installDocModal(); } catch (_) {}
+  // BURN-DOWN-2: the docked undo/redo buttons drive the SAME #ui history Ctrl+Z uses (state.undo / new state.redo);
+  // the sketcher's RAF loop repaints the canvas + panelTick reflects the button state next frame.
+  if (undoBtn) undoBtn.onclick = () => { controller.state.undo(); panelTick(); };
+  if (redoBtn) redoBtn.onclick = () => { controller.state.redo(); panelTick(); };
   renderPaper(); // DESIGN-PAPER-BOUNDS: draw the paper immediately (panelTick also refreshes it on size change)
 
   // Collapsible side panel (persisted).

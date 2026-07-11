@@ -8464,3 +8464,73 @@ disconnect in the +Outline/+Fill path, then verified the whole flow BY CLICKS.
   fill-edit, seed-toolpath cleanup, cloud palette, PP-8) + the two bezier follow-ups. STOP - hold.
 
 === WORKFLOW-FIX (SELECT #core IN Fill/Toolpath) DONE — HOLD ===
+
+## turn 344 - PARITY-AUDIT + RESTORE: audited current merged app vs the ORIGINAL penplotter; RESTORED vector hovering (the urgent regression); bucketed the rest (amendment-corrected).
+
+User: "you've dropped all the features we used in original pen plotter"; immediate = vector HOVERING gone. RAN the
+original (C:/Users/danse/APPS/penplotter/app, served headless: loads clean, 0 console errors; tools select/node/rotate/
+scale/line/rect/ellipse/polyline/freehand/scissors; panels layers/plotColors/toolpath/style/import/export/undo/redo).
+Cataloged its features (Explore agent) and compared to the current merged app.
+
+- **RESTORED NOW - vector HOVERING (`interaction.js`):** the plotter canvas (Fill/Toolpath/Export) hover only knew the
+  ART store (`shapeAtPoint` over `state.artLayers`, EMPTY post-UNIFY-7) -> hovering a #core vector showed nothing (same
+  art-only root as the selection bug). Added a #core hover ghost: `updateSelectHover` now, when no toolpath/art is under
+  the cursor, calls `coreShapeAtPoint` + draws a black outline halo (`coreGhost`, coreShapeToPolyline) - the original
+  Draw hover feedback, on #core geometry. VERIFIED LIVE (CDP, 0 errors): Design hover sets `hoveredShape` on the rim
+  (inherited from #ui); Fill AND Toolpath show the ghost on hover and CLEAR it on leave.
+- **NOTE - the other "safe interaction" already exists in the Design tab** (the editing surface): selection-highlight
+  (restored turn 342, blue on the plot canvas + #ui selection in Design), drag-move (#ui joint/shape drag), undo/redo
+  (#ui Ctrl+Z) - so HOVER was the one genuinely-missing low-risk UX. Restored.
+
+### PARITY TABLE (original -> current merged)
+| Feature            | Original (Draw canvas)                    | Current merged                                             | Status |
+|--------------------|-------------------------------------------|------------------------------------------------------------|--------|
+| Hover feedback     | ghost halo of vector                      | Design: #ui hover; Fill/Toolpath: #core ghost (THIS TURN)  | WORKS (restored) |
+| Selection highlight| 2px outline + panel .active               | Design: #ui selection; plot canvas: blue highlight (t342)  | WORKS |
+| Drag-move          | drag shape on Draw canvas                 | Design: #ui joint/shape drag (the editing surface)         | WORKS (in Design) / plot-canvas is targeting-only (SUPERSEDED there) |
+| Undo/redo          | snapshot Ctrl+Z/Ctrl+Shift+Z              | Design: #ui Ctrl+Z; plotter history.js for toolpaths       | WORKS (Design) |
+| Snapping           | vertex-snap on drag (10px)                | Design: #ui snap (joints/grid/inference - richer)          | SUPERSEDED / FLAG (see below) |
+| Toolpath/Fill/Export| pens, +Outline/+Fill, hatch, export zip  | same, on #core targets (verified t340/342/this)            | WORKS |
+| SVG import         | Inkscape-layers / color-group / inherit   | import -> #core + colors (UNIFY-5); ellipse/S-T-A approx   | WORKS (core path) / PARTIAL (no layer/color-group split; ellipse approx = IMPORT-3) |
+| Styling            | stroke/fill/width, None + 20 presets      | per-shape digital PEN color -> underlay (pen model)        | PARTIAL / SUPERSEDED (pen model; rich style panel not surfaced) |
+| Layer ops          | art-layer add/rename/hide/reorder/merge   | art store retired; Design sketch-tree + Toolpath pen-folders| SUPERSEDED (named sketches + pen folders); old art-layer panel MISSING |
+| Keyboard           | V/T/S/L/R/E/P/F/X/N + space/del/enter/esc | #ui L/R/C/A + select/pan/constraints + del/esc/undo; space-pan | PARTIAL (draw keys differ: C=circle vs E=ellipse; no T/S/X/N/P/F on #core yet) |
+| Rotate / Scale     | T/S drag + numeric HUD                    | NONE on #core yet                                          | RESTORABLE - deferred FOR-SIZE (see amendment) |
+| Scissors / trim    | X: split at crossings                     | NONE on #core yet                                          | RESTORABLE - deferred FOR-SIZE (see amendment) |
+| Node-edit          | N: vertex handles, drag/delete            | #ui joint-drag edits endpoints; no bezier control-pt/node-delete | FLAG-for-decision |
+
+### AMENDMENT INCORPORATED (turn 344 correction)
+The advisor corrected item 3: plotter #core geometry is ART = UNCONSTRAINED, so `solve()` (which only moves joints a
+constraint PINS) is a NO-OP on free joints -> rotate/scale/scissors do NOT fight the solver. They are RESTORABLE as
+plain transforms on #core JOINT COORDS. So they are re-bucketed **deferred-FOR-SIZE (not for-solver)**: this slice
+already delivered the full audit + ran the original + the URGENT hover restore (+2 CDP verifies), and building 3 new
+editing tools is a distinct focused slice. TURNKEY PLAN for the next slice:
+  - **Home:** a plotter-side capture tool on #design-canvas (mirror `freehand-tool.js`'s capture pattern) + Design-ribbon
+    buttons (extraGroups, like Freehand) setting `controller.state.currentTool` = 'rotate'|'scale'|'scissors'.
+  - **Rotate/Scale:** on pointerdown with a non-empty #ui selection, pivot = centroid of the selected shapes' UNIQUE
+    joint coords; drag -> angle delta / distance ratio; rewrite each unique joint's (x,y) from its original about the
+    pivot; a numeric HUD is optional polish. `engine.solve()` is a no-op on free joints; skip solve (or gate it) so a
+    dense selection stays fast.
+  - **Scissors:** split a shape at the clicked point -> a new joint + two shapes (reuse trim.js math on the flattened
+    polyline; for #core lines/beziers split the primitive), remap toolpath targets (`remapToolpathTargets`).
+  - **Edge (leave alone):** a shape pinned by a position/angle constraint (fixed dim, H/V, fixed point) gets reverted by
+    solve() - rare in a plotter; don't special-case it now.
+
+### FLAG-for-DECISION (only these two remain decisions, per the amendment)
+  - **Node-edit:** #ui joint-drag already moves endpoint joints. What's missing: editing a BEZIER's control points
+    (they're shape DATA, not joints) + node-DELETE on #core. Decision: add a #core node/control-point editor (shared #ui?
+    or plotter-side) - scope + home TBD.
+  - **Snapping:** #ui provides richer snapping (joints/grid/inference) in Design; the original's vertex-snap-on-drag is
+    effectively SUPERSEDED. Decision: is #ui snapping sufficient, or restore the plotter's vertex-snap on the plot canvas?
+
+- **VERIFY:** hover restore live-verified (Design rim + Fill + Toolpath ghost, clears on leave; 0 console errors). ALL
+  core oracles **23/23** green STANDALONE; `npm run test:shell` **12/12**; `node --check` clean. Only `interaction.js`
+  changed (plotter-only) - Studio/Shaper unregressed. Original app confirmed running (headless, 0 errors, screenshot
+  original-app.png). `git status` = only `interaction.js` (did NOT stage advisor docs or the user's stray svg). 0 net-new.
+- **process hygiene:** Explore agent (original catalog) + CDP verifies + original-run from scratchpad; `proc_health mark
+  --turn 344`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Vector hovering restored (Design+Fill+Toolpath); full parity audit done. NEXT (advisor
+  to prioritize): restore rotate/scale/scissors as #core joint transforms (turnkey plan above); DECIDE node-edit +
+  snapping; then remaining polish. STOP - hold.
+
+=== PARITY-AUDIT + RESTORE (VECTOR HOVER) DONE — HOLD ===

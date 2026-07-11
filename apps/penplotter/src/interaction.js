@@ -873,6 +873,25 @@ function selectCoreShape(sid, additive) {
     render();
 }
 
+/** PARITY-AUDIT: a black hover-ghost (thick outline halo) of a #core shape, flattened the way it's drawn. */
+function coreGhost(sid) {
+    const cs = state.coreSketch;
+    const sh = cs && cs.shapes && cs.shapes.find(s => s.id === sid);
+    if (!sh) return null;
+    const pts = coreShapeToPolyline(sh, cs.joints);
+    if (!pts || pts.length < 2) return null;
+    const el = document.createElementNS(SVG_NS, "polyline");
+    el.setAttribute("points", pts.map(p => `${p[0]},${p[1]}`).join(" "));
+    el.style.fill = "none";
+    el.style.stroke = GHOST_SHAPE;
+    el.style.strokeWidth = "4";
+    el.style.strokeLinejoin = "round";
+    el.style.opacity = GHOST_OPACITY;
+    el.style.pointerEvents = "none";
+    el.setAttribute("vector-effect", "non-scaling-stroke");
+    return el;
+}
+
 /** Topmost art shape whose interior contains point p, or null. */
 function shapeAtPoint(p) {
     for (const l of state.artLayers) {
@@ -954,10 +973,18 @@ function updateSelectHover(e, p) {
             return;
         }
         const gapShape = shapeAtPoint(p);
-        if (!gapShape) { removePreview(); return; }
-        const el = ghostElement(gapShape, GHOST_SHAPE);
-        el.style.opacity = GHOST_OPACITY;
-        showPreview(el);
+        if (gapShape) {
+            const el = ghostElement(gapShape, GHOST_SHAPE);
+            el.style.opacity = GHOST_OPACITY;
+            showPreview(el);
+            return;
+        }
+        // PARITY-AUDIT restore: hover-ghost a #core VECTOR (the geometry lives in #core now, not the art store) — the
+        // black outline halo a click would select, matching the original Draw hover feedback.
+        const cid = coreShapeAtPoint(p, tol);
+        const cg = cid ? coreGhost(cid) : null;
+        if (cg) { showPreview(cg); return; }
+        removePreview();
         return;
     }
     const sid = e.target.dataset && e.target.dataset.shapeId;

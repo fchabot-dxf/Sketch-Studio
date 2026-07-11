@@ -187,6 +187,22 @@
     #shape-color-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; }
     #shape-color-row input[type=color] { width: 40px; height: 24px; padding: 0; border: 1px solid #d7dce6; border-radius: 4px; background: none; }
     #shape-color-row input[type=color]:disabled { opacity: 0.4; }
+    /* TOOLPATH-POLISH Part B: the gear trigger + doc/settings MODALS (legacy .overlay/.wiz-box layout, paper-light). */
+    #toolpathPanel .tp-gear { float: right; background: none; border: 0; cursor: pointer; color: #8a8067; font-size: 13px; line-height: 1; padding: 0 2px; }
+    #toolpathPanel .tp-gear:hover { color: var(--sk-selection); }
+    .overlay { position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+    .wiz-box { background: #f7f0e0; border: 1px solid #d8cbb2; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+      padding: 16px; width: min(360px, 92vw); display: flex; flex-direction: column; gap: 12px; color: #3a352b; font: 13px system-ui, sans-serif; }
+    .wiz-head { margin: -16px -16px 0; padding: 10px 15px; background: var(--sk-selection); color: #fff; border-radius: 6px 6px 0 0; }
+    .wiz-head .preset-close { color: rgba(255,255,255,.85); background: none; border: 0; cursor: pointer; font-size: 14px; }
+    .wiz-head .preset-close:hover { color: #fff; }
+    .wiz-box .field { display: grid; grid-template-columns: 1fr 120px; gap: 8px; align-items: center; }
+    .wiz-box .field label { font-size: 11px; color: #8a8067; text-transform: uppercase; font-weight: bold; }
+    .wiz-box .field input, .wiz-box .field select { background: #fff; border: 1px solid #d8cbb2; border-radius: 3px; padding: 4px 6px; width: 100%; box-sizing: border-box; color: #3a352b; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+    .setting-row > span { font-size: 13px; }
+    .setting-row small { display: block; color: #8a8067; font-size: 11px; margin-top: 2px; }
+    .setting-row input[type=checkbox] { width: 16px; height: 16px; flex: none; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -199,6 +215,32 @@
   </header>
   <!-- Stage bodies are created from STAGES in main.js (one source of truth), then shown/hidden by the router. -->
   <main id="stages" class="stages"></main>
+
+  <!-- TOOLPATH-POLISH Part B: Document + Settings modals (legacy). #docModal opens from the #docInfo canvas readout;
+       #settingsModal from the Toolpath "Plotter Settings" gear. settings.js installSettingsPanel wireModals both +
+       binds #docW/#docH/#docUnit/#autoRecalcToggle (they live here now, always present so the binding never throws). -->
+  <div id="docModal" class="overlay" style="display:none;">
+    <div class="wiz-box">
+      <div class="wiz-head" style="display:flex; justify-content:space-between; align-items:center; font-weight:600;">
+        <span>Document</span><button class="preset-close" id="docModalClose" title="Close">&#10005;</button>
+      </div>
+      <div class="field"><label>Units</label><select id="docUnit"><option value="mm">mm</option><option value="in">inches</option></select></div>
+      <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input type="number" id="docW" min="10" max="2000" step="1"></div>
+      <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input type="number" id="docH" min="10" max="2000" step="1"></div>
+    </div>
+  </div>
+  <div id="settingsModal" class="overlay" style="display:none;">
+    <div class="wiz-box">
+      <div class="wiz-head" style="display:flex; justify-content:space-between; align-items:center; font-weight:600;">
+        <span>Settings</span><button class="preset-close" id="settingsModalClose" title="Close">&#10005;</button>
+      </div>
+      <label class="setting-row">
+        <span>Auto-recalculate toolpaths<small>Recompute whenever the artwork changes. Off: use the Recalculate button.</small></span>
+        <input type="checkbox" id="autoRecalcToggle">
+      </label>
+    </div>
+  </div>
+
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

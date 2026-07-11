@@ -8714,3 +8714,47 @@ One commit (both parts live in toolpath-stage.js — a shared file, so splitting
   buttons, marquee/banner overlays, import fidelity, rotate/scale/scissors transforms). STOP — hold.
 
 === S3 DONE — HOLD ===
+
+## turn 354 — TOOLPATH-POLISH: make the Toolpath tab READ LIKE THE LEGACY. Two commits.
+
+User: "messy, doesn't look like the previous one." S2/S3 stacked correct content into one cramped column of tiny
+centered dp-head caps + ragged fields. PORTED the legacy `.panel` LAYOUT (`SketchStudio/legacy pen plotter/app/`) to
+our paper-light theme — copied LAYOUT, not the dark colors. Verified by screenshot + clicks (0 console errors).
+Plotter-side only.
+
+### PART A — legacy section layout (`93217f4`; toolpath-stage.js + active-layer-panel.js + index.html CSS)
+- Rebuilt `#toolpathPanel` as `<section>`+`<h2>` blocks with border-bottom separation, in the legacy ORDER: **Pens /
+  Toolpath Operations / Active Toolpath / Plotter Settings**. Buttons -> `.btn` in `.layer-actions` rows (Recalculate;
+  +Outline/+Fill; Select all/Deselect all).
+- The 4 legacy cleanliness fixes, ported (paper-light values for `--border`/`--text-dim`/`--accent`->#d8cbb2/#8a8067/
+  var(--sk-selection)): (a) `#toolpathPanel section`+`h2` with border-bottom (styles.css:97/101); (b) `.field` = a
+  2-COL GRID `1fr 100px` (styles.css:559) — fixes the ragged fields; RE-ADDED the `<section id="activeLayerPanel">`
+  wrapper so the existing `#activeLayerPanel .field` grid actually applies to the op editor again (it had matched
+  nothing since MERGE-1 dropped the wrapper — that was the raggedness); (c) `#plotColors` max-height 22vh + `#toolpathLayers`
+  30vh, `overflow-y:auto` (scrollable); `#recalcBtn.stale` glows accent. `#activeLayerHead` is now the section `<h2>`
+  (dynamic op name). Screenshot (toolpath-polish.png): reads like the legacy — labelled sections, aligned fields.
+- VERIFY: section heads in order; `.field` computed display = grid; #plotColors/#toolpathLayers overflow-y auto.
+
+### PART B — doc-size + auto-recalc into MODALS (`<this commit>`; toolpath-stage.js + index.html)
+- Inline "Plotter Settings" now = penUp / penDown / drawFeed / zFeed / tol ONLY. Moved doc W/H/unit -> `#docModal`
+  (opens from the `#docInfo` canvas readout) and auto-recalc -> `#settingsModal` (opens from a ⚙ gear in the Plotter
+  Settings `<h2>`). settings.js ALREADY wireModals both (`docInfo`->docModal, `settingsBtn`->settingsModal) — I only
+  ADDED the modal HTML (legacy `.overlay`/`.wiz-box`/`.wiz-head`/`.setting-row`, paper-light) + the gear trigger.
+- The modals live in index.html (always present) so installSettingsPanel's UNGUARDED `$("#docW").addEventListener`
+  never throws. Kept the user's "settings in Toolpath, not Export" — both modals open FROM the Toolpath tab. No dup ids
+  (audited: docW/docH/docUnit/autoRecalcToggle each appear exactly once).
+- VERIFY (CDP): inline settings = feeds only (no doc-size inline); the ⚙ gear opens/closes the Settings modal (with
+  auto-recalc); clicking `#docInfo` opens the Document modal; editing Width in the modal -> `state.doc.w=150`; the inline
+  Draw feed -> `state.settings.draw_feed=1500` -> exported gcode contains **F1500** (settings still drive the gcode).
+
+- **UNREGRESSED (both parts):** ALL core oracles **23/23** STANDALONE; `npm run test:shell` **12/12**; `node --check`
+  clean; no duplicate DOM ids. Pure plotter UI/CSS (no #core/#ui edits) -> Studio/Shaper unregressed. Split into 2
+  commits (Part A `93217f4`, Part B this one). Did NOT stage advisor docs or the user's stray svg.
+- **process:** screenshot + CDP verifies (shot-s4a / verify-s4b) from scratchpad; caught + fixed a stray backtick that
+  would have closed the SCAFFOLD template literal early (node --check confirmed the fix); `proc_health mark --turn 354`;
+  headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The Toolpath tab now reads like the legacy: labelled sections, aligned 2-col fields,
+  scrollable lists, doc/settings in modals. HOLD for S4+ (Delete->#core + undo/redo buttons, marquee/banner overlays,
+  import fidelity, rotate/scale/scissors transforms). STOP — hold.
+
+=== TOOLPATH-POLISH DONE — HOLD ===

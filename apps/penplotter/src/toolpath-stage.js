@@ -45,17 +45,15 @@ const SCAFFOLD = `
         <div id="activeLayerContent"></div>
       </section>
       <section>
-        <h2>Plotter Settings</h2>
-        <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input id="docW" type="number"></div>
-        <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input id="docH" type="number"></div>
-        <div class="field"><label>Unit</label><select id="docUnit"><option value="mm">mm</option><option value="in">in</option></select></div>
+        <h2>Plotter Settings <button id="settingsBtn" class="tp-gear" title="More settings (auto-recalc)">&#9881;</button></h2>
         <div class="field"><label>Pen up Z <small>mm clear</small></label><input id="penUpZ" type="number" step="0.1"></div>
         <div class="field"><label>Pen down Z <small>mm</small></label><input id="penDownZ" type="number" step="0.1"></div>
         <div class="field"><label>Draw feed <small>mm/min</small></label><input id="drawFeed" type="number" step="100"></div>
         <div class="field"><label>Z feed <small>mm/min</small></label><input id="zFeed" type="number" step="100"></div>
         <div class="field"><label>Simplify tol <small>mm</small></label><input id="tol" type="number" step="0.01"></div>
-        <div class="field"><label>Auto-recalc</label><input id="autoRecalcToggle" type="checkbox"></div>
       </section>
+      <!-- TOOLPATH-POLISH Part B: doc size (W/H/unit) -> #docModal (opened by clicking the #docInfo readout on the
+           canvas); auto-recalc -> #settingsModal (opened by the gear above). settings.js already wireModals both. -->
     </aside>
   </div>`;
 

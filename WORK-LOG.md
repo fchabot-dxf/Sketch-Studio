@@ -8376,3 +8376,44 @@ stays the default.
   (curve-body hit-test, first-anchor snap). STOP - hold.
 
 === COLOR-MIX-3 (WIRE PEN-MIX) DONE — #11 COMPLETE — HOLD ===
+
+## turn 340 - RENDER-FIX (regression, loop re-opened post-close): #core geometry now renders in Fill/Toolpath/Export + stray draw toolbar removed.
+
+User: "none are showing" - drawn/imported #core geometry was invisible on Fill/Toolpath/Export (visible only in Design).
+Diagnosed live FIRST, then fixed at the cause. Plotter-only; no #core/#ui touch.
+
+- **DIAGNOSE (live CDP, pre-fix):** drew a #core circle + imported an SVG (4 elems -> 6 #core shapes). **Design** showed
+  them (underlay 4 paths for the static import + sketcher 2 shape-elems for the live-drawn). **Fill/Toolpath/Export**:
+  `coreGeomPolylines: 0`, no geometry group - only paper/grid + the (empty) toolpath overlay => the user's geometry was
+  INVISIBLE unless a toolpath targeted it. Confirmed the hypothesis: UNIFY-7 gutted render-art to paper/grid +
+  toolpath-overlay + sim only. ALSO confirmed the stray `#allTools` toolbar was present + VISIBLE + inside #canvasWrap
+  on all 3 tabs (it rides along when Fill/Toolpath/Export re-parent the shared canvas).
+- **FIX 1 - render the #core geometry (`render-art.js`):** a new `buildCoreGeometry()` flattens every `state.coreSketch`
+  shape via `coreShapeToPolyline` (world/mm coords - the SAME space the paper/grid + toolpath overlay already use, so it
+  ALIGNS) and strokes it in the shape's MAPPED PEN color (`penColorForShape`) - exactly what the Design underlay does.
+  Appended AFTER paper/grid, BEFORE the toolpath overlay (reference beneath; the plot draws on top). Reference-only
+  (pointer-events off, non-scaling stroke). Draws ALL shapes (drawn AND imported) since the plotter canvas has no
+  sketcher. DECLARE-over-hand-roll: reuses the existing coreShapeToPolyline + penColorForShape (no new flattening/color
+  path) - same seam the Design underlay + the toolpath resolver use.
+- **FIX 2 - remove the dead draw toolbar (`draw-stage.js`):** deleted `#allTools` (the `.tool` art-tool buttons) + the
+  now-unused `TOOLS`/`TOOLBAR` constants from the SCAFFOLD. The art tools were retired in UNIFY-7 (installToolbar/setTool
+  gone; `.tool` is bound only in the dormant, un-imported tools.js), but the toolbar markup lived INSIDE #canvasWrap so
+  it stayed visible on Fill/Toolpath/Export. Kept `#coords`/`#docInfo` (live) + `#transformHud` (hidden).
+- **VERIFY LIVE (CDP, post-fix): console errors 0.** Same scene: **Design** still shows geometry (underlay 4 + sketcher
+  2). **Fill, Toolpath AND Export** now each render **6 core-geometry polylines** (`hasCoreGeomGroup: true`) in pen
+  colors beneath the overlay - the circle + the import are VISIBLE. `#allTools` is GONE on all 3 tabs
+  (`allToolsPresent: false`). Export is render-independent (buildGcodeEntries reads state.toolpaths, not the canvas DOM)
+  - unaffected by this render-only change, and verified end-to-end last turn (COLOR-MIX-3).
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** green STANDALONE; `npm run test:shell` **12/12**; `node --check`
+  clean. Plotter-only (`render-art.js` + `draw-stage.js`) - NO #core/#ui edits, so Studio/Shaper are unregressed by file
+  scope; the plotter loads clean (0 console errors). `git status` = only the 2 plotter files (did NOT stage advisor-owned
+  NEXT-SESSION.md/ROADMAP.md or the user's stray svg). 0 net-new.
+- **process hygiene:** live diagnosis + verify from scratchpad (verify-render, run pre- and post-fix);
+  `proc_health mark --turn 340`; headless browser killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Drawn + imported #core geometry now shows in Design AND Fill AND Toolpath AND Export;
+  no stray toolbar. NEXT (blessed backlog): UNIFY-7b (gut the remaining dormant art code - incl. finally deleting
+  tools.js/the #allTools-era scaffold refs, #transformHud, interaction art branches), remaining polish (bulk fill-edit,
+  cloud palette save/load, PP-8 path-parser dedup), + the two small bezier follow-ups (curve-body hit-test, first-anchor
+  snap). STOP - hold.
+
+=== RENDER-FIX (#core geometry in Fill/Toolpath/Export) DONE — HOLD ===

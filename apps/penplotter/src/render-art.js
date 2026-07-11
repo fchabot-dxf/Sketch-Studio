@@ -3,11 +3,12 @@
 // geometry now lives in the #core sketch (drawn by the Design sketcher + the pen-color underlay); the plotter canvas
 // only shows the toolpath preview over the paper/grid. Toolpaths resolve #core geometry via UNIFY-2 (resolveCoreShapes).
 
-import { state } from "./state.js";
+import { state, penColorForShape } from "./state.js";
 import { canvas, SVG_NS } from "./dom.js";
 import { requestPreview, buildToolpathOverlay, buildSimulationOverlay } from "./preview.js";
 import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
+import { coreShapeToPolyline } from "#core/core-shape-to-polyline.js"; // RENDER-FIX: show the #core geometry on this canvas
 
 export function renderArt() {
     if (!canvas) return;
@@ -15,6 +16,12 @@ export function renderArt() {
 
     canvas.appendChild(buildPaper());
     canvas.appendChild(buildGrid());
+
+    // RENDER-FIX: draw the #core geometry (drawn sketch + imported SVG) in its mapped pen colors, BENEATH the toolpath
+    // overlay — the same geometry the Design tab shows via its sketcher/underlay. Without this the Fill/Toolpath/Export
+    // canvas only shows paper/grid + whatever a toolpath TARGETS, so untargeted drawn/imported shapes were invisible.
+    const geom = buildCoreGeometry();
+    if (geom) canvas.appendChild(geom);
 
     // The OPTIMIZED toolpath overlay (Toolpath/Fill) or the pen-width sim (Export). requestPreview recomputes via
     // #core/plot (vpype linemerge/sort/simplify), gated by autoRecalc; it resolves #core geometry (UNIFY-2). Fill/
@@ -33,6 +40,32 @@ export function renderArt() {
     // Keep the pen panels in sync each render (guarded — they only exist post-mount).
     if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
     if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
+}
+
+// RENDER-FIX: the #core sketch geometry (state.coreSketch = the sketcher's controller.state) flattened to polylines
+// (coreShapeToPolyline, world/mm coords — same space the paper/grid + toolpath overlay use) and stroked in each
+// shape's mapped physical PEN color (penColorForShape), so drawn + imported geometry is VISIBLE on Fill/Toolpath/
+// Export. Reference-only (pointer-events off; non-scaling stroke); the toolpath overlay draws the plot on top.
+function buildCoreGeometry() {
+    const cs = state.coreSketch;
+    if (!cs || !cs.shapes || !cs.shapes.length) return null;
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("data-layer", "core-geometry");
+    g.setAttribute("fill", "none");
+    g.setAttribute("pointer-events", "none");
+    for (const sh of cs.shapes) {
+        const pts = coreShapeToPolyline(sh, cs.joints);
+        if (!pts || pts.length < 2) continue;
+        const pl = document.createElementNS(SVG_NS, "polyline");
+        pl.setAttribute("points", pts.map(p => `${p[0]},${p[1]}`).join(" "));
+        pl.setAttribute("stroke", penColorForShape(sh.id));
+        pl.setAttribute("stroke-width", "0.8");
+        pl.setAttribute("stroke-linecap", "round");
+        pl.setAttribute("stroke-linejoin", "round");
+        pl.setAttribute("vector-effect", "non-scaling-stroke");
+        g.appendChild(pl);
+    }
+    return g;
 }
 
 function buildPaper() {

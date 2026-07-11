@@ -16,18 +16,13 @@ import { installPlotColorsPanel } from "./plot-colors-panel.js"; // the pen pale
 // UNIFY-7: retired the art-UI installers — installToolbar/setTool (tools.js), installTransformHud (rotate/scale HUD),
 // installLayerButtons (layers-panel, DELETED), installSvgImport (art importer; import goes to #core via the Design tab).
 
-const TOOLS = [
-  ["select", "Select"], ["line", "Line"], ["rect", "Rect"], ["ellipse", "Ellipse"],
-  ["polyline", "Polyline"], ["freehand", "Freehand"], ["node", "Node"], ["scissors", "Scissors"],
-  ["rotate", "Rotate"], ["scale", "Scale"],
-];
-const TOOLBAR = TOOLS.map(([t, label]) => `<button class="tool" data-tool="${t}" title="${label}">${label}</button>`).join("");
-
+// RENDER-FIX: the art-tool TOOLBAR (#allTools / .tool buttons) is DEAD scaffold — UNIFY-7 retired the art tools
+// (installToolbar/setTool gone), but the toolbar lived INSIDE #canvasWrap and so rode along (visible) when
+// Fill/Toolpath/Export re-parent the shared canvas. Removed. (#transformHud stays hidden; #coords/#docInfo are live.)
 const SCAFFOLD = `
   <div id="drawRoot">
     <div id="canvasWrap">
       <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div id="allTools">${TOOLBAR}</div>
       <div id="coords"></div>
       <div id="docInfo"></div>
       <div id="toast"></div>

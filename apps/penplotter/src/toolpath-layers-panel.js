@@ -231,6 +231,12 @@ function toolpathRow(toolpath, penColor) {
     // Target-editing highlight — orange tint so it's visually distinct
     // from a plain selection.
     if (state.targetEditingToolpathId === toolpath.id) row.classList.add("target-editing");
+    // S2 (7b): reverse cross-highlight — mark this row when the geometry it targets is hovered on the canvas.
+    if (state.hoveredShapeId && (toolpath.targetShapeIds || []).includes(state.hoveredShapeId)) row.classList.add("geo-hovered");
+    // S2 (7a): hovering the row ghosts its target geometry on the canvas (canvas-only redraw — keeps this row's
+    // listeners alive; the row's own :hover highlight is CSS).
+    row.onmouseenter = () => { state.hoveredToolpathId = toolpath.id; render({ skipPanels: true }); };
+    row.onmouseleave = () => { if (state.hoveredToolpathId === toolpath.id) { state.hoveredToolpathId = null; render({ skipPanels: true }); } };
 
     const exp = document.createElement("input");
     exp.type = "checkbox";

@@ -38,6 +38,10 @@ export const state = {
     // Toolpath multi-selection — populated by box-select in toolpath mode.
     // activeToolpathId stays the "primary" (last-clicked / first-selected).
     selectedToolpathIds: new Set(),
+    // S2: row<->canvas cross-highlight. hoveredToolpathId = the op ROW under the cursor (ghost its target geometry on
+    // canvas); hoveredShapeId = the #core geometry under the cursor on the plotter canvas (mark its owning op row).
+    hoveredToolpathId: null,
+    hoveredShapeId: null,
     // When set, canvas shape selection feeds back into this toolpath's
     // targetShapeIds. Enter via double-click on a toolpath row, exit
     // via Esc / clicking another row.

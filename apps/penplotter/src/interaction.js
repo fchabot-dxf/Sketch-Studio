@@ -858,6 +858,14 @@ function beginShapeDrag(p, sid, additive) {
     render();
 }
 
+/** S2 (7b): record the #core shape under the cursor + refresh ONLY the ops panel (so its owning row gets the
+ *  .geo-hovered cue) — gated on change, and panel-only so the canvas hover ghost isn't wiped. */
+function setHoveredShapeId(id) {
+    if (state.hoveredShapeId === (id || null)) return;
+    state.hoveredShapeId = id || null;
+    import("./toolpath-layers-panel.js").then(m => m.renderToolpathLayersPanel()).catch(() => {});
+}
+
 /** Shape hover/selection ghost: the shape's OUTLINE, stroked thick. The
  *  stroke straddles the edge so it both touches the shape and outsets a
  *  little — a halo, not a filled blob. */
@@ -903,11 +911,13 @@ function updateSelectHover(e, p) {
                 pl.setAttribute("vector-effect", "non-scaling-stroke");
                 g.appendChild(pl);
             }
+            setHoveredShapeId(null); // hovering a toolpath stroke, not a bare vector
             showPreview(g);
             return;
         }
         const gapShape = shapeAtPoint(p);
         if (gapShape) {
+            setHoveredShapeId(null);
             const el = ghostElement(gapShape, GHOST_SHAPE);
             el.style.opacity = GHOST_OPACITY;
             showPreview(el);
@@ -917,7 +927,8 @@ function updateSelectHover(e, p) {
         // black outline halo a click would select, matching the original Draw hover feedback.
         const cid = coreShapeAtPoint(p, tol);
         const cg = cid ? coreGhost(cid) : null;
-        if (cg) { showPreview(cg); return; }
+        if (cg) { setHoveredShapeId(cid); showPreview(cg); return; } // S2 (7b): mark the owning op row
+        setHoveredShapeId(null);
         removePreview();
         return;
     }

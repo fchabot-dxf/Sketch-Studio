@@ -8627,3 +8627,54 @@ Three exact changes (DRIVER = the original's editing UX). Verified end-to-end BY
   transforms). STOP - hold.
 
 === MERGE-1 (FILL->TOOLPATH + UN-STRAND EDITOR + KILL HUD) DONE — HOLD ===
+
+## turn 350 — S2 (finish the Toolpath workbench): op-editor correctness + LIVE op rows. Two commits.
+
+Driver = the ORIGINAL active-layer-panel.js + toolpath-layers-panel.js. Both parts verified BY CLICKS (headless CDP,
+0 console errors). Plotter-side only (NO #ui edits); the one #core touch is additive UI-only.
+
+### PART 1 — op-editor correctness (`09bb06e`; active-layer-panel.js + toolpath-stage.js + #core/plot registries)
+- **(1) TYPE GATE:** the editor showed BOTH outline+fill for EVERY op — a fill op's inert outline edits never export
+  (and vice versa). Now `tp.type==='outline'` -> the Outline editor; `'fill'` -> the Fill editor. Matches the original.
+- **(2) 'Draw outline' checkbox** (outline ops): `tp.drawOutline` is read downstream (preview.js/export.js) but had no
+  control — re-added (checkboxField). Verified: toggling it flips `drawOutline` true->false.
+- **(3) DYNAMIC HEADER:** `#activeLayerHead` (was a static "Selected op") now shows the op's NAME.
+- **(4) min/max/step FROM THE SCHEMA:** paramField no longer hardcodes `step="any"` — it reads `p.step` (and the
+  existing `p.min`/`p.max`). Added `step` to the #core/plot FILL_PATTERNS + OUTLINE_STYLES param descriptors. ADDITIVE +
+  UI-ONLY: `step` is not consumed by resolveParams (fills clamp by min only; outlines by min/max) -> zero geometry
+  change; the fill/outline oracles + Studio/Shaper are unaffected. (Did NOT add new min/max to unbounded params — that
+  WOULD change outline clamping.)
+- VERIFY: outline op -> {Draw-outline, Style, Passes}, NO Pattern; fill op -> {Pattern, params}, NO outline/Draw-outline;
+  header = op name; Draw-outline toggle flips drawOutline.
+
+### PART 2 — LIVE op rows (`<this commit>`; index.html CSS + state.js + render-art.js + toolpath-layers-panel.js + interaction.js)
+User: "no feedback or hover on these, very poor UX." The rows already got `.active`/`.selected`/`.target-editing`
+classes but NOTHING styled them. Fixes:
+- **(5) ROW HOVER + (6) SELECTED state (CSS):** `#toolpathLayers .tp-layer-row:hover` (bg) + `.active`/`.selected`
+  (bg + inset accent bar) + `.target-editing`. Now rows visibly respond.
+- **(7) ROW <-> CANVAS CROSS-HIGHLIGHT:** new `state.hoveredToolpathId` / `state.hoveredShapeId`.
+  - **row -> canvas:** row `onmouseenter/leave` sets `hoveredToolpathId` + a CANVAS-ONLY redraw (`renderArt({skipPanels})`
+    — so the panel DOM/listeners under the cursor aren't rebuilt); `buildCoreGeometry` draws a PINK HALO under the
+    geometry the FOCUSED op (hovered row, else active) targets — reusing coreShapeToPolyline. Verified: hover a row ->
+    the op's target vectors halo on the canvas (the active op's halo persists — correct).
+  - **canvas -> row:** `updateSelectHover`'s #core-vector branch sets `hoveredShapeId` (gated on change) + refreshes
+    ONLY the ops panel; a row whose `targetShapeIds` include it gets `.geo-hovered` (pink inset bar). Verified: hovering
+    the circle on canvas marks its owning fill-op row.
+- **(8) control CUES (CSS):** `.drag-handle` cursor:grab + fades in on row hover; `.sw` pointer; `.ren`/`.del` fade in on
+  row hover; `.del:hover` reddens.
+- VERIFY (CDP): activeRow has the selected class; row mouseenter -> `hoveredToolpathId` set + canvas `#ff2e88` halo
+  present; canvas geometry hover -> `hoveredShapeId` set + the row gets `.geo-hovered`.
+
+- **UNREGRESSED:** ALL core oracles **23/23** STANDALONE (both parts); `npm run test:shell` **12/12**; `node --check`
+  clean. Plotter-side + one additive UI-only #core touch (registry `step`) -> Studio/Shaper unregressed. Committed as
+  TWO commits (Part 1 `09bb06e`, Part 2 this one). Did NOT stage advisor docs (NEXT-SESSION/ROADMAP/PARITY-ROADMAP) or
+  the user's stray svg.
+- **process:** two-parter split per the advisor's OK; CDP verifies (verify-s2p1 / verify-s2p2) from scratchpad;
+  `proc_health mark --turn 350`; headless browsers killed by the harness; `watch` before pass. (Note: I stalled once
+  mid-turn — recovered, committed Part 1, finished Part 2, no work lost.)
+- **state:** branch `carve-out`. The Toolpath workbench is complete: type-correct op editor with a working Draw-outline
+  toggle + dynamic header, and live op rows (hover/selected/cross-highlight both directions + control cues). HOLD for
+  S3+ (Pens panel surface + machine-settings relocate, Delete->#core + undo/redo buttons, marquee/banner, import
+  fidelity, transforms). STOP — hold.
+
+=== S2 DONE — HOLD ===

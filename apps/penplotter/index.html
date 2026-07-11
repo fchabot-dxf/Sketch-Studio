@@ -99,6 +99,17 @@
     /* PP-4b — target-editing cue (double-click a toolpath row -> pick its target shapes; Esc exits). */
     body.target-editing #canvas { outline: 2px dashed var(--sk-selection); outline-offset: -2px; }
     #toolpathLayers select, #toolpathLayers input { font: inherit; border: 1px solid #d8cbb2; border-radius: 4px; padding: 1px 4px; }
+    /* S2 — live op ROWS: hover / selected / cross-highlight + control cues (fixes 'no feedback or hover, poor UX'). */
+    #toolpathLayers .tp-layer-row { cursor: pointer; transition: background 0.1s; }
+    #toolpathLayers .tp-layer-row:hover { background: #e6dcc4; }
+    #toolpathLayers .tp-layer-row.active, #toolpathLayers .tp-layer-row.selected { background: #dcd0b0; box-shadow: inset 2px 0 0 var(--sk-selection); }
+    #toolpathLayers .tp-layer-row.geo-hovered { background: #efe6cf; box-shadow: inset 2px 0 0 #ff2e88; } /* its target geometry is hovered on canvas */
+    #toolpathLayers .drag-handle { cursor: grab; opacity: 0.45; }
+    #toolpathLayers .tp-layer-row:hover .drag-handle { opacity: 0.85; }
+    #toolpathLayers .sw { cursor: pointer; }
+    #toolpathLayers .ren, #toolpathLayers .del { opacity: 0.5; cursor: pointer; }
+    #toolpathLayers .tp-layer-row:hover .ren, #toolpathLayers .tp-layer-row:hover .del { opacity: 1; }
+    #toolpathLayers .del:hover { color: #d64545; }
     /* PP-5 — the Fill stage: the SHARED canvas (re-parented in) + the pattern/style inspector. */
     #stage-fill { padding: 0; }
     #fillRoot { position: absolute; inset: 0; display: flex; }

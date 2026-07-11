@@ -10,7 +10,9 @@ import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
 import { coreShapeToPolyline } from "#core/core-shape-to-polyline.js"; // RENDER-FIX: show the #core geometry on this canvas
 
-export function renderArt() {
+// S2: opts.skipPanels redraws ONLY the canvas (geometry + overlay), leaving the ops panel DOM intact — used by op-row
+// hover so a cross-highlight doesn't rebuild the panel (which would detach the row listeners under the cursor).
+export function renderArt(opts = {}) {
     if (!canvas) return;
     while (canvas.firstChild) canvas.removeChild(canvas.firstChild);
 
@@ -37,9 +39,12 @@ export function renderArt() {
         }
     }
 
-    // Keep the pen panels in sync each render (guarded — they only exist post-mount).
-    if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
-    if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
+    // Keep the pen panels in sync each render (guarded — they only exist post-mount). Skipped for a canvas-only
+    // redraw (op-row hover) so the panel DOM + its row listeners survive.
+    if (!opts.skipPanels) {
+        if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
+        if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
+    }
 }
 
 // RENDER-FIX: the #core sketch geometry (state.coreSketch = the sketcher's controller.state) flattened to polylines
@@ -50,14 +55,28 @@ function buildCoreGeometry() {
     const cs = state.coreSketch;
     if (!cs || !cs.shapes || !cs.shapes.length) return null;
     const sel = state.selectedShapeIds;
+    // S2: cross-highlight — ghost (pink halo) the geometry the FOCUSED op plots (the hovered op ROW, else the active
+    // op), so hovering/selecting an op row shows WHICH vectors it targets.
+    const focusOp = state.toolpaths.find(t => t.id === (state.hoveredToolpathId || state.activeToolpathId));
+    const focusIds = focusOp ? new Set(focusOp.targetShapeIds || []) : new Set();
     const g = document.createElementNS(SVG_NS, "g");
     g.setAttribute("data-layer", "core-geometry");
     g.setAttribute("fill", "none");
     for (const sh of cs.shapes) {
         const pts = coreShapeToPolyline(sh, cs.joints);
         if (!pts || pts.length < 2) continue;
+        const ptsStr = pts.map(p => `${p[0]},${p[1]}`).join(" ");
+        if (focusIds.has(sh.id)) { // op-target halo, drawn UNDER the shape stroke
+            const halo = document.createElementNS(SVG_NS, "polyline");
+            halo.setAttribute("points", ptsStr);
+            halo.setAttribute("stroke", "#ff2e88"); halo.setAttribute("stroke-width", "3");
+            halo.setAttribute("stroke-opacity", "0.5"); halo.setAttribute("stroke-linecap", "round");
+            halo.setAttribute("stroke-linejoin", "round"); halo.setAttribute("vector-effect", "non-scaling-stroke");
+            halo.setAttribute("pointer-events", "none");
+            g.appendChild(halo);
+        }
         const pl = document.createElementNS(SVG_NS, "polyline");
-        pl.setAttribute("points", pts.map(p => `${p[0]},${p[1]}`).join(" "));
+        pl.setAttribute("points", ptsStr);
         // WORKFLOW-FIX: tag with the #core shape id so a canvas click can map back to the shape (selection/targeting),
         // and HIGHLIGHT the current selection (thicker blue) so "click a vector -> it selects" is visible.
         pl.setAttribute("data-shape-id", sh.id);

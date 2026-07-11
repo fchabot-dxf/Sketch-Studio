@@ -8883,3 +8883,56 @@ screenshot + measured rects (0 console errors).
   MODAL-BUTTONS (Done/Cancel), then S4. STOP — hold.
 
 === DESIGN-PAPER-BOUNDS DONE — HOLD ===
+
+## BURN-DOWN BATCH 1 (turn 364) — cheap functional restores + quick UI, 6 commits, one per item, each verified live
+Reference = SketchStudio/legacy pen plotter/app. All plotter-side except item 2 (ADDITIVE #ui redo) + item 6 (uses an
+existing #ui knob, no source change). Every item driven live via headless-CDP with 0 console errors.
+
+- **(1) DELETE key -> #core geometry** (`4c0ecd0`). ROOT: `keyboard.js deleteSelected()` iterated the retired
+  `state.layers` art store -> Delete did nothing on the plotter. On Design the #ui keydown already deletes (fires
+  first, idempotent); the plotter handler was dead. FIX: redirect `deleteSelected` to `deleteSelection(state.coreSketch)`
+  (shared #core delete-manager) -> removes the selected #core shapes + orphaned joints; also covers Toolpath/Export
+  where the #ui input layer is inactive. Removed the now-orphaned `snapshot` import. VERIFY: Design delete 2->1 shapes;
+  Toolpath delete via the plotter path 1->0; 0 errors.
+- **(2) UNDO/REDO buttons on Design** (`a11cf16`). ROOT: undo was Ctrl+Z-only and #ui had NO redo at all. FIX: added an
+  ADDITIVE `redo()` + `redoStack` to `packages/ui/sketch-state.js` (its correct home for the snapshot format): extracted
+  `_captureSnapshot`/`_restoreSnapshot`, `undo()` now captures the live state onto redoStack before restoring, `redo()`
+  re-applies it, `saveStateForce` clears the redo branch. undo()'s VISIBLE behaviour is unchanged -> Studio/Shaper
+  unregressed. Plotter-side: two DOCKED buttons in `#design-panel-actions` (not floating, per the docked-buttons
+  preference) wired to `coreSketch.undo()/redo()` -- the same history Ctrl+Z drives -- disabled state reflected each
+  frame in panelTick. VERIFY: draw shape (2), Undo->1 (gone), Redo->2 (back), disabled flags correct; 0 errors.
+- **(3) MARQUEE box VISIBLE** (`8194c0b`). ROOT: the toolpath-mode rubber-band selected fine but drew no box
+  (buildMarquee never ported). FIX: `buildMarqueeEl(it)` + show it as a preview element AFTER render() rebuilds the
+  canvas, cleared on mouseup. Legacy CAD tint driven by the `it.mode` updateMarquee already computes: left->right =
+  window (blue, solid), right->left = crossing (green, dashed); non-scaling stroke, pointer-events off. VERIFY: window
+  drag = blue solid rect, crossing drag = green dashed rect, gone after mouseup; 0 errors.
+- **(4) TARGET-EDITING banner** (`ed39aec`). ROOT: only a fading toast + a row tint signalled the mode. FIX: a
+  persistent `#targetEditBanner` (top-center over the canvas, pink like the target-halo) reading `Editing target for
+  "<name>" - click shapes, Esc to finish`; shown by enterTargetEditing, hidden by exitTargetEditing. Lives inside
+  `#canvasWrap` next to #docInfo/#toast so it rides along when the canvas re-parents into the Toolpath body.
+  textContent (not innerHTML) -> injection-safe. VERIFY: create toolpath -> banner shows the name; Esc -> banner hidden
+  + editing cleared; 0 errors.
+- **(5) MODAL Done/Cancel** (`52518e9`). ROOT: #docModal/#settingsModal only had a x that closed and KEPT the live
+  edits (doc size/unit apply as you type; the toggle on change). FIX: a Done/Cancel footer on each. Done closes keeping
+  edits; Cancel / x / backdrop / Esc revert to an ON-OPEN snapshot (state.doc + docUnit for the doc modal,
+  state.autoRecalc for settings) then close. Split the old `wireModal` into `wireOpener` (per opener -- #docModal has
+  TWO: #docInfo + #designDocBtn) + `wireModalControls` (once per modal) so the snapshot lives per-MODAL, not per-opener
+  (the earlier design would have restored a stale per-opener snapshot). VERIFY: doc 200->277 live, Cancel->200, Done
+  keeps 233; settings toggle Cancel reverts, Done keeps; both close; 0 errors.
+- **(6) JOINT-SIZE smaller** (`2be55da`). ROOT: Design joint markers too big. `JOINT_RADIUS` is the EXISTING #ui
+  SettingsManager knob (default 4 -> 16px base) -- the dispatch's "override if one exists" path, so NO #ui source
+  change. FIX: plotter sets `SettingsManager.set('JOINT_RADIUS', 2, {persist:false})` at Design mount. persist:false =
+  RUNTIME ONLY: not written to the shared `sketch-studio-settings` localStorage key, and each app is a separate page
+  instance -> Studio/Shaper keep the default 4. VERIFY: plotter JOINT_RADIUS=2, getDefault=4, localStorage persisted
+  keys=[] (leakedJointRadius=false); 0 errors.
+- **UNREGRESSED:** `npm run test:shell` **12/12**; plot oracles **5/5** standalone (clip/fills/fills3/outlines/
+  pipeline); `node --check` clean on all 7 touched files. Only #ui touch is the additive redo (item 2, default
+  unchanged); item 6 uses the declared knob runtime-only -> Studio/Shaper output-unregressed. Did NOT stage advisor
+  docs (NEXT-SESSION/ROADMAP/PARITY-ROADMAP) or the user's stray svg.
+- **PROCESS:** per-item CDP verify scripts (verify-del / verify-undo / verify-marquee / verify-banner / verify-modals /
+  verify-joint) from scratchpad; headless browsers self-terminated per run; `proc_health mark --turn 364` at turn start,
+  `watch`/`reap` before the pass.
+- **STATE:** branch `carve-out`. Batch 1 complete. Blessed backlog beyond this: rotate/scale/scissors as #core-joint
+  transforms; node-edit + snapping decisions; IMPORT-DOC-SIZE; region-hover on findLoops; further S-slices. STOP -- hold.
+
+=== BATCH-1 DONE — HOLD ===

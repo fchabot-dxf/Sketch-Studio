@@ -25,21 +25,20 @@ export function renderActiveLayerPanel() {
   root.appendChild(toolpathSelect(tps));      // pick which toolpath (shared state.activeToolpathId)
   const tp = activeToolpath() || tps[0];
   if (!tp) return;
-  // S2 (3): dynamic header = the op's name (was a static "Selected op").
-  if (head) head.textContent = tp.name;
+  // EDITOR-TIDY: STATIC header "Active Toolpath" (like the legacy <h2>) — the op name+type already show in the
+  // toolpathSelect dropdown ("Outline (outline)"), so a dynamic op-name h2 just duplicated the (now-removed) subhead.
+  if (head) head.textContent = "Active Toolpath";
 
   // S2 (1): GATE the editor by op TYPE — an outline op shows the OUTLINE editor, a fill op the FILL editor. Showing
   // both for every op (as before) meant a fill op had an inert outline editor whose edits never export (and vice
   // versa). Matches the original's type gate.
   if (tp.type === "outline") {
-    root.appendChild(subhead("Outline"));
     // S2 (2): the 'Draw outline' toggle — tp.drawOutline is read downstream (preview/export) but had no control.
     root.appendChild(checkboxField("Draw outline", tp.drawOutline !== false, (v) => { snapshot(); tp.drawOutline = v; triggerRerender(); }));
     root.appendChild(registrySelect("Style", tp.outline.style, OUTLINE_STYLES, false, (v) => { snapshot(); tp.outline.style = v; restructure(); }));
     const os = outlineStyle(tp.outline.style);
     if (os) for (const p of os.params) root.appendChild(paramField(p, tp.outline)); // includes Passes (declared param)
   } else if (tp.type === "fill") {
-    root.appendChild(subhead("Fill"));
     root.appendChild(registrySelect("Pattern", tp.fill.pattern, FILL_PATTERNS, true, (v) => { snapshot(); tp.fill.pattern = v; restructure(); }));
     const fp = tp.fill.pattern && tp.fill.pattern !== "none" ? fillPattern(tp.fill.pattern) : null;
     if (fp) for (const p of fp.params) root.appendChild(paramField(p, tp.fill));
@@ -108,5 +107,4 @@ function checkboxField(labelText, checked, onChange) {
 }
 
 function field() { const d = document.createElement("div"); d.className = "field"; return d; }
-function subhead(t) { const d = document.createElement("div"); d.className = "subhead"; d.textContent = t; return d; }
 function msg(t) { const d = document.createElement("div"); d.className = "empty"; d.textContent = t; return d; }

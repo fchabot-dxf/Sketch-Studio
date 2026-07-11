@@ -8758,3 +8758,22 @@ Plotter-side only.
   import fidelity, rotate/scale/scissors transforms). STOP — hold.
 
 === TOOLPATH-POLISH DONE — HOLD ===
+
+## turn 356 — EDITOR-TIDY: kill the doubled heading in the Active-Toolpath editor.
+
+User: "why is there 2 outline section." The type-gated op editor showed TWO stacked identical headings for an outline
+op — the section `<h2>` #activeLayerHead (S2 had set it to the op NAME = "Outline") AND a leftover `subhead("Outline")`
+inside the editor body. Quick fix in active-layer-panel.js:
+- REMOVED the `root.appendChild(subhead("Outline"))` + `subhead("Fill")` calls (pure duplication now the editor is
+  type-gated), and removed the now-orphaned `subhead()` helper (grep-clean — my removal orphaned it).
+- REVERTED the header to STATIC "Active Toolpath" (like the legacy `<h2>`): `head.textContent = "Active Toolpath"`,
+  dropped the `head.textContent = tp.name` line. No info lost — the op name+type still show in the toolpathSelect
+  dropdown ("Outline (outline)").
+- LEFT toolpathSelect / Draw-outline / Style / Passes / Pattern untouched (handlers unchanged -> editing still updates
+  the overlay).
+- VERIFY (screenshot + CDP): editor-tidy.png shows ONE "ACTIVE TOOLPATH" header (no doubled Outline); `#activeLayerHead`
+  text = "Active Toolpath"; `.subhead` count = 0; an OUTLINE op shows Draw-outline + Style + Passes (no Pattern); a fill
+  op shows Pattern. 23/23 oracles + shell-smoke 12/12; `node --check` clean; plotter-side (active-layer-panel.js only)
+  -> Studio/Shaper unregressed. STOP — hold.
+
+=== EDITOR-TIDY DONE — HOLD ===

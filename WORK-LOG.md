@@ -8250,3 +8250,42 @@ and the preview rides the existing per-tool preview pipeline, so the full pen wa
   path-parser dedup, #11 color-mixing), plus the two small bezier follow-ups flagged above. STOP - hold.
 
 === UNIFY-3-tool (SHARED #ui BEZIER TOOL) DONE — HOLD ===
+
+## turn 334 - COLOR-MIX-1 (#11): the pure color-MIX function - approximate an unreachable digital color by COMBINING pens. Pure #core + oracle.
+
+The MATH ONLY for "hash color mixes" (#11): a color the physical palette can't hit is approximated by a WEIGHTED blend
+of pens (cross-hatch red+yellow -> visual orange). Fill-layering + UI wiring stay OUT (COLOR-MIX-2/3). Pure, deterministic,
+no DOM.
+
+- **DECLARE over hand-roll:** a NEW pure module `#core/color-mix.js` REUSING color-match.js's `parseHex` +
+  `colorDistanceSq` (no duplicated color math). Mixing is a distinct concept from nearest-SINGLE-pen match, so it earns
+  its own file rather than bloating color-match.js. Nothing imports it yet (COLOR-MIX-2 wires it) - so it's inert,
+  additive substrate.
+- **`mixForColor(target, palette, opts?) -> [{ penId, weight }]`:** (1) SINGLE pen within tolerance -> `[{that, 1}]`
+  (no mix). (2) else BEST PAIR - over every pen pair, project the target onto the RGB segment between them (clamped,
+  closed-form least-squares on 2 pens) and keep the min-residual pair; return both weights (in [0,1], sum 1). A
+  projection landing on an endpoint (weight ~0) collapses to that single pen. Lenient inputs: target as hex |
+  `[r,g,b]` | `{r,g,b}`; palette pens as `{id|penId, hex|color}`. Empty/unusable palette or unparseable target -> `[]`.
+  Deterministic (index-order iteration, strict `<` so the first pair wins ties).
+- **MODEL CHOICE + FLAG (advisor review):** MVP = **LINEAR-RGB ADDITIVE blend + BEST PAIR (2 pens).** Two deliberate
+  simplifications, both flagged for the COLOR-MIX-2 model review: (a) real ink is SUBTRACTIVE (CMY-ish), not additive -
+  additive RGB averaging is the MVP approximation; (b) only 2 pens - a 3-pen (triangle / barycentric) blend can reach
+  interior targets no single edge hits. Linear-RGB + best-pair reconstructs the canonical cases EXACTLY (orange =
+  red+yellow; grey = black+white), so it's a clean, defensible MVP; the extensions are a model decision, not a bug.
+- **ORACLE (`packages/core/tests/color-mix.test.js`, new):** orange `#ff8000` on {red,yellow,blue,black,white} -> 2 pens
+  = red+yellow, each weight ~0.5, and the linear-RGB reconstruction of the returned mix matches `#ff8000` within tol
+  (per-channel <=3); EXACT pen (`#0000ff`, `#ff0000`) -> that single pen weight 1; grey `#808080` -> black+white ~0.5
+  each, reconstructs; empty palette -> `[]`; unparseable target -> `[]`; single-pen palette -> `[{that,1}]`; accepts
+  `{r,g,b}` + `[r,g,b]` target forms. Weights sum to 1 asserted.
+- **VERIFY:** the new oracle + ALL core oracles now **23/23** green STANDALONE (22 prior + color-mix; incl. the
+  byte-exact PP-2a golden). `npm run test:shell` **12/12**. `node --check` clean. Studio/Shaper UNAFFECTED - a NEW pure
+  file with NO existing edits and NO importers yet; `git status` = only `color-mix.js` + its oracle (did NOT stage the
+  advisor-owned NEXT-SESSION.md/ROADMAP.md or the user's stray `logo-of-letter-shape-svgrepo-com.svg`). 0 net-new.
+- **process hygiene:** `proc_health mark --turn 334`; no browser/servers spawned (pure node oracle); `watch` before pass.
+- **state:** branch `carve-out`. The pure color-mix math is in + oracle-pinned; NOT wired (COLOR-MIX-2 = fill-layering
+  plot: pick a fill pattern per weight - e.g. interleave/stipple the 2 pens by area fraction - + the digital->mix UI).
+  NEXT (blessed backlog): COLOR-MIX-2/3, UNIFY-7b (gut dormant art code), remaining polish (bulk fill-edit, cloud
+  palette save/load, PP-8 path-parser dedup), + the two small bezier follow-ups (curve-body hit-test, first-anchor
+  snap). ADVISOR: please review the additive/subtractive + 2-vs-3-pen model choice above. STOP - hold.
+
+=== COLOR-MIX-1 (PURE MIX FUNCTION) DONE — HOLD ===

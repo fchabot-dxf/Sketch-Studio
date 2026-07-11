@@ -9,30 +9,21 @@ import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installExportButton, buildGcodeEntries } from "./export.js";
-import { installSettingsPanel, loadDefaults } from "./settings.js";
 
+// S3-2: the machine SETTINGS block (doc size / unit / feeds / pen-heights / tolerance / auto-recalc) moved to the
+// Toolpath tab ("doesn't belong in Export", user-decided). Export now shows ONLY the export action; the pen-width
+// simulation is the canvas view set in onEnter.
 const SCAFFOLD = `
   <div id="exportRoot">
     <aside id="exportPanel">
-      <div class="dp-head">Document</div>
-      <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input id="docW" type="number"></div>
-      <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input id="docH" type="number"></div>
-      <div class="field"><label>Unit</label><select id="docUnit"><option value="mm">mm</option><option value="in">in</option></select></div>
-      <div class="dp-head">Plotter</div>
-      <div class="field"><label>Pen up Z</label><input id="penUpZ" type="number" step="any"></div>
-      <div class="field"><label>Pen down Z</label><input id="penDownZ" type="number" step="any"></div>
-      <div class="field"><label>Draw feed</label><input id="drawFeed" type="number"></div>
-      <div class="field"><label>Z feed</label><input id="zFeed" type="number"></div>
-      <div class="field"><label>Tolerance <small>mm</small></label><input id="tol" type="number" step="any"></div>
-      <div class="field"><label>Auto-recalc</label><input id="autoRecalcToggle" type="checkbox"></div>
+      <div class="dp-head">Export</div>
+      <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Toolpath</b> tab.</div>
       <button id="exportBtn" class="dp-btn dp-primary">Export G-code (.zip)</button>
     </aside>
   </div>`;
 
 export function mountExportStage(view) {
   view.innerHTML = SCAFFOLD;
-  installSettingsPanel(); // wires doc-size / feeds / tolerance / autoRecalc inputs
-  loadDefaults();         // hydrate the settings inputs from state.settings
   installExportButton();  // wires #exportBtn -> per-toolpath gcode -> zip -> download
   if (typeof window !== "undefined") window.__export = { buildGcodeEntries }; // dev/test seam: inspect the gcode
   return { onEnter };

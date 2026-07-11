@@ -12,7 +12,7 @@ import { renderArt } from "./render-art.js";
 import { installCanvasHandlers } from "./interaction.js";       // UNIFY-7: canvas pan + toolpath selection (art tools retired)
 import { installKeyboard } from "./keyboard.js";
 import { installHistory } from "./history.js";
-import { installPlotColorsPanel } from "./plot-colors-panel.js"; // the pen palette editor (pipeline)
+// S3: installPlotColorsPanel moved to toolpath-stage.js (the Pens palette is surfaced in the Toolpath tab now).
 // UNIFY-7: retired the art-UI installers — installToolbar/setTool (tools.js), installTransformHud (rotate/scale HUD),
 // installLayerButtons (layers-panel, DELETED), installSvgImport (art importer; import goes to #core via the Design tab).
 
@@ -43,11 +43,8 @@ const SCAFFOLD = `
         </div>
         <div id="layers" class="dp-list"></div>
       </section>
-      <section class="dp-sec">
-        <div class="dp-head">Pens</div>
-        <button id="addPlotColor" class="dp-btn">+ Pen</button>
-        <div id="plotColors" class="dp-list"></div>
-      </section>
+      <!-- S3: the Pens palette (#plotColors/#addPlotColor) moved to the Toolpath tab — it was stranded here in the
+           permanently-hidden drawHost, so the user could never add/rename/recolor/width/delete a pen. -->
     </aside>
   </div>`;
 
@@ -66,7 +63,7 @@ export function mountDrawStage(view) {
   installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas
   installKeyboard();
   installHistory(() => renderArt());
-  installPlotColorsPanel();               // the pen palette editor (pipeline)
+  // S3: the Pens palette is installed by toolpath-stage now (it was hidden in this drawHost).
 
   initLayers();                           // UNIFY-7: now seeds ONLY the default toolpath (no art layer)
   fitViewport();

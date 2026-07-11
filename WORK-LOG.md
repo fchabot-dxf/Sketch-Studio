@@ -8678,3 +8678,39 @@ classes but NOTHING styled them. Fixes:
   fidelity, transforms). STOP — hold.
 
 === S2 DONE — HOLD ===
+
+## turn 352 — S3: surface the hidden PENS palette + relocate MACHINE settings into the Toolpath tab. Pure re-home (like MERGE-1).
+
+Both panels were already PORTED — just mounted where the user can't reach them. Re-homed both to the Toolpath tab.
+One commit (both parts live in toolpath-stage.js — a shared file, so splitting would be messier than the advisor's
+"if cleaner"). Verified BY CLICKS (headless CDP, 0 console errors). Plotter-side only; NO #core/#ui edits.
+
+- **PART 1 — SURFACE PENS:** `#plotColors`+`#addPlotColor` lived in draw-stage.js's `#drawPanel` = the PERMANENTLY-HIDDEN
+  drawHost (main.js `drawHost.hidden=true`), so plot-colors-panel (guards on `#plotColors`) rendered into a hidden node —
+  the user could never add/rename/recolor/set-width/delete a pen, and per-pen WIDTH (drives the Export sim + gcode) was
+  frozen at 0.5mm with no UI. FIX: moved the Pens `<section>` (`#addPlotColor` + `#plotColors`) into the Toolpath ops
+  panel scaffold (toolpath-stage.js) + `installPlotColorsPanel()` on mount + `renderPlotColorsPanel()` on entry; REMOVED
+  the section + install from draw-stage.js (no duplicate IDs — grep confirms `#plotColors`/`#addPlotColor` exist ONLY in
+  toolpath-stage now). Auto-restores add / rename / recolor / width / delete-with-reassign.
+- **PART 2 — RELOCATE MACHINE SETTINGS** (user: "doesn't belong in Export"): moved the settings block (doc W/H, unit,
+  `#penUpZ`/`#penDownZ`/`#drawFeed`/`#zFeed`/`#tol`, auto-recalc) + `installSettingsPanel()` + `loadDefaults()` from
+  export-stage.js into a "Machine" `<section>` of the Toolpath tab. Export now shows ONLY the export button + a note
+  ("settings are in the Toolpath tab"); its canvas view is still the pen-width sim (onEnter unchanged). ATOMIC move —
+  installSettingsPanel calls `.addEventListener` UNGUARDED on `#docW`/`#docH`/the feed inputs, so it throws if they're
+  absent; the fields + the install + loadDefaults all moved together (export mount no longer calls them).
+- **VERIFY LIVE, BY CLICKS (CDP): console errors 0.** In the Toolpath tab: Pens + Machine sections present; **+Pen adds
+  a pen** (row with a color input, a `.pc-width` input, and a `.pc-del` delete); **width edit -> pc.width=1.25**;
+  **recolor -> pc.color=#123456**; **drawFeed edit -> state.settings.draw_feed=1234**, **penUpZ -> pen_up_z=7**. Then a
+  targeted fill op -> **Export gcode contains `F1234` AND `Z7.000`** (the relocated settings DRIVE the gcode). The
+  **Export tab has NO settings block** (`#penUpZ`/`#docW`/`#drawFeed`/`#autoRecalcToggle` absent) — only `#exportBtn`.
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** STANDALONE (no #core touch this slice); `npm run test:shell`
+  **12/12**; `node --check` clean; no duplicate DOM ids across the stage scaffolds. Plotter-side only ->
+  Studio/Shaper unregressed. `git status` = only toolpath-stage.js / draw-stage.js / export-stage.js (did NOT stage the
+  advisor docs — NEXT-SESSION/ROADMAP/PARITY-ROADMAP — or the user's stray svg). 0 net-new.
+- **process:** CDP verify from scratchpad (verify-s3b; the first heredoc attempt hit a shell-quoting snag -> rewrote via
+  the Write tool); `proc_health mark --turn 352`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The Toolpath tab is now the full workbench: ops list + inline fill/outline editor (S2)
+  + the PENS palette + the MACHINE settings. Export is just the action + sim. HOLD for S4+ (Delete->#core + undo/redo
+  buttons, marquee/banner overlays, import fidelity, rotate/scale/scissors transforms). STOP — hold.
+
+=== S3 DONE — HOLD ===

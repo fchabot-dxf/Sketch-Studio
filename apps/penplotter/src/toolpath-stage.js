@@ -1,8 +1,10 @@
-// apps/penplotter/src/toolpath-stage.js — the Toolpath stage.
+// apps/penplotter/src/toolpath-stage.js — the Toolpath stage (the plotter WORKBENCH).
 //  PP-4a: the compute backbone — shared re-parented canvas + the optimized overlay + Recalculate.
-//  PP-4b: the full OPS panel (toolpath-layers-panel): pens-as-folders -> outline/fill toolpaths, target (layer or
-//  selection), reorder, feeds/up-down, export flags, and PEN ASSIGN (tp.plotColorId). Completes the Toolpath stage.
-// Draw/Fill/Toolpath/Export SHARE one plotter canvas (INTEGRATION.md); it is re-parented into #toolpathRoot on entry.
+//  PP-4b: the OPS panel (toolpath-layers-panel): pens-as-folders -> outline/fill toolpaths, target, reorder, feeds,
+//         export flags, PEN ASSIGN.  MERGE-1: the fill/outline editor (active-layer-panel) is inline here.
+//  S3: the PENS palette (plot-colors-panel — was stranded in the permanently-hidden drawHost) + the MACHINE settings
+//      (settings.js — relocated out of Export) live here too. Everything a toolpath needs is now on one tab.
+// Draw/Toolpath/Export SHARE one plotter canvas (INTEGRATION.md); it is re-parented into #toolpathRoot on entry.
 
 import { state } from "./state.js";
 import { canvasWrap } from "./dom.js";
@@ -11,11 +13,9 @@ import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installToolpathLayersPanel, renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
 import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-panel.js"; // MERGE-1: the fill/outline editor, inline
+import { installPlotColorsPanel, renderPlotColorsPanel } from "./plot-colors-panel.js";     // S3-1: pens surfaced here
+import { installSettingsPanel, loadDefaults } from "./settings.js";                          // S3-2: machine settings relocated here
 
-// MERGE-1: Fill folded in. #activeLayerContent (the retired Fill tab's editor) now lives HERE, below the ops list —
-// clicking an op row (toolpath-layers-panel wires activeToolpathId + renderActiveLayerPanel) shows its pattern/style
-// editor inline next to pen/order/export. Previously renderActiveLayerPanel() ran with no container in this tab (the
-// editor mounted only in the Fill tab) -> "each toolpath has nothing to edit".
 const SCAFFOLD = `
   <div id="toolpathRoot">
     <aside id="toolpathPanel">
@@ -32,6 +32,19 @@ const SCAFFOLD = `
       <div id="toolpathLayers" class="dp-list"></div>
       <div class="dp-head" id="activeLayerHead">Selected op</div>
       <div id="activeLayerContent"></div>
+      <div class="dp-head">Pens</div>
+      <button id="addPlotColor" class="dp-btn">+ Pen</button>
+      <div id="plotColors" class="dp-list"></div>
+      <div class="dp-head">Machine</div>
+      <div class="field"><label>Width <small class="doc-unit-label">mm</small></label><input id="docW" type="number"></div>
+      <div class="field"><label>Height <small class="doc-unit-label">mm</small></label><input id="docH" type="number"></div>
+      <div class="field"><label>Unit</label><select id="docUnit"><option value="mm">mm</option><option value="in">in</option></select></div>
+      <div class="field"><label>Pen up Z</label><input id="penUpZ" type="number" step="any"></div>
+      <div class="field"><label>Pen down Z</label><input id="penDownZ" type="number" step="any"></div>
+      <div class="field"><label>Draw feed</label><input id="drawFeed" type="number"></div>
+      <div class="field"><label>Z feed</label><input id="zFeed" type="number"></div>
+      <div class="field"><label>Tolerance <small>mm</small></label><input id="tol" type="number" step="any"></div>
+      <div class="field"><label>Auto-recalc</label><input id="autoRecalcToggle" type="checkbox"></div>
     </aside>
   </div>`;
 
@@ -39,10 +52,13 @@ export function mountToolpathStage(view) {
   view.innerHTML = SCAFFOLD;
   installToolpathLayersPanel(); // wires #addOutlineTp/#addFillTp/#exportAll/#exportNone/#recalcBtn
   installActiveLayerPanel(() => { recalcPreview(); renderArt(); }); // MERGE-1: fill/outline edits recompute the overlay live
+  installPlotColorsPanel();     // S3-1: pens add/rename/recolor/width/delete-with-reassign (was hidden in drawHost)
+  installSettingsPanel();       // S3-2: doc size / unit / feeds / pen-heights / tolerance / auto-recalc (was in Export)
+  loadDefaults();               // hydrate the settings inputs from state.settings
   return { onEnter };
 }
 
-// On entry: adopt the shared canvas, switch to toolpath view, recompute + render (art + optimized overlay + panel).
+// On entry: adopt the shared canvas, switch to toolpath view, recompute + render (art + optimized overlay + panels).
 function onEnter() {
   const wrap = canvasWrap;
   if (!wrap) return;
@@ -54,7 +70,8 @@ function onEnter() {
   const r = wrap.getBoundingClientRect();
   if (r.width > 0 && r.height > 0) { if (needsFit()) fitViewport(); else applyViewport(); }
   recalcPreview();            // fresh optimized path on entry (an explicit recompute, like the button)
-  renderArt();                // art + the optimized overlay (renderArt also refreshes the ops panel)
+  renderArt();                // art + the optimized overlay (renderArt also refreshes the ops + pens panels)
   renderToolpathLayersPanel();
   renderActiveLayerPanel();   // MERGE-1: show the selected op's fill/outline editor inline
+  renderPlotColorsPanel();    // S3-1: show the pens palette
 }

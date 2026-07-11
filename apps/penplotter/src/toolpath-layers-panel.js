@@ -431,37 +431,38 @@ function insertToolpathInStack(tp) {
  *  _fill (then _stroke, then black). Plot colors are matched by hex;
  *  missing pens are created via findOrCreatePlotColor. */
 function createToolpathsFromSelection(type) {
-    const pickColor = (s) => {
-        if (type === "outline") {
-            const c = s._stroke || s._fill;
-            return c || "#000000";
-        }
-        const c = s._fill || s._stroke;
-        return c || "#000000";
-    };
+    const artPick = (s) => (type === "outline" ? (s._stroke || s._fill) : (s._fill || s._stroke)) || "#000000";
 
-    // Resolve selected shape ids → shape objects.
+    // Resolve each selected id -> { id, color }. WORKFLOW-FIX: the geometry now lives in the #core sketch (art store
+    // retired UNIFY-7), so resolve BOTH stores — art shapes by their _stroke/_fill, #core shapes by their DIGITAL
+    // color (state.shapeColors). Without the #core branch, a selection of drawn/imported vectors produced NO toolpath.
     const ids = state.selectedShapeIds;
-    const shapesById = new Map();
+    const resolved = [];        // { id, color }
+    const foundArt = new Set();
     for (const al of state.artLayers) {
-        for (const s of al.shapes) if (ids.has(s.id)) shapesById.set(s.id, s);
+        for (const s of al.shapes) if (ids.has(s.id)) { resolved.push({ id: s.id, color: artPick(s) }); foundArt.add(s.id); }
     }
-    if (!shapesById.size) return;
+    const cs = state.coreSketch;
+    if (cs && cs.shapes) {
+        const coreIds = new Set(cs.shapes.map(sh => sh.id));
+        for (const id of ids) if (!foundArt.has(id) && coreIds.has(id)) resolved.push({ id, color: state.shapeColors.get(id) || "#000000" });
+    }
+    if (!resolved.length) return;
 
-    // Bucket by lower-cased hex color.
+    // Bucket by lower-cased hex color -> one toolpath per color (a pen created/found per color).
     const byColor = new Map();
-    for (const s of shapesById.values()) {
-        const c = (pickColor(s) || "#000000").toLowerCase();
+    for (const r of resolved) {
+        const c = (r.color || "#000000").toLowerCase();
         if (!byColor.has(c)) byColor.set(c, []);
-        byColor.get(c).push(s);
+        byColor.get(c).push(r.id);
     }
 
     snapshot();
     let firstTp = null;
-    for (const [color, shapes] of byColor) {
+    for (const [color, shapeIds] of byColor) {
         const pc = findOrCreatePlotColor(color, color);
         const tp = makeToolpath(`${type} ${state.toolpaths.length + 1}`, type, null);
-        tp.targetShapeIds = shapes.map(s => s.id);
+        tp.targetShapeIds = shapeIds.slice();
         tp.targetArtLayerId = null;
         tp.plotColorId = pc.id;
         // Land next to existing same-pen / same-type entries so render

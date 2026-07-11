@@ -10,6 +10,7 @@ import { resolveToolpathShapes } from "./preview.js"; // PP-4a: the real compute
 import { syncTargetEditingSelection } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing (un-stubbed)
 import { closedPolygonFor, pointInPolygon } from "#core/plot/fills/utils.js";
 import { crossingParams, trimSpanAt, removedSpanAt } from "./trim.js";
+import { coreShapeToPolyline } from "#core/core-shape-to-polyline.js"; // WORKFLOW-FIX: hit-test #core geometry on the canvas
 
 // Snap threshold is in SCREEN pixels — converted to mm per drag frame
 // using the current viewport scale. That way a snap engages at a constant
@@ -253,16 +254,21 @@ function startSelect(e, p) {
             import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
             return;
         }
-        // In the gap between strokes → select the SVG shape underneath.
-        const gapShape = shapeAtPoint(p);
+        // In the gap between strokes → select the geometry underneath. WORKFLOW-FIX: the geometry now lives in the
+        // #core sketch (art store retired), so resolve a #core shape by direct stroke-click (data-shape-id) or by
+        // interior/near-stroke geometry (coreShapeAtPoint), and select it -> state.selectedShapeIds (UNIFY-2 targeting).
+        const gapShape = shapeAtPoint(p);                       // legacy art shape (empty post-UNIFY-7), kept for safety
         if (gapShape) { beginShapeDrag(p, gapShape.id, e.shiftKey); return; }
-        // Empty → rubber-band marquee that picks toolpaths.
+        const cid = (e.target.dataset && e.target.dataset.shapeId) || coreShapeAtPoint(p, tol);
+        if (cid) { selectCoreShape(cid, e.shiftKey); return; }
+        // Empty → rubber-band marquee that picks toolpaths + #core shapes in the box.
         state.interaction = {
             kind: "marquee",
             scope: "toolpath",
             startX: p.x, startY: p.y, x: p.x, y: p.y,
             additive: e.shiftKey,
             initialSelection: new Set(state.selectedToolpathIds),
+            initialShapeSelection: new Set(state.selectedShapeIds),
         };
         render();
         return;
@@ -340,6 +346,20 @@ function updateMarquee(it) {
         } else if (!next.size) {
             state.activeToolpathId = null;
         }
+        // WORKFLOW-FIX: also select #core SHAPES whose geometry falls in (window) / touches (crossing) the box, so a
+        // marquee in Fill/Toolpath grabs the vectors for targeting (state.selectedShapeIds -> UNIFY-2).
+        const cs = state.coreSketch;
+        const shapeNext = new Set(it.additive ? (it.initialShapeSelection || []) : []);
+        if (cs && cs.shapes) for (const sh of cs.shapes) {
+            const pts = coreShapeToPolyline(sh, cs.joints);
+            if (!pts || !pts.length) continue;
+            let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+            for (const q of pts) { if (q[0] < mnx) mnx = q[0]; if (q[0] > mxx) mxx = q[0]; if (q[1] < mny) mny = q[1]; if (q[1] > mxy) mxy = q[1]; }
+            const fullyInside = mnx >= minX && mxx <= maxX && mny >= minY && mxy <= maxY;
+            const touches = !(mxx < minX || mnx > maxX || mxy < minY || mny > maxY);
+            if (isWindow ? fullyInside : touches) shapeNext.add(sh.id);
+        }
+        state.selectedShapeIds = shapeNext;
         return;
     }
 
@@ -819,6 +839,38 @@ function nearestToolpathWithin(p, tol) {
         }
     }
     return best;
+}
+
+/** WORKFLOW-FIX: the topmost #core sketch shape hit by point p — interior (closed shapes) or within `tol` mm of any
+ *  segment (open shapes / edges). Returns the #core shape id, or null. Mirrors how RENDER-FIX draws the geometry
+ *  (coreShapeToPolyline), so what you click is what you see. */
+function coreShapeAtPoint(p, tol) {
+    const cs = state.coreSketch;
+    if (!cs || !cs.shapes) return null;
+    for (let i = cs.shapes.length - 1; i >= 0; i--) {
+        const sh = cs.shapes[i];
+        const pts = coreShapeToPolyline(sh, cs.joints);
+        if (!pts || pts.length < 2) continue;
+        const a = pts[0], b = pts[pts.length - 1];
+        const closed = Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
+        if (closed && pointInPolygon([p.x, p.y], pts)) return sh.id;
+        for (let k = 0; k + 1 < pts.length; k++) if (pointSegDist(p.x, p.y, pts[k], pts[k + 1]) <= tol) return sh.id;
+    }
+    return null;
+}
+
+/** WORKFLOW-FIX: select a #core shape into state.selectedShapeIds (highlight + targeting) — NOT a drag (the plotter
+ *  canvas is for targeting; editing is the Design tab). Honors target-editing mode + shift-toggle. */
+function selectCoreShape(sid, additive) {
+    if (state.targetEditingToolpathId) {
+        if (state.selectedShapeIds.has(sid)) state.selectedShapeIds.delete(sid); else state.selectedShapeIds.add(sid);
+        syncTargetEditingSelection();
+    } else if (additive) {
+        if (state.selectedShapeIds.has(sid)) state.selectedShapeIds.delete(sid); else state.selectedShapeIds.add(sid);
+    } else {
+        state.selectedShapeIds = new Set([sid]);
+    }
+    render();
 }
 
 /** Topmost art shape whose interior contains point p, or null. */

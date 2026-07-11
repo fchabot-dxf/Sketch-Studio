@@ -49,20 +49,26 @@ export function renderArt() {
 function buildCoreGeometry() {
     const cs = state.coreSketch;
     if (!cs || !cs.shapes || !cs.shapes.length) return null;
+    const sel = state.selectedShapeIds;
     const g = document.createElementNS(SVG_NS, "g");
     g.setAttribute("data-layer", "core-geometry");
     g.setAttribute("fill", "none");
-    g.setAttribute("pointer-events", "none");
     for (const sh of cs.shapes) {
         const pts = coreShapeToPolyline(sh, cs.joints);
         if (!pts || pts.length < 2) continue;
         const pl = document.createElementNS(SVG_NS, "polyline");
         pl.setAttribute("points", pts.map(p => `${p[0]},${p[1]}`).join(" "));
-        pl.setAttribute("stroke", penColorForShape(sh.id));
-        pl.setAttribute("stroke-width", "0.8");
+        // WORKFLOW-FIX: tag with the #core shape id so a canvas click can map back to the shape (selection/targeting),
+        // and HIGHLIGHT the current selection (thicker blue) so "click a vector -> it selects" is visible.
+        pl.setAttribute("data-shape-id", sh.id);
+        const selected = sel && sel.has(sh.id);
+        pl.setAttribute("stroke", selected ? "#2563eb" : penColorForShape(sh.id));
+        pl.setAttribute("stroke-width", selected ? "1.8" : "0.8");
         pl.setAttribute("stroke-linecap", "round");
         pl.setAttribute("stroke-linejoin", "round");
         pl.setAttribute("vector-effect", "non-scaling-stroke");
+        pl.style.pointerEvents = "stroke"; // clickable on the line; interior clicks resolve geometrically (coreShapeAtPoint)
+        pl.style.cursor = "pointer";
         g.appendChild(pl);
     }
     return g;

@@ -8417,3 +8417,50 @@ Diagnosed live FIRST, then fixed at the cause. Plotter-only; no #core/#ui touch.
   snap). STOP - hold.
 
 === RENDER-FIX (#core geometry in Fill/Toolpath/Export) DONE — HOLD ===
+
+## turn 342 - WORKFLOW-FIX (URGENT): you can now SELECT #core vectors in Fill/Toolpath -> target them with toolpaths/fills. End-to-end workflow restored.
+
+RENDER-FIX (turn 340) drew #core geometry on the plotter canvas but left it UN-selectable, so the Fill/Toolpath workflow
+was dead (can't pick a vector -> can't target it). Fixed selection FIRST, then found + fixed a second migration
+disconnect in the +Outline/+Fill path, then verified the whole flow BY CLICKS.
+
+- **ROOT (two disconnects, both from the art-store retirement):** (1) the plotter canvas select logic
+  (`interaction.js`) only knew the ART store: toolpath-mode gap-clicks called `shapeAtPoint` (scans `state.artLayers`,
+  EMPTY post-UNIFY-7) and the marquee scanned `state.layers` (also art) -> #core geometry was never hit; the RENDER-FIX
+  paths also had `pointer-events:none` + no `data-shape-id`. (2) `createToolpathsFromSelection` (toolpath-layers-panel)
+  resolved selected ids ONLY from `state.artLayers`, so even a fixed selection produced NO toolpath for #core shapes.
+- **FIX 1 - selection (`interaction.js` + `render-art.js`):** RENDER-FIX'd core-geometry polylines now carry
+  `data-shape-id`, are pickable (`pointer-events:stroke`), and the SELECTED shape draws HIGHLIGHTED (thick blue). New
+  `coreShapeAtPoint(p, tol)` hit-tests #core geometry the way it's DRAWN (coreShapeToPolyline: interior for closed
+  shapes via pointInPolygon, near-stroke for open) and `selectCoreShape(id, additive)` writes `state.selectedShapeIds`
+  (+ highlight, honoring target-editing + shift-toggle) - a SELECT, not a drag (the plotter canvas targets; editing is
+  the Design tab). Wired into `startSelect` (toolpath-mode gap-click: e.target.dataset.shapeId OR coreShapeAtPoint) and
+  the toolpath-scope marquee (also selects #core shapes whose geometry falls in/touches the box).
+- **FIX 2 - targeting (`toolpath-layers-panel.js`):** `createToolpathsFromSelection` now resolves BOTH stores - art
+  shapes by `_stroke`/`_fill`, and #core shapes by their DIGITAL color (`state.shapeColors`) - buckets by color, and
+  makes one toolpath per color targeting those ids with a pen (findOrCreatePlotColor). So +Outline/+Fill on a #core
+  selection creates a real, pen-assigned, correctly-targeted toolpath. (Fill tab / active-layer-panel already operated
+  on the ACTIVE toolpath's fill{} - unaffected; the pipeline resolves #core targets via UNIFY-2.)
+- **VERIFY LIVE, BY CLICKS (headless CDP): console errors 0.** Drew a #core circle (colored #cc0000), Toolpath tab,
+  dispatched REAL mousedown/up on #canvas at the circle -> `selectedShapeIds=[WF1]` (**selectionWorks:true**) and the
+  rendered vector HIGHLIGHTED (blue, thick). Clicked the REAL **+Outline** button -> an outline toolpath targeting WF1
+  with a RED pen auto-assigned (**outlinePen:#cc0000**); re-selected + **+Fill** -> a hatch fill toolpath targeting WF1.
+  Fill tab: the overlay shows **outline (1 stroke) + fill (20 hatch strokes)** (**fillHasStrokes:true**). Export ->
+  **3 gcode files, 84 G1 moves total**. SCREENSHOT captured (workflow-toolpath.png): the Toolpath-ops panel with the
+  pen-folder tree (red pen: outline 2 / fill 3) + the circle drawn with its blue highlighted outline under the pink
+  hatch/outline overlay. The whole draw->select->toolpath->fill->export chain works by clicks, no console.
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** green STANDALONE; `npm run test:shell` **12/12**; `node --check`
+  clean. Plotter-only (`interaction.js` + `render-art.js` + `toolpath-layers-panel.js`) - NO #core/#ui edits, so
+  Studio/Shaper unregressed; the plotter loads clean (0 console errors). `git status` = only those 3 files (did NOT
+  stage advisor-owned NEXT-SESSION.md/ROADMAP.md or the user's stray svg). 0 net-new.
+- **note:** the default seed "Outline" toolpath (empty targetShapeIds) still falls back to the live selection, so it
+  also traced the circle (a 3rd gcode file) - pre-existing seed behavior, harmless; a later polish could drop/retarget
+  the seed toolpath. NOT in scope here.
+- **process hygiene:** live verify + screenshot from scratchpad (verify-workflow); `proc_health mark --turn 342`;
+  headless browser killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. The Fill/Toolpath workflow is RESTORED: select #core vectors by click/marquee in
+  Fill/Toolpath -> +Outline/+Fill target them + assign a pen -> Fill hatch -> overlay updates -> Export N gcode; no
+  stray toolbar (turn 340). NEXT (blessed backlog): UNIFY-7b (gut remaining dormant art code), remaining polish (bulk
+  fill-edit, seed-toolpath cleanup, cloud palette, PP-8) + the two bezier follow-ups. STOP - hold.
+
+=== WORKFLOW-FIX (SELECT #core IN Fill/Toolpath) DONE — HOLD ===

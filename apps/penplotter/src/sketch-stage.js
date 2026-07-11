@@ -67,7 +67,9 @@ export function mountSketchStage(view, ctx = {}) {
   // its JOINTS (editable). Selecting a static shape ACTIVATES it (live); deselecting returns it to static. #14: this
   // is why a fresh freehand bezier shows its endpoint joints (it's never marked static -> live).
   const isStatic = (sh) => state.staticShapeIds.has(sh.id) &&
-    !(controller && controller.state.selectedShapes && controller.state.selectedShapes.has(sh.id));
+    !(controller && controller.state.selectedShapes && controller.state.selectedShapes.has(sh.id)) &&
+    !(controller && controller.state.hoveredShape === sh.id); // HOVER-2: a HOVERED static shape renders LIVE so its
+    // hover highlight shows (imported/static geometry hovers like drawn); mirrors the selected-static-goes-live rule.
 
   // UNIFY-throttle: gate the per-frame solve to when geometry is being MANIPULATED (a drag, a selected/active edit).
   // Idle frames skip solve (each call is ~1.3s at 13k joints); the last-solved geometry stays put. Discrete changes

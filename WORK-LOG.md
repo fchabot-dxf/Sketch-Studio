@@ -8534,3 +8534,55 @@ editing tools is a distinct focused slice. TURNKEY PLAN for the next slice:
   snapping; then remaining polish. STOP - hold.
 
 === PARITY-AUDIT + RESTORE (VECTOR HOVER) DONE — HOLD ===
+
+## turn 346 - HOVER-2: fixed GAP 1 (imported/static geometry now hovers in Design); GAP 2 (i) fill-region interior-hover works, (ii) multi-vector region scoped+flagged; Fill/Toolpath coupling reported.
+
+Acceptance found the turn-344 hover restore incomplete. Diagnosed both gaps LIVE (headless CDP), fixed GAP 1 at the
+real cause, confirmed GAP 2 (i), scoped (ii).
+
+- **GAP 1 diagnosis (imported SVG doesn't hover in Design):** #ui hover is GEOMETRIC - `updateHover` -> `findSnap` over
+  `state.shapes` (ALL shapes; the static-skip builds a LOCAL `dShapes` for `draw()` only, it does NOT mutate
+  state.shapes) - so static does NOT block hover DETECTION. The real cause: imported shapes are marked STATIC, and the
+  static render-skip drops them from what the sketcher DRAWS, so even when `hoveredShape` IS set the hover HIGHLIGHT is
+  never rendered (only the flat underlay shows). (Selection already excluded selected shapes from static -> selection
+  highlight shows; HOVER wasn't excluded.) A secondary, non-import effect: small/dense geometry makes the vertex snap
+  (JOINT_PX 30) beat the line-body snap (LINE_PX 20), so hovering near a vertex returns a JOINT - inherent snap
+  behavior, shared with drawn geometry, NOT an import regression (headless import-scale + the demo seed made this noisy
+  to probe; isolated the render cause with a clean drawn-then-marked-static shape).
+- **GAP 1 FIX (`sketch-stage.js`, plotter-side, 1 line):** the Design `isStatic` predicate now also excludes the
+  HOVERED shape: `isStatic(sh) = staticShapeIds.has(id) && !selected && !(hoveredShape===id)`. A hovered static shape
+  renders LIVE -> the sketcher draws it with the hover glow -> imported/static geometry hovers like drawn. Mirrors the
+  existing selected-static-goes-live rule. NOT a #ui change (the predicate is host-injected) -> Studio/Shaper
+  unaffected.
+- **GAP 1 VERIFY LIVE (CDP):** a drawn circle MARKED STATIC (simulates an import, clear of the scale/seed noise):
+  idle-static -> NOT rendered (`renderedWhileStaticIdle:false`); on HOVER -> `hoveredShape` set
+  (`hoveredWhileStatic:true`) AND now RENDERED live (`renderedWhileHovered:true`) = the highlight shows. 0 console errors.
+- **GAP 2 (i) - single closed #core shape interior-hover in Fill:** already WORKS - the turn-344 `coreShapeAtPoint`
+  pointInPolygon's closed shapes, so hovering INSIDE a closed shape ghosts it. VERIFIED (`fillInteriorGhost:true`,
+  hovering a circle interior). No fix needed. TAB-AGNOSTIC: the hit-test lives in the shared plotter-canvas handler
+  (`interaction.js`), so it fires in Fill AND Toolpath identically - and (per the turn-346 amendment) transfers AS-IS to
+  the coming Fill/Toolpath merge; I built NO Fill-tab-specific chrome.
+- **GAP 2 (ii) - region bounded by MULTIPLE vectors - SCOPED + FLAGGED (not built):** a fill region formed by several
+  separate #core vectors (e.g. an imported rect = 4 lines, or a boundary of distinct segments) has NO single closed
+  shape whose interior contains the point, so `coreShapeAtPoint` returns null there. Detecting "the loop under the
+  cursor" from an arrangement of vectors is a real CAM feature. `#core` ALREADY HAS a loop-finder:
+  `packages/core/loop-finder.js` `findLoops(state)`. PROPOSAL for a decision: wire region-hover on top of `findLoops`
+  (find the enclosing loop at the cursor -> ghost it -> it also becomes the fill-region target). Kept TAB-AGNOSTIC so it
+  lands in the merged Design/Toolpath surface. Did NOT build blind - awaiting the go-ahead + the merge.
+- **REPORT (no action) - Fill <-> Toolpath coupling:** they are TWO VIEWS OVER ONE SHARED RECORD - `state.toolpaths`.
+  The Toolpath tab (`toolpath-layers-panel`) edits the ops list (create/target/pen/order/feeds/export flags); the Fill
+  tab (`active-layer-panel`) edits the ACTIVE toolpath's `fill{pattern,params}` + `outline{}`. Same objects, two panels;
+  neither owns separate data. So the split is pure UI - merging is low-risk (fold Fill's controls into the Toolpath tab
+  as a section). Amendment CONFIRMS: the user is doing the merge (pipeline -> Design/Toolpath/Export) as the NEXT slice;
+  my GAP 2 region-hover logic (in the shared canvas handler) transfers unchanged.
+- **VERIFY UNREGRESSED:** ALL core oracles **23/23** green STANDALONE; `npm run test:shell` **12/12**; `node --check`
+  clean. Only `sketch-stage.js` changed (plotter-side; host-injected predicate) -> Studio/Shaper unregressed. `git
+  status` = only that file (did NOT stage advisor docs or the user's stray svg). 0 net-new.
+- **process hygiene:** CDP diagnosis + verify from scratchpad (diag-hover*, verify-hoverfix); `proc_health mark --turn
+  346`; headless browsers killed by the harness; `watch` before pass.
+- **state:** branch `carve-out`. Imported/static geometry hovers in Design (GAP 1 fixed); single-closed fill-region
+  interior-hover works (GAP 2 i). NEXT (advisor): the Fill/Toolpath MERGE (confirmed) + GAP 2 (ii) region-hover on
+  findLoops (tab-agnostic, transfers as-is); then rotate/scale/scissors restore (turn-344 plan); node-edit + snapping
+  decisions. STOP - hold.
+
+=== HOVER-2 (IMPORT + REGION HOVER) DONE — HOLD ===

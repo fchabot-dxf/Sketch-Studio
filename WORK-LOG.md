@@ -8936,3 +8936,99 @@ existing #ui knob, no source change). Every item driven live via headless-CDP wi
   transforms; node-edit + snapping decisions; IMPORT-DOC-SIZE; region-hover on findLoops; further S-slices. STOP -- hold.
 
 === BATCH-1 DONE — HOLD ===
+
+## BURN-DOWN BATCH 2 (turn 366) — IMPORT FIDELITY (PARITY-ROADMAP S6), 4 commits, one per item, each verified live
+Reference = `SketchStudio/legacy pen plotter/app`; plan = `PARITY-ROADMAP.md`. Items 1-3 touch the SHARED
+`#core/svg-import.js` (Shaper imports through it too) so each is strictly ADDITIVE. Every item driven live via
+headless-CDP against the real app, 0 console errors throughout.
+
+- **(1) IMPORT-DOC-SIZE** (`167a32a`). ROOT: `importSvgToCore` computed the mm scale but never touched the document, so
+  a 150x100mm import landed on a 200x200 paper. Two DECLARATIONS instead of inline math: a PURE
+  `computeImportSize({width,height,viewBox})` next to `computeImportScale` in `#core` (additive export; Shaper
+  untouched), and `setDocSize(w,h)` in `settings.js` as the ONE named entry point for a programmatic doc-size change.
+  WHY derive the extent from the SAME scale the coords are baked with, rather than re-reading width/height: it makes
+  "the paper matches the geometry that landed on it" true BY CONSTRUCTION. The no-viewBox case needed a special
+  branch -- SVG says a physical width/height sizes the VIEWPORT directly (so width="100mm" IS 100mm), while a unitless
+  one is user units x scale; reading it the uniform way would have put a 100mm drawing on a 26mm paper.
+  `null` return = unknowable size (no viewBox + no usable size, or a % width) -> keep the current doc, never guess.
+  DELIBERATELY did NOT route the `#docW`/`#docH` handlers through `setDocSize`: the input IS their source of truth and
+  `syncDocFields` would rewrite the value mid-type. Host-side, `fitDesignView()` was extracted out of `onEnter` and
+  reused by `doImport` -- the plotter's `fitViewport()` measures `#canvasWrap`, which is HIDDEN while Design is up, so
+  the Design tab has to do its own fit. The paper rect + button label needed no explicit call: panelTick's doc-size
+  signature already catches them. VERIFY: 200x200 -> import 150mm/vb150 -> doc + paper + button + view all 150x100,
+  status "paper 150x100 mm"; then Document W 150->200 -> 200x100 = a SET, not a lock.
+- **(2) `<ellipse>`** (`66702a6`). ROOT: `bump('ellipse','not supported in v1')` -- every ellipse silently vanished.
+  #core has no ellipse SHAPE, so the audit's [R] route: flatten to a closed ring. Declared `arcSteps(sweep)` =
+  FLATTEN_STEPS per 90deg, i.e. EXACTLY the density de Casteljau already gives a bezier quadrant -- so the pipeline
+  never sees a coarse ring beside fine curves, and item 3's arc flattening reuses the same rule (one density decision,
+  not two). Sampled in USER space so the element CTM supplies rotation/skew; minted through the existing `J()` so
+  scale + ctm baking are inherited, not re-implemented. SVG2 rx/ry="auto" -> the other radius; a still-zero radius is
+  FLAGGED (the browser doesn't render it either). VERIFY: ellipse rx30/ry12 -> 64-point ring, world bbox EXACTLY
+  20..80 x 35..65, all points satisfy the ellipse equation; plots through the real pipeline (select -> +Outline ->
+  Recalculate) with plot bbox identical; screenshot = a smooth 2:1 ellipse.
+- **(3) path S/T/A** (`a70d1c7`). ROOT: all three consumed their args then push()ed ONE line to the endpoint -- every
+  smooth curve and every arc arrived as a straight chord. S/T: track the previous curve's trailing control point +
+  family (`pcx/pcy/pKind`) and reflect it; EVERY non-curve command clears `pKind`, which is precisely the spec's
+  "if the previous command was not a C/S (Q/T), the first control point is the current point" -- then the EXISTING
+  flattenCubic/flattenQuad do the work (no new flattening path). A: new `flattenArc` doing endpoint->centre
+  parameterization (F.6.5 + the F.6.6 radius correction) and sampling the TRUE ellipse via `arcSteps` -- chosen over
+  cubic approximation because sampling the real arc has no approximation error at all. The non-obvious trap: arc
+  large-arc/sweep flags may be GLUED to the following number ("a5 5 0 011 1" = flags 0,1 then x=1) and the shared
+  tokenizer sees "011" as ONE number, so a dedicated `FLAG()` splits the leading digit and leaves the remainder in
+  place -- confined to the A branch so M/L/H/V/C/Q/Z tokenize untouched. Spec degeneracies (coincident endpoints ->
+  omit, zero radius -> line) are FLAGGED, keeping `skip()` meaningful rather than dead.
+  **WHAT I GOT WRONG AND HOW IT WAS CAUGHT:** my first unit assertion said sweep=1 bulges +y. It does NOT (it bulges
+  -y). Rather than reason it out again I built a BROWSER-GEOMETRY ORACLE -- 18 paths (every sweep/large-arc/rotation
+  combination, glued flags, relative s/t/a, a mixed C-S-A-Z chain) compared against the browser's own
+  `SVGGeometryElement.getPointAtLength` sampling. Worst one-way Hausdorff deviation 0.0105 units = the 4000-sample
+  reference's own resolution. The oracle corrected the assertion, not the code. Kept as a scratchpad tool, not
+  committed (it needs a browser; the committed specs now carry the verified constants).
+  ADDITIVE PROOF: diffed the new module against the pre-change one over 56 already-supported inputs (20 path strings +
+  12 descriptor sets x 3 scales) -> **GEOMETRY DIFFERENT: 0**. The single difference anywhere is a skip-reason LABEL on
+  my own literal input `"garbage"` (its `a` parses as an arc); zero subpaths either way. Control: all 3 S/T/A paths DO
+  change. VERIFY live in BOTH hosts -- plotter: per-source-path extrema exactly the hand-computed spec values (arc apex
+  50.000 where a chord gives 70, S chain 25.000..55.000, T chain 12.500..27.500), 62/90/90 points off baseline where a
+  chord gives 0; Shaper via its REAL drag-drop: plain M/L/C+rect+circle still "Imported 23 shapes" with no skips
+  (unregressed), `<ellipse>` 64 and S/T/A 128 where both used to be skipped (it just GAINS them).
+- **(4) DRAG-DROP + cleanup** (`1a98467`). ROOT: `#dropOverlay` was rendered but its listeners were stranded in the
+  never-called `installSvgImport`, which ALSO wired an `#importBtn`/`#importFile` pair inside the permanently hidden
+  Draw panel -- a drop overlay that couldn't take a drop, beside an invisible button. RE-HOMED rather than rebuilt: the
+  overlay markup moved into `#design-canvas-wrap` and REUSES its existing index.html CSS verbatim (that wrap is already
+  position:relative, the overlay pointer-events:none so it never eats the drop). Extracted `readIntoImport(f)` so the
+  button and the drop share ONE FileReader path. Two things that would have been bugs: `dragleave` also fires when the
+  pointer crosses onto the canvas CHILD, so it only hides when `!wrap.contains(relatedTarget)`; and a `dragover` cannot
+  read file NAMES (only `drop` can), so the `.svg` filter + its message land on drop.
+  DELETION took the OWNERSHIP-vs-SHARING test first. Died: `installSvgImport` + `loadSvgFile` (reachable only through
+  the binder) + the orphaned canvasWrap/dropOverlay/$/toast imports + the markup + dom.js's `dropOverlay` binding.
+  **NAMED KEEPS (not silent):** `inheritPaint`/`penColorFor` stay -- they are SHARED, `core-import.js` runs per-element
+  paint resolution THROUGH them, so they are not the retiree's to take. `importSvgText` + its art-store helpers
+  (importFromInkscapeLayers / importByColorGrouping / walk / nodeToShape) are kept although unreachable: they are the
+  reference implementation for the still-OPEN **S6 [D] "Inkscape-layer split"** decision, and the dispatch did not name
+  them -- deleting them would destroy the input to a pending user call. Flagged for a later explicit decision.
+  VERIFY: real DragEvent+DataTransfer -- dead ids absent, overlay present in the Design wrap + hidden at rest, dragover
+  shows / dragleave hides (screenshot: dashed teal panel over the canvas only), notes.txt -> "Only .svg files can be
+  imported." + 0 shapes, dropped 90x60mm svg -> 100 shapes into a new "dropped" sketch with doc AND paper 90x60, button
+  path still identical.
+- **UNREGRESSED:** `npm run test:shell` **12/12** after every item; plot oracles **5/5** STANDALONE (clip/fills/fills3/
+  outlines/pipeline) + core-shape-to-polyline, shaper-export, sketch-model; `node --check` clean on all 8 touched files;
+  items 1-3 additive with existing-input output proven identical; Shaper live-checked (5-mode nav intact,
+  explore/design/vcarve/prepare/simexport). Did NOT stage the user's stray svg. Per-pass gates were the FAST tier; the
+  FULL suite stays the advisor's merge gate. Items 1-3 were re-run live AFTER item 4 landed -- all identical.
+- **PROCESS:** built ONE reusable scratchpad CDP driver (`verify.cjs`) + a declared per-item check file instead of four
+  copy-pasted scripts. Trap worth recording: Git Bash MSYS path-conversion rewrites a leading-slash argv into a Windows
+  path, so `Page.navigate` failed with "Cannot navigate to invalid URL" -- the driver now takes a slash-less app path.
+  `proc_health mark --turn 366` at turn start; headless browsers self-terminate per run; `watch` before the pass = 9
+  procs, 0 flagged, no prior-turn leaks.
+- **CAPACITY:** comfortable -- roughly half the window used, no crowding on the last item. A fresh session is NOT needed
+  for Batch 3.
+- **NOTE FOR THE ADVISOR (tooling, not code):** the repo-local `handoff.py` is STALE -- it predates the amendments
+  mailbox, so `python handoff.py amendments --role worker` fails outright (`invalid choice: 'amendments'`). I used the
+  skill copy at `~/.claude/skills/multi-agent-handoff/handoff.py` by full path for every handoff call this turn. Any
+  turn that reaches for the repo copy to poll amendments loses mid-task corrections silently. One-line fix (copy the
+  skill version over the repo one) -- not done, no dispatch for it. Also: a stale forked `.handoff/` + `.proc/` sit one
+  level up in `APPS/SketchStudio/` from an old split-brain; harmless while everything anchors at the git root.
+- **STATE:** branch `carve-out`. S6 import fidelity is DONE except the two [D] items PARITY-ROADMAP leaves open
+  (Inkscape-layer split; and whether importSvgText's art-store machinery survives). Next per the dispatch: Batch 3 =
+  STYLE-TOOL (stroke color+width / fill color -> outline pen / fill pen). STOP -- hold.
+
+=== BATCH-2 DONE — HOLD ===

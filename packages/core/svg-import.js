@@ -6,8 +6,9 @@
 // (never the constraint-adding factories in shapes.js), so a flattened path can't flood the GLOBAL solver. Béziers
 // (C/Q) flatten via pure de Casteljau. The world is Y-DOWN (== SVG), so no Y-flip — only a mm scale.
 //
-// v1 subset: <line> <rect> <circle> <polyline> <polygon> <path>(M/L/H/V/C/Q/Z, abs+rel). FLAGGED-not-dropped:
-// ellipse, path S/T/A (drawn as a line-to-endpoint + a skip note). GRIEVANCE-2: group (g) nesting + a transform=
+// Coverage: <line> <rect> <circle> <ellipse> <polyline> <polygon> <path>(M/L/H/V/C/Q/Z, abs+rel).
+// IMPORT-2B-2: <ellipse> flattens to a closed polyline ring (#core has no ellipse shape) at the same curve density
+// as the béziers. FLAGGED-not-dropped: path S/T/A (drawn as a line-to-endpoint + a skip note). GRIEVANCE-2: group (g) nesting + a transform=
 // attribute are now APPLIED: the host recurses the tree and threads a composed CTM (per element) into each
 // descriptor; parseTransform / multiplyMatrix / applyMatrix below build + bake it. IMPORT-3 widens coverage.
 
@@ -97,6 +98,23 @@ function flattenQuad(x0, y0, x1, y1, x2, y2, push) {
   }
 }
 
+// arcSteps(sweep) — FLATTEN_STEPS per 90° of sweep. The SAME density de Casteljau gives one bézier quadrant, so an
+// ellipse or an arc flattens at the resolution of the C/Q curves beside it (a full ring = 4 quadrants = 64 segments).
+// One rule, so the pipeline never sees a mix of fine curves and coarse arcs.
+function arcSteps(sweep) { return Math.max(2, Math.ceil(FLATTEN_STEPS * Math.abs(sweep) / (Math.PI / 2))); }
+
+// ellipsePoints(cx, cy, rx, ry) → the sampled ring of an axis-aligned ellipse in SVG USER space; the caller's CTM
+// then supplies any rotation/skew (so a rotated <ellipse transform="rotate(30)"> comes in rotated, not re-derived).
+// No duplicate closing point — the caller closes the ring.
+export function ellipsePoints(cx, cy, rx, ry) {
+  const n = arcSteps(Math.PI * 2), pts = [];
+  for (let k = 0; k < n; k++) {
+    const t = (k / n) * Math.PI * 2;
+    pts.push({ x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
+  }
+  return pts;
+}
+
 // parsePathSubpaths(d) → { subpaths: [{ pts:[{x,y}…], closed }], skipped: [{ reason, count }] }.
 // Supports M/L/H/V/C/Q/Z (absolute + relative). S/T/A are FLAGGED + drawn as a line to their endpoint (keeps the
 // path connected) — full smooth-curve / elliptical-arc handling is IMPORT-3.
@@ -169,7 +187,17 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
       case 'polyline': polyline(parsePoints(d.points), false); break;
       case 'polygon': polyline(parsePoints(d.points), true); break;
       case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) polyline(sp.pts, sp.closed); for (const r of sk) bump('path', r.reason, r.count); break; }
-      case 'ellipse': bump('ellipse', 'not supported in v1'); break;
+      // IMPORT-2B-2: <ellipse> → a closed polyline ring. #core has no ellipse SHAPE, so this is the audit's [R]
+      // route: flatten at the pipeline's own curve density (arcSteps). SVG2 rx/ry="auto" = "use the other radius";
+      // either radius still 0 means the browser does not render it either, so it is FLAGGED, not silently dropped.
+      case 'ellipse': {
+        let rx = num(d.rx), ry = num(d.ry);
+        if (!(rx > 0) && ry > 0) rx = ry;
+        if (!(ry > 0) && rx > 0) ry = rx;
+        if (!(rx > 0) || !(ry > 0)) { bump('ellipse', 'zero radius (not rendered)'); break; }
+        polyline(ellipsePoints(num(d.cx), num(d.cy), rx, ry), true);
+        break;
+      }
       default: bump(d.tag, 'element not supported in v1'); break;
     }
   }

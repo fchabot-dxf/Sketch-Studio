@@ -95,10 +95,36 @@ import { parseLength, computeImportScale, computeImportSize, parsePoints, parseP
     assert(shapes.find((s) => s.type === 'circle').radius === 4, 'radius scaled ×2');
   }
 
-  // 7. unsupported element → flagged, not silently dropped
+  // 7. unsupported element → flagged, not silently dropped (IMPORT-2B-2: <ellipse> is now SUPPORTED)
   {
-    const { shapes, stats } = importSvgGeometry([{ tag: 'ellipse', cx: 0, cy: 0, rx: 5, ry: 3 }, { tag: 'text' }], { genJ: genJ() });
-    assert(shapes.length === 0 && stats.skipped.length === 2, 'ellipse + text both flagged');
+    const { shapes, stats } = importSvgGeometry([{ tag: 'text' }], { genJ: genJ() });
+    assert(shapes.length === 0 && stats.skipped.length === 1 && stats.skipped[0].tag === 'text', 'text flagged');
+  }
+
+  // 7b. IMPORT-2B-2: <ellipse> → a closed polyline ring at the pipeline's curve density
+  {
+    const { joints, shapes, stats } = importSvgGeometry([{ tag: 'ellipse', cx: 10, cy: 20, rx: 5, ry: 3 }], { genJ: genJ(), scale: 1 });
+    assert(stats.skipped.length === 0, 'ellipse no longer flagged as unsupported');
+    assert(joints.length === 64, 'ellipse sampled at 64 points (16 per bézier-quadrant)');
+    assert(shapes.length === 64 && shapes.every((s) => s.type === 'line'), 'ellipse = a closed ring of 64 lines');
+    // the ring's extent is exactly the ellipse's bbox, centred on (cx,cy)
+    const xs = joints.map((j) => j.x), ys = joints.map((j) => j.y);
+    assert(near(Math.min(...xs), 5) && near(Math.max(...xs), 15), 'ellipse x spans cx±rx');
+    assert(near(Math.min(...ys), 17) && near(Math.max(...ys), 23), 'ellipse y spans cy±ry');
+    // CLOSED: the last line returns to the first joint
+    assert(shapes[63].joints[1] === shapes[0].joints[0], 'ring is closed (last → first)');
+    // every sampled point satisfies the ellipse equation
+    assert(joints.every((j) => near(((j.x - 10) / 5) ** 2 + ((j.y - 20) / 3) ** 2, 1, 1e-9)), 'points lie ON the ellipse');
+    // rx/ry="auto" (SVG2) → use the other radius; a 0 radius is not rendered → flagged
+    const a = importSvgGeometry([{ tag: 'ellipse', cx: 0, cy: 0, rx: 4 }], { genJ: genJ(), scale: 1 });
+    assert(a.joints.length === 64 && near(Math.max(...a.joints.map((j) => j.y)), 4), 'missing ry → ry=rx (circle-like)');
+    const z = importSvgGeometry([{ tag: 'ellipse', cx: 0, cy: 0, rx: 0, ry: 0 }], { genJ: genJ(), scale: 1 });
+    assert(z.shapes.length === 0 && /zero radius/.test(z.stats.skipped[0].reason), 'zero-radius ellipse flagged');
+    // scale + a ctm both apply (the ring is minted through the same J() as every other element)
+    const s2 = importSvgGeometry([{ tag: 'ellipse', cx: 0, cy: 0, rx: 5, ry: 5 }], { genJ: genJ(), scale: 2 });
+    assert(near(Math.max(...s2.joints.map((j) => j.x)), 10), 'ellipse scaled ×2');
+    const ct = importSvgGeometry([{ tag: 'ellipse', ctm: parseTransform('translate(100,0)'), cx: 0, cy: 0, rx: 5, ry: 5 }], { genJ: genJ(), scale: 1 });
+    assert(near(Math.max(...ct.joints.map((j) => j.x)), 105), 'ellipse baked by the ctm');
   }
 
   // 8. GRIEVANCE-2: parseTransform primitives → the 2x3 matrix [a,b,c,d,e,f]

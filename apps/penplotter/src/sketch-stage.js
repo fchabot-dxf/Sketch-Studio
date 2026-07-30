@@ -2,7 +2,7 @@
 // Its OWN <svg> canvas (NOT the plotter #canvasWrap), a RAF tied to the active stage (start on enter / stop on
 // leave), and — host-side, #ui byte-identical — a FREEHAND tool (UNIFY-4b) + a pen-color UNDERLAY (UNIFY-4c).
 //
-// UNIFY-4c: a per-shape DIGITAL color (state.shapeColors) editable via a Design-tab color control, drawn beneath the
+// UNIFY-4c/STYLE-1: a per-shape DIGITAL STYLE (state.shapeStyles) editable via the Design-tab Style section, drawn beneath the
 // sketcher in its MAPPED PHYSICAL pen color (penColorForShape) by an underlay <svg> — rendered ON CHANGE
 // (dirty-flagged), NOT per frame. The sketcher draws the DOF/scaffold on the transparent canvas ON TOP.
 // PP-7b's "Bake to Draw" stays DORMANT (one-store; toolpaths target #core directly via UNIFY-2). Host wiring ONLY.
@@ -13,7 +13,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
-import { state, penColorForShape } from './state.js'; // UNIFY-4c: mapped physical pen color
+import { state, penColorForShape, shapeStyle, setShapeStyle, shapeColorFor } from './state.js'; // UNIFY-4c/STYLE-1: mapped pen color + the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
@@ -150,14 +150,13 @@ export function mountSketchStage(view, ctx = {}) {
     const selIds = s.selectedShapes ? [...s.selectedShapes] : [];
     if (colorInput) {
       colorInput.disabled = selIds.length === 0;
-      if (selIds.length && state.shapeColors.has(selIds[0]) && document.activeElement !== colorInput) {
-        colorInput.value = state.shapeColors.get(selIds[0]);
-      }
+      const st0 = selIds.length ? shapeStyle(selIds[0]) : null;
+      if (st0 && st0.stroke && document.activeElement !== colorInput) colorInput.value = st0.stroke;
     }
     // COLOR-MIX-3: reflect the Pen-mix opt-in for a single selected, colored shape (needs a palette to mix over).
     if (mixToggle) {
       const one = selIds.length === 1 ? selIds[0] : null;
-      const canMix = !!one && state.shapeColors.has(one) && state.plotColors.length > 0;
+      const canMix = !!one && !!shapeColorFor(one) && state.plotColors.length > 0;
       mixToggle.disabled = !canMix;
       const mixed = canMix && isMixed(one);
       if (document.activeElement !== mixToggle) mixToggle.checked = mixed;
@@ -233,7 +232,7 @@ export function mountSketchStage(view, ctx = {}) {
   // re-render the underlay (which maps digital -> the nearest physical pen color).
   if (colorInput) colorInput.addEventListener('input', () => {
     const ids = controller.state.selectedShapes ? [...controller.state.selectedShapes] : [];
-    for (const id of ids) state.shapeColors.set(id, colorInput.value);
+    for (const id of ids) setShapeStyle(id, { stroke: colorInput.value }); // STYLE-1: the lone picker edits STROKE
     // COLOR-MIX-3: if a shape is already mixed, recompute its mix for the new color so the pens follow the edit.
     for (const id of ids) if (isMixed(id)) applyMix(id);
     lastMixSig = ''; // force the mix status to refresh next tick
@@ -257,7 +256,7 @@ export function mountSketchStage(view, ctx = {}) {
     lastMixSig = ''; // panelTick recomputes on next frame
   });
 
-  // UNIFY-5: Import SVG -> #core sketch (constrainable). Colors -> shapeColors -> the underlay's mapped pen. Dense
+  // UNIFY-5: Import SVG -> #core sketch (constrainable). Paint -> shapeStyles -> the underlay's mapped pen. Dense
   // imports are marked static (fast). Surfaces the skipped/degraded count. Returns the result (dev/test seam).
   const importStatus = view.querySelector('#importStatus');
   const doImport = (text, name) => {

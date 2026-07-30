@@ -8,7 +8,7 @@
 // Pen swatch on every row reflects the linked plot color, so renames in
 // the Plot Colors panel cascade here automatically.
 
-import { state, makeToolpath, toolpathColor, findOrCreatePlotColor } from "./state.js";
+import { state, makeToolpath, toolpathColor, findOrCreatePlotColor, shapeColorFor } from "./state.js";
 import { $, toast } from "./dom.js";
 import { renderArt as render } from "./render-art.js"; // PP-4b: Draw's trimmed renderer (art + toolpath overlay)
 import { snapshot } from "./history.js";
@@ -441,7 +441,7 @@ function createToolpathsFromSelection(type) {
 
     // Resolve each selected id -> { id, color }. WORKFLOW-FIX: the geometry now lives in the #core sketch (art store
     // retired UNIFY-7), so resolve BOTH stores — art shapes by their _stroke/_fill, #core shapes by their DIGITAL
-    // color (state.shapeColors). Without the #core branch, a selection of drawn/imported vectors produced NO toolpath.
+    // style (state.shapeStyles). Without the #core branch, a selection of drawn/imported vectors produced NO toolpath.
     const ids = state.selectedShapeIds;
     const resolved = [];        // { id, color }
     const foundArt = new Set();
@@ -451,7 +451,9 @@ function createToolpathsFromSelection(type) {
     const cs = state.coreSketch;
     if (cs && cs.shapes) {
         const coreIds = new Set(cs.shapes.map(sh => sh.id));
-        for (const id of ids) if (!foundArt.has(id) && coreIds.has(id)) resolved.push({ id, color: state.shapeColors.get(id) || "#000000" });
+        // STYLE-1: same single-colour behaviour as before (shapeColorFor = stroke-then-fill); STYLE-4 makes this
+        // per-ROLE and strict — +Outline by stroke, +Fill by fill, each skipping shapes with None for that role.
+        for (const id of ids) if (!foundArt.has(id) && coreIds.has(id)) resolved.push({ id, color: shapeColorFor(id) || "#000000" });
     }
     if (!resolved.length) return;
 

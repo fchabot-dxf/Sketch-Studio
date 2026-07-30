@@ -7,7 +7,7 @@
 // Each created toolpath is tagged `mixOf: shapeId` (+ `mixWeight`) so the mix is idempotent (re-apply replaces it),
 // removable (clearMix), and surfaceable (the Design panel shows pens + weights). Plotter-side; the math is #core.
 
-import { state, makeToolpath, DEFAULT_PEN_WIDTH } from './state.js';
+import { state, makeToolpath, DEFAULT_PEN_WIDTH, shapeColorFor } from './state.js';
 import { mixForColor, mixFillParams } from '#core/color-mix.js';
 
 const MIX_TOLERANCE = 16; // matches mixForColor's default: within this RGB distance of a single pen -> no mix.
@@ -15,7 +15,7 @@ const MIX_TOLERANCE = 16; // matches mixForColor's default: within this RGB dist
 // The pen-mix for a shape's DIGITAL color over the owned palette, or null when it has no color / the palette is empty.
 // state.plotColors ({id,color,width}) is accepted directly by mixForColor (lenient {id,color} pens).
 export function mixForShape(shapeId) {
-  const hex = state.shapeColors.get(shapeId);
+  const hex = shapeColorFor(shapeId); // STYLE-1: stroke-then-fill for now; STYLE-2 flips this to FILL-first
   if (!hex || !state.plotColors.length) return null;
   return mixForColor(hex, state.plotColors, { tolerance: MIX_TOLERANCE });
 }

@@ -17,9 +17,11 @@ export const state = {
     // Lets a toolpath TARGET #core geometry DIRECTLY (resolveCoreShapes -> coreShapeToPolyline at collect-time), no
     // bake. COEXISTS with the art store (UNIFY-7 retires artLayers). null until the Design/Sketch tab mounts.
     coreSketch: null,
-    // UNIFY-4c: per-shape DIGITAL color (source RGB), edited in the Design tab. Plotter-side (#core stays pure). Maps
-    // to a PHYSICAL pen via nearest-match (penIdForShape). Keyed by shape id (art OR #core sketch shape).
-    shapeColors: new Map(),
+    // STYLE-1 (was UNIFY-4c's shapeColors: id -> hex): per-shape DIGITAL STYLE record, edited in the Design tab.
+    // Plotter-side (#core stays pure). Keyed by shape id (art OR #core sketch shape); value = a style record, see
+    // makeShapeStyle. MODEL (user-confirmed): stroke -> the OUTLINE pen, fill -> the FILL pen. Read it through
+    // shapeStyle(id), never directly — that accessor also normalizes the LEGACY bare-hex value.
+    shapeStyles: new Map(),
     // UNIFY-throttle: shape ids the plotter has marked STATIC (imported/dense, unedited). The sketcher SKIPS them
     // per-frame (perf) + the color underlay draws them; NOT-marked = LIVE (drawn by the sketcher, joints visible).
     // Freehand/drawn geometry is LIVE (joints show); imports (UNIFY-5) land static. Selecting a static shape -> live.
@@ -97,10 +99,55 @@ export function makePlotColor(name, color, width = DEFAULT_PEN_WIDTH) {
     return { id: uid("pen"), name, color, width };
 }
 
+// ─── STYLE-1: the per-shape DIGITAL STYLE record ──────────────────────────────────────────────────────────────
+// { stroke: hex|null, fill: hex|null, width: mm }.  stroke drives the OUTLINE pen · fill drives the FILL pen ·
+// null on either = "None" (that role gets no pen).  width is DISPLAY-ONLY: what gets plotted is the physical PEN's
+// width (penWidthFor), never this. Kept as PLOTTER state — #core shapes carry no style, exactly as before.
+export const DEFAULT_STROKE_WIDTH = 0.5; // mm — display width for a fresh/imported style
+
+export function makeShapeStyle(stroke = "#000000", fill = null, width = DEFAULT_STROKE_WIDTH) {
+    return { stroke, fill, width };
+}
+
+/** The style record for a shape, NORMALIZED — or null when the shape has no style at all.
+ *  MIGRATION: the pre-STYLE-1 store held a BARE HEX per shape (shapeColors: id -> "#rrggbb"). A string value is
+ *  read as { stroke: hex, fill: null, width: default } — the same single-color behaviour it had before — so an older
+ *  document, a cloud restore, or any code still writing a plain hex keeps rendering and bucketing. (Nothing in the
+ *  app persists this map today — history.serialize covers artLayers/toolpaths/doc only — so this tolerance IS the
+ *  migration; there is no stored payload to rewrite.) */
+export function shapeStyle(shapeId) {
+    const v = state.shapeStyles.get(shapeId);
+    if (v == null) return null;
+    if (typeof v === "string") return makeShapeStyle(v, null, DEFAULT_STROKE_WIDTH); // legacy id -> hex
+    return {
+        stroke: v.stroke || null,
+        fill: v.fill || null,
+        width: v.width != null ? v.width : DEFAULT_STROKE_WIDTH,
+    };
+}
+
+/** Patch a shape's style, creating the record if absent. `patch` may carry any of {stroke, fill, width};
+ *  `fill: null` is an explicit None (so pass it deliberately, not by omission). */
+export function setShapeStyle(shapeId, patch) {
+    const cur = shapeStyle(shapeId) || makeShapeStyle();
+    const next = { ...cur, ...patch };
+    state.shapeStyles.set(shapeId, next);
+    return next;
+}
+
+/** The DIGITAL color to RENDER a shape in / map to a pen. STROKE first (the outline is the shape's line), falling
+ *  back to FILL so a fill-only import — an SVG <path fill="red"> with no stroke — is still visible and still maps
+ *  to a pen instead of going neutral grey. BUCKETING does NOT use this: creating toolpaths needs the strict
+ *  per-role paint (no cross-fallback), so "None" can actually mean none. */
+export function shapeColorFor(shapeId) {
+    const st = shapeStyle(shapeId);
+    return st ? (st.stroke || st.fill || null) : null;
+}
+
 /** UNIFY-4c: the PHYSICAL pen id for a shape's DIGITAL color — nearest match over the owned palette. Null when the
- *  shape has no digital color or the palette is empty. Pen stays a plotter concept (state.plotColors + shapeColors). */
+ *  shape has no digital color or the palette is empty. Pen stays a plotter concept (state.plotColors + shapeStyles). */
 export function penIdForShape(shapeId) {
-    const hex = state.shapeColors.get(shapeId);
+    const hex = shapeColorFor(shapeId);
     if (!hex || !state.plotColors.length) return null;
     const idx = nearestColorIndex(hex, state.plotColors.map(p => p.color));
     return idx >= 0 ? state.plotColors[idx].id : null;
@@ -121,7 +168,7 @@ export function toolpathPenId(tp) {
 export function penColorForShape(shapeId) {
     const penId = penIdForShape(shapeId);
     if (penId) { const pc = state.plotColors.find(p => p.id === penId); if (pc) return pc.color; }
-    return state.shapeColors.get(shapeId) || "#333333";
+    return shapeColorFor(shapeId) || "#333333";
 }
 
 /** Effective pen width (mm) for a toolpath — the width of its (possibly derived) pen. Pen width is the single source

@@ -82,36 +82,45 @@ Deferred (behind the unify): bulk fill-edit · cloud palette save/load · PP-8 p
 
 ---
 
-## TASK — BATCH 2 (BURN-DOWN cont'd): IMPORT FIDELITY. COMMIT PER ITEM (4); verify each; pass back ONCE.
+## TASK — BATCH 3 (BURN-DOWN cont'd): STYLE-TOOL — per-shape STROKE color+width / FILL color, driving outline-pen / fill-pen. COMMIT PER ITEM (4 + a tiny 5th); verify each; pass back ONCE.
 
 **Foundation (LOCKED):** merged single-`#core`-store; invariant = **FREE ART BYPASSES THE SOLVER**. Plan = `PARITY-ROADMAP.md`.
-Reference original = `SketchStudio/legacy pen plotter/app`. **⚠ Items 2–3 touch `#core/svg-import.js` (SHARED — Shaper imports through
-it too): strictly ADDITIVE — new element/segment support only; output for already-supported input stays IDENTICAL (byte-exact where
-goldens exist). Run plot/import oracles STANDALONE + shell-smoke + any Shaper-import check.**
+**MODEL (user-CONFIRMED, no other option): stroke color → the OUTLINE pen; fill color → the FILL pen.** Reference original =
+`SketchStudio/legacy pen plotter/app/js/style-panel.js` (stroke/fill/width/None). All plotter-side (`#core`/`#ui` untouched);
+`#core` stays pure — the style record is PLOTTER state, like `shapeColors` today.
 
-1. **IMPORT-DOC-SIZE** (user-decided: "import svg would also define the canvas size, but overridable afterward"). `core-import.js`
-   `importSvgToCore` already computes the SVG's mm scale but never sets the document. FIX: after import, SET `state.doc.w/h` from the
-   SVG's real size (viewBox / width-height → mm, rounded like the `#docW` handler), then refresh everything that reads it: the Design
-   paper (`#design-paper`), the Document button label (panelTick), `#docInfo`, and re-fit the view. A SET, not a lock — the Document
-   dialog still overrides freely afterward. Verify: import an SVG of known size → paper matches; Document → change W → paper follows.
-2. **SVG `<ellipse>` import** (audit MISSING — `#core/svg-import.js` `bump('ellipse','not supported')`). Support it: `#core` has no
-   ellipse shape, so flatten to a closed polyline (sampled consistently with the pipeline's flattening) — the audit's [R] route. Circle
-   stays the existing circle path. Verify: import an SVG with an `<ellipse>` → it appears + plots.
-3. **Path S/T/A segments** (audit BROKEN — smooth curves + arcs currently drawn as straight CHORDS). Implement per SVG spec: S/T =
-   reflect the previous control point; A = elliptical-arc → cubic/polyline flattening. Existing M/L/C/Q/Z handling UNCHANGED. Verify:
-   import a file using S and A → curves come in CURVED (screenshot vs the chorded before); an already-supported file imports identically.
-4. **Drag-and-drop import + dead-code cleanup** (audit ORPHANED_DEAD: `#dropOverlay` is rendered but its listeners live in the
-   never-called `installSvgImport`; a working importer exists in Design). Wire dragover/drop on the DESIGN canvas → the SAME `doImport`
-   path as `#importSvgBtn` (`.svg` files only, show the overlay during drag). REMOVE the dead Draw-panel `#importBtn`/`#importFile` +
-   the never-called `installSvgImport` binder. Verify: drag an .svg onto the Design canvas → imports (and sets the doc size per item 1).
+1. **STATE — per-shape digital STYLE record** (`state.js`): replace the single `state.shapeColors` (Map id→hex) with a style record
+   `{ stroke: hex, fill: hex|null, width: mm }` (fill `null` = None; width = DISPLAY-only — the plotted line is the pen's physical
+   width). MIGRATE in place: existing entries → `{stroke: oldHex, fill: null, width: default}`; keep `penColorForShape` reading the
+   STROKE so every current consumer (underlay, bucketing, mix) works unchanged before items 2–4 land. Check for any serializer that
+   persists `shapeColors` and migrate it too.
+2. **UI — the Style section** (`sketch-stage.js` sidebar): replace the lone "Pen color" row with **Stroke** (color + width input) and
+   **Fill** (color + a None toggle), per the legacy style-panel. **Pen-mix stays**, now applying to the FILL color when one is set
+   (mix generates cross-hatch FILLS), else the stroke — note this in the WORK-LOG for review. Multi-select edits all selected (as today).
+3. **RENDER — see the style in Design** (`sketch-stage.js` underlay): stroke drawn in the stroke color at the display width; a CLOSED
+   shape with a fill color also gets a translucent SVG fill in that color (so fills are VISIBLE while designing, like the legacy).
+4. **BUCKETING — styles drive the pens** (`toolpath-layers-panel.js` `createToolpathsFromSelection`): **+Outline buckets the selection
+   by STROKE color** (skip shapes with no stroke), **+Fill buckets by FILL color** (skip fill=None) — the legacy's pickColor precedence,
+   now on the #core style record. Nearest-pen match / pen auto-create per color unchanged.
+5. **(tiny) Document button unit label**: it hardcodes "mm" — honor `state.docUnit` (in inches show `in`, converted values).
 
-**VERIFY (all):** each item by clicks/screenshot; shell-smoke 12/12; plot oracles green STANDALONE; Studio/Shaper unregressed (items
-2–3 additive, existing-input output identical); 0 console errors. If an item balloons (the A-arc math), SPLIT it out + flag, do the rest.
+**VERIFY (the workbench flow, by clicks):** circle with stroke=red width=0.8 fill=blue → Design shows a red outline + translucent blue
+fill; select → Toolpath **+Outline** → an outline op on the RED pen; **+Fill** → a fill op on the BLUE pen; overlay + Export gcode per
+pen. An OLD doc/shape (single color) still renders + buckets via the migration. Pen-mix on a fill color still produces mixed fills.
+shell-smoke 12/12; plot oracles green STANDALONE; Studio/Shaper unregressed; 0 console errors. If an item balloons, SPLIT + flag.
 
-**AFTER Batch 2 (advisor sequences):** Batch 3 = STYLE-TOOL (stroke color+width / fill color → outline pen / fill pen — CONFIRMED).
-Batch 4 = transforms (scissors/rotate/scale/node as #core joint transforms). Batch 5 = boolean union · cloud · responsive [D].
+**DECISIONS RULED (advisor, turn 367):** keep `inheritPaint`/`penColorFor` (SHARED — core-import runs through them); keep
+`importSvgText` + its art-store helpers as the REFERENCE IMPLEMENTATION for the still-open S6 [D] Inkscape-layer-split decision —
+do not delete them in cleanup. Repo-local `handoff.py` was STALE (no `amendments`) — synced from the skill copy this turn; use either.
 
-Append a WORK-LOG entry (per-item: root + fix + verify) ending with exactly `=== BATCH-2 DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+**AFTER Batch 3:** Batch 4 = transforms (scissors/rotate/scale/node as #core joint transforms — turnkey plan in WORK-LOG t344).
+Batch 5 = boolean union · cloud · responsive [D]. Remaining S8 bits (preset swatch popover, mixed-value cue) ride with Batch 5 polish.
+
+Append a WORK-LOG entry (per-item: root + fix + verify) ending with exactly `=== BATCH-3 DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## BATCH 2 (DONE `167a32a..1a98467` + WORK-LOG `3f4498a`): import sets the paper size (declared pure `computeImportSize` in #core + `setDocSize` fan-out) · `<ellipse>` → closed ring at bézier density (`arcSteps`) · S/T reflect + REAL `flattenArc` (F.6.5/F.6.6, glued-flag reader scoped to A) · Design drag-drop + dead importer retired. Additive proof: 56 already-supported inputs geometry-identical; Shaper live drag-drop unregressed (23 shapes). Advisor re-ran svg-import test + 5/5 plot oracles + 12/12 shell-smoke. Approved t367.
 
 ---
 <!-- superseded (provenance) -->

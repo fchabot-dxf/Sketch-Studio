@@ -50,6 +50,14 @@ SUBCOMMANDS
   watch --role advisor|worker --cmd "..." [--settle S]     headless: each new settled turn, run --cmd once
   sig   --role advisor|worker                print "turn N" = the turn THAT role last handled (your signature)
   status                                     print turn + which window the human should trigger
+  amend --to advisor|worker --note ...       queue a MID-TASK amendment (no turn/ball change) -- the other side sees it at their next `amendments` checkpoint. Use INSTEAD of a re-pass once they are past settle + working (a re-pass would be orphaned).
+  amendments --role advisor|worker [--peek]  print + consume mid-task amendments addressed to me on THIS turn. Run at each checkpoint (before commit, phase boundary, before pass-back). --peek = look without consuming.
+
+MID-TASK AMENDMENTS (the mailbox)
+  `pass` only lands within the settle window; once the other side is working, a re-pass is
+  orphaned. `amend` drops a turn-stamped line in .handoff/amendments.tsv WITHOUT changing the
+  turn/ball; the recipient polls it via `amendments` at natural checkpoints. It is a POLL not
+  an interrupt -- the amendment lands at their next stopping point, before they finalize.
 """
 import argparse, os, sys, time, tempfile
 from datetime import datetime, timezone
@@ -65,6 +73,25 @@ STATE_DIR = ".handoff"
 STOP = "STOP"
 OTHER = {"advisor": "worker", "worker": "advisor"}
 BALLS = ("advisor", "worker", "done")
+
+
+def _guard_forked_marker():
+    """SPLIT-BRAIN guard (field-proven 2026-07-15): running from a SUBDIR of the loop root silently forks a second
+    HANDOFF.md + .handoff/ there -- passes/waits act on the fork, the other role never sees them, the loop stalls
+    with no error. If no marker exists HERE but one exists in a parent directory, refuse and name the real root."""
+    if os.path.exists(MARKER):
+        return
+    d = os.path.dirname(os.path.abspath(os.getcwd()))
+    while True:
+        if os.path.exists(os.path.join(d, MARKER)):
+            sys.stderr.write("SPLIT-BRAIN GUARD: no %s here, but the loop root is %s\n"
+                             "cd there and re-run -- a nested marker forks the loop (no override; cd to the root).\n"
+                             % (MARKER, d))
+            sys.exit(2)
+        parent = os.path.dirname(d)
+        if parent == d:
+            return
+        d = parent
 
 
 def now():
@@ -281,7 +308,73 @@ def cmd_status(a):
     return 0
 
 
+def _amend_file():
+    return os.path.join(STATE_DIR, "amendments.tsv")
+
+
+def read_amseen(role):
+    """How many amendment lines this role has already consumed."""
+    try:
+        with open(os.path.join(STATE_DIR, role + ".amseen"), encoding="utf-8") as f:
+            return int(f.read().strip() or "0")
+    except (FileNotFoundError, ValueError, OSError):
+        return 0
+
+
+def set_amseen(role, n):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(os.path.join(STATE_DIR, role + ".amseen"), "w", encoding="utf-8") as f:
+        f.write(str(n))
+
+
+def cmd_amend(a):
+    """Queue a MID-TASK amendment for the other role WITHOUT advancing the turn/ball.
+    Use this (NOT `pass`) to inject new instructions once the other side is already past
+    settle + working: a re-pass would be orphaned, but this waits in the mailbox until they
+    check `amendments` at their next checkpoint. It is a POLL, not an interrupt -- the other
+    side sees it at their next stopping point (before commit / pass-back), not mid-thought."""
+    m = read_marker()
+    turn = m["turn"] if m else 0
+    os.makedirs(STATE_DIR, exist_ok=True)
+    note = (a.note or "").replace("\t", " ").replace("\r", " ").replace("\n", " ")
+    with open(_amend_file(), "a", encoding="utf-8") as f:
+        f.write("%d\t%s\t%s\t%s\n" % (turn, a.to, now(), note))
+    print("amend: queued for %s on turn %d -- they pick it up at their next `amendments` checkpoint (not instant)." % (a.to, turn))
+    return 0
+
+
+def cmd_amendments(a):
+    """Print NEW mid-task amendments addressed to me for the CURRENT turn, then mark them
+    consumed (--peek to look without consuming). Run at each checkpoint: before you commit,
+    at a phase boundary, and before you pass back -- so a late instruction lands before you
+    finalize the wrong thing."""
+    role = a.role
+    m = read_marker()
+    turn = m["turn"] if m else 0
+    try:
+        with open(_amend_file(), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (FileNotFoundError, OSError):
+        lines = []
+    seen = read_amseen(role)
+    fresh = []
+    for ln in lines[seen:]:
+        parts = ln.split("\t", 3)
+        if len(parts) == 4 and parts[1] == role and parts[0] == str(turn):
+            fresh.append(parts[3])
+    if not a.peek:
+        set_amseen(role, len(lines))   # advance past all lines read (future ones append beyond, seen next check)
+    if fresh:
+        print("AMENDMENTS for turn %d (%d new) -- INCORPORATE before you commit/pass:" % (turn, len(fresh)))
+        for n in fresh:
+            print("  - " + n)
+    else:
+        print("no new amendments (turn %d)." % turn)
+    return 0
+
+
 def main():
+    _guard_forked_marker()
     p = argparse.ArgumentParser(description="advisor/worker turn-marker handoff")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -317,6 +410,16 @@ def main():
     pg.set_defaults(fn=cmd_sig)
 
     ps = sub.add_parser("status"); ps.set_defaults(fn=cmd_status)
+
+    pam = sub.add_parser("amend")
+    pam.add_argument("--to", choices=["advisor", "worker"], required=True)
+    pam.add_argument("--note", required=True)
+    pam.set_defaults(fn=cmd_amend)
+
+    pms = sub.add_parser("amendments")
+    pms.add_argument("--role", choices=["advisor", "worker"], required=True)
+    pms.add_argument("--peek", action="store_true")
+    pms.set_defaults(fn=cmd_amendments)
 
     a = p.parse_args()
     sys.exit(a.fn(a))

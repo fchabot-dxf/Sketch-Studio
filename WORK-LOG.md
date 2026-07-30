@@ -9032,3 +9032,90 @@ headless-CDP against the real app, 0 console errors throughout.
   STYLE-TOOL (stroke color+width / fill color -> outline pen / fill pen). STOP -- hold.
 
 === BATCH-2 DONE — HOLD ===
+
+## BURN-DOWN BATCH 3 (turn 368) — STYLE-TOOL (PARITY-ROADMAP S8 core), 5 commits, one per item, each verified live
+Model, user-CONFIRMED: **stroke colour -> the OUTLINE pen, fill colour -> the FILL pen.** Reference original =
+`legacy pen plotter/app/js/style-panel.js`. ALL plotter-side: the batch diff touches 6 files under `apps/penplotter/`
+and **zero** `#core`/`#ui` files, so Studio/Shaper are unregressed by construction (Shaper re-checked live anyway).
+
+- **(1) STYLE-1 — the style record** (`d7ceb3c`). ROOT: `state.shapeColors` held ONE hex per shape, so stroke and fill
+  could not be expressed at all. Now `state.shapeStyles`: `{stroke, fill, width}`, null on either paint = None, width
+  DISPLAY-only (the plot always uses the physical pen's width via `penWidthFor`). DECLARED accessors so nothing touches
+  the map: `makeShapeStyle` / `shapeStyle(id)` / `setShapeStyle(id, patch)`, plus `shapeColorFor(id)` =
+  stroke-then-fill as the ONE forgiving precedence for rendering + pen-mapping, documented as deliberately NOT the
+  bucketing rule.
+  MIGRATION: `shapeStyle` normalizes a BARE HEX value to `{stroke: hex, fill: null, width: default}` — that tolerance
+  IS the migration. I checked for a serializer before writing one: `history.serialize()` covers artLayers/toolpaths/doc,
+  `preview.sourceHash()` omits styles, and no localStorage writer touches them, so there is NO stored payload to
+  rewrite. Said plainly rather than inventing a migration for data that does not exist.
+  ONE STEP PAST THE ITEM, flagged in the commit: the importer now records the element's stroke and fill SEPARATELY.
+  `inheritPaint` already resolved both and `penColorFor()` was collapsing them. Left alone, STYLE-4's "+Fill buckets by
+  FILL (skip None)" would have seen fill=null on EVERY imported shape and produced no fill ops at all — a regression
+  this batch would itself have introduced. An element with neither paint still defaults to a black STROKE (the old
+  behaviour), and `d.color` is untouched so pen seeding is unchanged.
+- **(2) STYLE-2 — the Style section** (`463ea42`). Replaced the lone "Pen color" swatch with Stroke + Width + Fill +
+  Fill:None (+ Pen-mix). ONE `applyStyle(patch)` drives all four controls. Two papercuts pre-empted: picking a fill
+  colour auto-unticks None (else the swatch changes while the fill stays off), and unticking None adopts the swatch's
+  current colour (so it round-trips to something sane instead of black). A control with FOCUS is never written by
+  panelTick, so a live edit can't be clobbered mid-frame.
+  **PEN-MIX PRECEDENCE, for review as asked:** the mix now follows the FILL colour when one is set, else the stroke —
+  declared once as the exported `mixColorFor(id)` so the panel's enable test and the mix itself cannot drift. FILL-first
+  is right because a mix IS a set of cross-hatch FILL toolpaths; a stroke-only shape still mixes, as before.
+  DEFERRED per the roadmap (NOT forgotten): the legacy preset-swatch popover + the multi-select "mixed" cue ride with
+  Batch 5 polish, so these are plain inputs and multi-select shows the FIRST shape's values.
+- **(3) STYLE-3 — see the style in Design** (`a39aef6`). The underlay drew every static shape as a 0.6 hairline, fill
+  none, in its nearest PEN colour — so neither width nor fill was ever visible. Now stroke colour at the style's width,
+  plus a translucent (`0.35`) fill for a CLOSED shape with a fill colour. Translucent on purpose: a plotter realises a
+  fill as HATCHING, so the preview should read "this region gets filled", not "printed ink".
+  Three judgement calls, all in the commit body: **(a) DIGITAL, not pen-mapped** — punch #10 rules "Design = digital
+  colour; Toolpath = physical-pen mapping" and render-art.js still maps to pens, so the split now matches that
+  decision. Imports look the same in practice (the palette is seeded FROM the import, so their nearest pen already IS
+  their digital colour); what changes is a user EDIT to an off-palette colour, which now shows what they picked instead
+  of snapping to an owned pen. FLAGGED because it does reverse the older UNIFY-4c "underlay shows pen colours" intent —
+  say the word and it goes back. **(b) CLOSED is not my own test** — `closedPolygonFor` from `#core/plot/fills` is the
+  SAME rule the fill pipeline uses (>=3 pts, first==last within 0.001), so a fill VISIBLE in Design is a fill that will
+  actually plot; it is per-SHAPE, so an imported filled outline (separate line shapes) shows no region fill, matching
+  the pipeline which cannot hatch it either (multi-shape loops need `#core findLoops`, roadmapped S7). **(c)** a
+  fill-only shape (stroke None — every imported `<path fill="red">`) draws its OUTLINE in the FILL colour; without that
+  it would have had no stroke AND no region fill = silently INVISIBLE where it shows today.
+- **(4) STYLE-4 — styles drive the pens** (`a8f8807`). `createToolpathsFromSelection` bucketed #core geometry by one
+  colour regardless of the button. Now STRICT per-role: +Outline by stroke, +Fill by fill, None for that role -> the
+  shape is SKIPPED (no cross-fallback, or None would be undeclarable). Art shapes keep the legacy pickColor fallback.
+  A shape with NO record is DRAWN geometry -> the DEFAULT style (black stroke, no fill), so +Outline on a fresh line is
+  unchanged; only +Fill now needs an explicit fill, which is the intended model. Both skip paths SAY SO ("... 2 shapes
+  skipped (no fill)", and "No fill colour on the selection — set a Fill in the Design panel's Style section") because a
+  silent dead button is the real failure mode here.
+- **(5) STYLE-5 — Document unit label** (`a862032`). Hardcoded "mm" while the dialog beside it showed inches. Declared
+  `docSizeLabel()` in state.js rather than adding a THIRD hand-rolled conversion (settings.js's private toDisplay/
+  roundDisplay + viewport.js's inline fmt already existed); state.js is the cycle-free home since settings.js already
+  imports viewport.js. Also fixed the refresh condition — the panelTick signature was size-only, so a mm<->in switch
+  left the OLD unit showing until the size happened to change; docUnit is in the signature now.
+
+- **VERIFY — THE WORKBENCH FLOW, by clicks, end to end.** Circle styled through the real Style UI to stroke #ff0000 /
+  width 0.8 / fill #0000ff; a second circle stroke #008800 no fill; a third shape given a LEGACY BARE HEX (#ff9900) to
+  exercise the migration. Design shows a thick red ring with a translucent blue interior (screenshot). Select all
+  three -> Toolpath: **+Outline = 3 ops on the RED, GREEN and ORANGE pens**; **+Fill = 1 op on the BLUE pen** + "2
+  shapes skipped (no fill)"; +Fill with no fills at all = 0 ops + the explanatory toast. Recalculate -> 3 outline
+  layers + `fill:15` (the blue fill really HATCHES). Pens auto-created per colour. Export -> one G-code file per op,
+  the RED outline carrying 36 G1 moves and the BLUE fill 47, both pen-down.
+- **MY OWN MISREAD, recorded:** the first export assertion reported "no moves" — it read a `text` key that does not
+  exist on a gcode entry (`{name, content}`). The gcode was fine; the CHECK was wrong. Re-read as `content` and
+  verified. Same class of error as turn 366's sweep-sign assumption: verify the shape of what you are asserting on.
+- **UNREGRESSED:** `npm run test:shell` **12/12** after every item; plot oracles **5/5** STANDALONE + color-match,
+  color-mix, closed-polyline, core-shape-to-polyline, svg-import; `node --check` clean on all touched files; every item
+  re-run live AFTER item 5 landed, all identical; Shaper re-driven through its real drag-drop (23 / 64 / 128 shapes,
+  5-mode nav intact, 0 errors) — expected, since the batch diff contains no `#core`/`#ui` file at all. Did NOT stage the
+  user's stray svg. Per-pass gates were the FAST tier; the FULL suite stays the advisor's merge gate.
+- **KNOWN, PRE-EXISTING, deliberately untouched:** when a mix is not needed (a single pen within tolerance) the
+  handler's "Nearest single pen - no mix needed." message is wiped by the next panelTick, which recomputes the status
+  from `mixed`. Same code path as before this batch; arbitrating that status is outside the item.
+- **PROCESS:** reused turn 366's scratchpad CDP driver (`verify.cjs`) with a declared per-item check file.
+  `proc_health mark --turn 368` at turn start; headless browsers self-terminate per run; `watch` before the pass.
+- **CAPACITY:** comfortable — this batch was lighter than Batch 2 (no shared-file risk, no geometry oracle needed). No
+  fresh session needed for Batch 4.
+- **STATE:** branch `carve-out`. The style tool is complete for the confirmed model. Two things a reviewer may want to
+  rule on: the Design underlay now showing DIGITAL rather than pen-mapped colour (item 3a), and whether the importer
+  splitting stroke/fill (folded into item 1) should have been its own commit. Next per the dispatch: Batch 4 =
+  transforms (scissors/rotate/scale/node as #core joint transforms, turnkey plan in WORK-LOG t344). STOP -- hold.
+
+=== BATCH-3 DONE — HOLD ===

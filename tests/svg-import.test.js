@@ -61,8 +61,75 @@ import { parseLength, computeImportScale, computeImportSize, parsePoints, parseP
     assert(c.subpaths.length === 2, 'two subpaths');
     const d = parsePathSubpaths('m0 0 l10 0 l0 10 z'); // relative
     assert(d.subpaths[0].pts.length === 3 && d.subpaths[0].pts[2].x === 10 && d.subpaths[0].pts[2].y === 10, 'relative l');
-    const e = parsePathSubpaths('M0 0 A5 5 0 0 1 10 0'); // arc → flagged + line
-    assert(e.skipped.some((s) => /arc/i.test(s.reason)), 'A flagged as skipped');
+    // UNREGRESSED: the M/L/C/Q/Z flatten counts are exactly what they were (1 start + 16 per bézier), and a path
+    // without S/T/A reports nothing skipped.
+    assert(parsePathSubpaths('M0 0 C0 10 10 10 10 0').subpaths[0].pts.length === 17, 'cubic = 1 + 16 points');
+    assert(parsePathSubpaths('M0 0 Q5 10 10 0').subpaths[0].pts.length === 17, 'quad = 1 + 16 points');
+    assert(parsePathSubpaths('M0 0 L10 0 L10 10 Z').skipped.length === 0, 'M/L/Z path skips nothing');
+  }
+
+  // 4b. IMPORT-2B-3: S/T reflect the previous control point; A is a REAL elliptical arc (all three were chords)
+  {
+    const ys = (r) => r.subpaths.flatMap((s) => s.pts.map((p) => p.y));
+    const xs = (r) => r.subpaths.flatMap((s) => s.pts.map((p) => p.x));
+
+    // --- A: a semicircle (0,0)→(10,0), rx=ry=5 ⇒ centre (5,0), r=5. Sampled ON the circle, not chorded. ---
+    const a = parsePathSubpaths('M0 0 A5 5 0 0 1 10 0');
+    assert(a.skipped.length === 0, 'A no longer flagged as skipped');
+    const ap = a.subpaths[0].pts;
+    assert(ap.length === 1 + 32, 'π sweep = 32 segments (16 per quadrant)');
+    assert(ap.every((p) => near(Math.hypot(p.x - 5, p.y - 0), 5, 1e-9)), 'every arc point lies ON the circle');
+    assert(near(ap[ap.length - 1].x, 10) && near(ap[ap.length - 1].y, 0), 'arc ends at its endpoint');
+    // the SWEEP flag picks which of the two arcs — opposite bulge, and NOT a chord either way. (Signs verified
+    // against the BROWSER's own SVGGeometryElement sampling: sweep=1 bulges −y, sweep=0 bulges +y.)
+    assert(near(Math.min(...ys(parsePathSubpaths('M0 0 A5 5 0 0 1 10 0'))), -5), 'sweep=1 bulges −y');
+    assert(near(Math.max(...ys(parsePathSubpaths('M0 0 A5 5 0 0 0 10 0'))), 5), 'sweep=0 bulges +y');
+    // the LARGE-ARC flag: same endpoints + r=8 ⇒ the long way round sweeps far further (−1.76 vs −14.24)
+    const small = Math.min(...ys(parsePathSubpaths('M0 0 A8 8 0 0 1 10 0')));
+    const large = Math.min(...ys(parsePathSubpaths('M0 0 A8 8 0 1 1 10 0')));
+    assert(near(small, -1.755, 1e-3) && large < small - 5, 'large-arc=1 takes the long way round');
+    // x-axis-rotation on a non-circular arc actually rotates it (rx10/ry4 turned 90° = a far deeper sweep)
+    const rot0 = Math.min(...ys(parsePathSubpaths('M0 0 A10 4 0 0 1 12 0')));
+    const rot90 = Math.min(...ys(parsePathSubpaths('M0 0 A10 4 90 0 1 12 0')));
+    assert(near(rot0, -0.8, 1e-9) && near(rot90, -15, 1e-9), 'x-axis-rotation rotates the ellipse');
+    // spec degeneracies, reported not silent
+    const coin = parsePathSubpaths('M5 5 A5 5 0 0 1 5 5');
+    assert(/coincident/.test(coin.skipped[0].reason), 'coincident endpoints → omitted + flagged');
+    const zero = parsePathSubpaths('M0 0 A0 5 0 0 1 10 0');
+    assert(/zero radius/.test(zero.skipped[0].reason) && zero.subpaths[0].pts.length === 2, 'zero radius → line + flagged');
+    // out-of-range radii are GROWN (F.6.6) rather than dropped: r=1 can't span 10, so it becomes a 5-radius semicircle
+    const grown = parsePathSubpaths('M0 0 A1 1 0 0 1 10 0');
+    assert(grown.subpaths[0].pts.every((p) => near(Math.hypot(p.x - 5, p.y), 5, 1e-9)), 'too-small radii grown to fit');
+    // GLUED flags ("011" is ONE token to the scanner) must parse identically to spaced ones — SVGO/Illustrator emit this
+    const glued = parsePathSubpaths('M0 0 A5 5 0 011 0'), spaced = parsePathSubpaths('M0 0 A5 5 0 0 1 1 0');
+    assert(JSON.stringify(glued) === JSON.stringify(spaced), 'glued arc flags parse identically to spaced');
+
+    // --- S: reflection of the previous cubic's 2nd control point ---
+    // C(0,0)(0,5)(5,5)(5,0) peaks at y=15·t(1−t)=3.75; S reflects (5,5)→(5,−5) so the second half MIRRORS it.
+    const s = parsePathSubpaths('M0 0 C0 5 5 5 5 0 S10 -5 10 0');
+    assert(s.skipped.length === 0, 'S no longer flagged');
+    assert(s.subpaths[0].pts.length === 1 + 16 + 16, 'S flattens as a full cubic (16 segments), not a chord');
+    assert(near(Math.max(...ys(s)), 3.75) && near(Math.min(...ys(s)), -3.75), 'S mirrors the previous cubic exactly');
+    // after a NON-cubic, S's first control point collapses to the current point (spec): the cubic is then
+    // (5,0)(5,0)(10,−5)(10,0), whose true extremum −20/9 falls between two flatten samples ⇒ −2.2156.
+    const s2 = parsePathSubpaths('M0 0 L5 0 S10 -5 10 0');
+    assert(near(Math.min(...ys(s2)), -2.2156, 1e-3), 'S after a line: control = current point');
+
+    // --- T: reflection of the previous quad's control point ---
+    // Q ctrl (5,5) peaks at y=2.5; T's ctrl = reflect about (10,0) = (15,−5) ⇒ trough −2.5.
+    const t = parsePathSubpaths('M0 0 Q5 5 10 0 T20 0');
+    assert(t.skipped.length === 0, 'T no longer flagged');
+    assert(t.subpaths[0].pts.length === 1 + 16 + 16, 'T flattens as a full quad');
+    assert(near(Math.max(...ys(t)), 2.5) && near(Math.min(...ys(t)), -2.5), 'T mirrors the previous quad exactly');
+    assert(near(Math.max(...xs(t)), 20), 'T reaches its endpoint');
+    // T after a non-quad → control = current point ⇒ a straight run (all y = 0)
+    assert(parsePathSubpaths('M0 0 L5 0 T15 0').subpaths.flatMap((p) => p.pts).every((p) => near(p.y, 0)), 'T after a line is straight');
+
+    // relative s/t/a work off the current point
+    const rel = parsePathSubpaths('m0 0 c0 5 5 5 5 0 s5 -5 5 0');
+    assert(near(Math.max(...xs(rel)), 10) && near(Math.min(...ys(rel)), -3.75), 'relative s mirrors + lands at x=10');
+    const ra = parsePathSubpaths('m0 0 a5 5 0 0 1 10 0');
+    assert(ra.subpaths[0].pts.every((p) => near(Math.hypot(p.x - 5, p.y), 5, 1e-9)), 'relative a = the same arc');
   }
 
   // 5. importSvgGeometry — the declared element mapping → STATIC joints/shapes

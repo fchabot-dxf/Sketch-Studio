@@ -6,9 +6,10 @@
 // (never the constraint-adding factories in shapes.js), so a flattened path can't flood the GLOBAL solver. Béziers
 // (C/Q) flatten via pure de Casteljau. The world is Y-DOWN (== SVG), so no Y-flip — only a mm scale.
 //
-// Coverage: <line> <rect> <circle> <ellipse> <polyline> <polygon> <path>(M/L/H/V/C/Q/Z, abs+rel).
+// Coverage: <line> <rect> <circle> <ellipse> <polyline> <polygon> <path>(M/L/H/V/C/Q/S/T/A/Z, abs+rel).
 // IMPORT-2B-2: <ellipse> flattens to a closed polyline ring (#core has no ellipse shape) at the same curve density
-// as the béziers. FLAGGED-not-dropped: path S/T/A (drawn as a line-to-endpoint + a skip note). GRIEVANCE-2: group (g) nesting + a transform=
+// as the béziers. IMPORT-2B-3: S/T reflect the previous control point and A is a real sampled elliptical arc (all
+// three were previously drawn as a straight CHORD). GRIEVANCE-2: group (g) nesting + a transform=
 // attribute are now APPLIED: the host recurses the tree and threads a composed CTM (per element) into each
 // descriptor; parseTransform / multiplyMatrix / applyMatrix below build + bake it. IMPORT-3 widens coverage.
 
@@ -115,9 +116,47 @@ export function ellipsePoints(cx, cy, rx, ry) {
   return pts;
 }
 
+// flattenArc(x1,y1, rx,ry, rotDeg, fA,fS, x2,y2, push) → '' | a degeneracy reason.
+// IMPORT-2B-3: a REAL SVG elliptical-arc segment (A/a). Endpoint → centre parameterization exactly per the SVG
+// implementation notes (F.6.5 + the F.6.6 radius correction), then arcSteps() samples along the TRUE ellipse — so
+// the result IS the arc, with neither the chord it used to draw nor the error of a cubic approximation. The two
+// spec degeneracies are reported so a degraded import is never silent.
+export function flattenArc(x1, y1, rx, ry, rotDeg, fA, fS, x2, y2, push) {
+  if (x1 === x2 && y1 === y2) return 'A (arc) with coincident endpoints → omitted';  // spec: omit the segment
+  rx = Math.abs(rx); ry = Math.abs(ry);
+  if (!(rx > 0) || !(ry > 0)) { push(x2, y2); return 'A (arc) with a zero radius → line'; } // spec: straight line
+  const phi = (rotDeg || 0) * DEG, cosP = Math.cos(phi), sinP = Math.sin(phi);
+  const hdx = (x1 - x2) / 2, hdy = (y1 - y2) / 2;
+  const x1p = cosP * hdx + sinP * hdy, y1p = -sinP * hdx + cosP * hdy;
+  const lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+  if (lam > 1) { const s = Math.sqrt(lam); rx *= s; ry *= s; }   // F.6.6: grow radii that can't span the endpoints
+  const rx2 = rx * rx, ry2 = ry * ry, px2 = x1p * x1p, py2 = y1p * y1p;
+  const den = rx2 * py2 + ry2 * px2;
+  const co = Math.sqrt(Math.max(0, (rx2 * ry2 - rx2 * py2 - ry2 * px2) / den)) * (fA === fS ? -1 : 1);
+  const cxp = co * (rx * y1p / ry), cyp = co * (-ry * x1p / rx);
+  const cx0 = cosP * cxp - sinP * cyp + (x1 + x2) / 2;
+  const cy0 = sinP * cxp + cosP * cyp + (y1 + y2) / 2;
+  const ang = (ax, ay, bx, by) => {                              // signed angle from (ax,ay) to (bx,by)
+    const l = Math.hypot(ax, ay) * Math.hypot(bx, by);
+    const a = Math.acos(Math.min(1, Math.max(-1, l ? (ax * bx + ay * by) / l : 0)));
+    return (ax * by - ay * bx < 0) ? -a : a;
+  };
+  const ux = (x1p - cxp) / rx, uy = (y1p - cyp) / ry;
+  const th1 = ang(1, 0, ux, uy);
+  let dth = ang(ux, uy, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  if (!fS && dth > 0) dth -= 2 * Math.PI;                        // the sweep flag picks which of the two arcs
+  else if (fS && dth < 0) dth += 2 * Math.PI;
+  const n = arcSteps(dth);
+  for (let s = 1; s <= n; s++) {
+    const th = th1 + dth * (s / n), ct = Math.cos(th), st = Math.sin(th);
+    push(cosP * rx * ct - sinP * ry * st + cx0, sinP * rx * ct + cosP * ry * st + cy0);
+  }
+  return '';
+}
+
 // parsePathSubpaths(d) → { subpaths: [{ pts:[{x,y}…], closed }], skipped: [{ reason, count }] }.
-// Supports M/L/H/V/C/Q/Z (absolute + relative). S/T/A are FLAGGED + drawn as a line to their endpoint (keeps the
-// path connected) — full smooth-curve / elliptical-arc handling is IMPORT-3.
+// Supports M/L/H/V/C/Q/S/T/A/Z (absolute + relative). IMPORT-2B-3: S/T reflect the previous control point and A is a
+// real elliptical arc — all three used to be drawn as a straight CHORD to their endpoint.
 export function parsePathSubpaths(d) {
   const subpaths = []; const skipped = [];
   const skip = (r) => { const e = skipped.find((s) => s.reason === r); if (e) e.count++; else skipped.push({ reason: r, count: 1 }); };
@@ -125,7 +164,21 @@ export function parsePathSubpaths(d) {
   const toks = String(d).match(/[a-zA-Z]|-?\.?\d[\d.]*(?:e-?\d+)?/gi) || [];
   let i = 0, cx = 0, cy = 0, startX = 0, startY = 0, cmd = '';
   let cur = null;
+  // IMPORT-2B-3: the previous curve's TRAILING control point + which family it belonged to — what S and T reflect.
+  // Any non-curve command clears pKind, which is exactly the spec's "if the previous command was not a C/S (Q/T),
+  // the first control point is the current point".
+  let pcx = 0, pcy = 0, pKind = '';
   const N = () => num(toks[i++]);
+  // An arc's large-arc/sweep flags are single digits that MAY be GLUED to the number after them ("a1 1 0 011 1" =
+  // flags 0,1 then x=1) — SVGO and Illustrator both emit that. The tokenizer sees "011" as ONE number, so read a
+  // flag by taking its leading digit and leaving the remainder in place as the next number. ONLY the A branch uses
+  // this, so M/L/H/V/C/Q/Z tokenize byte-for-byte as before.
+  const FLAG = () => {
+    const t = toks[i];
+    if (t == null) { i++; return 0; }
+    if (t.length > 1 && (t[0] === '0' || t[0] === '1')) { toks[i] = t.slice(1); return t[0] === '1' ? 1 : 0; }
+    i++; return num(t) ? 1 : 0;
+  };
   const push = (x, y) => { if (cur) cur.pts.push({ x, y }); };
   const begin = (x, y) => { if (cur && cur.pts.length) subpaths.push(cur); cur = { pts: [{ x, y }], closed: false }; };
   while (i < toks.length) {
@@ -133,16 +186,34 @@ export function parsePathSubpaths(d) {
     if (!cmd) { i++; continue; }
     const rel = cmd === cmd.toLowerCase();
     switch (cmd.toUpperCase()) {
-      case 'M': { let x = N(), y = N(); if (rel) { x += cx; y += cy; } cx = x; cy = y; startX = x; startY = y; begin(x, y); cmd = rel ? 'l' : 'L'; break; }
-      case 'L': { let x = N(), y = N(); if (rel) { x += cx; y += cy; } cx = x; cy = y; push(x, y); break; }
-      case 'H': { let x = N(); if (rel) x += cx; cx = x; push(x, cy); break; }
-      case 'V': { let y = N(); if (rel) y += cy; cy = y; push(cx, y); break; }
-      case 'C': { let x1 = N(), y1 = N(), x2 = N(), y2 = N(), x = N(), y = N(); if (rel) { x1 += cx; y1 += cy; x2 += cx; y2 += cy; x += cx; y += cy; } flattenCubic(cx, cy, x1, y1, x2, y2, x, y, push); cx = x; cy = y; break; }
-      case 'Q': { let x1 = N(), y1 = N(), x = N(), y = N(); if (rel) { x1 += cx; y1 += cy; x += cx; y += cy; } flattenQuad(cx, cy, x1, y1, x, y, push); cx = x; cy = y; break; }
-      case 'S': { N(); N(); let x = N(), y = N(); if (rel) { x += cx; y += cy; } push(x, y); cx = x; cy = y; skip('S (smooth cubic) → line'); break; }
-      case 'T': { let x = N(), y = N(); if (rel) { x += cx; y += cy; } push(x, y); cx = x; cy = y; skip('T (smooth quad) → line'); break; }
-      case 'A': { N(); N(); N(); N(); N(); let x = N(), y = N(); if (rel) { x += cx; y += cy; } push(x, y); cx = x; cy = y; skip('A (elliptical arc) → line'); break; }
-      case 'Z': { if (cur) { cur.closed = true; subpaths.push(cur); cur = null; } cx = startX; cy = startY; break; }
+      case 'M': { let x = N(), y = N(); if (rel) { x += cx; y += cy; } cx = x; cy = y; startX = x; startY = y; begin(x, y); cmd = rel ? 'l' : 'L'; pKind = ''; break; }
+      case 'L': { let x = N(), y = N(); if (rel) { x += cx; y += cy; } cx = x; cy = y; push(x, y); pKind = ''; break; }
+      case 'H': { let x = N(); if (rel) x += cx; cx = x; push(x, cy); pKind = ''; break; }
+      case 'V': { let y = N(); if (rel) y += cy; cy = y; push(cx, y); pKind = ''; break; }
+      case 'C': { let x1 = N(), y1 = N(), x2 = N(), y2 = N(), x = N(), y = N(); if (rel) { x1 += cx; y1 += cy; x2 += cx; y2 += cy; x += cx; y += cy; } flattenCubic(cx, cy, x1, y1, x2, y2, x, y, push); cx = x; cy = y; pcx = x2; pcy = y2; pKind = 'C'; break; }
+      case 'Q': { let x1 = N(), y1 = N(), x = N(), y = N(); if (rel) { x1 += cx; y1 += cy; x += cx; y += cy; } flattenQuad(cx, cy, x1, y1, x, y, push); cx = x; cy = y; pcx = x1; pcy = y1; pKind = 'Q'; break; }
+      // S = a cubic whose FIRST control point is the reflection of the previous cubic's SECOND control point about
+      // the current point; after a non-cubic it collapses onto the current point (spec). Was: a chord.
+      case 'S': {
+        let x2 = N(), y2 = N(), x = N(), y = N(); if (rel) { x2 += cx; y2 += cy; x += cx; y += cy; }
+        const x1 = pKind === 'C' ? 2 * cx - pcx : cx, y1 = pKind === 'C' ? 2 * cy - pcy : cy;
+        flattenCubic(cx, cy, x1, y1, x2, y2, x, y, push); cx = x; cy = y; pcx = x2; pcy = y2; pKind = 'C'; break;
+      }
+      // T = a quad whose control point is the reflection of the previous quad's control point about the current point.
+      case 'T': {
+        let x = N(), y = N(); if (rel) { x += cx; y += cy; }
+        const x1 = pKind === 'Q' ? 2 * cx - pcx : cx, y1 = pKind === 'Q' ? 2 * cy - pcy : cy;
+        flattenQuad(cx, cy, x1, y1, x, y, push); cx = x; cy = y; pcx = x1; pcy = y1; pKind = 'Q'; break;
+      }
+      // A = a real elliptical arc (flattenArc). NOTE the flag reads: FLAG(), not N() — see FLAG above.
+      case 'A': {
+        const rx = N(), ry = N(), rot = N(), fA = FLAG(), fS = FLAG();
+        let x = N(), y = N(); if (rel) { x += cx; y += cy; }
+        const degraded = flattenArc(cx, cy, rx, ry, rot, fA, fS, x, y, push);
+        if (degraded) skip(degraded);
+        cx = x; cy = y; pKind = ''; break;
+      }
+      case 'Z': { if (cur) { cur.closed = true; subpaths.push(cur); cur = null; } cx = startX; cy = startY; pKind = ''; break; }
       default: i++; break;
     }
   }

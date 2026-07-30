@@ -3,7 +3,7 @@
 // leave), and — host-side, #ui byte-identical — a FREEHAND tool (UNIFY-4b) + a pen-color UNDERLAY (UNIFY-4c).
 //
 // UNIFY-4c/STYLE-1: a per-shape DIGITAL STYLE (state.shapeStyles) editable via the Design-tab Style section, drawn beneath the
-// sketcher in its MAPPED PHYSICAL pen color (penColorForShape) by an underlay <svg> — rendered ON CHANGE
+// sketcher in its DIGITAL stroke/fill (STYLE-3; the Toolpath/Export canvas keeps the pen mapping) by an underlay <svg> — rendered ON CHANGE
 // (dirty-flagged), NOT per frame. The sketcher draws the DOF/scaffold on the transparent canvas ON TOP.
 // PP-7b's "Bake to Draw" stays DORMANT (one-store; toolpaths target #core directly via UNIFY-2). Host wiring ONLY.
 
@@ -13,7 +13,8 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
-import { state, penColorForShape, shapeStyle, setShapeStyle, makeShapeStyle } from './state.js'; // UNIFY-4c/STYLE-1: mapped pen color + the style record
+import { closedPolygonFor } from '#core/plot/fills/utils.js';          // STYLE-3: the pipeline's OWN closed-shape test
+import { state, shapeStyle, setShapeStyle, makeShapeStyle } from './state.js'; // UNIFY-4c/STYLE-1: the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
@@ -25,6 +26,10 @@ import SettingsManager from '#core/settings-manager.js';               // BURN-D
 // (default 4 -> 16px base); shrink it plotter-side. persist:false = RUNTIME ONLY (not written to the shared
 // 'sketch-studio-settings' localStorage key), so Studio/Shaper -- separate page instances -- render the default 4.
 const PLOTTER_JOINT_RADIUS = 2;
+
+// STYLE-3: how solid a fill preview is on the Design canvas. Translucent on purpose — a pen plotter realises a fill
+// as HATCHING, not flood colour, so the preview should read as "this region gets filled", not as printed ink.
+const FILL_PREVIEW_OPACITY = 0.35;
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
@@ -145,7 +150,20 @@ export function mountSketchStage(view, ctx = {}) {
     try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
     return true;
   };
-  // Rebuild the underlay paths: each #core shape flattened (coreShapeToPolyline) + stroked in its MAPPED pen color.
+  // STYLE-3: rebuild the underlay paths — each #core shape flattened (coreShapeToPolyline), then painted from its
+  // STYLE record: the stroke colour at the style's DISPLAY width, and, for a CLOSED shape carrying a fill colour, a
+  // translucent fill so fills are visible while designing (as the legacy did).
+  //
+  // DIGITAL, not pen-mapped. The old underlay drew every shape in its NEAREST PHYSICAL PEN colour; punch item #10
+  // rules "Design = digital colour; Toolpath = physical-pen mapping", and render-art.js (the Toolpath/Export canvas)
+  // still uses penColorForShape, so the split now matches that decision. In practice imports look the same — the
+  // palette is seeded FROM the import, so their nearest pen IS their digital colour. What changes is a user EDIT to
+  // an off-palette colour: Design now shows what they picked instead of snapping it to an owned pen.
+  //
+  // CLOSED is not our own test: closedPolygonFor is the SAME rule #core/plot/fills uses to decide what it can hatch
+  // (>=3 pts and first==last within 0.001), so a fill VISIBLE here is a fill that will actually plot. Per-SHAPE, which
+  // means an imported filled outline (decomposed into separate line shapes) shows no region fill — matching the
+  // pipeline, which cannot hatch it either. Multi-shape loops need #core findLoops (already roadmapped, S7).
   const renderUnderlay = () => {
     if (!underlay || !controller) return;
     const s = controller.state, parts = [];
@@ -153,8 +171,16 @@ export function mountSketchStage(view, ctx = {}) {
       if (!isStatic(sh)) continue; // live (selected) shapes are drawn by the sketcher (DOF) — not the underlay
       const pts = coreShapeToPolyline(sh, s.joints);
       if (!pts || pts.length < 2) continue;
+      const st = shapeStyle(sh.id) || makeShapeStyle();
+      // A fill-only shape (stroke None, e.g. an imported <path fill="red">) still draws its outline — in the FILL
+      // colour — so it never becomes invisible. Same stroke-then-fill precedence shapeColorFor declares.
+      const strokePaint = st.stroke || st.fill;
+      const ring = st.fill ? closedPolygonFor({ type: 'polyline', points: pts }) : null;
       const d = 'M ' + pts.map(p => p[0] + ' ' + p[1]).join(' L ');
-      parts.push('<path data-shape-id="' + sh.id + '" d="' + d + '" fill="none" stroke="' + penColorForShape(sh.id) + '" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>');
+      parts.push('<path data-shape-id="' + sh.id + '" d="' + d + '"' +
+        (ring ? ' fill="' + st.fill + '" fill-opacity="' + FILL_PREVIEW_OPACITY + '" fill-rule="evenodd"' : ' fill="none"') +
+        (strokePaint ? ' stroke="' + strokePaint + '" stroke-width="' + st.width + '"' : ' stroke="none"') +
+        ' stroke-linecap="round" stroke-linejoin="round"/>');
     }
     underlay.innerHTML = parts.join('');
   };

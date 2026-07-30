@@ -8,7 +8,7 @@
 // Pen swatch on every row reflects the linked plot color, so renames in
 // the Plot Colors panel cascade here automatically.
 
-import { state, makeToolpath, toolpathColor, findOrCreatePlotColor, shapeColorFor } from "./state.js";
+import { state, makeToolpath, toolpathColor, findOrCreatePlotColor, shapeStyle, makeShapeStyle } from "./state.js";
 import { $, toast } from "./dom.js";
 import { renderArt as render } from "./render-art.js"; // PP-4b: Draw's trimmed renderer (art + toolpath overlay)
 import { snapshot } from "./history.js";
@@ -431,13 +431,19 @@ function insertToolpathInStack(tp) {
     state.toolpaths.splice(at, 0, tp);
 }
 
-/** Split state.selectedShapeIds by their natural color and create one
- *  toolpath per color. For outline type, the relevant color is the
- *  shape's _stroke (then _fill, then black). For fill type, it's
- *  _fill (then _stroke, then black). Plot colors are matched by hex;
- *  missing pens are created via findOrCreatePlotColor. */
+/** Split state.selectedShapeIds by the paint for THIS ROLE and create one toolpath per colour — the STYLE-4 model:
+ *  **+Outline buckets by STROKE, +Fill buckets by FILL**, and a shape carrying None for that role is SKIPPED (it
+ *  gets no pen for it). Art shapes keep the legacy pickColor fallback (_stroke||_fill / _fill||_stroke). Plot colours
+ *  are matched by hex; missing pens are created via findOrCreatePlotColor — unchanged. */
 function createToolpathsFromSelection(type) {
     const artPick = (s) => (type === "outline" ? (s._stroke || s._fill) : (s._fill || s._stroke)) || "#000000";
+    // STYLE-4: for #core geometry the role's paint is STRICT — no cross-fallback, so "None" actually means none.
+    // A shape with NO style record is DRAWN geometry (only imports and Style edits create one), so it takes the
+    // DEFAULT style: black stroke, no fill. +Outline on a freshly drawn line therefore behaves exactly as before.
+    const corePick = (id) => {
+        const st = shapeStyle(id) || makeShapeStyle();
+        return type === "outline" ? st.stroke : st.fill;
+    };
 
     // Resolve each selected id -> { id, color }. WORKFLOW-FIX: the geometry now lives in the #core sketch (art store
     // retired UNIFY-7), so resolve BOTH stores — art shapes by their _stroke/_fill, #core shapes by their DIGITAL
@@ -445,17 +451,29 @@ function createToolpathsFromSelection(type) {
     const ids = state.selectedShapeIds;
     const resolved = [];        // { id, color }
     const foundArt = new Set();
+    let skippedNone = 0;        // selected #core shapes with None for this role
     for (const al of state.artLayers) {
         for (const s of al.shapes) if (ids.has(s.id)) { resolved.push({ id: s.id, color: artPick(s) }); foundArt.add(s.id); }
     }
     const cs = state.coreSketch;
     if (cs && cs.shapes) {
         const coreIds = new Set(cs.shapes.map(sh => sh.id));
-        // STYLE-1: same single-colour behaviour as before (shapeColorFor = stroke-then-fill); STYLE-4 makes this
-        // per-ROLE and strict — +Outline by stroke, +Fill by fill, each skipping shapes with None for that role.
-        for (const id of ids) if (!foundArt.has(id) && coreIds.has(id)) resolved.push({ id, color: shapeColorFor(id) || "#000000" });
+        for (const id of ids) {
+            if (foundArt.has(id) || !coreIds.has(id)) continue;
+            const c = corePick(id);
+            if (!c) { skippedNone++; continue; }   // None for this role -> no pen, no op
+            resolved.push({ id, color: c });
+        }
     }
-    if (!resolved.length) return;
+    if (!resolved.length) {
+        // Say WHY nothing happened — a silent no-op here reads as a broken button.
+        if (skippedNone) {
+            toast(type === "fill"
+                ? `No fill colour on the selection — set a Fill in the Design panel's Style section.`
+                : `No stroke colour on the selection — set a Stroke in the Design panel's Style section.`, true);
+        }
+        return;
+    }
 
     // Bucket by lower-cased hex color -> one toolpath per color (a pen created/found per color).
     const byColor = new Map();
@@ -482,7 +500,9 @@ function createToolpathsFromSelection(type) {
         state.activeToolpathId = firstTp.id;
         state.selectedToolpathIds = new Set([firstTp.id]);
     }
-    toast(`Created ${byColor.size} ${type} toolpath${byColor.size === 1 ? "" : "s"}.`);
+    // STYLE-4: name the skips too, so a partly-styled selection doesn't look like it lost shapes.
+    toast(`Created ${byColor.size} ${type} toolpath${byColor.size === 1 ? "" : "s"}.`
+        + (skippedNone ? ` ${skippedNone} shape${skippedNone === 1 ? "" : "s"} skipped (no ${type === "fill" ? "fill" : "stroke"}).` : ""));
     render();
 }
 

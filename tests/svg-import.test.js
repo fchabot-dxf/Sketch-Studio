@@ -1,4 +1,4 @@
-import { parseLength, computeImportScale, parsePoints, parsePathSubpaths, importSvgGeometry, parseTransform, multiplyMatrix, applyMatrix, linearScaleOf, IDENTITY_MATRIX } from '#core/svg-import.js';
+import { parseLength, computeImportScale, computeImportSize, parsePoints, parsePathSubpaths, importSvgGeometry, parseTransform, multiplyMatrix, applyMatrix, linearScaleOf, IDENTITY_MATRIX } from '#core/svg-import.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -25,6 +25,24 @@ import { parseLength, computeImportScale, parsePoints, parsePathSubpaths, import
     assert(near(d.scale, 1) && d.assumed === true, 'unitless viewBox → 1 mm/unit assumed');
     const e = computeImportScale({ width: '300px' });
     assert(near(e.scale, 25.4 / 96) && e.assumed === true, 'no viewBox → 96 dpi px assumed');
+  }
+
+  // 2b. IMPORT-DOC-SIZE: computeImportSize — the doc extent in mm, derived from the SAME scale as the coords
+  {
+    const a = computeImportSize({ width: '100mm', height: '80mm', viewBox: '0 0 200 160' });
+    assert(near(a.w, 100) && near(a.h, 80), 'physical width + viewBox → exact mm extent');
+    const b = computeImportSize({ viewBox: '0 0 210 297' });
+    assert(near(b.w, 210) && near(b.h, 297) && b.assumed === true, 'unitless viewBox → 1mm/unit extent (A4)');
+    const c = computeImportSize({ width: '800', height: '600' });
+    assert(near(c.w, 800 * 25.4 / 96) && near(c.h, 600 * 25.4 / 96), 'no viewBox, unitless → px @ 96 dpi');
+    const d = computeImportSize({ width: '100mm', height: '80mm' });
+    assert(near(d.w, 100) && near(d.h, 80), 'no viewBox, physical → the physical size IS the viewport');
+    // the paper must match the geometry: extent = what the same scale maps the viewBox onto
+    const e = computeImportSize({ width: '100mm', viewBox: '0 0 50 40' });
+    assert(near(e.scale, 2) && near(e.w, 100) && near(e.h, 80), 'scale 2 mm/unit → 50x40 units = 100x80 mm');
+    assert(computeImportSize({}) === null, 'no viewBox + no size → null (host keeps its doc)');
+    assert(computeImportSize({ width: '100%', height: '100%' }) === null, '% size → null (unknowable)');
+    assert(computeImportSize({ width: '0', height: '0' }) === null, 'zero size → null');
   }
 
   // 3. parsePoints

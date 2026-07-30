@@ -110,6 +110,17 @@ export function mountSketchStage(view, ctx = {}) {
   // DESIGN-PAPER-BOUNDS: draw the document paper+grid (0,0)-(doc.w,doc.h) as the BACKMOST Design layer — same helper +
   // world/mm coords the plotter canvas (render-art) uses, so the Design area IS the paper. Redrawn on doc-size change.
   const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc); };
+  // IMPORT-DOC-SIZE / UNIFY-6: fit the SHARED view to the CURRENT doc on THIS canvas, then apply it. The plotter-side
+  // fitViewport() measures #canvasWrap — hidden while Design is up — so the Design tab has to do its own fit. Used on
+  // stage entry (first fit) AND after an import changes the paper size.
+  const fitDesignView = () => {
+    const r = designCanvas.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return false;
+    Object.assign(controller.state.view, fitRectForDoc(r.width, r.height));
+    markFitted();
+    try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
+    return true;
+  };
   // Rebuild the underlay paths: each #core shape flattened (coreShapeToPolyline) + stroked in its MAPPED pen color.
   const renderUnderlay = () => {
     if (!underlay || !controller) return;
@@ -248,8 +259,11 @@ export function mountSketchStage(view, ctx = {}) {
   const doImport = (text, name) => {
     const res = importSvgToCore(text, name || 'Imported.svg', controller);
     underlayDirty = true; // new static geometry -> redraw the underlay
+    // IMPORT-DOC-SIZE: the import SET the paper size — re-fit this canvas to the new paper. The paper rect itself and
+    // the Document button label refresh on the next panelTick (its doc-size signature changed).
+    if (res.docSet) fitDesignView();
     if (importStatus) importStatus.textContent = res.error ? ('Import failed: ' + res.error)
-      : `Imported ${res.imported} -> ${res.sketchName} @ ${res.scaleLabel}${res.static ? ' (static)' : ''}${res.skippedSummary ? ' · skipped ' + res.skippedSummary : ''}`;
+      : `Imported ${res.imported} -> ${res.sketchName} @ ${res.scaleLabel}${res.docSet ? ` · paper ${res.docW}×${res.docH} mm` : ''}${res.static ? ' (static)' : ''}${res.skippedSummary ? ' · skipped ' + res.skippedSummary : ''}`;
     return res;
   };
   const importBtn = view.querySelector('#importSvgBtn'), importFile = view.querySelector('#importSvgFile');
@@ -274,8 +288,7 @@ export function mountSketchStage(view, ctx = {}) {
       // UNIFY-6: the FIRST canvas shown at a real size fits the SHARED view (controller.state.view) to the plotter
       // doc. Then ALWAYS apply the shared view to #design-canvas on entry, so pan/zoom done on a pen tab reflects here
       // (persists across tabs). updateViewBox is the #ui's own applier (center-based; adjusts h to this canvas aspect).
-      const r = designCanvas.getBoundingClientRect();
-      if (needsFit() && r.width > 0 && r.height > 0) { Object.assign(controller.state.view, fitRectForDoc(r.width, r.height)); markFitted(); }
+      if (needsFit()) fitDesignView();
       try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
     },
     onLeave: () => controller.stop(),

@@ -53,6 +53,27 @@ export function computeImportScale({ width, height, viewBox } = {}) {
   return { scale: PX_MM, label: fmtScale(PX_MM) + ' (96 dpi)', assumed: true };
 }
 
+// computeImportSize({ width, height, viewBox }) → { w, h (mm), scale, label, assumed } | null.
+// The DOCUMENT EXTENT of the incoming SVG, in mm — for a host that sizes its paper from the import
+// (IMPORT-DOC-SIZE). Derived from the SAME scale importSvgGeometry bakes into the coords, so the paper
+// ALWAYS matches the geometry that landed on it (that invariant is the whole point of deriving rather
+// than re-reading width/height independently):
+//   • viewBox present  → (vbW, vbH) × scale                (covers physical-width + viewBox exactly)
+//   • no viewBox       → width/height, physical units taken AS mm (per SVG: they size the viewport
+//                        directly), unitless taken as user units × scale (= px @ 96 dpi)
+// null when the size is unknowable (no viewBox and no usable width/height, or a % width) — the host
+// then keeps its current doc size rather than guessing.
+export function computeImportSize({ width, height, viewBox } = {}) {
+  const { scale, label, assumed } = computeImportScale({ width, height, viewBox });
+  const vb = parseViewBox(viewBox);
+  if (vb && vb.w > 0 && vb.h > 0) return { w: vb.w * scale, h: vb.h * scale, scale, label, assumed };
+  const w = parseLength(width), h = parseLength(height);
+  if (!w || !h || !(w.value > 0) || !(h.value > 0)) return null;
+  if (w.unit === '%' || h.unit === '%') return null; // relative to a viewport we don't have
+  const mm = (L) => (PHYS[L.unit] != null ? L.value * PHYS[L.unit] : L.value * scale);
+  return { w: mm(w), h: mm(h), scale, label, assumed };
+}
+
 // parsePoints('0,0 10,0 10,10') → [{x,y}, …] (commas and/or whitespace separated).
 export function parsePoints(str) {
   if (!str) return [];

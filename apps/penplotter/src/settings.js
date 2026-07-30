@@ -71,6 +71,23 @@ export function syncDocFields() {
     if (sel) sel.value = state.docUnit;
 }
 
+/** IMPORT-DOC-SIZE: set the document size FROM CODE (mm) + refresh everything that reads it — the ONE named
+ *  entry point for a programmatic doc-size change (import today; project-load / a paper-size preset later).
+ *  Rounds to 2dp in mm, exactly like the #docW/#docH handlers. `fitViewport` no-ops while the plotter canvas is
+ *  hidden (e.g. on the Design tab) — that canvas re-fits from the shared view on its own stage entry.
+ *  A SET, not a lock: the Document dialog still overrides freely afterwards.
+ *  (The #docW/#docH handlers deliberately do NOT route through here — the input IS their source of truth, so
+ *  syncDocFields would rewrite the value the user just typed.) */
+export function setDocSize(w, h) {
+    if (!(w > 0) || !(h > 0)) return false;
+    state.doc.w = Math.round(w * 100) / 100;
+    state.doc.h = Math.round(h * 100) / 100;
+    syncDocFields();   // the Document dialog's W/H fields
+    fitViewport();     // shared view -> the new paper (+ the #docInfo readout, via applyViewport)
+    render();
+    return true;
+}
+
 // BURN-DOWN-5: on-open snapshots so Cancel/✕/backdrop/Esc revert the live edits (doc size + unit change apply
 // immediately as the user types; the Settings toggle applies on change). Set by each modal's onOpen.
 let _docSnap = null, _settingsSnap = null;

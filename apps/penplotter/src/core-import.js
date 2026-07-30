@@ -6,10 +6,11 @@
 // UNIFY-throttle skip holds ~60 FPS); small imports stay LIVE/constrainable. Unsupported/degraded elements are
 // COUNTED + surfaced (IMPORT-3), never silently dropped.
 
-import { importSvgGeometry, computeImportScale, parseTransform, multiplyMatrix, IDENTITY_MATRIX } from '#core/svg-import.js';
+import { importSvgGeometry, computeImportScale, computeImportSize, parseTransform, multiplyMatrix, IDENTITY_MATRIX } from '#core/svg-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { state, findOrCreatePlotColor } from './state.js';
 import { inheritPaint, penColorFor } from './svg-import.js'; // reuse the plotter's paint resolver (UNIFY-7 relocates)
+import { setDocSize } from './settings.js';                  // IMPORT-DOC-SIZE: the import defines the paper size
 
 const TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
 const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style', 'clippath', 'lineargradient', 'radialgradient']);
@@ -49,7 +50,13 @@ export function importSvgToCore(svgText, fileName, controller) {
   const svg = doc.documentElement;
   if (!svg) return { error: 'no svg root' };
   const { descs, skipped } = extract(svg);
-  const { scale, label } = computeImportScale({ width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') });
+  const root = { width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') };
+  const { scale, label } = computeImportScale(root);
+  // IMPORT-DOC-SIZE (user-decided: "import svg would also define the canvas size, but overridable afterward").
+  // The size comes from the SAME scale the coords below are baked with, so the paper matches the geometry. null =
+  // unknowable size (no viewBox, no usable width/height) -> keep the current doc.
+  const size = computeImportSize(root);
+  const docSet = size ? setDocSize(size.w, size.h) : false;
 
   // Land the import in a NEW named sketch (like Shaper). idBase makes per-descriptor shape ids unique.
   const sk = addSketch(st, (fileName || 'Imported').replace(/\.svg$/i, '') || 'Imported');
@@ -74,7 +81,8 @@ export function importSvgToCore(svgText, fileName, controller) {
   const dense = importedIds.length > DENSE_THRESHOLD; // (kept only to note "dense" in the status)
 
   const skippedSummary = Object.entries(skipped).map(([k, n]) => `${k} x${n}`).join(', ');
-  return { imported: importedIds.length, sketchName: sk.name, scaleLabel: label, static: importedIds.length > 0, dense, skippedSummary };
+  return { imported: importedIds.length, sketchName: sk.name, scaleLabel: label, static: importedIds.length > 0, dense, skippedSummary,
+           docSet, docW: state.doc.w, docH: state.doc.h }; // IMPORT-DOC-SIZE: what the paper became (host re-fits the view)
 }
 
 function bumpInto(obj, k, n) { obj[k] = (obj[k] || 0) + n; }

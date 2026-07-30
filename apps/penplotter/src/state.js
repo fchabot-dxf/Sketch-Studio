@@ -74,6 +74,19 @@ export const state = {
 /** Default fill settings applied to new and imported layers. */
 export const DEFAULT_FILL = { pattern: "none", angle: 45, spacing: 2.0 };
 
+const MM_PER_IN = 25.4;
+/** STYLE-5: the document size as a display string in the CURRENT unit — "200 × 150 mm" / "7.87 × 5.91 in".
+ *  Declared HERE (state owns doc + docUnit, and this module imports nothing app-side, so no cycle) because the app
+ *  was already hand-rolling this conversion in two places — settings.js's private toDisplay/roundDisplay for the
+ *  dialog fields and viewport.js's inline fmt() for the #docInfo readout — and the Document button was about to be
+ *  a third, hardcoding "mm". One formatter so every place that shows the doc size agrees.
+ *  (#docInfo still uses its own inline integer formatting; it can adopt this whenever that is in scope.) */
+export function docSizeLabel() {
+    const inch = state.docUnit === "in";
+    const f = (mm) => (inch ? (mm / MM_PER_IN).toFixed(2) : String(Math.round(mm * 100) / 100));
+    return `${f(state.doc.w)} × ${f(state.doc.h)} ${inch ? "in" : "mm"}`;
+}
+
 export const DEFAULT_PEN_WIDTH = 0.5; // mm — typical fineliner
 export const DEFAULT_OUTLINE = {
     style: "normal",

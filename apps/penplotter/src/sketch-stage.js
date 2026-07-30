@@ -14,7 +14,7 @@ import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
 import { closedPolygonFor } from '#core/plot/fills/utils.js';          // STYLE-3: the pipeline's OWN closed-shape test
-import { state, shapeStyle, setShapeStyle, makeShapeStyle } from './state.js'; // UNIFY-4c/STYLE-1: the style record
+import { state, shapeStyle, setShapeStyle, makeShapeStyle, docSizeLabel } from './state.js'; // UNIFY-4c/STYLE-1: the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
@@ -224,8 +224,10 @@ export function mountSketchStage(view, ctx = {}) {
     if (redoBtn) redoBtn.disabled = !(s.redoStack && s.redoStack.length);
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
     if (docBtn) {
-      const dsig = state.doc.w + 'x' + state.doc.h;
-      if (dsig !== lastDocSig) { lastDocSig = dsig; docBtn.textContent = `Document · ${state.doc.w} × ${state.doc.h} mm`; renderPaper(); }
+      // STYLE-5: the label honours state.docUnit via the shared docSizeLabel() (it hardcoded "mm"). docUnit is part of
+      // the signature now — without it, switching mm<->in left the button showing the OLD unit until the size changed.
+      const dsig = state.doc.w + 'x' + state.doc.h + '|' + state.docUnit;
+      if (dsig !== lastDocSig) { lastDocSig = dsig; docBtn.textContent = `Document · ${docSizeLabel()}`; renderPaper(); }
     }
     let vsum = 0; for (const c of s.constraints) if (typeof c.value === 'number') vsum += c.value;
     const nShapes = (s.shapes && s.shapes.length) || 0;

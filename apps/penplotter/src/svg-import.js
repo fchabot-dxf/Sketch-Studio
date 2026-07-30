@@ -8,40 +8,19 @@
 //      and group by that color. Each unique color becomes one layer.
 //      "One color = one pen = one layer" matches pen-plotter conventions.
 
+// IMPORT-2B-4: installSvgImport + its loadSvgFile helper are DELETED — the binder was never called (it wired
+// #importBtn/#importFile and a #canvasWrap drop, all in the permanently hidden Draw panel), so the whole chain was
+// dead. The live importer is the Design tab: #importSvgBtn + drag-drop on #design-canvas-wrap -> importSvgToCore.
+// STILL SHARED, do not touch: inheritPaint + penColorFor below — core-import.js resolves per-element paint through
+// them. importSvgText and its art-store helpers are kept deliberately (see the WORK-LOG note): they are the
+// reference implementation for the still-open S6 [D] "Inkscape-layer split" decision.
+
 import { state, makeArtLayer, makeToolpath, findOrCreatePlotColor } from "./state.js";
-import { canvasWrap, dropOverlay, $, toast, INK_NS } from "./dom.js";
+import { INK_NS } from "./dom.js";
 import { fitViewport } from "./viewport.js";
 import { renderArt as render } from "./render-art.js"; // PP-3c: Draw's trimmed renderer
 import { snapshot } from "./history.js";
 import { syncDocFields } from "./settings.js"; // PP-6: real (un-stubbed); no-ops if the doc-size fields aren't mounted
-
-export function installSvgImport() {
-    $("#importBtn").onclick = () => $("#importFile").click();
-    $("#importFile").addEventListener("change", (e) => {
-        const f = e.target.files[0];
-        if (f) loadSvgFile(f);
-        e.target.value = "";
-    });
-
-    canvasWrap.addEventListener("dragover", (e) => { e.preventDefault(); dropOverlay.classList.add("show"); });
-    canvasWrap.addEventListener("dragleave", () => dropOverlay.classList.remove("show"));
-    canvasWrap.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropOverlay.classList.remove("show");
-        const f = e.dataTransfer.files[0];
-        if (f) loadSvgFile(f);
-    });
-}
-
-async function loadSvgFile(file) {
-    const text = await file.text();
-    try {
-        importSvgText(text);
-        toast(`Imported ${file.name}`);
-    } catch (err) {
-        toast("Import failed: " + err.message, true);
-    }
-}
 
 export function importSvgText(text) {
     const doc = new DOMParser().parseFromString(text, "image/svg+xml");

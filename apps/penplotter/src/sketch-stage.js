@@ -61,6 +61,10 @@ const SCAFFOLD = `
         <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
         <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
         <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
+             but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
+             CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
+        <div id="dropOverlay">Drop an SVG to import</div>
       </div>
     </div>
   </div>`;
@@ -266,13 +270,40 @@ export function mountSketchStage(view, ctx = {}) {
       : `Imported ${res.imported} -> ${res.sketchName} @ ${res.scaleLabel}${res.docSet ? ` · paper ${res.docW}×${res.docH} mm` : ''}${res.static ? ' (static)' : ''}${res.skippedSummary ? ' · skipped ' + res.skippedSummary : ''}`;
     return res;
   };
+  const readIntoImport = (f) => { const rd = new FileReader(); rd.onload = () => doImport(String(rd.result), f.name); rd.readAsText(f); };
   const importBtn = view.querySelector('#importSvgBtn'), importFile = view.querySelector('#importSvgFile');
   if (importBtn && importFile) {
     importBtn.addEventListener('click', () => importFile.click());
     importFile.addEventListener('change', () => {
       const f = importFile.files && importFile.files[0]; if (!f) return;
-      const rd = new FileReader(); rd.onload = () => doImport(String(rd.result), f.name); rd.readAsText(f);
+      readIntoImport(f);
       importFile.value = '';
+    });
+  }
+
+  // IMPORT-2B-4: DRAG-AND-DROP an .svg onto the Design canvas -> the SAME doImport path as the button (so it also
+  // sets the paper size, per item 1). The audit found #dropOverlay rendered but its listeners stranded in the
+  // never-called installSvgImport; both now live here, on the canvas the user actually drops onto. A dragover can
+  // only see that files are coming (names are readable at DROP), so the .svg filter + its message land on drop.
+  const dropWrap = view.querySelector('#design-canvas-wrap');
+  const dropOverlay = view.querySelector('#dropOverlay');
+  if (dropWrap) {
+    const showDrop = (on) => { if (dropOverlay) dropOverlay.classList.toggle('show', on); };
+    const isFileDrag = (e) => {
+      const dt = e.dataTransfer;
+      if (!dt) return false;
+      if (dt.items && dt.items.length) return [...dt.items].some((it) => it.kind === 'file');
+      return !!(dt.types && [...dt.types].includes('Files'));
+    };
+    dropWrap.addEventListener('dragover', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); showDrop(true); });
+    // dragleave also fires when the pointer crosses onto a CHILD (the canvas svg) — only hide when it truly left.
+    dropWrap.addEventListener('dragleave', (e) => { if (!dropWrap.contains(e.relatedTarget)) showDrop(false); });
+    dropWrap.addEventListener('drop', (e) => {
+      e.preventDefault(); showDrop(false);
+      const files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+      const f = files.find((x) => /\.svg$/i.test(x.name) || x.type === 'image/svg+xml');
+      if (!f) { if (importStatus) importStatus.textContent = files.length ? 'Only .svg files can be imported.' : ''; return; }
+      readIntoImport(f);
     });
   }
 

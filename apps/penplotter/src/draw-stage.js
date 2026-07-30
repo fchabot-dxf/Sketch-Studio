@@ -14,7 +14,8 @@ import { installKeyboard } from "./keyboard.js";
 import { installHistory } from "./history.js";
 // S3: installPlotColorsPanel moved to toolpath-stage.js (the Pens palette is surfaced in the Toolpath tab now).
 // UNIFY-7: retired the art-UI installers — installToolbar/setTool (tools.js), installTransformHud (rotate/scale HUD),
-// installLayerButtons (layers-panel, DELETED), installSvgImport (art importer; import goes to #core via the Design tab).
+// installLayerButtons (layers-panel, DELETED). IMPORT-2B-4: installSvgImport is now DELETED too (it was never called;
+// import goes to #core via the Design tab, which owns both the button and the drag-drop).
 
 // RENDER-FIX: the art-tool TOOLBAR (#allTools / .tool buttons) is DEAD scaffold — UNIFY-7 retired the art tools
 // (installToolbar/setTool gone), but the toolbar lived INSIDE #canvasWrap and so rode along (visible) when
@@ -28,13 +29,10 @@ const SCAFFOLD = `
       <div id="docInfo"></div>
       <div id="toast"></div>
       <div id="targetEditBanner" hidden></div>
-      <div id="dropOverlay">Drop an SVG to import</div>
     </div>
     <aside id="drawPanel">
-      <section class="dp-sec">
-        <button id="importBtn" class="dp-btn dp-primary">Import SVG</button>
-        <input id="importFile" type="file" accept=".svg,image/svg+xml" hidden>
-      </section>
+      <!-- IMPORT-2B-4: the dead Import SVG button/#importFile + #dropOverlay are GONE from this hidden panel. The
+           real importer lives on the Design tab (button + drag-drop, both -> importSvgToCore). -->
       <section class="dp-sec">
         <div class="dp-head">Layers</div>
         <div class="dp-row">

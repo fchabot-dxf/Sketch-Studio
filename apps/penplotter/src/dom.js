@@ -14,7 +14,8 @@ export let layersEl = null;
 export let coordsEl = null;
 export let docInfoEl = null;
 export let toastEl = null;
-export let dropOverlay = null;
+// IMPORT-2B-4: dropOverlay was resolved here for the deleted installSvgImport. The overlay now lives in the Design
+// stage's own scaffold (#design-canvas-wrap) and is queried there — nothing in the Draw stage owns it any more.
 
 // Resolve the Draw-stage element refs from a mounted container (falls back to document). Call once after the
 // scaffold is in the DOM. The `export let` bindings above update live, so every importer sees the resolved nodes.
@@ -27,7 +28,6 @@ export function initDom(root) {
     coordsEl = q("#coords");
     docInfoEl = q("#docInfo");
     toastEl = q("#toast");
-    dropOverlay = q("#dropOverlay");
 }
 
 let toastTimer = null;

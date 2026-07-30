@@ -7,15 +7,24 @@
 // Each created toolpath is tagged `mixOf: shapeId` (+ `mixWeight`) so the mix is idempotent (re-apply replaces it),
 // removable (clearMix), and surfaceable (the Design panel shows pens + weights). Plotter-side; the math is #core.
 
-import { state, makeToolpath, DEFAULT_PEN_WIDTH, shapeColorFor } from './state.js';
+import { state, makeToolpath, DEFAULT_PEN_WIDTH, shapeStyle } from './state.js';
 import { mixForColor, mixFillParams } from '#core/color-mix.js';
 
 const MIX_TOLERANCE = 16; // matches mixForColor's default: within this RGB distance of a single pen -> no mix.
 
+/** STYLE-2: the colour a pen-mix reproduces for a shape — its FILL when one is set, else its STROKE. FILL-first
+ *  because a mix IS a set of cross-hatch FILL toolpaths: mixing the fill colour is what the user is asking for when
+ *  a shape has one. A stroke-only shape still mixes (the hatch stands in for its colour), which is the pre-STYLE
+ *  behaviour. Exported so the Design panel's enable/disable test uses the SAME precedence the mix will actually use. */
+export function mixColorFor(shapeId) {
+  const st = shapeStyle(shapeId);
+  return st ? (st.fill || st.stroke || null) : null;
+}
+
 // The pen-mix for a shape's DIGITAL color over the owned palette, or null when it has no color / the palette is empty.
 // state.plotColors ({id,color,width}) is accepted directly by mixForColor (lenient {id,color} pens).
 export function mixForShape(shapeId) {
-  const hex = shapeColorFor(shapeId); // STYLE-1: stroke-then-fill for now; STYLE-2 flips this to FILL-first
+  const hex = mixColorFor(shapeId);
   if (!hex || !state.plotColors.length) return null;
   return mixForColor(hex, state.plotColors, { tolerance: MIX_TOLERANCE });
 }

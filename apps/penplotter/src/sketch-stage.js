@@ -13,10 +13,10 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
-import { state, penColorForShape, shapeStyle, setShapeStyle, shapeColorFor } from './state.js'; // UNIFY-4c/STYLE-1: mapped pen color + the style record
+import { state, penColorForShape, shapeStyle, setShapeStyle, makeShapeStyle } from './state.js'; // UNIFY-4c/STYLE-1: mapped pen color + the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
-import { applyMix, clearMix, isMixed, mixSummary } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
+import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
 import SettingsManager from '#core/settings-manager.js';               // BURN-DOWN-6: plotter-side joint-size override (runtime only)
@@ -46,12 +46,29 @@ const SCAFFOLD = `
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
           <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
           <div id="importStatus" class="dp-note"></div>
-          <div id="shape-color-row" class="dp-field">
-            <label for="shapeColor">Pen color</label>
-            <input id="shapeColor" type="color" value="#000000" disabled title="Select a shape, then pick its digital color">
-          </div>
-          <div id="shape-mix-row" class="dp-field">
-            <label title="Reproduce an out-of-palette color as interleaved per-pen cross-hatch (COLOR-MIX-3)"><input id="shapeMix" type="checkbox" disabled> Pen-mix</label>
+          <!-- STYLE-2: the Style section (legacy style-panel.js, ported to the #core style record). STROKE drives the
+               OUTLINE pen, FILL drives the FILL pen. Width is DISPLAY-only. The preset-swatch popover + the "mixed"
+               multi-select cue stay deferred (Batch 5 polish, per the roadmap). -->
+          <div id="shape-style">
+            <div class="dp-head">Style</div>
+            <div class="dp-field">
+              <label for="strokeColor">Stroke</label>
+              <input id="strokeColor" type="color" value="#000000" disabled title="Outline colour — drives the OUTLINE pen">
+            </div>
+            <div class="dp-field">
+              <label for="strokeWidth">Width <small>mm · display only</small></label>
+              <input id="strokeWidth" type="number" min="0.05" max="10" step="0.05" value="0.5" disabled title="Display width only — the plot uses the physical pen's width">
+            </div>
+            <div class="dp-field">
+              <label for="fillColor">Fill</label>
+              <input id="fillColor" type="color" value="#c8c8c8" disabled title="Fill colour — drives the FILL pen">
+            </div>
+            <div class="dp-field dp-check">
+              <label title="No fill: the shape gets no fill pen (+ Fill skips it)"><input id="fillNone" type="checkbox" disabled> Fill: None</label>
+            </div>
+            <div class="dp-field dp-check">
+              <label title="Reproduce an out-of-palette colour as interleaved per-pen cross-hatch (COLOR-MIX-3). Applies to the FILL colour when one is set, else the stroke."><input id="shapeMix" type="checkbox" disabled> Pen-mix</label>
+            </div>
             <div id="mixStatus" class="dp-note"></div>
           </div>
         </div>
@@ -75,7 +92,10 @@ export function mountSketchStage(view, ctx = {}) {
   const underlay = view.querySelector('#pen-underlay');
   const paperSvg = view.querySelector('#design-paper'); // DESIGN-PAPER-BOUNDS: backmost paper+grid layer
   const designCanvas = view.querySelector('#design-canvas');
-  const colorInput = view.querySelector('#shapeColor');
+  const colorInput = view.querySelector('#strokeColor');   // STYLE-2: the Style section's four controls
+  const widthInput = view.querySelector('#strokeWidth');
+  const fillInput = view.querySelector('#fillColor');
+  const fillNone = view.querySelector('#fillNone');
   const mixToggle = view.querySelector('#shapeMix');
   const docBtn = view.querySelector('#designDocBtn'); // DOC-SIZE-IN-DESIGN: opens #docModal; label shows the size
   const mixStatus = view.querySelector('#mixStatus');
@@ -148,15 +168,25 @@ export function mountSketchStage(view, ctx = {}) {
     if (s.selectedShapes) state.selectedShapeIds = new Set(s.selectedShapes);
     // UNIFY-4c: reflect the selected shape's digital color into the picker (enable when a shape is selected).
     const selIds = s.selectedShapes ? [...s.selectedShapes] : [];
-    if (colorInput) {
-      colorInput.disabled = selIds.length === 0;
-      const st0 = selIds.length ? shapeStyle(selIds[0]) : null;
-      if (st0 && st0.stroke && document.activeElement !== colorInput) colorInput.value = st0.stroke;
+    // STYLE-2: reflect the FIRST selected shape's style into the Style section; every control is disabled with no
+    // selection. A focused control is left alone so a live edit is never overwritten mid-frame. (Multi-select shows
+    // the first shape's values — the legacy "mixed" cue is deferred to Batch 5 polish.)
+    {
+      const st0 = selIds.length ? (shapeStyle(selIds[0]) || makeShapeStyle()) : null;
+      const enable = (el, on) => { if (el) el.disabled = !on; };
+      enable(colorInput, !!st0); enable(widthInput, !!st0); enable(fillInput, !!st0); enable(fillNone, !!st0);
+      if (st0) {
+        if (colorInput && document.activeElement !== colorInput && st0.stroke) colorInput.value = st0.stroke;
+        if (widthInput && document.activeElement !== widthInput) widthInput.value = st0.width;
+        // an unset fill leaves the swatch showing the last colour but ticks None — so unticking restores something sane
+        if (fillInput && document.activeElement !== fillInput && st0.fill) fillInput.value = st0.fill;
+        if (fillNone && document.activeElement !== fillNone) fillNone.checked = !st0.fill;
+      }
     }
     // COLOR-MIX-3: reflect the Pen-mix opt-in for a single selected, colored shape (needs a palette to mix over).
     if (mixToggle) {
       const one = selIds.length === 1 ? selIds[0] : null;
-      const canMix = !!one && !!shapeColorFor(one) && state.plotColors.length > 0;
+      const canMix = !!one && !!mixColorFor(one) && state.plotColors.length > 0;
       mixToggle.disabled = !canMix;
       const mixed = canMix && isMixed(one);
       if (document.activeElement !== mixToggle) mixToggle.checked = mixed;
@@ -228,15 +258,30 @@ export function mountSketchStage(view, ctx = {}) {
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
-  // UNIFY-4c: the per-shape DIGITAL color control — apply the picked color to every selected #core shape, then
-  // re-render the underlay (which maps digital -> the nearest physical pen color).
-  if (colorInput) colorInput.addEventListener('input', () => {
+  // STYLE-2: the Style controls. ONE applier for all four — patch every selected shape's style record, re-mix if the
+  // shape was already mixed (so the pens follow the edit, as the single colour control did), redraw the underlay.
+  const applyStyle = (patch) => {
     const ids = controller.state.selectedShapes ? [...controller.state.selectedShapes] : [];
-    for (const id of ids) setShapeStyle(id, { stroke: colorInput.value }); // STYLE-1: the lone picker edits STROKE
-    // COLOR-MIX-3: if a shape is already mixed, recompute its mix for the new color so the pens follow the edit.
+    if (!ids.length) return;
+    for (const id of ids) setShapeStyle(id, patch);
+    // COLOR-MIX-3: if a shape is already mixed, recompute its mix for the new colour so the pens follow the edit.
     for (const id of ids) if (isMixed(id)) applyMix(id);
     lastMixSig = ''; // force the mix status to refresh next tick
     underlayDirty = true; renderUnderlay();
+  };
+  if (colorInput) colorInput.addEventListener('input', () => applyStyle({ stroke: colorInput.value }));
+  if (widthInput) widthInput.addEventListener('change', () => {
+    const w = parseFloat(widthInput.value);
+    if (isFinite(w) && w > 0) applyStyle({ width: w });
+  });
+  // Picking a fill colour IMPLIES a fill — otherwise the swatch would visibly change while None kept it off.
+  if (fillInput) fillInput.addEventListener('input', () => {
+    if (fillNone) fillNone.checked = false;
+    applyStyle({ fill: fillInput.value });
+  });
+  // None ON = fill null (no fill pen). None OFF = adopt whatever the fill swatch currently shows.
+  if (fillNone) fillNone.addEventListener('change', () => {
+    applyStyle({ fill: fillNone.checked ? null : (fillInput ? fillInput.value : '#c8c8c8') });
   });
 
   // COLOR-MIX-3: the Pen-mix opt-in — reproduce the selected shape's out-of-palette color as per-pen cross-hatch fill

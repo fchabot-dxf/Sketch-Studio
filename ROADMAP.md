@@ -144,6 +144,18 @@ PHASE 2 — Shaper shell  (apps/shaper — the app is now IN the repo; the SHELL
   toolpath-param layer + visual-simulation layer + Shaper cut-path SVG export, over packages/core.
   shaper.js (correct cut-type encoding) is already at apps/shaper/src/shaper.js.
 
+PHASE 3 — Pen Plotter shell  (apps/penplotter — the FIRST "future app"; north star #6)  <- NEXT (human-prioritized)
+  Fold the existing pen-plotter (C:\Users\danse\APPS\penplotter) in as app #3: a 5-stage TIMELINE shell
+  (Draw . Sketch[optional = the SHARED Design tab] . Fill . Toolpath . Export) over packages/core.
+  Pure engines (vpype optimize . fill patterns . outline styles . gcode+zip) land in #core/plot/ as
+  APP-AGNOSTIC capabilities; DDCS/pen specifics stay DECLARED in the shell + injected (mirrors CUT_TYPES ->
+  shaper-export). Freeform art = the shell's OWN geometry store (solver never sees it); #core geometry + art
+  meet ONLY at the bake seam (-> pen-tagged polylines). Slices PP-1..PP-5. Design record: penplotter/INTEGRATION.md.
+  OFFSET ENGINES (PP-2b decision, north star #2): TWO declared homes. #core/polygon-offset.js = PURE simple-loop CAD
+  offset (Shaper export/vcarve; byte-exact, zero-dep; KEPT, not rerouted). #core/plot/clip.js + vendor/clipper.js =
+  ROBUST art/fill boolean + concave-SPLIT + holes (fills need it; polygon-offset returns [] on splits — probed + confirmed
+  turn 268). Vendor pristine (wrap don't fork). Eventual UNIFY (route the simple case through Clipper) = tracked debt, deferred.
+
 FUTURE — laser / 3D-print / other-CNC apps attach at the same seams, no core edits.
 ```
 

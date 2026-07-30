@@ -35,36 +35,823 @@ The carve-out runs as **load-safe vertical slices**, NOT "extract-all → move-a
 ESM app you run live. **Each extraction ships WITH its shell-side wiring in the same commit**, or
 behavior regresses even where load doesn't break.
 
-## TASK — COMMIT the already-reviewed VCARVE-3b (advisor-approved). No code changes. Then pass back.
+## ★ USER PUNCH LIST + REFINED MODEL — pen plotter (durable, pinned per request)
 
-VCARVE-3b is **DONE and advisor-APPROVED** — I reconstructed it from the diff (not the summary) and verified it myself:
-shell-smoke **12/12** (byte-identical holds), vcarve oracle green, `node --check` clean on all 5 files, and the
-`vcarveContours` depth contract (`depth = inset / halfAngleTan`) matches the view. The prior session died mid-close-out
-~8 days ago, so the work sits **UNCOMMITTED** in the tree (last commit is still VCARVE-3a `1c4554b`). This turn just lands it.
+**THE MODEL (refined this session):** Draw + Sketch **MERGE into ONE "Design" tab** — freehand + precise + constraint tools
+on one canvas, one `#core` geometry store, pen-colors. Shell collapses **5 -> 4 tabs: `Design -> Fill -> Toolpath -> Export`**.
+**NO Bake seam** (one store; the pipeline targets the geometry directly — bake only existed to cross the two stores). Freehand
+= the ONLY non-constrainable geometry. The items below are PROPERTIES of that model (verify each lands):
+1. ~~Drop "optional" on Sketch~~ -> ABSORBED: no separate Sketch tab (merged into Design).
+2. Imported SVG visible + editable in the Design tab (import lands in the `#core` geometry).
+3. ~~Remove "Bake to Draw"~~ -> ABSORBED: one store, no bake bridge.
+4. FREEHAND -> a `#core` shape stored as a BEZIER (curve-FITTED on stroke-end, NOT a dense polyline) => compact -> solver-light,
+   smooth, editable; NON-constrainable for now. Imported SVG -> CONSTRAINABLE. Full DATA-merge (freehand lives in `#core`).
+   NEEDS a freehand->bezier fitter (Schneider, ~150 LOC, pure). Pipeline already samples curves->polylines (from-path/PP-8).
+   BEZIER itself = a SHARED feature, see #12.
+5. Pen-color UNDERLAY on the Design canvas ("a layer of colors below") — host-side, `#ui` byte-identical.
+6. Design tab uses the plotter's color UI (pen-color geometry via the underlay, NO DOF-blue recolor; chrome -> paper-light).
+7. UNIFY — ONE `#core` geometry store + a plotter-side pen layer = THE MERGE above.
+8. Draw + Sketch = ONE tab, different TOOLS (not two tabs, not a reorder). Import is a tool on it; import-before-constrain flow.
+9. CONSISTENT pan + zoom on ALL plotter canvases — match `#ui`/other-apps (today the plotter canvas uses its own `viewport.js`).
+10. **COLOR vs PEN is STAGED (resolves the pen-model question).** PEN = PHYSICAL, SVG = DIGITAL. Geometry carries a DIGITAL
+    color (SVG/RGB) — edited in the **Design** tab. The PHYSICAL pen palette + the DIGITAL->PHYSICAL mapping live in the
+    **Toolpath** tab (keeps PP-3c: the palette is a toolpath-stage concern). Fewer pens than colors (e.g. 8 SVG colors -> 4
+    pens) => MATCH each digital color to the NEAREST physical pen (or the user reassigns). Design = digital color; Toolpath =
+    physical-pen mapping.
+11. **(FUTURE / optional) COLOR-MIXING — "hash color mixes":** approximate a digital color the palette can't hit by COMBINING
+    physical pens (cross-hatch red+yellow -> orange; stipple/dither two pens -> a blend). REUSES `#core/plot/fills`
+    (hatch/crosshatch/stipple). A DISTINCT new feature — parked AFTER the core migration; nail nearest-match first.
+12. **BEZIER = a SHARED `#core`/`#ui` feature (a SUB-EPIC, PRECEDES the plotter unify).** Bezier is NEW to `#core`. Add a
+    first-class bezier SHAPE (`#core`) + a bezier TOOL in the `#ui` ribbon for **ALL apps** (Studio + Shaper + plotter). The
+    plotter's freehand curve-fits into the SAME shape. **Guardrail shift (deliberate, user-approved):** `#core`/`#ui` go from
+    byte-identical to ADDITIVE — a new shape+tool, existing shapes/tools/constraints/tests UNREGRESSED (shell-smoke + core
+    oracle stay green); all apps just GAIN the tool. **MVP** = draw/edit-control-points/render/export, NOT solver-constrained
+    (constrainable control points = a big planegcs job, LATER). Sub-epic `BEZIER-*` lands FIRST; then UNIFY consumes it.
+13. **MERGED RIBBON dedups REDUNDANT tools.** Select/Line/Rect appear in BOTH the Draw ribbon and the `#core` sketcher;
+    Ellipse (plotter) ≈ Circle (`#core`). The merged Design ribbon = the UNION with dupes REMOVED — shared tools use the
+    `#core` versions (constrainable). Keep unique-Draw (Freehand->bezier · Node · Scissors · Rotate · Scale) + unique-Sketch
+    (Arc · constraints · dimension). GAP: `#core` has Circle, NOT Ellipse -> a small `#core` add (like bezier) or keep as-is.
 
-**▶ Scope (commit-only — do NOT touch code):**
-1. **Do not modify any code.** The tree is approved as-is.
-2. Pre-commit sanity (fast): `node --check` on the 5 changed JS files + `npm run test:shell` → confirm **12/12** still green.
-3. Commit the WHOLE working tree as ONE commit — the 6 modified files + the new `apps/shaper/src/vcarve-view.js` +
-   `WORK-LOG.md` + `NEXT-SESSION.md`. Message:
-   `feat(shaper): VCARVE-3b — live Vcarve workspace (V-bit + region picker + depth-shaded preview + state.vcarves)`
-4. Append **one line** to WORK-LOG under the existing VCARVE-3b entry: `committed post-advisor-review — <short hash>`.
-   (Do NOT write a new full entry — VCARVE-3b already has one ending in its DONE marker.)
+14. **RENDER PARITY (normal sketch) — BUG, found debugging UNIFY-throttle.** Joints + DIMENSIONS + constraint glyphs must
+    ALWAYS display in the Design tab like Studio/Shaper — they currently show ONLY ON SELECTION. Color theming is FINE (keep
+    the plotter theme). ROOT CAUSE: the static-skip OVER-APPLIED (made normal sketch selection-gated). FIX: normal sketch =
+    ALWAYS live (overlays always); static-skip triggers ONLY on a DENSE IMPORT (large batch), NEVER by default. (Folded into
+    UNIFY-throttle via amends.)
 
-**VERIFY:** `git log --oneline -1` shows the VCARVE-3b commit; `git status` clean; `npm run test:shell` 12/12; `node --check`
-clean. **Then pass the ball back to advisor and STOP.**
+Deferred (behind the unify): bulk fill-edit · cloud palette save/load · PP-8 path-parser dedup (tracked debt) · #11 color-mixing.
 
-> **Then (re-prioritized — Design-workspace grievances jump ahead of VCARVE-4):**
-> **GRIEVANCE-1 — cursor offset in the Design workspace.** Root cause (advisor-diagnosed): the canvas viewBox aspect goes
-> STALE when the canvas element resizes from a LAYOUT change (docked Design side-panel opening / drag-resize), because
-> nothing re-runs `updateViewBox` — there is **no `ResizeObserver`** anywhere in the repo. `updateViewBox`
-> (`#ui/input-manager.js:1026`) keeps `view.h = view.w / elementAspect`, but only fires at init / zoom / pan. Result: the
-> RENDER (preserveAspectRatio=meet) stays correct (round circles), but `screenToWorld` (`#ui/coords.js`, independent
-> scaleX/scaleY, no centering term) reads a stale viewBox → the cursor's world-point ≠ where it visually points.
-> **Fix shape = DECLARE the invariant "viewBox aspect always tracks the element aspect" in ONE place:** a `ResizeObserver`
-> on the canvas SVG that re-runs `updateViewBox` on any size change (shared `#ui` — must fix BOTH hosts, keep shell-smoke
-> 12/12). Worker must REPRODUCE + confirm the root cause live before fixing (verify-first). *(Full task written next turn.)*
-> Then further grievances TBD, then VCARVE-4 the gated vcarve export, then VCARVE-5.
+---
+
+## TASK — BATCH 2 (BURN-DOWN cont'd): IMPORT FIDELITY. COMMIT PER ITEM (4); verify each; pass back ONCE.
+
+**Foundation (LOCKED):** merged single-`#core`-store; invariant = **FREE ART BYPASSES THE SOLVER**. Plan = `PARITY-ROADMAP.md`.
+Reference original = `SketchStudio/legacy pen plotter/app`. **⚠ Items 2–3 touch `#core/svg-import.js` (SHARED — Shaper imports through
+it too): strictly ADDITIVE — new element/segment support only; output for already-supported input stays IDENTICAL (byte-exact where
+goldens exist). Run plot/import oracles STANDALONE + shell-smoke + any Shaper-import check.**
+
+1. **IMPORT-DOC-SIZE** (user-decided: "import svg would also define the canvas size, but overridable afterward"). `core-import.js`
+   `importSvgToCore` already computes the SVG's mm scale but never sets the document. FIX: after import, SET `state.doc.w/h` from the
+   SVG's real size (viewBox / width-height → mm, rounded like the `#docW` handler), then refresh everything that reads it: the Design
+   paper (`#design-paper`), the Document button label (panelTick), `#docInfo`, and re-fit the view. A SET, not a lock — the Document
+   dialog still overrides freely afterward. Verify: import an SVG of known size → paper matches; Document → change W → paper follows.
+2. **SVG `<ellipse>` import** (audit MISSING — `#core/svg-import.js` `bump('ellipse','not supported')`). Support it: `#core` has no
+   ellipse shape, so flatten to a closed polyline (sampled consistently with the pipeline's flattening) — the audit's [R] route. Circle
+   stays the existing circle path. Verify: import an SVG with an `<ellipse>` → it appears + plots.
+3. **Path S/T/A segments** (audit BROKEN — smooth curves + arcs currently drawn as straight CHORDS). Implement per SVG spec: S/T =
+   reflect the previous control point; A = elliptical-arc → cubic/polyline flattening. Existing M/L/C/Q/Z handling UNCHANGED. Verify:
+   import a file using S and A → curves come in CURVED (screenshot vs the chorded before); an already-supported file imports identically.
+4. **Drag-and-drop import + dead-code cleanup** (audit ORPHANED_DEAD: `#dropOverlay` is rendered but its listeners live in the
+   never-called `installSvgImport`; a working importer exists in Design). Wire dragover/drop on the DESIGN canvas → the SAME `doImport`
+   path as `#importSvgBtn` (`.svg` files only, show the overlay during drag). REMOVE the dead Draw-panel `#importBtn`/`#importFile` +
+   the never-called `installSvgImport` binder. Verify: drag an .svg onto the Design canvas → imports (and sets the doc size per item 1).
+
+**VERIFY (all):** each item by clicks/screenshot; shell-smoke 12/12; plot oracles green STANDALONE; Studio/Shaper unregressed (items
+2–3 additive, existing-input output identical); 0 console errors. If an item balloons (the A-arc math), SPLIT it out + flag, do the rest.
+
+**AFTER Batch 2 (advisor sequences):** Batch 3 = STYLE-TOOL (stroke color+width / fill color → outline pen / fill pen — CONFIRMED).
+Batch 4 = transforms (scissors/rotate/scale/node as #core joint transforms). Batch 5 = boolean union · cloud · responsive [D].
+
+Append a WORK-LOG entry (per-item: root + fix + verify) ending with exactly `=== BATCH-2 DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## BATCH 1 (DONE `4c0ecd0..2be55da`, 6 commits): Delete→#core (dead art-store iteration retired) · docked Undo/Redo (+ additive `#ui` `redo()`, undo behavior unchanged) · visible marquee (window=solid/crossing=dashed) · target-editing banner · modal Done/Cancel (on-open-snapshot revert) · smaller Design joints (`JOINT_RADIUS=2` runtime-only, persist:false). Each live-verified; 12/12 + 5/5; Studio/Shaper unregressed. Loop then closed at cycle 183 (user pause) — REOPENED for Batch 2.
+
+---
+<!-- superseded (provenance) -->
+## DESIGN-PAPER-BOUNDS (DONE `da1abf8`): Document button un-clipped (full-width); Design canvas draws the paper rect+10mm grid at doc size BEHIND the geometry (backmost `#design-paper` svg), matching Toolpath/Export; extracted shared `paperGridMarkup(doc)` (`paper-grid.js`) — render-art reuses it (−40 lines). viewBox-synced, resizes live (200→150 verified). Plotter-side, 23/23 + 12/12.
+
+---
+<!-- superseded (provenance) -->
+## DOC-SIZE-IN-DESIGN (DONE `2c7e8e1`): added a discoverable "Document · W×H" button to the Design sidebar opening the EXISTING `#docModal`; extracted idempotent `installDocModal()` wired from BOTH the Design mount + `installSettingsPanel` (dialog works from the first tab); panelTick syncs the label. No dup ids; 23/23 + 12/12. (tiny: label hardcodes "mm" in inch mode — later.)
+
+---
+<!-- superseded (provenance) -->
+## LAYOUT-UNIFY (DONE `f95fb2e`): Toolpath/Export adopt the Design frame — reserved 80px top strip + panel LEFT 244px + `#canvasWrap` RIGHT. Measured canvas rect IDENTICAL on all 3 tabs (x244 y124 w1056 h705); only the left panel content swaps. Plotter-shell only, 23/23 + 12/12. (Strip=80px pixel-perfect; can shorten if a small vertical offset is OK.)
+
+Append a WORK-LOG entry ending with exactly `=== LAYOUT-UNIFY DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## EDITOR-TIDY (DONE `9f15f11`): removed the doubled Active-Toolpath heading (dropped both `subhead(...)` calls + the orphaned helper; static "Active Toolpath" header). Plotter-only, 23/23 + 12/12.
+
+---
+<!-- superseded (provenance) -->
+## TOOLPATH-POLISH (DONE — Part A `93217f4`, Part B `6fff25a`): ported the legacy `.panel` look (section+h2, 2-col `.field` grid, scrollable lists) to the paper-light theme; doc-size→`#docModal` + auto-recalc→`#settingsModal` (⚙), inline settings = feeds only. Reads like the legacy; plotter-only, 23/23 + 12/12.
+
+---
+<!-- superseded (provenance) -->
+## S3 (DONE `e3231e5`): surfaced the stranded Pens palette + relocated machine settings out of Export into the Toolpath tab (pure re-home; verified feed→F1234, penUp→Z7.000; 23/23 + 12/12). Exposed the messy-stack layout → TOOLPATH-POLISH.
+
+---
+<!-- superseded (provenance) -->
+## S2 (DONE — Part1 `09bb06e`, Part2 `ec7253b`): op-editor type-gated (outline vs fill) + Draw-outline toggle + dynamic header + schema step; live op rows (hover/selected CSS + bidirectional row↔canvas cross-highlight via `renderArt({skipPanels})` / panel-only refresh). Verified: plot oracles 5/5 standalone, shell-smoke 12/12, additive `step:` #core touch only.
+
+> **QUEUED — the AUTHORITATIVE plan is now `PARITY-ROADMAP.md`** (exhaustive 125-feature audit, original vs merged, 2026-07-11).
+> MERGE-1 (in flight) = its first slice. Then S2→S11, cheap-high-value first. Advisor dispatches one slice per turn from there.
+> **Correction folded in:** machine SETTINGS are NOT orphaned — they're wired in the **Export tab** (`mountExportStage →
+> installSettingsPanel`); only discoverability is weak. Earlier "settings orphaned / feeds not editable" was WRONG.
+> **Next after MERGE-1 (per roadmap):** S2 fill-editor correctness (re-gate by `tp.type`, re-add Draw-outline checkbox) ·
+> S3 surface the hidden Pens panel (unlocks pen rename/width/delete — highest structural win) · S4 Delete-key→#core + undo/redo
+> buttons · S5 marquee/banner overlays. Panel row hover/selected/cross-highlight folds into S2/S3 (the editor+pens live there).
+
+---
+<!-- superseded (provenance) -->
+## PARITY-AUDIT + RESTORE (DONE `458796d`): audited original vs merged (full table in WORK-LOG t344); restored #core vector HOVERING (Design #ui + Fill/Toolpath ghost). rotate/scale/scissors re-bucketed RESTORABLE-for-size (turnkey plan); node-edit + snapping flagged. FOUNDATION then LOCKED = stay merged.
+## WORKFLOW-FIX (DONE `c379576`): #core vectors selectable in Fill/Toolpath (data-shape-id + coreShapeAtPoint) -> +Outline/+Fill target the selection + assign pen. Verified by clicks: draw->select->toolpath+pen->fill->export 3 gcode.
+
+**Context (user, frustrated):** "there's no UI at all, how do I apply fills and toolpath." RENDER-FIX made geometry VISIBLE,
+but there's NO usable UI to APPLY a FILL or CREATE/ASSIGN a TOOLPATH. The migration verified the PIPELINE (programmatic
+toolpath -> gcode) but NEVER the user-facing WORKFLOW. Likely the Fill/Toolpath panels lost their wiring / actions in the
+stage-merge + render changes (toolpath-layers-panel PP-4b; active-layer-panel UNIFY-4c). The Fill tab shows OUTLINE/FILL
+dropdowns but no way to apply them; the Toolpath create/pen UI may be missing.
+
+**ROOT CAUSE (user pinned it): "we can't SELECT vectors in Fill or Toolpath."** So targeting a shape with a toolpath/fill is
+impossible -> the whole workflow is dead. RENDER-FIX drew the `#core` geometry on `#canvasWrap` as VISUAL paths but did NOT
+wire CLICK-SELECTION (the paths lack `data-shape-id` / the plotter canvas click-handler doesn't map a click -> the `#core`
+shape). **FIX SELECTION FIRST**, then the create/apply/assign actions hang off it.
+
+**▶ Scope — DIAGNOSE live (drive the app), then FIX the WORKFLOW UI:**
+1. **Selection (the root):** make the RENDER-FIX'd `#core` geometry on the Fill/Toolpath `#canvasWrap` SELECTABLE by CLICK —
+   tag each rendered path with its `#core` `data-shape-id` (as render-art did for art shapes) + wire the plotter canvas
+   click-handler (interaction.js) to select the `#core` shape -> `state.selectedShapeIds` (marquee too). Then a toolpath can
+   target the selection (UNIFY-2). VERIFY: click a vector in Fill/Toolpath -> it highlights/selects.
+2. **Then the actions:** TOOLPATH tab — CREATE a toolpath (+Outline/+Fill) targeting the SELECTION, ASSIGN a pen, order/feeds.
+   FILL tab — apply a Pattern/Outline to the selected shape's toolpath. Report + reconnect whatever's MISSING vs the
+   pre-UNIFY panels (toolpath-layers-panel PP-4b, active-layer-panel UNIFY-4c).
+2. **FIX so a user can, ENTIRELY VIA CLICKS (no console/window.__ seams):** select geometry -> create a toolpath (outline OR
+   fill) -> assign a physical pen -> tune the fill pattern / outline style -> see the toolpath overlay -> Export gcode.
+   RECONNECT whatever the migration disconnected (create-toolpath buttons, target-selection, pen-assign, fill/outline apply).
+3. Keep it working end-to-end; don't regress Design/render.
+
+**VERIFY LIVE (must be doable by CLICKS, screenshot the working panels):** draw a rect in Design -> Toolpath tab: create an
+outline toolpath targeting it + assign a pen (the buttons/UI are THERE and work) -> Fill tab: give it a hatch fill -> the
+overlay updates -> Export = gcode. NO console seams used. 3 apps load; `npm run test:shell` **12/12**; oracles green.
+
+Append a WORK-LOG entry (what was disconnected + the reconnect + the by-clicks verify) ending with exactly
+`=== WORKFLOW-FIX (fill/toolpath UI usable by clicks) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## RENDER-FIX (DONE `669df07`): #core geometry (drawn+imported) now renders in pen colors in Fill/Toolpath/Export; removed the dead #allTools draw toolbar. Live-verified in all 4 tabs.
+
+**Context:** the user reports drawn sketches + imported SVGs are INVISIBLE in Fill/Toolpath (and maybe imports don't show at
+all). LIKELY CAUSE: UNIFY-7 gutted `render-art` (draws on the Fill/Toolpath/Export `#canvasWrap`) to only paper/grid +
+toolpath-overlay + sim — NOT the `#core` geometry. Design shows it (sketcher live + pen-underlay for static imports), but the
+other 3 tabs draw nothing underneath.
+
+**▶ Scope — DIAGNOSE live, then FIX:**
+1. **Diagnose (report exactly what's invisible where):** a drawn `#core` shape in DESIGN? an IMPORTED SVG in Design
+   (underlay)? EITHER in Fill/Toolpath/Export? Pin it down.
+2. **FIX — `#core` geometry must RENDER in Fill/Toolpath/Export:** `render-art` (on `#canvasWrap`) must draw the `#core`
+   geometry (via `coreShapeToPolyline`, in pen colors — like the Design underlay) BENEATH the toolpath overlay/sim, so the
+   user SEES their sketch + imports in those tabs. (Cleanest may be to reuse the underlay-render on `#canvasWrap`, OR converge
+   Fill/Toolpath/Export onto the shared `#ui` canvas + underlay — if that's a bigger change, FLAG + do the direct render fix.)
+3. **If imports don't show in Design either:** fix the underlay/static-import display so imports render.
+4. **REMOVE the leftover draw toolbar** (`#allTools` / `.tool` stack in `draw-stage.js` TOOLBAR/TOOLS) — dead scaffold showing
+   in Fill/Toolpath (UNIFY-7b cleanup). Fill/Toolpath/Export must NOT show draw tools.
+
+**VERIFY LIVE (the user's exact symptom):** draw a line/circle in Design + import an SVG -> BOTH show in Design AND Fill AND
+Toolpath (as geometry, pen colors) -> a toolpath overlays correctly -> Export works. NO stray draw toolbar in any tab. 3
+apps load; `npm run test:shell` **12/12**; oracles green standalone; Studio/Shaper unregressed.
+
+Append a WORK-LOG entry ending with exactly `=== RENDER-FIX (geometry visible in all tabs) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## COLOR-MIX-3 (DONE `097d72e`) — #11 COMPLETE: opt-in Pen-mix -> N per-pen fill toolpaths via the existing pipeline; orange -> 2-pen hatching. 23/23 oracles.
+
+**Context:** COLOR-MIX-1 (`mixForColor`) + COLOR-MIX-2 (`mixFillStrokes`) are the pure math+geometry. Now WIRE it: a shape
+whose digital color the palette can't hit is PLOTTED as a pen-mix. OPT-IN; nearest-single-pen stays the default (UNIFY-4c).
+
+**▶ Scope — integration + opt-in:**
+1. **A "Mix" opt-in** (Design or Toolpath tab): for a selected shape/region, "reproduce color as pen-mix" ->
+   `mixForColor(shapeColor, palette)`. Single pen within tol -> NO mix (default). Else -> generate the mix.
+2. **Per-pen plot geometry (REUSE the pipeline):** for each `{penId, weight}`, create a FILL TOOLPATH targeting the shape
+   (pattern=hatch, spacing=penWidth/weight, angle=distinct-per-pen, pen=penId) so the EXISTING fill->pipeline->export plots
+   each pen's hatching. (Or call `mixFillStrokes` directly and emit per-pen toolpaths — your call; reuse existing fill/
+   toolpath machinery, NO new pipeline.)
+3. **Export:** a mixed shape -> N per-pen gcode files (one per pen) -> load + swap pens -> the blend. Surface the mix (pens +
+   weights) in the UI.
+
+**VERIFY LIVE:** a shape with orange `#ff8000` on a {red,yellow,blue,...} palette -> Mix ON -> Export = TWO pens' hatching
+(red + yellow) at interleaved angles/densities (paste gcode showing BOTH pens' G1 runs); Mix OFF -> nearest single pen. 3
+apps load; `npm run test:shell` **12/12**; oracles green standalone; Studio/Shaper unregressed.
+
+**GUARDRAILS:** REUSE the fill/toolpath/export pipeline (no new pipeline); OPT-IN (default = nearest single pen). Plotter-side
++ the `#core` mix functions. 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== COLOR-MIX-3 (WIRE PEN-MIX) DONE — #11 COMPLETE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## COLOR-MIX-2 (DONE `3465144`): pure `mixFillStrokes` — per-pen cross-hatch at spacing=penWidth/weight, distinct angles; oracle measures real spacing. 23/23 oracles.
+
+**Context:** COLOR-MIX-1 (`c2cb596`) gives `mixForColor -> [{penId, weight}]`. Model BLESSED: linear-RGB best-pair = correct
+for OPTICAL cross-hatch mixing (interleaved strokes -> the eye averages -> weighted average; NOT subtractive/overlap). The
+weight = area coverage. Now render a mix: interleave each pen's hatching so the eye blends to the target.
+
+**▶ Scope — the fill-layering (geometry), pure:**
+1. **`mixFillStrokes(region, mix, penWidth) -> [{ penId, strokes }]`** (pure `#core`, reuse `#core/plot/fills` hatch): per pen
+   in the mix, a HATCH fill of `region` at DENSITY ∝ its weight (coverage = weight => spacing ≈ penWidth / weight) at a
+   DISTINCT ANGLE per pen (spread e.g. 0/60/120°) so the pens INTERLEAVE (adjacent strokes, optical blend), not overlap.
+   Returns per-pen stroke sets.
+2. **ORACLE:** a square region + orange mix {red:.5, yellow:.5}, penWidth w -> 2 hatch sets (red + yellow), each at spacing
+   ≈ w/.5 = 2w, distinct angles; a single-pen mix ({p:1}) -> one denser fill (spacing ≈ w). Green standalone.
+3. Do NOT wire to the toolpath pipeline / UI yet (COLOR-MIX-3). Pure.
+
+**VERIFY:** the oracle + all 23 core oracles green STANDALONE; `node --check` clean; Studio/Shaper unaffected; shell-smoke
+**12/12**; 0 net-new.
+
+**GUARDRAILS:** pure `#core` (reuse fills, no fork); no pipeline/UI this slice.
+
+Append a WORK-LOG entry ending with exactly `=== COLOR-MIX-2 (MIX FILL-LAYERING) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## COLOR-MIX-1 (DONE `c2cb596`): pure `#core/color-mix.js` mixForColor (linear-RGB best-pair) + oracle. Model BLESSED (optical cross-hatch = weighted average). 23/23 oracles.
+
+**Context:** the digital->physical model (UNIFY-4c) maps each digital color to its NEAREST SINGLE pen. #11 "hash color mixes":
+a color the palette can't hit (e.g. orange on red+yellow+blue) is APPROXIMATED by COMBINING pens (cross-hatch red+yellow ->
+visual orange). This slice = the pure MATH only; the fill-layering/plot + the UI wiring are COLOR-MIX-2/3.
+
+**▶ Scope — the pure function + oracle:**
+1. **`mixForColor(targetRgb, palette) -> [{ penId, weight }]`** (pure `#core`, e.g. extend `#core/color-match.js` or a new
+   `#core/color-mix.js`): if a SINGLE pen is within tolerance of the target -> `[{that pen, 1}]` (no mix). Else find the small
+   set (2, maybe 3) of pens whose WEIGHTED blend best approximates the target + the weights (weights in [0,1], sum 1). MVP
+   model: linear-RGB (or a simple subtractive) blend; pick the pens that best span/bracket the target; least-squares or
+   nearest-2-that-bracket. Deterministic, no DOM.
+2. **ORACLE** (`packages/core/tests/`): orange `#ff8000` on a {red,yellow,blue,black,white} palette -> ~{red:0.5, yellow:0.5}
+   (assert the blended weights reconstruct the target within tolerance); a color that IS a pen -> that single pen weight 1;
+   grey -> black+white weights; guard empty palette. Green standalone.
+3. Do NOT wire it to fills or UI yet (COLOR-MIX-2). Pure additive `#core`.
+
+**VERIFY:** the mix oracle + all 22 core oracles green STANDALONE; `node --check` clean; Studio/Shaper unaffected (new/extended
+pure file, no behavior change); shell-smoke 12/12; 0 net-new.
+
+**GUARDRAILS:** pure `#core` color math (additive); no fills/UI this slice. If the "best mix" model has real choices (which
+pens, how many, blend space), pick a defensible MVP + FLAG the model in WORK-LOG for review.
+
+Append a WORK-LOG entry ending with exactly `=== COLOR-MIX-1 (PURE MIX FUNCTION) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-3-tool (DONE `cc2734d`): shared #ui bezier PEN tool for ALL apps (punch #12). Additive (new TOOL_MODE + ribbon button + preview branch + interaction); verified live in Studio/Shaper/plotter; 22/22 oracles + shell-smoke; output-unregressed. FLAG: curve-body click-select gap (UNIFY-4b, tracked).
+
+**Context:** the redesign is functionally complete; the user picked the deferred **`#ui` bezier tool** first. The `#core`
+bezier SHAPE (UNIFY-3) + fitter (UNIFY-3-fit) are in; the plotter Freehand (UNIFY-4b) is a plotter-side capture. Now the
+SHARED explicit tool the user asked for ("a bezier tool in ALL the sketch studio apps") — place/drag control points to draw
+precise beziers. A `#ui` tool, so all 3 apps gain it.
+
+**Guardrail (ADDITIVE + output-unregressed):** a NEW tool mode + interaction in `#ui`; existing tools/shapes/constraints/
+tests UNCHANGED. Studio/Shaper existing content renders/exports IDENTICALLY (shell-smoke 12/12; core oracle 22/22; a
+render/import proof). All apps GAIN the button; existing behavior byte-identical in output.
+
+**▶ Scope — the shared bezier pen tool:**
+1. **A `bezier` TOOL MODE** (`#core/constants.js` TOOL_MODES) + a bezier button in the `#ui` tool ribbon (CREATE group, by
+   line/rect/circle/arc). Additive.
+2. **The pen interaction** in the `#ui` input layer (add a `bezier` case to the `switch(currentTool)` the survey found —
+   additive): CLICK places an anchor (endpoint JOINT); CLICK-DRAG pulls the tangent handles (smooth point); each new anchor
+   commits a cubic segment (`makeBezier` from the previous anchor + handles) into the `#core` store. Live PREVIEW of the
+   pending segment; Enter/Esc/double-click ends the path. Corner (click) vs smooth (click-drag) anchors.
+3. Reuse `makeBezier` (UNIFY-3) — a chain of connected cubics sharing endpoint joints.
+4. **SPLIT authorized:** if the full pen (handle-drag + preview + corner/smooth) is big, land BASIC first (click anchors ->
+   cubics with straight 1/3-2/3 handles, no drag) + FLAG, then handles/preview.
+
+**VERIFY LIVE (in ALL 3 apps):** the bezier button appears in Studio, Shaper, AND the plotter Design ribbon; draw a bezier
+path (place anchors, drag handles) -> `#core` bezier shapes render + are selectable; in the plotter, target a toolpath ->
+Export = the curve. Studio/Shaper existing behavior UNREGRESSED (shell-smoke 12/12; 22/22 oracles; existing render/export
+identical). `node --check` clean; 0 net-new.
+
+**GUARDRAILS:** `#ui`/`#core` ADDITIVE (new tool mode + ribbon button + interaction case); existing tools/behavior output-identical.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-3-tool (SHARED #ui BEZIER TOOL) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## CIRCLE-FIX (DONE `4896845`): closed-polyline collapse — root cause douglas-peucker float cancellation (not linemerge); surgical closed-loop guard; byte-exact golden held; circle exports full rim.
+
+**Context:** UNIFY-7's verify DISCOVERED a pre-existing pipeline bug: a CLOSED polyline (first==last — e.g. a circle's 65-pt
+flatten) collapses to a 2-POINT stroke in `toolpathToPolylines` (`#core/plot` optimize) EVEN with lineSimplify off, so a
+circle exports as ~1 gcode move (doesn't plot). Lines / open polylines / beziers are fine. Root cause: `linemerge`
+self-merges the coincident start/end of a LONE closed loop. `#core/plot` untouched since PP-2a.
+
+**▶ Scope:**
+1. **Diagnose `#core/plot/optimize/linemerge.js`:** confirm a closed polyline (start==end within tol) fed to linemerge folds
+   (it treats its own shared endpoint as a merge join).
+2. **Fix — preserve closed loops:** linemerge must NOT merge a polyline's OWN start/end into itself (only join DISTINCT
+   polylines); OR detect closed inputs and pass them through intact; OR drop the single duplicate closing vertex before merge
+   + re-close. Cleanest option; keep OPEN-polyline merging unchanged.
+3. **ORACLE** (`packages/core/tests/`): a CLOSED polyline (65-pt circle, first==last) -> `toolpathToPolylines`/`renderGcode`
+   produces the FULL loop (correct move count), NOT a 2-pt collapse. Two-distinct-segment merge + open polylines still
+   correct (regression). Green standalone.
+
+**VERIFY LIVE:** draw a CIRCLE in Design -> toolpath -> Export -> the gcode WALKS THE FULL RIM (many G1, not 1). PASTE a
+snippet. ALL plot oracles (esp. the PP-2a BYTE-EXACT DDCS golden — a closed-loop fix must NOT change open-path output) + the
+new oracle green STANDALONE; shell-smoke 12/12; `node --check` clean; Studio/Shaper unregressed; 0 net-new.
+
+**GUARDRAILS:** targeted `#core/plot` fix (closed loops only); the existing byte-exact open-path golden must stay green.
+
+Append a WORK-LOG entry ending with exactly `=== CIRCLE-FIX (closed-polyline linemerge) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-7 (DONE `ccd9e7c`, SAFE SUBSET): retired the dormant art store + Bake-to-Draw (punch #3); ~427 LOC removed; full pipeline verified. FLAG: circle-export bug (fix = this task); dormant art code (interaction/svg-import/tools/state) deferred to UNIFY-7b.
+
+**Context:** the unify is functionally complete (Design on `#core`, import->#core, pen model, throttle, shared pan/zoom). The
+two-store era's ART side is now DORMANT — retire it. This kills "Bake to Draw" (punch #3).
+
+**▶ Scope — SURGICAL delete (prove NO regression):**
+1. **Retire the ART STORE + its rendering:** `state.artLayers` + `render-art`'s art-drawing + the art layers panel (if
+   art-only) + `svg-import->art` (import goes to `#core` now, UNIFY-5) + the dormant art tools in `interaction.js` (the ones
+   that drew into `artLayers` — the Design tab uses `#core` tools + the plotter Freehand now).
+2. **Remove the Bake-to-Draw button** + its handler (punch #3 — now meaningless).
+3. **KEEP what Fill/Toolpath/Export need:** the plotter `#canvasWrap` + `initDom` + the toolpath model +
+   `state.toolpaths`/`plotColors`/`settings` + `preview`/`export`. They render `#core` geometry on `#canvasWrap` (UNIFY-2/6)
+   — do NOT break them. (Retiring the plotter canvas ITSELF = a LATER optional consolidation, NOT this slice.)
+4. If the art store is more entangled than expected (Fill/Toolpath/Export secretly depend on it), FLAG + do the safe subset.
+
+**VERIFY LIVE (full pipeline, POST-delete):** draw in Design (`#core` line/circle + Freehand bezier) -> Fill (a pattern) ->
+Toolpath (a pen) -> Export (gcode); import an SVG -> shows in pen colors -> plots; all 4 tabs work; NO Bake-to-Draw button;
+pan/zoom consistent. PASTE a gcode snippet. 3 apps load; `npm run test:shell` **12/12**; oracles green standalone; `node
+--check` clean; Studio/Shaper unregressed; 0 net-new. REPORT the LOC deleted.
+
+**GUARDRAILS:** DELETE only the dormant ART side; KEEP the toolpath/canvas infra. PROVE the full pipeline still works.
+penplotter-only.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-7 (RETIRE ART STORE + BAKE) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-6 (DONE `bfa6675`): pan/zoom convergence — all 4 tabs share one `#ui` state.view; viewport.js a thin adapter; wired the never-wired wheel-zoom. + import-display flip (imports show in pen colors). Punch #9. Plotter-side only.
+
+**Context:** UNIFY-5 (`07be65a`) landed import->#core (colored, dense-static). Now punch-list **#9**: all plotter canvases use
+consistent pan/zoom like the other apps. Today the Design tab uses `#ui`'s pan/zoom (`state.view{x,y,w,h}`) while
+Fill/Toolpath/Export use the plotter's `viewport.js{scale,panX,panY}` — CONVERGE on the `#ui` model.
+
+**▶ Scope:**
+0. **(UNIFY-5 follow-up, one-liner — DECIDED):** mark ALL imports STATIC (not just >threshold) so an imported SVG DISPLAYS in
+   its PEN colors (via the underlay) by default; the user activates a subset (select) to constrain. Small live imports were
+   showing in DOF colors instead of pen colors.
+1. **Converge pan/zoom on `#ui` `state.view`:** the Fill/Toolpath/Export canvas reads/writes the SAME `state.view` the Design
+   sketcher uses (wheel-zoom + pan + fit), so pan/zoom is IDENTICAL across all 4 stages and matches Studio/Shaper. Retire
+   `viewport.js`'s separate `{scale,panX,panY}` model (or make it a thin adapter over `state.view`).
+2. Keep the two physical canvases for now (UNIFY-7 retires the plotter one); they just SHARE the view model + fit.
+
+**VERIFY LIVE:** pan/zoom on Design, then Fill/Toolpath/Export — the view is CONSISTENT (same gesture, same feel) across all
+4 tabs; fit works on each; a small import now shows in PEN colors. 3 apps load; `npm run test:shell` **12/12**; oracles green;
+Studio/Shaper unregressed.
+
+**GUARDRAILS:** prefer plotter-side / reuse `#ui`'s existing pan/zoom (`state.view` + its wheel/pan); any `#ui` touch =
+additive + output-unregressed. 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-6 (PAN/ZOOM CONVERGENCE) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-5 (DONE `07be65a`): import SVG -> #core (constrainable, colored, dense-static 60fps); reused #core/svg-import (no fork). Punch #2/#4. Ellipse/S-T-A surfaced (IMPORT-3).
+
+**Context:** UNIFY-throttle (`1467078`) CLEARED the perf blocker (0.7->60 FPS via a marked-static skip + a solve-gate) AND fixed
+the render-parity bug (normal sketch overlays always live). Now IMPORT: SVG -> `#core` sketch geometry so imported art is
+CONSTRAINABLE + shows in the Design tab. Punch-list #2/#4.
+
+**▶ Scope:**
+1. **Import SVG -> `#core`:** an Import action in the Design tab -> the plotter's SVG parse -> `#core/svg-import`
+   (`importSvgGeometry` + CTM + `parsePathSubpaths` + `computeImportScale`) -> a new sketch's `#core` shapes. REUSE Shaper's
+   `importSvgToSketch` pattern (`apps/shaper/src/main.js`) — no fork.
+2. **Capture colors -> the pen-layer:** each imported element's SVG fill/stroke -> the shape's DIGITAL color
+   (`state.shapeColors`); the Toolpath nearest-pen map (UNIFY-4c) derives the physical pen (8-color SVG -> 8 digital ->
+   mapped to the palette).
+3. **Mark DENSE imports STATIC:** if the import batch exceeds a threshold (e.g. > a few hundred shapes), MARK them static
+   (`state.staticShapeIds`) so the throttle holds ~60 FPS. SMALL imports stay LIVE/constrainable.
+4. **Import limits (tracked IMPORT-3):** ellipse -> approximate (arcs/beziers) or flag; path S/T/A -> the existing flatten.
+   COUNT + surface skipped/approximated — never silently drop.
+
+**VERIFY LIVE:** import a multi-color SVG -> its geometry shows in the Design tab (`#core`, in mapped pen colors via the
+underlay); a DENSE import stays ~60 FPS (marked static); a toolpath targets imported geometry -> Export = its gcode (paste a
+snippet); a SMALL import is live/constrainable. 3 apps load; `npm run test:shell` **12/12**; oracles green; Studio/Shaper
+unregressed.
+
+**GUARDRAILS:** REUSE `#core/svg-import` (no fork); import colors are PLOTTER-side (`shapeColors`). Any `#core`/`#ui` touch =
+additive + output-unregressed. 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-5 (IMPORT SVG -> #core + COLORS + STATIC) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-throttle (DONE `1467078`): static-skip + solve-gate seams (additive #ui) -> 6716 shapes 0.7->60 FPS; MARKED-STATIC policy fixed the render-parity bug (normal sketch overlays always live, not selection-gated). Punch #14. FLAG: solve() O(joints)/call = a later #core slice.
+
+**Context:** the perf probe found ~6716 `#core` shapes = **0.7 FPS** — the `#ui` renderer rebuilds ALL paths + joints per RAF
+frame. The color UNDERLAY (UNIFY-4c) already renders `#core` geometry ONCE (dirty-flagged). THROTTLE = stop the LIVE sketcher
+re-rendering STATIC geometry (the underlay shows it); only the FEW active/edited shapes redraw per frame.
+
+**▶ Scope:**
+1. **A host-injected STATIC-SKIP seam in `#ui`** (mountSketch / svg-renderer): an optional `isStatic(shape)` predicate OR a
+   `staticIds` Set the host passes; the renderer SKIPS those shapes + their joint glyphs in the per-frame render. **ADDITIVE:**
+   default (no predicate) = render everything = BYTE-IDENTICAL (Studio/Shaper pass nothing -> unchanged output). Keep "static"
+   a HOST concept — do NOT put a static flag on `#core` shapes (mirror the pen-model decision).
+2. **Plotter marks geometry STATIC:** imported/dense + unedited geometry is static (drawn by the underlay). Freshly-drawn /
+   selected geometry is LIVE (drawn by the sketcher for editing/constraining).
+3. **ACTIVATION:** selecting a static shape (or a "make editable" action) moves it LIVE (out of static) to edit/constrain;
+   deselect -> back to static. (Dense imports = static-by-default; activate a subset to constrain.)
+4. **MEASURE:** the 6716-shape all-static scene -> REPORT the new frame time (target interactive, ~<=16 ms; only live shapes redraw).
+
+**VERIFY:** the perf MEASUREMENT (6716 static -> interactive fps, vs 0.7 before); a static shape shows in the underlay,
+activates on select (renders live), edits, deactivates; **Studio/Shaper OUTPUT-unregressed** (no skip -> byte-identical;
+shell-smoke 12/12 + a render/import proof); all oracles green standalone; `node --check` clean. FLAG if the `#ui` seam proves
+complicated.
+
+**GUARDRAILS:** the `#ui` edit is ADDITIVE (a skip seam; default = render-all = unchanged). "static" is HOST-side. 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-throttle (STATIC-SKIP RENDER) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-4c (DONE `011413c`): pen model (digital shapeColors + Toolpath nearest-pen) + color UNDERLAY (mapped pen, dirty-flagged). Additive #core color-match + oracle; #ui byte-identical; 21 oracles green. Punch #5/#6/#10.
+
+**Context:** UNIFY-4b (`626b2d7`) landed Freehand (plotter-side; capture WON over `#ui` pan-zoom; `#ui` byte-identical). UNIFY-4c
+is the pen/color story (punch-list #5/#6/#10). SPARSE canvases only for now (the dense-import THROTTLE is the NEXT slice,
+before UNIFY-5).
+
+**▶ Scope:**
+1. **Pen DATA model (folds UNIFY-3b):** `state.shapeColors: Map<shapeId,'#rgb'>` = per-shape DIGITAL color (plotter-side; `#core`
+   pure). A **Design-tab color control**: select a shape -> pick its digital color (writes `shapeColors`).
+2. **Toolpath nearest-pen mapping (digital->physical):** the physical pen palette (`state.plotColors`) + a NEAREST-pen match
+   (color distance) maps each shape's digital color -> the pen that plots it; lives in the Toolpath tab (keeps PP-3c). ORACLE
+   the nearest-match (8 digital colors -> 4 pens -> correct assignments).
+3. **Color UNDERLAY:** an `<svg>` BENEATH `#design-canvas` (same viewBox), rendering the `#core` geometry
+   (`coreShapeToPolyline`) with each shape in its MAPPED PHYSICAL pen color; the `#ui` sketcher draws the DOF/scaffold on the
+   transparent canvas ON TOP. Host-side, `#ui` byte-identical. **Render the underlay ON CHANGE (dirty-flagged), NOT per RAF
+   frame** — this is the substrate the dense THROTTLE builds on.
+4. Split allowed (pen-data+UI / underlay) if big — FLAG.
+
+**VERIFY LIVE:** Design tab -> draw/select a shape -> set its digital color -> the UNDERLAY shows it in the mapped PHYSICAL
+pen color under the scaffold; changing the color updates the underlay; the mapped pen drives the toolpath/export. 3 apps
+load; nearest-pen oracle + all oracles green standalone; `npm run test:shell` **12/12**; Studio/Shaper unregressed.
+
+**GUARDRAILS:** plotter-side + host-side underlay (`#ui` byte-identical); pen is a PLOTTER concept (NOT pushed into `#core`).
+0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-4c (PEN MODEL + COLOR UNDERLAY) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-4b (DONE `626b2d7`): Freehand tool, PLOTTER-SIDE (capture won over #ui pan-zoom, #ui byte-identical). Stroke -> compact #core bezier -> gcode. FLAG: bezier click-select needs a later #ui pick slice.
+
+**Context:** UNIFY-4a (`06e0f6b`) landed the merged Design shell (5->4). **PERF NOTE:** the probe found ~6716 `#core` shapes =
+**0.7 FPS** (the `#ui` renderer rebuilds all paths+joints per frame) -> RENDER THROTTLING is REQUIRED before UNIFY-5 (dense
+import). But HAND SKETCHES (few shapes) are FINE, so UNIFY-4b proceeds unaffected.
+
+**▶ Scope — the plotter-side Freehand tool:**
+1. A **Freehand ribbon button** in the Design tab. When active, a **plotter-side capture-phase listener** on `#design-canvas`:
+   pointerdown/move collect raw WORLD points (`screenToWorld`, `#ui/coords.js`), `stopImmediatePropagation` so `#ui` pan-zoom
+   doesn't fire; pointerup -> `fitCubic(points, tol)` -> per segment `makeBezier` (2 endpoint joints + c1/c2) -> add to the
+   `#core` store. VERIFY the capture WINS over `#ui`'s svg listeners (the stopImmediatePropagation ordering); if fragile,
+   fall back to a `#ui` FREEHAND switch-mode (ADDITIVE + output-unregressed) and FLAG.
+2. **Selection reconcile:** toolpath targeting keys off shape ids (UNIFY-2 works); ensure a freehand bezier's `#core` id is
+   selectable/targetable. Reconcile the plotter `selectedShapeIds` with the `#ui` selection as needed.
+3. Node-move = rely on `#ui` joint-drag (no new tool); Scissors/Rotate/Scale stay DEFERRED.
+
+**VERIFY LIVE:** Design tab -> Freehand -> draw a stroke -> COMPACT `#core` beziers (few control points, not a dense
+polyline) -> target a toolpath -> Export = the curve as gcode (paste a snippet). 3 apps load; `npm run test:shell` **12/12**;
+oracles green standalone; Studio/Shaper unregressed (if you touched `#ui`, prove output-unregressed).
+
+**GUARDRAILS:** prefer PLOTTER-SIDE (no `#ui` edit); a `#ui` switch-add, if needed, is ADDITIVE + output-unregressed. 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-4b (FREEHAND TOOL) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-4a (DONE `06e0f6b`): merged Design shell 5->4 + canvas re-home + degree-field cleanup (GONE). PERF PROBE: 6716 shapes = 0.7 FPS -> throttling required before UNIFY-5.
+
+**Blessing (UNIFY-4 plan `037f192` APPROVED) + decisions:** Freehand = PLOTTER-SIDE capture listener (stopImmediatePropagation
+before `#ui` pan-zoom; fall back to a `#ui` switch-add if fragile) = UNIFY-4b. Scissors/Rotate/Scale = DEFERRED (fight the
+solver; not MVP); Node-move reuses `#ui` joint-drag; node-delete later. Ellipse = drop/approx (track IMPORT-3). Two canvases
+coexist this stage (Design on `#ui` `#design-canvas`; Fill/Toolpath/Export on the plotter `#canvasWrap` via UNIFY-2); UNIFY-6
+converges. Sub-slicing: **4a (this) shell+probe -> 4b Freehand+selection -> 4c pen model+underlay.**
+
+**▶ Scope — UNIFY-4a (ADDITIVE / dormant, no deletes):**
+1. **STAGES 5->4:** drop the separate `draw` + `sketch` entries -> ONE `design` stage (drop "optional"). The router mounts the
+   sketcher composition (today's `sketch-stage`) for `design`. KEEP the art store / render-art / svg-import->art / bake /
+   interaction art tools DORMANT (retired in UNIFY-7) — so this stays additive + reviewable.
+2. **Re-home the plotter canvas** (`#canvasWrap`) via a STARTUP mount so Fill/Toolpath/Export still render `#core` geometry
+   (UNIFY-2) once Draw is no longer a tab.
+3. **PERF PROBE (blessed):** frame time with ~6716 `#core` shapes loaded (Shaper's dense-import case) -> REPORT the number; it
+   GATES whether 4b/4c need render throttling (static geometry -> the underlay once).
+4. **Degree-field cleanup:** the DEFERRED Rotate/Scale tools' transform HUD (`#transformHud`, the "°" angle field) must NOT
+   appear in the Design tab — VERIFY the user's stray top-left degree field is GONE.
+
+**VERIFY LIVE:** 4-tab shell (Design/Fill/Toolpath/Export); Design shows the `#ui` sketcher (draw a line/circle -> solves); a
+`#core` shape still flows to gcode via Fill/Toolpath/Export; NO stray degree field; PERF number reported. 3 apps load;
+`npm run test:shell` **12/12**; `node --check` clean; oracles green standalone; Studio/Shaper unregressed.
+
+**GUARDRAILS:** additive/dormant — NO deletes (art store stays until UNIFY-7); the sketcher composition is `#ui` byte-identical
+(only STAGES + the router change). 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-4a (DESIGN SHELL 5->4 + PERF PROBE) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-4-plan (DONE `037f192` — BLESSED turn 315): merged Design-tab composition survey. CRUX: no `#ui` host tool-seam -> freehand plotter-side. 4a/b/c sub-slicing.
+
+**Context:** the `#core` substrate is READY — UNIFY-2 (no-bake), UNIFY-3 (bezier shape), UNIFY-3-fit (fitter). UNIFY-4 is the
+CENTERPIECE: merge Draw + Sketch into ONE "Design" tab (one canvas, one ribbon, Freehand->bezier, pen underlay; shell 5->4).
+Biggest, most interaction-heavy slice -> map the composition + slice it before building.
+
+**▶ Scope — SURVEY the composition mechanism + PROPOSE the sub-slicing (build nothing):**
+1. **Canvas:** the merged tab uses the ONE `#ui` sketcher canvas (blessed). Confirm how the 4 stages share it (UNIFY-1b D/E).
+2. **FREEHAND wiring:** how does a stroke capture -> `fitCubic` -> `makeBezier` -> `#core` beziers ON the sketcher canvas?
+   **PLOTTER-SIDE** (compose on the sketcher, keep `#ui` minimal — "freehand where needed") vs a `#ui` tool-mode addition.
+   Recommend + justify. (The explicit `#ui` bezier tool for ALL apps = the DEFERRED UNIFY-3-tool, separate.)
+3. **Tool porting:** the plotter's unique tools — Node / Scissors / Rotate / Scale — operated on the ART store; they must
+   operate on `#core` geometry now. Which port cleanly, which need work, which stay plotter-side? Ribbon DEDUP
+   (line/rect/circle/arc/select = the `#core` sketch tools; #11/#13 lists — ellipse gap).
+4. **Pen model + underlay (folds in UNIFY-3b):** where the per-shape DIGITAL color (`state.shapeColors`) + the Toolpath
+   nearest-pen mapping + the Design-tab color UI + the pen UNDERLAY land in the sub-slicing.
+5. **Stage collapse:** separate Draw + Sketch -> one Design stage (shell 5->4); what stays until UNIFY-7 (art-store retire).
+6. **Propose UNIFY-4a/b/c...** each a reviewable, verifiable increment. Flag the dense-import PERF probe (due around here).
+7. Write the composition survey + sub-slicing to WORK-LOG. PASS BACK for blessing. Build nothing.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-4 PLAN (MERGED-TAB COMPOSITION) — AWAIT BLESSING ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-3-fit (DONE `aa06919`): the freehand->bezier FITTER (`#core/curve-fit.js`, pure Schneider) + oracle. Additive; 20 core oracles + shell-smoke green.
+
+**Context:** UNIFY-3 (`5a7aacd`) added the `#core` bezier SHAPE. Now the FITTER: fit a freehand point sequence -> cubic bezier
+segments, so a stroke becomes compact `#core` bezier shapes (not a dense polyline). Pure `#core` module; used by the plotter's
+Freehand tool (UNIFY-4) and available to any app.
+
+**▶ Scope:**
+1. **`#core/curve-fit.js` `fitCubic(points, tolerance)` -> [{p0,c1,c2,p3}, ...]** — Schneider's algorithm: fit one cubic to
+   the run; if max error > tolerance, split at the worst point + recurse; endpoint tangents. Pure, no DOM (~150 LOC). Each
+   segment is ready to become a `#core` bezier via `makeBezier`.
+2. **ORACLE** (`packages/core/tests/`): a straight run -> 1 segment reproducing the line; a smooth curve-like run -> a few
+   segments WITHIN tolerance (assert EVERY input point is within `tolerance` of the fitted curve); ≤2-pt degenerate guarded.
+   Green standalone.
+3. Do NOT wire it to any tool yet (UNIFY-4's Freehand does that). Additive pure `#core`.
+
+**VERIFY:** the fitter oracle + all 19 core oracles + shell-smoke **12/12** green STANDALONE; `node --check` clean;
+Studio/Shaper unaffected (NEW file, no existing edits); 0 net-new.
+
+**GUARDRAILS:** additive `#core` — a NEW file (`curve-fit.js`) + its oracle; NO existing `#core`/`#ui` edits.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-3-fit (FREEHAND->BEZIER FITTER) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-3 (DONE `5a7aacd`): first-class cubic BEZIER shape in `#core` (shared, Branch A, additive). Shape kind + renderer + flatten + oracle; 19 oracles + shell-smoke green; Studio/Shaper output-unregressed.
+
+**Context:** UNIFY-2 (`0515a26`) proved the no-bake path. UNIFY-3 = the SHARED bezier (blessed Branch A) — the FIRST migration
+slice that EDITS `#core` (additively). This slice = the `#core` bezier SHAPE only (represent + render + flatten). The `#ui`
+bezier TOOL (all apps) = UNIFY-3-tool; the Schneider freehand FITTER (`#core/curve-fit.js`) = UNIFY-3-fit.
+
+**Guardrail (SHIFTED — blessed): ADDITIVE + Studio/Shaper OUTPUT-unregressed.** We now edit `packages/#core`(+`#ui`) — but
+ADDITIVELY: a NEW shape kind; existing shapes/constraints/solver/tests UNCHANGED. PROVE it: shell-smoke 12/12; the `#core`
+oracle 12/12; existing Studio/Shaper geometry renders/exports IDENTICALLY (no existing shape's behavior moved).
+
+**▶ Scope — the `#core` bezier shape:**
+1. Add a **bezier/cubic shape kind** to the `#core` shape model (`packages/core/shapes.js` + the shape-type switch). A cubic =
+   start joint + end joint + 2 control points. RECOMMEND (MVP): endpoints are JOINTS (so a bezier connects to other geometry),
+   the 2 control points are shape DATA, NOT solver-constrained yet. MATCH `#core`'s conventions; if the data model gets
+   complicated, FLAG before pressing on.
+2. **Renderer case** in `#ui/svg-renderer.js` — draw the cubic (`<path d="M..C..">`) via the same `--sk-*` geometry vars.
+3. **`coreShapeToPolyline` bezier case** (`#core/core-shape-to-polyline.js`) — flatten the cubic to a polyline (~16-step de
+   Casteljau, matching parsePathSubpaths' C/Q) so the plotter pipeline plots beziers.
+4. **ORACLE** (`packages/core/tests/`): a known cubic -> a correct `d`; `coreShapeToPolyline` -> the expected sampled polyline
+   (vertex count / bounds). Wire in; green standalone.
+
+**VERIFY:** the new bezier oracle + all existing oracles (12 core + 6 plot) green STANDALONE; shell-smoke 12/12; `node --check`
+clean; **Studio + Shaper OUTPUT-unregressed** (existing geometry renders/exports identically — describe the proof); 3 apps
+load; 0 net-new.
+
+**GUARDRAILS:** ADDITIVE to `#core`/`#ui` — a new shape kind + renderer case; NO existing shape/constraint/solver behavior
+changed. NO tool, NO fitter this slice.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-3 (#core BEZIER SHAPE, shared) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-2 (DONE `0515a26`): toolpaths target `#core` geometry DIRECTLY — proved `#core` shape -> toolpath -> gcode with NO bake (artLayers unchanged). ADDITIVE.
+
+**Blessing (UNIFY-1b plan `bad6a10`/`44a9bca` APPROVED) + decisions:**
+- **Bezier = Branch A** (shared `#core`/`#ui` bezier, ALL apps; guardrail -> ADDITIVE + Studio/Shaper OUTPUT-unregressed via
+  shell-smoke + a Shaper-import proof). Lands at UNIFY-3.
+- **One shared `#ui` canvas** for the 4 stages; converge pan/zoom on `#ui` `state.view` (retire `viewport.js`) = UNIFY-6.
+- **Fitter in `#core/curve-fit.js`** (reusable). **Accept ellipse / S-T-A import limits now**, track as IMPORT-3 debt.
+- **Perf probe (~6716 shapes) BEFORE the merge/delete** (UNIFY-4/7). **Pen model** resolved (Design=digital per-shape color;
+  Toolpath=physical palette + nearest-pen map) = UNIFY-3b.
+- **SEQUENCE:** UNIFY-2 (this) -> 3 bezier(shared) -> 3b pen -> 4 merged Design tab (5->4) -> 5 import->#core+colors ->
+  6 pan/zoom -> 7 RETIRE art store+bake (big DELETE, perf-gated) -> 8 perf(conditional). The destructive delete is LAST.
+
+**▶ Scope — UNIFY-2 (ADDITIVE, no deletes):**
+1. Make a toolpath TARGET `#core` SKETCH geometry directly: `collectToolpathShapes` / `resolveToolpathShapes` also read the
+   sketcher's `controller.state.shapes`, and `coreShapeToPolyline` (PP-7b) resolves them at collect-time -> the pipeline. A
+   `#core` shape flows shape -> toolpath -> optimize -> gcode with **NO bake**.
+2. Keep it ADDITIVE — do NOT remove the art store, the Bake-to-Draw button, or the separate stages (that's UNIFY-7). Both
+   targeting paths (art + `#core`) COEXIST this slice.
+3. REUSE `coreShapeToPolyline`, the vpype pipeline, export, the toolpath/target model.
+
+**VERIFY LIVE (no-bake proof):** serve; Sketch/Design -> draw a `#core` line/circle -> target a toolpath at it (NO
+Bake-to-Draw) -> the Toolpath overlay optimizes it -> Export -> the gcode contains the `#core` geometry. PASTE a snippet.
+Studio/Shaper UNREGRESSED; 3 apps load; `npm run test:shell` **12/12**; `node --check` clean; all plot oracles green standalone.
+
+**GUARDRAILS:** penplotter-only additive (READS `#core`; NO `#core`/`#ui` edits this slice — bezier's `#core` add is UNIFY-3).
+0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-2 (TOOLPATHS TARGET #core DIRECTLY, NO BAKE) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-1b (DONE turn 306, `bad6a10`/`44a9bca` — plan BLESSED turn 307): probe `#core` bezier support + propose the migration to ONE "Design" tab.
+
+**Context — the model MERGED (user-driven; supersedes UNIFY-1's two-tab framing; REUSE your turn-304 wiring map):**
+- **Draw + Sketch -> ONE "Design" tab**: one canvas, one ribbon with tool groups (freehand | precise line/rect/circle/arc |
+  constraints), one `#core` geometry store. Shell **5 -> 4**: `Design -> Fill -> Toolpath -> Export`. **NO bake seam.**
+- **Freehand -> a `#core` BEZIER shape** (curve-fitted on stroke-end; compact -> solver-light; non-constrainable for now).
+- **Import -> `#core`** (constrainable), SVG colors preserved as a plotter-side PEN layer.
+- **Pen-color UNDERLAY** on the Design canvas + CONTEXTUAL constraint scaffold; `#ui` BYTE-IDENTICAL (plotter-side
+  composition, NOT a `#ui` change — confirm).
+- **Consistent pan/zoom** across all plotter canvases.
+
+**▶ Scope — SURVEY + PROPOSE, build nothing:**
+1. **THE PIVOTAL PROBE — does `#core` hold BEZIER/cubic geometry as a FIRST-CLASS editable shape** (in the store + rendered +
+   selectable + a create tool), or ONLY as a static `path` import blob? Check the shape model, `svg-renderer`, the `#ui` tool
+   ribbon (is there a curve/spline tool?). This decides REUSE vs. a real `#core` bezier-shape addition — scope BOTH branches.
+2. **Merged-tab composition (plotter-side, `#ui` byte-identical):** mount the shared sketcher + layer the freehand tool +
+   pen-color underlay + contextual scaffold; ONE ribbon grouping draw/precise/constraint tools. Confirm no `#ui` edit needed.
+3. **The freehand->bezier fitter** (Schneider, pure ~150 LOC): where it lives, tolerance, output shape.
+4. **Migration slicing (UNIFY-2..):** what two-store code (art store, render-art, the separate Draw stage, the bake seam) is
+   REUSED vs REMOVED; import routing to `#core`+pen-layer; pan/zoom unification; the color underlay + contextual scaffold.
+5. **Flag risks:** the `#core`-bezier answer (biggest); solver perf on many imported shapes; `#core`/`#ui` byte-identical.
+6. Write the survey + slicing to WORK-LOG. PASS BACK for blessing. Build nothing.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-1b PLAN (MERGED-TAB MIGRATION) — AWAIT BLESSING ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance) -->
+## UNIFY-1 (DONE turn 304, two-tab framing SUPERSEDED by the merge): survey the two-store geometry model + propose the migration to a UNIFIED `#core` geometry store. Plan only — build NOTHING.
+
+**Context (user-driven redesign, supersedes the polish queue):** the core epic shipped a TWO-store model (freeform art store +
+`#core` sketch + the `coreShapeToPolyline` bake seam). The USER wants to UNIFY. Their decision + clarifications:
+- **Import SVG -> `#core` sketch -> CONSTRAINABLE** (reuse Shaper's `importSvgToSketch` / `#core/svg-import`). Today import
+  lands in the freeform art store -> not in Sketch, not constrainable. THE main change; preserve the SVG's colors as the pen-layer.
+- **Freehand tool -> NON-constrainable** (ACCEPTED — the ONLY non-constrainable geometry; dense polyline, 0 constraints ->
+  solver stays light). Recommend how freehand is stored (freeform kind vs a `#core` static-polyline kind) + justify.
+- **Pen-color UNDERLAY in the Sketch tab** ("add a layer of colors below"): stack a pen-color layer BENEATH the shared
+  Design canvas so Sketch shows pen-colored art + the constraint scaffold (joints/dims) on top. NO DOF-blue recolor. GOAL:
+  host-side composition, `#ui` BYTE-IDENTICAL (confirm, or flag if `#ui` must change).
+- **Remove "Bake to Draw" + "optional"** — geometry IS the sketch; toolpaths target the `#core` geometry DIRECTLY
+  (`coreShapeToPolyline` at collect-time, no bake button).
+- Model: ONE `#core` geometry store; a per-shape PEN attribute as a PLOTTER-SIDE layer (do NOT push plotter concepts into
+  shared `#core`).
+
+**▶ Scope — SURVEY + PROPOSE, build nothing:**
+1. **Map the current two-store wiring:** freeform art store (`state.artLayers` + render-art + interaction + svg-import->art)
+   vs the `#core` sketch (sketch-stage) + the `coreShapeToPolyline` bake. What produces/consumes each; where import lands;
+   how toolpaths target art today.
+2. **Propose the unified model + migration slicing (UNIFY-2..):** where geometry lives; how the pen attribute attaches
+   (shapeId->pen side-table, plotter-side); import->`#core` preserving colors; freehand as non-constrainable (+ the
+   solver-perf mitigation: 0 constraints); the pen-color underlay (host-side?); removing bake/optional; toolpaths targeting
+   `#core` geometry directly. Say how much completed two-store code is REUSED vs REPLACED.
+3. **Flag risks:** solver perf on dense imports (Shaper does 6716 — probe if needed); `#core`/`#ui` byte-identical (underlay
+   + import must not regress Studio/Shaper); the underlay aligning with the geometry.
+4. Write the survey + migration slicing to WORK-LOG. PASS BACK for blessing. Build nothing.
+
+Append a WORK-LOG entry ending with exactly `=== UNIFY-1 PLAN (GEOMETRY-UNIFY MIGRATION) — AWAIT BLESSING ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded / resolved tasks (kept for provenance) -->
+## PP-8 (RESOLVED — DEFERRED, option D `9f1d819`): reconcile `#core/plot` `from-path` onto pure `parsePathSubpaths` — north-star-#2 path-parser duplication.
+Worker assess found the RISKY case: `parsePathSubpaths` is a PARTIAL sampler (M/L/H/V/C/Q; S/T/A degrade to a chord),
+while `from-path` (getTotalLength) samples ALL commands faithfully and is the LIVE gcode flatten. A swap regresses S/T/A
+curves; full closure means extending the shared parser (touches Shaper's importer). **Advisor decision: DEFER (option D)** —
+declare the boundary as TRACKED DEBT, revisit under IMPORT-3 (not worth a Shaper-affecting slice now; the UNIFY redesign
+may reshape path handling). No code changed; Shaper byte-identical.
+
+**Context:** the PENPLOTTER CORE EPIC (PP-1..PP-7) is COMPLETE + reviewed. User opted to continue with POLISH. First: the
+tracked north-star-#2 debt. `#core/plot/polylines/from-path.js` samples an SVG path via `getTotalLength` (DOM-guarded ->
+returns null in Node), DUPLICATING `#core`'s pure `parsePathSubpaths` (`#core/svg-import.js`, from GRIEVANCE-2). Two path
+handlers = one capability, two homes (#2 violation). Reconcile onto ONE — the PURE parser (so `#core/plot` path->polyline
+also works in Node, not only the browser).
+
+**▶ Scope — assess, then act (complete the clean case; GATE the risky one):**
+1. **Assess `parsePathSubpaths`:** does it SAMPLE curves (C/Q/S/T/A) into points, or only line segments (M/L/H/V/Z)?
+   - **Clean case — it samples curves:** route `from-path.js` onto `parsePathSubpaths` (pure, no DOM), drop the
+     `getTotalLength` path. DO IT this turn + oracle. `#core/plot` path->polyline now works in Node.
+   - **Risky case — line-segments only (a swap would LOSE curve fidelity), OR extending `parsePathSubpaths` would touch
+     Shaper's SVG-import behavior:** do NOT unilaterally swap or regress Shaper. STOP, write the exact trade-off + a
+     proposal (extend the pure parser as the one home vs. keep two with a declared boundary), and pass back for blessing.
+2. If you act: **`parsePathSubpaths` must NOT change Shaper's SVG-import output** (byte-identical; existing call sites
+   unchanged). The reconciliation removes the DUPLICATE, it does not regress the shared parser.
+3. **ORACLE:** a curved path (e.g. `M0,0 C10,0 10,10 0,10`) -> `from-path`/`coreShapeToPolyline` yields the expected sampled
+   polyline IN NODE (the win: no DOM dependency); existing path cases still pass.
+
+**VERIFY:** new/updated oracle + all plot oracles green STANDALONE; Shaper SVG-import UNREGRESSED (import a path-heavy SVG
+-> same result); `npm run test:shell` **12/12**; `node --check` clean; 0 net-new.
+
+Append a WORK-LOG entry ending with exactly `=== PP-8 (from-path -> parsePathSubpaths RECONCILE) DONE — HOLD ===` (or
+`=== PP-8 PLAN (PATH RECONCILE) — AWAIT BLESSING ===` if you hit the risky case). **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded task (kept for provenance) -->
+## PP-7b (DONE `c2b3ead`): the `coreShapeToPolyline` SEAM — a solved `#core` sketch bakes into plotter art polylines, CLOSED the epic.
+
+**Context:** PP-7a (`7ebd215`) mounted the shared Design tab (Sketch stage), `#core`/`#ui` byte-identical. PP-7b is the FINAL
+seam: let SOLVED `#core` sketch geometry flow into the plotter pipeline as polylines — realizing INTEGRATION.md's "#core
+geometry + art meet at the bake seam as polylines." Cleanest minimal seam: bake the solved sketch -> a plotter ART layer,
+then the existing Draw/Fill/Toolpath/Export pipeline carries it unchanged (and the DOF->pen color switch happens at the bake).
+
+**▶ Scope:**
+1. **`coreShapeToPolyline(shape, joints)`** — a NEW ADDITIVE `#core` module (app-agnostic: a `#core` shape -> a polyline).
+   Resolve the shape's joints; line -> `[[x1,y1],[x2,y2]]`; arc/circle -> sampled via `#core`'s EXISTING arc sampler
+   (reuse loop-geometry / `sampleArc` — do NOT hand-roll a 2nd sampler, north star #2). PURE, no DOM. **Additive `#core`**
+   (a NEW file; Studio/Shaper stay byte-identical — verify). ORACLE (a `#core` line -> its endpoints; an arc -> sampled
+   polyline with expected vertex count / bounds).
+2. **A "Bake to Draw" action** in the Sketch stage: `engine.solve` the active sketch, convert each solved `#core` shape via
+   `coreShapeToPolyline` -> plotter polyline shapes -> a NEW art LAYER (`state.artLayers`) -> switch to Draw. The sketch
+   geometry is now ART (pen-color world); the existing pipeline handles it.
+3. The `#core` sketch stays the SOURCE (re-baking re-derives; the art layer is the baked projection).
+
+**VERIFY LIVE (closes the epic — `#core` geometry -> G-code):** serve; Sketch tab -> draw a constrained line + circle, solve
+-> "Bake to Draw" -> the geometry appears as a plotter art layer in Draw -> target a toolpath at it -> Export -> the gcode
+contains the SKETCH geometry (came through `coreShapeToPolyline` -> the pipeline). PASTE a gcode snippet. SketchStudio +
+Shaper Design UNREGRESSED (`#core` additive-only). 3 apps load; the new `#core` oracle + all plot oracles green STANDALONE;
+`npm run test:shell` **12/12**; `node --check` clean.
+
+**GUARDRAILS:** `#core` gets ONE new ADDITIVE file (`coreShapeToPolyline`) + its oracle — NO existing `#core`/`#ui` file
+modified (byte-identical). The rest is penplotter-only. 0 net-new.
+
+Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake to Draw" action + the end-to-end
+`#core`-geometry->gcode verify) ending with exactly
+`=== PP-7b (coreShapeToPolyline SEAM) DONE — PP-7 + THE PENPLOTTER EPIC COMPLETE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+> **DONE this cycle:** GRIEVANCE-1 `fcafcc6` · GRIEVANCE-2 `37163db` · PP-1 `de23e01` · PP-2a (vpype pipeline -> #core/plot) `e32d913`.
+>
+> **PENPLOTTER EPIC (in flight)** — fold the pen-plotter in as app #3 (north star #6). Design: `penplotter/INTEGRATION.md`.
+> Ahead of VCARVE-4 (human redirect). ONE slice per turn, reviewed before the next:
+> - **PP-2 (port the pure engines -> `#core/plot/`)**, split load-safe:
+>   - **PP-2a** vpype PIPELINE + oracle + declared DDCS profile. DONE `e32d913`.
+>   - **PP-2b** fills — OFFSET GATE plan BLESSED `fff4927` (Option B: Clipper as the robust engine, keep polygon-offset). Port split:
+>     - **PP-2b-1** Clipper -> `#core/plot/` (pristine vendor + clip.js wrapper, Node-load shim) + oracle + boundary decl. DONE `09c72e9`.
+>     - **PP-2b-2** fills registry SHAPE + hatch + concentric archetypes + expandLayerWithFill + oracle. DONE `11c372b`.
+>     - **PP-2b-3** remaining fills (crosshatch, zigzag, stipple, dots) — registry now 6, COMPLETE. DONE `bb71940`.
+>       (NB: broke plot-fills.test.js's stale `length===2` assert; masked by the runner halting at ai-vision → PP-2b-3-fix.)
+>     - **PP-2b-3-fix** stale plot-fills.test.js assertion -> assert-by-id + plot oracles verified standalone. DONE.
+>   - **PP-2c** outlines -> `#core/plot/outlines/` (mirror fills) + oracle. DONE `d8c7c59`. **PP-2 COMPLETE** — #core/plot = pipeline+clip+fills+outlines, all oracle-pinned.
+> - **PP-3** Draw stage — DONE (`8da8e56` / `bf1b247` / `c887c47`). **PP-3 COMPLETE** — the plotter's freeform canvas draws live.
+>   NB (PP-3c finding): pens attach to TOOLPATHS (`tp.plotColorId`), NOT layers — INTEGRATION.md seam corrected accordingly.
+> - **PP-4 DOWNSTREAM plan BLESSED `111f787`** — no separate art bake; the per-toolpath recompute IS the seam; `coreShapeToPolyline`
+>   (PP-7) is the only new geometry. `autoRecalc` = the art<->machine recompute gate. Sequence:
+>   - **PP-4** Toolpath stage — PP-4a `3e2090e` + PP-4b `0b44d68`. **PP-4 COMPLETE** (ops panel + pen-assign + target-editing).
+>     (PP-4b left a 7-line active-layer-panel no-op stub -> PP-5 replaces it with the real registry-driven Fill panel.)
+>   - **PP-5** Fill stage — registry-driven panel (controls GENERATED from `params`); 2nd tab over the same toolpaths. DONE `f6c9e71`.
+>   - **PP-6** Export stage — real DDCS gcode + pen-width sim + settings. DONE `82e05c4`. **PIPELINE END-TO-END: Draw->Fill->Toolpath->Export.**
+>   - **PP-7** Sketch stage: PP-7a `7ebd215` (shared Design tab, #core/#ui byte-identical) + PP-7b `c2b3ead` (coreShapeToPolyline seam).
+> - **★ PENPLOTTER CORE EPIC (PP-1..PP-7) COMPLETE + reviewed.** app #3 folded in: #core/plot brain (oracle-pinned) · 5-stage shell ·
+>   the shared Design tab as the optional Sketch stage · the bake seam. Draw->Fill->Toolpath->Export->DDCS G-code, end-to-end.
+> - **PP-8** path-parser dedup -> RESOLVED: DEFERRED (option D, plan `9f1d819`) — a swap regresses S/T/A or touches Shaper's
+>   shared importer; tracked debt, revisit under IMPORT-3.
+> - **★ UNIFY redesign (user-driven — supersedes polish). REFINED to a MERGE:** Draw + Sketch -> ONE "Design" tab (freehand +
+>   precise + constraint tools, one canvas, ONE `#core` geometry store, pen-colors). Shell 5->4: `Design->Fill->Toolpath->Export`.
+>   NO bake. Freehand = a `#core` BEZIER (curve-fitted, compact). Import->`#core` constrainable, colors as a pen-layer. Pen
+>   underlay + contextual scaffold, `#ui` byte-identical. Consistent pan/zoom. (Full punch list #1-#9 above.)
+>   - **UNIFY-1** two-tab survey — SUPERSEDED by the merge (turn 304). **UNIFY-1b** merged-migration survey — DONE + BLESSED (`bad6a10`).
+>     Verdict: `#core` has NO bezier -> add it SHARED (Branch A); pen model resolved (Design=digital / Toolpath=physical+nearest);
+>     one `#ui` canvas; fitter in `#core/curve-fit.js`; import limits tracked; perf-probe before the delete.
+>   - **UNIFY-2** toolpaths target `#core` directly (NO bake). ADDITIVE. DONE `0515a26`.
+>   - **UNIFY-3** SHARED bezier `#core` SHAPE — DONE `5a7aacd` (additive; 19 oracles + shell-smoke green; output-unregressed).
+>   - **UNIFY-3-fit** freehand->bezier fitter (`#core/curve-fit.js`, pure) + oracle. DONE `aa06919` (20 core oracles green).
+>   - **UNIFY-4-plan** merged-tab composition — DONE + BLESSED `037f192` (crux: no `#ui` tool seam -> freehand plotter-side).
+>   - **UNIFY-4a** Design shell 5->4 + canvas re-home + degree-field GONE. DONE `06e0f6b`. ⚠ PERF PROBE: 6716 shapes = **0.7 FPS**.
+>   - **UNIFY-4b** Freehand — plotter-side capture WON over #ui pan-zoom; stroke -> compact #core bezier -> gcode. DONE `626b2d7`.
+>     (FLAG: bezier click-select needs a later #ui pick slice; targetable by id/mirror meanwhile.)
+>   - **UNIFY-4c** pen model (digital shapeColors) + color UNDERLAY (mapped pen, dirty-flagged). DONE `011413c`. Punch #5/#6/#10.
+>   - **UNIFY-throttle** static-skip + solve-gate (additive #ui) -> 0.7->**60 FPS**; MARKED-STATIC fixed render parity (#14). DONE `1467078`.
+>   - **UNIFY-5** import SVG -> #core (constrainable, colored, dense-static 60fps). DONE `07be65a`. Punch #2/#4.
+>   - **UNIFY-6** pan/zoom converge (#9) + import-pen-display flip. DONE `bfa6675` (also wired the never-wired wheel-zoom). Plotter-side.
+>   - **UNIFY-7** retired art store + Bake-to-Draw (punch #3); ~427 LOC. DONE `ccd9e7c` (SAFE SUBSET). Discovered the circle-export bug.
+>   - **CIRCLE-FIX** DONE `4896845` — root cause was douglas-peucker float cancellation on a closed loop (NOT linemerge); surgical
+>     closed-loop guard; byte-exact golden held; a circle now exports 32 moves (was 1). 22/22 oracles.
+> - **★★ THE UNIFY REDESIGN IS FUNCTIONALLY COMPLETE** (punch #1-#10,#12-#14 done; #11 deferred). User picked DEFERRED POLISH:
+>   - **UNIFY-3-tool** shared `#ui` bezier PEN tool (all apps) — #12 COMPLETE. DONE `cc2734d`.
+>   - **COLOR-MIX-1** pure mix function (linear-RGB best-pair, model blessed). DONE `c2cb596`.
+>   - **COLOR-MIX-2** fill-layering (per-pen cross-hatch at density ∝ weight) + oracle; then **COLOR-MIX-3** pipeline+UI wiring. <- THIS TASK
+>   - user's polish queue after: bulk fill-edit · cloud palette · bezier control-handle edit
+>   - **UNIFY-7b** finish the art-code delete (dormant interaction/svg-import/tools/state art bits; keep pan+toolpath) ·
+>     **UNIFY-8** perf(cond., likely moot) · later-optional: retire plotter canvas · #ui bezier tool · bezier click-select · control-handle edit
+>   - tracked #core: solve() O(joints)/call (heavy constraint-edit of dense scenes) · bezier control-handle editing · #core ellipse
+>   - deferred/tracked: Scissors/Rotate/Scale (fight solver) · #core ellipse · **UNIFY-3-tool** #ui bezier tool (all apps)
+>   - **UNIFY-4** merged Design tab (ribbon dedup, shell 5->4) · **UNIFY-5** import->`#core`+colors · **UNIFY-6** pan/zoom converge
+>   - **UNIFY-7** RETIRE art store + bake (big DELETE, perf-gated) · **UNIFY-8** perf (conditional)
+> - Deferred polish: PP-9 bulk fill-edit · PP-10 cloud palette. Parked: VCARVE-4/5 · Shaper grievances.
+>   - **PP-6** Export stage — `export.js` (per-pen gcode+zip) + pen-width sim + `settings` (un-stub `syncDocFields`).
+>   - **PP-7** Sketch stage — shared `#core`/`#ui` Design tab + the `coreShapeToPolyline` seam (a toolpath targets #core geometry).
+> - Cloud (palette save/load) = OUTSIDE the epic; stays stubbed unless requested.
+>
+> **Tracked debt (north star #2):** `#core/plot` `fromPath` (path->polyline via getTotalLength) DUPLICATES `#core` svg-import
+> `parsePathSubpaths` — reconcile onto the pure parser in a later slice (flagged in PP-2a).
+> **Backlog (after the epic):** further Design grievances TBD · VCARVE-4 gated vcarve export · VCARVE-5.
 
 > **WHY vcarve at all:** the Shaper Origin / Studio have NO native v-carve (only flat-bottom cuts). Our offset-stack
 > EMULATES one using primitives the Origin DOES support — a stack of `online` cuts, each a contour offset inward + a

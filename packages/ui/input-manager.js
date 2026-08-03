@@ -1,4 +1,4 @@
-﻿﻿// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MANAGER - Central coordinator
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared UI (#ui/input-manager.js). Relocated from apps/sketchstudio in slice S4f (the cluster ROOT).
@@ -29,6 +29,8 @@ import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
+import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
+import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -266,6 +268,8 @@ export function setupInput(svg, state, opts = {}) {
     setupDrawingTools(svg, state);
     setupConstraintTools(svg, state);
     setupBezierTool(svg, state);
+    try { setupBreakTool(svg, state); } catch(_) {}  // TRACE-1
+    try { setupTrimTool(svg, state);  } catch(_) {}  // TRACE-1
     setupPanZoom(svg, state);
     setupDimensionTool(svg, state);
     setupNumericInput(svg, state);
@@ -692,6 +696,12 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.BEZIER:
             handled = handleBezierPointerDown(e, svg, state, w);
             break;
+        case TOOL_MODES.BREAK:  // TRACE-1
+            try { handled = handleBreakPointerDown(e, svg, state, state.view); } catch(_) {}
+            break;
+        case TOOL_MODES.TRIM:   // TRACE-1
+            try { handled = handleTrimPointerDown(e, svg, state, state.view); } catch(_) {}
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -813,6 +823,10 @@ function handlePointerMove(e, svg, state) {
             }
             break;
         case TOOL_MODES.BEZIER: handled = handleBezierPointerMove(e, svg, state, w); break;
+        case TOOL_MODES.BREAK:  // TRACE-1
+            try { handleBreakPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
+        case TOOL_MODES.TRIM:   // TRACE-1
+            try { handleTrimPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
         default: handled = handlePanZoomPointerMove(e, svg, state);
     }
     return handled; 
@@ -886,6 +900,10 @@ function handlePointerUp(e, svg, state) {
             if (state.currentTool === TOOL_MODES.RECT && !state.active) hideLiveInputs();
             break;
         case TOOL_MODES.BEZIER: handled = handleBezierPointerUp(e, svg, state, w); break;
+        case TOOL_MODES.BREAK:  // TRACE-1
+            try { handleBreakPointerUp(e, svg, state, state.view); } catch(_) {} break;
+        case TOOL_MODES.TRIM:   // TRACE-1
+            try { handleTrimPointerUp(e, svg, state, state.view); } catch(_) {} break;
     }
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
     // Force-hide magnifier on pointer up to ensure it doesn't persist after drag ends
@@ -1316,6 +1334,8 @@ function handleEscape(state) {
     // 2. Ensure tool-specific cleanup runs (line tool and drawing state)
     try{ if(state.currentTool === TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
     try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
+    try{ resetBreakState(); }catch(_){ }  // TRACE-1
+    try{ resetTrimState(); }catch(_){ }   // TRACE-1
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
 

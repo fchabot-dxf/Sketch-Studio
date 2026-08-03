@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Trace — Sketch Studio</title>
+  <meta name="description" content="Trace raster images to clean SVG and DXF vector paths with real-world scaling">
+
+  <!-- Shared dark theme contract -->
+  <link rel="stylesheet" href="../../packages/ui/sketcher.css">
+  <!-- Trace-specific styles (overrides after sketcher.css) -->
+  <link rel="stylesheet" href="styles/main.css">
+
+  <!-- Importmap — mirrors shaper: #core + #ui shared packages -->
+  <script type="importmap">
+  {
+    "imports": {
+      "#core/": "../../packages/core/",
+      "#ui/":   "../../packages/ui/"
+    }
+  }
+  </script>
+
+  <!-- ImageTracer.js (UMD global — must load before ES modules) -->
+  <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="tr-header">
+    <span id="app-switcher-host"></span>
+    <nav class="tr-tabs" id="main-tabs">
+      <button class="tr-tab active" data-tab="trace">Trace</button>
+      <button class="tr-tab" data-tab="edit">Edit</button>
+      <button class="tr-tab" data-tab="export">Export</button>
+    </nav>
+    <span class="tr-spacer"></span>
+    <span id="tr-status" class="tr-status"></span>
+  </header>
+
+  <!-- ── Trace tab ────────────────────────────────────────────────────────── -->
+  <div id="tab-trace" class="tr-tab-pane">
+    <div class="tr-sidebar">
+
+      <!-- Upload -->
+      <div class="tr-panel">
+        <div class="tr-panel-title">Image</div>
+        <div id="drop-zone" class="tr-drop-zone" role="button" tabindex="0" aria-label="Upload image">
+          <span class="tr-drop-icon">🖼</span>
+          <p class="tr-drop-label"><strong>Drop image here</strong><br>or click to browse</p>
+        </div>
+        <input id="file-input" type="file" accept="image/*" hidden>
+      </div>
+
+      <!-- Trace controls -->
+      <div class="tr-panel">
+        <div class="tr-panel-title">Trace</div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Threshold</span>
+            <span id="threshold-val">128</span>
+          </div>
+          <input id="threshold-slider" type="range" min="1" max="254" value="128">
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Blur</span>
+            <span id="blur-val">0</span>
+          </div>
+          <input id="blur-slider" type="range" min="0" max="5" value="0">
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label"><span>Mode</span></div>
+          <div class="tr-toggle-group">
+            <button class="tr-toggle-btn color-mode-btn active" data-mode="bw">B&amp;W</button>
+            <button class="tr-toggle-btn color-mode-btn" data-mode="color">Color</button>
+          </div>
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Simplify</span>
+            <span id="simplify-val">0</span>
+          </div>
+          <input id="simplify-slider" type="range" min="0" max="10" value="0">
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Smooth</span>
+            <span id="smooth-val">0</span>
+          </div>
+          <input id="smooth-slider" type="range" min="0" max="10" value="0">
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label" style="align-items: center; justify-content: flex-start; gap: 8px; margin-top: 4px;">
+            <input type="checkbox" id="outline-only-cb" checked style="margin: 0; width: 14px; height: 14px;">
+            <label for="outline-only-cb" style="cursor: pointer;">Outline Only (Fill Holes)</label>
+          </div>
+        </div>
+
+        <button id="btn-retrace" class="tr-btn tr-btn-secondary tr-btn-full">↺ Re-trace</button>
+      </div>
+
+      <!-- Masking -->
+      <div class="tr-panel" id="masking-panel">
+        <div class="tr-panel-title">Masking & Wand</div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
+          <button class="tr-mask-btn" data-tool="wand-include" title="Auto Include (Magic Wand)">🪄+</button>
+          <button class="tr-mask-btn" data-tool="wand-exclude" title="Auto Exclude (Magic Wand)">🪄-</button>
+          <button class="tr-mask-btn" data-tool="include" title="Include Brush (Force Trace)">🖌️+</button>
+          <button class="tr-mask-btn" data-tool="exclude" title="Exclude Brush (Erase)">🖌️-</button>
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Wand Tolerance</span>
+            <span id="wand-tol-val">30</span>
+          </div>
+          <input id="wand-tolerance" type="range" min="0" max="255" value="30">
+        </div>
+
+        <div class="tr-control-row">
+          <div class="tr-control-label">
+            <span>Brush Size</span>
+            <span id="brush-size-val">30</span>
+          </div>
+          <input id="brush-size" type="range" min="1" max="150" value="30">
+        </div>
+
+        <button class="tr-btn tr-btn-secondary tr-btn-full tr-mask-btn" data-tool="clear" style="margin-top:4px;">↺ Clear Mask</button>
+      </div>
+
+      <!-- Scale -->
+      <div class="tr-panel" id="scale-panel">
+        <div class="tr-panel-title">Scale</div>
+
+        <!-- Unit toggle -->
+        <div class="tr-unit-row">
+          <span class="tr-unit-label">Unit</span>
+          <div class="tr-toggle-group">
+            <button class="tr-toggle-btn unit-toggle-btn active" data-unit="mm">mm</button>
+            <button class="tr-toggle-btn unit-toggle-btn" data-unit="in">in</button>
+          </div>
+        </div>
+
+        <!-- Mode tabs -->
+        <div class="tr-scale-tabs">
+          <button class="tr-scale-tab active" id="tab-global">Global</button>
+          <button class="tr-scale-tab" id="tab-reference">Reference</button>
+        </div>
+
+        <!-- Global mode -->
+        <div id="global-scale-ui" class="visible">
+          <div class="tr-input-row">
+            <input id="global-width-val" class="tr-unit-input unit-placeholder"
+                   type="number" min="0" step="1" placeholder="e.g. 200">
+            <span class="tr-unit-badge active-unit-label">mm</span>
+            <span class="tr-unit-badge">wide</span>
+          </div>
+        </div>
+
+        <!-- Reference mode -->
+        <div id="reference-scale-ui">
+          <p class="tr-ref-instructions">
+            <strong>Click &amp; drag</strong> a line across a known feature on the image.
+          </p>
+          <p id="ref-line-status" class="tr-ref-status">No line drawn yet</p>
+          <div class="tr-input-row" style="margin-top:8px">
+            <input id="ref-length-val" class="tr-unit-input unit-placeholder"
+                   type="number" min="0" step="0.1" placeholder="e.g. 22">
+            <span class="tr-unit-badge active-unit-label">mm</span>
+          </div>
+        </div>
+
+        <div id="scale-readout" class="tr-scale-readout">Scale: <span>—</span></div>
+      </div>
+
+      <!-- Send to editor -->
+      <div class="tr-panel">
+        <button id="btn-send-to-edit" class="tr-btn tr-btn-primary tr-btn-full" disabled>
+          → Send to Editor
+        </button>
+      </div>
+
+    </div><!-- /sidebar -->
+
+        <!-- Dual preview panes -->
+    <div class="tr-preview">
+      <div class="tr-preview-pane" id="original-pane">
+        <div class="tr-pane-label">Original</div>
+        
+        <div class="tr-pane-inner">
+          <canvas id="original-canvas" style="width:100%; height:100%; object-fit:contain;"></canvas>
+          <canvas id="threshold-overlay" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:auto; touch-action:none; opacity: 0.6; mix-blend-mode: multiply;"></canvas>
+          <!-- Reference line overlay -->
+          <svg id="ref-overlay" id="ref-overlay"
+               style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+            <svg id="ref-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          </svg>
+        </div>
+        <div class="tr-empty-state" id="original-empty">
+          <span>🖼</span><p>No image loaded</p>
+        </div>
+      </div>
+
+      <div class="tr-preview-pane tr-checker" id="svg-pane">
+        <div class="tr-pane-label">Traced</div>
+        <div class="tr-pane-inner" id="svg-output"></div>
+        <div id="trace-overlay" class="tr-trace-overlay">
+          <div class="tr-spinner"></div>
+          <span class="tr-trace-msg">Tracing…</span>
+        </div>
+        <div class="tr-empty-state" id="svg-empty-state">
+          <span>✦</span><p>Trace will appear here</p>
+        </div>
+      </div>
+    </div><!-- /preview -->
+
+  </div><!-- /tab-trace -->
+
+  <!-- ── Edit tab ─────────────────────────────────────────────────────────── -->
+  <div id="tab-edit" class="tr-tab-pane" hidden>
+    <div class="tr-edit-empty" id="edit-empty">
+      <p>Trace an image, then click <strong>Send to Editor</strong> to edit the paths here.</p>
+    </div>
+    <!-- The shared sketch canvas mounts here: design-ribbon + design-body (sketch SVG) -->
+    <div id="design-ribbon" hidden></div>
+    <div id="design-body" style="flex:1;display:flex;min-height:0" hidden>
+      <svg id="design-canvas"
+           viewBox="-300 -200 600 400"
+           preserveAspectRatio="xMidYMid meet"
+           style="flex:1;background:#F4EFE1">
+      </svg>
+    </div>
+  </div>
+
+  <!-- ── Export tab ────────────────────────────────────────────────────────── -->
+  <div id="tab-export" class="tr-tab-pane" hidden>
+    <div class="tr-export-view">
+      <h2 class="tr-export-title">Export</h2>
+      <p class="tr-export-sub">Download your traced geometry for Shaper Origin (SVG) or Fusion 360 (DXF).</p>
+
+      <div class="tr-export-cards">
+        <div class="tr-export-card">
+          <div class="tr-export-card-icon">◈</div>
+          <div class="tr-export-card-title">Shaper Origin</div>
+          <div class="tr-export-card-sub">SVG with real-world mm or in dimensions</div>
+          <div class="tr-export-actions">
+            <button id="btn-dl-svg" class="tr-btn tr-btn-primary" disabled>↓ Download SVG</button>
+            <button id="btn-copy-svg" class="tr-btn tr-btn-secondary" disabled>⧉ Copy SVG</button>
+          </div>
+        </div>
+
+        <div class="tr-export-card">
+          <div class="tr-export-card-icon">⬡</div>
+          <div class="tr-export-card-title">Fusion 360</div>
+          <div class="tr-export-card-sub">DXF with LWPOLYLINE entities, $INSUNITS set</div>
+          <div class="tr-export-actions">
+            <button id="btn-dl-dxf" class="tr-btn tr-btn-primary" disabled>↓ Download DXF</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="export-scale-note" class="tr-export-note" hidden>
+        ⚠ No scale set — exports will use raw SVG coordinates. Set a scale in the Trace tab first.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast container ──────────────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <!-- App entry (ES module) -->
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

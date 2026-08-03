@@ -19,6 +19,11 @@ const CREATE = [
   { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
 ];
+// TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
+const EDIT = [
+  { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim' },
+  { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break' },
+];
 const INSPECT = [
   { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim' },
 ];
@@ -131,7 +136,11 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   function toolButton(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     b.dataset.tool = t.tool; b.title = t.label;
-    b.innerHTML = iconSvg(t.icon) + `<span class="sk-ribbon-lbl">${t.label}</span>`;
+    // Support both symbol-id icons (icon) and raw inline SVG paths (iconSvg) for newer tools
+    const icon = t.iconSvg
+      ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
+      : iconSvg(t.icon);
+    b.innerHTML = icon + `<span class="sk-ribbon-lbl">${t.label}</span>`;
     b.addEventListener('click', () => selectTool(t.tool));
     toolBtns.push({ btn: b, tool: t.tool });
     return b;
@@ -178,8 +187,9 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     defs.forEach(d => frag.appendChild(makeBtn(d)));
     el.appendChild(group(label, frag));
   }
-  // CREATE (rect gets the dropdown), INSPECT, CONSTRAIN
+  // CREATE (rect gets the dropdown), EDIT (trim/break), INSPECT, CONSTRAIN
   buildGroup('Create', CREATE, (t) => (t.rectDropdown ? rectButton(t) : toolButton(t)));
+  buildGroup('Edit', EDIT, toolButton);  // TRACE-1: trim + break
   buildGroup('Inspect', INSPECT, toolButton);
   buildGroup('Constrain', CONSTRAIN, toolButton);
   // app-specific groups (Edit / Actions / …) appended by the host

@@ -10,6 +10,7 @@ export const APPS = [
   { id: 'sketchstudio', name: 'Sketch Studio', href: '../sketchstudio/' },
   { id: 'shaper', name: 'Shaper', href: '../shaper/' },
   { id: 'penplotter', name: 'Pen Plotter', href: '../penplotter/' }, // PP-1: app #3 (a "tab like Shaper")
+  { id: 'trace',      name: 'Image Trace', href: '../trace/'      }, // TRACE-1: image → SVG/DXF tracer
 ];
 
 let stylesInjected = false;

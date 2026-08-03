@@ -77,6 +77,8 @@ export const TOOL_MODES = {
   CIRCLE: 'circle',
   ARC: 'arc',
   BEZIER: 'bezier',
+  TRIM: 'trim',   // TRACE-1: trim a line/polyline segment at intersections
+  BREAK: 'break', // TRACE-1: split a line at a clicked point
   COINCIDENT: 'coincident',
   EQUAL: 'equal',
   HORIZONTAL_VERTICAL: 'hv',

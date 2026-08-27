@@ -283,7 +283,13 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     // Allow immediate pointerUp when we just created an active start (click -> temp start)
     // or when the active is a temporary start. This prevents the module-level debounce
     // from blocking the test/UX case that confirms a click should create the start joint.
-    if (now - lastLineCommitTime < LINE_POINTERUP_DEBOUNCE_MS && !(justCreatedActive || (state.active && state.active._tempStart))) {
+    // Only debounce a pointerUp that lands back at (near enough to be a duplicate release of)
+    // the segment's own start point -- a click at a genuinely different location is a new,
+    // deliberate polyline point and must go through regardless of how soon it follows the last
+    // commit (live-driven triangle repro: clicks under ~500ms apart were silently dropped here).
+    const debounceAnchor = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
+    const nearDebounceAnchor = debounceAnchor ? (Math.hypot(w.x - debounceAnchor.x, w.y - debounceAnchor.y) < 0.05) : true;
+    if (now - lastLineCommitTime < LINE_POINTERUP_DEBOUNCE_MS && nearDebounceAnchor && !(justCreatedActive || (state.active && state.active._tempStart))) {
         dbg.log('line-tool', '[line-tool] pointerUp debounced', { delta: now - lastLineCommitTime });
         return true;
     }
@@ -305,6 +311,9 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
             state.active.start = startId;
             state.active.polylineOrigin = startId;
             state.polylineOrigin = startId;
+            // Consumed: clear the flag (mirrors arc-tool.js) so the NEXT pointerUp falls through to real
+            // segment creation instead of re-entering this "place start" branch forever.
+            state.active._tempStart = false;
             // This pointerup was the click that created the start joint; do not finalize a line now.
             return true;
         }

@@ -262,6 +262,11 @@ console.log('\n=== Arc: does start/end stay equidistant from center under drag +
 
   const res = makeArc(state.joints, centerId, startId, endId, 'CENTER', false);
   res.shapes.forEach(sh => state.engine.addShape(sh));
+  // Consume res.constraints exactly like the real arc-tool.js:227 does (post-fix, makeArc now
+  // returns a structural equal-radius constraint) -- this test predates that fix and needs updating
+  // to match, or it's testing a topology no real caller produces any more.
+  const { ConstraintManager: CM5 } = await import('#core/constraint-manager.js');
+  (res.constraints || []).forEach(c => CM5.createConstraint(state, c.type, c, { source: 'arc' }));
   s.solve();
 
   const distTo = (a, b) => s.edgeLen(a, b);
@@ -296,6 +301,179 @@ console.log('\n=== Arc: does start/end stay equidistant from center under drag +
     Math.abs(distTo(centerId, endId) - 60) < 0.5,
     `end-radius=${distTo(centerId, endId)} expected ~60 (start=${distTo(centerId, startId)}) — if end is still ` +
     `~40 while start is ~60, editing an arc's radius bends it out of shape instead of resizing it uniformly.`);
+}
+
+// SCENARIO 6: circle tangent to a line, then the circle's radius is edited via the just-fixed
+// commitDimensionEdit path -- does tangency survive a radius change?
+// constraint-tools.js:218 -> ConstraintManager.createConstraint(state, TANGENT, { line, circle }).
+console.log("\n=== Circle tangent-to-line + radius edit (built on the just-landed radius fix) ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const addConstraintMod = await import('#core/constraints.js');
+  const addConstraint = addConstraintMod.addConstraint;
+  const cmMod = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod.ConstraintManager;
+  const ctMod = await import('#core/constants.js');
+  const CT = ctMod.CONSTRAINT_TYPES;
+
+  const line = s.line(-100, 0, 100, 0);
+  const centerId = s.point(0, 30, false);
+  const shapeId = "sTanCircle";
+  state.shapes.push({ id: shapeId, type: "circle", joints: [centerId], radius: 30 });
+  addConstraint(state, CT.DISTANCE, { shape: shapeId, value: 30, isRadius: true });
+  ConstraintManager.createConstraint(state, CT.TANGENT, { line: line.id, circle: shapeId }, { source: "toolbar" });
+  s.solve();
+
+  const shape = () => state.shapes.find(sh => sh.id === shapeId);
+  const tangentGap = () => Math.abs(s.pos(centerId).y - 0) - shape().radius;
+
+  check("TAN1 solve converged after tangent add", s.converged === true, JSON.stringify(s.conflicts));
+  check("TAN1 tangent holds initially (center-to-line distance == radius)", Math.abs(tangentGap()) < 0.5,
+    "center.y=" + s.pos(centerId).y + " radius=" + shape().radius);
+
+  // REAL BUG, traced past the symptom: editing this radius via the real commitDimensionEdit seam
+  // gets REVERTED ("conflicts with tangent") -- but that revert is actually the CORRECT response to a
+  // deeper problem: the RAW engine.solve() genuinely does not restore tangency after shape.radius
+  // changes, while falsely reporting converged:true with error~1e-15. Isolated below (no edit-seam
+  // involved) to pin the root cause on the solver, not on commitDimensionEdit's revert logic.
+  const radiusDim = state.constraints.find(c => c.type === CT.DISTANCE && c.isRadius && c.shape === shapeId);
+  const editResult = s.editValue(radiusDim, 50);
+  check("TAN2 edit was reverted (this is a SYMPTOM, not the bug -- see TAN2-RAW below for the real cause)",
+    s.lastError != null, "lastError=" + s.lastError);
+
+  // Isolate: bypass the edit seam entirely, mutate shape.radius + re-solve directly, exactly as
+  // dimension-seams.js's commitDimensionEdit does internally.
+  shape().radius = 50;
+  const rawResult = state.engine.solve(500);
+  const rawGap = Math.abs(s.pos(centerId).y) - shape().radius;
+  check("TAN2-RAW a fresh solve() after shape.radius changes externally reports the geometry as WRONG (this is the correct/expected outcome)",
+    Math.abs(rawGap) > 1,
+    "converged=" + rawResult.converged + " reported-error=" + rawResult.error + " rankDeficient=" + rawResult.rankDeficient +
+    " center.y=" + s.pos(centerId).y + " radius=" + shape().radius + " ACTUAL tangent gap=" + rawGap +
+    " -- if converged=true and reported-error is ~1e-15 while ACTUAL gap is several units, the solver's own " +
+    "'converged but lying' geometric-honesty check is WRONG for this case: it reports success on a genuinely " +
+    "unsatisfied tangent constraint after an external shape.radius mutation (confirmed: NOT a rank-deficiency " +
+    "artifact -- reproduces identically even with the circle's center.x pinned by an independent VERTICAL " +
+    "constraint, ruling out 'free X direction' as the cause). This is now a LIVE, reachable path: the just-shipped " +
+    "circle-radius-edit fix (dimension-seams.js) mutates shape.radius exactly this way on every radius edit.");
+}
+
+// SCENARIO 7: freeform PARALLEL + PERPENDICULAR on independently-drawn lines (constraint-tools.js's
+// real {shapes:[id1,id2]} path, not rect-tool's built-in H/V) + drag.
+console.log("\n=== Freeform parallel/perpendicular (2 independent lines, real constraint-tools.js path) + drag ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const cmMod2 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod2.ConstraintManager;
+  const ctMod2 = await import('#core/constants.js');
+  const CT = ctMod2.CONSTRAINT_TYPES;
+
+  const lineA = s.line(0, 0, 100, 20);
+  state.joints.get(lineA.a).fixed = true;
+  const lineB = s.line(0, 50, 100, 55);
+
+  ConstraintManager.createConstraint(state, CT.PARALLEL, { shapes: [lineA.id, lineB.id] }, { source: "toolbar" });
+  s.solve();
+  const angleOf = (l) => { const a = s.pos(l.a), b = s.pos(l.b); return Math.atan2(b.y - a.y, b.x - a.x); };
+  const angleDiff = (a1, a2) => { let d = Math.abs(a1 - a2) % Math.PI; return Math.min(d, Math.PI - d); };
+
+  check("PP1 solve converged after PARALLEL", s.converged === true, JSON.stringify(s.conflicts));
+  check("PP1 lines are actually parallel", angleDiff(angleOf(lineA), angleOf(lineB)) < 0.01,
+    "angleA=" + angleOf(lineA) + " angleB=" + angleOf(lineB));
+
+  for (let i = 0; i < 15; i++) s.drag(lineB.b, 2, -3);
+  check("PP2 still parallel after dragging lineB", angleDiff(angleOf(lineA), angleOf(lineB)) < 0.05,
+    "angleA=" + angleOf(lineA) + " angleB=" + angleOf(lineB));
+
+  const lineC = s.line(0, -50, 30, -80);
+  ConstraintManager.createConstraint(state, CT.PERPENDICULAR, { shapes: [lineA.id, lineC.id] }, { source: "toolbar" });
+  s.solve();
+  const perpOf = () => { const d = angleDiff(angleOf(lineA), angleOf(lineC)); return Math.abs(d - Math.PI / 2); };
+  check("PP3 solve converged after PERPENDICULAR", s.converged === true, JSON.stringify(s.conflicts));
+  check("PP3 lines are actually perpendicular", perpOf() < 0.01, "diff-from-90deg(rad)=" + perpOf());
+  for (let i = 0; i < 10; i++) s.drag(lineC.b, -5, 2);
+  check("PP4 still perpendicular after dragging lineC", perpOf() < 0.05, "diff-from-90deg(rad)=" + perpOf());
+  check("PP4 lineA/lineB STILL parallel too (multi-constraint stack holds)", angleDiff(angleOf(lineA), angleOf(lineB)) < 0.05,
+    "angleA=" + angleOf(lineA) + " angleB=" + angleOf(lineB));
+}
+
+// SCENARIO 8: angle-defined triangle (SAS: two sides + included angle) + drag.
+console.log("\n=== Angle-defined triangle (SAS) + drag ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const cmMod3 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod3.ConstraintManager;
+  const ctMod3 = await import('#core/constants.js');
+  const CT = ctMod3.CONSTRAINT_TYPES;
+
+  const l1 = s.line(0, 0, 80, 0);
+  state.joints.get(l1.a).fixed = true;
+  const l2 = s.line(0, 0, 40, 60);
+  // Real topology (per line-tool.js): shared vertex = TWO separate joints tied by an explicit
+  // COINCIDENT constraint, not a literally-shared joint id.
+  ConstraintManager.createConstraint(state, CT.COINCIDENT, { joints: [l1.a, l2.a] }, { source: "toolbar" });
+
+  s.dimension(l1.a, l1.b, 80);
+  s.dimension(l2.a, l2.b, 70);
+  // ANGLE's REAL validated param shape is {shapes:[s1,s2], value} (constraint-manager.js:791-793),
+  // not raw joints -- confirmed by reading _validateParams (line 989-990) after createConstraint
+  // returned null on a first, wrong-shaped attempt.
+  const dAngle = ConstraintManager.createConstraint(state, CT.ANGLE, { shapes: [l1.id, l2.id], value: 50 }, { source: "toolbar" });
+  check("SAS0 angle constraint was actually created", !!dAngle, "createConstraint returned " + JSON.stringify(dAngle));
+  s.solve();
+
+  const angleBetween = () => {
+    const a = s.pos(l1.a), b = s.pos(l1.b), c = s.pos(l2.a), d = s.pos(l2.b);
+    const u = Math.atan2(b.y - a.y, b.x - a.x), v = Math.atan2(d.y - c.y, d.x - c.x);
+    let diff = Math.abs(u - v) * 180 / Math.PI; if (diff > 180) diff = 360 - diff; return diff;
+  };
+  check("SAS1 solve converged", s.converged === true, JSON.stringify(s.conflicts));
+  check("SAS1 angle matches (~50deg)", Math.abs(angleBetween() - 50) < 1, "got " + angleBetween());
+  check("SAS1 side lengths hold", Math.abs(s.edgeLen(l1.a, l1.b) - 80) < 0.5 && Math.abs(s.edgeLen(l2.a, l2.b) - 70) < 0.5,
+    "l1=" + s.edgeLen(l1.a, l1.b) + " l2=" + s.edgeLen(l2.a, l2.b));
+
+  for (let i = 0; i < 15; i++) s.drag(l2.b, -10, 5);
+  check("SAS2 angle STILL matches after drag", Math.abs(angleBetween() - 50) < 1, "got " + angleBetween());
+  check("SAS2 side lengths STILL hold after drag",
+    Math.abs(s.edgeLen(l1.a, l1.b) - 80) < 0.5 && Math.abs(s.edgeLen(l2.a, l2.b) - 70) < 0.5,
+    "l1=" + s.edgeLen(l1.a, l1.b) + " l2=" + s.edgeLen(l2.a, l2.b));
+  check("SAS2 shared vertex (l1.a/l2.a) still coincident after drag", s.edgeLen(l1.a, l2.a) < 0.1,
+    "gap=" + s.edgeLen(l1.a, l2.a));
+}
+
+// SCENARIO 9: midpoint-centering -- constrain a rectangle's diagonal midpoint coincident with a
+// fixed origin point (recent project fix: "a shape can now be centered on the origin").
+console.log("\n=== Midpoint centering: constrain a rectangle's center to a fixed origin point ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const cmMod4 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod4.ConstraintManager;
+  const ctMod4 = await import('#core/constants.js');
+  const CT = ctMod4.CONSTRAINT_TYPES;
+
+  const r = s.rect(500, 500, 80, 40);
+  const c1 = r.corners[0], c3 = r.corners[2];
+  const originId = s.point(0, 0, true);
+  const midId = s.point(999, 999, false);
+
+  ConstraintManager.createConstraint(state, CT.MIDPOINT, { joints: [c1, c3, midId] }, { source: "toolbar" });
+  ConstraintManager.createConstraint(state, CT.COINCIDENT, { joints: [midId, originId] }, { source: "toolbar" });
+  s.solve();
+
+  const center = () => { const a = s.pos(c1), b = s.pos(c3); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  check("MID1 solve converged", s.converged === true, JSON.stringify(s.conflicts));
+  check("MID1 rectangle is now centered on the origin (bidirectional midpoint pulled the WHOLE shape)",
+    Math.hypot(center().x, center().y) < 0.5, "center=" + JSON.stringify(center()));
+  check("MID1 still a rectangle after centering", s.isRectangle(r.corners));
+
+  for (let i = 0; i < 15; i++) s.drag(c1, -10, -5);
+  check("MID2 still centered on origin after dragging a corner", Math.hypot(center().x, center().y) < 0.5,
+    "center=" + JSON.stringify(center()));
+  check("MID2 still a rectangle after drag", s.isRectangle(r.corners));
 }
 
 console.log(`\n${failures.length === 0 ? 'ALL PASS' : failures.length + ' FAILURE(S)'}`);

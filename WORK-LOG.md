@@ -9614,3 +9614,27 @@ throughout, the scope was well-bounded by the dispatch's own step list.
 Append per the dispatch's required marker:
 
 === FRAME-CALC-TOGGLE-V1 DONE — HOLD ===
+
+---
+
+## TURN 380 — FRAME-CALC-APP-SWITCHER: Frame Calc is now reachable from (and reaches) every other app
+
+**Dispatch:** small follow-up to last turn's `apps/frame-calc` build — the shared app-switcher's `APPS` list
+(`packages/ui/app-switcher.js`) had no `frame-calc` entry, and wiring the switcher INTO `apps/frame-calc` itself
+was deliberately deferred last turn.
+
+**Fix — both pieces:** added `{ id: 'frame-calc', name: 'Frame Calc', href: '../frame-calc/' }` to the shared
+`APPS` list (one entry, same shape as the existing 4). Added `<span id="app-switcher-host"></span>` to
+`apps/frame-calc/index.html`'s header (mirrors `apps/shaper/index.html`'s slot) and mounted
+`createAppSwitcher({ current: 'frame-calc' })` into it from `main.js`, verbatim mirroring
+`apps/shaper/src/main.js:33-34`'s pattern.
+
+**VERIFIED LIVE** (CDP, all 4 apps): opened `frame-calc` — its switcher shows all 5 apps with Frame Calc marked
+current, and clicking Shaper from within it navigates there correctly (`location.href` confirmed). Opened
+SketchStudio, Shaper, and Pen Plotter in turn — Frame Calc now appears in every one of their switcher menus
+(unaffected entries in the same order, nothing displaced). 0 console errors across all 4 checks.
+
+**REGRESSION:** `node --check` clean on both touched files. `shell-smoke` 11/12 — same pre-existing, unrelated
+ribbon-order fail carried from prior turns.
+
+=== FRAME-CALC-APP-SWITCHER DONE — HOLD ===

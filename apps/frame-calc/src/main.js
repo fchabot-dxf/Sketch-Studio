@@ -7,8 +7,14 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findLoops } from '#core/loop-finder.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
+import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
 import { createCalculatorView } from './calculator-view.js';
 import { buildFrameSketch, attachFrameDimensions } from './sketch-builder.js';
+
+// SWITCH-1: mount the shared two-way app-switcher into the header brand slot (mirrors
+// apps/shaper/src/main.js:33-34's pattern).
+const _swHost = document.getElementById('app-switcher-host');
+if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'frame-calc' }).el);
 
 // This app is inches-only (the calculator has no mm mode) — default DOC_UNIT to 'in' so the Sketch
 // view's dimension labels match the Calculator view's own display, same opt-in pattern Shaper uses

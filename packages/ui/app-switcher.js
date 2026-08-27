@@ -11,6 +11,7 @@ export const APPS = [
   { id: 'shaper', name: 'Shaper', href: '../shaper/' },
   { id: 'penplotter', name: 'Pen Plotter', href: '../penplotter/' }, // PP-1: app #3 (a "tab like Shaper")
   { id: 'trace',      name: 'Image Trace', href: '../trace/'      }, // TRACE-1: image → SVG/DXF tracer
+  { id: 'frame-calc', name: 'Frame Calc', href: '../frame-calc/' }, // FRAME-CALC-1: shop-framing calculator + CAD toggle
 ];
 
 let stylesInjected = false;

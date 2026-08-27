@@ -1,6 +1,14 @@
-// apps/frame-calc — boot + wiring. Scaffold only (step 1); the calculator/sketch/export logic lands
-// in later steps of this same feature. Mirrors apps/shaper/src/main.js's view-toggle shape, simplified
-// to two views (Calculator / Sketch) instead of Shaper's 5-mode nav.
+// apps/frame-calc — boot + wiring. Mirrors apps/shaper/src/main.js's view-toggle shape, simplified to
+// two views (Calculator / Sketch) instead of Shaper's 5-mode nav.
+
+import { createCalculatorView } from './calculator-view.js';
+
+let latestGeom = null; // the calculator's most recent output; the Sketch-view builder (a later step) reads this on toggle
+const calcView = createCalculatorView({
+  formEl: document.getElementById('calc-form'),
+  previewEl: document.getElementById('calc-preview'),
+  onChange: (geom) => { latestGeom = geom; },
+});
 
 const VIEWS = {
   calc: document.getElementById('calc-view'),

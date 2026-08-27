@@ -9753,3 +9753,91 @@ CSS-only (no script changes this turn — last turn's scroll-reset listener is u
 cleanup per the dispatch).
 
 === MOBILE-VIEWPORT-DVH-FIX DONE — HOLD ===
+
+---
+
+## TURN 386 — MOBILE-VIBRATION-FIX: a genuine ResizeObserver/layout feedback loop, root-caused and fixed
+
+**The advisor's hypothesis (rank-deficient default geometry -> solver floating-point jitter) is empirically
+refuted.** Sampled `window.__lastSolveStats` across 10 frames on the true default/empty canvas (only
+`j_origin`, a single fixed joint, zero free variables): `{maxDelta:0, rankDeficient:false, converged:true}`
+identically every single frame — the solver's `_pack()` fast-path for zero free variables makes it
+deterministic by construction. The solver is not the source. Per the dispatch's own instruction, moved on
+rather than forcing that angle.
+
+**What IS oscillating, found by instrumenting the live page (CDP, mobile viewport 390x667):** the canvas
+`<svg>`'s `viewBox` attribute was being rewritten on essentially every animation frame (72 `MutationObserver`
+hits in ~1s / 60 rAF frames), flipping between exactly two fixed values every single frame
+(`vbH: 12.874493598937988` <-> `13.52226734161377`, never a third value, never settling) — a textbook
+feedback-loop signature, not solver noise (solver stats stayed perfectly stable throughout).
+
+**Traced the mechanism precisely, in two rounds of direct measurement (not guessed):**
+1. `packages/ui/input-manager.js`'s `ResizeObserver` (tagged "GRIEVANCE-1") on the canvas `svg` calls
+   `updateViewBox(svg, state.view)` on every detected size change; `updateViewBox` itself reads
+   `svg.getBoundingClientRect()` and, alongside setting `viewBox`, writes a live readout into the footer's
+   `#viewport-size` span (`inputCtx.setViewportSize?.(...)`, line ~1077).
+2. Measured `svg`'s and the `<footer>`'s `getBoundingClientRect().height` across consecutive rAF frames:
+   `footerH` alternated `35px <-> 51px` (exactly one text line, ~16px) in EXACT lockstep with `svgH`
+   alternating `334px <-> 318px` — the footer growing 16px precisely as the (flex-sized) svg shrinks 16px.
+   First hypothesis (the `#viewport-size` span's own text wrapping to 2 lines at the marginal mobile width,
+   flipped by sub-pixel digit-width differences between e.g. "13" and "14") was tested by adding
+   `whitespace-nowrap overflow-hidden` to that span's parent div and re-measuring — confirmed via
+   `getComputedStyle` that the rule actually applied (`white-space: nowrap`), and that div's own height (16px)
+   became perfectly constant across all frames — but the footer/svg oscillation was COMPLETELY UNCHANGED
+   (same 35/51, 334/318 values). So that div's own wrap was a real but secondary symptom, not the whole story.
+3. Re-measured with all footer children broken out individually: the FIRST hypothesis's fix (div2 = 16px
+   constant) was confirmed correct in isolation, but `div1`/`#btn-mag-toggle` (the "MAG LENS: OFF" button) was
+   now the thing alternating `22px <-> 38px` (1 line vs 2 lines of its own button text) — because footer is
+   `flex justify-between` with no `shrink-0`/`nowrap` on `div1`, and `div2`'s natural (unwrapped but still
+   overflow-visible-width) content width still varies frame to frame purely from the changing digits in the
+   `updateViewBox` readout text, which was enough to nudge div1's shrink-to-fit width across the button's own
+   text-wrap boundary every frame.
+
+**Root cause, precisely stated:** `updateViewBox`'s footer readout write is itself layout-affecting at this
+mobile width — two sibling elements in the footer sit exactly at their own text-wrap thresholds, and the
+readout text's frame-to-frame digit changes are enough to flip each of them across that threshold. Because the
+footer is `shrink-0` and `main`/`svg` are flex-sized against the remaining space, any footer height change
+becomes an svg height change, which re-fires the SAME `ResizeObserver` that triggered the write in the first
+place — a true, self-sustaining two-state loop, independent of the solver entirely. This is a real, confirmed,
+non-solver bug — matching the "canvas visibly vibrates" report exactly (axis lines / stroke widths / circle
+radius all derive from `svg-renderer.js`'s per-frame `zoom = vb.width/rect.width` recompute, so a flipping
+`viewBox`+rect produces a flipping render every frame).
+
+**Fix (`apps/sketchstudio/index.html`, footer only, 2-line diff):** pinned both footer children so neither can
+ever wrap or shrink, breaking the loop at its source rather than patching the ResizeObserver's trigger logic:
+`div1` (mode/mag-lens) gets `shrink-0 whitespace-nowrap`, `#btn-mag-toggle` gets `whitespace-nowrap`, `div2`
+(coords/viewport-size) gets `whitespace-nowrap overflow-hidden`. Minimal and targeted to the confirmed
+mechanism — no change to `input-manager.js`'s ResizeObserver/`updateViewBox` logic itself, since the loop's
+actual defect was footer layout instability, not the observer or the render-loop `solve()` call the dispatch
+suspected.
+
+**VERIFIED LIVE, before and after:** re-ran the same frame-by-frame instrumentation after the fix —
+`viewBox` mutation count over 60 rAF frames dropped from 72 to **0**; every measured dimension (`svgH`,
+`footerH`, `div1H`, `div2H`, `btnH`, `mainH`, `htmlH`, `bodyH`, `innerH`) held perfectly constant across all 16
+sampled frames. Swept 5 common mobile widths (360, 375, 390, 414, 428px) — 0 `viewBox` mutations at every one,
+confirming the fix isn't a coincidence of one specific width.
+
+**Secondary check (per dispatch, lower priority, done briefly since time remained after the primary cause was
+closed):** the reported "touching the canvas makes an app-switcher-adjacent element disappear" correlation.
+Read `packages/ui/app-switcher.js`: its dropdown menu (`open()`) attaches a `document`-level click listener
+that calls `close()` on ANY outside click (line ~64, standard outside-click-to-close pattern) — this fully and
+simply explains the report: if the switcher's dropdown was open, touching the canvas is an outside click and
+closes it by design. Not a bug; no fix needed or made. Did not chase this further per the dispatch's own
+time-boxing instruction.
+
+**Gate:** `scripts/run-tests.js` looped individually (halts on first failure otherwise, per this repo's known
+runner caveat) — 106 tests, 8 failures, all matching this repo's already-documented pre-existing-failure
+buckets (`ai-vision-label-spacing`, `debug-panel`, `debug-whisker-align`, `input-manager-midpoint`,
+`settings-panel-ui`, `tuning-wizard`, `wizard-base`, `wizard-placement`); grepped all 8 failing test files for
+any reference to `footer`/`viewport-size`/`btn-mag-toggle`/`mag-lens` — zero matches, confirming none touch the
+element I changed. `shell-smoke.cjs`: 11/12, same pre-existing unrelated ribbon-group-DOM-order failure noted
+in prior turns.
+
+**What still needs a real device:** as with the last two mobile turns, headless Chrome has no real address bar
+and no real GPU/battery throttling — this fully explains and fixes the specific mechanism that was directly
+measured and reproduced (a genuine, deterministic, 100%-reproducible-headless layout feedback loop), but a
+real-device check is still the right final confirmation that this was THE (or the only) source of the reported
+vibration, since a phone could in principle also be seeing compounding effects (e.g. GPU repaint cost) that
+this loop was driving but that headless can't fully capture the felt severity of.
+
+=== MOBILE-VIBRATION-FIX DONE — HOLD ===

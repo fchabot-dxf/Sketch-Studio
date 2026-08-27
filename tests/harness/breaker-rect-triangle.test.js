@@ -326,37 +326,39 @@ console.log("\n=== Circle tangent-to-line + radius edit (built on the just-lande
   s.solve();
 
   const shape = () => state.shapes.find(sh => sh.id === shapeId);
-  const tangentGap = () => Math.abs(s.pos(centerId).y - 0) - shape().radius;
+  // IMPORTANT: neither line endpoint is pinned here (matches a freshly-drawn, undimensioned line --
+  // line-tool.js never sets fixed:true by default), so the line is just as free to move as the
+  // circle's center. An earlier version of this gap check assumed the line stays put at y=0, which
+  // produced a FALSE finding (looked like a solver bug; was actually this test's wrong assumption --
+  // the solver had correctly moved the line too as part of a valid tangent solution). Compute the gap
+  // from the line's ACTUAL current endpoints every time, never an assumed-fixed position.
+  const tangentGap = () => {
+    const A = s.pos(line.a), B = s.pos(line.b), C = s.pos(centerId);
+    const ux = B.x - A.x, uy = B.y - A.y, wx = C.x - A.x, wy = C.y - A.y;
+    const cross = wx * uy - wy * ux, lu = Math.hypot(ux, uy);
+    return Math.abs(cross / lu) - shape().radius;
+  };
 
   check("TAN1 solve converged after tangent add", s.converged === true, JSON.stringify(s.conflicts));
   check("TAN1 tangent holds initially (center-to-line distance == radius)", Math.abs(tangentGap()) < 0.5,
     "center.y=" + s.pos(centerId).y + " radius=" + shape().radius);
 
-  // REAL BUG, traced past the symptom: editing this radius via the real commitDimensionEdit seam
-  // gets REVERTED ("conflicts with tangent") -- but that revert is actually the CORRECT response to a
-  // deeper problem: the RAW engine.solve() genuinely does not restore tangency after shape.radius
-  // changes, while falsely reporting converged:true with error~1e-15. Isolated below (no edit-seam
-  // involved) to pin the root cause on the solver, not on commitDimensionEdit's revert logic.
+  // Real bug, found + fixed by the worker (t374, commit 87d3516): editing this radius via the real
+  // commitDimensionEdit seam used to revert ("conflicts with tangent") because a circle's isRadius row
+  // (no rim joint) produced a NaN residual that poisoned the WHOLE gradient once the circle also
+  // participated in a real tangent constraint -- confirmed fixed here with a CORRECTED gap measurement
+  // (using the line's live position, not an assumed-fixed one).
   const radiusDim = state.constraints.find(c => c.type === CT.DISTANCE && c.isRadius && c.shape === shapeId);
-  const editResult = s.editValue(radiusDim, 50);
-  check("TAN2 edit was reverted (this is a SYMPTOM, not the bug -- see TAN2-RAW below for the real cause)",
-    s.lastError != null, "lastError=" + s.lastError);
+  s.editValue(radiusDim, 50);
+  check("TAN2 radius edit was NOT reverted", s.lastError == null, "lastError=" + s.lastError);
+  check("TAN2 radius actually updated to 50", Math.abs(shape().radius - 50) < 0.5, "got " + shape().radius);
+  check("TAN2 tangency genuinely holds after the edit (line may have moved too -- that's fine, still tangent)",
+    Math.abs(tangentGap()) < 0.5,
+    "gap=" + tangentGap() + " center=" + JSON.stringify(s.pos(centerId)) + " line=" + JSON.stringify([s.pos(line.a), s.pos(line.b)]));
 
-  // Isolate: bypass the edit seam entirely, mutate shape.radius + re-solve directly, exactly as
-  // dimension-seams.js's commitDimensionEdit does internally.
-  shape().radius = 50;
-  const rawResult = state.engine.solve(500);
-  const rawGap = Math.abs(s.pos(centerId).y) - shape().radius;
-  check("TAN2-RAW a fresh solve() after shape.radius changes externally reports the geometry as WRONG (this is the correct/expected outcome)",
-    Math.abs(rawGap) > 1,
-    "converged=" + rawResult.converged + " reported-error=" + rawResult.error + " rankDeficient=" + rawResult.rankDeficient +
-    " center.y=" + s.pos(centerId).y + " radius=" + shape().radius + " ACTUAL tangent gap=" + rawGap +
-    " -- if converged=true and reported-error is ~1e-15 while ACTUAL gap is several units, the solver's own " +
-    "'converged but lying' geometric-honesty check is WRONG for this case: it reports success on a genuinely " +
-    "unsatisfied tangent constraint after an external shape.radius mutation (confirmed: NOT a rank-deficiency " +
-    "artifact -- reproduces identically even with the circle's center.x pinned by an independent VERTICAL " +
-    "constraint, ruling out 'free X direction' as the cause). This is now a LIVE, reachable path: the just-shipped " +
-    "circle-radius-edit fix (dimension-seams.js) mutates shape.radius exactly this way on every radius edit.");
+  for (let i = 0; i < 10; i++) s.drag(centerId, 4, 0);
+  check("TAN3 tangency MAINTAINED after dragging the center sideways", Math.abs(tangentGap()) < 0.5,
+    "gap=" + tangentGap());
 }
 
 // SCENARIO 7: freeform PARALLEL + PERPENDICULAR on independently-drawn lines (constraint-tools.js's

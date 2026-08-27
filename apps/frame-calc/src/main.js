@@ -4,7 +4,18 @@
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import SettingsManager from '#core/settings-manager.js';
 import { createCalculatorView } from './calculator-view.js';
+import { buildFrameSketch } from './sketch-builder.js';
+
+// This app is inches-only (the calculator has no mm mode) — default DOC_UNIT to 'in' so the Sketch
+// view's dimension labels match the Calculator view's own display, same opt-in pattern Shaper uses
+// (persist:false: an in-memory default only, never written to the shared 'sketch-studio-settings'
+// localStorage, so it can't leak into a same-origin SketchStudio/Shaper session).
+try {
+  const persisted = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}');
+  if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
+} catch (_) { /* localStorage blocked */ }
 
 let latestGeom = null; // the calculator's most recent output; the Sketch-view builder (a later step) reads this on toggle
 const calcView = createCalculatorView({
@@ -38,6 +49,13 @@ function ensureSketch() {
   ribbon.render(document.getElementById('sketch-ribbon'));
   infoPanel = createDesignInfoPanel({ state: sketchController.state, engine: sketchController.engine });
   infoPanel.render(document.getElementById('sketch-panel'));
+
+  // Build the frame from the calculator's CURRENT geometry once, on first entry — the Sketch view is
+  // then its own independent editable document from here on (re-entering it later, e.g. after tweaking
+  // a slider and glancing back, does NOT silently discard dimension edits the user already made).
+  buildFrameSketch(sketchController, calcView.geom());
+  sketchController.engine.solve(500);
+  if (infoPanel) infoPanel.refresh();
 }
 
 function showView(view) {

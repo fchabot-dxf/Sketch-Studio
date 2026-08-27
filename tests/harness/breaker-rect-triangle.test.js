@@ -478,6 +478,199 @@ console.log("\n=== Midpoint centering: constrain a rectangle's center to a fixed
   check("MID2 still a rectangle after drag", s.isRectangle(r.corners));
 }
 
+// SCENARIO 10: POINT_ON_LINE -- a free point pinned onto an existing line (snap-constraints.js:103's
+// real param shape: {joint, shape}), never covered by any prior scenario.
+console.log("\n=== Point-on-line: a free point pinned onto a line + drag both sides ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const cmMod = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod.ConstraintManager;
+  const ctMod = await import('#core/constants.js');
+  const CT = ctMod.CONSTRAINT_TYPES;
+
+  const line = s.line(0, 0, 100, 0);
+  state.joints.get(line.a).fixed = true;
+  const ptId = s.point(40, 25, false); // off the line initially -- the constraint should pull it on
+  const pol = ConstraintManager.createConstraint(state, CT.POINT_ON_LINE, { joint: ptId, shape: line.id }, { source: "toolbar" });
+  check("POL0 point_on_line constraint was created", !!pol, "createConstraint returned " + JSON.stringify(pol));
+  s.solve();
+
+  const gapOf = () => {
+    const A = s.pos(line.a), B = s.pos(line.b), P = s.pos(ptId);
+    const ux = B.x - A.x, uy = B.y - A.y, wx = P.x - A.x, wy = P.y - A.y;
+    return Math.abs(ux * wy - uy * wx) / Math.hypot(ux, uy);
+  };
+  check("POL1 solve converged", s.converged === true, JSON.stringify(s.conflicts));
+  check("POL1 the point landed ON the line", gapOf() < 0.1, "gap=" + gapOf() + " point=" + JSON.stringify(s.pos(ptId)));
+
+  // Drag the point sideways -- it must slide ALONG the line, never leave it.
+  for (let i = 0; i < 15; i++) s.drag(ptId, 3, 5);
+  check("POL2 still on the line after dragging the point", gapOf() < 0.5, "gap=" + gapOf());
+
+  // Drag the line's free endpoint (rotating the line) -- the point must follow, staying on the (now
+  // rotated) line, not stay at its old world position.
+  for (let i = 0; i < 15; i++) s.drag(line.b, 0, 30);
+  check("POL3 still on the line after rotating the line itself", gapOf() < 0.5,
+    "gap=" + gapOf() + " line=" + JSON.stringify([s.pos(line.a), s.pos(line.b)]) + " point=" + JSON.stringify(s.pos(ptId)));
+}
+
+// SCENARIO 11: COLLINEAR -- two independently-drawn lines forced onto one infinite line
+// (constraint-tools.js:175's real param shape: {shapes:[l1.id, l2.id]}), re-verifying the worker's
+// measureResidual sign/abs fix (turn 87d3516) holds under an actual drag, not just at rest.
+console.log("\n=== Collinear: two independent lines forced onto one line + drag ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const cmMod2 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod2.ConstraintManager;
+  const ctMod2 = await import('#core/constants.js');
+  const CT = ctMod2.CONSTRAINT_TYPES;
+
+  const lineA = s.line(0, 0, 50, 0);
+  state.joints.get(lineA.a).fixed = true;
+  state.joints.get(lineA.b).fixed = true; // lineA fully fixed -- the reference line
+  const lineB = s.line(80, 20, 130, 35); // off-axis, independent joints
+
+  const coll = ConstraintManager.createConstraint(state, CT.COLLINEAR, { shapes: [lineA.id, lineB.id] }, { source: "toolbar" });
+  check("COLL0 collinear constraint was created", !!coll, "createConstraint returned " + JSON.stringify(coll));
+  s.solve();
+
+  const collGapOf = () => {
+    const A = s.pos(lineA.a), B = s.pos(lineA.b);
+    const ux = B.x - A.x, uy = B.y - A.y, lu = Math.hypot(ux, uy);
+    const gapOf = (P) => Math.abs(ux * (P.y - A.y) - uy * (P.x - A.x)) / lu;
+    return Math.max(gapOf(s.pos(lineB.a)), gapOf(s.pos(lineB.b)));
+  };
+  check("COLL1 solve converged", s.converged === true, JSON.stringify(s.conflicts));
+  check("COLL1 lineB's BOTH endpoints landed on lineA's infinite line", collGapOf() < 0.1, "gap=" + collGapOf());
+
+  // Drag lineB's free endpoint along/near the line -- collinearity must hold throughout.
+  for (let i = 0; i < 15; i++) s.drag(lineB.b, -3, 0);
+  check("COLL2 still collinear after dragging lineB's endpoint", collGapOf() < 0.5, "gap=" + collGapOf());
+  for (let i = 0; i < 10; i++) s.drag(lineB.a, 5, 0);
+  check("COLL3 still collinear after dragging lineB's OTHER endpoint too", collGapOf() < 0.5, "gap=" + collGapOf());
+}
+
+// SCENARIO 12: circle-circle TANGENT (the sibling case to Scenario 6's line-circle tangent) + a radius
+// edit on ONE of the two circles -- exercises engine.js's OTHER isRadius+tangent branch
+// ({joints:[C1,C2], radii:[r1,r2]}, engine.js:290-308), not the {line,circle} one Scenario 6 covers.
+console.log("\n=== Circle-circle tangent (external) + radius edit on one circle ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const addConstraintMod = await import('#core/constraints.js');
+  const addConstraint = addConstraintMod.addConstraint;
+  const cmMod3 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod3.ConstraintManager;
+  const ctMod3 = await import('#core/constants.js');
+  const CT = ctMod3.CONSTRAINT_TYPES;
+
+  const c1Id = s.point(0, 0, true);
+  const c2Id = s.point(50, 0, false);
+  state.shapes.push({ id: "sCC1", type: "circle", joints: [c1Id], radius: 20 });
+  state.shapes.push({ id: "sCC2", type: "circle", joints: [c2Id], radius: 30 });
+  addConstraint(state, CT.DISTANCE, { shape: "sCC1", value: 20, isRadius: true });
+  const r2Dim = addConstraint(state, CT.DISTANCE, { shape: "sCC2", value: 30, isRadius: true });
+  ConstraintManager.createConstraint(state, CT.TANGENT, { shapes: ["sCC1", "sCC2"] }, { source: "toolbar" });
+  s.solve();
+
+  const shape1 = () => state.shapes.find(x => x.id === "sCC1");
+  const shape2 = () => state.shapes.find(x => x.id === "sCC2");
+  const centerGap = () => s.edgeLen(c1Id, c2Id) - (shape1().radius + shape2().radius); // external tangency: dist == r1+r2
+
+  check("CC1 solve converged after circle-circle tangent", s.converged === true, JSON.stringify(s.conflicts));
+  check("CC1 tangent holds initially (dist == r1+r2)", Math.abs(centerGap()) < 0.5,
+    "dist=" + s.edgeLen(c1Id, c2Id) + " r1+r2=" + (shape1().radius + shape2().radius));
+
+  // Find the actual constraint object (addConstraint's plain path doesn't return it the same way
+  // ConstraintManager does -- re-find it from state.constraints, matching how a real edit-click would).
+  const realR2Dim = state.constraints.find(c => c.type === CT.DISTANCE && c.isRadius && c.shape === "sCC2");
+  s.editValue(realR2Dim, 45);
+  check("CC2 radius edit on circle 2 was not reverted", s.lastError == null, "lastError=" + s.lastError);
+  check("CC2 radius actually updated", Math.abs(shape2().radius - 45) < 0.5, "got " + shape2().radius);
+  check("CC2 tangency genuinely holds after the edit (centers moved apart to match)", Math.abs(centerGap()) < 0.5,
+    "dist=" + s.edgeLen(c1Id, c2Id) + " r1+r2=" + (shape1().radius + shape2().radius));
+
+  for (let i = 0; i < 10; i++) s.drag(c2Id, 5, 8);
+  check("CC3 tangency MAINTAINED after dragging circle 2's center", Math.abs(centerGap()) < 0.5,
+    "gap=" + centerGap());
+}
+
+// SCENARIO 13: "kitchen sink" -- a REAL mixed-shape-type sketch: a rectangle (rect-tool's H/V+distance),
+// a circle inscribed tangent to TWO of its sides (a classic corner-fillet construction), and a
+// diagonal line whose far endpoint is point_on_line'd onto a rectangle edge. Stacks
+// rect-built-in-H/V + DISTANCE + TANGENT(line,circle) x2 + isRadius + POINT_ON_LINE + COINCIDENT all
+// on one document, then drags a rectangle corner and checks EVERYTHING re-solves consistently.
+console.log("\n=== Kitchen sink: rectangle + inscribed tangent circle + point-on-line, all together ===");
+{
+  const s = createSketch();
+  const state = s.state;
+  const addConstraintMod2 = await import('#core/constraints.js');
+  const addConstraint2 = addConstraintMod2.addConstraint;
+  const cmMod4 = await import('#core/constraint-manager.js');
+  const ConstraintManager = cmMod4.ConstraintManager;
+  const ctMod4 = await import('#core/constants.js');
+  const CT = ctMod4.CONSTRAINT_TYPES;
+
+  const r = s.rect(0, 0, 120, 80);
+  const [c1, c2, c3, c4] = r.corners; // c1=(0,0) top-left-ish, c2 top-right, c3 bottom-right, c4 bottom-left (per rect() convention)
+  s.dimension(c1, c2, 120);
+  s.dimension(c2, c3, 80);
+
+  // makeRectFromTwoJoints (shapes.js:12-61) gives EVERY corner TWO welded (coincident) joint copies --
+  // the "A" variants r.corners exposes ([c1,c2,c3,c4] = j1A/j2A/j3A/j4A), and separate "B" variants used
+  // by the vertical (right/left) edges: shapes = [top:[j1A,j2A], right:[j2B,j3B], bottom:[j4A,j3A],
+  // left:[j1B,j4B]] -- so the left edge does NOT literally contain c1/c4, it contains their coincident
+  // B-twins. Index into r.shapes directly (the real object graph) instead of searching by joint id.
+  const topEdge = r.shapes[0], rightEdge = r.shapes[1], bottomEdge = r.shapes[2], leftEdge = r.shapes[3];
+  check("KS0 rect exposes exactly 4 line shapes", r.shapes.length === 4 && r.shapes.every(sh => sh.type === "line"),
+    JSON.stringify(r.shapes.map(sh => sh.type)));
+
+  // Inscribe a circle near the c1 (top-left) corner, tangent to the top edge and the left edge.
+  const centerId = s.point(20, 20, false);
+  const circId = "sInscribed";
+  state.shapes.push({ id: circId, type: "circle", joints: [centerId], radius: 15 });
+  addConstraint2(state, CT.DISTANCE, { shape: circId, value: 15, isRadius: true });
+  ConstraintManager.createConstraint(state, CT.TANGENT, { line: topEdge.id, circle: circId }, { source: "toolbar" });
+  ConstraintManager.createConstraint(state, CT.TANGENT, { line: leftEdge.id, circle: circId }, { source: "toolbar" });
+
+  // A diagonal line from the opposite corner (c3) toward the circle, whose far end is snapped
+  // point_on_line onto the BOTTOM edge (c4-c3) -- an unrelated 3rd shape tying into the rectangle.
+  const diag = s.line(120, 80, 60, 40);
+  // bottomEdge = r.shapes[2] = [j4A,j3A] = [c4,c3] -- already declared above, matches bottomGap()'s A=c4/B=c3.
+  ConstraintManager.createConstraint(state, CT.COINCIDENT, { joints: [diag.a, c3] }, { source: "toolbar" });
+  ConstraintManager.createConstraint(state, CT.POINT_ON_LINE, { joint: diag.b, shape: bottomEdge.id }, { source: "toolbar" });
+  s.solve();
+
+  const tangentGapTo = (edgeShape) => {
+    const A = s.pos(edgeShape.joints[0]), B = s.pos(edgeShape.joints[1]), C = s.pos(centerId);
+    const ux = B.x - A.x, uy = B.y - A.y, wx = C.x - A.x, wy = C.y - A.y;
+    return Math.abs(ux * wy - uy * wx) / Math.hypot(ux, uy) - state.shapes.find(x => x.id === circId).radius;
+  };
+  const bottomGap = () => {
+    const A = s.pos(c4), B = s.pos(c3), P = s.pos(diag.b);
+    const ux = B.x - A.x, uy = B.y - A.y;
+    return Math.abs(ux * (P.y - A.y) - uy * (P.x - A.x)) / Math.hypot(ux, uy);
+  };
+
+  check("KS1 solve converged with everything stacked together", s.converged === true, JSON.stringify(s.conflicts));
+  check("KS1 still a rectangle", s.isRectangle(r.corners));
+  check("KS1 circle tangent to top edge", Math.abs(tangentGapTo(topEdge)) < 0.5, "gap=" + tangentGapTo(topEdge));
+  check("KS1 circle tangent to left edge", Math.abs(tangentGapTo(leftEdge)) < 0.5, "gap=" + tangentGapTo(leftEdge));
+  check("KS1 diagonal's far end on the bottom edge", bottomGap() < 0.5, "gap=" + bottomGap());
+  check("KS1 diagonal's near end still at corner c3", s.edgeLen(diag.a, c3) < 0.1, "gap=" + s.edgeLen(diag.a, c3));
+
+  // Drag the FAR rectangle corner (c3) -- everything downstream (both tangencies, the point-on-line,
+  // the coincident diagonal) must re-solve consistently, not just the rectangle itself.
+  for (let i = 0; i < 20; i++) s.drag(c3, 15, -10);
+  check("KS2 still a rectangle after dragging c3", s.isRectangle(r.corners));
+  check("KS2 circle STILL tangent to top edge after the drag", Math.abs(tangentGapTo(topEdge)) < 0.5, "gap=" + tangentGapTo(topEdge));
+  check("KS2 circle STILL tangent to left edge after the drag", Math.abs(tangentGapTo(leftEdge)) < 0.5, "gap=" + tangentGapTo(leftEdge));
+  check("KS2 diagonal's far end STILL on the bottom edge after the drag", bottomGap() < 0.5, "gap=" + bottomGap());
+  check("KS2 diagonal's near end STILL at corner c3 after the drag", s.edgeLen(diag.a, c3) < 0.5, "gap=" + s.edgeLen(diag.a, c3));
+}
+
 console.log(`\n${failures.length === 0 ? 'ALL PASS' : failures.length + ' FAILURE(S)'}`);
 if (failures.length) {
   console.log(failures.map(f => '  - ' + f).join('\n'));

@@ -574,7 +574,13 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
         else if (shape.type === 'circle' || shape.type === 'arc') {
             const centerId = shape.joints[0];
             const center = state.joints.get(centerId);
-            let radius = (typeof shape.radius === 'number') ? shape.radius : 0;
+            // A circle carries `.radius` (circle-tool.js sets it); an ARC never does (makeArc doesn't
+            // set it) -- falling back to a hardcoded 0 here created a radius dimension worth 0 on
+            // every arc (live-confirmed). Mirror engine.js's own fallback: compute the real center→rim
+            // distance from the arc's own joints (joints[1] is a real rim point, per makeArc(center,
+            // start, end)) instead of the shape's absent scalar field.
+            let radius = (typeof shape.radius === 'number') ? shape.radius
+                : (center && shape.joints && shape.joints.length >= 2 ? getDist(center, state.joints.get(shape.joints[1])) : 0);
             
             const alreadyHasDriving = hasDrivingDistanceForShape(state, shape.id);
 
@@ -588,20 +594,31 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
             const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
             if (!c) { endDimUndo(state); return false; }
 
-            const w = placePos || { x: center.x + radius, y: center.y };
-            logDim('create-radius-dim', { id: c.id || '(new)', keepPlacing, placePos: w, keyboardPlaced: !!opts.keyboardPlaced, radius });
+            // NOTE: this is handleDimensionPointerDown (the click-driven Case B path), not
+            // startDimensionFromSelection -- `placePos`/`keepPlacing`/`opts` belong to that sibling
+            // function and don't exist here (were throwing ReferenceError on every radius-dim click,
+            // live-confirmed). `w` is this function's own screenToWorld(e.clientX, e.clientY) from
+            // above; mirror the `line` branch just above (same function) for placing/drag wiring.
             try { c.__placing = true; } catch(_){ }
             try { c.glyphPos = w; } catch(_){ }
             try{ c.offset = getDist(center, w) - radius; }catch(_){ c.offset = SolverConfig.DIMENSION_OFFSET || 30; }
+            state.placingConstraint = c;
+            dimensionState.placingConstraint = c;
 
-            if (keepPlacing) {
-                try { state.placingConstraint = c; } catch(_) {}
-                dimensionState.placingConstraint = c;
-                try { if (opts.keyboardPlaced) c.__keyboardPlaced = true; } catch(_) {}
+            try { dimensionState.pendingPointer = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, constraint: c }; } catch(_){ }
+            try { svg.setPointerCapture(e.pointerId); } catch(_){ }
+
+            if (e.pointerType !== 'touch') {
+                state.drag = {
+                    type: DRAG_TYPES.DIMENSION,
+                    constraint: c,
+                    initialOffset: c.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                    startWorld: w,
+                    pointerId: e.pointerId,
+                    startTime: Date.now()
+                };
             } else {
-                try { c.__placing = false; } catch(_){ }
-                dimensionState.editingConstraint = c;
-                showEditInput(svg, state, c);
+                state.drag = null;
             }
             endDimUndo(state);
             return true;

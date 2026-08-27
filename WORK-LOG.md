@@ -9119,3 +9119,152 @@ and **zero** `#core`/`#ui` files, so Studio/Shaper are unregressed by constructi
   transforms (scissors/rotate/scale/node as #core joint transforms, turnkey plan in WORK-LOG t344). STOP -- hold.
 
 === BATCH-3 DONE — HOLD ===
+
+---
+
+## TURN 370 — CORE-BUG-HUNT redirect (rect/triangle live-click) + mid-task AMENDMENT (circle radius edit) — 5 confirmed UI/solver-manager bugs, all root-caused and live-fixed
+
+**Dispatch 1 (original, turn note):** live-drive `apps/sketchstudio` by real browser clicks (rect: draw+dimension+drag;
+triangle: draw+SSS+drag), name the exact repro, root-cause, fix, keep 16/16 green. Built a reusable scratchpad CDP
+driver (`cdp.cjs`, modeled verbatim on `scripts/shell-smoke.cjs`'s proven static-server + raw-CDP-over-WebSocket
+pattern — no puppeteer) plus per-scenario drivers, and used a **TEMPORARY** `window.__dbgState`/`__dbgEngine` hook in
+`main.js` during investigation only (reads `state.joints`/`shapes`/`constraints` live) — reverted before every
+commit, never part of the diff.
+
+**RECTANGLE — verified SOLID, no bug found.** Draw (drag corner-to-corner) → +Distance on two adjacent edges (10, 6)
+→ both commit correctly, all 4 edges update to 10/6/10/6 → drag any corner → rigid-body TRANSLATION (shape holds,
+0 coincident-gap, as expected — nothing anchors the rect to the origin so 2 rigid-body DOF remain) → a 3rd redundant
+distance on the parallel edge auto-comes-in as a REFERENCE (isDriven, no distortion) — the "rectangle-or-refuse"
+invariant holds exactly as `solver-scenarios.test.js` already proves. This path (`rect-tool.js`) never touches
+`line-tool.js`, so it was unaffected by both the bug and the fix below.
+
+**TRIANGLE (line tool) — 2 confirmed bugs, both live-repro'd, both fixed:**
+1. **`_tempStart` never cleared** (`packages/ui/input-handlers/line-tool.js` `handleLinePointerUp`, the
+   "place-the-start-point" branch). First click correctly places the start joint, but the branch never reset
+   `state.active._tempStart = false` afterward — arc-tool.js's IDENTICAL branch already does this
+   (`arc-tool.js:175`), line-tool.js's sibling never did. Every SUBSEQUENT pointerUp re-entered the SAME
+   "place a temp start" branch (its guard only checks `_tempStart`, never `movedSinceStart`) and created ANOTHER
+   phantom start joint AT THE ORIGINAL START POSITION, discarding the real click coordinates — live-repro: 4 clicks
+   (A→B→C→A-close) produced 4 joints, **all 4 at A's exact coordinates**, 0 shapes, 0 constraints. A user cannot
+   draw ANY multi-segment shape with the Line tool this way — not just a triangle, any polyline. FIX: set
+   `state.active._tempStart = false` once consumed (mirrors arc-tool.js verbatim).
+2. **`LINE_POINTERUP_DEBOUNCE_MS = 500` blocked ANY click within 500ms of the last commit, at ANY position** — not
+   just a duplicate release of the same click. Live-repro: with fix #1 alone, clicks 80ms apart drew segment
+   A→B, then click C was silently swallowed entirely (0 new joints, 0 new shapes) because it landed <500ms after
+   segment 1's commit — a completely ordinary fast multi-click gesture. FIX: scoped the debounce to fire only when
+   the new pointerUp lands back within 0.05 world units of the CURRENT segment's own start point (a genuine
+   duplicate release of the same click) — a click at a different location goes through regardless of timing. No
+   test locks the original 500ms value (grepped `tests/` — zero hits) so nothing to preserve beyond its stated
+   intent.
+   **VERIFIED LIVE (post-fix):** 4 clicks 80ms apart → 3 lines + 3 coincident constraints, closed triangle, 0
+   console errors. SSS-dimensioned all 3 edges to 5/5/6 (click edge → click empty → edit box → type → Enter, same
+   flow verified working on the rectangle) → solver converges, edges become 5.000/5.000/6.000. Dragged a vertex →
+   stays 5/5/6, all 3 corner gaps 0.00000. `node --check` clean.
+
+**Dispatch 2 (mid-task AMENDMENT, turn 370 mailbox, "PRIORITY FLIP"):** the advisor's isolated breaker probe
+(headless, `#core` only) found rect/triangle solid at the solver layer (26/26) and separately confirmed a real
+`#core` bug: circle radius dimensions can be added but never edited (always reverts, "conflicts with distance").
+Root cause per the advisor's trace: `engine.js`'s `isRadius` joint-synthesis requires `shape.joints.length >= 2` to
+build a center→rim Jacobian row, but a real circle (`circle-tool.js`) is created with ONLY the center joint —
+`shape.radius` is a plain scalar the solver never touches (every other consumer — tangent, point-on-circle —
+already reads it directly). Dispatched fix: `dimension-seams.js` `commitDimensionEdit` should write `shape.radius`
+directly on edit, scoped to shapes with no rim joint so ARCS (which DO have a real rim joint, `makeArc` gives 3
+joints) keep going through the solver unchanged — writing a frozen `.radius` onto an arc would make every OTHER
+`shape.radius` reader (tangent, point-on-circle — all of which fall back to a live joint-distance computation when
+`.radius` is absent, which is true for every arc today, grepped every `.radius =` site) start preferring a stale
+scalar over live geometry the instant anyone edited an arc's radius. Implemented exactly that (snapshot/restore
+`oldRadius` on the revert path too, per the amendment's explicit ask to check that).
+
+**Live-verifying the amendment's own fix surfaced 3 MORE bugs blocking the SAME feature from ever being reached
+through ordinary clicks — the amendment's fix was correct but unreachable via the real UI gesture:**
+
+3. **`handleDimensionPointerDown`'s circle/arc branch threw `ReferenceError: placePos is not defined`**
+   (`dimension-tool.js:591`, pre-fix) on EVERY click-to-dimension a circle or arc's radius. `placePos`/`keepPlacing`/
+   `opts` belong to the sibling function `startDimensionFromSelection` (a DIFFERENT call site, selection-driven, not
+   click-driven) — this branch was evidently copy-pasted from there without adapting to its own scope, where none of
+   those three names exist. `w` (this function's own `screenToWorld(e.clientX, e.clientY)`, already computed near
+   the top of `handleDimensionPointerDown`) was sitting right there unused. Live symptom: clicking a circle's rim
+   with the Dim tool threw, and `input-manager.js`'s catch-all surfaced it to the user as a scary red
+   "Input Error: placePos is not defined" toast — not silent, but also not remotely descriptive of what the user
+   did wrong (nothing). FIX: rewrote the branch to use `w` and mirror the sibling `line` branch's placing/drag
+   wiring (same file, same function, ~40 lines above) instead of the unrelated function's pattern.
+4. **`ConstraintManager.createConstraint`'s rank-redundancy check auto-forces EVERY fresh circle radius dimension to
+   `isDriven: true`, even against ZERO other constraints.** Traced to `engine.js` `rankRowRedundant`: a circle's
+   isRadius row has NO valid joints (root cause #3 above, same missing-rim-joint fact), so its assembled Jacobian
+   row is structurally ALL-ZERO — `_rowsRaiseRank` correctly reports "this row does not raise rank" for an
+   all-zero row (mathematically true), and the caller reads "doesn't raise rank" as "redundant / already
+   determined," even with an EMPTY basis (nothing to be redundant against). Confirmed by direct probe
+   (`ConstraintManager.createConstraint(state, 'distance', {shape, value:5, isRadius:true})` on a brand-new circle,
+   0 prior constraints) → `isDriven: true`, notify "Dimension added as reference — already determined by the
+   existing dimensions" — objectively false, nothing determines it. Consequence: `numeric-input-manager.js`'s
+   `showEditInput` early-returns for any `isDriven` constraint (by design, driven dims are read-only labels), so
+   the edit box NEVER opens for a freshly-dimensioned circle through ordinary use — my fix to `commitDimensionEdit`
+   was correct but structurally unreachable. FIX: `rankRowRedundant` now short-circuits to `false` for an isRadius
+   candidate whose shape has `< 2` joints (same gating rule engine.js's own synthesis already uses) — arcs
+   (real rim joint, meaningful Jacobian row) are untouched; whether a shape already has a driving radius is still
+   correctly handled by the EARLIER, EXPLICIT same-shape check (`_edgeHasDrivingDistance`) a few lines up in the
+   same function, unaffected by this change.
+5. **(found while checking arcs per the amendment's ask, NOT the circle gap) every ARC radius dimension is created
+   with `value: 0`.** `dimension-tool.js`'s shared circle/arc branch computed the dimension's initial value as
+   `(typeof shape.radius === 'number') ? shape.radius : 0` — a circle carries `.radius` (set at creation by
+   `circle-tool.js`); an arc NEVER does (`makeArc` doesn't set it — confirmed, only writer of `.radius` anywhere in
+   the repo is circle creation), so every arc silently fell to the `: 0` default regardless of its actual size.
+   FIX: fall back to the real center→rim distance computed from the arc's own joints (`joints[1]` is a genuine rim
+   point per `makeArc(center, start, end)`) — mirrors the SAME fallback pattern `engine.js` already uses in 3 other
+   places for this exact shape.radius-or-compute-it choice.
+
+**VERIFIED LIVE, end to end, both shapes, post-all-5-fixes:**
+- Circle: draw (click center, click rim) → Dim-tool click the rim → edit box opens, prefilled with the REAL
+  radius (was: crash, or silently forced-driven with no box at all) → type a new value + Enter → circle VISIBLY
+  resizes (r: 3.0 → 5.3), 0 console errors, no revert notice.
+- Arc: draw (center/start/end) → Dim-tool click the curve (used `path.getPointAtLength` to land exactly on the
+  curve, not the bbox center, which is generally off-path for a curved arc) → edit box opens prefilled with the
+  REAL radius 3.0 (was: 0.0, root cause #5) → edit to 4.8 → the constrained rim joint (`joints[1]`) moves to the
+  new radius via the solver correctly, 0 console errors, no revert.
+
+**NEW OPEN ITEM found, deliberately NOT fixed this turn — flagged, not silently swept:** an arc's isRadius
+constraint ties ONLY `joints[1]` (one rim point) to the center distance (`engine.js`'s synthesis: `params.joints =
+[center, joints[1]]`, `joints[2]` — the arc's OTHER endpoint — is never included). Editing the radius correctly
+moves `joints[1]` but leaves `joints[2]` at its OLD center-distance, so post-edit the two rim points are no longer
+equidistant from center — the arc becomes geometrically non-circular (verified: after editing 3.0→4.8, the SVG path
+`d` showed the `A 4.8 4.8` sweep parameter but the unmoved endpoint sat only 3.0 from center — an inconsistent arc).
+This is a DIFFERENT, deeper question than what was dispatched (does arc-radius dimensioning need a SECOND row for
+`joints[2]`, or is single-rim-point radius dimensioning an intentional simplification for arcs?) — the amendment
+explicitly said "do NOT build a rim-joint system," and this isn't that, but it IS a real gap in what a "radius
+dimension" on an arc actually guarantees. Left for the advisor to rule on; not touched.
+
+**Also checked per the amendment's ask:** `toggleDriving`'s promote-to-driving read (`dimension-seams.js:90-92`,
+`c.value = s.radius`) is unaffected and correct for circles (reads the real, already-authoritative `.radius`) — no
+matching bug there, nothing to fix.
+
+**REGRESSION — all gates re-run after EVERY fix, not just at the end:** 16/16 solver/harness
+(`solver-scenarios` 23/23, `constraint-conformance` 15/15, `solver-fuzz` 150/150, `differential-planegcs` 9/9,
+`packages/core/tests/solver-*` 10/10) green throughout. Every touched-area unit spec green: `circle-tool`,
+`arc-tool`, `arc-integration`, `arc-drag`, `radial-locked`, `constraint-edit-driven`, `constraint-manager` (+
+`-sandbox-notification`), `constraint-tools`, all 7 `line-*`/`grid-snap-apply` specs. `node --check` clean on
+all 4 touched files (`engine.js`, `dimension-seams.js`, `dimension-tool.js`, `line-tool.js`). `shell-smoke` 11/12 —
+the one FAIL (ribbon-group DOM order) is PRE-EXISTING and untouched by me — reproduced byte-identical on a
+`git stash` of every change in this turn (TRACE-1's `Edit` group insertion into `tool-ribbon.js`, unrelated).
+
+**UNCOMMITTED, NOT MINE, left untouched:** `apps/trace/*` + `packages/ui/sketch-canvas.js` (a parallel session's
+in-flight work — the `sketch-canvas.js` diff is a 3-line additive `opts.seedDemo` gate, not used by
+`apps/sketchstudio`, confirmed via `grep -rl "sketch-canvas"`: only penplotter/shaper/trace import it) and
+`NEXT-SESSION.md` (the advisor's own amendment text, ROADMAP/NEXT-SESSION are advisor-owned — never edited).
+
+**PROCESS / trap worth recording:** ordinary line/rect JOINTS have NO DOM `.joint-handle` element — that class is
+rendered ONLY for arc/circle rim endpoints and the single-origin case (`svg-renderer.js`). Hit-testing an ordinary
+joint from a live-click driver must convert its WORLD position to screen via the SAME linear viewBox transform
+`#ui/coords.js` uses (`rect.left + (wx - vb.x) * rect.width/vb.width`), not query a DOM node — there isn't one.
+Similarly, clicking a curved arc's shape must NOT use its bounding-box center (generally off the actual curve) —
+used `path.getPointAtLength(len * frac)` via `getScreenCTM()` to land exactly on the rendered path.
+`proc_health mark --turn 370` at start; browsers self-terminate per script run (no lingering procs); `watch` before
+the pass.
+
+**CAPACITY:** this turn absorbed TWO dispatches (the original redirect + a mid-task priority-flip amendment) and
+went deep — 5 confirmed, root-caused, live-fixed bugs plus 1 named-and-flagged open item. Comfortable, no fresh
+session needed, but this was a heavier-than-usual turn; say so plainly rather than let it pass unremarked.
+
+Append per the AMENDMENT's own required marker (supersedes the original redirect's `CORE-BUG-HUNT` marker, since the
+amendment explicitly flipped priority mid-task and its dispatch note names this exact string):
+
+=== CIRCLE-RADIUS-EDIT-FIX DONE — HOLD ===

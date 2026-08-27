@@ -448,6 +448,19 @@ export class NewtonSolver {
   // (which is true whenever ANY DOF is free, e.g. an undimensioned height).
   rankRowRedundant(candidate) {
     if (!candidate) return false;
+    // A radius distance on a shape with no rim joint (a real CIRCLE -- circle-tool.js gives it only
+    // the center joint; makeArc DOES give an arc 2 rim joints, so arcs are unaffected) has a
+    // structurally ALL-ZERO Jacobian row: it can never "raise rank" by construction, which this
+    // generic rank check misreads as "already determined" even with ZERO other constraints present
+    // (live-confirmed: a brand-new circle's first-ever radius dimension came back isDriven=true).
+    // That row doesn't participate in the Jacobian at all -- dimension-seams.js's commitDimensionEdit
+    // writes shape.radius directly instead -- so rank redundancy is meaningless for it; whether the
+    // shape already has a driving radius is already handled correctly, earlier, by the explicit
+    // same-shape check in ConstraintManager.createConstraint (_edgeHasDrivingDistance).
+    if (candidate.isRadius && candidate.shape) {
+      const s = this.shapes.find(x => x.id === candidate.shape);
+      if (s && (!s.joints || s.joints.length < 2)) return false;
+    }
     const allC = this.constraints;
     const x0 = this._pack();
     const n = x0.length;

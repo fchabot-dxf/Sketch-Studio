@@ -15,18 +15,39 @@ const ITER = () => SolverConfig.ITERATIONS || 500;
 // non-convergence REFUSE + REVERT to the last valid shape (restore value + positions, re-solve).
 // Returns { reverted, clash } so the caller can surface a message. No DOM, no notifications here.
 export function commitDimensionEdit(state, c, val) {
+  // A CIRCLE's radius dimension has no rim joint for the solver to move (engine.js's isRadius row
+  // requires shape.joints.length >= 2, but circle-tool.js creates a circle with only the center
+  // joint) -- every other consumer (tangent, point-on-circle) already reads shape.radius directly
+  // as the source of truth, so an edit here must move THAT, not rely on the (inert) joint row to do
+  // it. An ARC's isRadius row DOES have a real rim joint (makeArc creates 3: center + 2 rim points)
+  // so the solver already moves it correctly via the Jacobian -- arcs never get a `.radius` field
+  // written anywhere (grepped every `.radius =` site), and every reader falls back to a live
+  // joint-distance computation when it's absent. Writing `.radius` here for an arc would freeze a
+  // stale scalar that those readers would then prefer over live geometry, so this is scoped to
+  // shapes with NO rim joint (the same `< 2` the engine itself already keys off of) -- circles today.
+  const shapeForRadius = (c.isRadius && c.shape && state && state.shapes)
+    ? state.shapes.find(s => s.id === c.shape && (!s.joints || s.joints.length < 2))
+    : null;
+  const oldRadius = shapeForRadius ? shapeForRadius.radius : undefined;
+
   const engine = state && state.engine;
-  if (!engine || typeof engine.solve !== 'function') { c.value = val; return { reverted: false, clash: '' }; }
+  if (!engine || typeof engine.solve !== 'function') {
+    c.value = val;
+    if (shapeForRadius) shapeForRadius.radius = val;
+    return { reverted: false, clash: '' };
+  }
   const oldValue = c.value;
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
   const snap = new Map();
   if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
 
   c.value = val;
+  if (shapeForRadius) shapeForRadius.radius = val;
   const result = engine.solve(ITER());
   if (result && result.converged === false) {
     const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
     c.value = oldValue;
+    if (shapeForRadius) shapeForRadius.radius = oldRadius;
     if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
     engine.solve(ITER());
     return { reverted: true, clash };

@@ -9462,3 +9462,59 @@ warrants a fresh session before taking on anything else non-trivial, purely on a
 investigation consumed; flagging that rather than guessing at the next task's scope blind.
 
 === TANGENT-RADIUS-CONVERGENCE-FIX DONE — HOLD ===
+
+---
+
+## TURN 376 (new cycle) — MOBILE-RIBBON-SCROLL-FIX: the shared tool ribbon is now horizontally scrollable
+
+**Dispatch:** user-reported — the tool ribbon can't be scrolled on mobile, hiding tools off-screen. Advisor
+root-caused already: `apps/sketchstudio/index.html` carried dead CSS (`.toolbar-row` + two `@media` blocks) for a
+retired two-row mobile ribbon design (`createToolRibbon` replaced it and the CSS was never cleaned up), while the
+REAL ribbon (`.sk-ribbon` in `packages/ui/tool-ribbon.js`, shared by SketchStudio/Shaper/pen-plotter) has no
+`overflow-x`/mobile handling at all — a single flex row that just overflows the viewport with nothing to scroll it
+into view.
+
+**Re-verified before touching anything (per the dispatch's own instruction not to assume the grep):** `grep -rn
+"toolbar-row\|tb-constrain\|tb-inspect\|tb-actions" apps/ packages/ --include=*.js` — zero hits, confirmed dead.
+
+**Fix — both parts:**
+1. `packages/ui/tool-ribbon.js`'s injected `.sk-ribbon` stylesheet: added `overflow-x:auto;
+   -webkit-overflow-scrolling:touch; touch-action:pan-x; scrollbar-width:thin`, plus a `@media (hover:none)` rule
+   hiding the scrollbar on touch devices (kept native swipe) while a mouse/trackpad user still sees a thin
+   scrollbar — matches the old dead CSS's intent, on the ACTUAL container this time. Also added `flex-shrink:0`
+   to `.sk-ribbon-group` — without it, flex's default shrink-to-fit would squeeze the groups instead of letting
+   the row genuinely overflow (the thing that needs to be scrollable in the first place).
+2. `apps/sketchstudio/index.html`: deleted the entire dead block (`.toolbar-row` + its `@media (hover:none)` +
+   `@media (max-width:767px)` + `@media (min-width:768px)` rules, including the `.tb-constrain`/`.tb-inspect`/
+   `.tb-actions` order rules — all confirmed unreferenced). Kept the one still-live line, `#toolsRibbon { cursor:
+   default; }`, which styles the real mount container.
+
+**VERIFIED LIVE** (CDP, `Emulation.setDeviceMetricsOverride` for a real mobile viewport, reusing the turn-370
+driver infrastructure):
+- SketchStudio @ 375px: `.sk-ribbon` `scrollWidth=1044` vs `clientWidth=367` (genuinely overflows), scrolling to
+  the end reveals the LAST button (`Undo`, a host-appended action past the whole Constrain group) fully within the
+  container — and explicitly, the Constrain group's own last button (`Mid`) is independently reachable by scroll.
+  0 console errors.
+- SketchStudio @ 1280px desktop: `scrollWidth === clientWidth` (`1272`) — fits in one row exactly as before,
+  confirming the fix is a no-op at desktop width (nothing regressed there).
+- Shaper (shared `#ui` component, spot-check per the dispatch): default view has no ribbon at all (Shaper opens on
+  "Explore," not "Design") — clicked its own "Design" nav item, `.sk-ribbon` then appears and correctly overflows
+  + scrolls at 375px (`lastButtonLabel: 'Mid'`), same as SketchStudio.
+- Pen-plotter Design tab (shared `#ui` component, spot-check): `.sk-ribbon` present by default, correctly
+  overflows + scrolls at 375px. Neither host reported this bug, but both benefit from the same one-file fix and
+  neither regressed.
+
+**REGRESSION:** `shell-smoke` 11/12 — same PRE-EXISTING, unrelated ribbon-GROUP-ORDER fail from the last several
+turns (a DOM order mismatch in a stale test expectation, nothing to do with scroll behavior), reproduced
+identically before this turn's changes. `node --check` clean on `tool-ribbon.js`. This is a CSS-only change (no
+`#core`/solver touch) — skipped the 16/16 solver gate as out of scope per gate tiering; ran the fast tier
+(shell-smoke) instead.
+
+**PROCESS:** no dedicated `tool-ribbon` test file exists in `tests/` (checked). Reused the CDP live-driver
+infrastructure from prior turns; no temp debug hooks needed this time (pure DOM/CSS geometry checks, no internal
+solver state to inspect). `proc_health mark --turn 376` at start.
+
+**Per the user's explicit instruction this was the ONLY task for the cycle** — passing back now so the advisor can
+merge `carve-out` into `main` and deploy (this fix + the 7 already-reviewed fixes from last cycle).
+
+=== MOBILE-RIBBON-SCROLL-FIX DONE — HOLD ===

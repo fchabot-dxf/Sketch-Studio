@@ -81,29 +81,8 @@
             }
         }
         
-        /* Toolbar: TWO stacked rows on mobile/tablet (row1 draw, row2 constraints); ONE row on desktop. */
         #toolsRibbon { cursor: default; }
-        .toolbar-row { touch-action: pan-x; -webkit-overflow-scrolling: touch; min-width: 0; scroll-behavior: smooth; }
-        @media (hover: none) {
-            /* Touch devices: hide scrollbars but allow native horizontal panning per row */
-            .toolbar-row.no-scrollbar { scrollbar-width: none; }
-        }
-        /* Mobile / tablet (<768px): two full-width stacked rows */
-        @media (max-width: 767px) {
-            #toolsRibbon { gap: 2px; }
-            .toolbar-row { width: 100%; }
-        }
-        /* Desktop (>=768px): collapse the row wrappers so every section sits in ONE row again
-           (original look). display:contents drops the wrapper box but keeps the section boxes
-           (borders/padding); `order` restores the original left-to-right order. */
-        @media (min-width: 768px) {
-            #toolsRibbon { flex-direction: row; align-items: stretch; }
-            #toolsRibbon > .toolbar-row { display: contents; }
-            .tb-constrain { order: 3; }
-            .tb-inspect   { order: 4; }
-            .tb-actions   { order: 99; }
-        }
-        
+
         /* Tool dropdown */
         .tool-dropdown {
           position: relative;

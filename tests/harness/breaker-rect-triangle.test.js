@@ -159,6 +159,88 @@ console.log('\n=== Triangle: real line-tool topology + SSS dimension + EQUAL + i
     `gaps=${[coincidentGap(l1.b, l2.a), coincidentGap(l2.b, l3.a), coincidentGap(l3.b, l1.a)]}`);
 }
 
+// ── SCENARIO 3: circle radius dimension — built EXACTLY like circle-tool.js builds one ──
+// circle-tool.js:104 → state.shapes.push({ id, type:'circle', joints:[centerJointId], radius: r });
+// circle-tool.js:108 → addConstraint(state, DISTANCE, { shape: shapeId, value: r, isRadius: true })
+// NOTE: circle-tool.js uses packages/core/constraints.js's addConstraint (the plain path), NOT
+// ConstraintManager.createConstraint (the redundancy/refuse-aware path rect-tool.js uses).
+console.log('\n=== Circle: radius dimension add + edit (real circle-tool.js topology) ===');
+{
+  const s = createSketch();
+  const { state, engine } = s;
+  const { addConstraint } = await import('#core/constraints.js');
+  const { CONSTRAINT_TYPES: CT } = await import('#core/constants.js');
+
+  const centerId = s.point(50, 50, true); // pinned center, like a real anchored circle
+  const shapeId = 'sCircle1';
+  state.shapes.push({ id: shapeId, type: 'circle', joints: [centerId], radius: 20 });
+  addConstraint(state, CT.DISTANCE, { shape: shapeId, value: 20, isRadius: true });
+  s.solve();
+
+  const shape = () => state.shapes.find(sh => sh.id === shapeId);
+  const radiusConstraint = () => state.constraints.find(c => c.type === CT.DISTANCE && c.isRadius && c.shape === shapeId);
+
+  check('C1 solve converges right after creating a locked-radius circle (before any edit)',
+    s.converged === true, `converged=${s.converged} conflicts=${JSON.stringify(s.conflicts)}`);
+  check('C1 radius constraint was created', !!radiusConstraint());
+  check('C1 shape.radius starts at 20', shape().radius === 20, `got ${shape() && shape().radius}`);
+  check('C1 shape has only ONE joint (real circle-tool topology, no rim joint)', shape().joints.length === 1,
+    `joints=${JSON.stringify(shape().joints)}`);
+
+  // Now edit the radius dimension to 35 via the REAL edit seam (numeric-input-manager's exact call).
+  const { commitDimensionEdit } = await import('#ui/dimension-seams.js');
+  const c = radiusConstraint();
+  const { reverted, clash } = commitDimensionEdit(state, c, 35);
+  s.solve();
+
+  check('C1 edit was NOT reverted (solver thinks it converged)', reverted === false, `reverted=${reverted} clash=${clash}`);
+  check('C1 dimension VALUE updated to 35 (what the label reads for a driving dim)', c.value === 35, `c.value=${c.value}`);
+  check('C1 shape.radius (what actually gets DRAWN, per svg-renderer.js:873/1996) ALSO updated to 35',
+    Math.abs(shape().radius - 35) < 0.05,
+    `shape.radius=${shape().radius} — if this is still 20, the label says 35 but the drawn circle is still radius 20: ` +
+    `a dimension that visibly does not apply to the geometry.`);
+}
+
+// ── SCENARIO 4: does a locked-radius circle's dead constraint corrupt the WHOLE document's solve? ──
+// Hypothesis from Scenario 3: engine.js's isRadius synthesis (lines ~328-333) requires
+// shape.joints.length >= 2, which a real circle-tool.js circle NEVER has (always exactly 1 joint,
+// the center). So params.joints stays [] for that row, Definitions.distance.computeError reads
+// params.joints[0]/[1] as undefined -> NaN residual. Since ALL constraint rows share ONE global
+// cost (sum of squares) per engine.solve() call, a NaN in this one row could poison convergence for
+// the ENTIRE sketch, not just the circle. Test: does an UNRELATED, otherwise-perfectly-solvable
+// rectangle in the SAME document fail to converge purely because a locked-radius circle also exists?
+console.log('\n=== Circle radius NaN-row blast-radius: does it break an UNRELATED rectangle in the same doc? ===');
+{
+  const s = createSketch();
+  const { state } = s;
+  const { addConstraint } = await import('#core/constraints.js');
+  const { CONSTRAINT_TYPES: CT } = await import('#core/constants.js');
+
+  // A perfectly normal, fully-dimensioned rectangle — on its own this always converges (Scenario 1).
+  const r = s.rect(200, 200, 100, 60);
+  const [c1, c2, c3] = r.corners;
+  s.dimension(c1, c2, 100);
+  s.dimension(c2, c3, 60);
+  check('D1 baseline: rectangle alone converges', s.converged === true, JSON.stringify(s.conflicts));
+
+  // Now add a SEPARATE, unrelated circle with a locked radius, exactly like circle-tool.js does at
+  // creation time (addConstraint from constraints.js — the same path, no ConstraintManager).
+  const centerId = s.point(50, 50, true);
+  const shapeId = 'sCircle2';
+  state.shapes.push({ id: shapeId, type: 'circle', joints: [centerId], radius: 20 });
+  addConstraint(state, CT.DISTANCE, { shape: shapeId, value: 20, isRadius: true });
+  s.solve();
+
+  check('D1 solve still converges with an UNRELATED locked-radius circle also in the document',
+    s.converged === true,
+    `converged=${s.converged} conflicts=${JSON.stringify(s.conflicts)} — if false, one dead circle-radius ` +
+    `constraint is corrupting the convergence state of the ENTIRE document, including shapes that have ` +
+    `nothing to do with it.`);
+  check('D1 the UNRELATED rectangle is STILL correctly dimensioned despite the circle',
+    Math.abs(s.edgeLen(c1, c2) - 100) < 0.5 && Math.abs(s.edgeLen(c2, c3) - 60) < 0.5,
+    `w=${s.edgeLen(c1, c2)} h=${s.edgeLen(c2, c3)} (expected ~100 / ~60)`);
+}
+
 console.log(`\n${failures.length === 0 ? 'ALL PASS' : failures.length + ' FAILURE(S)'}`);
 if (failures.length) {
   console.log(failures.map(f => '  - ' + f).join('\n'));

@@ -9700,3 +9700,56 @@ carries the SAME pre-fix `body`-only-overflow pattern, but is completely unrefer
 cleanup decision rather than editing a file with zero live effect.
 
 === MOBILE-RIBBON-SHIFT-FIX DONE — HOLD ===
+
+---
+
+## TURN 384 — MOBILE-VIEWPORT-DVH-FIX: correcting last turn's diagnosis, the real fix is `100dvh`
+
+**Correction, from the user directly:** the actual symptom is *"the app sits under the address bar after load,
+it covers the app"* — the TOP of the app renders where the still-visible address bar physically overlaps it,
+from the very first paint. This reframes last turn's model: the primary bug is that `body`'s `h-screen`
+(Tailwind's `100vh`) is SIZED against the address-bar-collapsed (taller) viewport while the bar is still
+showing — not (primarily) a post-load scroll drift. Last turn's scroll-reset fix is left in place as reasonable
+defensive cleanup but doesn't fix THIS symptom by itself, verified explicitly below rather than assumed covered.
+
+**Confirmed before touching anything:** `grep -n "h-screen\|100vh\|h-dvh\|100dvh"` — `body`'s `h-screen` (line
+286-ish) is the ONLY spot in the file using viewport-height sizing; nowhere else needed the same fix.
+
+**Two things verified live before picking a fix path (per the dispatch's own "verify feasibility first"):**
+1. **Does the loaded Tailwind CDN build support `h-dvh`?** No — a `.h-dvh` test element measured `0px` (if the
+   utility existed, a `dvh`-based height would resolve against the viewport regardless of the element's
+   containing block, so `0px` means Tailwind generated no CSS for that class at all). Ruled out the `h-dvh`
+   utility swap; a plain CSS override is required.
+2. **Does a plain (non-`!important`) `body { height: 100dvh }` override win the cascade against Tailwind's
+   `.h-screen{height:100vh}`?** Tested empirically with a distinctive value (`401px` plain vs `402px !important`,
+   avoiding the trap of testing with `100dvh` itself — headless Chrome has no real address bar, so `dvh` and
+   `vh` resolve to the IDENTICAL number there, which would have made a plain-vs-important test look like it
+   "worked" either way for the wrong reason): the plain override LOST (stayed at the `100vh` value); the
+   `!important` version WON. Confirms class-selector specificity (`.h-screen`) beats a bare element selector
+   (`body`) regardless of source order — `!important` is required, matching the file's own existing precedent
+   (`#toolsRibbon { z-index: 100 !important; }`).
+
+**Fix:** `@supports (height: 100dvh) { html { height: 100dvh !important; } body { height: 100dvh !important; } }`
+— feature-detected (browsers that don't understand `dvh` skip the whole block, falling back to `html`'s `100%` /
+`body`'s Tailwind `100vh`, both still present and unregressed), `!important` to win the confirmed cascade fight,
+applied to both `html` and `body` for consistency with last turn's `html` clamp.
+
+**VERIFIED LIVE:** `CSS.supports('height','100dvh')` is `true` in this browser; the new rule is present in
+`document.styleSheets`'s cascade (confirmed by scanning for the `100dvh` rule text); `body`/`html`'s computed
+height both resolve to `window.innerHeight` at a mobile viewport (390×667: 513px all three, `html`/`body`
+overflow both stay `hidden`); desktop viewport (1280×900) unaffected (canvas + ribbon both visible, body height
+= 746px = `innerHeight`, matching pre-fix behavior). 0 console errors at both viewports.
+
+**Same testing limitation as last turn, stated plainly rather than glossed over:** headless Chrome has no real
+mobile address bar, so `dvh` and `vh` resolve to the SAME number there — this environment cannot show the
+VISUAL difference `100dvh` makes on an actual phone (that's the whole point of the unit: it only diverges from
+`vh` when the browser's own chrome is transiently taking up space). What WAS verified: the browser understands
+`dvh`, the rule is correctly in the cascade and wins the specificity fight it needed to win, and nothing
+regressed at any viewport tested. A real-device check is still the only way to see the actual visual fix; still
+recommended before considering this fully closed.
+
+**REGRESSION:** `shell-smoke` 11/12, same pre-existing unrelated ribbon-order fail. Diff is 17 lines, one file,
+CSS-only (no script changes this turn — last turn's scroll-reset listener is untouched, left as defensive
+cleanup per the dispatch).
+
+=== MOBILE-VIEWPORT-DVH-FIX DONE — HOLD ===

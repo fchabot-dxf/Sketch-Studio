@@ -17,6 +17,23 @@
             --fusion-orange: #EA580C;
             --fusion-blue: #3B82F6;
         }
+        /* CORRECTED (2026-08-27): the primary mobile symptom is body's `h-screen` (Tailwind = 100vh)
+           being SIZED against the address-bar-collapsed (taller) viewport from the very first paint,
+           while the bar is still visibly showing -- so the app renders where the still-onscreen address
+           bar physically overlaps its top edge, not (primarily) a post-load scroll drift. `100dvh`
+           tracks the REAL, currently-visible viewport and updates live as the browser chrome shows/hides
+           -- exactly the case this unit exists for. Tailwind's CDN build here does NOT generate a
+           `h-dvh` utility (confirmed live: a `.h-dvh` test element measured 0px), so this is a plain CSS
+           override instead; confirmed live that a PLAIN `body { height: 100dvh }` LOSES the cascade to
+           Tailwind's `.h-screen{height:100vh}` (class selector specificity beats a bare element
+           selector, regardless of source order) -- `!important` is required to win, same precedent as
+           the `#toolsRibbon z-index !important` reassertions further down this file. `@supports` gates
+           the whole block so a browser that doesn't understand `dvh` at all falls back to `html`'s
+           `100%` / `body`'s `100vh` below, unregressed. */
+        @supports (height: 100dvh) {
+            html { height: 100dvh !important; }
+            body { height: 100dvh !important; }
+        }
         /* Mobile browsers auto-collapse their address bar ~1-2s after load, GROWING the viewport height
            via a native resize -- and on some mobile browsers `100vh` resolves against the LARGER,
            bar-collapsed viewport even while the bar is still showing, so `body`'s own `h-screen` (100vh)

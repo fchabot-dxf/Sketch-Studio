@@ -10,6 +10,7 @@ import * as inspector from './inspector.js';
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
@@ -253,7 +254,7 @@ stylePanel.render(document.body);
 const settingsBtn = document.getElementById('btn-settings');
 if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());
 
-let infoPanel = null, ribbon = null, lastSig = '';
+let infoPanel = null, ribbon = null, lastSig = '', drawer = null;
 
 // Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /
 // selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap. Since
@@ -295,6 +296,13 @@ function buildDesignUI() {
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
+  // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
+  // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
+  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  const header = document.querySelector('header.toolbar');
+  if (header) header.appendChild(drawer.toggleEl);
+  drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
+
   wireSvgImport(); // IMPORT-2: the Import-SVG button + a drop on the Design view
 }
 
@@ -323,6 +331,7 @@ function showMode(mode) {
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
   else if (designController) designController.stop();                   // pause the RAF off Design
+  if (drawer) drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none';
   // VCARVE-3b: the Vcarve workspace operates on the shared Design sketch — ensure it's mounted + solved, then mount the
   // live view once (re-populate its region list on each entry, since the sketch may have changed, e.g. after an import).
   if (mode === 'vcarve') {

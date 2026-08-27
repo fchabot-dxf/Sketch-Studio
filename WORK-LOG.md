@@ -9841,3 +9841,79 @@ vibration, since a phone could in principle also be seeing compounding effects (
 this loop was driving but that headless can't fully capture the felt severity of.
 
 === MOBILE-VIBRATION-FIX DONE — HOLD ===
+
+---
+
+## TURN 388 — MOBILE-DRAWER-PANEL: shared #ui drawer component, wired into all 3 real hosts
+
+**Two ground-truth claims in the dispatch were stale — corrected here rather than force-fit (per this
+skill's own instruction to fix the map when a claim proves wrong):**
+1. **sketchstudio has NO side info-panel at all** — grepped/read `apps/sketchstudio/index.html` and
+   `main.js`: no `<aside>`, no `#design-panel-info`, no 244px convention, no `createDesignInfoPanel`
+   call anywhere. The `<main>` is canvas-only (Design/Export are header TABS, not a docked side panel).
+   The dispatch's claim that "apps/shaper and apps/sketchstudio use the same ~244px convention" is
+   wrong for sketchstudio specifically — it never had this panel, so there's nothing to convert there.
+   Confirmed the REAL hosts with the panel are: **shaper**, **penplotter**, **frame-calc** (all three
+   use `createDesignInfoPanel` into a fixed-width `<aside>`, verified by grep).
+2. **No existing `max-width: 767px` (or 768px) breakpoint convention exists anywhere in the repo** —
+   grepped for `767px`/`768px`, zero hits. The ribbon fix this session actually used (`packages/ui/tool-
+   ribbon.js`) is `@media (hover: none)` (an input-capability query), not a width breakpoint at all — so
+   there was no existing width convention to "match." Used **768px** anyway, but for a different, real
+   reason: it's Tailwind's own `md:` cutoff, already in live use elsewhere in this codebase
+   (`apps/sketchstudio/index.html`'s `p-2 md:p-4`) — the closest thing to an actual precedent.
+3. **`apps/trace` checked, not assumed, and ruled out**: it has no `createDesignInfoPanel` mount; its
+   sidebar is a stack of independent `.tr-panel` sections (Image/Trace/Masking/Scale), a different shape
+   entirely from a single collapsible constraint-dock. Not an equivalent panel — correctly out of scope,
+   not force-fit.
+
+**Component (`packages/ui/mobile-drawer.js`, new file):** `createMobileDrawer({ panelEl, breakpoint,
+label, hideOnMobile })`. Deliberately does NOT re-parent or rebuild the host's existing panel content —
+it adds a `sk-drawer-panel` class + behavior to the host's ALREADY-mounted `<aside>` in place. Every new
+CSS rule lives inside the `@media (max-width: 767px)` block, so desktop is a **total no-op by
+construction** (no override rule exists outside the query) rather than something I had to verify stayed
+unregressed after the fact. Below the breakpoint: the aside becomes `position: fixed`, off-canvas by
+default (`transform: translateX(-100%)`), slides in on `.sk-drawer-open` (added by the returned `open()`),
+scrollable (`overflow-y: auto`) for long constraint lists. Open/close mirrors `style-panel.js`'s existing
+idiom for consistency: Escape key, outside-click, and an auto-injected close-X all call the same
+`close()`. Returns a `toggleEl` button for the HOST to place in its own header (not self-floating — this
+codebase's own convention, per memory, is app actions live in chrome the host places, never an overlay
+floating over the ribbon/canvas).
+
+**`hideOnMobile` — a real conflict this design had to solve:** shaper and penplotter each already have
+their OWN desktop collapse-to-30px-strip toggle (`#design-panel-toggle`, persisted via localStorage).
+Left alone, that button would still be visible and clickable INSIDE the open mobile drawer, and clicking
+it would add a `.collapsed` class that (via the host's own pre-existing CSS) hides `#design-panel-info`
+— the drawer would open but read as empty. `hideOnMobile: [toggle]` hides that old button below the
+breakpoint (its own desktop behavior is completely unaffected, since the hiding rule is media-scoped
+too). `open()` also unconditionally strips any stale `.collapsed` class as a second guard, in case a
+user collapsed the panel on a desktop session and later opens the SAME localStorage-backed page on
+mobile.
+
+**Wired into all 3 real hosts** (not split — this IS the complete real scope once sketchstudio/trace
+were correctly ruled out): `apps/frame-calc/src/main.js` (`ensureSketch`, toggle shown/hidden in
+`showView`), `apps/shaper/src/main.js` (`buildDesignUI`, toggle shown/hidden in `showMode`),
+`apps/penplotter/src/sketch-stage.js` (toggle shown/hidden via the stage's existing `onEnter`/`onLeave`
+hooks — the router's generic mount lifecycle, no new special-casing needed). Each host's diff is ~6
+lines: one import, one `createMobileDrawer(...)` call reusing the panel element it already had, one
+`header.appendChild(toggleEl)`, one visibility line at the view/mode/stage switch point.
+
+**VERIFIED LIVE (CDP, both 1280x900 desktop and 390x667 mobile, all 3 hosts):**
+- **Desktop, all 3:** panel width 244px, `left: 0`, `position: static` (identical to pre-existing CSS,
+  since nothing outside the media query touches it); new drawer toggle `display: none`; shaper/penplotter's
+  pre-existing collapse-arrow toggle unaffected (`display: flex`, unchanged).
+- **Mobile, all 3:** panel starts off-canvas (`width: 280px`, `left: -280`, `position: fixed`); drawer
+  toggle visible (`display: flex`); shaper/penplotter's OLD toggle correctly hidden (`display: none`, no
+  conflict). Clicking the toggle opens the drawer (`sk-drawer-open` class, `left: 0`, real content
+  present — `textContent.length > 5`). Clicking the close-X closes it (`sk-drawer-open` removed). 0
+  console errors on every run.
+
+**Gate:** `run-tests.js` looped individually — 106 tests, same 8 pre-existing failures as last turn (no
+new ones; `mobile-drawer.js` also sanity-loaded standalone under plain `node -e "import(...)"` with no
+error). `shell-smoke.cjs` (sketchstudio only — untouched this turn) still 11/12, same pre-existing
+ribbon-order failure.
+
+**Deferred / out of scope, named rather than silently skipped:** sketchstudio (no panel to convert —
+see correction #1) and trace (no equivalent panel — see correction #3). Nothing else deferred; all 3
+qualifying hosts are fully wired and verified this turn.
+
+=== MOBILE-DRAWER-PANEL DONE — HOLD ===

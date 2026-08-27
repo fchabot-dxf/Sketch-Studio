@@ -10,6 +10,7 @@
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
@@ -286,6 +287,13 @@ export function mountSketchStage(view, ctx = {}) {
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
+  // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
+  // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
+  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  const header = document.querySelector('header.toolbar');
+  if (header) header.appendChild(drawer.toggleEl);
+  drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
+
   // STYLE-2: the Style controls. ONE applier for all four — patch every selected shape's style record, re-mix if the
   // shape was already mixed (so the pens follow the edit, as the single colour control did), redraw the underlay.
   const applyStyle = (patch) => {
@@ -393,7 +401,8 @@ export function mountSketchStage(view, ctx = {}) {
       // (persists across tabs). updateViewBox is the #ui's own applier (center-based; adjusts h to this canvas aspect).
       if (needsFit()) fitDesignView();
       try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
+      drawer.toggleEl.style.display = '';
     },
-    onLeave: () => controller.stop(),
+    onLeave: () => { controller.stop(); drawer.toggleEl.style.display = 'none'; },
   };
 }

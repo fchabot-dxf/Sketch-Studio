@@ -4,6 +4,7 @@
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
+import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findLoops } from '#core/loop-finder.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
@@ -44,6 +45,7 @@ let currentView = 'calc';
 let sketchController = null; // { state, engine, start, stop } — mountSketch()'s return
 let ribbon = null;
 let infoPanel = null;
+let drawer = null; // MOBILE-DRAWER: the shared #ui wrapper — below 768px, #sketch-panel becomes a slide-over drawer
 
 function ensureSketch() {
   if (sketchController) return;
@@ -55,6 +57,10 @@ function ensureSketch() {
   ribbon.render(document.getElementById('sketch-ribbon'));
   infoPanel = createDesignInfoPanel({ state: sketchController.state, engine: sketchController.engine });
   infoPanel.render(document.getElementById('sketch-panel'));
+  drawer = createMobileDrawer({ panelEl: document.getElementById('sketch-panel'), label: 'Panel' });
+  const header = document.querySelector('header');
+  if (header) header.appendChild(drawer.toggleEl);
+  drawer.toggleEl.style.display = 'none'; // shown only while the Sketch view is active (showView below)
 
   // Build the frame from the calculator's CURRENT geometry once, on first entry — the Sketch view is
   // then its own independent editable document from here on (re-entering it later, e.g. after tweaking
@@ -77,6 +83,7 @@ function showView(view) {
   } else if (sketchController) {
     sketchController.stop(); // pause the RAF while Calculator is active
   }
+  if (drawer) drawer.toggleEl.style.display = (view === 'sketch') ? '' : 'none';
   exportBtn.disabled = view !== 'sketch';
 }
 viewBtns.forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));

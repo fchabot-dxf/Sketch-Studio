@@ -97,6 +97,20 @@ export function getConstrainedGeometry(constraint, shapes) {
             break;
 
         case CONSTRAINT_TYPES.EQUAL:
+            // Two input modes (mirrors constraints.js's addConstraint): shapes (the usual case) OR
+            // explicit joints (an arc's structural center<->rim equal-radius, one shape, no peer to
+            // be "equal" to).
+            if (constraint.shapes) {
+                for (const sid of constraint.shapes) constraintShapes.add(sid);
+            }
+            if (constraint.joints) {
+                for (const jid of constraint.joints) constraintJoints.add(jid);
+                for (const s of shapes) {
+                    if (s.joints && s.joints.some(jid => constraintJoints.has(jid))) constraintShapes.add(s.id);
+                }
+            }
+            break;
+
         case CONSTRAINT_TYPES.ANGLE:
             if (constraint.shapes) {
                 for (const sid of constraint.shapes) constraintShapes.add(sid);
@@ -236,7 +250,15 @@ export function createConstraint(type, params) {
             if (params.glyphPos) distObj.glyphPos = params.glyphPos;
             return distObj;
         case CONSTRAINT_TYPES.EQUAL:
-            // Equality operates on two shapes (lines or circles)
+            // Equality normally operates on two shapes (lines or circles) -- engine.js synthesizes
+            // joints from `shapes` at solve time. An arc's two rim points are ONE shape apiece (no
+            // second shape to be equal to), so makeArc()'s structural equal-radius constraint needs
+            // the definition's OTHER supported input mode directly: explicit joints [a,b,c,d] ->
+            // len(a,b) == len(c,d) (packages/core/solver/definitions.js's `equal.computeError`
+            // already prefers this form when present). Mirrors DISTANCE's existing joints/shapes dual mode.
+            if (params.joints && params.joints.length >= 4) {
+                return { type: CONSTRAINT_TYPES.EQUAL, joints: params.joints.slice() };
+            }
             if (!params.shapes || params.shapes.length < 2) return null;
             return { type: CONSTRAINT_TYPES.EQUAL, shapes: params.shapes.slice() };
 
@@ -362,6 +384,25 @@ export function hasConstraint(constraints, type, params) {
                 }
                 break;
             case CONSTRAINT_TYPES.EQUAL:
+                if (c.shapes && params.shapes) {
+                    const [a,b] = c.shapes; const [x,y] = params.shapes;
+                    if ((a===x && b===y) || (a===y && b===x)) {
+                        dbg.log('constraints', '[hasConstraint] Duplicate found (angle/equal):', c, 'vs params:', params);
+                        return true;
+                    }
+                } else if (c.joints && params.joints && c.joints.length === 4 && params.joints.length === 4) {
+                    // Joints-based EQUAL (an arc's structural center<->rim pair) -- same 4 joints, either
+                    // pair order, is the same constraint.
+                    const samePair = (p, q) => (p[0] === q[0] && p[1] === q[1]) || (p[0] === q[1] && p[1] === q[0]);
+                    const cP1 = [c.joints[0], c.joints[1]], cP2 = [c.joints[2], c.joints[3]];
+                    const pP1 = [params.joints[0], params.joints[1]], pP2 = [params.joints[2], params.joints[3]];
+                    if ((samePair(cP1, pP1) && samePair(cP2, pP2)) || (samePair(cP1, pP2) && samePair(cP2, pP1))) {
+                        dbg.log('constraints', '[hasConstraint] Duplicate found (equal joints):', c, 'vs params:', params);
+                        return true;
+                    }
+                }
+                break;
+
             case CONSTRAINT_TYPES.ANGLE:
                 if (c.shapes && params.shapes) {
                     const [a,b] = c.shapes; const [x,y] = params.shapes;

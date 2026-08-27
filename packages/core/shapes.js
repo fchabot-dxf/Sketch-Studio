@@ -269,7 +269,13 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
         groupId
     };
     if (isConstruction) shape.isConstruction = true;
-    return { shapes: [shape], constraints: [] };
+    // Structural: keep the two rim points (p2 start, p3 end) equidistant from the center (p1) ALWAYS
+    // -- not just at creation. Without this, dragging p3 alone (or editing a radius dimension, which
+    // only wires in p2) silently stops the arc being circular. Reuses the EXISTING `equal` definition
+    // (len(a,b) == len(c,d)) via its joints-based input mode -- no new solver math, mirrors how
+    // makeRectFromTwoJoints already bakes in H/V so a rectangle stays a rectangle.
+    const constraints = [{ type: 'equal', joints: [p1, p2, p1, p3] }];
+    return { shapes: [shape], constraints };
 }
 
 /**

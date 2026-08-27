@@ -2,8 +2,6 @@
 // INPUT MANAGER - Central coordinator
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared UI (#ui/input-manager.js). Relocated from apps/sketchstudio in slice S4f (the cluster ROOT).
-// Settings panel is app-specific -> injected via setupInput(svg, state, { openSettings }); this module no
-// longer reaches into any #app/ module.
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { dbg } from '#core/debug.js';
@@ -275,9 +273,6 @@ export function setupInput(svg, state, opts = {}) {
     setupNumericInput(svg, state);
     setupNotifications();
     try { setupMagToggle(svg, state); } catch(_) { }
-    // Settings panel is app-specific. The shell injects opts.openSettings (SketchStudio wires it to lazily
-    // import + init its settings-panel) so this shared module never reaches into a per-app module.
-    try { opts.openSettings?.(svg, state); } catch(_) { }
     try { initCursors(); } catch(e) { console.error('Failed to init cursors:', e); }
     try { setupLiveDimensionInput(); } catch(e) { console.error('Failed to init live dim:', e); }
     

@@ -983,7 +983,11 @@ export class ConstraintManager {
                 return !!(params.line && params.circle)
                     || (params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2);
             case CONSTRAINT_TYPES.EQUAL:
-                return params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2;
+                // Shapes (the usual case) OR explicit joints [a,b,c,d] -> len(a,b)==len(c,d) -- an
+                // arc's structural center<->rim equal-radius has only ONE shape, so it uses the
+                // definition's other input mode directly (mirrors DISTANCE's joints/shapes dual mode).
+                return (params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2)
+                    || (params.joints && Array.isArray(params.joints) && params.joints.length >= 4);
             case CONSTRAINT_TYPES.MIDPOINT:
                 return params.joints && Array.isArray(params.joints) && params.joints.length === 3;
             case CONSTRAINT_TYPES.ANGLE:

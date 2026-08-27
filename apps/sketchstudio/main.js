@@ -162,8 +162,7 @@ function initApp(){
     if (b) b.addEventListener('click', () => { header.setActiveTab('design'); showView('design'); });
   });
 
-  // The input-manager's settings gesture now opens the SHARED style panel (the old #settings-panel is retired).
-  setupInput(svg, state, { openSettings: () => stylePanel.open() });
+  setupInput(svg, state);
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
   window.addEventListener('focus', () => {

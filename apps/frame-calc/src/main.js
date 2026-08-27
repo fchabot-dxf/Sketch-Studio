@@ -5,6 +5,8 @@ import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import SettingsManager from '#core/settings-manager.js';
+import { findLoops } from '#core/loop-finder.js';
+import { exportShaperSVG } from '#core/shaper-export.js';
 import { createCalculatorView } from './calculator-view.js';
 import { buildFrameSketch, attachFrameDimensions } from './sketch-builder.js';
 
@@ -17,11 +19,9 @@ try {
   if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
 } catch (_) { /* localStorage blocked */ }
 
-let latestGeom = null; // the calculator's most recent output; the Sketch-view builder (a later step) reads this on toggle
 const calcView = createCalculatorView({
   formEl: document.getElementById('calc-form'),
   previewEl: document.getElementById('calc-preview'),
-  onChange: (geom) => { latestGeom = geom; },
 });
 
 const VIEWS = {
@@ -75,3 +75,24 @@ function showView(view) {
 }
 viewBtns.forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
 showView('calc');
+
+// Export = plain SVG, reusing packages/core/shaper-export.js's exportShaperSVG (the same serializer
+// Shaper already exports through) — no new format. It's built around a "cut plan" (entries + an
+// injected cut-type encoding); this app has no cut-type picker UI, so every board loop gets the same
+// single minimal "outline" entry — a plain, uncut line drawing, exactly what a frame layout needs.
+const OUTLINE_ENCODING = [{ id: 'outline', cutType: 'outline', fill: 'none', stroke: '#000000' }];
+function download(filename, text) {
+  const blob = new Blob([text], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+exportBtn.addEventListener('click', () => {
+  if (!sketchController) return;
+  const st = sketchController.state;
+  const entries = findLoops(st).map((loop) => ({ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'outline' } }));
+  const svg = exportShaperSVG({ state: st, entries, encoding: OUTLINE_ENCODING, docUnit: SettingsManager.get('DOC_UNIT') || 'in' });
+  download('frame-calc-trapezoid.svg', svg);
+});

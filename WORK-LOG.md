@@ -9335,3 +9335,32 @@ a `constraints.length` assertion that this would break — zero hits). Full 16/1
 (reverted before commit, not in the diff — same discipline as last turn). `proc_health mark --turn 372` at start.
 
 === ARC-STRUCTURAL-INTEGRITY DONE — HOLD ===
+
+---
+
+## TURN 372 (mid-task amendment) — STYLE-PANEL-AUTOOPEN-FIX: the Style panel no longer force-opens on every load
+
+**Dispatch:** user-reported (screenshot), root-caused by the advisor via WORK-LOG history — a disjoint, different-file
+bug riding along with the arc task, landed as its own separate commit per the amendment's explicit instruction.
+
+**Root cause (confirmed, not re-derived):** `packages/ui/input-manager.js`'s `setupInput` called
+`opts.openSettings?.(svg, state)` **unconditionally, once, at init** — correct when `openSettings` was an *install*
+hook (t~1995: lazily import + wire a now-retired `#btn-settings-toggle` button, nothing shown). t3468 redirected
+`apps/sketchstudio/main.js`'s injected callback to `() => stylePanel.open()` — a *show* hook — without updating the
+unconditional call site, so every app load now force-opens the shared Style panel. Confirmed via `grep -rn
+"openSettings"` across the whole repo: exactly 3 hits, all at this one seam (the injection in `main.js`, the
+declaration comment, and the dead call) — no other caller anywhere, Shaper included.
+
+**Fix — removed, not patched around** (the old button this seam served is already retired; the header's real Style
+button, `onStyle: () => stylePanel.toggle()`, is unaffected and is now the sole way to open the panel): dropped the
+`{ openSettings: ... }` option from `main.js`'s `setupInput(...)` call, deleted the now-dead `opts.openSettings?.()`
+call + its two stale comments in `input-manager.js` (one at the call site, one in the file-header comment
+describing the injection point). `opts` itself stays (still used for `inputCtx`/`isActive`).
+
+**VERIFIED LIVE:** fresh app load → `.sk-style-panel` is absent/hidden (was: force-open) — 0 console errors. Click
+the header Style button → panel opens normally. Press Escape → closes normally. `shell-smoke` re-run: the existing
+"Style opens/closes" checks (which already drive this exact flow) still PASS, 11/12 overall (the one FAIL is the
+same pre-existing ribbon-order issue from the last two turns, unrelated). `node --check` clean on both files. No
+test anywhere references `openSettings` (grepped `tests/`), so nothing needed updating.
+
+=== STYLE-PANEL-AUTOOPEN-FIX DONE — HOLD ===

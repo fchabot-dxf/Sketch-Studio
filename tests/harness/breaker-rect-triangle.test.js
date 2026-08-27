@@ -241,6 +241,63 @@ console.log('\n=== Circle radius NaN-row blast-radius: does it break an UNRELATE
     `w=${s.edgeLen(c1, c2)} h=${s.edgeLen(c2, c3)} (expected ~100 / ~60)`);
 }
 
+// ── SCENARIO 5: arc integrity — does dragging/editing keep start+end equidistant from center? ──
+// arc-tool.js:220-227: joints=[center,start,end], placed so start&end are equidistant from center at
+// CREATION time, but makeArc() adds ZERO constraints (shapes.js:272 `constraints: []`). So nothing in
+// the constraint system enforces "start and end stay on the same circle as center moves" — it's only
+// true by construction. Does that integrity survive a drag? A CAD arc/fillet that visibly stops being
+// circular after a drag would be a very common, very visible "constraints not applied correctly" symptom.
+console.log('\n=== Arc: does start/end stay equidistant from center under drag + radius edit? ===');
+{
+  const s = createSketch();
+  const { state } = s;
+  const { makeArc } = await import('#core/shapes.js');
+  const { ConstraintManager } = await import('#core/constraint-manager.js');
+  const { CONSTRAINT_TYPES: CT } = await import('#core/constants.js');
+
+  const R = 40;
+  const centerId = s.point(0, 0, true);
+  const startId = s.point(R, 0, false);                                  // angle 0
+  const endId = s.point(R * Math.cos(Math.PI/2), R * Math.sin(Math.PI/2), false); // angle 90
+
+  const res = makeArc(state.joints, centerId, startId, endId, 'CENTER', false);
+  res.shapes.forEach(sh => state.engine.addShape(sh));
+  s.solve();
+
+  const distTo = (a, b) => s.edgeLen(a, b);
+  check('A1 arc built with start/end equidistant from center (by construction)',
+    Math.abs(distTo(centerId, startId) - distTo(centerId, endId)) < 0.05,
+    `start-radius=${distTo(centerId, startId)} end-radius=${distTo(centerId, endId)}`);
+
+  // Add a radius dimension (like arc-tool.js does when the user types a radius), matching the real
+  // path (ConstraintManager, not the plain addConstraint circle-tool.js uses).
+  const shapeId = res.shapes[0].id;
+  const dR = ConstraintManager.createConstraint(state, CT.DISTANCE, { shape: shapeId, value: R, isRadius: true }, { source: 'arc' });
+  s.solve();
+  check('A2 solve converges after adding the arc radius dimension', s.converged === true, JSON.stringify(s.conflicts));
+
+  // Drag the END joint a little (simulating a user nudging the arc's end handle).
+  const stepDx = 5, stepDy = -3;
+  for (let i = 0; i < 10; i++) s.drag(endId, stepDx / 10, stepDy / 10);
+  check('A3 after dragging END, start+end STILL equidistant from center (arc stays circular)',
+    Math.abs(distTo(centerId, startId) - distTo(centerId, endId)) < 0.5,
+    `start-radius=${distTo(centerId, startId)} end-radius=${distTo(centerId, endId)} — if these differ, dragging ` +
+    `an arc's endpoint silently turns it into a non-circular shape.`);
+  check('A4 after dragging END, the dimensioned radius (center-start) is unchanged',
+    Math.abs(distTo(centerId, startId) - R) < 0.5, `got ${distTo(centerId, startId)} expected ~${R}`);
+
+  // Now edit the radius dimension to a new value (like a user typing a new radius).
+  const editRes = s.editValue(dR, 60);
+  check('A5 arc radius EDIT was not reverted', editRes.converged !== false || s.lastError == null,
+    `converged=${editRes && editRes.converged} lastError=${s.lastError}`);
+  check('A6 after radius edit, start moved to the new radius', Math.abs(distTo(centerId, startId) - 60) < 0.5,
+    `got ${distTo(centerId, startId)} expected ~60`);
+  check('A7 after radius edit, END ALSO moved to the new radius (stayed a valid arc)',
+    Math.abs(distTo(centerId, endId) - 60) < 0.5,
+    `end-radius=${distTo(centerId, endId)} expected ~60 (start=${distTo(centerId, startId)}) — if end is still ` +
+    `~40 while start is ~60, editing an arc's radius bends it out of shape instead of resizing it uniformly.`);
+}
+
 console.log(`\n${failures.length === 0 ? 'ALL PASS' : failures.length + ' FAILURE(S)'}`);
 if (failures.length) {
   console.log(failures.map(f => '  - ' + f).join('\n'));

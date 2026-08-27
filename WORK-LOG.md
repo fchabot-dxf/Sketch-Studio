@@ -9268,3 +9268,70 @@ Append per the AMENDMENT's own required marker (supersedes the original redirect
 amendment explicitly flipped priority mid-task and its dispatch note names this exact string):
 
 === CIRCLE-RADIUS-EDIT-FIX DONE — HOLD ===
+
+---
+
+## TURN 372 — ARC-STRUCTURAL-INTEGRITY: an arc's two rim points now stay equidistant from center, always
+
+**Dispatch:** the advisor's ruling on last turn's flagged open item ("is single-rim-point radius intentional or a
+gap?") — it's a gap, fix it. `makeArc()` (`packages/core/shapes.js:262-272`) built an arc from 3 joints
+`[center, start, end]`, equidistant only AT CREATION, returning `constraints: []` — nothing ties `center↔end` to
+`center↔start` afterward, so dragging the end joint (or editing an isRadius dimension, which per turn 370's fix
+only wires in `joints[1]`=start) silently stops the arc being circular.
+
+**Fix — reused the EXISTING `equal` definition, no new solver math**, per the dispatch's own direction:
+`makeArc()` now returns `constraints: [{ type: 'equal', joints: [center, start, center, end] }]` — the definition's
+`len(a,b) - len(c,d)` residual (`definitions.js`'s `equal.computeError`) is EXACTLY `dist(center,start) -
+dist(center,end)`, i.e. the invariant itself. Mirrors how `makeRectFromTwoJoints` already bakes H/V in at creation
+to keep a rectangle a rectangle. `arc-tool.js:225-227`'s `handleCenterArc` (confirmed the ONE arc-creation code
+path — both the click-driven `handleArcPointerUp` and the live-dimension `finalizeArcFromActive` call into it,
+grepped every `makeArc(` call site, exactly one) already forwards `res.constraints` through
+`ConstraintManager.createConstraint`; that loop ran zero times before this, now runs once per arc.
+
+**A wrinkle the dispatch's literal snippet didn't cover, traced and fixed:** `{type:'equal', joints:[...]}` does
+NOT validate as-is — `EQUAL` is a **shapes-only** constraint type everywhere in the stack today (an arc's two rim
+points are ONE shape, not two, so the usual "equal these two shapes" model doesn't fit — this is a genuinely
+different input shape, not a bug in the dispatch's reasoning about the MATH, which was correct). Three gates
+assumed shapes-only and needed a joints-based alternative added, mirroring how `DISTANCE` already supports
+THREE input modes (joints / isRadius+shape / shapes) — same dual-mode pattern, not new machinery:
+1. `ConstraintManager.validateParams` (`constraint-manager.js`) — EQUAL required `params.shapes.length===2`;
+   would silently `return null` (constraint never created) for a joints-only candidate. Added `|| (params.joints
+   && params.joints.length >= 4)`.
+2. `constraints.js`'s `addConstraint` object-builder — EQUAL's case built `{type, shapes}` and returned `null`
+   if `shapes` was absent, discarding any `joints` I passed. Added a joints branch (checked first, mirroring
+   DISTANCE's own ordering) returning `{type, joints}`.
+3. `constraints.js`'s `getConstrainedGeometry` (hover/selection/deletion-sweep scope) and `hasConstraint` (dedup)
+   both only inspected `constraint.shapes` for EQUAL — split EQUAL out of the ANGLE-shared case (ANGLE stays
+   shapes-only, unaffected) and added a joints branch to each so an arc's structural constraint is correctly
+   scoped/deduped like every other constraint, not a silent blind spot.
+`engine.js`'s solve-time synthesis (`c.type==='equal' && c.shapes && c.shapes.length>0` → build joints from
+shapes) only fires when `c.shapes` is present, so it correctly leaves an explicit joints-based EQUAL alone —
+no change needed there; confirmed by testing, not assumed.
+
+**VERIFIED LIVE (CDP-driven browser, extending the same driver from turn 370):**
+- Draw arc (center, start, end) → `dist(center,start)=3.0000`, `dist(center,end)=3.0000` at creation (unchanged
+  from before — the fix only matters AFTER creation).
+- **Drag the END joint** (Select tool) 40/-60 world units → BOTH `dist(center,start)` and `dist(center,end)` land
+  at `3.0001` (previously: `start` would stay put while `end` drifted to whatever the drag left it at) — the arc
+  visibly stays a constant-radius curve; 0 console errors.
+- **Edit the radius dimension** (Dim tool click on the curve via `path.getPointAtLength`, not the bbox center which
+  is off-curve for an arc — same trap noted last turn) from 3.0 → 5.1 → BOTH `dist(center,start)` and
+  `dist(center,end)` land at exactly `5.1000` (previously: only `start`, `end` stayed at its old radius — the
+  post-edit arc was geometrically non-circular, exactly the bug this turn fixes). 0 console errors.
+
+**REGRESSION — item 3's ask ("check nothing relied on independent rim-point dragging"):** `arc-drag.test.js` and
+`arc-integration.test.js` both drive arc creation through a MINIMAL mock state with no `state.engine` — confirmed
+`ConstraintManager.createConstraint`'s conflict-detection layers all guard on `state.engine &&
+typeof state.engine.solve==='function'` and skip cleanly when absent, so the new EQUAL constraint is appended to
+`state.constraints` without throwing; neither test asserts an exact constraints count, so both still pass and
+still test what they claim to (grepped every `arc-*.test.js` + `radial-locked.test.js` + `circle-tool.test.js` for
+a `constraints.length` assertion that this would break — zero hits). Full 16/16 solver/harness gate green
+(`solver-scenarios` 23/23, `constraint-conformance` 15/15, `solver-fuzz` 150/150, `differential-planegcs` 9/9,
+`packages/core/tests/solver-*` 10/10) + `arc-tool`/`arc-integration`/`arc-drag`/`radial-locked`/`circle-tool`/
+`solver-tangent-arc-arc` all green. `node --check` clean on all 3 touched files (`shapes.js`, `constraints.js`,
+`constraint-manager.js`). `shell-smoke` 11/12 — same PRE-EXISTING ribbon-order fail as last turn, untouched.
+
+**PROCESS:** reused the turn-370 TEMPORARY `window.__dbgState` hook in `main.js` for this investigation only
+(reverted before commit, not in the diff — same discipline as last turn). `proc_health mark --turn 372` at start.
+
+=== ARC-STRUCTURAL-INTEGRITY DONE — HOLD ===

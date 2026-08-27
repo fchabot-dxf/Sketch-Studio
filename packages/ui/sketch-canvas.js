@@ -77,6 +77,15 @@ export function mountSketch(svgEl, opts = {}) {
   const state = createSketchState(engine, view);
   setConstraintNotifier(() => {}); // host has no toast surface yet
 
+  // SHARED-TOUCH-ACTION-FIX: this canvas element already gets a COMPLETE JS-driven touch-gesture
+  // system below (setupInput → select/drag + two-finger pinch-zoom) — touch-action:none hands 100%
+  // of one- and two-finger gesture recognition to that JS, structurally, for whatever element any
+  // host passes in. Set here (not in per-host CSS) so every current AND future mountSketch() caller
+  // gets correct touch ownership for free, matching apps/sketchstudio/index.html's own (independently
+  // written, pre-monorepo) #svgCanvas rule — that app doesn't call mountSketch() at all, so this is
+  // additive, not a duplicate.
+  if (svgEl && svgEl.style) svgEl.style.touchAction = 'none';
+
   // World-group: the render target draw() writes into (created once inside the host svg).
   let worldGroup = svgEl && svgEl.querySelector ? svgEl.querySelector('#design-world-group') : null;
   if (!worldGroup && svgEl) {

@@ -31,8 +31,10 @@
       --canvas-bg: #fdfcf8;               /* PP-3a: the Draw-stage paper fill (read by render-art buildPaper) */
     }
     * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; }
-    body { background: #f5efe1; color: #3a352b; font: 14px system-ui, sans-serif; display: flex; flex-direction: column; }
+    html, body { height: 100%; margin: 0; overflow: hidden; } /* SHARED-TOUCH-ACTION-FIX: page must not scroll on mobile */
+    body { background: #f5efe1; color: #3a352b; font: 14px system-ui, sans-serif; display: flex; flex-direction: column;
+      touch-action: none; -webkit-user-select: none; user-select: none; } /* matches apps/sketchstudio's page-level lock --
+      the canvas already owns its own gestures (packages/ui/sketch-canvas.js); the page must not compete */
     header.toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 12px;
       background: var(--sk-header-bg); border-bottom: 1px solid var(--sk-header-sep); color: var(--sk-header-fg); }
     #app-switcher-host { display: inline-flex; }

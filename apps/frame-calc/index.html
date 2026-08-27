@@ -16,7 +16,10 @@
   <link rel="stylesheet" href="../../packages/ui/sketcher.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font: 13px system-ui, sans-serif; color: #1e293b; background: #f1f5f9; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    body { margin: 0; font: 13px system-ui, sans-serif; color: #1e293b; background: #f1f5f9; height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+      touch-action: none; -webkit-user-select: none; user-select: none; } /* SHARED-TOUCH-ACTION-FIX: matches
+      apps/sketchstudio's page-level lock -- the canvas already owns its own gestures
+      (packages/ui/sketch-canvas.js); the page must not compete */
     header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #fff; border-bottom: 1px solid #e2e8f0; }
     header h1 { font-size: 14px; margin: 0; font-weight: 700; color: #0f172a; }
     header .spacer { flex: 1; }

@@ -17,6 +17,13 @@ html, body {
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
+  overflow: hidden; /* SHARED-TOUCH-ACTION-FIX: without this, the page itself scrolls/pans on mobile */
+}
+body {
+  touch-action: none; /* SHARED-TOUCH-ACTION-FIX: matches apps/sketchstudio's page-level lock -- the
+    canvas already owns its own gestures (packages/ui/sketch-canvas.js); the page must not compete */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ---- toolbar ---- */

@@ -9985,3 +9985,64 @@ added to `apps/sketchstudio/main.js` for this turn's touch-dispatch testing was 
 (confirmed via `git diff` showing zero diff on that file).
 
 === MOBILE-TOUCH-SELECT-ZOOM-FIX DONE — HOLD ===
+
+---
+
+## TURN 392 — SHARED-TOUCH-ACTION-FIX: the real gap was Shaper/Pen Plotter/Frame Calc never had ANY touch-gesture protection
+
+**Confirmed the advisor's ground-truth check myself before touching anything** (grep across
+`apps/shaper/index.html`, `apps/penplotter/index.html`, `apps/frame-calc/index.html`, `packages/ui/
+sketcher.css`, `packages/ui/sketch-canvas.js`): zero `touch-action` hits anywhere. Last turn's fix
+(turn 390) only ever touched `apps/sketchstudio/index.html` — correct for that bug, but scoped to the
+one app that happens to carry its OWN independent, pre-monorepo CSS. Shaper/Pen Plotter/Frame Calc all
+mount their canvas via the SHARED `packages/ui/sketch-canvas.js`'s `mountSketch()`, which has never set
+`touch-action` on anything — these 3 apps have had ZERO touch-gesture ownership since they existed.
+
+**Per-host body-level audit (the dispatch's second ask), each genuinely different, none matching
+Sketch Studio's `body { touch-action: none; overflow: hidden; ... }` pattern:**
+- **`apps/shaper`**: WORST case — its `html, body` rule lives in `apps/shaper/styles/main.css` (not
+  even the inline `<style>` block), and had `margin:0; height:100%;` and nothing else — no `overflow`,
+  no `touch-action` at all. This matches the user's screenshot exactly (bare black page background
+  visible where the app's content shifted — nothing was stopping the page itself from scrolling).
+- **`apps/penplotter`**: `html, body { height:100%; margin:0; }` plus a separate `body {...display:flex...}`
+  — `height:100%` present but no `overflow:hidden`, no `touch-action`.
+- **`apps/frame-calc`**: `body {...height:100vh; overflow:hidden;...}` — HAD the overflow lock already,
+  but no `touch-action`.
+
+**Fix — TWO parts, matching the dispatch's explicit "fix once at the shared level" instruction:**
+1. **Canvas-level, ONE place** (`packages/ui/sketch-canvas.js`'s `mountSketch(svgEl, opts)`): added
+   `if (svgEl && svgEl.style) svgEl.style.touchAction = 'none';` right after `state` is created. Verified
+   `mountSketch()` receives the host's REAL DOM svg element directly as its first argument — setting the
+   inline style there requires ZERO per-host markup/CSS changes and applies structurally to whatever
+   element ANY current or future caller passes in (highest-specificity inline style, no competing rule
+   exists in any host to fight it). Confirmed `apps/sketchstudio/main.js` does NOT call `mountSketch()`
+   at all (it predates the shared `#ui` layer, per the dispatch) — this addition is purely additive
+   there, never a duplicate/conflicting rule.
+2. **Page-level, per-host `<body>`/`<html>`** (each host's own shell, since there's no shared HTML
+   layer to inject into): added `touch-action: none` (+ `-webkit-user-select`/`user-select: none`,
+   matching Sketch Studio's own body rule) to all three hosts, plus the missing `overflow: hidden` where
+   it wasn't already present — `apps/shaper/styles/main.css`, `apps/penplotter/index.html` (inline),
+   `apps/frame-calc/index.html` (inline, `overflow:hidden` was already there).
+
+**VERIFIED LIVE (CDP, mobile device-metrics override, all 4 apps):** `getComputedStyle` on `document.body`
+and each host's actual canvas element — `sketchstudio`/`shaper`/`penplotter`/`frame-calc` ALL now read
+`bodyTouchAction: 'none'`, `bodyOverflow: 'hidden'`, `canvasTouchAction: 'none'`. Sketch Studio
+unregressed (identical to post-turn-390). Functional sanity check on Shaper (representative of the
+`mountSketch()`-based hosts): mouse-drawn a line via the Line tool + drag post-fix — the canvas's
+rendered `<line>` element count increased (6→8), confirming normal drawing still works with
+`touch-action:none` set (expected — it only affects touch/pen gesture recognition, never mouse input).
+
+**Same honesty standard as every mobile-gesture turn this session, restated because it's still true:**
+headless Chrome cannot reproduce the ORIGINAL symptom on any of these 3 apps either (no scrollable
+content for native panning to actually grab, so the compositor's "pan" claim is a no-op regardless of
+touch-action) — this was equally true for the exact same reason on Sketch Studio last turn. What IS
+proven: the correct, structurally-scoped rule is now present and correctly computed on every host, and
+nothing regressed. Real-device confirmation on all three previously-unprotected apps (not just one) is
+still the only way to confirm the actual reported symptom (whole-page panning, screenshot-visible black
+background) is gone.
+
+**Gate:** `run-tests.js` looped individually — 106 tests, same 8 pre-existing failures as every prior
+turn this session (unrelated to touch-action/CSS). `shell-smoke.cjs` (sketchstudio) 11/12, same
+pre-existing ribbon-order failure.
+
+=== SHARED-TOUCH-ACTION-FIX DONE — HOLD ===

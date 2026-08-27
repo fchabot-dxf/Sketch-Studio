@@ -6,7 +6,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import SettingsManager from '#core/settings-manager.js';
 import { createCalculatorView } from './calculator-view.js';
-import { buildFrameSketch } from './sketch-builder.js';
+import { buildFrameSketch, attachFrameDimensions } from './sketch-builder.js';
 
 // This app is inches-only (the calculator has no mm mode) — default DOC_UNIT to 'in' so the Sketch
 // view's dimension labels match the Calculator view's own display, same opt-in pattern Shaper uses
@@ -53,7 +53,8 @@ function ensureSketch() {
   // Build the frame from the calculator's CURRENT geometry once, on first entry — the Sketch view is
   // then its own independent editable document from here on (re-entering it later, e.g. after tweaking
   // a slider and glancing back, does NOT silently discard dimension edits the user already made).
-  buildFrameSketch(sketchController, calcView.geom());
+  const boardsOut = buildFrameSketch(sketchController, calcView.geom());
+  attachFrameDimensions(sketchController, boardsOut);
   sketchController.engine.solve(500);
   if (infoPanel) infoPanel.refresh();
 }

@@ -58,10 +58,16 @@ function injectStyles() {
   s.id = 'sk-ribbon-styles';
   s.textContent = `
 .sk-ribbon { display: flex; align-items: stretch; gap: 4px; background: var(--sk-ribbon-bg, #fff);
-  padding: 4px 2px; font: 12px system-ui, sans-serif; box-sizing: border-box; }
+  padding: 4px 2px; font: 12px system-ui, sans-serif; box-sizing: border-box;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x; scrollbar-width: thin; }
 .sk-ribbon * { box-sizing: border-box; }
+@media (hover: none) {
+  /* Touch devices: hide the scrollbar but keep native horizontal panning/swipe */
+  .sk-ribbon { scrollbar-width: none; }
+  .sk-ribbon::-webkit-scrollbar { display: none; }
+}
 .sk-ribbon-group { display: flex; flex-direction: column; align-items: center; padding: 0 8px;
-  border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+  flex-shrink: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
 .sk-ribbon-group:last-child { border-right: 0; }
 .sk-ribbon-btns { display: flex; gap: 2px; }
 .sk-ribbon-group-label { font-size: 8px; font-weight: 900; text-transform: uppercase; margin-top: 4px;

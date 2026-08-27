@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Frame Calc — Trapezoid</title>
+  <!-- Isomorphic aliases (mirrors apps/shaper/index.html + package.json): #core = shared brain, #ui = shared UI. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "#core/": "../../packages/core/",
+      "#ui/": "../../packages/ui/"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="../../packages/ui/sketcher.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 13px system-ui, sans-serif; color: #1e293b; background: #f1f5f9; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #fff; border-bottom: 1px solid #e2e8f0; }
+    header h1 { font-size: 14px; margin: 0; font-weight: 700; color: #0f172a; }
+    header .spacer { flex: 1; }
+    .view-toggle { display: flex; gap: 2px; background: #f1f5f9; border-radius: 8px; padding: 2px; }
+    .view-toggle button { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; font: inherit; font-weight: 600; color: #64748b; cursor: pointer; }
+    .view-toggle button.active { background: #3B82F6; color: #fff; }
+    #btn-export { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    #btn-export:hover { background: #f8fafc; }
+    #btn-export:disabled { opacity: 0.4; cursor: default; }
+
+    main { flex: 1; min-height: 0; position: relative; }
+    #calc-view, #sketch-view { position: absolute; inset: 0; display: flex; }
+    #calc-view[hidden], #sketch-view[hidden] { display: none; }
+
+    /* Calculator view: form panel (left) + SVG preview (right) — plain port of TrapezoidControlsPanel/CanvasView. */
+    #calc-form { flex: 0 0 340px; overflow-y: auto; padding: 16px; background: #fff; border-right: 1px solid #e2e8f0; }
+    #calc-preview-wrap { flex: 1; min-width: 0; background: #fff; }
+    #calc-preview { width: 100%; height: 100%; }
+    .fc-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .fc-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin: 0 0 10px; }
+    .fc-field { margin-bottom: 12px; }
+    .fc-field-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .fc-field-head span:first-child { font-weight: 600; color: #334155; }
+    .fc-field-head span:last-child { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .fc-field input[type="range"] { width: 100%; }
+    .fc-field input[type="number"] { width: 72px; margin-left: 8px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 5px; font: inherit; }
+    .fc-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #475569; }
+    .fc-stats b { color: #059669; }
+
+    /* Sketch view: shared ribbon on top, info panel + canvas below — mirrors apps/shaper's #design-view. */
+    #sketch-view { flex-direction: column; }
+    #sketch-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #e2e8f0; background: #fff; }
+    #sketch-body { flex: 1 1 auto; display: flex; min-height: 0; }
+    #sketch-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #fff; border-right: 1px solid #e2e8f0; padding: 8px; }
+    #sketch-canvas { flex: 1; min-width: 0; min-height: 0; background: #fff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Frame Calc — Trapezoid</h1>
+    <span class="spacer"></span>
+    <nav class="view-toggle">
+      <button id="btn-view-calc" data-view="calc" class="active">Calculator</button>
+      <button id="btn-view-sketch" data-view="sketch">Sketch</button>
+    </nav>
+    <button id="btn-export" disabled title="Export the frame as an SVG">Export SVG</button>
+  </header>
+
+  <main>
+    <section id="calc-view">
+      <div id="calc-form"></div>
+      <div id="calc-preview-wrap"><svg id="calc-preview" viewBox="-60 -60 120 120" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </section>
+
+    <section id="sketch-view" hidden>
+      <div id="sketch-ribbon"></div>
+      <div id="sketch-body">
+        <aside id="sketch-panel"></aside>
+        <svg id="sketch-canvas" viewBox="-500 -500 1000 1000" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

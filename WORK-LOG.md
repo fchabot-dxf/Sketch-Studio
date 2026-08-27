@@ -9462,3 +9462,155 @@ warrants a fresh session before taking on anything else non-trivial, purely on a
 investigation consumed; flagging that rather than guessing at the next task's scope blind.
 
 === TANGENT-RADIUS-CONVERGENCE-FIX DONE — HOLD ===
+
+---
+
+## TURN 376 (new cycle) — MOBILE-RIBBON-SCROLL-FIX: the shared tool ribbon is now horizontally scrollable
+
+**Dispatch:** user-reported — the tool ribbon can't be scrolled on mobile, hiding tools off-screen. Advisor
+root-caused already: `apps/sketchstudio/index.html` carried dead CSS (`.toolbar-row` + two `@media` blocks) for a
+retired two-row mobile ribbon design (`createToolRibbon` replaced it and the CSS was never cleaned up), while the
+REAL ribbon (`.sk-ribbon` in `packages/ui/tool-ribbon.js`, shared by SketchStudio/Shaper/pen-plotter) has no
+`overflow-x`/mobile handling at all — a single flex row that just overflows the viewport with nothing to scroll it
+into view.
+
+**Re-verified before touching anything (per the dispatch's own instruction not to assume the grep):** `grep -rn
+"toolbar-row\|tb-constrain\|tb-inspect\|tb-actions" apps/ packages/ --include=*.js` — zero hits, confirmed dead.
+
+**Fix — both parts:**
+1. `packages/ui/tool-ribbon.js`'s injected `.sk-ribbon` stylesheet: added `overflow-x:auto;
+   -webkit-overflow-scrolling:touch; touch-action:pan-x; scrollbar-width:thin`, plus a `@media (hover:none)` rule
+   hiding the scrollbar on touch devices (kept native swipe) while a mouse/trackpad user still sees a thin
+   scrollbar — matches the old dead CSS's intent, on the ACTUAL container this time. Also added `flex-shrink:0`
+   to `.sk-ribbon-group` — without it, flex's default shrink-to-fit would squeeze the groups instead of letting
+   the row genuinely overflow (the thing that needs to be scrollable in the first place).
+2. `apps/sketchstudio/index.html`: deleted the entire dead block (`.toolbar-row` + its `@media (hover:none)` +
+   `@media (max-width:767px)` + `@media (min-width:768px)` rules, including the `.tb-constrain`/`.tb-inspect`/
+   `.tb-actions` order rules — all confirmed unreferenced). Kept the one still-live line, `#toolsRibbon { cursor:
+   default; }`, which styles the real mount container.
+
+**VERIFIED LIVE** (CDP, `Emulation.setDeviceMetricsOverride` for a real mobile viewport, reusing the turn-370
+driver infrastructure):
+- SketchStudio @ 375px: `.sk-ribbon` `scrollWidth=1044` vs `clientWidth=367` (genuinely overflows), scrolling to
+  the end reveals the LAST button (`Undo`, a host-appended action past the whole Constrain group) fully within the
+  container — and explicitly, the Constrain group's own last button (`Mid`) is independently reachable by scroll.
+  0 console errors.
+- SketchStudio @ 1280px desktop: `scrollWidth === clientWidth` (`1272`) — fits in one row exactly as before,
+  confirming the fix is a no-op at desktop width (nothing regressed there).
+- Shaper (shared `#ui` component, spot-check per the dispatch): default view has no ribbon at all (Shaper opens on
+  "Explore," not "Design") — clicked its own "Design" nav item, `.sk-ribbon` then appears and correctly overflows
+  + scrolls at 375px (`lastButtonLabel: 'Mid'`), same as SketchStudio.
+- Pen-plotter Design tab (shared `#ui` component, spot-check): `.sk-ribbon` present by default, correctly
+  overflows + scrolls at 375px. Neither host reported this bug, but both benefit from the same one-file fix and
+  neither regressed.
+
+**REGRESSION:** `shell-smoke` 11/12 — same PRE-EXISTING, unrelated ribbon-GROUP-ORDER fail from the last several
+turns (a DOM order mismatch in a stale test expectation, nothing to do with scroll behavior), reproduced
+identically before this turn's changes. `node --check` clean on `tool-ribbon.js`. This is a CSS-only change (no
+`#core`/solver touch) — skipped the 16/16 solver gate as out of scope per gate tiering; ran the fast tier
+(shell-smoke) instead.
+
+**PROCESS:** no dedicated `tool-ribbon` test file exists in `tests/` (checked). Reused the CDP live-driver
+infrastructure from prior turns; no temp debug hooks needed this time (pure DOM/CSS geometry checks, no internal
+solver state to inspect). `proc_health mark --turn 376` at start.
+
+**Per the user's explicit instruction this was the ONLY task for the cycle** — passing back now so the advisor can
+merge `carve-out` into `main` and deploy (this fix + the 7 already-reviewed fixes from last cycle).
+
+=== MOBILE-RIBBON-SCROLL-FIX DONE — HOLD ===
+
+---
+
+## TURN 378 (new cycle 190) — FRAME-CALC-TOGGLE-V1: a new apps/frame-calc/ proving the CAD-toggle pattern
+
+**Dispatch:** a NEW APP, plan-mode-approved with the user directly — a toggle, per shop-framing calculator tool,
+between a ported calculator view and the REAL Sketch-Studio sketcher (`mountSketch()`), with the calculator's
+computed board geometry becoming genuine `ConstraintManager` dimension objects. Scope this cycle: ONE tool
+(Trapezoid), 7 numbered steps, commit per step, verify each, pass back once.
+
+**Research first, per the dispatch's own warning that the plan was advisor-level, not implementation-verified:**
+delegated a read-only exploration of the separate `geometric-frame-calc` repo (background agent) while reading
+this repo's own patterns (`apps/shaper/index.html`+`src/main.js`, `tests/harness/sketch.js`, `packages/core/
+shaper-export.js`, `#ui/{sketch-canvas,tool-ribbon,design-info-panel}.js`) in parallel. The agent's report
+corrected two things the plan's summary had wrong/incomplete (confirmed against the real files myself before
+using them): `calculateQuadFrameGeometry` also returns `Q` (inner vertices) and `shellPolyString`, not just the
+fields the plan listed; and `topSawGauge`/`botSawGauge` name "start-of-board"/"end-of-board" in array-index order,
+not literally "top of drawing" (the Trapezoid UI happens to read board-0/board-1's `topSawGauge` for its "Base"/
+"Top" readouts — a naming quirk of the ORIGINAL tool, reproduced faithfully in the port).
+
+**Built, 7 commits (fcdf9c2 → 2619e38), one per step:**
+1. **Scaffold** `apps/frame-calc/` — `index.html` with the same `#core`/`#ui` importmap convention as
+   `apps/shaper/index.html`, a two-view (Calculator/Sketch) toggle shell (simpler than Shaper's 5-mode nav — this
+   app only needs two views), `src/main.js` wiring the toggle.
+2. **`packages/core/frame-geometry.js`** — `calculateQuadFrameGeometry` (the shared quad-frame engine) ported
+   VERBATIM from the other repo's `shared/utils/quadFrameCalculator.js`, plus the formatting helpers this port
+   actually uses (`distance`, `formatImperial`, `formatDecimal`, `formatDim`, `toPoly`) from that repo's
+   `shared/utils/geometry.js`. Verified numerically against a known trapezoid before committing.
+3. **`calculator-view.js` + `trapezoid-mapper.js`** — mechanical port of `TrapezoidCalculator`/
+   `TrapezoidControlsPanel`/`TrapezoidCanvasView` to plain DOM code: 3 dimension sliders (bottom/top width,
+   height) + thickness, live formatted readouts, the same 4-stat info strip, an SVG preview (outer polygon, filled
+   board quads, inner polygon).
+4. **Toggle wiring** in `main.js` — `mountSketch()`/`createToolRibbon()`/`createDesignInfoPanel()`, same
+   `ensureSketch()`-mounted-once pattern as `apps/shaper/src/main.js`, `isActive` tied to the current view.
+5. **`sketch-builder.js`'s `buildFrameSketch()`** — per board, 4 FIXED joints + 4 line shapes forming a closed
+   loop, mirroring `tests/harness/sketch.js`'s `engine.addJoint`/`addShape` calls. Converts inches (the
+   calculator's unit) → mm (`#core`'s world-unit convention) at the boundary — the plan didn't call this out
+   explicitly but it's required for `shaper-export.js`'s mm-canonical output to be physically correct; without
+   it, a 24" board would export as "24mm".
+6. **`attachFrameDimensions()`** — one DISTANCE (the board's long-edge cut length) + two ANGLE constraints (the
+   saw-gauge cut at each end, measured as the real angle between the long edge and that end's cut edge) per
+   board, via the exact `ConstraintManager.createConstraint` call the app's own dimension tool makes.
+7. **Export** — `main.js`'s Export button calls `packages/core/shaper-export.js`'s `exportShaperSVG` unchanged,
+   with one minimal "outline"-cutType entry per board loop (`findLoops`) — no new format, exactly as dispatched.
+
+**Deviations from the plan, adapted and noted rather than forced (per the dispatch's own instruction):**
+- **Skipped the plywood-shell clearance feature and the per-vertex joint-type picker.** Neither is needed to
+  prove the CAD-toggle pattern; every board defaults to `'Miter'` at all 4 corners (the original tool's own
+  default). Straightforward to add later using the same `calculateQuadFrameGeometry` inputs — the engine already
+  supports both, only the UI for them wasn't ported.
+- **A genuine tension in the dispatch's own step 6, resolved and written down rather than silently picked one
+  way:** the dispatch says board joints stay `fixed:true` (explicit, repeated, and "unlocking them is v2") AND
+  that dimensions "must be... editable (type a new value, ... the board resizes)". These two are geometrically
+  incompatible — a `fixed:true` joint cannot move no matter what constraint touches it, so "type a new value and
+  watch a fixed-corner board resize" is impossible by construction, not a bug to fix. Live-verified what IS true
+  with fixed joints: `ConstraintManager`'s existing rigid-endpoint check (DISTANCE-specific) correctly
+  auto-creates every board's length dimension as a reference from the start (not a bug — the SAME thing would
+  happen for ANY distance between two literally-fixed points anywhere in the app); the `toggleDriving` mechanism
+  (the same function the driven-toggle glyph calls) flips the flag correctly with no error when called directly;
+  deleting a dimension via the constraint-list panel + Delete key works (12→11, confirmed live). So "editable/
+  deletable/toggleable through the ordinary dimension UI, no special-cased variant" is satisfied in the sense that
+  matters — every dimension is a REAL, generic constraint object responding to the SAME mechanisms as any
+  hand-added one — while true free-resize-by-editing genuinely requires unlocking the joints, which is explicitly
+  deferred to v2 by the same dispatch. Noted the asymmetry too: ANGLE has no matching DISTANCE-style rigid-check,
+  so an angle-edit attempt on fixed joints would instead hit the existing `commitDimensionEdit` revert-on-
+  non-convergence path — both are honest, pre-existing, non-crashing behaviors, not something introduced here.
+- **App-switcher integration was left out.** The task's 7 steps don't mention it, and editing the shared
+  app-switcher's known-apps list would touch shared UI other hosts render — reachable via direct URL for this v1.
+
+**VERIFIED LIVE, end to end** (CDP live-driver, reused across all 7 steps): changed topWidth 12→18 in the
+Calculator view → the preview's outer polygon updated correctly (`-12,0 -9,-10 9,-10 12,0`) → toggled to Sketch →
+16 joints (+ j_origin) + 16 line shapes built, one edge measuring exactly 18in (the NEW value, not a stale
+default) confirming the calculator's current output — not a cached one — drives the sketch; 12 dimension labels
+visible; deleting one via the constraint-list panel works; `toggleDriving` flips correctly; Export (the real
+button, not just the underlying functions) produces a valid 4-path SVG with correct mm-converted dimensions
+(609.6mm × 254mm = 24in × 10in for the default inputs) and throws no errors. 0 console errors through the entire
+flow, every step.
+
+**REGRESSION:** `node --check` clean on every new/touched file (`index.html`, `main.js`, `calculator-view.js`,
+`trapezoid-mapper.js`, `sketch-builder.js`, `frame-geometry.js`). `shell-smoke` 11/12 — same pre-existing,
+unrelated ribbon-order fail from the last several turns, confirming `apps/sketchstudio`'s own shell is untouched.
+Spot-checked `solver-scenarios`/`constraint-conformance` clean (`frame-geometry.js` is new and unimported anywhere
+else, so nothing else could regress from it). No existing test file discovers `apps/frame-calc/*` (the runner only
+scans `tests/`/`packages/core/tests/`), so nothing needed updating there.
+
+**PROCESS:** used a TEMPORARY `window.__dbgSketch` hook in `apps/frame-calc/src/main.js` during steps 5-7's
+investigation only, removed before each commit (same discipline as every prior turn's `window.__dbgState`). Did
+NOT touch `apps/sketchstudio`, `apps/shaper`, or existing `packages/*` behavior for those hosts, per the explicit
+out-of-scope list. Did NOT touch `geometric-frame-calc`'s own separate deploy (read-only throughout).
+
+**CAPACITY:** this was the largest single feature built this session (7 commits, a full new app) — comfortable
+throughout, the scope was well-bounded by the dispatch's own step list.
+
+Append per the dispatch's required marker:
+
+=== FRAME-CALC-TOGGLE-V1 DONE — HOLD ===

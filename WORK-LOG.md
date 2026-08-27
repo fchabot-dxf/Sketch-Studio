@@ -10046,3 +10046,17 @@ turn this session (unrelated to touch-action/CSS). `shell-smoke.cjs` (sketchstud
 pre-existing ribbon-order failure.
 
 === SHARED-TOUCH-ACTION-FIX DONE — HOLD ===
+
+**Side discovery while staging this turn's diff (flagging, not fixing — out of scope for this task):**
+`packages/ui/sketch-canvas.js` carries a PRE-EXISTING, UNCOMMITTED change sitting in the working tree
+across multiple turns now (`git status` has shown this file modified every turn since at least t380,
+always left alone as "not mine"): `mountSketch()` at HEAD calls `seedDemo(engine, state);`
+UNCONDITIONALLY — it has NEVER actually respected `opts.seedDemo`, despite `apps/frame-calc/src/main.js`
+(committed, turn 378/380) explicitly passing `{ seedDemo: false, ... }`. This means frame-calc's Sketch
+view has been silently showing the (20,20)-(80,20) demo line alongside the calculator-built frame this
+whole time in the actually-shipped code — a real, live, currently-deployed bug, distinct from anything
+in this turn's scope. The uncommitted `if (opts.seedDemo !== false) { seedDemo(...) }` guard sitting in
+the working tree looks like an unfinished fix for exactly this. Staged and committed ONLY my
+touch-action hunk (via a hand-built patch applied with `git apply --cached`, verified `git diff --staged`
+showed just my addition) — left this other hunk exactly as found, unstaged, for the advisor to either
+dispatch as its own turn or reconcile with whoever's mid-edit this represents.

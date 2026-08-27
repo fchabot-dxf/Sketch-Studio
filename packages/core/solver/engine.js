@@ -364,6 +364,23 @@ export class NewtonSolver {
         }
       }
 
+      // A radius distance on a shape with NO rim joint (a real CIRCLE) is an intentionally INERT row:
+      // circle-tool.js gives it only the center joint, so the synthesis above leaves params.joints
+      // empty on purpose (dimension-seams.js's commitDimensionEdit moves shape.radius directly instead
+      // of through the Jacobian). But Definitions.distance.computeError unconditionally indexes
+      // params.joints[0]/[1] -- with an empty array that's `positions[NaN]` -> NaN, and even though the
+      // resulting Jacobian row is genuinely all-zero (invalid-index writes silently no-op on the typed
+      // array), Algebra.atx's per-column accumulation still computes `0 * NaN = NaN` for every column,
+      // poisoning the WHOLE gradient the instant this constraint shares ANY joint with another real
+      // constraint (tangent, point-on-circle, ...) -- confirmed live: cost/lambda spike to NaN/Infinity
+      // from iteration 0 and the solve never moves, silently disabling every other constraint on that
+      // joint. Make the "no rim joint" case an EXPLICIT zero row instead of an accidental NaN one.
+      if (c.type === 'distance' && c.isRadius && (!params.joints || params.joints.length < 2)) {
+        r[row] = 0;
+        row++;
+        continue;
+      }
+
       const e = def.computeError(params, densePositions);
       if (Array.isArray(e)) {
         // multi-row (e.g., coincident)

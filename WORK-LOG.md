@@ -9364,3 +9364,101 @@ same pre-existing ribbon-order issue from the last two turns, unrelated). `node 
 test anywhere references `openSettings` (grepped `tests/`), so nothing needed updating.
 
 === STYLE-PANEL-AUTOOPEN-FIX DONE — HOLD ===
+
+---
+
+## TURN 374 — TANGENT-RADIUS-CONVERGENCE-FIX: a "converged but lying" gap, root-caused to TWO independent defects
+
+**Dispatch:** the advisor's breaker sweep found a real solver-internals bug: circle tangent to a line + a radius
+dimension → editing the radius reverts ("conflicts with tangent"), and an isolated raw `engine.solve()` call
+(bypassing the edit seam) after mutating `shape.radius` reports `converged:true, error≈1e-15` while the ACTUAL
+tangent residual is off by several units. Their own bounded look ruled out "free-x rank-deficiency" explicitly
+(pinning `x` gave the identical wrong result) and left the mechanism as a hypothesis (LM λ/damping mismanagement on
+a sudden external jump) for this turn to trace. Took the full time it needed — this ended up being TWO separate,
+independently-confirmed defects, not one.
+
+**Investigation, live + isolated (not guessed):**
+
+**Defect 1 — a SIGN bug in the geometric "honesty" verifier (`constraint-verifier.js`'s `measureResidual`), found
+first via a live repro.** Built a CDP live-driver scenario (line + circle, tangent constraint via the real toolbar
+click flow) and hit an immediate wall: creating the tangent constraint was REJECTED even from a carefully
+engineered near-tangent starting position (`_sandboxVerify` reported a residual of `6.0 ≈ 2×radius` on geometry
+that was actually only `0.05` off). Traced with a direct `measureResidual` probe: `perpendicularDistance(center,
+a, b)` returns a **signed** value (which side of the line the center is on); the TANGENT case computed
+`Math.abs(perpendicularDistance(...) - r)` — abs of the WHOLE subtraction, not abs of the distance first. On the
+side where the signed distance is negative and near `-r` (a genuinely tangent configuration), this reads as
+`|-r - r| = 2r` instead of `≈0` — an entirely false conflict. **Swept for the same pattern** (a signed
+`perpendicularDistance` used without an inner abs) and found it TWICE more: `POINT_ON_LINE`'s line-case
+(`return perpendicularDistance(pt,p1,p2)` with no abs at all — a point violating by a large amount on the negative
+side would satisfy `residual <= tolerance` and read as SATISFIED, the opposite direction of false), and
+`COLLINEAR`'s joints-case (`if (err > maxErr) maxErr = err` — a negative `err` can never beat `maxErr`'s `0` start,
+so a genuinely non-collinear point on that side silently reads as perfectly collinear). Fixed all three
+(`tangent` ×2 branches, `point_on_line`, `collinear`) by abs-ing the raw signed distance before any comparison —
+zero behavior change on the positive side, correct on the negative side. This is exactly the "converged but lying"
+class of bug the project's own invariant targets, just discovered via a DIFFERENT symptom (false rejection at
+creation time) than the dispatch's own repro (false accept at edit time) — same root defect, opposite-sign
+manifestation.
+
+**Defect 2 — the ACTUAL mechanism behind the dispatch's specific repro, found by re-deriving the live scenario
+after fixing #1 and it STILL reverted.** With the sign bug fixed, tangent creation now succeeds correctly and the
+edit box opens — but editing the radius still reverted with "conflicts with tangent." Isolated with a raw
+`createNewtonSolver` probe (bypassing the wrapped engine, `verbose:true`): **`cost` and `costNew` are `NaN` from
+iteration 0** the instant BOTH a `tangent` constraint AND an `isRadius` distance constraint exist on the same
+circle — confirmed present even with NO tangent at all, isRadius alone. Root cause: an `isRadius` distance
+constraint on a circle (turn 370/372's own finding — a circle has only the center joint, no rim, so
+`engine.js`'s synthesis leaves `params.joints` empty, and `dimension-seams.js` moves `shape.radius` directly
+instead) makes `Definitions.distance.computeError` index `params.joints[0]/[1]` — both `undefined` — giving
+`positions[NaN]` → `NaN`. The resulting Jacobian row IS genuinely all-zero (an invalid-index write on a
+`Float64Array` silently no-ops), so in ISOLATION this row is harmless — which is exactly why turn 370's original
+isolated test of `isRadius` alone (through the WRAPPED engine, whose independent geometric recheck overwrites the
+raw `error`/`converged` entirely) never surfaced it. But `Algebra.atx`'s gradient accumulation sums `J[row,k] *
+r[row]` across ALL rows for each column — `0 * NaN` is `NaN` in IEEE754, not `0` — so the instant this circle's
+center ALSO participates in another real constraint (tangent, point-on-circle — anything with a nonzero row on
+that joint), the entire gradient vector `g` gets poisoned to `NaN`, the LM step `dx` solves to `NaN`, every
+candidate step is rejected (any comparison against `NaN` is `false` in JS), `λ` spirals to `Infinity`, and the
+solver silently stalls at the ORIGINAL position forever while `λ`/`cost` explode — precisely matching the
+dispatch's "existing rows spike + stall" hypothesis, just with the actual poisoning mechanism identified (a NaN
+row's implicit `0×NaN` contamination, not a stale/miscalibrated λ carried across calls — confirmed `λ` IS freshly
+reset to `lambdaInit` at the top of every `solve()` call, ruling that specific idea out explicitly).
+
+**Fix (engine.js):** made the "no rim joint" isRadius case an EXPLICIT zero row (`r[row]=0`, leave the
+already-zero-initialized Jacobian row alone, `row++; continue;`) instead of an accidental NaN one — this is the
+SAME declared invariant turn 372 already established (a circle's radius is governed by a direct `shape.radius`
+write, not the Jacobian), just now enforced at the one place that was silently violating it. `Definitions.distance`
+itself is untouched (still correctly reflects real distance constraints; only the KNOWN-inert case is short-circuited
+before it ever reaches the generic formula).
+
+**VERIFIED LIVE, both defects, together, in the exact dispatched scenario:** draw a line, draw a circle roughly
+tangent above it, add the TANGENT constraint (real toolbar click flow — now succeeds where it used to falsely
+reject), dimension the radius (real Dim-tool click — opens correctly, prefilled with the true radius), edit
+3.0 → 4.8 → **circle resizes to radius 4.8, perpendicular distance to the line is ALSO 4.8 (still exactly
+tangent), NO revert notification, 0 console errors.** Isolated regression probes for the two sibling cases named in
+the dispatch: point-on-circle + isRadius (radius 10→25: the constrained point correctly tracks to the new rim,
+`converged:true`) and circle-circle tangent + isRadius (radius 10→25: center distance correctly becomes 45=25+20,
+`converged:true`) — both now converge correctly through the same one-line engine fix; named and verified, not
+assumed to be covered "for free."
+
+**REGRESSION:** full 16/16 solver/harness gate green (`solver-scenarios` 23/23, `constraint-conformance` 15/15,
+`solver-fuzz` 150/150, `differential-planegcs` 9/9, `packages/core/tests/solver-*` 10/10) + every named spec from
+this turn AND the prior three (`arc-tool`, `arc-integration`, `arc-drag`, `radial-locked`, `circle-tool`,
+`constraint-edit-driven`, `constraint-manager` + `-sandbox-notification`, `constraint-tools`, `tangent-sandbox`,
+all `line-*`/`grid-snap-apply` specs) all green. `node --check` clean on both touched files
+(`constraint-verifier.js`, `solver/engine.js`). `shell-smoke` 11/12 — same pre-existing, unrelated ribbon-order
+fail carried from the last three turns.
+
+**PROCESS:** reused the `window.__dbgState` TEMPORARY hook (reverted before commit, as every prior turn) plus the
+CDP live-driver infrastructure; this turn's investigation needed three escalating levels of isolation (live UI
+click flow → direct `ConstraintManager`/`measureResidual` probes via dynamic `import()` inside the page → a raw,
+`verbose:true` `createNewtonSolver` outside the browser entirely) to separate "the outer wrapper is lying" from
+"the raw solver is actually stuck" — worth recording as the general playbook for the next "converged but lying"
+report: check the WRAPPED result and the RAW result separately, they can disagree in either direction. `proc_health
+mark --turn 374` at start; all scratch probe `.mjs` files written to and deleted from the repo root (never
+committed) since Node's `#core/*` import-map only resolves from files inside the repo, not the scratchpad
+temp dir.
+
+**CAPACITY:** this was the deepest single-issue investigation across the last four turns — genuinely needed the
+full time, per the dispatch's own instruction not to rush it. Comfortable at the end, but this turn alone probably
+warrants a fresh session before taking on anything else non-trivial, purely on account of how much context this
+investigation consumed; flagging that rather than guessing at the next task's scope blind.
+
+=== TANGENT-RADIUS-CONVERGENCE-FIX DONE — HOLD ===

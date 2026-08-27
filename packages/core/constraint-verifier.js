@@ -54,7 +54,10 @@ export function measureResidual(c, joints, shapes) {
                 if (shape.type === 'line' && shape.joints.length >= 2) {
                     const p1 = joints.get(shape.joints[0]);
                     const p2 = joints.get(shape.joints[1]);
-                    if (p1 && p2) return perpendicularDistance(pt, p1, p2);
+                    // perpendicularDistance is SIGNED -- point-on-line is satisfied at distance 0
+                    // regardless of which side, so a negative signed value must be abs'd or a point
+                    // sitting well off the line on one particular side reads as "satisfied".
+                    if (p1 && p2) return Math.abs(perpendicularDistance(pt, p1, p2));
                 } else if (shape.type === 'circle' || shape.type === 'arc') {
                     const center = joints.get(shape.joints[0]);
                     let radius = shape.radius;
@@ -93,7 +96,9 @@ export function measureResidual(c, joints, shapes) {
                 const p2 = pts[1];
                 let maxErr = 0;
                 for (let i = 2; i < pts.length; i++) {
-                    const err = perpendicularDistance(pts[i], p1, p2);
+                    // Same sign fix: a point off the line on the negative-normal side must not
+                    // silently lose to maxErr's 0 starting value.
+                    const err = Math.abs(perpendicularDistance(pts[i], p1, p2));
                     if (err > maxErr) maxErr = err;
                 }
                 return maxErr;
@@ -165,7 +170,12 @@ export function measureResidual(c, joints, shapes) {
                     const center = joints.get(circleShape.joints[0]);
                     if (a && b && center) {
                         const r = getR(circleShape, center);
-                        return Math.abs(perpendicularDistance(center, a, b) - r);
+                        // perpendicularDistance is SIGNED (which side of the line the center is on);
+                        // tangency means |signed dist| == r, so abs the DISTANCE first, then compare --
+                        // `signed - r` (no inner abs) reads as satisfied/violated by the wrong amount
+                        // whenever the center is on the negative-normal side (confirmed live: a genuinely
+                        // near-tangent circle on that side measured ~2r off instead of ~0).
+                        return Math.abs(Math.abs(perpendicularDistance(center, a, b)) - r);
                     }
                 }
             }
@@ -181,7 +191,8 @@ export function measureResidual(c, joints, shapes) {
                     const center = joints.get(circS.joints[0]);
                     if (a && b && center) {
                         const r = getR(circS, center);
-                        return Math.abs(perpendicularDistance(center, a, b) - r);
+                        // Same sign fix as the c.line/c.circle branch above.
+                        return Math.abs(Math.abs(perpendicularDistance(center, a, b)) - r);
                     }
                 }
                 if (isCircle(s1) && isCircle(s2)) {

@@ -98,14 +98,18 @@
 
         #svgCanvas { width: 100%; height: 100%; touch-action: none; background-color: #ffffff; transition: background-color 0.15s ease; }
         #svgCanvas.snapping { background-color: #fff7ed; }
-        
-        /* Prevent pinch-zoom but allow panning */
-        @supports (touch-action: pan-x pan-y) {
-            #svgCanvas {
-                touch-action: pan-x pan-y;
-            }
-        }
-        
+
+        /* MOBILE-TOUCH-SELECT-ZOOM-FIX: the canvas implements its OWN complete touch handling --
+           select/drag (packages/ui/input-manager.js) and two-finger pinch-zoom (input-handlers/
+           pan-zoom.js) both already work entirely in JS. `touch-action: none` (above) hands 100% of
+           single- and two-finger gesture recognition to that JS, matching every other full-custom-
+           touch canvas app (Figma/tldraw/Excalidraw all do the same). The @supports override this
+           replaced loosened that back to `pan-x pan-y` on real phones -- letting the BROWSER's own
+           native gesture recognizer compete with the app's pointer handlers for one- and two-finger
+           gestures, and native panning/zoom is exactly what the user reported. #svgCanvas isn't
+           itself a scrollable element, so there was nothing for native panning to actually do -- it
+           could only ever get in the JS's way, never provide working functionality of its own. */
+
         #toolsRibbon { cursor: default; }
 
         /* Tool dropdown */

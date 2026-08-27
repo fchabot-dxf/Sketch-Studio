@@ -9917,3 +9917,71 @@ see correction #1) and trace (no equivalent panel — see correction #3). Nothin
 qualifying hosts are fully wired and verified this turn.
 
 === MOBILE-DRAWER-PANEL DONE — HOLD ===
+
+---
+
+## TURN 390 — MOBILE-TOUCH-SELECT-ZOOM-FIX: `touch-action` handed back to the browser on real phones, confirmed long-standing
+
+**Confirmed via `git blame`/`git log` (the advisor's exact question): this is a LONG-STANDING bug, NOT
+a regression from this session's work.** `apps/sketchstudio/index.html`'s touch-action CSS block (the
+base `#svgCanvas { touch-action: none; }` plus the `@supports (touch-action: pan-x pan-y) { ... }`
+override) traces to a single original commit `4ef2991`, 2026-05-02 — nearly 4 months old, predating even
+the `packages/core`/`packages/ui` restructuring this whole `carve-out` branch is built on. The touch/
+pointer-priority logic in `packages/ui/input-manager.js` (`handlePointerDown`'s two-finger-gesture-first
+check) traces to `e922708a`, 2026-06-27; `packages/ui/input-handlers/pan-zoom.js` (the app's own pinch-
+zoom implementation) has exactly one history entry, a verbatim file relocation (`79effc5`), no logic
+change ever. None of this session's dvh/footer/viewBox work (turns 384/386) touched touch-action or
+pointer-handler logic at all — this was always broken this way on a real phone; the user is the first
+to have stress-tested core interaction there.
+
+**Root cause, from reading the actual code (not just the CSS):** the app implements its OWN COMPLETE
+touch-gesture system in JS — `packages/ui/input-manager.js`'s `handlePointerDown` and `packages/ui/
+input-handlers/pan-zoom.js`'s `handlePanZoomPointerDown/Move/Up` fully handle single-finger select/drag
+AND two-finger pinch-zoom (tracking touch points by `pointerId` in a `Map`, computing pinch center/
+distance, mutating `state.view` directly) — exactly the architecture every full-custom-touch canvas app
+(Figma, tldraw, Excalidraw) uses, and exactly why `#svgCanvas`'s BASE rule is `touch-action: none`
+(hand 100% of gesture recognition to JS, since `body` is ALSO unconditionally `touch-action: none`).
+But the `@supports` block REPLACED that with `touch-action: pan-x pan-y` on any browser supporting the
+multi-value syntax — i.e. on every current real phone. That put the BROWSER's own native one-/two-
+finger gesture recognizer back in competition with the JS's already-complete handling: `#svgCanvas`
+isn't itself a scrollable element, so native panning could never actually accomplish anything useful
+there — it could only ever intercept/preempt gestures the JS already handles correctly, matching both
+reported symptoms (native gesture claiming the touch before/instead of the JS's select/drag logic;
+native page-level pinch-zoom instead of the JS's own canvas-scale zoom).
+
+**Fix:** removed the `@supports` override entirely (2-line net diff beyond the added comment), leaving
+the single unconditional `#svgCanvas { touch-action: none; }` rule that was already there for browsers
+lacking multi-value support — now applying everywhere, consistent with `body`'s own unconditional
+`none`. Comment explains why, citing the two JS files that now own 100% of gesture handling.
+
+**Verified — precisely what headless CDP CAN and CANNOT show, stated plainly rather than glossed over:**
+Used CDP's real `Input.dispatchTouchEvent` (not a JS-synthesized `PointerEvent` — this is the closest
+thing to real-device input available headlessly, since it goes through Chrome's actual touch/gesture
+arbitration and touch-action enforcement, unlike firing a synthetic event from JS) with
+`Emulation.setDeviceMetricsOverride({mobile:true, hasTouch:true})`:
+- A real single-finger touch-drag on a drawn line's joint: the joint's world position changed to follow
+  the touch, and the solver correctly re-enforced its horizontal constraint on the other joint.
+- A plain tap (touchstart+touchend, no move) on a shape: `state.selectedShapes` populated (size 1).
+- A real two-finger pinch (both touch points spreading apart over 5 steps): `state.view.w` changed
+  (20 → 4), confirming the JS's own zoom engaged.
+- **All three of the above ALSO passed identically against the OLD, unfixed CSS** — meaning headless
+  Chrome's touch-action/gesture arbitration does NOT reproduce whatever is actually going wrong on the
+  user's real phone (most likely because `#svgCanvas` has nothing to scroll, so headless Chrome's
+  compositor treats the native "pan" claim as a no-op and lets events through regardless, whereas a real
+  mobile browser's gesture recognizer is known to be far more eager/aggressive about claiming touches
+  for native handling based on touch-action alone, without waiting to check if anything is actually
+  scrollable — that eagerness is the whole reason `touch-action` exists as a compositor-thread hint in
+  the first place). **This means headless testing can prove the fix causes zero regression (all three
+  behaviors still work identically after the change) but CANNOT prove it fixes the reported symptom on
+  an actual phone** — same class of limitation as the address-bar and vibration work. The fix is the
+  architecturally-correct configuration for what this app's JS already does (confirmed by reading the
+  code, not guessed), and removes the only mechanism that could let native gestures compete with logic
+  already proven correct in isolation — but a real-device check is the only way to confirm the reported
+  symptom is actually gone.
+
+**Gate:** `shell-smoke.cjs` 11/12, same pre-existing unrelated ribbon-order failure. No JS files changed
+(CSS-only fix in `apps/sketchstudio/index.html`); a temporary `window.__dbgState = state;` debug hook
+added to `apps/sketchstudio/main.js` for this turn's touch-dispatch testing was reverted before commit
+(confirmed via `git diff` showing zero diff on that file).
+
+=== MOBILE-TOUCH-SELECT-ZOOM-FIX DONE — HOLD ===

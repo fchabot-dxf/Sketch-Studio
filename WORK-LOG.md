@@ -9638,3 +9638,65 @@ SketchStudio, Shaper, and Pen Plotter in turn — Frame Calc now appears in ever
 ribbon-order fail carried from prior turns.
 
 === FRAME-CALC-APP-SWITCHER DONE — HOLD ===
+
+---
+
+## TURN 382 — MOBILE-RIBBON-SHIFT-FIX: html now clamped like body + a scroll-reset listener
+
+**Dispatch:** user-reported with screenshot — on a real phone, the ribbon looks correct on load then visibly
+shifts up ~2s later, overlapping the header. Explicitly a mobile-only class of bug headless CDP structurally
+cannot reproduce (no real address bar to auto-collapse) — the advisor's own headless check came back clean and
+was flagged as a blind spot, not evidence of no bug.
+
+**Confirmed the diagnosis before touching anything:** `apps/sketchstudio/index.html` — `body` has
+`class="h-screen"` (Tailwind's `100vh`) + `overflow:hidden` inline, but `html` had NEITHER a height nor an
+overflow rule (`getComputedStyle(document.documentElement).overflow` read `"visible"`, confirmed live). This is
+the textbook mobile-`100vh` bug: on real mobile Safari/Chrome, `100vh` can resolve against the LARGER
+address-bar-collapsed viewport even while the bar is still showing, so `body`'s rendered height can exceed the
+momentarily-visible viewport. `body`'s own `overflow:hidden` only clips ITS content — it does nothing to stop
+`html` (the real scrolling context) from drifting into that extra space. When the bar then genuinely collapses
+(~1-2s, native, not app-controlled), any residual scroll stays applied to the now-taller viewport, visibly
+pushing the ribbon up past the header. Ruled out (matching the advisor's own read): `main.js`'s
+`resize -> updateView()` only touches the SVG `viewBox`, can't move the ribbon/header — confirmed by re-reading it.
+
+**Attempted a genuine headless repro first, and it's instructive why it can't fully work here:** loaded at an
+"address-bar-visible" mobile viewport (390×611), nudged a scroll, then resized to the "bar-collapsed" height
+(390×667) via `Emulation.setDeviceMetricsOverride` — `window.scrollTo` was a no-op (`scrollY` stayed 0 throughout)
+because headless Chrome's device-metrics override doesn't reproduce the specific "100vh resolves against the
+larger viewport" quirk real mobile browsers have — in headless CDP, `100vh` always matched whatever height was
+actively set, so there was never anything to scroll into. This is an empirically-confirmed limitation (not an
+assumption): the exact real-world trigger genuinely cannot be recreated without a real device or a real mobile
+browser's `vh` behavior.
+
+**Fix — the standard pattern for this exact class of bug, sized to what the confirmed cause needs (no bigger
+defensive rewrite):**
+1. `html { height: 100%; overflow: hidden; }` — the same clamp `body` already has, closing the gap that let
+   `html` itself drift.
+2. A small scroll-reset listener (in the existing inline `<script>` block, alongside the pre-existing iOS
+   gesture-prevention code): on `window`'s `resize` and (when available) `visualViewport`'s `resize`/`scroll`,
+   force `window.scrollTo(0, 0)` if the page has drifted off `(0,0)` — belt-and-suspenders for the moment a real
+   address-bar collapse fires the native resize this app can't otherwise intercept.
+
+**VERIFIED LIVE** (CDP, since a real phone wasn't available in this environment — noted explicitly, not
+papered over): confirmed `html`'s computed `overflow` is now `"hidden"` (was `"visible"`). Decoupled from the
+un-reproducible real trigger, verified the FIX'S OWN mechanism directly: temporarily forced real page overflow
+(bypassing the new `html` clamp for this one probe only, to give `scrollTo` something to act on), scrolled to
+`(0, 60)` (confirmed `scrollY: 60`), dispatched a `resize` event, and confirmed the listener corrected it back to
+`scrollY: 0`. Confirmed `#svgCanvas`'s `touch-action` (`pan-x pan-y`, per the existing `@supports` block) and
+`body`'s `touch-action` (`none`) are both unchanged — the fix doesn't touch the app's own gesture handling.
+Confirmed a clean full-page load at both mobile and desktop viewports with 0 console errors.
+
+**Honestly flagged, not swept under:** this fix could not be verified against the LITERAL real-world trigger (an
+actual phone's address bar collapsing) in this environment — only the confirmed root cause (`html` lacking the
+clamp) and the fix's own response mechanism (the reset listener firing and correcting a real offset) were
+verified live. The dispatch's own instruction to verify on an actual device before considering this fully closed
+still stands; recommend the user (or a future turn with device access) does a final phone check.
+
+**REGRESSION:** `shell-smoke` 11/12, same pre-existing unrelated ribbon-order fail. Clean load, 0 console errors,
+at both viewports. Diff is 19 lines in one file (`apps/sketchstudio/index.html`), CSS + a small script addition
+only — no other file touched. Noted, not touched (out of scope for this bug): `apps/sketchstudio/overrides.css`
+carries the SAME pre-fix `body`-only-overflow pattern, but is completely unreferenced anywhere in the repo
+(confirmed via grep — orphaned dead code, unrelated to this bug since nothing loads it); flagging for a future
+cleanup decision rather than editing a file with zero live effect.
+
+=== MOBILE-RIBBON-SHIFT-FIX DONE — HOLD ===

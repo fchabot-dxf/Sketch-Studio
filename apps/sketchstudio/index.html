@@ -17,6 +17,14 @@
             --fusion-orange: #EA580C;
             --fusion-blue: #3B82F6;
         }
+        /* Mobile browsers auto-collapse their address bar ~1-2s after load, GROWING the viewport height
+           via a native resize -- and on some mobile browsers `100vh` resolves against the LARGER,
+           bar-collapsed viewport even while the bar is still showing, so `body`'s own `h-screen` (100vh)
+           can be taller than the momentarily-visible viewport. `body` alone having `overflow:hidden`
+           doesn't stop `html` (the actual scrolling context) from drifting into that extra space; when
+           the bar then collapses for real, any such residual scroll stays applied to the NOW-taller
+           viewport, visibly shifting the ribbon/header. `html` needs the same clamp `body` already has. */
+        html { height: 100%; overflow: hidden; }
         body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; -webkit-user-select: none; user-select: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -461,6 +469,17 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
                 e.preventDefault();
             }
         }, { passive: false });
+
+        // Mobile browser chrome (the address bar) auto-collapsing ~1-2s after load fires a native
+        // resize/visualViewport-resize with a residual page scroll already applied (see the `html`
+        // overflow:hidden comment above for why) -- force back to (0,0) whenever the viewport's size or
+        // visual offset changes, so that residual scroll can never end up visible as a shifted ribbon.
+        const resetScroll = () => { if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0); };
+        window.addEventListener('resize', resetScroll);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resetScroll);
+            window.visualViewport.addEventListener('scroll', resetScroll);
+        }
     </script>
 
     <!-- Import map (browser) — ISOMORPHIC with package.json "imports" (Node). Same #-prefixed

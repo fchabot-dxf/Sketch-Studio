@@ -11,6 +11,7 @@ import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
+import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
@@ -245,9 +246,18 @@ export function mountSketchStage(view, ctx = {}) {
   };
 
   // Mount the shared sketcher ONCE into the stage's OWN svg (isActive gates its document-level input listeners).
-  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve });
+  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve, seedDemo: false }); // PERSIST-2: the autosave buffer below decides what geometry to show
   state.coreSketch = controller.state; // UNIFY-2: a toolpath can target this #core geometry directly
   try { controller.engine.solve(500); } catch (_) {} // UNIFY-throttle: converge the seed once (per-frame solve is now gated)
+
+  // PERSIST-2: restore the shared cross-app document (if any), then keep autosaving.
+  const saveStatusEl = document.getElementById('save-status');
+  const docBuffer = createDocumentBuffer({
+    state: controller.state,
+    onStatusChange: (s) => { if (saveStatusEl) saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
+  });
+  docBuffer.restore().then(() => { try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {} });
+  docBuffer.start();
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.

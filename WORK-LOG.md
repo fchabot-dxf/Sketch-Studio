@@ -10060,3 +10060,124 @@ the working tree looks like an unfinished fix for exactly this. Staged and commi
 touch-action hunk (via a hand-built patch applied with `git apply --cached`, verified `git diff --staged`
 showed just my addition) — left this other hunk exactly as found, unstaged, for the advisor to either
 dispatch as its own turn or reconcile with whoever's mid-edit this represents.
+
+---
+
+## TURN 394 — PERSIST-1-2: the document format + serializer, and the autosave/cross-app buffer
+
+**Epic: PROJECT PERSISTENCE.** This turn = Slice 1 (the `#core` document format/serializer) + Slice 2
+(the IndexedDB autosave buffer + restore + cross-app carry), per the dispatch's own split.
+
+### Slice 1 — `packages/core/document.js`
+
+Format: `{ version, geometry: {joints, shapes, constraints, sketches, activeSketchId, groups, vcarves},
+hosts: {} }`. The geometry field set is NOT invented fresh — it's exactly what `packages/ui/sketch-
+state.js`'s `_captureSnapshot()`/`_restoreSnapshot()` already treat as "the whole model" for undo/redo,
+the already-battle-tested answer in this codebase to "what does the geometry consist of" (confirmed by
+reading it before designing, per the dispatch's own instruction not to re-derive). `joints` serializes as
+an array of `[id, {x,y,fixed,...}]` pairs — the SAME shape `tests/harness/sketch.js`'s existing `load()`
+already accepts as one of its 4 input forms, chosen deliberately to match rather than invent a 5th.
+`hosts` is opaque to `#core` — embedded verbatim, a host's own concern to read/write.
+
+`deserializeDocument` clears every store to default FIRST (lesson 4: no blending old+restored), re-adds
+constraints via `addConstraintObject` (the SAME validated-add path `_restoreSnapshot`'s undo/redo already
+uses — not the raw `engine.addConstraint` the load()-only test harness uses, since a document that
+traveled through storage deserves the same safety net a redo step gets), and REJECTS (never half-reads)
+a document whose `version` is newer than this build understands (lesson 5).
+
+**Flagged, not fixed:** `sketch-state.js`'s undo/redo snapshot and this document codec now capture the
+SAME fields via two SEPARATE implementations — a real "one codec per thing" (lesson 3) violation in
+spirit. Not unified this turn: refactoring undo/redo (a working, well-tested, load-bearing mechanism) to
+delegate to the new `#core` function is out of scope for a persistence-epic turn and carries real
+regression risk on an unrelated system; flagging as a legitimate follow-up cleanup rather than silently
+leaving two near-identical implementations undocumented.
+
+**Round-trip oracle** (`packages/core/tests/document-roundtrip.test.js`): builds a sketch covering every
+shape kind (line, circle, arc, bezier — confirmed via grep that these are the only 4 `shape.type` values
+anywhere in `#core/shapes.js`+`circle-tool.js`; rect/polygon are just groups of `line` shapes, so covering
+`line` covers them) and a representative constraint spread (HORIZONTAL/VERTICAL/COINCIDENT from a welded
+rect, a driving radius DISTANCE, a TANGENT between a circle and a line, an arc's own structural EQUAL
+constraint, a driving dimension DISTANCE) — serializes, deserializes into a FRESH engine, asserts shape/
+constraint counts and every kind/type present, asserts restored joint positions match EXACTLY, then
+re-solves and asserts convergence to the SAME positions as the original. **Proved non-vacuous**: mutated
+`deserializeDocument` to silently drop circle shapes, re-ran — failed with `missing shape kind: circle`,
+confirmed the test actually catches the exact defect class the epic is worried about; reverted the
+mutation, re-ran — passes.
+
+### Slice 2 — `packages/ui/document-buffer.js` + wiring
+
+`createDocumentBuffer({state, hostName, getHostData, pollMs, onStatusChange})` returns
+`{restore, start, stop}`. Persists to IndexedDB under ONE well-known key (`sketch-studio-documents` /
+`current`) — because every app is same-origin, that key IS the cross-app carry. Uses a fixed-interval
+"did anything change" poll (default 1500ms, matching the DDCS reference's own "live-ish poll, cheap"
+cadence) rather than a classic per-keystroke debounce timer — coalesces rapid edits into one write either
+way, and avoids needing a hook at this codebase's many scattered state-mutation call sites; noted here
+explicitly since "debounced on change" could also mean a stricter definition. All storage best-effort
+(lesson 7): read/write failures resolve to "nothing to restore" / status 'error', never a thrown error the
+host has to handle. **NO beforeunload prompt** (lesson 2) — never added one; the passive status
+indicator is the only signal.
+
+**Wired into the 3 editors** (generators `frame-calc`/`trace` deliberately NOT wired, confirmed by
+omission — see cross-app-isolation verify below):
+- `apps/shaper/src/main.js` (`ensureSketch`), `apps/penplotter/src/sketch-stage.js` (`mountSketchStage`) —
+  both pass `seedDemo: false` to `mountSketch()` now that persistence decides what geometry to show.
+- `apps/sketchstudio/main.js` — custom wiring (confirmed it does NOT call `mountSketch()`, per the
+  dispatch's own flag) added directly around its existing `state`/`engine`/header setup. It already
+  starts with an empty sketch by design (no demo to gate), so no `seedDemo` concern there.
+- Each host gets a `#save-status` text indicator (unobtrusive, no icon/color alarm) — shaper/penplotter
+  in their static header HTML + CSS, sketchstudio appended to its JS-built header (`createAppHeader` has
+  no dedicated extra-slot API, so appended directly to the returned `.el`).
+
+**A dependency this turn genuinely needed, now adopted rather than left flagged:** `packages/ui/sketch-
+canvas.js`'s `mountSketch()` had a pre-existing UNCOMMITTED hunk (flagged, not fixed, in turn 392's
+WORK-LOG) where `opts.seedDemo` was accepted but never actually respected — `seedDemo()` ran
+unconditionally regardless. Restoring a document while a demo line ALSO unconditionally seeds would mix
+demo geometry into the user's real restored document — a correctness bug for THIS turn's own feature, not
+just a pre-existing curiosity. Verified the hunk (`if (opts.seedDemo !== false) { seedDemo(...) }`) is
+correct and adopted it as part of this turn's commit, now exercised directly by shaper/penplotter's
+`seedDemo:false` calls above and by frame-calc's pre-existing (previously silently-ignored) one.
+
+### SIDE FINDING (dispatch: confirm + record, do NOT fix) — the suspected penplotter-undo bug does NOT reproduce as described
+
+Tested exactly the scenario asked: draw a line in Pen Plotter's Design tab, then undo — via BOTH the
+Design tab's own Undo button (`#designUndoBtn`) and keyboard Ctrl+Z. **Both correctly undid the drawn
+`#core` geometry** (shape count reverted exactly). Root cause of the non-reproduction: both paths route
+through the SAME shared `controller.state.undo()` (`packages/ui/input-manager.js`'s Ctrl+Z handler calls
+`state.undo()` directly, same as the button) — the shared sketcher's OWN undo/redo, whose
+`_captureSnapshot`/`_restoreSnapshot` genuinely DOES capture joints/shapes/constraints (confirmed while
+building Slice 1 above). The ground truth about `history.js`/`state.js:129` (plotter-level history
+covering `artLayers`/`toolpaths`/`doc` only, never `#core` geometry) is still accurate by reading — that
+gap is real — but it does not manifest as "drawing in the Design tab, pressing undo, doesn't undo it,"
+because the Design tab's undo never goes through `history.js` at all. Recording the correction rather than
+confirming the hypothesis: if there IS a real undo gap here, it's likely specific to some OTHER trigger
+path (a different tab's Ctrl+Z, or an app-wide history action) not tested this turn — flagging as an open
+question rather than a confirmed bug, since forcing the original hypothesis onto a contradicting result
+would be worse than an honest "didn't reproduce."
+
+### VERIFIED LIVE (CDP, all with real solver-state assertions, not just DOM-count proxies)
+
+1. **Hard-refresh persistence (sketchstudio):** drew a constrained rect via mouse, waited for the
+   autosave poll, navigated to the SAME URL (a hard refresh), waited for restore. Joint count (9), shape
+   count (4), constraint count (8), `converged:true`, and every joint's EXACT floating-point position
+   matched byte-for-byte before vs. after. Baseline (fresh, no draw) confirmed 1 joint / 0 shapes / 0
+   constraints, ruling out a false-positive from static markup.
+2. **Cross-app carry:** drew a circle in Shaper, waited for autosave, navigated to Pen Plotter — its
+   `state.shapes` showed exactly `[{type:'circle'}]`, joint count matched Shaper's pre-navigation count.
+3. **Generator isolation:** same session, navigated to Frame Calc's Sketch view — `state.shapes` was ALL
+   `'line'` (its own calculator-built frame), `hasCircle: false` — the shared document correctly did NOT
+   leak into a generator.
+4. **No exit-warning prompt:** never added a beforeunload listener anywhere — nothing to verify beyond its
+   absence, confirmed by grep.
+
+**Gate:** discovered while running this turn's gate that EVERY prior turn this session's "full suite" run
+only ever looped `tests/*.test.js` — missing `packages/core/tests/` (the actual solver oracle suite) and
+`tests/harness/` entirely, silently under-counting the real suite by 28 tests (106 vs the real 134).
+Corrected the loop, updated the stale `reference_test_runner.md` memory (which named a nonexistent
+`tests/solver-*.test.js` path). Full corrected run: 134 tests, same 8 pre-existing failures as every prior
+turn (none in the 2 previously-missed dirs — solver oracle suite, including the new round-trip test, is
+100% green). `shell-smoke.cjs` 11/12, same pre-existing ribbon-order failure.
+
+Temporary `window.__dbgState` debug hooks added to sketchstudio/shaper/frame-calc's main.js for this
+turn's live-verify were reverted before commit (confirmed via grep across all 4 hosts — zero matches).
+
+=== PERSIST-1-2 (document format + autosave buffer) DONE — HOLD ===

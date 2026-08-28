@@ -38,6 +38,7 @@
     header.toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 12px;
       background: var(--sk-header-bg); border-bottom: 1px solid var(--sk-header-sep); color: var(--sk-header-fg); }
     #app-switcher-host { display: inline-flex; }
+    .save-status { font: 11px system-ui, sans-serif; color: #8a8272; opacity: 0.8; margin-left: 10px; } /* PERSIST-2 */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .stage-btn { background: transparent; color: #6b6353; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer;
       font: 13px system-ui, sans-serif; opacity: 0.8; }
@@ -242,6 +243,8 @@
   <header class="toolbar">
     <!-- The shared two-way app-switcher (mounted in main.js): marks Pen Plotter current, navigates to the siblings. -->
     <span id="app-switcher-host"></span>
+    <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
+    <span id="save-status" class="save-status"></span>
     <!-- The 5-stage pipeline nav — built by ITERATING the STAGES registry in main.js (never hardcoded). -->
     <nav id="mode-nav" class="mode-nav"></nav>
     <span class="spacer"></span>

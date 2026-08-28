@@ -94,7 +94,9 @@ export function mountSketch(svgEl, opts = {}) {
     svgEl.appendChild(worldGroup);
   }
 
-  seedDemo(engine, state);
+  if (opts.seedDemo !== false) {
+    seedDemo(engine, state);
+  }
 
   // P5b: interactive input. Host input ctx binds the Design canvas; OMIT getMagEls (loupe) + the toolbar methods
   // (P4 fall-throughs degrade gracefully). isActive gates the document-level listeners to the Design surface.

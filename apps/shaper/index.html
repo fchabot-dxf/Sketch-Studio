@@ -145,6 +145,8 @@
     .cut-preset { flex: 1; background: #0b1020; border: 1px solid #2a2d31; border-radius: 6px; padding: 5px 0; color: #cbd5e1; cursor: pointer; font: 12px system-ui, sans-serif; }
     .cut-preset:hover { border-color: var(--sk-selection, #4c9aff); }
     .cut-preset.is-active { background: rgba(76,154,255,0.2); border-color: var(--sk-selection, #4c9aff); color: #fff; }
+    /* PERSIST-2: passive autosave status text, unobtrusive by design (no icon, no color alarm). */
+    .save-status { font: 11px system-ui, sans-serif; color: #6b7280; opacity: 0.8; margin-left: 10px; }
     /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
@@ -159,6 +161,8 @@
   <header class="toolbar">
     <!-- SWITCH-1: the shared two-way app-switcher (replaces the static brand + the DEPLOY-1 one-way back-link). -->
     <span id="app-switcher-host"></span>
+    <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
+    <span id="save-status" class="save-status"></span>
     <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->
     <nav id="mode-nav" class="mode-nav">
       <button class="mode-btn" data-mode="explore">Explore</button>

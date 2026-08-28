@@ -12,6 +12,7 @@ import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
 import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
 import { createStylePanel } from '#ui/style-panel.js';
+import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 
@@ -155,6 +156,18 @@ function initApp(){
   const headerHost = document.getElementById('app-header-host');
   if (headerHost) header.render(headerHost);
   showView('design');
+
+  // PERSIST-2: a passive autosave status indicator (never a blocking prompt).
+  const saveStatusEl = document.createElement('span');
+  saveStatusEl.id = 'save-status';
+  saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;';
+  header.el.appendChild(saveStatusEl);
+  const docBuffer = createDocumentBuffer({
+    state,
+    onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
+  });
+  docBuffer.restore().then(() => { try { engine.solve(500); } catch (_) {} });
+  docBuffer.start();
 
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {

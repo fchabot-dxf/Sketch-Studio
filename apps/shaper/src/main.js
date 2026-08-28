@@ -11,6 +11,7 @@ import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
+import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
@@ -313,8 +314,19 @@ function ensureSketch() {
   designController = mountSketch(document.getElementById('design-canvas'), {
     isActive: () => currentMode === 'design',
     onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
+    seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
   });
   buildDesignUI();
+
+  // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
+  // keep autosaving. statusEl is optional-safe (older cached HTML without #save-status just no-ops).
+  const statusEl = document.getElementById('save-status');
+  const docBuffer = createDocumentBuffer({
+    state: designController.state,
+    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
+  });
+  docBuffer.restore().then(() => { try { designController.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {} });
+  docBuffer.start();
 }
 
 // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the

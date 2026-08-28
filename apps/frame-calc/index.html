@@ -36,10 +36,12 @@
 
     /* Calculator view: form panel (left) + SVG preview (right) — plain port of TrapezoidControlsPanel/CanvasView. */
     #calc-form { flex: 0 0 340px; overflow-y: auto; padding: 16px; background: #fff; border-right: 1px solid #e2e8f0; }
-    #calc-preview-wrap { flex: 1; min-width: 0; background: #fff; }
+    #calc-preview-wrap { flex: 1; min-width: 0; background: #fff; position: relative; }
     #calc-preview { width: 100%; height: 100%; }
     .fc-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
     .fc-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin: 0 0 10px; }
+    .fc-card-head { display: flex; align-items: center; justify-content: space-between; }
+    .fc-card-head h2 { margin: 0; }
     .fc-field { margin-bottom: 12px; }
     .fc-field-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
     .fc-field-head span:first-child { font-weight: 600; color: #334155; }
@@ -48,6 +50,17 @@
     .fc-field input[type="number"] { width: 72px; margin-left: 8px; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 5px; font: inherit; }
     .fc-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #475569; }
     .fc-stats b { color: #059669; }
+    .fc-corner-stats span { flex: 1 1 45%; }
+    /* SLICE 0 parity additions */
+    .fc-toggle { padding: 3px 12px; font-size: 11px; font-weight: 700; border-radius: 999px; border: 0; cursor: pointer; background: #e2e8f0; color: #475569; }
+    .fc-toggle.active { background: #d97706; color: #fff; }
+    .fc-shell-body { margin-top: 10px; }
+    .fc-hint { font-size: 11px; color: #94a3b8; font-style: italic; margin: 0; }
+    .fc-dimmode { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+    .fc-dimmode-btn { font-size: 11px; font-weight: 600; padding: 6px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; text-align: left; }
+    .fc-dimmode-btn.active { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
+    .fc-joint-glyph { position: absolute; padding: 0; border: 1px solid #cbd5e1; border-radius: 6px; background: rgba(255,255,255,0.9); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .fc-joint-glyph:hover { border-color: #2563eb; }
 
     /* Sketch view: shared ribbon on top, info panel + canvas below — mirrors apps/shaper's #design-view. */
     #sketch-view { flex-direction: column; }

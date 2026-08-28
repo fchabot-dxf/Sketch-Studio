@@ -10181,3 +10181,96 @@ Temporary `window.__dbgState` debug hooks added to sketchstudio/shaper/frame-cal
 turn's live-verify were reverted before commit (confirmed via grep across all 4 hosts — zero matches).
 
 === PERSIST-1-2 (document format + autosave buffer) DONE — HOLD ===
+
+---
+
+## TURN 396 — SLICE 0: Trapezoid parity in `apps/frame-calc` (joints picker · shell · dimension mode)
+
+**Ground truth re-verified against the actual reference files before implementing (one correction
+found):** read `TrapezoidCalculator.js`, `TrapezoidControlsPanel.js`, `TrapezoidCanvasView.js`, and
+`QuadJointGlyph.js` directly. Confirmed 2 of 3 missing features exactly as dispatched. The 3rd — "Target
+Dimension Mode incl. an 'All Sides' option" — was a conflation in the ground truth: "All Sides" is simply
+the Board Thickness slider's own label (uniform thickness, already present in the port since cycle 190),
+unrelated to Target Dimension Mode. The REAL Target Dimension Mode is `shellDimMode`: a 2-way toggle
+('inside' = Wood Frame / 'outside' = Sheathing Shell) that governs what a typed bottom/top/height value
+means when editing WHILE the shell is enabled — outside-mode edits back-calculate the underlying frame
+dimension so the SHELL's outer edge lands on the typed number. Implemented that (correct) semantics, not
+an invented "All Sides" dimension-mode option that doesn't exist anywhere in the reference.
+
+### What shipped
+
+1. **Per-corner joint-type picker** (`apps/frame-calc/src/quad-joint-glyph.js`, new) — a faithful
+   mechanical port of `QuadJointGlyph.js` (same algorithm: 5 points on a constant-turn arc so the middle
+   3 carry the corner's real interior angle, run through `calculateQuadFrameGeometry`, crop the two
+   meeting boards to 55% length) using `svgEl(...)` calls instead of React, per the dispatch's explicit
+   "reuse it" instruction. Rendered IN-CANVAS as a clickable button at each of the 4 corners (matching the
+   user's screenshot finding — spatial, not a dropdown), positioned via a proper letterbox-fit calculation
+   (uniform scale + centering, replicating what `preserveAspectRatio="xMidYMid meet"` does) rather than a
+   naive percentage mapping that would misplace them whenever the wrapper's aspect ratio doesn't match the
+   viewBox's.
+   **Deliberately simplified interaction** (noted, not silently dropped): the original expands to a
+   3-choice menu on click (`JointPicker.js`); this port CYCLES through Miter → CW-Through → CCW-Through on
+   a single click. Same functional outcome (spatial, in-canvas, 3 selectable states) with far less UI
+   machinery — a reasoned trim, not a missed feature.
+2. **Plywood Sheathing Shell** — toggle + clearance slider (form) + the shell ring (`geom.S`, dashed
+   amber) drawn in the preview, gated on `enableShell`, plus its own bottom/top/height reference labels
+   in parentheses (matching the existing renderer's own driving-vs-reference convention this file already
+   uses for its regular dims).
+3. **Target Dimension Mode** — inside/outside toggle; wired into the SAME edit-commit path every slider/
+   number input already uses (`frameValueFor`, a direct port of `TrapezoidCalculator.js`'s
+   `handleEditDim` math: back out `2*shellOffset/tan(angle/2)` for width edges, `2*shellOffset` for
+   height, using the pre-edit angle). **Verified live**: with shell ON + outside mode, typing 26" into
+   Bottom Width produced a FRAME value of 22.47" (not 26) — confirms the shell's outer edge, not the
+   frame's own edge, is what the typed number now targets.
+4. **Corner stat readout extended from 2 to 4** — since joint type is now independent per corner, showing
+   only the base/top corners (valid under the original's ALL-MITER-ONLY assumption, where mirror-pair
+   corners always match) would silently go stale the moment two corners differ. Now shows all 4 corners'
+   type + gauge, each read from `cutList[k].topSawGauge` (the existing convention, generalized).
+
+**Sketch view: required ZERO code changes to reflect any of this** — confirmed by reading `sketch-
+builder.js` (`buildFrameSketch` consumes `geom.boards[k].p1..p4` generically; it has no dependency on
+joint type beyond the positions `calculateQuadFrameGeometry` already computes correctly). Verified live:
+set corner 0 to CW-Through in the Calculator, entered Sketch view — the constraint set solved (12
+constraints, DOF 0, fully constrained) reflecting the new board geometry, with zero sketch-builder edits.
+This is exactly the dispatch's own "everything downstream is already shared and proven" framing, now
+empirically confirmed rather than assumed.
+
+**Deliberately NOT ported this turn (dispatch's own "don't blind-port 443 lines" permission, exercised —
+not silently dropped, reasoned here):** the original's click-to-edit-on-canvas dimension inputs, zoom/pan
+canvas, PNG export, `DualAngleArc` corner-angle-arc rendering, the hand-tuned per-board dimension-line
+collision-avoidance offsets, and the locked-glow pulse animation. The Sketch view already provides REAL
+interactive dimension editing backed by the actual constraint solver (click a shape, edit its dimension)
+— a materially better mechanism than the calculator preview's fake overlay math, so re-implementing that
+whole subsystem in the calculator view would be redundant with, not additive to, what this app already
+has. The calculator's own number/slider inputs remain the way to edit dimensions there, matching this
+file's own pre-existing (unchanged) comment that "the sketch view is where real, editable dimensions live
+for this app." Shell geometry was scoped to the CALCULATOR VIEW only (not added to the Sketch view's
+solver geometry) — it's non-editable reference/material-planning info, and the original tool has no
+Sketch-view equivalent to port a precedent from; adding a new non-solving shape kind to `sketch-builder.js`
+for a decorative outline would be scope creep beyond "parity."
+
+**Bug found and fixed during live-verify (mine, from this turn's own new code):** the frame height label
+and the new shell-height label rendered at the same on-screen position when shell was enabled, producing
+an illegible overlap ("(12\" shell10\" h)"). Fixed by vertically offsetting the two labels instead of
+relying on horizontal-only separation (which can't reliably avoid collision without knowing rendered text
+width). Re-verified via screenshot — both labels now read cleanly.
+
+**SIDE FINDING (pre-existing, NOT introduced this turn, NOT fixed — flagged for the advisor):** the
+Sketch view's canvas renders severely over-zoomed for a Trapezoid-scale frame (only the origin crosshair
+and one distance label visible, no view-fit ever runs). Confirmed via `git stash`/`stash pop` A/B: this
+reproduces IDENTICALLY on the pre-Slice-0 baseline with zero code changes of mine, and `apps/frame-calc/
+src/main.js` has no view-fit/recenter call anywhere (grepped) — `mountSketch()`'s own default `view:
+{w:120,h:90}` is far smaller than a real frame's ~600mm span, and nothing ever adjusts it for this app.
+Real, notable (makes the Sketch view hard to use without manually scrolling/zooming), but out of scope
+for "Trapezoid parity" — recording rather than silently fixing or silently ignoring.
+
+**VERIFIED LIVE (CDP + screenshots):** joint-glyph buttons render at all 4 corners and correctly cycle
+type on click (title + rendered mini-diagram update); shell toggle shows the amber ring + reference
+labels; dimension-mode toggle correctly back-calculates the frame value under outside-mode edits; Export
+SVG (with 2 differing corner joint types + shell enabled) produces a real, non-empty SVG with no crash;
+Sketch view reflects the chosen joint type with zero sketch-builder changes.
+
+**Gate:** full corrected loop (`tests/` + `packages/core/tests/` + `tests/harness/`) — 134 tests, same 8
+pre-existing failures, none new. `shell-smoke.cjs` 11/12, same pre-existing ribbon-order failure.
+
+=== TRAPEZOID-PARITY (Slice 0) DONE — HOLD ===

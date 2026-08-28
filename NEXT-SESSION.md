@@ -82,6 +82,1042 @@ Deferred (behind the unify): bulk fill-edit · cloud palette save/load · PP-8 p
 
 ---
 
+## ★ REDIRECT (2026-08-26) — pen-plotter burn-down PAUSED. New priority: SketchStudio core/solver bug hunt
+
+**Context:** the user (talking directly to the advisor session, not through a queued batch) reports "the core and
+solver have a lot of bugs, constraints are not applied correctly" in **`apps/sketchstudio`** (the original CAD
+sketcher, NOT the pen-plotter). Concrete example given: **a simple rectangle or triangle should be easy to
+dimension and constrain, and isn't working the way the user expects.**
+
+**Advisor ground-truth check before dispatching:** ran every solver/constraint gate that exists —
+`tests/harness/{solver-scenarios,constraint-conformance,solver-fuzz,differential-planegcs}.test.js` (23 scenarios +
+15/15 canonical shapes + 400 fuzz sims + 9/9 vs the FreeCAD PlaneGCS oracle) + all 10
+`packages/core/tests/solver-*.test.js`. **16/16 GREEN, right now, on this tree.** So this is NOT a known regression
+any existing gate would catch — the gap is between test coverage (synthetic scenarios, driven through
+`tests/harness/sketch.js` / the dimension-seams) and the REAL interactive app (mouse clicks, the actual dimension
+tool UI, actual drag). Do not assume the Newton engine's math is at fault until the live repro says so — it is
+just as likely a UI/interaction-layer bug (wrong joints wired to a constraint at creation time, a dimension input
+that doesn't call solve(), a snap/selection bug that picks the wrong joint) as a solver Jacobian bug.
+
+**Batch 3 (style tool) is DONE** (`d7ceb3c..a862032`, WORK-LOG `398b9e5`) — advisor-reviewed, all plotter-side, 0
+`#core`/`#ui` touch. **Batch 4 (pen-plotter transforms) is DEFERRED, not cancelled** — resume it after this bug
+hunt closes. Do not mix the two in one commit.
+
+**▶ Scope — LIVE-DRIVE `apps/sketchstudio` (real browser clicks, e.g. via the CDP driver pattern from turn
+366/368's `verify.cjs`, or `run` if that's faster), not just the test suite:**
+1. **Rectangle:** draw one with the rect tool. Add a **Distance** dimension on one edge, then an **Equal** or a
+   second **Distance** on an adjacent edge (so it's fully dimensioned — width+height). Drag a corner/edge —
+   confirm it resizes along the dimensioned edges and does NOT deform into a non-rectangle (H/V should hold).
+   Try toggling a dimension driver↔reference. Try over-constraining (a 3rd redundant distance) — should refuse or
+   go reference, never silently corrupt geometry (per the "rectangle-or-refuse" invariant already tested in
+   `solver-scenarios.test.js` — reproduce the SAME moves by actual click, not the harness seam, and see if they
+   still hold).
+2. **Triangle:** draw 3 lines forming a closed triangle (coincident corners). Add a Distance on each side (SSS) or
+   an Angle + 2 Distances. Drag a vertex — confirm it resizes correctly, doesn't flip/mirror, doesn't leave a gap
+   at a corner (coincidence should hold under drag).
+3. **For each step, name the EXACT click sequence and what went wrong** (wrong shape, constraint didn't apply,
+   dimension shows stale value, drag fights the constraint, console error, etc.) — this is the repro the fix
+   proceeds from. If everything above actually works fine live, say so explicitly and ask the user for a MORE
+   specific repro (which constraint type, which shape, which gesture) rather than guessing further.
+4. **Root-cause + fix** whatever concretely breaks. Likely places to check first (not a prescription — verify,
+   don't assume): `apps/sketchstudio/ui/input-handlers/{constraint-tools,dimension-tool,dimension-input}.js` (does
+   the click path wire the SAME joints the solver expects?), `packages/core/constraint-manager.js` (does
+   `createConstraint` get called with the right joint indices for a freshly-drawn rect/triangle?), and whether
+   `solve()` actually runs after each constraint add / drag frame in the live app (vs. the harness which calls it
+   explicitly).
+
+**VERIFY LIVE (by clicks, screenshot or paste the console):** the rectangle flow (draw → dimension both edges →
+drag → still a rectangle, correct size) and the triangle flow (draw → SSS dimension → drag a vertex → still
+closed, correct lengths) both work as a CAD user would expect. Re-run the 16/16 solver/harness gate — must stay
+green (don't regress the math while chasing a UI bug). `node --check` clean on any touched file.
+
+Append a WORK-LOG entry (repro found, root cause, fix, live-verify) ending with exactly
+`=== CORE-BUG-HUNT (rect/triangle dimension+constrain) DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ AMENDMENT (2026-08-26, while worker was mid-task) — a CONFIRMED, real `#core` bug: circle radius dimensions cannot be edited
+
+**This supersedes priority — fix THIS first, the rect/triangle live-click hunt above is now SECONDARY** (the
+advisor's isolated breaker probe already proved rect/triangle dimension+constrain+drag is solid in `#core` —
+26/26 adversarial checks incl. real line-tool triangle topology, incremental drag, EQUAL stacking, over-constrain
+— so that hunt is unlikely to find a `#core` math bug; still worth a quick live sanity pass, but not the priority).
+
+**The bug (reproduced headlessly, in the isolated `advisor-breaker` worktree, `tests/harness/breaker-rect-triangle.test.js`
+Scenario 3 — NOT on your tree, don't look for the file there; the repro is copy-pasteable):**
+1. Draw a circle with a locked radius (`circle-tool.js:104/139` → `state.shapes.push({id, type:'circle',
+   joints:[centerId], radius:r})` + `addConstraint(state, DISTANCE, {shape, value:r, isRadius:true})` — note this
+   uses `packages/core/constraints.js`'s plain `addConstraint`, NOT `ConstraintManager.createConstraint`). Solve
+   converges fine (checked — the dead row does NOT corrupt the rest of the document either, checked that too).
+2. **Edit the radius dimension's value** via the real edit seam (`dimension-seams.js` `commitDimensionEdit` — the
+   exact function `numeric-input-manager.js:299` calls on every dimension edit, radius included). **The edit is
+   REVERTED every time**, with `conflicts` naming `distance` — i.e., in the live app this reads as "Can't set to
+   35 — conflicts with distance. Reverted," on a totally ordinary "change this circle's size" edit.
+
+**Root cause (traced, not guessed):** `packages/core/solver/engine.js` lines 327-333, the `isRadius` joint
+synthesis:
+```js
+else if (c.type === 'distance' && c.isRadius && c.shape) {
+  const shape = this.shapes.find(s => s.id === c.shape);
+  if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
+    params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
+  }
+}
+```
+requires a **second "rim" joint** (`shape.joints.length >= 2`) to build a solvable center→rim distance row. But
+a REAL circle (`circle-tool.js`) is created with **exactly one joint — the center — always**; there is no rim
+joint anywhere in the app (confirmed: grepped every `.radius =` write in `packages/ui/` — the ONLY write is at
+circle creation; nothing ever mutates `shape.radius` afterward, and no interaction creates/drags a rim joint).
+So for every real circle, this constraint's `params.joints` stays `[]`, and the row is inert — `shape.radius` is
+a plain data field the solver never touches. Editing the dimension only changes `c.value`; the post-solve
+geometric-honesty check (the one from `docs/architecture/SOLVER_WALKTHROUGH.md` "converged but lying" fix) then
+correctly notices `c.value` (35) no longer matches the real geometry (`shape.radius` still 20) and refuses. The
+refusal logic is doing its job — the actual bug is one layer up: **nothing ever had a mechanism to move
+`shape.radius` toward the edited value in the first place.**
+
+**The fix is narrow — do NOT build a rim-joint system, that's a much bigger change than this needs.** Every
+existing consumer of a circle/arc's radius (the tangent branches at `engine.js:284, 302-303, 321-323`) ALREADY
+reads `shape.radius` directly as the source of truth, not a joint distance. So radius is already, by convention,
+a plain scalar property outside the joint/Jacobian system — the dimension EDIT path is the one place that
+doesn't honor that convention. Fix in `packages/ui/dimension-seams.js`'s `commitDimensionEdit` (and check
+`toggleDriving` too, which already does the mirror-image read at line 90-92 — `if (c.isRadius && c.shape) { ...
+c.value = s.radius }` — but has no matching WRITE when editing): when `c.isRadius && c.shape`, also set the
+shape's `radius = val` directly (before/alongside `c.value = val`) so the geometry actually moves, THEN let
+`engine.solve()` run normally — any tangent constraint on that circle will naturally re-satisfy against the new
+radius since it already reads `shape.radius` live. Verify: does a snapshot/revert on non-convergence (the
+existing `reverted` path) still need to restore `shape.radius` too, not just joint positions + `c.value` — trace
+the `snap`/restore logic in `commitDimensionEdit` for exactly this.
+
+**Scope — VERIFY LIVE + FIX:**
+1. Reproduce live in the browser: draw a circle, give it a radius, double-click the radius dimension, type a new
+   value — confirm it currently reverts/refuses (or shows a wrong number). Screenshot or paste the console.
+2. Fix per above (or a better-verified alternative if the trace turns up something more precise than this
+   advisor's read of the code).
+3. Also check: does the SAME gap affect `isRadius` on an **arc** (not just circle)? `engine.js:330` checks
+   `shape.type === 'circle' || shape.type === 'arc'` — arcs are built by `makeArc` (`shapes.js:262`) with 3
+   joints (per that function's docstring) — check whether an arc's radius dimension edit already works (3
+   joints might satisfy `length >= 2` differently) or has the identical gap.
+4. Re-run the 16/16 existing solver/harness gate (must stay green) + this advisor's breaker probe if you want a
+   second oracle (ask the advisor for the worktree path, or just re-verify with your own repro — don't assume
+   the breaker file, re-derive the check).
+
+**VERIFY LIVE:** draw a circle, radius 20 → edit the radius dimension to 35 (or any new value) → the circle
+VISIBLY resizes to the new radius, no revert, no console error. Do the same on an arc if #3 finds it's affected.
+
+Append a WORK-LOG entry (repro, root cause, fix, live-verify) ending with exactly
+`=== CIRCLE-RADIUS-EDIT-FIX DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK — arc structural integrity: an arc's two rim points must stay equidistant from center, ALWAYS (not just when dimensioned)
+
+**Ground truth, independently confirmed twice** (advisor's headless breaker probe, `advisor-breaker`
+worktree, Scenario 5 — AND the worker's own live-click repro during CIRCLE-RADIUS-EDIT-FIX, same
+numbers): `makeArc()` (`packages/core/shapes.js:262-272`) builds an arc from 3 joints
+`[center, start, end]`, placed equidistant from center **at creation time only** — it returns
+`constraints: []`. Nothing ties `center↔end` to `center↔start` afterward. So:
+- Dragging the arc's END joint (with or without a radius dimension) leaves `start` alone while `end`
+  drifts to whatever distance the drag left it at — the arc silently stops being circular.
+- Editing an isRadius dimension only moves `start` (the joint the synthesis wires in,
+  `engine.js:328-333`, `shape.joints[1]`); `end` is untouched, same distortion.
+
+**Advisor's ruling on the question the worker flagged ("is single-rim-point radius intentional or a
+gap?"): it's a gap, fix it.** Nothing in the codebase or the project's docs treats "an arc's far
+endpoint can silently leave the circle" as intentional — it's a byproduct of `isRadius` synthesis being
+written generically for "distance + isRadius + shape" without accounting for arcs having TWO meaningful
+rim points where circles conceptually have none. An arc that stops being circular after an ordinary drag
+is a basic correctness bug for a CNC/CAD sketch tool, not a design choice.
+
+**Fix direction (declare, don't hand-roll — this needs NO new solver math):** the real invariant is
+`dist(center, start) == dist(center, end)`, which is EXACTLY what the existing `equal` constraint
+definition already computes when given `joints:[a,b,c,d]` → `len(a,b) - len(c,d)`
+(`packages/core/solver/definitions.js:414-451`). So: make `makeArc()`
+(`packages/core/shapes.js:262-272`) return a **structural EQUAL constraint** —
+`{ type: 'equal', joints: [center, start, center, end] }` — in its `constraints` array instead of the
+current `[]`, mirroring how `makeRectFromTwoJoints` already bakes in H/V constraints at creation to keep
+a rectangle a rectangle. The wiring is ALREADY THERE on the consumer side —
+`arc-tool.js:227` already does `res.constraints.forEach(c => ConstraintManager.createConstraint(state,
+c.type, c, {source:'arc'}))` for whatever `makeArc` returns; today that loop runs zero times. This is a
+small, targeted change, not "build a rim-joint system."
+
+**Scope — verify, fix, prove it holds under everything that already touches an arc:**
+1. Add the structural EQUAL constraint in `makeArc()`. Confirm `finalizeArcFromActive` / wherever else an
+   arc gets created goes through this same function (grep — don't assume there's only one call site).
+2. Verify LIVE: draw an arc → drag its end handle → it stays circular (both rim points track). Add/edit
+   a radius dimension → both ends move to the new radius, not just `start`.
+3. Regression-check anything that ALREADY relies on an arc's two rim points being independently
+   draggable (if any UI flow intentionally reshapes an arc's sweep by moving just one endpoint at a
+   fixed radius — that should still work fine with EQUAL in place, since EQUAL only pins the two
+   *radii* equal, not the angle/position — but verify this live, don't assume). Check the arc-drag /
+   arc-integration specs still pass and still test what they claim to.
+4. Keep the 16/16 solver/harness gate green + all the arc/circle-adjacent specs from last turn
+   (`arc-tool`, `arc-integration`, `arc-drag`, `radial-locked`, `solver-tangent-arc-arc`).
+
+**VERIFY LIVE:** draw an arc, radius ~any → drag the far endpoint around → the arc visibly stays a
+constant-radius curve (both ends track center distance) instead of stretching one end while the other
+stays put. Same check after a radius-dimension edit.
+
+Append a WORK-LOG entry (repro, fix, live-verify, regression) ending with exactly
+`=== ARC-STRUCTURAL-INTEGRITY DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, screenshot) — the Style/settings panel force-opens on every app load
+
+**Root-caused already, small isolated fix — land this FIRST, before or interleaved with the arc task
+since it's a different file and a glaring, immediate UX bug (visible the instant the app loads).**
+
+**Root cause (traced via WORK-LOG history, not guessed):** `packages/ui/input-manager.js:280` —
+`try { opts.openSettings?.(svg, state); } catch(_) { }` — calls the injected `openSettings` callback
+**unconditionally, once, during `setupInput`'s init sequence.** That's correct IF `openSettings` is an
+*install* hook (its original purpose per WORK-LOG t~1995: `openSettings: (s,st) =>
+import('./ui/settings-panel.js').then(m => m.default?.(s,st))` — lazily import a module that itself
+wires a `#btn-settings-toggle` DOM button's click listener; nothing shown yet, just installed).
+
+But WORK-LOG (t3468) records: *"redirected the input-manager `openSettings` seam → `stylePanel.open()`"*
+— and `apps/sketchstudio/main.js:166` now has `setupInput(svg, state, { openSettings: () =>
+stylePanel.open() })`. Since `input-manager.js` still calls this unconditionally at setup (the OLD
+"install" contract), and the callback now means "show the dialog" (the NEW contract), **every app load
+calls `stylePanel.open()` once, forcing the panel open on start.** One name (`openSettings`), two
+meanings, and the call site still obeys the old one — the exact "codebase lies about itself" class of
+bug (a seam whose behavior silently changed meaning under it).
+
+**The old `#btn-settings-toggle` this seam was built for is explicitly retired** (main.js's own comment:
+*"The input-manager's settings gesture now opens the SHARED style panel (the old #settings-panel is
+retired)"*), and the header already has a real, working **Style** button
+(`app-header.js`'s `onStyle: () => stylePanel.toggle()`, confirmed wired at `main.js:152`) — so this
+seam is now pure legacy surface with no live purpose. Confirmed Shaper doesn't use `setupInput`'s
+`openSettings` option at all (grepped `apps/shaper/` — zero hits), so nothing else depends on it.
+
+**Fix (no legacy path — remove, don't patch around):** drop the `openSettings` option from the
+`setupInput(...)` call in `apps/sketchstudio/main.js:166` entirely (the Style header button is the sole,
+correct way to open the panel now). Then check whether `input-manager.js`'s `opts.openSettings?.(...)`
+call + its now-stale comment (lines 5, 278-280) should be deleted too, since grep shows this was its
+ONLY caller across the whole repo — verify that yourself before deleting (don't assume from this
+advisor's grep alone).
+
+**VERIFY LIVE:** reload the app — the Style panel must NOT be open on load. Click the header's Style
+button — it still opens/closes the panel normally (16 controls, Save/Reset/Close all still work).
+
+Append a WORK-LOG entry ending with exactly `=== STYLE-PANEL-AUTOOPEN-FIX DONE — HOLD ===` (append this
+one whenever you land it relative to the arc task — they're independent, land + verify + WORK-LOG each
+separately rather than bundling one commit).
+
+---
+
+## ★ TASK (found by the advisor's breaker sweep, 2026-08-26) — a "converged but lying" gap: TANGENT doesn't re-satisfy after a shape's radius changes externally
+
+**Both prior turns reviewed and independently re-verified — excellent work, no notes.** Diff read,
+16/16 gate + every named unit spec re-run by the advisor personally (all green), and the advisor's own
+headless breaker probe confirms both fixes hold under adversarial conditions (arc: 7/7 checks now pass
+where 2 failed before; style-panel: confirmed absent on load). This is genuinely a NEW bug the breaker
+sweep found while testing tangent constraints on top of your radius-edit fix — not a regression from
+your work, but a gap your fix makes newly REACHABLE (see below).
+
+**Confirmed behavior (`advisor-breaker` worktree, Scenario 6 in `breaker-rect-triangle.test.js`,
+reproducible standalone — copy the repro, don't take this write-up on faith):**
+1. A circle, tangent-constrained to a line (`ConstraintManager.createConstraint(state, TANGENT, {line,
+   circle})`), with a radius dimension (`isRadius`). Converges correctly, tangent holds.
+2. Edit the radius dimension (via the real `commitDimensionEdit` seam your last-but-one turn fixed) —
+   **the edit gets reverted, "conflicts with tangent."** That revert is *correct behavior given what's
+   underneath it* — not the bug itself.
+3. **Root cause, isolated (bypassing the edit seam, mutating `shape.radius` directly + calling
+   `engine.solve()` raw, exactly like `commitDimensionEdit` does internally):** the solve returns
+   `{converged: true, error: ~1e-15, rankDeficient: true}` — but the ACTUAL tangent residual
+   (hand-computed from the final joint positions: `|centerY| − radius`) is off by several units, not
+   zero. **The solver is reporting success on a genuinely unsatisfied constraint.**
+4. **Ruled out the obvious suspect:** this looked like it might be the circle's fully-free `x` direction
+   (a rank-deficient null-space direction) fooling the convergence check. Tested with the circle's
+   center `x` independently pinned via a `VERTICAL` constraint to a fixed anchor — **identical wrong
+   result** (`rankDeficient: true` still reported, same wrong final position). So it is NOT simply "free
+   x direction confuses the rank-deficiency logic" — something about the LM/convergence machinery
+   mishandles a SUDDEN external change to `shape.radius` specifically (a value the Newton loop doesn't
+   itself own or step incrementally, unlike joint positions), most likely: the LM damping parameter (λ)
+   was calibrated for the OLD, already-converged state and doesn't get reset/re-probed for a fresh large
+   jump, so it may spike and stall the step size while the "converged" check reads a stale or
+   incorrectly-scoped residual. **This is a hypothesis, not a traced root cause — the advisor's bounded
+   look stopped at confirming the symptom precisely; find the actual mechanism in `engine.js`'s
+   iteration/convergence/λ-management code.**
+
+**Why this matters now, specifically:** before your circle-radius-edit fix, this path was UNREACHABLE
+(every radius edit reverted immediately for an unrelated reason — the isRadius joint-synthesis gap). Now
+that radius edits actually flow through to `shape.radius` and re-solve, this pre-existing solver gap is
+live for any circle that's ALSO tangent-constrained (or presumably constrained by anything else that
+reads `shape.radius` live at assembly time — `point_on_line`'s `onCircle` mode, circle-circle tangent —
+worth checking those too, not just line-tangent).
+
+**Scope — investigate + fix + verify, this is solver-internals work, take the time it needs:**
+1. Reproduce with the exact repro above (or the committed test in the breaker worktree — ask for the
+   path, or re-derive it standalone, your call).
+2. Find why `converged`/`error` come back clean when the geometry demonstrably isn't. Check: does the
+   convergence/geometric-honesty check re-derive residuals fresh from final positions AND current
+   `shape.radius`, or does it reuse something computed mid-iteration that could be stale relative to an
+   externally-changed `shape.radius`? Check the λ/damping schedule's behavior on a large, sudden
+   residual jump (does it reset per `solve()` call, or carry state that could saturate/stall on an
+   unusually large initial residual from an external mutation?).
+3. Fix so a `solve()` call after `shape.radius` changes externally either (a) actually converges to the
+   TRUE tangent-satisfying position, or (b) if it genuinely can't, HONESTLY reports non-convergence
+   (never silently claim success on an unsatisfied constraint — this is the project's own stated
+   invariant from the "converged but lying" fix history, `docs/architecture/SOLVER_WALKTHROUGH.md`).
+4. Once fixed, the circle-radius-edit-on-a-tangent-constrained-circle case should stop reverting and
+   should correctly re-satisfy tangency at the new radius (verify: edit → circle resizes, stays tangent
+   to the line, no revert).
+5. Check the sibling cases while you're in there (point-on-circle, circle-circle tangent) for the same
+   shape.radius-mid-flight-change gap — name what you checked even if you don't fix all of them this
+   turn; flag anything you find but don't fix.
+
+**VERIFY LIVE:** draw a circle tangent to a line with a radius dimension → edit the radius → the circle
+resizes AND stays visually tangent to the line (no revert, no gap). Keep the 16/16 gate + everything from
+the last 3 turns' regression lists green.
+
+Append a WORK-LOG entry (repro, investigation trail, root cause, fix, live-verify) ending with exactly
+`=== TANGENT-RADIUS-CONVERGENCE-FIX DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+<!-- superseded (provenance): cycle 188 closed here (handoff.py done) after TANGENT-RADIUS-CONVERGENCE-FIX
+     landed and was independently re-verified (including catching and fixing a flawed assumption in the
+     advisor's own breaker test — see WORK-LOG). New cycle starts below, user-reported (2026-08-27). -->
+
+## ★ TASK (user-reported, 2026-08-27) — the tool ribbon can't be scrolled on mobile; hides tools off-screen
+
+**Root-caused already — the fix is small and precise, land it before anything else this cycle.**
+
+**What's actually happening (traced, not guessed):** `apps/sketchstudio/index.html` has CSS (~line 84-104)
+for a "TWO stacked rows on mobile/tablet" toolbar design — `.toolbar-row { touch-action: pan-x;
+-webkit-overflow-scrolling: touch; ...}` plus a `@media (max-width: 767px)` stacking rule. **This CSS
+matches NOTHING in the DOM.** Grepped every `.js` file in the repo for the string `toolbar-row` — **zero
+hits**. The comment right above the CSS confirms why: *"S7c-2d-cleanup: inline button markup removed; the
+shared tool ribbon (createToolRibbon) mounts here at runtime"* — the OLD ribbon markup that this CSS was
+written for was replaced by the shared `packages/ui/tool-ribbon.js` component, and the CSS was never
+updated or removed to match. Classic "styles nothing" dead CSS.
+
+**The REAL ribbon** (`createToolRibbon()` in `packages/ui/tool-ribbon.js:115-214`) builds ONE flat
+`.sk-ribbon` div (`display:flex; align-items:stretch;`, defined in that file's own injected
+`<style>`, ~line 60) holding all four groups (Create/Edit/Inspect/Constrain) in a single row, with
+**no `overflow-x`, no wrapping, and no mobile handling of any kind.** On a narrow viewport, the row
+simply overflows the screen width with nothing to scroll it into view — the later groups (Constrain:
+Coinc/H-V/Para/Perp/Coll/Tang/Equal/Mid) become inaccessible on mobile.
+
+**Fix — two parts, both needed:**
+1. **Add real horizontal scroll to `.sk-ribbon`** in `packages/ui/tool-ribbon.js`'s injected stylesheet:
+   `overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x;` (this is exactly the intent
+   the dead `.toolbar-row` CSS was going for — reuse that idea, on the ACTUAL container). Hide the
+   scrollbar on touch devices if you want to match the old `.no-scrollbar` look
+   (`scrollbar-width: none` + `::-webkit-scrollbar { display:none }`), but a visible thin scrollbar is
+   also fine — your call, verify it looks reasonable at a mobile width in devtools or a real device.
+   `tool-ribbon.js` is the SHARED `#ui` component (Studio + Shaper + the pen-plotter Design tab all use
+   it) — this fix is host-agnostic and benefits all three; don't scope it to SketchStudio only.
+2. **Remove the dead CSS** in `apps/sketchstudio/index.html` (the `.toolbar-row` rules + its two
+   `@media` blocks, ~lines 84-104) — it styles a DOM structure that no longer exists and its continued
+   presence is exactly the kind of "codebase lies about itself" surface this project's principles flag.
+   Confirm (don't assume) nothing else in `apps/sketchstudio` still references `.toolbar-row` before
+   deleting — the advisor's grep found none, but re-verify yourself.
+
+**VERIFY LIVE:** open the app at a mobile viewport width (devtools responsive mode, ~375px, or a real
+phone) — the ribbon should be horizontally scrollable/swipeable by touch, and every tool group
+(including Constrain's 8 buttons) must be reachable. Desktop width unaffected (still fits in one row,
+scrolling is a no-op there). Check Shaper + the pen-plotter Design tab too, briefly, since this is a
+shared `#ui` component — confirm you didn't regress their ribbon (even though neither reported this bug).
+
+**Then, per the user's explicit instruction, this is the ONLY task for the cycle** — once verified, come
+back to the advisor; the fixes from the LAST cycle (7 bugs, already reviewed + merged into `carve-out`)
+are queued to merge into `main` and deploy live right after this lands, not before.
+
+Append a WORK-LOG entry ending with exactly `=== RIBBON-MOBILE-SCROLL-FIX DONE — HOLD ===`. **Then pass
+the ball back to advisor and STOP.**
+
+---
+
+## ★ NEW FEATURE (cycle 190, user-approved plan, 2026-08-27) — `apps/frame-calc`: a Sketch-Studio toggle for the shop framing calculators
+
+**This is a NEW APP, not a bug fix — read the whole task before starting, it's bigger than recent
+turns.** Plan-mode-approved with the user directly; treat the plan below as authoritative, but verify
+every file path/API call cited against the real code before using it (the plan was written from an
+advisor-level read, not a full implementation pass) — flag and adapt if something doesn't match.
+
+**Context:** a SEPARATE repo/deploy, `geometric-frame-calc` (`C:\Users\danse\APPS\geometric frame calc`
+— NOT in this monorepo, browse it read-only for reference), is a family of 5 no-build React shop-framing
+calculators (Triangle, Polygon, Trapezoid, Parallelogram, Stud-layout). Each computes exact board
+geometry + saw-gauge cut lists from typed dimensions and draws a disposable SVG/Canvas preview. The user
+wants a toggle, per tool, that turns the calculated shape into a real, editable, exportable CAD drawing
+using Sketch-Studio's ACTUAL shared sketcher (`mountSketch()` etc.) — not a copy of it, not a plain
+export button. Confirmed with the user: a rewrite is acceptable, dimensions must be genuine
+`ConstraintManager` distance/angle objects (editable + deletable, not a locked annotation layer), and
+export is plain SVG (reuse `shaper-export.js`, no new format).
+
+**Why this belongs in THIS monorepo, not a bridge from the other repo:** `#core`/`#ui` resolve via
+`package.json`'s bare `imports` map (`#core/*`, `#ui/*`) — only code living inside this monorepo can
+import them without copying the packages into the other repo (which would create a duplicated-source
+drift the project's own principles rule out). This is also exactly what NORTH STAR already says: "any
+host (CAD/CNC/pen-plotter) embeds the SAME shared `#core`/`#ui` Design tab" — a frame-calculator host is
+squarely that pattern, just like Shaper and the pen-plotter.
+
+**Scope for THIS cycle: ONE tool only, prove the pattern end-to-end.** Pick **Trapezoid**
+(`trapezoid-frame-calculator/` in the other repo) unless you find a concrete reason mid-investigation to
+prefer Polygon or Parallelogram — all three already share one geometry engine
+(`shared/utils/quadFrameCalculator.js`'s `calculateQuadFrameGeometry`, returns
+`{P, boards:[{p1,p2,p3,p4},...], cutList:[{part,maxLen,minLen,topSawGauge,botSawGauge},...], Q, S,
+interiorAnglesDeg, minX/maxX/minY/maxY, width, height}`), so porting one gets the CAD-toggle machinery
+working for all three's geometry shape. Triangle and Stud-layout use their own bespoke calculators
+(different output shape) — explicitly OUT of scope this cycle, next phase once this proves out.
+
+**▶ Steps (commit per step, verify each, pass back ONCE — mirrors the STYLE-TOOL batch pattern from
+earlier this session):**
+1. **Scaffold `apps/frame-calc/`** in THIS repo, following `apps/shaper/`'s shape (`index.html` with the
+   same importmap `#core/*`→`packages/core/*`, `#ui/*`→`packages/ui/*`, plus `src/main.js`). Confirm the
+   exact importmap syntax from `apps/shaper/index.html` — copy its convention, don't reinvent it.
+2. **Move the shared geometry engine into `#core`**: copy `shared/utils/quadFrameCalculator.js` +
+   `shared/utils/geometry.js` from the OTHER repo into `packages/core/` (e.g.
+   `packages/core/frame-geometry.js`) verbatim — it's a pure function, framework-free, no porting needed
+   for the math itself. This becomes the ONE engine both the new calculator form and the CAD-toggle read.
+3. **Port trapezoid's form + preview to plain JS.** Read `trapezoid-frame-calculator/src/`'s actual
+   components (its `ControlsPanel`/`CanvasView` equivalents — the plan cited triangle's file names as a
+   pattern reference, trapezoid's may differ, READ THE REAL FILES) and port them to plain DOM code:
+   inputs writing into a small state object, a render function, same visual layout/labels/behavior. This
+   is mechanical porting, not a redesign.
+4. **Wire the toggle** — two view states in `apps/frame-calc`'s shell, same pattern as
+   `apps/sketchstudio/main.js`'s `showView` Design/Export switch or the pen-plotter's tab switch:
+   - **Calculator view** (default): the ported form + static preview, as today.
+   - **Sketch view** (the toggle): mount the real sketcher — `mountSketch()` from `#ui/sketch-canvas.js`
+     (same call `apps/shaper/src/main.js:10` makes), `createToolRibbon()`, `createDesignInfoPanel()` —
+     the SAME shared chrome Shaper/SketchStudio use.
+5. **Build the sketch from calculator output on toggle.** Translate `calculateQuadFrameGeometry`'s
+   `boards` array into a Sketch-Studio document: per board quad `{p1,p2,p3,p4}` → 4 joints
+   (`fixed: true` — the calculator's math is authoritative) + 4 line shapes forming a closed loop.
+   Mirrors `tests/harness/sketch.js`'s `load()` document shape (`{joints, shapes, constraints}`) — READ
+   that file for the exact `engine.addJoint`/`engine.addShape` calls to mirror.
+6. **Dimensions are REAL constraint objects, not a separate annotation layer.** Each board's length
+   (`cutList[i].maxLen`/`minLen`) → a real `{type:'distance', joints:[...], value}` constraint via
+   `ConstraintManager.createConstraint` (same call the dimension tool makes); each saw-gauge angle → a
+   real `{type:'angle', ...}` constraint the same way. Since the joints are fixed, these settle as
+   reference (non-driving) dimensions initially — but MUST be fully editable/deletable/toggleable-to-
+   driving through the ordinary dimension UI, exactly like any dimension a user adds by hand (no
+   special-cased/locked variant — verify this live, don't assume it falls out for free).
+7. **Export = SVG**, reusing `packages/core/shaper-export.js`'s `exportShaperSVG` — the same serializer
+   Shaper already exports through. No new format.
+
+**Explicitly OUT of scope this cycle:** Triangle/Stud-layout ports; unlocking the board JOINTS
+themselves for free-drag editing (they stay `fixed:true` — only dimensions are editable/deletable this
+cycle; letting a user drag a corner and have the frame re-solve is a v2); touching
+`geometric-frame-calc`'s existing separate deploy (leave it running, no decision needed on retiring it);
+any change to `apps/sketchstudio`, `apps/shaper`, or existing `packages/*` behavior for the other hosts.
+
+**VERIFY LIVE:** enter dimensions in the Calculator view → toggle to Sketch view → the drawn shape's
+board outlines match the calculator's own preview (same corner coordinates, same scale) → each board's
+dimension is visible, editable (type a new value, toggle driving, the board resizes), and deletable →
+Export → the SVG opens correctly. `node --check` on every new/ported file. `npm run test:shell` (or the
+equivalent) stays green — this only ADDS an app, it must not touch `apps/sketchstudio`/`apps/shaper`/
+`packages/*` behavior for the existing hosts. If trapezoid's real files diverge meaningfully from the
+plan's assumptions, adapt and note what changed in WORK-LOG rather than forcing a mismatch.
+
+Append a WORK-LOG entry (what was built, any deviation from the plan + why, live-verify) ending with
+exactly `=== FRAME-CALC-TOGGLE-V1 DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, 2026-08-27) — `apps/frame-calc` has no way to switch to/from the other apps
+
+**Small, well-scoped, already root-caused.** The shared app-switcher (`packages/ui/app-switcher.js`)
+has a hardcoded `APPS` list (~line 10-12): `sketchstudio`, `shaper`, `penplotter` — no `frame-calc`
+entry. Separately, wiring the switcher INTO `apps/frame-calc` itself was explicitly deferred in last
+turn's dispatch ("App-switcher integration deliberately left out... reachable via direct URL for v1").
+Together these mean: from `apps/frame-calc` there's no way to navigate anywhere else, and from every
+OTHER app there's no way to navigate TO frame-calc either.
+
+**Fix — two small pieces:**
+1. Add `{ id: 'frame-calc', name: 'Frame Calc', href: '../frame-calc/' }` to `app-switcher.js`'s `APPS`
+   list (same shape as the existing 3 entries). This is a SHARED file — the addition automatically
+   makes Frame Calc reachable from Sketch Studio/Shaper/Pen Plotter's existing switcher dropdowns too,
+   verify that live (open each of the other 3 apps, confirm Frame Calc now appears in their switcher).
+2. Wire `createAppSwitcher({ current: 'frame-calc' })` into `apps/frame-calc/src/main.js`, mirroring
+   `apps/shaper/src/main.js:33-34`'s pattern (`document.getElementById('app-switcher-host')` +
+   `.appendChild(...).el`) or `apps/sketchstudio/main.js:148`'s pattern (passed as a header `leading`
+   element) — pick whichever fits `apps/frame-calc/index.html`'s current header markup with the least
+   disruption; add the `#app-switcher-host` element to that header if neither pattern fits cleanly.
+
+**VERIFY LIVE:** open `apps/frame-calc` — the switcher is visible and lets you jump to Sketch
+Studio/Shaper/Pen Plotter. Open Pen Plotter (or any other app) — Frame Calc now appears in ITS switcher
+and clicking it navigates there correctly. `npm run test:shell` (or equivalent) stays green.
+
+Append a WORK-LOG entry ending with exactly `=== FRAME-CALC-APP-SWITCHER DONE — HOLD ===`. **Then pass
+the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, screenshot, 2026-08-27) — SketchStudio's ribbon shifts up ~2s after load on mobile, overlapping the header
+
+**Needs a REAL mobile device or an actual (non-headless) mobile-emulated browser to reproduce — a
+headless CDP check CANNOT catch this class of bug** (see why below). Don't trust a headless "looks fine"
+result for this one.
+
+**User's exact report:** on `sketch-studio.pages.dev` on a phone, the page loads looking correct, then
+**~2 seconds later the toolbar visibly shifts upward**, ending up overlapping/covering the bottom of the
+header above it (screenshot showed the header's "Studio" label + an active-tab button sliver poking out
+from BEHIND the now-higher ribbon).
+
+**Advisor's investigation so far (ruled one thing out, found a real lead — verify both before
+concluding):**
+- **Ruled out:** `apps/sketchstudio/main.js:23-34`'s `window.addEventListener('resize', updateView)` —
+  `updateView()` only sets the SVG canvas's `viewBox` attribute; it cannot move the ribbon or header,
+  they're unrelated DOM. Don't chase this as the cause — confirmed by reading the function, not assumed.
+- **A real, well-known contributing factor:** only `body` has `overflow: hidden`
+  (`apps/sketchstudio/index.html:20`, mirrored in `apps/sketchstudio/overrides.css:6`) — `html` does
+  NOT. This is a classic setup for exactly this symptom: mobile browsers auto-collapse their address bar
+  ~1-2 seconds after load (very common, not app-controlled), which changes the viewport height and fires
+  a native `resize`. If the page had ANY scroll offset before that collapse (even a few px, from content
+  briefly taller than the shorter address-bar-visible viewport), nothing forces it back to `scrollTo(0,
+  0)` afterward — the content stays scrolled relative to the NOW-taller viewport, which reads exactly as
+  "the header scrolls partially out of view, the ribbon ends up higher than it should be."
+- **Why headless testing missed this:** headless Chrome has no address bar at all, so this exact
+  trigger (a real browser's UI chrome collapsing after load) never fires in a headless CDP check,
+  static-viewport or not. The advisor's own mobile-viewport headless check (375×667, static) came back
+  clean — that result is NOT evidence this is fine, it's a blind spot in the test method. Verify this
+  live on an actual phone, or in Chrome DevTools' device-toolbar mode (NOT headless — the visible,
+  interactive emulator, which mimics some viewport-resize-on-scroll behavior more realistically), or by
+  scripting a REAL `visualViewport`/`window` resize + scroll-position check ~1.5-2s after load if you
+  build a better headless probe for this class of bug specifically.
+
+**Fix direction (standard mobile-web pattern for this exact class of issue — verify it's the right fix
+for THIS symptom before landing it, don't assume):** add `overflow: hidden` (and likely `height: 100%`)
+to `html` as well as `body`, and/or listen for `window.visualViewport`'s `resize`/`scroll` events (or a
+plain `scroll` event on `window`) and force `window.scrollTo(0, 0)` whenever it fires — a standard fix
+for "mobile browser chrome collapse leaves the page scrolled." Land the minimal version that actually
+fixes the REPRODUCED symptom; don't over-build defensive scroll-locking beyond what's needed.
+
+**VERIFY LIVE, on an actual mobile device or realistic emulation (not headless):** load the app on
+mobile, wait 3+ seconds, confirm the ribbon/header stay in their original relative position — no shift,
+no overlap. Also confirm normal pinch/pan/draw interaction on the canvas is unaffected (this app
+deliberately uses `touch-action: none` for its own gesture handling — don't accidentally re-enable
+native browser scroll/zoom on the canvas while fixing the outer page scroll).
+
+Append a WORK-LOG entry (repro method used, root cause confirmed, fix, live-verify) ending with exactly
+`=== MOBILE-RIBBON-SHIFT-FIX DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ CORRECTION (user, 2026-08-27) — the mobile symptom is a SIZING bug (100vh), not primarily a scroll-drift one
+
+**The user clarified the actual symptom precisely, after the scroll-reset fix above already landed:**
+*"the app sits under the address bar after load, it covers the app"* — i.e. the TOP of the app (header
++ ribbon) renders at a position the still-visible browser address bar physically overlaps, while the
+bar is showing. This reframes last turn's model: the primary bug is that the page is SIZED against the
+address-bar-COLLAPSED (taller) viewport from the first paint, not that it drifts via scroll after the
+fact. The scroll-reset fix from last turn may still be valid defensive cleanup, but it does not fix
+THIS symptom on its own — verify that live once the real fix below lands, don't assume the old fix
+already covers it.
+
+**Confirmed root cause:** `apps/sketchstudio/index.html:286` — `<body class="flex flex-col h-screen
+...">`. Tailwind's `h-screen` = `height: 100vh`. On many mobile browsers, `100vh` resolves against the
+LARGER, address-bar-collapsed viewport even while the bar is still visible on screen — so a
+`height:100vh` element is taller than what's actually visible right now, and gets positioned assuming
+space that doesn't exist yet. This is exactly the class of bug the CSS `dvh` (dynamic viewport height)
+unit was invented to fix: `100dvh` tracks the REAL, currently-visible viewport and updates live as the
+browser chrome shows/hides — no JS scroll hack needed for the sizing itself.
+
+**Fix direction — verify feasibility first, this repo uses Tailwind via CDN (no build):**
+1. Check what Tailwind CDN version is loading (`apps/sketchstudio/index.html`'s script tag) and whether
+   it supports the `h-dvh` utility (Tailwind added `dvh`/`svh`/`lvh` height utilities in v3.4). If it
+   does, swap `h-screen` → `h-dvh` on `body` (and anywhere else using `h-screen`/`100vh` for full-page
+   sizing — grep for it, don't assume `body` is the only spot).
+2. If the CDN version predates that utility, add a plain CSS override instead (`body { height: 100dvh;
+   }`) in the existing `<style>` block — but **verify the CASCADE ORDER carefully**: Tailwind's CDN
+   script injects its own stylesheet at runtime, and depending on WHEN that injection happens relative
+   to this page's inline `<style>` block, your override could either win or silently lose to
+   `.h-screen`. This file already has precedent for using `!important` to win exactly this kind of
+   ordering fight (see the `#toolsRibbon { z-index: 100 !important; }` reassertions) — use that pattern
+   if a plain override doesn't reliably win, and explain in WORK-LOG which case you hit.
+3. Add a `@supports not (height: 100dvh)` (or equivalent feature-detection) fallback to the existing
+   `100vh`/`h-screen` behavior for older browsers that don't support `dvh` at all, so this isn't a
+   regression there.
+
+**VERIFY LIVE, on an actual mobile device or realistic emulation (still not headless — same limitation
+as last turn, `dvh` behavior specifically depends on real mobile browser chrome, which headless doesn't
+have):** load the app with the address bar visible — the header/ribbon must be FULLY visible, not
+tucked under the bar, from the very first paint, with no shift needed as the bar later collapses/expands.
+
+Append a WORK-LOG entry (what `100vh` was actually doing wrong, the dvh fix + cascade-order finding,
+live-verify) ending with exactly `=== MOBILE-VIEWPORT-DVH-FIX DONE — HOLD ===`. **Then pass the ball
+back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, confirmed still present after the dvh/scroll fixes deployed) — the canvas visibly vibrates on mobile
+
+**User's exact report, confirmed NOT fixed by anything already live:** "the canvas is vibrating very
+fast" on load; touching the canvas makes an app-switcher-adjacent element disappear AND the vibration
+stops (the two are correlated observations from the user, not necessarily two separate bugs — the
+vibration is the one that must be fixed; the switcher-disappearing-on-touch may just be a symptom of
+whatever's oscillating, or may be unrelated/expected — investigate, don't assume either way).
+
+**Advisor's investigation so far:**
+- Ruled out (via a headless CDP probe polling `#toolsRibbon`/`.sk-ribbon`/`#app-header-host`'s
+  `getBoundingClientRect()` every 150ms for 3s + after a simulated touch, against the LIVE deployed
+  site): NO layout/position oscillation shows up in headless Chrome at all — every sample was pixel-
+  identical. This does NOT mean there's no bug; it means either (a) headless can't reproduce whatever
+  real-device condition triggers it (same limitation as the address-bar work — no real mobile browser
+  chrome, no real GPU/CPU throttling behavior), or (b) the vibration isn't a ribbon/header LAYOUT issue
+  at all, but something else entirely — e.g. the drawn CANVAS CONTENT itself (grid, origin markers,
+  construction lines) jittering, which my probe didn't check.
+- **A strong, concrete lead, found by reading the code (not proven as root cause yet — verify before
+  committing to a fix):** `apps/sketchstudio/main.js`'s render loop —
+  ```js
+  function loop(){
+    const iters = SolverConfig.ITERATIONS || 500;
+    engine.solve(iters);          // <-- runs EVERY frame, unconditionally, forever
+    draw(...);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  ```
+  calls `engine.solve(500)` on **every single animation frame** (~60/sec) regardless of whether
+  anything changed — no dirty-flag, no early-out when nothing is being dragged/edited. For a
+  perfectly-determined sketch this is wasteful but should be stable (LM resets `lambdaInit` fresh each
+  call and a converged system should re-converge to the same point near-instantly). But this session's
+  own solver work found MULTIPLE `rankDeficient: true` cases (a free/undetermined direction in the
+  system) — re-solving a rank-deficient configuration from scratch every frame can legitimately land on
+  a microscopically different point along that free direction each time (floating-point path-dependence
+  in an iterative method), which rendered at 60fps reads as visible high-frequency jitter. **Check
+  whether the DEFAULT/empty canvas's own construction geometry (the origin marker, the red/green
+  construction axis lines visible in the user's screenshot) constitutes such a rank-deficient system**
+  — that would explain why this happens even with nothing drawn yet.
+
+**Scope — investigate this specific hypothesis, then fix the real cause (verify, don't assume the
+hypothesis is right just because it's plausible):**
+1. Load the app (real device if you have one, or reproduce the CPU-load signature headlessly — e.g. log
+   `engine.getSolveStats()` / joint positions across consecutive frames on the DEFAULT empty canvas and
+   check for `rankDeficient:true` and/or sub-pixel position drift frame-to-frame).
+2. If confirmed as the cause: the fix is a DIRTY-FLAG gate on the render loop — only call `engine.solve()`
+   when something actually changed since the last frame (a drag in progress, a joint/constraint/shape
+   added or edited) — not unconditionally every frame. This is also a legitimate mobile
+   performance/battery fix regardless of whether it's THE vibration cause, since 500 Newton iterations
+   60x/sec forever is real, continuous CPU load for no reason on a static sketch.
+3. If NOT confirmed (frame-to-frame positions are stable even on a rank-deficient default sketch):
+   name what you checked and keep investigating — check the drawn canvas content specifically (do the
+   construction axis lines/grid actually redraw with different coordinates frame-to-frame?), and
+   consider whether this is a REAL device-only phenomenon (GPU/CPU thermal throttling causing dropped-
+   frame stutter that reads as vibration, unrelated to the solver at all) that may need the user's own
+   device to fully diagnose — say so plainly rather than force-fitting an unconfirmed fix.
+4. Investigate the switcher-disappearing-on-touch correlation too, but treat it as SECONDARY to the
+   vibration — don't spend the bulk of the turn there if the vibration cause is still open.
+
+**VERIFY LIVE:** load the app, wait several seconds with nothing touched — no visible jitter of any
+on-screen element (grid, axes, ribbon, header). If a real device isn't available, say so and describe
+exactly what WAS checked headlessly and what could not be verified that way — same honesty standard as
+the last two turns.
+
+Append a WORK-LOG entry (investigation trail, root cause confirmed or ruled out, fix if found, what
+still needs a real device) ending with exactly `=== MOBILE-VIBRATION-FIX DONE — HOLD ===` (or, if the
+cause is genuinely not found this turn, `=== MOBILE-VIBRATION-INVESTIGATION (unresolved) — HOLD ===`
+— either is an acceptable outcome, an honest non-fix is better than a guessed one). **Then pass the
+ball back to advisor and STOP.**
+
+---
+
+## ★ NEW FEATURE (user, 2026-08-27) — a SHARED mobile drawer for the side info-panel, across ALL apps
+
+**User's ask, verbatim intent: "frame calc need to use a mobile ui layout too, with drawer control
+panel" → then broadened: "actually all app should have one."** So this is NOT a frame-calc-only fix —
+every host app (`sketchstudio`, `shaper`, `penplotter`, `frame-calc`, and `trace` if it has an
+equivalent side panel) needs its side info/constraint panel to become a collapsible DRAWER on mobile
+widths, instead of a permanently-visible fixed-width sidebar eating a big fraction of a phone screen.
+
+**Ground truth, checked before dispatching (don't re-derive, verify current if it's drifted):**
+- Every app currently mounts its info/constraint panel (`createDesignInfoPanel` from
+  `packages/ui/design-info-panel.js`) into a fixed-width `<aside>` (e.g. `apps/frame-calc/index.html`'s
+  `#sketch-panel { flex: 0 0 244px; ... }`, matching the same ~244px convention `apps/shaper` and
+  `apps/sketchstudio` use) — always visible, no collapse/toggle, no mobile variant at all today.
+- `packages/ui/tabbed-dock-panel.js` (`createTabbedDockPanel`) exists but is **completely unused**
+  anywhere (grepped — zero importers). It's a multi-TAB dock container, not a slide-in/out drawer — it
+  does NOT already solve this (no open/close/toggle-visibility API). Don't force-fit it; a new small
+  shared component is the right call here, but re-verify this yourself before ruling it out entirely.
+- **Precedent to follow:** this session's mobile ribbon fix (`packages/ui/tool-ribbon.js`, the
+  `.sk-ribbon` component) is the model — ONE shared `#ui` component gets the mobile-aware behavior
+  once, and every host automatically benefits since they all import the same file. Do the SAME thing
+  here: don't hand-roll a drawer per app.
+
+**Scope — build ONE shared drawer, wire it into every host:**
+1. **A new shared `#ui` component** (e.g. `packages/ui/mobile-drawer.js`, name it whatever reads
+   cleanest) that wraps the EXISTING info-panel content: on desktop widths, renders exactly as today
+   (fixed-visible sidebar, byte-identical behavior — this must stay unregressed); below the same mobile
+   breakpoint the ribbon fix uses (`max-width: 767px`, matching the existing convention), the panel
+   becomes a DRAWER — hidden/collapsed by default, a visible toggle affordance (a button/tab/handle) to
+   slide it in over (or push aside) the canvas, and a way to close it again (tap outside, a close
+   button, or both — your call, follow whatever feels native to a mobile CAD tool, look at how the
+   existing style-panel/modal patterns in this codebase handle open/close for consistency).
+2. **Wire it into every host** that has a side info-panel: `apps/sketchstudio`, `apps/shaper`,
+   `apps/penplotter` (pen-plotter — check its actual mount point name, it may differ from
+   `#design-panel-info`), `apps/frame-calc`, and `apps/trace` if it has an equivalent panel (check —
+   don't assume). Each host's wiring change should be small (swap the panel's mount call for the new
+   drawer wrapper's mount call) — the actual drawer LOGIC lives once, in `#ui`.
+3. Don't touch the RIBBON (already fixed this session) or anything else about desktop layout.
+
+**VERIFY LIVE, at a mobile width, on AT LEAST 3 of the apps (sketchstudio + frame-calc + one more —
+your call which, but don't only check one):** the side panel is collapsed/out of the way by default,
+a clear affordance opens it as a drawer, it's usable (readable, scrollable if long) while open, and
+closing it returns to the normal canvas view. **At desktop width, confirm ZERO change** — same fixed
+sidebar as before, byte-identical rendering (screenshot or DOM diff, your call) for at least one app.
+`npm run test:shell` (or equivalent) stays green.
+
+**Split authorized if this is bigger than one turn:** land the shared component + ONE host fully
+verified first, flag remaining hosts as a clear follow-up rather than rushing all 5 half-done.
+
+Append a WORK-LOG entry (component design, which hosts got wired this turn, any deferred, live-verify)
+ending with exactly `=== MOBILE-DRAWER-PANEL DONE — HOLD ===` (or `=== MOBILE-DRAWER-PANEL (partial,
+N/5 hosts) — HOLD ===` if split). **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, mobile, HIGH SEVERITY — core interaction) — Select/drag doesn't work on touch, and pinch-to-zoom zooms the whole page instead of just the canvas
+
+**Sketch Studio, on a phone. Two symptoms, likely the same root cause (touch-action / gesture
+capture), reported together:**
+1. "select tool doesn't seem to work correctly, selecting and move aren't working" — tapping a shape to
+   select it, or dragging a joint/shape, doesn't do what it should on touch.
+2. "pinch to zoom zooms whole UI but should be canvas only" — a two-finger pinch gesture is being
+   handled by the BROWSER (native page zoom) instead of being captured by the app's own canvas
+   pan/zoom logic.
+
+**Advisor's starting point (found, NOT yet diagnosed as the cause — verify before fixing):**
+`apps/sketchstudio/index.html` has this existing (NOT new this session — present before any of this
+session's fixes, confirmed by checking) touch-action setup:
+```css
+body { touch-action: none; ... }
+#svgCanvas { width: 100%; height: 100%; touch-action: none; ... }
+@supports (touch-action: pan-x pan-y) {
+    #svgCanvas { touch-action: pan-x pan-y; }
+}
+```
+The `@supports` override REPLACES `none` with `pan-x pan-y` on any browser that supports the
+multi-value syntax (i.e., basically all current mobile browsers) — meaning on a real phone, the canvas
+is currently running with `touch-action: pan-x pan-y`, NOT `none`. That changes what the BROWSER itself
+is allowed to do with one- and two-finger gestures on that element vs. what the app's own JS pointer
+handlers (`packages/ui/input-manager.js`) expect to see. This is a plausible mechanism for BOTH
+symptoms (a native pan/gesture recognition competing with the JS's own drag/select logic; pinch
+specifically escaping to a differently-configured ancestor if the canvas element doesn't fully own it)
+— but it is UNCONFIRMED and it is NOT NEW CODE, so don't assume it's simply "the bug" without checking
+whether this exact rule predates a recent regression or has always behaved this way. **Find out:**
+- Is this genuinely new-broken (something this session's changes exposed — e.g. the dvh/height fixes
+  changing the canvas element's actual computed size or stacking context in a way that changes how
+  touch-action resolves), or has select/drag on mobile touch always been broken and the user is only
+  now testing it seriously on a phone?
+- Check `git log -p` / `git blame` on this `@supports` block and on `packages/ui/input-manager.js`'s
+  touch/pointer handling for anything that changed recently vs. is long-standing.
+
+**Scope — diagnose for real (this is touch-gesture behavior; a headless CDP touch-event dispatch can
+simulate SOME of this but real multi-touch pinch gesture recognition is a genuine gap — same class of
+limitation as the address-bar work; use a real device or the most realistic emulation you can, and say
+plainly what you could and couldn't verify):**
+1. Confirm exactly what's broken: does a single tap fail to select at all, or select the wrong
+   thing, or select correctly but not respond to a subsequent drag? Does pinch zoom the WHOLE
+   document (visual page zoom, browser chrome included) or just visually scale the app's own
+   container? Precise symptom narrows the fix a lot.
+2. Root-cause the touch-action interaction (or find the real cause if it's something else — a pointer-
+   event listener registration issue, a recent CSS change affecting hit-testing coordinates, etc.).
+3. Fix so: single-finger tap/drag on the canvas selects and moves shapes correctly (matching desktop
+   mouse behavior), and a two-finger pinch is captured by the app's OWN zoom logic, never the browser's
+   native page zoom.
+
+**VERIFY LIVE, on an actual phone (this is exactly the class of gesture bug that can't be trusted from
+headless alone):** tap a shape → it selects (highlight/handles appear); drag it → it moves with your
+finger; pinch with two fingers → only the CANVAS content scales, the rest of the UI (header, ribbon,
+footer) stays fixed, no browser-level page zoom.
+
+Append a WORK-LOG entry (exact symptom confirmed, root cause, fix, live-verify) ending with exactly
+`=== MOBILE-TOUCH-SELECT-ZOOM-FIX DONE — HOLD ===`. **Then pass the ball back to advisor and STOP.**
+
+---
+
+## ★ TASK (user-reported, screenshots, HIGH SEVERITY — the last fix was scoped too narrowly) — Shaper/Pen Plotter/Frame Calc have NO touch-action protection at all; panning pans the whole PAGE
+
+**The last turn's fix only touched `apps/sketchstudio/index.html`. User's next report, WITH
+screenshots, is from SHAPER** (dark theme, the "Panel" drawer button visible top-right confirms it) —
+**"panning is just panning the page not the canvas."** One screenshot shows the app's content shifted
+so half the screen is bare black background — that's the PAGE itself having scrolled/panned, not the
+canvas.
+
+**Advisor's ground-truth check (confirmed, don't re-derive):** grepped `touch-action` across
+`apps/shaper/index.html`, `apps/penplotter/index.html`, `apps/frame-calc/index.html`,
+`packages/ui/sketcher.css`, and `packages/ui/sketch-canvas.js` — **zero hits, anywhere.** Sketch
+Studio's canvas only ever worked because IT (a standalone app that predates the monorepo carve-out)
+independently wrote its own `touch-action: none` rules in its own `index.html` — that protection was
+NEVER part of the shared `#ui` layer `mountSketch()` and friends give every OTHER host. Shaper/Pen
+Plotter/Frame Calc have been running with ZERO touch-gesture ownership this whole time; the browser's
+default native pan/zoom has always been free to act on their canvases and the surrounding page.
+
+**Fix this ONCE, at the shared level — do NOT repeat the per-host index.html pattern the last turn
+used.** The right place is almost certainly `#ui/sketch-canvas.js`'s `mountSketch()` itself (or
+`packages/ui/sketcher.css` if that's genuinely shared/loaded by every host — check which) — set
+`touch-action: none` on the canvas element it creates/binds, structurally, so EVERY current and future
+host gets correct touch ownership automatically without each one needing to remember its own CSS.
+Verify this is really the single right injection point before committing to it — trace exactly how
+Sketch Studio's OWN (now-correct) canvas touch-action rule relates to what `mountSketch` does, so the
+shared fix produces the SAME effective behavior Sketch Studio now has, not something subtly different.
+
+**Also check the PAGE-level scroll lock, not just the canvas element:** Sketch Studio's `index.html`
+has `body { touch-action: none; overflow: hidden; ...}` (page-level, not just canvas-level) — confirm
+whether Shaper/Pen Plotter/Frame Calc's `index.html`s have an equivalent body-level lock or not. If
+they don't, that's likely WHY the whole page pans (nothing stops it) even independent of the canvas fix
+above — both may be needed. Don't assume; check each host's actual `<body>` CSS.
+
+**Scope:**
+1. Add the canvas-level `touch-action: none` fix in the shared `#ui` layer (one place, benefits every
+   host).
+2. Audit + fix the page-level (`body`/`html`) scroll/touch lock in `apps/shaper/index.html`,
+   `apps/penplotter/index.html`, `apps/frame-calc/index.html` — each host's own HTML shell, matching
+   Sketch Studio's pattern where it's missing.
+3. Same honesty standard as every mobile-gesture turn this session: headless CANNOT prove this fixes
+   the real symptom (no native gesture to fight over in a headless browser with nothing to scroll) —
+   verify what's checkable (no regression, the rule is present and correctly scoped) and say plainly
+   that real-device confirmation is still needed.
+
+**VERIFY LIVE, on an actual phone, on ALL THREE previously-unprotected apps (Shaper, Pen Plotter, Frame
+Calc) — not just one:** single-finger drag pans/selects/moves WITHIN the canvas only; the page itself
+never scrolls or shifts; pinch only scales canvas content, never the browser page. Also re-confirm
+Sketch Studio is unregressed (it already worked after the last turn — don't break it while fixing the
+others).
+
+Append a WORK-LOG entry (what was missing in each host, the shared fix, per-host body-lock audit
+results, live-verify) ending with exactly `=== SHARED-TOUCH-ACTION-FIX DONE — HOLD ===`. **Then pass
+the ball back to advisor and STOP.**
+
+---
+
+## ★ NEW EPIC (user-approved after a long design discussion, 2026-08-27) — PROJECT PERSISTENCE: documents that save, reopen, and travel between apps
+
+**THIS TURN = SLICE 1 + 2 ONLY** (the serializer + the autosave buffer). Slice 3 (named Save/Open
+files) follows next turn. Commit per slice, verify each, pass back once. **Split authorized** if it
+balloons — land slice 1 completely and flag slice 2, rather than half-doing both.
+
+### Why (the design decisions already made with the user — do not re-litigate these)
+
+- **Nothing persists today.** Verified: no app saves the sketch. Only UI prefs sit in localStorage.
+  Export (SVG/DXF) is the only way out, and it's **one-way and lossy** — SVG/DXF have no concept of
+  constraints, so every hop between the user's own apps silently flattens the parametric model. The
+  constraint solver is this codebase's crown jewel and the current story destroys its output.
+- **Audience = the user + a few coworkers.** Ruled: **no accounts, no server, ever.** Local-first.
+  Sharing is "send the file." BYO-cloud (the user's OWN Drive, DDCS-Studio-style) is a LATER,
+  optional slice for the user's own phone↔desktop sync — NOT in scope now.
+  - 📌 **Credential already registered for that future slice (2026-08-27), recorded here so it isn't
+    lost.** Sketch Studio has its OWN Google Cloud project (separate from DDCS Studio's, so the
+    consent screen brands correctly). The **public** OAuth client ID — safe in source, ships in the
+    page exactly like DDCS's does in its `providers.js`; there is NO secret in this design:
+    `983232817866-b4pl67uuhfmqdrtah42vaf22ivimfh3j.apps.googleusercontent.com`
+    Scope will be `drive.file` (non-sensitive → no Google verification review). When the slice lands,
+    it goes in a `providers.js`-shaped config, mirroring
+    `C:\Users\danse\APPS\ddcs-studio-project\DDCS-Studio\web\ui\cloud\providers.js` (read-only ref).
+  - 📌 **USER RULING (2026-08-27) — the header AVATAR is THE single connection point.** A signed-in
+    account avatar sits top-right in the header and IS the one sign-in door. DDCS already paid for
+    every lesson below (`web/ui/headerAccount.js` + `web/ui/cloudAccount.js`, read-only ref) — steal
+    them, don't rediscover:
+    1. **ONE door, not two.** DDCS had sign-in reachable from two places reading different state;
+       a user connected in one, saw the other say "not connected," and concluded it failed. The human
+       hit exactly that and asked for one login. One door, in the header.
+    2. **It belongs in the header** because it's a first-run action, not a setting you go hunting for
+       — and it gets real width (reads "Sign in" when signed out, not a bare glyph).
+    3. ⭐ **The avatar costs NO extra OAuth scope**: `photoLink` comes from Drive's OWN `about.get`
+       (see `googleDrive.js getUserInfo`). Asking for `userinfo.profile` to get a picture the normal
+       way would widen consent into SENSITIVE scopes and drag the app into Google verification —
+       forfeiting the whole `drive.file`-only advantage. Initials are the fallback, and a broken or
+       expired photo URL must fall back to initials too, never a dead image.
+    4. ⭐ **ONE ACCOUNT, TWO FEATURES.** Signing in signs in the ACCOUNT — it must NOT by itself turn
+       any feature on. DDCS's words: *"signing in must not silently start routing a user's G-code
+       through the cloud."* For us: signing in must not silently start syncing sketches to Drive.
+       Using the account is a separate, explicit choice.
+    5. **The identity-backfill trap** (their t2113, a two-part bug): the backfill condition was
+       `!name && !email` from when identity meant name+email only; once the PICTURE was added, anyone
+       already connected had name+email, so the backfill never ran and their avatar stayed initials
+       forever — only fixable by disconnect/reconnect. AND it lived in a function only the Settings /
+       Project-Manager panels called, so the HEADER (the one surface that shows the picture) could
+       never trigger it. Fix both halves: a missing picture is equally a reason to re-ask, and the
+       header must be able to trigger the backfill itself.
+- **Geometry is SHARED across apps; the DOCUMENT is the travel mechanism.** This matches the repo's
+  own north star ("ONE reusable Design tab… other tabs differ per host"). All 5 apps are
+  **same-origin** (`/apps/<name>/`), so a shared IndexedDB buffer makes cross-app carry nearly free —
+  no export/import dance, constraints intact.
+- **EDITORS vs GENERATORS** (the one nuance): editors (`sketchstudio`, `shaper`, `penplotter`) share
+  the live document. Generators (`frame-calc`, `trace`) PRODUCE a new document rather than inheriting
+  whatever was open — you must never dump 4000 traced paths into the sketch someone was editing.
+  Slice 2 wires the editors only; generators keep their current behavior this turn.
+
+### Ground truth checked by the advisor (verify if it's drifted, but don't re-derive from scratch)
+
+- **`#core` has NO geometry serializer.** `apps/penplotter/src/history.js`'s `serialize()` covers
+  `artLayers`/`toolpaths`/`doc` ONLY — it never captures joints/shapes/constraints. A comment in
+  `apps/penplotter/src/state.js:129` admits it: *"no app persists this map today — history.serialize
+  covers artLayers/toolpaths/doc only."*
+- ⚠ **SIDE FINDING, likely a real live bug — do NOT fix this turn, just confirm + record it in
+  WORK-LOG:** if penplotter's undo snapshot never captures `#core` geometry, then undo/redo in its
+  Design tab probably does NOT undo drawn geometry. Verify the symptom cheaply (draw a line in the
+  Design tab, press undo) and record the result. It's a separate dispatch.
+- **A real head start exists:** `tests/harness/sketch.js` already implements `load(model)` and
+  `serialize()` over exactly `{joints, shapes, constraints}` — the right document shape, already
+  handling Map/array/object joint forms. **Promote/adapt that into `#core` rather than writing fresh**
+  — but re-read it first; it's harness code and may not cover every shape kind.
+
+### Lessons to STEAL from DDCS Studio (already paid for there — do not rediscover them)
+
+Read these files before designing: `web/data/backup.js` (header), `web/data/fsHandles.js` (header),
+`web/ui/fileSaveState.js:164`, `web/ui/projects/projectStore.js` (header) under
+`C:\Users\danse\APPS\ddcs-studio-project\DDCS-Studio` — **read-only, that repo is not ours to edit.**
+
+1. **Buffer ≠ file.** Work is ALWAYS persisted to a local buffer; a named file is a separate explicit
+   artifact. Two concepts.
+2. **NO `beforeunload` warning** (their t1221 user ruling). The buffer survives reload, so the warning
+   cried wolf every refresh: *"Being interrupted by a false alarm teaches people to click through real
+   ones."* Use a passive **dirty indicator** instead, never a blocking prompt.
+3. **Move each store's OWN persisted bytes; never re-serialize through a second codec.** One codec per
+   thing. Adding a store = one row in a declared registry, not new machinery.
+4. **Opening a document replaces the WHOLE state** — clear every declared store to default first, then
+   write the file's. Their old keep-what's-missing behavior produced *"a blend that was neither the
+   file nor what you had, and then marked that blend 'saved'."*
+5. **Version field, and flag a document NEWER than we understand** rather than half-reading it.
+6. **Never auto-download anything** — *"a file appearing in Downloads that nobody asked for is not
+   consent."*
+7. **All storage best-effort:** a failure means "re-pick next time," never a broken save.
+
+### ▶ SLICE 1 — the `#core` document format + serializer (pure, no UI, no storage)
+
+1. **A new `packages/core/document.js`** (name it as fits) exporting a versioned serialize/deserialize
+   pair over the shared sketch state: `{ version, geometry: { joints, shapes, constraints }, hosts: {} }`
+   — the exact top-level shape is yours to design, but it MUST have: a schema **version** field, the
+   shared geometry, and a **namespaced per-host side-car section** (`hosts.shaper`, `hosts.penplotter`,
+   …) so host data (pen colors, cut types, board thickness) never leaks into `#core` geometry. That
+   host/core separation is an established rule in this repo — the plotter already keeps its colors
+   plotter-side and `#core` pure. Keep it.
+2. **Cover EVERY shape kind** — line, rect, circle, arc, bezier — and every constraint type. Check
+   `#core/shapes.js` + `CONSTRAINT_TYPES` for the full list; a shape kind silently dropped on save is
+   exactly the "worst defect class" this project's docs name.
+3. **Deserialize must reject/flag a newer version**, not half-read it (lesson 5).
+4. **A round-trip ORACLE** in `packages/core/tests/`: build a sketch containing every shape kind + a
+   representative spread of constraint types (including a dimension, a tangent, a coincident-welded
+   rect, an arc with its structural equal-radius constraint) → serialize → deserialize into a FRESH
+   engine → assert the geometry and constraint set are equivalent, and that a `solve()` on the restored
+   document converges to the same positions. This oracle is the real deliverable — it's what proves
+   nothing is silently dropped.
+
+### ▶ SLICE 2 — the autosave buffer (IndexedDB) + restore + cross-app carry
+
+5. **A shared `#ui` (or `#core`, your call — justify it) buffer module** persisting the current
+   document to **IndexedDB** under one well-known key, debounced on change. IndexedDB, not
+   localStorage: geometry documents can get large and localStorage's ~5MB cap + synchronous API are
+   both wrong for this (DDCS uses IndexedDB for exactly this reason).
+6. **Restore on boot:** an app that mounts the shared sketcher loads the buffer if present. Because all
+   apps are same-origin, this IS the cross-app carry — draw in Shaper, switch to Pen Plotter, the
+   geometry is there with constraints intact. **Wire the EDITORS only** (`shaper`, `penplotter`, and
+   `sketchstudio` if feasible — note it does NOT call `mountSketch()`, so it may need its own wiring;
+   flag rather than force it). **Do NOT wire `frame-calc` or `trace`** (generators — see above).
+7. **A passive dirty/saved indicator** somewhere unobtrusive. **NO `beforeunload` prompt** (lesson 2).
+
+**VERIFY LIVE:** draw a constrained sketch (a dimensioned rect + a tangent circle) → hard-refresh the
+page → it comes back intact, constraints included, and still solves. Then: draw in Shaper → switch apps
+via the switcher → the same geometry is there. Confirm `frame-calc`/`trace` did NOT inherit it. Confirm
+no exit-warning prompt appears on refresh. Round-trip oracle + the existing 16/16 solver gate + shell-smoke
+stay green.
+
+Append a WORK-LOG entry (format design + why, what the oracle covers, the penplotter-undo side finding,
+live-verify) ending with exactly `=== PERSIST-1-2 (document format + autosave buffer) DONE — HOLD ===`
+(or `=== PERSIST-1 (document format) DONE — HOLD ===` if you split). **Then pass the ball back to
+advisor and STOP.**
+
+---
+
+## ★ QUEUED (user, 2026-08-27) — port the remaining 4 frame-calc shapes into `apps/frame-calc`
+
+**Not dispatched yet — queued behind the persistence epic above.** Recorded now with the advisor's
+groundwork done so it's ready to go.
+
+Only **Trapezoid** is ported (`apps/frame-calc`, cycle 190). The other four live in the read-only
+reference repo `C:\Users\danse\APPS\geometric frame calc`. **Advisor checked each engine's actual
+return shape** — that's what determines the real cost, and they fall into three tiers:
+
+| Shape | Engine | Returns | Cost |
+|---|---|---|---|
+| **Parallelogram** | `shared/utils/quadFrameCalculator.js` — **already ported** to `#core/frame-geometry.js` | `{P,Q,S,boards,cutList}` | **UI porting only** — engine + sketch-builder both work unchanged |
+| **Polygon** | its own `polygonCalculator.js` (regular N-gon) | **same** `{P,Q,S,boards,cutList}` (+ `N,s,r,R,acrossFlats,…`) | port the engine to `#core`; sketch-builder needs NO change |
+| **Triangle** | its own `framingCalculator.js` (right) **+** `obliqueCalculator.js` (oblique — two sub-modes) | **different** — named board objects (`V`,`H_board`,`D` with `tl/tr/br/bl` corners), NOT a `boards[]` array | needs an ADAPTER to the sketch-builder, plus a sub-mode selector |
+| **Stud layout** | `boxGeometry.js` | unverified — a different KIND of tool (stud spacing inside a box, not a frame perimeter) | assess before committing; may not fit the frame model at all |
+
+**⭐ THE KEY DESIGN INSTRUCTION — DECLARE, don't hand-roll five branches.** Everything downstream of
+the engine call is already shared and proven (`sketch-builder.js` → fixed joints + lines + real
+dimension constraints → `exportShaperSVG`). The only per-shape parts are **(a)** the input form and
+**(b)** the engine call + vertex mapping. So introduce a **declared calculator REGISTRY** — one row per
+shape, e.g. `{ id, label, engine, formFields, mapVertices }` — and drive both the shape-picker UI and
+the calculation off that data. A new shape must be a new ROW, not new machinery. This is exactly the
+project's own "DECLARE over hand-roll" principle, and the reason the Trapezoid work generalizes cheaply.
+
+**UI shape:** add a **shape picker** (tabs or a dropdown) selecting which calculator is active. It is
+ORTHOGONAL to the existing Calculator/Sketch view toggle — picking a shape changes the form + geometry;
+the Sketch view, dimensions, drawer, and export stay exactly as they are. Retire the hardcoded
+"Frame Calc — Trapezoid" title in favour of the active shape's label.
+
+**⚠ SLICE 0 COMES FIRST — reach PARITY on Trapezoid before porting anything else (user-flagged:
+"the trapezoid calculator is not as full blown as the original").** Cycle 190 deliberately shipped a
+reduced Trapezoid to prove the CAD-toggle pattern. Advisor diffed the original's controls
+(`trapezoid-frame-calculator/src/components/TrapezoidControlsPanel.js`) against the port — **three
+features are missing**, and every one of them is SHARED across the quad shapes + polygon:
+1. **Joint-type picker** — per-corner `Miter` / `CW-Through` / `CCW-Through`. The engine already takes
+   this (`calculateQuadFrameGeometry({ joints: [...] })`) and it materially changes both board geometry
+   AND the saw gauges; without it you're locked to all-Miter. There's a shared glyph component for it
+   in the reference repo (`shared/components`, the `QuadJointGlyph` the roadmap mentions) — reuse it.
+2. **Plywood Sheathing Shell + Shell Clearance** — the engine already computes the shell ring (`S` /
+   `shellPolyString` from `shellOffset`); the port simply never surfaces or draws it.
+3. **Target Dimension Mode** (incl. an "All Sides" option) — governs what the typed dimensions
+   actually measure. Read the original to pin its exact semantics before implementing.
+Also compare the CANVAS: the original's `TrapezoidCanvasView.js` is 443 lines (dimension lines, angle
+arcs, joint glyphs); the port's preview is far simpler. Decide what's genuinely needed vs. what the
+Sketch view now covers better — don't blind-port 443 lines, but don't silently drop shop-critical
+readouts either.
+
+**⭐ WHAT A SCREENSHOT OF THE ORIGINAL REVEALS (user-supplied, 2026-08-27) — read this before designing:**
+- **The joint picker is IN-CANVAS, not a form control.** Each of the 4 corners carries a clickable
+  glyph button showing that corner's current joint type. That's the `QuadJointGlyph` component. Follow
+  that design — it's better than a separate dropdown list, because the choice is spatial.
+- ⭐ **The original's visual language ALREADY MATCHES Sketch-Studio's dimension semantics.** Driving
+  inputs (12" top, 24" bottom, 10" height) render GREEN and un-parenthesized; every DERIVED value
+  (board lengths `(10 5/16")`, `(8 3/16")`, angles `(29.5°)`, `(121.0°)`) renders **in parentheses** —
+  which is exactly how `svg-renderer.js` already draws a DRIVEN/REFERENCE dimension vs. a driving one.
+  **So much of this doesn't need re-drawing at all** — in the Sketch view, the calculator's typed
+  inputs should become DRIVING dimensions and the derived board/angle values REFERENCE dimensions, and
+  the existing renderer produces the same convention natively. Exploit that instead of porting a
+  parallel drafting layer.
+- **Saw-gauge readouts are shop-critical and must survive** — note the `(-45° = 15.5°)` annotation with
+  its dashed reference line: that's the actual miter-saw setting, the whole point of the tool. The
+  repo's ROADMAP calls a wrong displayed number "the worst defect class."
+- **The original already has SHAPE TABS** (Parallelogram · Polygon visible in its header) and a
+  **History** control with a count badge. So the shape-picker design in Slice A can follow the
+  original's own pattern rather than being invented from scratch.
+**Why first:** all three are shared across the remaining shapes. Port 4 more shapes at today's fidelity
+and you replicate the same gap 4× and then fix it 5×.
+
+**⚠ QUEUED BUG (found during Slice 0, confirmed PRE-EXISTING via git-stash A/B — not caused by that
+work):** the **Sketch view opens severely over-zoomed** for a frame of this size — there is NO view-fit
+logic anywhere in `apps/frame-calc/src/main.js`. Mounting the sketcher should fit the built geometry to
+the canvas (compute the geometry's bounds → set `state.view` to frame it with a margin). Small, and it
+badly hurts first impressions of the toggle. **Do this with Slice A** (or before it) — every additional
+shape ported makes it more visible.
+
+**Suggested slicing (one per turn, review each):**
+- **0** — ✅ **DONE** (cycle 199, commit `ee34837`) — Trapezoid parity: in-canvas per-corner joint
+  picker (real `QuadJointGlyph` port, click-to-cycle), Plywood Sheathing Shell (toggle + clearance +
+  ring), and Target Dimension Mode (Wood Frame Inside / Sheathing Shell Outside, correctly gated behind
+  the shell being ON, with the back-calculation trig ported). Corner stats extended 2→4 (2 was only
+  valid under the all-Miter assumption). **`sketch-builder.js` needed ZERO changes** — it consumes
+  `geom.boards` generically, verified live with a CW-Through corner.
+  - **Dispatch correction recorded:** the advisor's "Target Dimension Mode incl. an 'All Sides' option"
+    conflated two unrelated things — **"All Sides" is just the Board Thickness slider's label**; the
+    real dimension mode is the inside/outside shell-vs-frame target. Implemented with the correct
+    semantics.
+  - Deliberately NOT ported (reasoned, dispatch-permitted): click-to-edit-on-canvas, zoom/pan, PNG
+    export, angle arcs — the Sketch view's real solver-backed editing covers these better.
+- **A** — the registry + shape picker + **Parallelogram** (cheapest; proves the registry with 2 rows).
+- **B** — **Polygon** (port `polygonCalculator.js` into `#core`; same output shape, so the toggle
+  should light up with no sketch-builder change — verify that claim, don't assume it).
+- **C** — **Triangle** (the adapter + right/oblique sub-modes — the real work).
+- **D** — **Stud layout** (assess first: does it even produce frame-style boards? If not, it may
+  belong as its own thing rather than forced into this registry — flag rather than force-fit).
+
+---
+<!-- superseded (provenance) -->
 ## TASK — BATCH 3 (BURN-DOWN cont'd): STYLE-TOOL — per-shape STROKE color+width / FILL color, driving outline-pen / fill-pen. COMMIT PER ITEM (4 + a tiny 5th); verify each; pass back ONCE.
 
 **Foundation (LOCKED):** merged single-`#core`-store; invariant = **FREE ART BYPASSES THE SOLVER**. Plan = `PARITY-ROADMAP.md`.

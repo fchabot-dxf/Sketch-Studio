@@ -8,6 +8,7 @@
  */
 
 import { createAppSwitcher }              from '#ui/app-switcher.js';
+import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload }                     from './upload.js';
 import { initControls }                   from './controls.js';
 import { initScale }                      from './scale.js';
@@ -19,6 +20,15 @@ import { ensureEditMount, importSvgToEdit }  from './edit-view.js';
 // ── App switcher ──────────────────────────────────────────────────────────────
 const swHost = document.getElementById('app-switcher-host');
 if (swHost) swHost.appendChild(createAppSwitcher({ current: 'trace' }).el);
+
+// DIAG-OVERLAY: log/error/viewport/touch capture works the same as every other app. The document
+// (serializeDocument) section is deliberately omitted here rather than reaching into the Edit tab's
+// #core state through a getter this turn — that getter exists only in another in-progress,
+// uncommitted change to edit-view.js/app.js (not authored by this turn), and depending on it would
+// entangle this commit with unreviewed work. Everything else in the report still works; wiring the
+// document section in is a small, clean follow-up once that other change lands.
+const _diagLog = createDiagnosticLog({ appId: 'trace' });
+if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
 const listeners = {};

@@ -7,6 +7,7 @@ import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HID
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
 import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
+import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
 // nav AND (later) its mount(). Adding/reordering a stage is ONE edit here; the nav + the stage bodies + the router
@@ -29,6 +30,11 @@ let currentStageId = null; // the showing stage; drives the isActive gate + whic
 // Mount the shared app-switcher (marks Pen Plotter current; navigates to Sketch Studio / Shaper).
 const swHost = document.getElementById('app-switcher-host');
 if (swHost) swHost.appendChild(createAppSwitcher({ current: 'penplotter' }).el);
+
+// DIAG-OVERLAY: reuses the existing window.__sketch dev/test seam (sketch-stage.js) rather than
+// threading a new export through the stage-mount API.
+const _diagLog = createDiagnosticLog({ appId: 'penplotter', state: () => window.__sketch && window.__sketch.controller.state });
+if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // Build the nav buttons AND the stub stage bodies BY ITERATING STAGES (declaration-first — nothing hardcoded).
 const nav = document.getElementById('mode-nav');

@@ -9,6 +9,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { findLoops } from '#core/loop-finder.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
+import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createCalculatorView } from './calculator-view.js';
 import { buildFrameSketch, attachFrameDimensions } from './sketch-builder.js';
 
@@ -16,6 +17,11 @@ import { buildFrameSketch, attachFrameDimensions } from './sketch-builder.js';
 // apps/shaper/src/main.js:33-34's pattern).
 const _swHost = document.getElementById('app-switcher-host');
 if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'frame-calc' }).el);
+
+// DIAG-OVERLAY: created at boot (not gated to the Sketch view) — sketchController mounts lazily on
+// first entry to Sketch, so its state is read via a getter.
+const _diagLog = createDiagnosticLog({ appId: 'frame-calc', state: () => sketchController && sketchController.state });
+if (_swHost) _swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // This app is inches-only (the calculator has no mm mode) — default DOC_UNIT to 'in' so the Sketch
 // view's dimension labels match the Calculator view's own display, same opt-in pattern Shaper uses

@@ -10274,3 +10274,95 @@ Sketch view reflects the chosen joint type with zero sketch-builder changes.
 pre-existing failures, none new. `shell-smoke.cjs` 11/12, same pre-existing ribbon-order failure.
 
 === TRAPEZOID-PARITY (Slice 0) DONE — HOLD ===
+
+---
+
+## TURN 398 — DIAG-OVERLAY: the diagnostic log overlay + Copy Report, built and round-trip-verified
+
+**Ground truth re-confirmed before building:** read `#core/debug.js` fully — `dbg.*` writes straight to
+`console.*` gated by `_state.level`/`_state.enabled`, dozens of existing call sites across `input-
+manager`, the input-handlers, `svg-renderer`, core, etc. Read `apps/sketchstudio/ui/debug-panel.js` (the
+candidate the dispatch flagged for reuse) and confirmed it's a VISUAL toggle panel (Show Tension/
+Freedom/Health, AI Vision checkboxes) — not a log console, and sketchstudio-only (no equivalent button
+exists in shaper/penplotter/frame-calc/trace's headers). Correctly did NOT try to extend it; built a new
+shared component instead, same call as the dispatch's own fallback framing.
+
+### The sink seam (`#core/debug.js`, additive)
+
+`setDebugSink(fn)` — same injection idiom as `setConstraintNotifier`/`createEngine({onMetrics})`. The
+critical design point, implemented exactly as specified: the sink fires on **every** `dbg.*` call
+regardless of `shouldPrint`'s category/level gate — console printing keeps its existing, unchanged
+gating. Verified live: called `dbg.warn('diag-test', ...)` with nothing enabled for that category (the
+default state) and confirmed it still landed in the overlay's log.
+
+### `packages/ui/diagnostic-log.js` (new)
+
+- **Capture starts at import time**, not when the overlay is opened — a module-level side effect
+  (`installCapture()` called once) wires the debug sink, `window.onerror`, `unhandledrejection`, and a
+  wrapped `console.error` (raw exceptions, like the dimension-tool crash the dispatch cited, never route
+  through `dbg`). A bounded ring buffer (300 entries) — verified it fills FAST under normal use (a couple
+  seconds of drawing produced 180–200 entries, mostly per-frame render-loop `dbg` calls) — flagging this
+  calibration point for the advisor rather than silently picking a different cap than the dispatch's own
+  "a few hundred" without saying so.
+- **Touch/pointer trace** (60-event cap): `pointerdown/move/up/cancel` at the document level, capture
+  phase, passive. `pointermove` is throttled to 1 recorded event per 100ms — unthrottled, a single drag
+  gesture would evict every OTHER event (including the pointerdown that started it) before the buffer
+  even wrapped, defeating the point of a trace.
+- **The Copy blob** (`buildReport`): recent log entries, the touch trace, viewport/layout numbers
+  (`innerWidth/Height`, `visualViewport`, `scrollX/Y`, `devicePixelRatio`, `getBoundingClientRect()` for
+  the canvas/ribbon/header — exactly what was invisible during the address-bar and vibration hunts), app
+  id/URL/UA, and **`serializeDocument(state)`** — the killer feature, reusing `#core/document.js` from
+  last cycle unchanged.
+- **Copy mechanism**: `navigator.clipboard.writeText` with a real fallback (a selectable `<textarea>`),
+  not a silent failure — clipboard write needs live user-activation context that a script-only trigger
+  doesn't always have; verified BOTH paths actually work (see live-verify below), not just that the code
+  compiles.
+- **Overlay UI**: full-screen on mobile (matches "must not block the canvas when closed" — `sk-hidden`
+  fully removes it from layout), open/close/Escape mirrors `style-panel.js`'s existing idiom.
+
+### Wiring — all 5 apps, one small addition each
+
+`sketchstudio`, `shaper`, `penplotter`, `frame-calc` all pass a real `state` (or a `() => state` getter
+for a host whose sketcher mounts lazily, e.g. shaper/frame-calc's Design/Sketch-tab-gated mount, or
+reusing penplotter's existing `window.__sketch` dev/test seam rather than threading a new export through
+`mountSketchStage`'s return shape) — so their Copy Report includes a real, replayable document.
+`trace` gets the toggle + full log/error/viewport/touch capture too, but its `document` section is
+**deliberately omitted this turn**: `edit-view.js` only exposes its `#core` state via a `getEditController()`
+getter that exists in ANOTHER, currently uncommitted, unrelated in-progress change to `trace/app.js` and
+`edit-view.js` (not authored this turn) — depending on it would entangle this commit with unreviewed
+work. Everything else in trace's report works; wiring the document section in is a small, clean follow-up
+once that other change lands (flagged, not silently dropped).
+
+**The toggle lives in each app's header** (next to `#save-status`/the app-switcher — same "reachable
+everywhere, unobtrusive" placement this session has used for every shared `#ui` chrome addition), created
+at BOOT for shaper/penplotter/frame-calc/trace (not gated to a specific mode/tab) since a bug can happen
+anywhere, not just in the Design/Sketch surface.
+
+### VERIFIED LIVE — the whole bridge, round-tripped (the dispatch's own acceptance test)
+
+1. Loaded sketchstudio, drew a constrained rect, threw a real uncaught error
+   (`throw new Error('DIAG-OVERLAY test error')`) and called an un-enabled `dbg.warn`. Opened the
+   overlay: both appeared in the log (confirmed by text match), proving BOTH the always-on sink and the
+   raw-exception capture work.
+2. Clicked Copy Report. Confirmed BOTH copy paths independently: (a) with no prior real user interaction,
+   `navigator.clipboard.writeText` throws `NotAllowedError: Document is not focused` (a genuine headless-
+   automation artifact, not a bug) and the code correctly falls back to a populated, selectable
+   `<textarea>` (12,540 chars). (b) After real prior mouse interaction (drawing the rect via actual
+   `Input.dispatchMouseEvent` calls, which grants the document real activation), `writeText` succeeds
+   outright — confirmed by intercepting `navigator.clipboard.writeText` to capture its exact argument
+   (sidesteps headless clipboard-read permission, which stayed denied even after
+   `Browser.grantPermissions` — an environment limitation, verified separately, not a defect in the
+   component).
+3. **THE ACCEPTANCE TEST**: took the captured report's `document.geometry` and fed it directly to
+   `tests/harness/sketch.js`'s `load()` in a real Node script (not a browser context) —
+   `load()` returned `true`, joint/shape/constraint counts matched the source exactly (9/4/8),
+   `solve(500)` converged. **The Copy Report blob genuinely replays as a Node scenario.**
+4. Confirmed the overlay toggle exists, opens, and closes cleanly on shaper, penplotter, frame-calc
+   (screenshotted/asserted in one combined pass), and trace (separately) — 5/5 apps. Confirmed closing
+   leaves the canvas fully interactive (dispatched a real pointerdown/up on the canvas post-close, no
+   error, matching the "must not block the canvas when closed" requirement).
+
+**Gate:** full corrected loop (`tests/` + `packages/core/tests/` + `tests/harness/`) — 134 tests, same 8
+pre-existing failures, none new. `shell-smoke.cjs` 11/12, same pre-existing ribbon-order failure.
+
+=== DIAG-OVERLAY DONE — HOLD ===

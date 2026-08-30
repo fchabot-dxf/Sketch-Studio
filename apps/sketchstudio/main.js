@@ -13,6 +13,7 @@ import { createAppHeader } from '#ui/app-header.js';
 import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
 import { createStylePanel } from '#ui/style-panel.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 
@@ -168,6 +169,10 @@ function initApp(){
   });
   docBuffer.restore().then(() => { try { engine.solve(500); } catch (_) {} });
   docBuffer.start();
+
+  // DIAG-OVERLAY: reachable from the header, next to the save-status indicator.
+  const diagLog = createDiagnosticLog({ appId: 'sketchstudio', state });
+  header.el.appendChild(diagLog.toggleEl);
 
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {

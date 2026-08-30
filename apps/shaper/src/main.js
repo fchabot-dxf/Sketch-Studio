@@ -12,6 +12,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
@@ -34,6 +35,11 @@ inspector.init(document.getElementById('inspector'));
 // SWITCH-1: mount the shared two-way app-switcher into the header brand slot.
 const _swHost = document.getElementById('app-switcher-host');
 if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'shaper' }).el);
+
+// DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
+// Explore/Vcarve/Prepare — designController may not exist yet, so its state is read lazily.
+const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
+if (_swHost) _swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 const fileInput = document.getElementById('file');
 document.getElementById('open').addEventListener('click', () => fileInput.click());

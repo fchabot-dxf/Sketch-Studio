@@ -35,23 +35,26 @@ function shouldPrint(category, level) {
     return false;
 }
 
+// DIAG-OVERLAY: an additive sink seam (same injection idiom as setConstraintNotifier /
+// createEngine({onMetrics})) so a host can CAPTURE every dbg.* call for its own diagnostic ring
+// buffer, independent of the console print gate above. CRITICAL: the sink fires on EVERY call,
+// print-enabled or not — a mobile bug report needs the log even though nobody enabled that
+// category in advance (the user can't know what to enable before the bug happens). Console
+// printing keeps its existing gating, completely unchanged.
+let _sink = null;
+export function setDebugSink(fn) { _sink = typeof fn === 'function' ? fn : null; }
+
+function emit(category, level, args) {
+    _state.seen.add(category);
+    if (_sink) { try { _sink({ category, level, args }); } catch (_) {} }
+    if (shouldPrint(category, level)) console[level](`[${category}]`, ...args);
+}
+
 export const dbg = {
-    log(category, ...args) {
-        _state.seen.add(category);
-        if (shouldPrint(category, 'log')) console.log(`[${category}]`, ...args);
-    },
-    debug(category, ...args) {
-        _state.seen.add(category);
-        if (shouldPrint(category, 'debug')) console.debug(`[${category}]`, ...args);
-    },
-    warn(category, ...args) {
-        _state.seen.add(category);
-        if (shouldPrint(category, 'warn')) console.warn(`[${category}]`, ...args);
-    },
-    error(category, ...args) {
-        _state.seen.add(category);
-        if (shouldPrint(category, 'error')) console.error(`[${category}]`, ...args);
-    },
+    log(category, ...args) { emit(category, 'log', args); },
+    debug(category, ...args) { emit(category, 'debug', args); },
+    warn(category, ...args) { emit(category, 'warn', args); },
+    error(category, ...args) { emit(category, 'error', args); },
 };
 
 // NOTE: the window.ug.debug console API + the spring overlay (which need window/

@@ -1089,6 +1089,75 @@ readouts either.
 **Why first:** all three are shared across the remaining shapes. Port 4 more shapes at today's fidelity
 and you replicate the same gap 4× and then fix it 5×.
 
+## ★ TASK (user-approved, 2026-08-29) — DIAGNOSTIC LOG OVERLAY with a Copy button (shared `#ui`)
+
+**Do this BEFORE the tools sweep** (advisor recommendation, user agreed): the sweep will surface bugs,
+and this is what makes each one cheap to diagnose instead of a multi-round guessing loop.
+
+**Why — the bottleneck this whole session.** Mobile has no devtools, so every phone-only bug (canvas
+vibration, address-bar sizing, touch select/drag, pinch-zoom) had to be reasoned from source rather
+than observed, and several took multiple turns of guessing. The user reports a symptom; we cannot see
+the state that produced it.
+
+**⭐ HALF THIS BRIDGE ALREADY EXISTS AND HAS BEEN WAITING FOR THE OTHER HALF.**
+`tests/harness/sketch.js`'s own header states the intent verbatim:
+> *"It also LOADS a serialized sketch (s.load) in the app's own model shape ({joints, shapes,
+> constraints}) — the 'read my window' bridge: **a user hits Copy/export in the app**, and the exact
+> failing sketch replays here."*
+
+That Copy button was designed and never built. And `serializeDocument()` (`#core/document.js`, landed
+last cycle) now produces exactly that shape. So the sending half is nearly free — **build it, and a
+phone bug becomes an exactly-replayable Node scenario instead of a description.**
+
+### Ground truth checked by the advisor (don't re-derive)
+
+- `#core/debug.js` exports a category logger `dbg` (`.log/.debug/.warn/.error`), gated by `_state`
+  (`enabled: Set<category>`, `level` default `'warn'`) and writing **straight to `console.*`**.
+  `_state.seen` accumulates every category ever used (a ready-made category list for the UI).
+- **There are already dozens of `dbg.*` call sites** across `input-manager`, the input-handlers,
+  `svg-renderer`, core, etc. — a rich structured stream that today goes nowhere visible on a phone.
+  **Tap that existing stream; do not add new instrumentation.**
+- ⚠ **`apps/sketchstudio/debug-overlay.js` is NOT a log console** — it's the spring/joint-label visual
+  overlay. Different thing, don't conflate or extend it.
+
+### ▶ Scope
+
+1. **A sink seam on `dbg`** (`#core/debug.js`, ADDITIVE): e.g. `setDebugSink(fn)`, following this
+   codebase's established injection idiom (`setConstraintNotifier`, `createEngine({onMetrics})`).
+   ⭐ **CRITICAL DESIGN POINT: capture ALWAYS, print only when enabled.** The sink must receive events
+   regardless of `shouldPrint`'s category/level gate — otherwise the buffer is empty for exactly the
+   "it just happened" bug we're trying to catch, since the user can't know to enable a category in
+   advance. Console printing keeps its current gating, unchanged.
+2. **A bounded ring buffer** (a few hundred entries; must not grow without limit on a long session).
+3. **Also capture what never routes through `dbg`:** `window.onerror`,
+   `unhandledrejection`, and `console.error` — the dimension-tool crash was a raw exception.
+4. **A shared `#ui` overlay component** (all apps get it, same pattern as the ribbon and mobile drawer
+   — NOT per-app). Phone-usable: dismissible, scrollable, must not block the canvas when closed.
+   Reachable somewhere unobtrusive (the existing header Debug action is a candidate — check what it
+   currently does before reusing it).
+5. **The Copy button** — `navigator.clipboard.writeText` with a graceful fallback (clipboard can fail
+   or be blocked; a selectable `<textarea>` fallback is fine). It must copy a single blob containing:
+   - the recent log/error entries,
+   - **the serialized document** via `serializeDocument()` — the killer feature,
+   - **viewport/layout numbers**: `innerWidth/Height`, `visualViewport` size+offset, `scrollX/Y`,
+     `devicePixelRatio`, and the canvas/ribbon/header `getBoundingClientRect()`s (these are exactly
+     what was invisible during the address-bar and vibration hunts),
+   - a short **touch/pointer event trace** (last N events: type, coords, target id) — the missing
+     evidence in the select/drag and pinch-zoom hunts,
+   - app id, URL, user-agent, and the app version/commit if reachable.
+
+**VERIFY — round-trip the WHOLE bridge, that's the point:** at a mobile viewport, trigger a real error,
+open the overlay, confirm it's listed, hit Copy — then **take the copied text and actually feed its
+document section to `tests/harness/sketch.js`'s `load()` and confirm it replays** (that's the
+acceptance test; a Copy button whose output the harness can't consume has missed the point). Confirm
+the overlay is present in more than one app, and that closing it leaves the canvas fully interactive.
+Gate: the corrected full loop (`tests/` + `packages/core/tests/` + `tests/harness/`) + shell-smoke.
+
+Append a WORK-LOG entry ending with exactly `=== DIAG-OVERLAY DONE — HOLD ===`. **Then pass the ball
+back to advisor and STOP.**
+
+---
+
 **⚠ QUEUED BUG (found during Slice 0, confirmed PRE-EXISTING via git-stash A/B — not caused by that
 work):** the **Sketch view opens severely over-zoomed** for a frame of this size — there is NO view-fit
 logic anywhere in `apps/frame-calc/src/main.js`. Mounting the sketcher should fit the built geometry to

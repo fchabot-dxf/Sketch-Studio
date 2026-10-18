@@ -19,9 +19,9 @@ function buildOptions(params) {
       ltres:          ltres,
       qtres:          qtres,
       pathomit:       pathomit,
-      rightangleenhance: true,
+      rightangleenhance: smooth === 0,
       colorsampling: 0,
-      palette: [
+      pal: [
         { r: 0,   g: 0,   b: 0,   a: 255 },
         { r: 255, g: 255, b: 255, a: 0   },
       ],
@@ -37,7 +37,7 @@ function buildOptions(params) {
     ltres:          ltres,
     qtres:          qtres,
     pathomit:       pathomit,
-    rightangleenhance: true,
+    rightangleenhance: smooth === 0,
     colorsampling: 2,
   };
 }

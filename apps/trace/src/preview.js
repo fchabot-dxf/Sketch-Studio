@@ -68,6 +68,9 @@ export function initPreview(eventBus) {
     thresholdOverlay.width = srcCanvas.width;
     thresholdOverlay.height = srcCanvas.height;
     
+    const vectorOverlay = document.getElementById('vector-overlay');
+    if (vectorOverlay) vectorOverlay.innerHTML = '';
+    
     clearMask();
 
     // Also size the ref overlay SVG
@@ -94,6 +97,27 @@ export function initPreview(eventBus) {
 
     if (emptyState) emptyState.style.display = 'none';
     showTracing(false);
+    
+    // Also inject into the original pane as a blue outline overlay
+    const vectorOverlay = document.getElementById('vector-overlay');
+    if (vectorOverlay) {
+      vectorOverlay.innerHTML = svgString;
+      const overlaySvg = vectorOverlay.querySelector('svg');
+      if (overlaySvg) {
+        overlaySvg.style.maxWidth  = '100%';
+        overlaySvg.style.maxHeight = '100%';
+        overlaySvg.style.width     = '100%';
+        overlaySvg.style.height    = '100%';
+        // Strip fills, add thin blue strokes that don't scale with zoom
+        const paths = overlaySvg.querySelectorAll('path');
+        paths.forEach(p => {
+          p.setAttribute('fill', 'none');
+          p.setAttribute('stroke', '#00aaff');
+          p.setAttribute('stroke-width', '1');
+          p.setAttribute('vector-effect', 'non-scaling-stroke');
+        });
+      }
+    }
   }
 
   function showTracing(visible) {
@@ -283,18 +307,51 @@ export function initPreview(eventBus) {
     const data = imgData.data;
     
     const tOut = tCtx.createImageData(w, h);
+    const bwData = new Uint8Array(w * h);
     
     for (let i = 0; i < data.length; i += 4) {
       const lum = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-      const isBlack = lum < params.threshold;
-      
-      if (isBlack && params.colorMode === 'bw') {
-        tOut.data[i] = 0;
-        tOut.data[i+1] = 120;
-        tOut.data[i+2] = 255;
-        tOut.data[i+3] = 150;
+      bwData[i/4] = lum < params.threshold ? 0 : 255;
+    }
+    
+    if (params.colorMode === 'bw' && params.outlineOnly) {
+      const stack = [];
+      for (let x = 0; x < w; x++) { stack.push(x, 0); stack.push(x, h - 1); }
+      for (let y = 0; y < h; y++) { stack.push(0, y); stack.push(w - 1, y); }
+
+      while (stack.length > 0) {
+        const y = stack.pop();
+        const x = stack.pop();
+        if (x < 0 || x >= w || y < 0 || y >= h) continue;
+        
+        const idx = y * w + x;
+        if (bwData[idx] === 255) {
+          bwData[idx] = 128;
+          stack.push(x + 1, y);
+          stack.push(x - 1, y);
+          stack.push(x, y + 1);
+          stack.push(x, y - 1);
+        }
+      }
+
+      for (let i = 0; i < bwData.length; i++) {
+        if (bwData[i] === 128) {
+          bwData[i] = 255;
+        } else if (bwData[i] === 255) {
+          bwData[i] = 0; // fill hole
+        }
+      }
+    }
+    
+    for (let i = 0; i < bwData.length; i++) {
+      const idx = i * 4;
+      if (bwData[i] === 0 && params.colorMode === 'bw') {
+        tOut.data[idx] = 0;
+        tOut.data[idx+1] = 120;
+        tOut.data[idx+2] = 255;
+        tOut.data[idx+3] = 150;
       } else {
-        tOut.data[i+3] = 0;
+        tOut.data[idx+3] = 0;
       }
     }
     

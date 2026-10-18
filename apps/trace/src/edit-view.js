@@ -20,6 +20,8 @@ let infoPanel        = null;
 let ribbonMounted    = false;
 let importSeq        = 0;
 
+export function getEditController() { return designController; }
+
 /**
  * Lazy-mount the sketch canvas the first time the Edit tab is opened.
  * Returns the controller so app.js can reference it.
@@ -35,7 +37,7 @@ export function ensureEditMount() {
   if (!svgEl) return null;
 
   // Mount the shared sketch engine + renderer
-  designController = mountSketch(svgEl);
+  designController = mountSketch(svgEl, { seedDemo: false });
 
   // Mount the shared tool ribbon (shared CREATE + INSPECT + CONSTRAIN groups)
   if (ribbonEl && !ribbonMounted) {
@@ -121,8 +123,29 @@ export function importSvgToEdit(svgText, name, onStatus) {
 
   const sk = addSketch(st, name || 'Traced');
   activateSketch(st, sk.id);
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  for (const s of shapes)  st.shapes.push(s);
+  
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const j of joints) {
+    if (j.x < minX) minX = j.x;
+    if (j.y < minY) minY = j.y;
+    if (j.x > maxX) maxX = j.x;
+    if (j.y > maxY) maxY = j.y;
+  }
+  
+  let dx = 0, dy = 0;
+  if (minX !== Infinity) {
+    dx = -(minX + maxX) / 2;
+    dy = -(minY + maxY) / 2;
+  }
+  
+  for (const j of joints) {
+    st.joints.set(j.id, { x: j.x + dx, y: j.y + dy, sketchId: sk.id });
+  }
+  
+  for (const s of shapes) {
+    s.sketchId = sk.id;
+    st.shapes.push(s);
+  }
 
   onStatus?.(
     `Imported ${shapes.length} shapes → ${sk.name} @ ${label}` +

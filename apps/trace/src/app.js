@@ -15,7 +15,7 @@ import { initScale }                      from './scale.js';
 import { initPreview }                    from './preview.js';
 import { trace }                          from './tracer.js';
 import { downloadSVG, downloadDXF, copySVG } from './export.js';
-import { ensureEditMount, importSvgToEdit }  from './edit-view.js';
+import { ensureEditMount, importSvgToEdit, getEditController }  from './edit-view.js';
 
 // ── App switcher ──────────────────────────────────────────────────────────────
 const swHost = document.getElementById('app-switcher-host');
@@ -44,7 +44,7 @@ const state = {
   imageH: 0,
   imageName: 'trace',
   svgString: null,
-  params: { threshold: 128, blur: 0, colorMode: 'bw' },
+  params: null,  // Will be populated by controls on init
   scale: null,   // mm/px — null = unset
   unit: 'mm',
 };
@@ -63,10 +63,16 @@ function switchTab(id) {
   Object.entries(tabPanes).forEach(([k, el]) => {
     if (el) el.hidden = k !== id;
   });
+  
   if (id === 'edit') {
-    ensureEditMount();
+    const ctrl = ensureEditMount();
+    if (ctrl) ctrl.start();
     updateExportButtons();
+  } else {
+    const ctrl = getEditController();
+    if (ctrl) ctrl.stop();
   }
+  
   if (id === 'export') {
     updateExportButtons();
     updateScaleNote();
@@ -76,10 +82,13 @@ function switchTab(id) {
 tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
 // ── Modules init ──────────────────────────────────────────────────────────────
-const preview = initPreview(eventBus);
+// Initialize controls and grab default parameters
+const controls = initControls(eventBus);
+state.params = controls.getParams();
+
 const { setImageSize } = initScale(eventBus);
+const preview = initPreview(eventBus);
 initUpload(eventBus);
-const { getParams } = initControls(eventBus);
 
 preview.onMaskChanged(() => scheduleTrace());
 

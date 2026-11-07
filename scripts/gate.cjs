@@ -13,8 +13,6 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const KNOWN_FAILURES = [
   // Real bug: bi-directional whiskers along slanted line never render (reported in turn 414)
   'tests/debug-whisker-align.test.js',
-  // Environment: missing optional devDependency @salusoft89/planegcs
-  'tests/harness/differential-planegcs.test.js',
 ];
 
 const TEST_DIRS = [

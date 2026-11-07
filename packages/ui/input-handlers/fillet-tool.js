@@ -28,6 +28,8 @@ function syncLastRadius(state) {
 }
 
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
+// Radius for display: 2 decimals in mm (2.79), 3 in inches (0.25in / 0.4in), trailing zeros trimmed, unit suffix.
+const fmtR = (mm, unit = getDocUnit()) => formatUnit(mm, unit, { unit: true, decimals: unit === 'in' ? 3 : 2 });
 
 function getSvgElement(ctx) {
   if (ctx && typeof ctx.getCanvasSvg === 'function') return ctx.getCanvasSvg();
@@ -130,9 +132,9 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
     else if (typeof window.__requestDraw === 'function') window.__requestDraw();
 
     const unit = getDocUnit();
-    const formatted = formatUnit(res.radius, unit, { unit: true });
+    const formatted = fmtR(res.radius, unit);
     showNotification(res.clamped
-      ? `Fillet applied -- R reduced to ${formatUnit(res.radius, unit, { unit: true })} to fit`
+      ? `Fillet applied -- R reduced to ${fmtR(res.radius, unit)} to fit`
       : `Fillet applied (R = ${formatted})`, res.clamped ? 'warning' : 'info');
 
     // Land on the radius dimension with the input open, pre-filled with the default / last value.
@@ -156,12 +158,12 @@ export function handleFilletPointerUp() {
 export function handleFilletKeyDown(e, svg, state) {
   if (e.key === 'r' || e.key === 'R') {
     const unit = getDocUnit();
-    const input = prompt('Enter Fillet Radius (' + unit + '):', formatUnit(currentRadius, unit));
+    const input = prompt('Enter Fillet Radius (' + unit + '):', formatUnit(currentRadius, unit, { decimals: unit === 'in' ? 3 : 2 }));
     if (input !== null) {
       const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
       if (val != null) {
         setFilletRadius(val);
-        showNotification(`Fillet radius set to ${formatUnit(val, unit, { unit: true })}`, 'info');
+        showNotification(`Fillet radius set to ${fmtR(val, unit)}`, 'info');
         if (hoverCorner) {
           const sEl = getSvgElement(_ctx);
           renderFilletOverlay(sEl, hoverCorner, state.view);
@@ -227,6 +229,6 @@ function renderFilletOverlay(svg, corner, viewState) {
     <line x1="${tA.x}" y1="${tA.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
     <line x1="${tB.x}" y1="${tB.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
     <!-- Radius label -->
-    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${formatUnit(radius, getDocUnit())}</text>
+    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${fmtR(radius)}</text>
   `;
 }

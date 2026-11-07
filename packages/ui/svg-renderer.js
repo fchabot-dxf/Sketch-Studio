@@ -1139,6 +1139,16 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isLeader = (getClusterLeader(id) === id);
     const isHiddenCoincident = coincidentJoints.has(id) && !isLeader && !centerJoints.has(id) && !isHovered && !isSelected && !isConstraintPart && !isActiveSnap;
     if (isHiddenCoincident) continue;
+
+    // Fillet virtual-sharp joint V (the corner as it was; overall dimensions attach here): a small CROSS, never
+    // hidden, with the usual transparent hit target so it stays hoverable/snappable as a dimension target.
+    if (j.virtualSharp) {
+      const arm = scale(5);
+      const vStroke = (isSelected || isHovered || isConstraintPart) ? '#1e40af' : '#64748B';
+      out.push(`<circle class="joint-handle" data-joint-id="${id}" cx="${j.x}" cy="${j.y}" r="${scale(BASE_JOINT_RADIUS) * 1.9}" fill="rgba(0,0,0,0)" style="cursor:pointer"/>`);
+      out.push(`<path d="M ${j.x - arm} ${j.y - arm} L ${j.x + arm} ${j.y + arm} M ${j.x - arm} ${j.y + arm} L ${j.x + arm} ${j.y - arm}" fill="none" style="stroke:${skv(vStroke)}" stroke-width="${scale(1.5)}" stroke-linecap="round"/>`);
+      continue;
+    }
     
     // Draw regular point styling with zoom-scaled sizes
     const r = scale(BASE_JOINT_RADIUS);

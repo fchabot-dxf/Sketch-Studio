@@ -512,7 +512,13 @@ function ensureSketch() {
     state: designController.state,
     onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(() => { try { designController.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {} });
+  docBuffer.restore().then(() => {
+    try {
+      designController.engine.solve(500);
+      if (infoPanel) infoPanel.refresh();
+      if (vcarveView) vcarveView.refresh();
+    } catch (_) {}
+  });
   docBuffer.start();
 }
 

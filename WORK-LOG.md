@@ -10881,3 +10881,32 @@ Per the TURN 418 plan + advisor decisions (Q3 automatic exclusion, Q4 no d=0 pas
     - `shaper-none.png`: Shaper canvas with grid hidden.
     - `shaper-points.png`: Shaper canvas with draft points in cream theme.
     - `penplotter-design-unchanged.png`: Pen Plotter Design canvas confirmed unchanged (`hasPaperSvg: true`, `canvasHasGridPattern: false`, `canvasHasInfiniteGrid: false`).
+
+
+## TURN 422 — V-carve follow-ups (tidy vbitHalfAngleTan rounding fix + fix direct reload to Vcarve tab) — branch agy1
+Two follow-ups to VCARVE-4 (merged ffb49dd):
+
+1. **TIDY `packages/core/vcarve.js`:**
+   - Deleted the redundant `halfAngle === 45 -> 1.0` branch and comment from `vbitHalfAngleTan`.
+   - Retained the `+ 1e-6` guard inside `Math.floor((maxDepth * tan) / dStep + 1e-6)` in `deriveVcarveContours`.
+   - In `tests/shaper-export.test.js:314`, updated the preview-parity depth assertion to compare formatted depth via `format(previewContours[i].depth, 'mm', { unit: true })` (matching `shaper-export.js`'s serialization).
+   - Proven: Exact-string oracles in `tests/shaper-export.test.js` (90° square in mm with 5mm/10mm/15mm and in inches with 0.1969in/0.3937in/0.5906in) continue to pass byte-for-byte.
+
+2. **BUG FIX (Direct reload to Vcarve tab lists `(no closed loops)`):**
+   - **Root Cause Identified (`apps/shaper/src/main.js:514` & `538`):**
+     On page load or direct navigation to `vcarve` mode (`initMode === 'vcarve'` or clicking Vcarve without visiting Design), `showMode('vcarve')` invokes `ensureSketch()` (line 536).
+     In `ensureSketch()`, `docBuffer.restore()` is kicked off as an asynchronous Promise reading IndexedDB (`readBuffer()`). `ensureSketch()` returns immediately.
+     Synchronously next, `mountVcarveView(designController.state)` is mounted (line 538). At that exact instant, `designController.state.shapes` is empty `[]`. `populateRegions()` calls `findLoops(state)`, finds 0 loops, and sets `#vcarve-region` innerHTML to `<option value="">(no closed loops)</option>`.
+     When `docBuffer.restore().then(...)` resolved at line 514, it called `designController.engine.solve(500)` and `infoPanel.refresh()`, but NEVER called `vcarveView.refresh()`!
+     Thus `#vcarve-region` stayed at `(no closed loops)` indefinitely until the user navigated to Design and back.
+   - **Fix (`apps/shaper/src/main.js:514`):**
+     Inside `docBuffer.restore().then(...)`, added `if (vcarveView) vcarveView.refresh();`.
+   - **Stop Condition Check:**
+     Verified that this fix does NOT change when or how the saved document restores for other tabs (Design, Prepare, Explore, Sim/Export). `docBuffer.restore()` executes at the exact same location with the same asynchronous timing; for other tabs `vcarveView` is null.
+   - **Verification & Evidence (Live headless repro via CDP in Edge):**
+     - Case A (Direct reload into Vcarve mode with saved square loop + vcarve record):
+       - Before fix: `#vcarve-region` options = 1 (`(no closed loops)`), canvas = 0 polygons (reproduced and captured in `.evidence/422/vcarve-direct-reload-before-fix.png`).
+       - After fix: `#vcarve-region` options = 2 (`Loop 1 (1600 mm²)` selected), controls synchronized (`60°`, `1 mm`, `8 mm`), readout `"4 contours · max 6.93 mm"`, and canvas = 5 polygons (1 boundary + 4 depth-shaded contours). Captured in `.evidence/422/vcarve-direct-reload.png`.
+     - Case B (Reload into explore -> click Vcarve tab first):
+       - `#vcarve-region` options = 2, first option `"— pick a loop —"`, second option `"Loop 1 (1600 mm²)"`.
+- **Gate:** `npm run gate` (`scripts/gate.cjs`): `GATE files=154 pass=154 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.

@@ -2,6 +2,7 @@ import { exportShaperSVG, loopToPathD, polyToPathD } from '#core/shaper-export.j
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js'; // SKETCH-4e: island fixtures
 import { deriveVcarveContours } from '#core/vcarve.js';
+import { format } from '#core/units.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -311,7 +312,7 @@ import { deriveVcarveContours } from '#core/vcarve.js';
     for (let i = 0; i < previewContours.length; i++) {
       const wantD = polyToPathD(previewContours[i].polygon);
       eq(exportedPaths[i].d, wantD, `contour ${i} path d matches preview polygon`);
-      eq(exportedPaths[i].depth, `${previewContours[i].depth}mm`, `contour ${i} depth matches preview`);
+      eq(exportedPaths[i].depth, format(previewContours[i].depth, 'mm', { unit: true }), `contour ${i} depth matches preview`);
     }
 
     // 18. Parity on non-trivial triangle with 60° bit

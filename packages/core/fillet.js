@@ -7,6 +7,18 @@
 import { makeArc } from './shapes.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
+import { parse as parseUnit } from './units.js';
+
+/** Default fillet radius in WORLD mm (1 world unit = 1 mm): 5 mm, or 1/4" = 6.35 mm for an inch document. */
+export function defaultFilletRadius(docUnit = 'mm') {
+  return docUnit === 'in' ? 6.35 : 5;
+}
+
+/** Parse a typed radius in the document unit (a suffix overrides) -> world mm, or null if invalid / <= 0. */
+export function parseFilletRadius(str, docUnit = 'mm') {
+  const v = parseUnit(str, docUnit);
+  return (v != null && v > 0) ? v : null;
+}
 
 /**
  * Get all joint IDs that form a coincident cluster with startJointId.
@@ -121,6 +133,30 @@ export function findCornerAtPoint(state, worldPt, tolerance = 15) {
 }
 
 /**
+ * Why did a fillet click near `worldPt` do nothing? Returns a user-facing message, or null when the
+ * click was nowhere near a joint (empty space needs no toast). Call only after findCornerAtPoint failed.
+ */
+export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
+  if (!state || !state.joints || !worldPt) return null;
+  let best = null, bestDist = tolerance;
+  for (const [jid, j] of state.joints.entries()) {
+    if (!j || typeof j.x !== 'number') continue;
+    const d = Math.hypot(worldPt.x - j.x, worldPt.y - j.y);
+    if (d < bestDist) { bestDist = d; best = jid; }
+  }
+  if (!best) return null;
+  const cluster = getCoincidentCluster(state, best);
+  const touching = (state.shapes || []).filter(sh => sh && Array.isArray(sh.joints) && sh.joints.some(j => cluster.has(j)));
+  const arcs = touching.filter(sh => sh.type === 'arc');
+  if (arcs.some(a => (state.constraints || []).some(c => c && c.type === 'tangent' && c.circle === a.id))) {
+    return 'This corner is already filleted';
+  }
+  const lines = touching.filter(sh => sh.type === 'line');
+  if (lines.length > 2) return 'Fillet needs a corner between exactly two lines (T-junction)';
+  return 'Fillet needs a corner between two lines';
+}
+
+/**
  * Compute the fillet geometry (tangent points, arc center, actual radius).
  * @param {{x: number, y: number}} pA - Endpoint of line A away from corner
  * @param {{x: number, y: number}} cornerPt - Corner vertex
@@ -196,9 +232,9 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   if (!state || !cornerInfo) return null;
 
   const geom = calculateFilletGeometry(cornerInfo.pA, cornerInfo.cornerPt, cornerInfo.pB, radius);
-  if (!geom.valid) return null;
+  if (!geom.valid) return { success: false, reason: geom.reason };
 
-  try { state.saveState?.(); } catch (_) {}
+  // History is the caller's (tool layer) job, like every other tool -- do NOT saveState here, or one fillet takes two undo steps.
 
   const { joints, shapes, constraints } = state;
   const { cluster, lineA, lineB } = cornerInfo;
@@ -298,6 +334,8 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     arc: arcShape,
     radiusConstraint,
     radius: finalRadius,
+    requestedRadius: radius,
+    clamped: finalRadius < radius - 1e-6,
     centerPt,
     tA,
     tB,

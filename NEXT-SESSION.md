@@ -1917,11 +1917,16 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
 
 ## ▶ COMBINE + PROFILE SELECTION — owner rulings 2026-11-07 (tasks 430–432, Antigravity seat AGY-1)
 - Holes are NOT automatic in the background. The owner picks.
-- REVISED by owner the same day: "if I'd want an island I don't have a choice to combine shape". In Shaper SVG, an
-  island exists only inside ONE compound path, so holes/islands come ONLY from COMBINE. No derived faces at pick time.
-- SELECTION (the Select tool, not a separate tool) picks individual loops; SHIFT+CLICK adds more. A loop that belongs to
-  a combined profile selects as that whole profile.
-- COMBINE / UNCOMBINE (Ctrl+Shift+C / Ctrl+Shift+U) are the one way to declare holes/islands (one compound path in the SVG).
+- FINAL DECISION (owner chose option B after discussion; "better than Shaper Studio, which has no GUI for toolpath
+  layers"):
+  - The Select tool's click inside a region picks its PROFILE = the loop minus its directly-contained loops (derived at
+    pick time, as Fusion does). A click inside a hole picks the hole/island's own profile. SHIFT+CLICK adds profiles.
+  - Each profile has its OWN cut params. A loop can be both a hole of the outer profile (no params) and its own profile
+    with its own cut. Export: the outer as one compound evenodd path, the island as a separate path; both are valid
+    Shaper SVG.
+  - COMBINE / UNCOMBINE (Ctrl+Shift+C / Ctrl+Shift+U) are the power tool: several loops act as ONE profile with ONE
+    param set; it overrides the derived face.
+  - The SVG doesn't force Combine: the exporter builds the compound path from the picked profile.
 - Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
   profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
   433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).

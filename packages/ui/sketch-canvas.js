@@ -12,6 +12,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
 import { draw } from '#ui/svg-renderer.js';
+import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
 
@@ -69,6 +70,8 @@ function seedDemo(engine, state) {
 // interactive. Omitted (default) = render everything = byte-identical. 'static' is a HOST concept, not a #core flag.
 // opts.shouldSolve: () => boolean — OPTIONAL host solve gate (UNIFY-throttle): skip the per-frame engine.solve() when
 // it returns false (e.g. idle / nothing being edited). Omitted (default) = always solve = byte-identical.
+// opts.grid: boolean — OPTIONAL: draw the shared GRID_MODE-driven canvas grid (#ui/canvas-grid.js) behind the geometry.
+// Omitted/false (default) = no grid on this canvas = byte-identical. One grid per page (it owns url(#grid) ids).
 export function mountSketch(svgEl, opts = {}) {
   const engine = createEngine(null);
   engine.init();
@@ -107,9 +110,13 @@ export function mountSketch(svgEl, opts = {}) {
   };
   try { setupInput(svgEl, state, { inputCtx: hostInputCtx, isActive: opts.isActive }); } catch (_) { /* non-fatal */ }
 
-  // Render ctx OMITS updateGrid/getSolverStats/injectDebugStyle — the host has no #grid/debug overlay; all
-  // three are no-op-safe (P3).
+  // Render ctx: omits getSolverStats/injectDebugStyle (no-op-safe, P3). updateGrid is only supplied when the host opts
+  // in with opts.grid (Shaper) → the shared canvas grid (#ui/canvas-grid.js, GRID_MODE-driven) is mounted into svgEl;
+  // omitted (Pen Plotter, Trace) → no grid is drawn on this canvas, exactly as before.
   const renderCtx = {};
+  if (opts.grid && svgEl) {
+    renderCtx.updateGrid = (a) => { try { updateGridFromSettings({ ...a, svgEl }); } catch (_) { /* grid is non-essential */ } };
+  }
   let rafId = null;
   const frame = () => {
     // UNIFY-throttle: each engine.solve() call has an O(joints) setup cost (~1.3s at 13k joints) INDEPENDENT of

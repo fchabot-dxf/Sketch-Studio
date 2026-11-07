@@ -3,7 +3,7 @@
 // Loads apps/sketchstudio/index.html in headless Edge/Chrome (the no-build app needs the repo served so its
 // #core/#ui importmap resolves), asserts console errors=0, and exercises the integrated shell: the shared header
 // (Design|Export tabs + Style + Debug), the Design default (shared ribbon groups + canvas), the Design↔Export
-// router, and the shared style panel (16 controls, open/close). Self-contained: a tiny static server + the CDP
+// router, and the shared style panel (17 controls, open/close). Self-contained: a tiny static server + the CDP
 // protocol over Node's built-in WebSocket — no puppeteer / npm deps. Exit 0 = pass, non-zero = fail.
 
 const http = require('http');
@@ -171,7 +171,7 @@ async function closeBrowser(proc, dbgPort) {
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],
       ['Design tab returns', c.designBack === true, c.designBack],
       ['Style opens the shared panel', c.styleOpens === true, c.styleOpens],
-      ['Style panel has 16 controls', c.styleControls === 16, c.styleControls],
+      ['Style panel has 17 controls', c.styleControls === 17, c.styleControls],
       ['Style panel closes (Esc)', c.styleCloses === true, c.styleCloses],
     ];
     let failed = 0;

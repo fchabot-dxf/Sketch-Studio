@@ -10656,3 +10656,42 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
     - `packages/ui/svg-renderer.js:58, 59`: `document.getElementById('grid')`, `document.getElementById('grid-heavy')`.
     - `packages/ui/svg-renderer.js:3`: TODO comment.
   - Zero other files in the entire repo query `#grid`, `#infinite-grid`, or `grid-heavy`. All access is consolidated cleanly in `packages/ui/canvas-grid.js`.
+
+
+## TURN 421 — Shared canvas grid (GRID_MODE: lines / off / points) built & verified — branch agy2
+
+- **Summary:**
+  - Built the shared canvas grid module (`packages/ui/canvas-grid.js`) per the TURN 419b plan and the 3 advisor amendments.
+  - Declared `GRID_MODE` in `packages/core/settings-manager.js` ('lines' | 'off' | 'points', default 'lines').
+  - Wired SketchStudio (`defaultRenderCtx.updateGrid`) and Shaper (`mountSketch` with `opts.grid = true`) to the shared grid module.
+  - Pen Plotter remains completely untouched (`opts.grid` omitted; retains its own `paper-grid.js`).
+  - Added generic declared `select` control type to `packages/ui/style-panel.js`, added `GRID_MODE` (Grid / None / Draft points), and updated `scripts/shell-smoke.cjs` to assert 17 controls (12/12 pass).
+  - Added `tests/canvas-grid-snapshot.test.js` asserting byte-identical output for 'lines' and non-vacuity against 9 mutations.
+
+- **Amendments implemented:**
+  1. **No fallback copy:** Deleted inline `<defs>` and `#infinite-grid` markup from `apps/sketchstudio/index.html:396-405`. `packages/ui/canvas-grid.js` is the sole source of truth. Updated TODO in `packages/ui/svg-renderer.js:3`.
+  2. **Scoped lookups & single-grid guard:** `canvas-grid.js` uses `svgEl.querySelector` exclusively, never `document.getElementById`. Enforces "One grid per page" guard: `ensureCanvasGrid` refuses (`dbg.warn` and returns null) if `#grid`, `#grid-heavy`, or `#infinite-grid` already exist in another SVG on the document.
+  3. **Generic select control:** Added `type: 'select'` in `packages/ui/style-panel.js` (`buildControl` and `populate`) iterating generic `options: [{ value, label }]`.
+
+- **Files modified/added:**
+  - `packages/core/settings-manager.js`: added `GRID_MODE: 'lines'` to `DEFAULT_SETTINGS`.
+  - `packages/ui/canvas-grid.js`: (new) pure markup generators (`gridDefsMarkup`, `gridRectMarkup`) + DOM management (`ensureCanvasGrid`, `updateCanvasGrid`, `updateGridFromSettings`).
+  - `packages/ui/svg-renderer.js`: delegated `defaultRenderCtx.updateGrid` to `updateGridFromSettings`.
+  - `packages/ui/sketch-canvas.js`: added `opts.grid` support in `mountSketch`.
+  - `apps/shaper/src/main.js`: passed `grid: true` to `mountSketch`.
+  - `apps/shaper/index.html`: updated theme comment for shared grid.
+  - `apps/sketchstudio/index.html`: removed hardcoded `<defs>` and `<rect id="infinite-grid">`.
+  - `packages/ui/style-panel.js`: added generic `select` type + `GRID_MODE` control (16 -> 17 controls).
+  - `scripts/shell-smoke.cjs`: updated control count assertion to 17.
+  - `tests/canvas-grid-snapshot.test.js`: (new) snapshot & non-vacuity test suite.
+
+- **Gate & Verification:**
+  - `npm run gate`: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
+  - Headless live verification (.evidence/421/):
+    - `sketchstudio-grid.png`: lines mode matches baseline.
+    - `sketchstudio-none.png`: grid hidden (`display="none"`).
+    - `sketchstudio-points.png`: draft points rendered as intersection dots.
+    - `shaper-grid.png`: Shaper Design canvas renders grid in warm cream palette.
+    - `shaper-none.png`: Shaper canvas with grid hidden.
+    - `shaper-points.png`: Shaper canvas with draft points in cream theme.
+    - `penplotter-design-unchanged.png`: Pen Plotter Design canvas confirmed unchanged (`hasPaperSvg: true`, `canvasHasGridPattern: false`, `canvasHasInfiniteGrid: false`).

@@ -11168,3 +11168,50 @@ Built VCARVE-5a per the TURN 424 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 428 — Fix false black constraint-status on under-constrained filleted geometry — branch agy2
+
+- **Owner Repro & Symptom:**
+  - Rectangle with bottom-left corner at the origin (fixed), H/V constraints, height dimension = 100 on the left edge, and top-right corner filleted with $R=20$.
+  - Symptom: The left line, top line, and fillet arc rendered BLACK (`#202020` / "fixed, cannot move"); the right and bottom lines rendered BLUE (`#60A5FA`). Dragging moved the top line and arc (the width is free), yet they remained black.
+  - Expected: Left line is black (pinned by origin + vertical + height 100); top line, fillet arc, right line, and bottom line are blue (depend on the free width).
+
+- **Hypothesis Testing & Bisect:**
+  - **H1 (Task 416 c375f26 virtual-sharp pointOnLine) RULED OUT:**
+    - Tested at `c375f26~1` (prior to Task 416): top line and arc were already incorrectly marked fixed (`fixedShapes.has(topLine.id) === true`, `fixedShapes.has(arc.id) === true`).
+  - **H2 (Owner commit 5bffb68 "solver-respecting rigidity for filleted geometry") RULED IN:**
+    - Tested at `5bffb68~1` (immediately before commit): `topLine.fixed === false`, `arc.fixed === false` (both blue).
+    - Tested at `5bffb68`: `topLine.fixed === true`, `arc.fixed === true` (both black).
+
+- **Root Cause (`packages/core/constraint-status.js`):**
+  - In `analyzeConstraintStatus`:
+    - For `CONSTRAINT_TYPES.TANGENT`, lines 490–530 correctly propagate directional axis locks (`lockedAxisY` or `lockedAxisX`) for horizontal/vertical lines tangent to an arc/circle.
+    - At lines 533–534, `applyDecIfNeeded(c, centerId)` and `if (sharedRim) applyDecIfNeeded(c, sharedRim)` were called unconditionally, recording `'tangent:auto'` into `dofSources`.
+    - In `provisionalDOFFromLocks` (line 168) and Phase 3 (line 768), `'tangent'` was missing from the skip list (which already skips `horizontal` and `vertical` because their effects are accounted for by axis locks).
+    - Consequently, the tangency constraint was double-counted: once as an axis lock (reducing joint base DOF from 2 to 1), and again in `otherReductions` (reducing from 1 to 0). This drove the arc center, top rim, and right rim to DOF 0, erroneously causing the solver to treat the arc and top line as fixed.
+    - Furthermore, linear constraints (`pointOnLine`, `horizontal`, `vertical`, `tangent`) could reduce an ungrounded joint to 0 DOF in 2D space even when both coordinate axes were not locked.
+
+- **The Fix (`packages/core/constraint-status.js`):**
+  1. Removed redundant `applyDecIfNeeded(c, centerId)` and `applyDecIfNeeded(c, sharedRim)` calls from the tangent handler (lines 533–534).
+  2. Added `'tangent'` to the skip lists in `provisionalDOFFromLocks` (line 169) and Phase 3 (line 773).
+  3. Added linear reduction guards in `provisionalDOFFromLocks` and Phase 3 ensuring ungrounded joints with only linear constraints cannot drop below 1 DOF unless both world coordinate axes are locked.
+
+- **Tests & Evidence:**
+  - **Fail-First Test (`tests/filleted-underconstrained-movability.test.js`):**
+    - Ran on unpatched code: failed with `AssertionError: Top line must be blue (NOT fixed), true !== false`.
+    - Ran on patched code: passed (`filleted underconstrained movability tests passed ✅`).
+    - Verified movability: under solver drag target $X=60$ on arc center, arc center moves smoothly from 30 to 60 while the left line remains pinned at $X=0$.
+    - Contrast case: adding a width dimension ($W=50$) locks all 5 shapes and all joints to fixed (black), confirming fully constrained sketches remain rigid.
+  - **Live Headless Edge Reproduction (SketchStudio):**
+    - Captured with unpatched code: `.evidence/428/before-bug-top-and-arc-black.png` (verbatim DOM: top line and arc stroke `var(--sk-geo-fixed, #202020)`).
+    - Captured with patched code: `.evidence/428/after-fixed-correct-colors.png` (verbatim DOM: left line is `#202020`; top line, arc, right line, bottom line are `var(--sk-constraint-fill, #60A5FA)`).
+    - Captured dragged state: `.evidence/428/after-dragged-width-stayed-blue.png` (width dragged from 50 to 80; top line and arc moved and stayed `#60A5FA`).
+
+- **Gate:**
+  - `npm run gate` (`scripts/gate.cjs`):
+    - `GATE files=157 pass=157 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

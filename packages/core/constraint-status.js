@@ -166,12 +166,19 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             for (const s of dofSources.get(jid)) {
                 const t = (s && s.split) ? s.split(':')[0] : s;
                 if (t === 'distance' || t === 'radius' || t === 'origin' || t === 'ground'
-                    || t === 'fixed' || t === 'anchor' || t === 'horizontal' || t === 'vertical') continue;
+                    || t === 'fixed' || t === 'anchor' || t === 'horizontal' || t === 'vertical' || t === 'tangent') continue;
                 other++;
             }
         }
         const afterRadial = Math.max(0, base - Math.max(0, Math.min(rCount, base)));
-        const computed = Math.max(0, afterRadial - Math.max(0, Math.min(other, afterRadial)));
+        let computed = Math.max(0, afterRadial - Math.max(0, Math.min(other, afterRadial)));
+        if (computed === 0 && (!lockedAxisX.has(jid) || !lockedAxisY.has(jid)) && rCount === 0 && !fixedJoints.has(jid) && jid !== 'j_origin') {
+            const hasOnlyLinear = dofSources.has(jid) && dofSources.get(jid).every(src => {
+                const t = src.split(':')[0];
+                return t === 'point_on_line' || t === 'pointOnLine' || t === 'horizontal' || t === 'vertical' || t === 'tangent';
+            });
+            if (hasOnlyLinear) computed = 1;
+        }
         return computed;
     };
 
@@ -529,9 +536,6 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                                 if (!visitedInQueue.has(centerId)) { processingQueue.push(centerId); visitedInQueue.add(centerId); }
                                 if (sharedRim && !visitedInQueue.has(sharedRim)) { processingQueue.push(sharedRim); visitedInQueue.add(sharedRim); }
                             }
-
-                            applyDecIfNeeded(c, centerId);
-                            if (sharedRim) applyDecIfNeeded(c, sharedRim);
                         }
                     }
                     break;
@@ -766,13 +770,20 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             for (const s of dofSources.get(id)) {
                 const type = (s && s.split && s.split(':')[0]) ? s.split(':')[0] : s;
                 if (type === 'distance' || type === 'radius' || type === 'ground' || type === 'origin'
-                    || type === 'fixed' || type === 'anchor' || type === 'horizontal' || type === 'vertical') continue;
+                    || type === 'fixed' || type === 'anchor' || type === 'horizontal' || type === 'vertical' || type === 'tangent') continue;
                 // Count 'equal', 'midpoint', 'point_on_line', 'parallel', 'perpendicular', 'collinear', etc.
                 otherReductions++;
             }
         }
 
-        const computed = Math.max(0, afterRadial - Math.max(0, Math.min(otherReductions, afterRadial)));
+        let computed = Math.max(0, afterRadial - Math.max(0, Math.min(otherReductions, afterRadial)));
+        if (computed === 0 && (!lockedAxisX.has(id) || !lockedAxisY.has(id)) && rCount === 0 && !fixedJoints.has(id) && id !== 'j_origin') {
+            const hasOnlyLinear = dofSources.has(id) && dofSources.get(id).every(src => {
+                const t = src.split(':')[0];
+                return t === 'point_on_line' || t === 'pointOnLine' || t === 'horizontal' || t === 'vertical' || t === 'tangent';
+            });
+            if (hasOnlyLinear) computed = 1;
+        }
 
         // Keep radialLocked in sync for legacy consumers
         if (rCount > 0) radialLocked.add(id);

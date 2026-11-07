@@ -10374,3 +10374,10 @@ pre-existing failures, none new. `shell-smoke.cjs` 11/12, same pre-existing ribb
 - **Options for the advisor:** (A) drop the two tangent constraints in applyFillet and keep geometric tangency through rim-on-line + perpendicular(center-rim, line) constraints (non-singular) — a constraint-set change inside fillet.js, no solver edit; (B) leave constraints, loosen/fix tangent handling in the solver (out of lane); (C) keep the dim but make edit = delete + re-apply fillet at the new radius. I recommend A; I did not do it — it changes which constraints a fillet carries.
 - Steps 3: the `R` key `prompt()` is KEPT (pre-sets the radius BEFORE clicking; the inline input only edits after). Not retired.
 - Uncommitted: none. Screenshots in my scratchpad .../scratchpad/shots/.
+
+## TURN 399b (cont.) — option B: shared-endpoint tangent residual in the solver
+- Rule: line-circle `tangent` whose line shares an endpoint joint with the arc's rim joints -> endpoint-tangency residual `(P−C)·u/|u|` (engine.js ~L311 sets `params.sharedEnd`; definitions.js `tangent` residual + Jacobian). Stored constraint unchanged; non-shared tangents take the old path untouched. Jacobian checked vs finite differences (3e-10 / 1e-9).
+- Tests: new `packages/core/tests/solver-tangent-shared-endpoint.test.js` (80x60 unfixed rect: 20→5, 20→10, 5→12 within 1e-6) RED before the fix, green after. tests/fillet.test.js case now uses the unfixed rect; red without the solver change.
+- Gate: every packages/core/tests/solver-* identical before/after (12 pass; only the new file flipped 1→0). tests/harness/differential-planegcs fails IDENTICALLY before and after: ERR_MODULE_NOT_FOUND (missing dependency in this worktree), so it exercised nothing. Rest: same 8 baseline failures, shell-smoke 12/12.
+- Live: fillet a corner, type 12, Enter -> arc R 12.0000005 (screenshot scratchpad/shots/3-after-12.png). On the tiny floating ~4 mm rect the rest of the sketch deforms to hold R12 (nothing pins the rect's size) — expected, not a bug.
+- Esc/default: the input shows the clamped value (default 5 clamped to the geometry), so that becomes "last value" for the next fillet.

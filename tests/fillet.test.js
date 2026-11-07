@@ -62,7 +62,7 @@ console.log('Running tests for packages/core/fillet.js...');
   const joints = new Map();
   let n = 0; const genJ = () => 'j_t3_' + (++n);
   const a = genJ(), b = genJ();
-  joints.set(a, { x: 0, y: 0, fixed: true });
+  joints.set(a, { x: 0, y: 0, fixed: false }); // unfixed: the case that used to refuse every edit
   joints.set(b, { x: 80, y: 60, fixed: false });
   const { shapes, constraints } = makeRectFromTwoJoints(joints, a, b, genJ);
   const state = { joints, shapes, constraints };

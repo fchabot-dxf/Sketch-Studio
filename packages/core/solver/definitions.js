@@ -367,6 +367,11 @@ export const Definitions = {
       const wx = cx - ax, wy = cy - ay;
       const cross = wx * uy - wy * ux;
       const lu = Math.hypot(ux, uy) || 1e-12;
+      if (params.sharedEnd) {
+        // Endpoint tangency: the shared joint P is the touch point, so (P - C) ⟂ line direction.
+        const px = params.sharedEnd === 'a' ? ax : bx, py = params.sharedEnd === 'a' ? ay : by;
+        return ((px - cx) * ux + (py - cy) * uy) / lu;
+      }
       const r = Number(params.radius) || 0;
       return Math.abs(cross / lu) - r;
     },
@@ -393,6 +398,24 @@ export const Definitions = {
       const wx = cx - ax, wy = cy - ay;
       const cross = wx * uy - wy * ux;
       const lu = Math.hypot(ux, uy) || 1e-12;
+      if (params.sharedEnd) {
+        // s = (P - C).u / |u|; ds = (dw.u + w.du)/|u| - g (u.du)/|u|^3, g = w.u
+        const pI = params.sharedEnd === 'a' ? aI : bI;
+        const wpx = positions[pI*2] - cx, wpy = positions[pI*2+1] - cy;
+        const g = wpx * ux + wpy * uy;
+        const lu3 = lu * lu * lu;
+        const add = (idx, dwx, dwy, dux, duy) => {
+          outRow[idx*2 + 0] += (dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3;
+          outRow[idx*2 + 1] += (dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3;
+        };
+        outRow[cI*2] = outRow[cI*2+1] = outRow[aI*2] = outRow[aI*2+1] = outRow[bI*2] = outRow[bI*2+1] = 0;
+        // x and y components are independent: variable x moves (dw,du) along x only.
+        add(cI, -1, -1, 0, 0);
+        add(pI, 1, 1, 0, 0);
+        add(aI, 0, 0, -1, -1);
+        add(bI, 0, 0, 1, 1);
+        return;
+      }
       const s = cross / lu;
       const sgn = s >= 0 ? 1 : -1;
       // ∂cross/∂{Cx,Cy} = (uy, −ux)

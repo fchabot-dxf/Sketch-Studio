@@ -318,6 +318,11 @@ export class NewtonSolver {
             const bIdx = jointIndexMap.get(lineShape.joints[1]);
             if (typeof cIdx === 'number' && typeof aIdx === 'number' && typeof bIdx === 'number') {
               params.joints = [cIdx, aIdx, bIdx];
+              // Shared endpoint (a fillet: the line ends ON the arc's rim joint) -> endpoint-tangency
+              // residual (P - C) . u/|u| = 0, non-singular; distance-to-line has a double root there.
+              const arcRim = new Set(circShape.joints.slice(1));
+              if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
+              else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
               params.radius = (typeof circShape.radius === 'number')
                 ? circShape.radius
                 : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);

@@ -127,6 +127,9 @@ export function measureResidual(c, joints, shapes) {
                     const j3 = joints.get(s2.joints[0]);
                     const j4 = joints.get(s2.joints[1]);
                     if (j1 && j2 && j3 && j4) {
+                        // Solver residual is cross(u,v) = |u||v| sin(theta): exactly 0 when either line is zero-length (angle undefined),
+                        // so the verifier must not invent an atan2(0,0) angle there. Otherwise the same angular distance mod 180 deg.
+                        if (Math.hypot(j2.x - j1.x, j2.y - j1.y) < 1e-12 || Math.hypot(j4.x - j3.x, j4.y - j3.y) < 1e-12) return 0;
                         const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
                         const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
                         let diff = Math.abs(a1 - a2);

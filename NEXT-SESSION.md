@@ -1915,6 +1915,17 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
 
 ---
 
+## ▶ COMBINE + PROFILE SELECTION — owner rulings 2026-11-07 (tasks 430–432, Antigravity seat AGY-1)
+- Holes are NOT automatic in the background. The owner picks.
+- SELECTION is the primary way (and it's NOT a separate tool): in Prepare/Vcarve, the Select tool's click inside a region
+  picks that loop's PROFILE = the loop minus its directly-contained loops (derived at pick time, as Fusion does).
+  SHIFT+CLICK adds more profiles, e.g. the island inside a hole.
+- COMBINE / UNCOMBINE (Ctrl+Shift+C / Ctrl+Shift+U) are tool actions for complex shapes; a combined profile overrides
+  the derived face.
+- Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
+  profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
+  433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).
+
 ## ▶ DISPATCHED 2026-11-07 — GRID-1, REVISED BY OWNER: a SHARED grid setting for ALL apps (not Shaper-only)
 Owner: "isn't that a SketchStudio feature". It is: the grid is drawn by the shared Design canvas. So `GRID_MODE`
 (lines / off / points, default lines) lives in the shared layer, and its control goes in the SHARED settings panel for every

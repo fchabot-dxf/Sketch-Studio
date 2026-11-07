@@ -11356,3 +11356,222 @@ Built VCARVE-5b per the TURN 426 plan and advisor decisions:
   - In `tests/vcarve.test.js` Test 11: verified both `excludeNested: false` (returns all 2 contained loops) and `excludeNested: true` (returns only 1 hole, uncut dot).
 - **Gate:**
   - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.
+
+
+## TURN 430 (COMBINE + PROFILE PLAN) — A COMBINE SHAPES tool + a PROFILE selector that understands inner profiles (PLAN ONLY)
+
+### Overview
+This plan implements the owner's directive:
+> *"to get real pocket island effect, we need a combine shape tool, and a profile selector that considers inner profiles"* and holes are *"not automatic"*.
+
+Today, holes are derived on the fly from an explicit user GROUP (`Ctrl+G`, `group-model.js:52-108`) combined with geometric containment (`polygonContains`). Selection in Prepare (`prepare-view.js:154-164`) and Vcarve (`vcarve-view.js:35-42`) selects only individual topological loops.
+This plan replaces group-as-holes with **COMBINED PROFILES**: an explicit, declared data structure representing a 2D machining region (outer boundary minus inner hole boundaries).
+
+---
+
+### 1. The Declaration (`packages/core/profile-model.js`, `document.js`, `sketch-state.js`)
+- **Record Structure:**
+  Declared in `state.profiles` on the shared sketch state (array of plain objects):
+  ```javascript
+  {
+    id: 'profile-1',          // minted stable id
+    outer: 'loop_so1-so2-...',// topological loop id of the outer boundary
+    inners: ['loop_sh1-...'], // topological loop ids of the inner hole boundaries
+    name: 'Profile 1',        // human-readable label for UI/tree/inspector
+    sketchId: 'sketch-1'      // active sketch container (matches SKETCH-1a)
+  }
+  ```
+- **Why Loop IDs for Outer/Inners:**
+  - In SketchStudio, topological loops are planar cycles of joined edges (`packages/core/loop-finder.js:46: makeLoop: 'loop_' + edges.slice().sort().join('-')`).
+  - Edge/shape IDs (`so1`, `sh1`) are immutable across solver movement, point drag, and solve iterations. Therefore loop IDs are topology-stable.
+  - Using loop IDs connects directly with CAM target resolution in Prepare (`prepare-view.js:138`) and cut-plan keys (`cut-plan.js:8: keyOf(kind, id)`).
+- **Persistence & Serialization:**
+  - `packages/core/document.js`:
+    - `serializeDocument(state)` (`document.js:44-48`):
+      `profiles: Array.isArray(state.profiles) ? state.profiles.map(p => ({ ...p, inners: [...p.inners] })) : undefined`
+    - `deserializeDocument(doc, state)` (`document.js:93-100`):
+      Restores `state.profiles` from `doc.geometry.profiles` (defaults to `[]`).
+  - `packages/ui/sketch-state.js`:
+    - `_captureSnapshot()` (`sketch-state.js:59-63`): deep-clones `this.profiles`.
+    - `_restoreSnapshot()` (`sketch-state.js:83-84`): restores `this.profiles`.
+    - Undo/Redo (`state.undo()`, `state.redo()`): fully undoable and redoable with zero custom code.
+- **Relationship to User Groups (`packages/core/group-model.js`):**
+  - **Combine becomes THE ONE source of holes.**
+  - `group-model.js` is stripped of all hole/containment logic and returns purely to entity organization (`userGroupId`, `makeGroup`, `ungroup`, `renameGroup`, `shapesInGroup`).
+  - **What gets deleted:**
+    1. `holesOfLoop` in `packages/core/group-model.js:78-112`: DELETED from `group-model.js`.
+    2. `import { polygonContains } from './loop-geometry.js';` in `group-model.js:10`: DELETED.
+    3. `loopsInGroup` and `groupOfLoop` in `group-model.js:54-69`: removed from hole lookups.
+    4. Group-as-holes logic in `packages/core/shaper-export.js:195-212`: replaced by profile-based lookup.
+  - **Saved Documents Policy:**
+    - Per project principle: "no legacy path; ask only if data is genuinely irreplaceable".
+    - Because Sketch-Studio is an in-development desktop app without legacy customer databases, no dual-codec compatibility shim is retained.
+    - Existing saved groups continue to exist as user groups (organization). If a user wants holes in an old document, they select the shapes in Design and click Combine.
+
+---
+
+### 2. The Tool (Design Ribbon & Canvas Feedback)
+- **Ribbon Button (`packages/ui/tool-ribbon.js`, `apps/shaper/src/main.js`):**
+  - In the ribbon's `EDIT` or a new `PROFILE` group (`tool-ribbon.js:23-27`), add two action buttons:
+    - **Combine** (`icon-combine`, label: "Combine")
+    - **Uncombine** (`icon-uncombine`, label: "Uncombine")
+- **Interaction Model (Selection-then-Action):**
+  - Follows the established CAD pattern (Illustrator/Inkscape `Path > Combine`, Figma Boolean, Group `Ctrl+G` in `main.js:224-232`):
+  1. The user selects shapes on the canvas (Shift-click or marquee selection in Select mode).
+  2. The user clicks **Combine** (or presses `Ctrl+Shift+C`).
+  3. **Validation (`validateCombine(selectedShapes, state)` in `profile-model.js`):**
+     - Finds all closed loops whose edges are in `selectedShapes` (`findLoops`).
+     - Must find $\ge 2$ closed loops (otherwise toast: *"Select shapes forming 2+ closed loops to combine"*).
+     - Computes boundary polygon for each loop via `loopPolygon` (`loop-geometry.js:30`).
+     - Sorts loops by `polyArea` descending. The largest loop is candidate `outerLoop`.
+     - Remaining loops must be strictly contained in `outerLoop` via `polygonContains(outerPoly, holePoly)` (`loop-geometry.js:80`). If any is outside or intersecting, rejects with toast: *"Hole loops must be strictly inside the outer boundary"*.
+     - Checks hole-hole non-crossing: no inner loop may intersect or cross another inner loop.
+     - Checks nesting: inner loops may not be contained inside each other (depth-1 holes only, matching the clean uncut-island CAM rule).
+  4. On valid check:
+     - Mints `{ id: 'profile-N', outer: outerLoop.id, inners: innerLoops.map(l => l.id), name: 'Profile N' }`.
+     - Appends to `state.profiles`.
+     - Calls `state.saveState()` (undo point).
+     - Toast: `Combined into Profile N (${innerLoops.length} hole${innerLoops.length === 1 ? '' : 's'})`.
+  5. **Uncombine Action:**
+     - When any shape or loop belonging to an existing combined profile is selected:
+     - "Uncombine" button activates (or `Ctrl+Shift+U`).
+     - Calls `uncombineProfile(state, profileId)`: removes the record from `state.profiles`, calls `state.saveState()`, and restores the loops as independent uncombined loops.
+- **Canvas Visual Feedback in Design Mode (`packages/ui/svg-renderer.js`):**
+  - In the sketch canvas world group (`#design-world-group`), behind the interactive line/arc strokes:
+  - Each profile in `state.profiles` is rendered as a soft tinted compound polygon:
+    `<path d="${outerD} ${inner1D} ${inner2D}..." fill-rule="evenodd" style="fill:var(--sk-profile-fill, rgba(122,167,224,0.08)); stroke:none;"/>`
+  - Visual result: The solid channel between outer and holes displays a distinct soft blue tint, while the hole regions remain transparent (raw stock). This immediately cues the user that the shapes are combined into a profile with holes.
+
+---
+
+### 3. The Profile Selector (Prepare & Vcarve)
+- **Concept: Every 2D Region is a Profile (`apps/shaper/src/prepare-view.js:138-164`):**
+  - Today, Prepare resolves cursor proximity to `{ kind: 'edge', id }` or `{ kind: 'loop', id }`.
+  - With combined profiles, the selectable region entity is extended to understand profiles:
+    - If a loop is the outer loop of a combined profile $P$: it represents $P$ (outer minus inners).
+    - If a loop is an inner loop of $P$: it is absorbed into $P$ and cannot be independently selected at top-level.
+    - If a loop is not in any combined profile: it is a standalone plain loop profile (0 holes).
+- **Cursor Hit-Testing (`resolveTarget(worldPt)` in `prepare-view.js:154-164`):**
+  1. Edge proximity test runs first (`EDGE_TOL_PX` on stroke) -> returns `{ kind: 'edge', id }`.
+  2. If not on an edge, evaluate profiles:
+     - For each combined profile $P$:
+       Check if `pointInPolygon(outerPoly, worldPt)` is true AND `!pointInPolygon(holePoly, worldPt)` for all holes in $P$.
+       If yes, the point lies in the solid material of the combined profile!
+     - For plain loops:
+       Check if `pointInPolygon(loopPoly, worldPt)` is true.
+     - Among candidate hits, pick the one with the smallest net area (standard CAD innermost-face rule).
+     - Return `{ kind: 'profile', id: P.id }` (or `{ kind: 'loop', id: l.id }` for plain loops).
+  3. **Cursor Inside a Hole:**
+     - If the cursor is inside a hole of $P$:
+       `pointInPolygon(holePoly, worldPt)` is true, so $P$ is NOT hit.
+       If the hole contains another plain loop or profile (a nested island / bullseye dot), that inner loop is hit!
+       If the hole is empty, no target is hit (empty void).
+- **Hover & Selection Markup (`targetMarkup` in `prepare-view.js:167-172`):**
+  - When `{ kind: 'profile', id: 'profile-1' }` is hovered or selected:
+    Emits ONE compound SVG path:
+    `<path d="${outerD} ${inner1D} ${inner2D}..." fill-rule="evenodd" style="${HOVER_STYLE | SELECT_STYLE}"/>`
+  - Under `fill-rule="evenodd"`, the hover/selection tint highlights the EXACT solid region (channel) while leaving holes completely unhighlighted!
+  - The selection outline traces both the outer perimeter and each hole boundary with `SELECT_STYLE` (solid blue border).
+- **Vcarve Region Picker (`apps/shaper/src/vcarve-view.js:35-42`):**
+  - Dropdown lists all available machining profiles:
+    - Combined profiles: `Profile 1 (1600 mm² · 1 hole)`
+    - Standalone loops: `Loop 2 (200 mm²)`
+    - Inner absorbed loops are not listed as selectable outer regions.
+  - Selecting `Profile 1` immediately feeds `boundary = outerPoly` and `holes = holePolys` into `deriveVcarveContours(outerPoly, rec, { holes: holePolys, excludeNested: true })`.
+
+---
+
+### 4. Export & Cut Types on a Combined Profile (`packages/core/shaper-export.js`)
+When a cut is assigned to a combined profile $P$ (outer loop $L_{\text{out}}$, inner loops $L_{\text{in}, 1..k}$):
+
+1. **Pocket (`cutType: 'pocket'`):**
+   - Machining: Pocket out all material within $L_{\text{out}}$ while leaving $L_{\text{in}}$ islands uncut.
+   - Export: ONE compound `<path d="${outerD} ${innersD}" fill-rule="evenodd" shaper:cutType="pocket" ... />`.
+   - Prepare Look: Hatch pattern across the solid channel + tool-center offset paths around outer (inward) and inners (outward).
+2. **V-Carve (in Vcarve Tab):**
+   - Machining: Dual-slope V-carve grooving between outer wall and hole walls meeting at medial ridge.
+   - Export: Concentric `<path shaper:cutType="online" shaper:cutDepth="...">` rings derived from ClipperOffset with outer and hole paths.
+3. **Outside / Exterior (`cutType: 'exterior'`):**
+   - Machining: Full cutout of the part (e.g. picture frame or washer).
+   - In CNC CAM practice:
+     - Outer boundary $L_{\text{out}}$ is cut with `shaper:cutType="exterior"`.
+     - Inner hole boundaries $L_{\text{in}}$ are cut with `shaper:cutType="interior"`.
+     - Tool cuts inner holes FIRST (while stock is rigid), then outer boundary (freeing the part).
+   - Prepare Look: Outside kerf band on outer boundary, inside kerf bands on inner boundaries.
+4. **Inside / Interior (`cutType: 'interior'`):**
+   - Machining: Inverted cutout / aperture with island.
+   - Outer boundary $L_{\text{out}}$ cut with `shaper:cutType="interior"`.
+   - Inner boundaries $L_{\text{in}}$ cut with `shaper:cutType="exterior"`.
+5. **On-line (`cutType: 'online'`):**
+   - Machining: Trace tool centerline directly on all perimeters of the profile.
+   - All loops ($L_{\text{out}}$ and $L_{\text{in}}$) receive `shaper:cutType="online"` at the assigned `cutDepth`.
+6. **Guide (`cutType: 'guide'`):**
+   - Reference lines for visual alignment on Shaper Origin screen. Emitted with `shaper:cutType="guide"`.
+
+---
+
+### 5. Fusion 360 Divergence
+In Fusion 360:
+- Planar faces (profiles) are automatically derived by a planar arrangement graph algorithm every time geometry changes. Clicking anywhere inside a boundary selects that dynamic face.
+
+Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
+- **What the user gains:**
+  1. *Immunity from unintended cutouts:* In Fusion, nesting multiple parts inside a stock border or nesting small parts inside cutouts often inadvertently hollows out components unless painstakingly deselected. In SketchStudio, nested parts remain independent solid parts by default.
+  2. *Topological & Solver Stability:* Dynamic face-arrangement engines are computationally heavy ($O(N \log N + K)$) and notoriously glitchy during solver dragging or joint coincidence transitions. Storing an explicit, declared profile record (`state.profiles`) guarantees that toolpath assignments never flicker, invert, or vanish during edits.
+  3. *Declarative Simplicity (Wizards-as-Data):* The user declares intent explicitly: "This outer loop and these holes constitute a combined workpiece."
+- **What the user loses:**
+  1. *Zero-click face detection:* The user must explicitly execute the "Combine" action in Design mode rather than instantly clicking on an enclosed hollow region.
+  2. *Automatic face splitting:* If an outer loop is bisected by a line in Fusion, the face splits automatically; in SketchStudio, modifying the outer loop's topology requires re-combining.
+
+---
+
+### 6. Slicing into Build Tasks (One Turn Per Slice)
+
+#### Slice 1: Pure Profile Model & Document Persistence
+- **Scope:**
+  - Create `packages/core/profile-model.js`: `makeProfile`, `uncombineProfile`, `profilesOf`, `profileForLoop`, `validateCombine`.
+  - Add `state.profiles` to `packages/ui/sketch-state.js` (`_captureSnapshot`, `_restoreSnapshot`) for undo/redo.
+  - Add `state.profiles` to `packages/core/document.js` (`serializeDocument`, `deserializeDocument`).
+  - Delete `holesOfLoop` from `packages/core/group-model.js`.
+  - Update `packages/core/shaper-export.js` and `apps/shaper/src/vcarve-view.js` to read holes from `profile-model.js`.
+- **Tests:**
+  - `tests/profile-model.test.js`: creation, validation (containment, non-crossing, nesting), uncombine, query helpers.
+  - `tests/document.test.js`: serialization and round-trip verification of `state.profiles`.
+  - Existing export and vcarve tests updated and passing.
+
+#### Slice 2: Design Ribbon Combine & Uncombine Tool
+- **Scope:**
+  - Add `Combine` and `Uncombine` action buttons to `packages/ui/tool-ribbon.js` (or `main.js`).
+  - Wire selection-then-combine in `apps/shaper/src/main.js`: validate selected shapes, mint profile, save undo snapshot, show toast.
+  - Canvas background feedback in `packages/ui/svg-renderer.js`: render combined profiles with soft transparent compound fill (`evenodd`) and open holes.
+- **Tests:**
+  - Unit tests for ribbon button state and combine dispatch.
+  - Headless Edge test verifying selection -> click Combine -> profile created -> toast displayed -> canvas compound fill rendered.
+
+#### Slice 3: Prepare Profile Selector & CAM Hover/Selection
+- **Scope:**
+  - Update `apps/shaper/src/prepare-view.js`:
+    - Extend `resolveTarget` to detect combined profiles (`pointInPolygon(outer) && !pointInPolygon(inners)`).
+    - Extend `targetMarkup` to render evenodd compound paths for hover and selection.
+    - Update Cut Look preview in Prepare (hatched pocket across channel, exterior kerfs on outer/inners).
+  - Update `apps/shaper/src/vcarve-view.js`:
+    - Populate region selector with combined profiles.
+- **Tests:**
+  - `tests/prepare-profile-selector.test.js`: verify hit-testing inside channel, inside hole, outside; verify hover and select SVG markup.
+
+#### Slice 4: Full Multi-Cut Export & Parity Verification
+- **Scope:**
+  - In `packages/core/shaper-export.js`: full support for combined profile targets across all 5 cut types (`pocket`, `exterior`, `interior`, `online`, `guide`).
+  - Strict ordering: inner holes cut before outer boundaries for exterior/interior cuts.
+  - Update `tests/shaper-export.test.js`: exact-string oracle tests for all cut types on combined profiles.
+  - Live Edge screenshot evidence showing Prepare profile hover/selection with holes and exported SVG.
+
+---
+
+### 7. Owner Questions
+1. **Cut Assignment for Exterior/Interior Cuts on a Combined Profile:**
+   - Confirm that assigning an `exterior` cut to a combined profile should automatically emit outer as `exterior` and inners as `interior` (cutting inners first, then outer), matching standard CNC CAM contouring.
+2. **Combine Tool Shortcut:**
+   - Confirm shortcut key for Combine in Design mode: `Ctrl+Shift+C` (with Uncombine as `Ctrl+Shift+U`), keeping `Ctrl+G` strictly for shape grouping.
+3. **Uncombine Granularity:**
+   - Confirm that Uncombine disbands the entire combined profile back into individual loops (rather than removing one hole at a time).

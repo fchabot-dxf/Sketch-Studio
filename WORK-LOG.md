@@ -10931,3 +10931,144 @@ Two follow-ups to VCARVE-4 (merged ffb49dd):
      - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 17`, `HEADLESS-OTHER 0`, exit code 1 (gate failed as intended). Leaked processes reaped and change reverted.
   3. **Clean gate run:** `npm run gate`:
      - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.
+
+
+## TURN 424 (VCARVE-5a PLAN) — V-carve contours that SPLIT via Clipper (no code) — branch agy1
+Plan for VCARVE-5a: replacing the simple-loop `#core/polygon-offset.js` inside `#core/vcarve.js` with the robust Clipper offset from `#core/plot/clip.js`, so inward offsets split into multiple islands at neck pinches (letters B, 8, S, dumbbells) instead of aborting the entire contour stack at the first collapse.
+
+### 1. How `clip.js` Offsets Inward
+- **Module and Source of Truth:** `packages/core/plot/clip.js` wraps Angus Johnson's vendored Clipper library (`packages/core/plot/vendor/clipper.js`) via `packages/core/plot/vendor/clipper-node-shim.js` (ensuring Node ESM and browser parity without global pollution).
+- **Coordinate Conversion & Precision (`clip.js:18-36`):**
+  - Clipper operates on integer coordinates. `CLIP_SCALE = 1000` (`clip.js:19`): 1 integer unit = 1 µm (0.001 mm). At millimeter scale, this gives sub-micron precision without floating-point accumulation or geometry degradation.
+  - `toClipper(points)` (`clip.js:22-29`) maps `[[x, y], ...]` to `[{ X: Math.round(x * 1000), Y: Math.round(y * 1000) }]`, dropping any duplicate closing vertex.
+  - `fromClipper(path)` (`clip.js:32-36`) maps `[{ X, Y }, ...]` back to `[[x, y], ...]` in millimeters (`pt.X / 1000`), appending a duplicate closing vertex.
+- **Offset API (`clip.js:38-49` & `clip.js:68-91`):**
+  - `insetPolygon(polygon, amount)`:
+    ```javascript
+    // clip.js:43-48
+    if (!ClipperLib.Clipper.Orientation(path)) path.reverse();
+    const co = new ClipperLib.ClipperOffset(2 /* miterLimit */, 0.25 * CLIP_SCALE);
+    co.AddPath(path, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    const sol = new ClipperLib.Paths();
+    co.Execute(sol, -amount * CLIP_SCALE); // negative delta = inward
+    return sol.filter(r => r.length >= 3).map(fromClipper);
+    ```
+  - For concentric multi-step offsets, `ClipperOffset` is initialized once with `co.AddPath`, and `co.Execute(sol, -d * CLIP_SCALE)` is called repeatedly for each `d` (avoiding redundant path preprocessing).
+- **What it returns on a split:**
+  - `sol` is a `ClipperLib.Paths` collection containing **multiple independent closed paths** (e.g. `sol.length === 2` for a neck pinch).
+  - Each path is a complete, non-self-intersecting closed ring.
+  - Unlike `#core/polygon-offset.js:127` which tests `selfIntersects(out)` and returns `[]` on any pinch, Clipper resolves the pinch into separate topologically valid loops.
+
+### 2. The New Derivation (`packages/core/vcarve.js`)
+- **Algorithm:**
+  - Initialize `co = new ClipperLib.ClipperOffset(2, 0.25 * CLIP_SCALE)`.
+  - Add the outer boundary (converted from `{ x, y }[]` to Clipper path).
+  - Loop `for (let i = 1; i <= maxIters; i++)`:
+    - `d = i * step`.
+    - `co.Execute(sol, -d * CLIP_SCALE)`.
+    - If `sol.length === 0`: every island has reached its local medial axis ridge -> terminate early (`break;`).
+    - For each `ring` in `sol`:
+      - Filter `ring.length >= 3`.
+      - Convert vertices from Clipper integer `{ X, Y }` back to mm `{ x, y }` (stripping the duplicate closing vertex).
+      - Push `{ polygon: pts, depth: d / tan }`.
+- **Data Shape Recommendation: Keep FLAT `[{ polygon, depth }, ...]`:**
+  - Grouping by depth (`[{ depth, polygons: [...] }]`) would require breaking changes across all consumers. Keeping the return shape flat `[{ polygon, depth }, ...]` ensures:
+    1. **UI Preview (`apps/shaper/src/vcarve-view.js:83-87`):**
+       ```javascript
+       for (const c of contours) {
+         const t = maxDepth > 0 ? Math.min(1, c.depth / maxDepth) : 0;
+         const L = Math.round(66 - 44 * t);
+         s += poly(c.polygon, `fill="none" stroke="hsl(28,50%,${L}%)" ...`);
+       }
+       ```
+       Preview loop iterates `contours` directly; zero changes required.
+    2. **Machine Export (`packages/core/shaper-export.js:246-253`):**
+       ```javascript
+       const contours = deriveVcarveContours(boundary, vc);
+       for (const c of contours) {
+         const d = polyToPathD(c.polygon);
+         const common = colorAttrs(onlineEnc) + shaperAttrs({ cutDepth: c.depth }, onlineEnc, docUnit);
+         items.push({ common, tag: 'path', a: `d="${d}"` });
+       }
+       ```
+       Export emits one `<path>` per cut contour; zero changes required.
+    3. **Tests (`tests/shaper-export.test.js:305-315`):**
+       Preview-vs-export parity checks iterate `previewContours[i]` 1:1 against `exportedPaths[i]`; zero structural changes required.
+  - **Cut & Depth Ordering:** Contours are emitted in depth-ascending order ($d = 1\cdot\text{step}, 2\cdot\text{step}, \dots$). When a step splits into multiple islands, those sibling islands are emitted consecutively at the same depth. This matches physical CNC machining (shallow passes are cut across all features before stepping deeper).
+
+### 3. Behaviour Changes on Simple / Convex Shapes
+- **Empirical Probe (40×40 square at $d = 5\text{ mm}$):**
+  - **Geometric parity:** Exactly identical 30×30 mm square with corners $(5, 5)$, $(35, 5)$, $(35, 35)$, $(5, 35)$; area is exactly $900\text{ mm}^2$.
+  - **Vertex Order & Start Point Difference:**
+    - Today's `polygon-offset.js`: Starts at vertex 0 corresponding to input $(0, 0)$, traversing counter-clockwise (in SVG Y-down):
+      `d="M 5 5 L 35 5 L 35 35 L 5 35 Z"`.
+    - Clipper `insetPolygon`: Starts at bottom-right $(35, 35)$, traversing clockwise:
+      `d="M 35 35 L 5 35 L 5 5 L 35 5 Z"`.
+  - **Exported SVG Output:**
+    The geometric cuts cut by Shaper Origin or a CNC machine are 100% physically identical. However, the path string `d` attribute starts at `M 35 35` instead of `M 5 5`.
+- **Proposal for Exact-String Oracles:**
+  - **Recommended Approach:** Update the exact-string oracle constants in `tests/shaper-export.test.js` (`wantMM` and `wantIN`, lines 273-291) to Clipper's canonical output (`M 35 35 L 5 35 L 5 5 L 35 5 Z`), documenting that Clipper defines the canonical vertex ordering for all offset operations.
+  - **Alternative Evaluated & Rejected (Vertex Rolling):** Attempting to "roll" Clipper's polygon vertices so that the vertex closest to `boundary[0]` comes first works for 1:1 single loops, but is an unprincipled heuristic that breaks down as soon as a shape splits into multiple islands (where island 2 has no relation to `boundary[0]`). Adopting Clipper's native deterministic order is cleaner and robust.
+
+### 4. Holes (Compound Regions, e.g. Letter 'O')
+- **Today's Limitation:**
+  - In `apps/shaper/src/vcarve-view.js:37` and `packages/core/shaper-export.js:240-254`, `state.vcarves[0].region` references a single loop ID.
+  - For a letter 'O', `findLoops` returns two distinct loops (outer boundary and inner hole). Today, the user picks the outer loop, and `vcarveContours` carves straight through the center, completely destroying the hole.
+- **Clipper's Native Capability:**
+  - `ClipperOffset` supports compound polygons: if an outer loop and an inner hole loop are added via `co.AddPath(outer)` and `co.AddPath(hole)`:
+    - The outer loop insets inward.
+    - The hole loop offsets outward into the wall.
+    - Both fronts advance toward each other and collapse simultaneously when they meet at the medial axis ridge (verified empirically: a 40×40 square with a 10×10 central hole collapses at $d = 7.5\text{ mm}$, yielding 0 rings at $d \ge 7.5\text{ mm}$).
+- **Plan for VCARVE-5a vs 5b:**
+  - In VCARVE-5a, `vcarveContours(boundary, opts)` will accept `boundary` as either `Point[]` (single loop) or `{ outer: Point[], holes: Point[][] }` (compound).
+  - When given a single boundary (as the UI passes today), Clipper insets the outer ring.
+  - The plumbing is thus hole-ready for VCARVE-5b, which can wire the UI/host to detect contained islands via `groupOfLoop` / `loopsInGroup` / `polygonContains` (reusing the pattern already proven for pocket islands in `shaper-export.js:192-212`).
+
+### 5. Performance & The 200-Contour Cap
+- **Empirical Benchmark:**
+  - Run on a complex 60-vertex wavy star polygon (resembling intricate typography) with 200 concentric Clipper offset calls:
+    - **Total execution time:** **42.29 ms** in Node V8.
+    - **Total rings produced:** 158 rings across multiple splitting lobes.
+  - 42 ms is well within the 100 ms threshold for 60 fps / instantaneous UI reactivity during interactive slider adjustments.
+- **Keep `maxContours = 200`:**
+  - **YES.** At `dStep = 0.5 mm`, 200 depth levels represents a 100 mm deep carve (far exceeding any CNC router bit reach).
+  - The cap prevents runaway execution on corrupt inputs, micro-steps (e.g. `dStep = 0.001`), or degenerate slivers.
+  - In the implementation, `maxIters = Math.min(maxContours, Math.floor((maxDepth * tan) / dStep + 1e-6))` limits the depth passes, while a secondary guard `if (out.length >= maxContours * 2) break;` prevents memory explosion if a complex fractal shape splits into dozens of islands per level.
+
+### 6. Test Suite Plan
+1. **Dumbbell Split Test (`tests/vcarve.test.js`):**
+   - Shape: 60×20 bounding box with two 20×20 lobes (`x = 0..20` and `x = 40..60`) joined by a 4-high neck (`y = 8..12`, `x = 20..40`).
+   - Parameters: `dStep = 1.0`, 90° bit (`tan = 1.0`).
+   - Expected progression:
+     - $d = 1\text{ mm}$: 1 connected contour (neck width shrinks from 4 to 2 mm).
+     - $d = 2\text{ mm}$: 2 contours (neck collapses; splits into left and right lobes).
+     - $d = 3..9\text{ mm}$: 2 contours per level (both lobes independently insetting toward centers $(10, 10)$ and $(50, 10)$).
+     - $d = 10\text{ mm}$: collapses to 0 rings.
+   - Assertions:
+     - Exact contour count: $1 + 8 \times 2 = \mathbf{17\text{ contours}}$.
+     - Depths: $1\text{ mm}$ (1 path), $2..9\text{ mm}$ (2 paths each).
+     - Finite termination without hanging.
+2. **Angled Waisted Pinch Test (`tests/vcarve.test.js`):**
+   - Shape: 20×20 with an acute waist pinching at `x = 9..11, y = 10`.
+   - Today's `polygon-offset.js` returns `[]` at $d = 1.0\text{ mm}$, yielding only **1 contour** total and abandoning both lobes.
+   - Clipper derivation yields **15 contours** (1 connected + 7 split pairs), cutting cleanly down to $d = 4.0\text{ mm}$.
+3. **Preview vs Export Parity Test (`tests/shaper-export.test.js`):**
+   - Feed the dumbbell loop into `exportShaperSVG`.
+   - Assert all 17 contours are exported as `<path shaper:cutType="online">`.
+   - Verify every exported path matches `deriveVcarveContours` in coordinate string `d` and depth attribute `shaper:cutDepth`.
+4. **Zero-Vcarve & Simple Loop Regression Tests:**
+   - Verify non-vcarve exports remain 100% byte-identical.
+   - Verify 40×40 square export matches the updated oracle.
+
+### 7. Risks & Questions for Owner
+1. **Cut Ordering Across Islands:**
+   - Today's proposed order is **depth-first** (at depth $d$, cut island A then island B; then step to $d + \text{step}$ and cut island A then island B). This is standard CNC practice to prevent excessive radial tool engagement.
+   - *Question:* Is depth-first ordering desired for Shaper Origin, or would woodworkers prefer cutting each island to completion before retracting and moving to the next island? (Recommendation: depth-first).
+2. **Oracle Approval:**
+   - Confirm approval to update `wantMM` and `wantIN` in `tests/shaper-export.test.js` to Clipper's canonical vertex start point (`M 35 35 ...`).
+3. **Micro-loop Threshold:**
+   - Near the apex of sharp acute corners, offsetting can occasionally leave microscopic residual loops ($< 0.1\text{ mm}$ perimeter).
+   - *Question:* Should we filter out any contour with perimeter $< 0.2\text{ mm}$ or area $< 0.05\text{ mm}^2$ to prevent unnecessary on-tool stuttering?
+4. **Consolidation / Two-Engine Debt:**
+   - VCARVE-5a will route `vcarve.js` to `#core/plot/clip.js`. `#core/polygon-offset.js` will remain in use solely by `apps/shaper/src/prepare-view.js` (for pocket inset / toolpath visualization).
+   - Eventual unification of `prepare-view.js` to Clipper will retire `polygon-offset.js` entirely per ROADMAP.md.

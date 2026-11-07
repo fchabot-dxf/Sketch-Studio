@@ -10457,3 +10457,15 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
     - Cause: `engine.js` line 304 only synthesizes circle-circle tangent from `c.shapes`; for circle-line it expects `c.line && c.circle`, but `ConstraintManager.createConstraint` normalizes to `c.shapes = [circle, line]`. The engine produces `error: NaN` and `converged: false`, but the verifier correctly handles `c.shapes = [circle, line]`, finds residual = 0, and reports `converged: true`.
     - The proposed rule (`engine.error <= tolerance`) rejects these valid fixtures because `NaN <= tolerance` is false.
 - **Gate:** 153 test files run one by one — 144 pass, same 9 pre-existing failures, new `shadow-converged.test.js` passes in 5.4s; `shell-smoke.cjs` 12/12; 0 leftover `sk-shell-smoke` headless Edge processes.
+
+
+## TURN 413 — support shapes-form [line, circle] tangent in solver param synthesis — branch agy1
+- **Done (`packages/core/solver/engine.js`):** Unified `c.type === 'tangent'` parameter synthesis to support constraints stored in `{shapes: [sA, sB]}` form when one shape is a line and the other is a circle/arc (in either `[circle, line]` or `[line, circle]` order). Reuses the existing `{line, circle}` path, resolving `lineId` and `circleId` and building identical parameters, including the fillet shared-endpoint rule (`params.sharedEnd = 'a' | 'b'`) and circle/arc radius calculation. Circle-circle / arc-arc tangent via `shapes` and legacy UI tool `{line, circle}` form remain identical and untouched.
+- **Fail-first test (`packages/core/tests/solver-tangent-shapes-form.test.js`):**
+  - Case (a): Line + circle in shapes form `[line, circ]` and `[circ, line]` both converge (`converged: true, error < 1e-6`) and match `{line, circle}` reference geometry. FAILED before fix (`converged: false, error: NaN`).
+  - Case (b): Fillet-like shared-endpoint case in shapes form converges (`converged: true, error < 1e-6`) with target radius 10 and matches `{line, circle}` reference. FAILED before fix (`converged: false, error: NaN`).
+- **Shadow harness re-run (`tests/harness/shadow-converged.test.js`):**
+  - Evaluated 5,463 total solves across the test corpus (160 fuzz seeds).
+  - Category (c) False alarms dropped from 9 to 0! All 9 `document-roundtrip.test.js` false alarms are eliminated.
+  - Pinned assertions in `shadow-converged.test.js` updated to enforce `catC.length === 0`.
+- **Gate:** 154 test files run one by one — 145 pass, exactly the same 9 pre-existing baseline failures (`ai-vision-label-spacing`, `debug-panel`, `debug-whisker-align`, `input-manager-midpoint`, `settings-panel-ui`, `tuning-wizard`, `wizard-base`, `wizard-placement`, `harness/differential-planegcs`), all existing `solver-*` tests pass; `shell-smoke.cjs` 12/12; 0 leftover `sk-shell-smoke` headless Edge processes.

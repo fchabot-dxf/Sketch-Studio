@@ -10,9 +10,8 @@
 //   (a) 0 genuine lies today (wrapper converged=true with geometric residual > tolerance)
 //   (b) 134 drag-only differences (mouse_spring present; verifier satisfied and structuralError <= 0.001,
 //       but structuralError >= engine tol (1e-6) due to drag spring penalty)
-//   (c) 9 false alarms in packages/core/tests/document-roundtrip.test.js (fixture is geometrically tangent
-//       with verifier residual 0, but engine does not recognize {type:'tangent', shapes:[circle,line]}
-//       producing engine error=NaN)
+//   (c) 0 false alarms (the 9 document-roundtrip false alarms resolved in turn 413 by supporting
+//       shapes-form line-circle tangents)
 
 import fs from 'fs';
 import path from 'path';
@@ -195,15 +194,9 @@ try {
     throw new Error(`Expected 0 genuine lies in wrapper, found ${catA.length}`);
   }
 
-  // Verify that all non-drag false alarms match the documented document-roundtrip tangent NaN bug
-  for (const d of catC) {
-    const isNaNOrNull = d.error === null || typeof d.error !== 'number' || isNaN(d.error);
-    if (!d.file.includes('document-roundtrip.test.js') || !isNaNOrNull || d.maxResidual > d.tolerance) {
-      throw new Error(`Unexpected non-drag false alarm outside documented set: ${JSON.stringify(d)}`);
-    }
-  }
-  if (catC.length !== 9) {
-    throw new Error(`Expected exactly 9 document-roundtrip false alarms, found ${catC.length}`);
+  // Verify that there are 0 non-drag false alarms (all non-drag differences resolved)
+  if (catC.length !== 0) {
+    throw new Error(`Expected 0 non-drag false alarms, found ${catC.length}: ${JSON.stringify(catC)}`);
   }
 
   // Verify all drag-only differences satisfy verifier tolerance and have structuralError <= tolerance

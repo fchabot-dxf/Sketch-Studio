@@ -300,45 +300,57 @@ export class NewtonSolver {
             params.onCircle = true;
           }
         }
-        // Support tangent between two circle/arc shapes by synthesizing center indices + radii
-        else if (c.type === 'tangent' && c.shapes && c.shapes.length === 2) {
-          const sA = this.shapes.find(s => s.id === c.shapes[0]);
-          const sB = this.shapes.find(s => s.id === c.shapes[1]);
-          if (sA && sB && (sA.type === 'circle' || sA.type === 'arc') && (sB.type === 'circle' || sB.type === 'arc')) {
-            const cA = sA.joints && sA.joints.length > 0 ? sA.joints[0] : null;
-            const cB = sB.joints && sB.joints.length > 0 ? sB.joints[0] : null;
-            if (cA && cB) {
-              const idxA = jointIndexMap.get(cA);
-              const idxB = jointIndexMap.get(cB);
-              if (typeof idxA === 'number' && typeof idxB === 'number') {
-                params.joints = [ idxA, idxB ];
-                const rA = (typeof sA.radius === 'number') ? sA.radius : (sA.joints && sA.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sA.joints[0]) * 2; const ri = jointIndexMap.get(sA.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-                const rB = (typeof sB.radius === 'number') ? sB.radius : (sB.joints && sB.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sB.joints[0]) * 2; const ri = jointIndexMap.get(sB.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-                params.radii = [rA, rB];
+        // Support tangent: circle-circle (via shapes), or line+circle (via {line, circle} or shapes [line, circle] / [circle, line])
+        else if (c.type === 'tangent') {
+          let lineId = c.line;
+          let circleId = c.circle;
+          if ((!lineId || !circleId) && c.shapes && c.shapes.length === 2) {
+            const sA = this.shapes.find(s => s && s.id === c.shapes[0]);
+            const sB = this.shapes.find(s => s && s.id === c.shapes[1]);
+            if (sA && sB) {
+              if ((sA.type === 'circle' || sA.type === 'arc') && (sB.type === 'circle' || sB.type === 'arc')) {
+                const cA = sA.joints && sA.joints.length > 0 ? sA.joints[0] : null;
+                const cB = sB.joints && sB.joints.length > 0 ? sB.joints[0] : null;
+                if (cA && cB) {
+                  const idxA = jointIndexMap.get(cA);
+                  const idxB = jointIndexMap.get(cB);
+                  if (typeof idxA === 'number' && typeof idxB === 'number') {
+                    params.joints = [ idxA, idxB ];
+                    const rA = (typeof sA.radius === 'number') ? sA.radius : (sA.joints && sA.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sA.joints[0]) * 2; const ri = jointIndexMap.get(sA.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+                    const rB = (typeof sB.radius === 'number') ? sB.radius : (sB.joints && sB.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sB.joints[0]) * 2; const ri = jointIndexMap.get(sB.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+                    params.radii = [rA, rB];
+                  }
+                }
+              } else if (sA.type === 'line' && (sB.type === 'circle' || sB.type === 'arc')) {
+                lineId = sA.id;
+                circleId = sB.id;
+              } else if (sB.type === 'line' && (sA.type === 'circle' || sA.type === 'arc')) {
+                lineId = sB.id;
+                circleId = sA.id;
               }
             }
           }
-        }
-        // Tangent line+circle (created by the UI tool with {line, circle} fields).
-        // Synthesize joints = [center, A, B] and pass radius via params.radius.
-        else if (c.type === 'tangent' && c.line && c.circle) {
-          const lineShape = this.shapes.find(s => s.id === c.line);
-          const circShape = this.shapes.find(s => s.id === c.circle);
-          if (lineShape && lineShape.type === 'line' && lineShape.joints && lineShape.joints.length >= 2 &&
-              circShape && (circShape.type === 'circle' || circShape.type === 'arc') && circShape.joints && circShape.joints.length >= 1) {
-            const cIdx = jointIndexMap.get(circShape.joints[0]);
-            const aIdx = jointIndexMap.get(lineShape.joints[0]);
-            const bIdx = jointIndexMap.get(lineShape.joints[1]);
-            if (typeof cIdx === 'number' && typeof aIdx === 'number' && typeof bIdx === 'number') {
-              params.joints = [cIdx, aIdx, bIdx];
-              // Shared endpoint (a fillet: the line ends ON the arc's rim joint) -> endpoint-tangency
-              // residual (P - C) . u/|u| = 0, non-singular; distance-to-line has a double root there.
-              const arcRim = new Set(circShape.joints.slice(1));
-              if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
-              else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
-              params.radius = (typeof circShape.radius === 'number')
-                ? circShape.radius
-                : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+          // Tangent line+circle (created by the UI tool with {line, circle} fields or mapped from shapes).
+          // Synthesize joints = [center, A, B] and pass radius via params.radius.
+          if (lineId && circleId) {
+            const lineShape = this.shapes.find(s => s && s.id === lineId);
+            const circShape = this.shapes.find(s => s && s.id === circleId);
+            if (lineShape && lineShape.type === 'line' && lineShape.joints && lineShape.joints.length >= 2 &&
+                circShape && (circShape.type === 'circle' || circShape.type === 'arc') && circShape.joints && circShape.joints.length >= 1) {
+              const cIdx = jointIndexMap.get(circShape.joints[0]);
+              const aIdx = jointIndexMap.get(lineShape.joints[0]);
+              const bIdx = jointIndexMap.get(lineShape.joints[1]);
+              if (typeof cIdx === 'number' && typeof aIdx === 'number' && typeof bIdx === 'number') {
+                params.joints = [cIdx, aIdx, bIdx];
+                // Shared endpoint (a fillet: the line ends ON the arc's rim joint) -> endpoint-tangency
+                // residual (P - C) . u/|u| = 0, non-singular; distance-to-line has a double root there.
+                const arcRim = new Set(circShape.joints.slice(1));
+                if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
+                else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
+                params.radius = (typeof circShape.radius === 'number')
+                  ? circShape.radius
+                  : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+              }
             }
           }
         }

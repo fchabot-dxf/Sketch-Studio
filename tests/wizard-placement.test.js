@@ -3,8 +3,19 @@
   const { createWizardPanel, normalizeExistingPanel, PANEL_STACK_SPACING } = await import('../apps/sketchstudio/ui/wizard-base.js');
 
   // Clean DOM shim for style checks
-  global.document = global.document || {};
-  document.createElement = document.createElement || ((t) => ({ style: {}, appendChild: () => {}, id: '' }));
+  const body = {
+    children: [],
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    }
+  };
+  global.document = {
+    body,
+    createElement: (t) => ({ style: { cssText: '' }, appendChild: () => {}, id: '', parentNode: null }),
+    getElementById: (id) => null
+  };
 
   // Create two bottom-right panels and assert they stack vertically (bottom offsets differ by spacing)
   const a = createWizardPanel({ id: 'w-a', title: 'A', zone: 'bottom-right' });

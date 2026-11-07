@@ -11,7 +11,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
   const { findCornerAtPoint, applyFillet } = await import('#core/fillet.js');
   const { commitDimensionEdit } = await import('#ui/dimension-seams.js');
   const { findLoops } = await import('#core/loop-finder.js');
-  const { deleteShapes } = await import('#core/delete-manager.js');
+  const { deleteShapes, deleteSelection } = await import('#core/delete-manager.js');
 
   function build(W = 60, H = 40) {
     const engine = createEngine(null); engine.init();
@@ -137,6 +137,63 @@ globalThis.document = globalThis.document || { getElementById: () => null };
 
   // (The `mutual` Jacobian is covered at solver level in packages/core/tests/solver-point-on-line-mutual.test.js;
   //  since 403 a radius edit seeds the analytic geometry, so it no longer DEPENDS on the flag to converge.)
+
+  // ---- TURN 406: V survives deleting the lines (and the arc) with its overall dims, like Fusion
+  {
+    const scenario = () => {
+      const { engine, state } = build();
+      // dims on the TOP and RIGHT edges (both end at the filleted corner), created before the fillet
+      const P = (id) => state.joints.get(id);
+      const lineAt = (f) => state.shapes.find(sh => sh.type === 'line' && f(P(sh.joints[0]), P(sh.joints[1])));
+      const top = lineAt((a, b) => Math.abs(a.y - 40) < 1e-6 && Math.abs(b.y - 40) < 1e-6);
+      const right = lineAt((a, b) => Math.abs(a.x - 60) < 1e-6 && Math.abs(b.x - 60) < 1e-6);
+      ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: top.joints.slice(), value: 60 }, { source: 'dim' });
+      ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: right.joints.slice(), value: 40 }, { source: 'dim' });
+      engine.solve(500);
+      const res = applyFillet(state, findCornerAtPoint(state, { x: 60, y: 40 }, 5), 8);
+      engine.solve(500);
+      const del = (id) => { state.selectedShapes.clear(); state.selectedShapes.add(id); deleteSelection(state); return engine.solve(300); };
+      return { engine, state, res, top, right, del };
+    };
+    const vDims = (state, V) => state.constraints.filter(c => c.type === 'distance' && !c.isRadius && c.joints && c.joints.includes(V));
+
+    for (const arcFirst of [false, true]) {
+      const { state, res, top, right, del } = scenario();
+      const V = res.virtualSharp;
+      if (arcFirst) del(res.arc.id);
+      del(right.id);
+      assert(state.joints.has(V), `V survives deleting the right line (arcFirst=${arcFirst})`);
+      assert(state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === V).length === 1, 'V keeps exactly one pointOnLine after the first line is deleted');
+      const sr = del(top.id);
+      assert(state.joints.has(V), `V survives deleting BOTH lines (arcFirst=${arcFirst})`);
+      const dims = vDims(state, V);
+      const vals = dims.map(c => +c.value.toFixed(3)).sort((a, b) => a - b);
+      assert(dims.length === 3 && vals[0] === 40 && vals[1] === 60 && vals[2] === +Math.hypot(60, 40).toFixed(3), `the 60, 40 and diagonal dims all stay on V, values unchanged (arcFirst=${arcFirst}): ${JSON.stringify(vals)}`);
+      assert(dims.every(c => c.joints.every(j => state.joints.has(j))), 'every joint of a kept dim still exists');
+      assert(sr.converged !== false, 'solve converges after both deletions');
+      assert(state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === V).length === 0, 'its pointOnLines are gone with the lines');
+    }
+    // explicit V delete (select the cross) still removes V AND its dims
+    {
+      const { state, res } = scenario();
+      const V = res.virtualSharp;
+      state.selectedShapes.clear(); state.selectedJoints.clear(); state.selectedJoints.add(V);
+      deleteSelection(state);
+      assert(!state.joints.has(V), 'selecting V and deleting removes V');
+      assert(vDims(state, V).length === 0, 'and its dims');
+    }
+    // plain case untouched: a rect line WITHOUT a virtual sharp still drops its dim when deleted
+    {
+      const { engine, state } = build();
+      const lineAt = (f) => state.shapes.find(sh => sh.type === 'line' && f(state.joints.get(sh.joints[0]), state.joints.get(sh.joints[1])));
+      const top = lineAt((a, b) => Math.abs(a.y - 40) < 1e-6 && Math.abs(b.y - 40) < 1e-6);
+      ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: top.joints.slice(), value: 60 }, { source: 'dim' });
+      const nBefore = state.constraints.filter(c => c.type === 'distance').length;
+      state.selectedShapes.clear(); state.selectedShapes.add(top.id); deleteSelection(state);
+      const dimOnTop = state.constraints.some(c => c.type === 'distance' && c.joints && c.joints.some(j => top.joints.includes(j)));
+      assert(!dimOnTop && state.constraints.filter(c => c.type === 'distance').length < nBefore, 'without a virtual sharp, deleting a line still drops its dimension (unchanged behaviour)');
+    }
+  }
 
   // ---- undo/redo and serialization keep V; deleting the arc leaves V + open lines (Fusion parity)
   {

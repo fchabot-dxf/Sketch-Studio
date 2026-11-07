@@ -1,6 +1,23 @@
 import { removeOrphanJoints } from './joints.js';
 import { SolverConfig } from './solver-config.js';
 
+// A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
+// surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
+// even after the lines/arc around it are deleted (Fusion parity). Returns the joint ids to KEEP: every V that a
+// measurement dimension (joint-pair DISTANCE, joint-form EQUAL) is attached to, plus that dimension's other joints.
+// Deleting V explicitly (deleteJoints) is unaffected and still removes V and its dimensions.
+function virtualSharpProtectedJoints(state) {
+  const keep = new Set();
+  if (!state || !state.joints || !Array.isArray(state.constraints)) return keep;
+  const isV = (id) => { const j = state.joints.get(id); return !!(j && j.virtualSharp); };
+  for (const c of state.constraints) {
+    if (!c || c.isRadius || !Array.isArray(c.joints)) continue;
+    const measure = (c.type === 'distance' && c.joints.length >= 2) || (c.type === 'equal' && c.joints.length >= 4);
+    if (measure && c.joints.some(isV)) c.joints.forEach(j => keep.add(j));
+  }
+  return keep;
+}
+
 export function deleteConstraints(state, constraintsOrIds) {
   if (!state) return 0;
   const toDelete = Array.isArray(constraintsOrIds) ? constraintsOrIds : [constraintsOrIds];
@@ -79,7 +96,8 @@ export function deleteShapes(state, shapeIds) {
   // a joint that is going away are dropped so nothing dangles (e.g. the arc's `equal` on its centre joint).
   const usedBySurvivors = new Set();
   for (const s of state.shapes) if (s && Array.isArray(s.joints)) s.joints.forEach(j => usedBySurvivors.add(j));
-  const goneJoints = new Set([...removedJoints].filter(j => !usedBySurvivors.has(j)));
+  const protectedJoints = virtualSharpProtectedJoints(state);
+  const goneJoints = new Set([...removedJoints].filter(j => !usedBySurvivors.has(j) && !protectedJoints.has(j)));
   if (goneJoints.size) {
     for (let i = state.constraints.length - 1; i >= 0; i--) {
       const c = state.constraints[i];
@@ -207,8 +225,9 @@ export function deleteSelection(state) {
 
   // Any candidate not used by survivors is an orphan -> delete it
   const finalJointsToDelete = [...explicitJoints];
+  const vsProtected = virtualSharpProtectedJoints(state);
   for (const jid of candidateJoints) {
-      if (!usedBySurvivors.has(jid) && !jointsToDeleteSet.has(jid)) {
+      if (!usedBySurvivors.has(jid) && !jointsToDeleteSet.has(jid) && !vsProtected.has(jid)) {
           finalJointsToDelete.push(jid);
           jointsToDeleteSet.add(jid);
       }

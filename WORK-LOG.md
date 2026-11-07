@@ -10527,3 +10527,35 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
   - Ran headless Edge using `scripts/live-evidence-416.cjs`, loaded app, enabled debug overlay (`SHOW_DEBUG_OVERLAY = true`, `SHOW_FREEDOM = true`), loaded slanted line `(-5,-5) -> (5,5)` with point `p1 (0,0)` on `L1`.
   - Observed 6 whiskers in DOM: joints `a` and `b` show standard 2-DOF axis whiskers; point `p1` exhibits bi-directional whiskers strictly aligned along the 45° line (`+dir`: `0.02326, 0.02326 -> 0.13956, 0.13956`; `-dir`: `-0.02326, -0.02326 -> -0.13956, -0.13956`).
   - Saved screenshot to `.evidence/416/slanted-line-whiskers.png` (35,794 bytes). Closed browser via CDP `Browser.close` + tree kill. 0 headless browsers left.
+
+
+## TURN 416b — DOF impact corpus measurement & evidence untracking — branch agy1
+- **Part 1 (Stop-condition check & DOF impact measurement):**
+  - **Double-count prevention guard:** Verified and quoted verbatim from `packages/core/constraint-status.js`:
+    ```javascript
+    const isReductionApplied = (c, jid) => reductionApplied.has(jid) && reductionApplied.get(jid).has(c);
+    const applyDecIfNeeded = (c, jid) => {
+        if (!jid) return false;
+        if (isReductionApplied(c, jid)) return false;
+        ...
+        markReductionApplied(c, jid);
+        return true;
+    };
+    ```
+    Any constraint already recorded in the fixed-endpoints branch returns `false` at line 52 and is never double-applied.
+  - **Corpus comparison (448 total sketches evaluated):**
+    - Ran `analyzeConstraintStatus` across `origin/main` vs `agy1` on 448 sketches: every solve in `tests/harness/solver-scenarios.test.js`, solver test fixtures in `packages/core/tests/`, and the 4 required hand-built cases.
+    - 441 of 448 sketches are 100% identical.
+    - Exactly 7 sketches showed differences, all strictly localized to `pointOnLine` constraints on unfixed/floating lines that were previously skipped:
+      1. Hand-built Case 2 (`point on line, free ends`): total DOF 6 -> 5 (`p: d2->d1`).
+      2. Hand-built Case 4 (`rect with midpoint-on-line`): total DOF 5 -> 4 (`mid: d1->d0`).
+      3. `solver-point-on-line-mutual.test.js` (solves #1 & #2): total DOF 3 -> 2 (`V: d2->d1`).
+      4. `solver-point-on-circle.test.js` (solve #1): total DOF 2 -> 1 (`p: d2->d1`).
+      5. `solver-tangent-shapes-form.test.js` (solves #4 & #5): total DOF 20 -> 18 (`j_fillet: d2->d0`).
+    - Hand-built Case 1 (`fixed ends`) and Case 3 (`fixed ends + dim`) both remained `0` (`fully constrained`).
+    - Zero sketches flipped status between fully constrained and under-constrained.
+- **Part 2 (Repo hygiene):**
+  - Removed `.evidence/416/slanted-line-whiskers.png` and `scripts/live-evidence-416.cjs` from git cache via `git rm --cached`.
+  - Added `.evidence/` and `scripts/live-evidence-*.cjs` to `.gitignore`. Committed as `bf26746`.
+  - Re-took live screenshot zoomed in on `p1 (0, 0)` with viewBox `'-1.2 -0.8 2.4 1.6'`; saved locally to `.evidence/416/slanted-line-whiskers.png` (33,927 bytes).
+- **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.

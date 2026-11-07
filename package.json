@@ -10,7 +10,8 @@
     "test": "node scripts/run-tests.js",
     "test:unit": "node scripts/run-tests.js",
     "test:shell": "node scripts/shell-smoke.cjs",
-    "build:inline": "node scripts/build-inline.cjs"
+    "build:inline": "node scripts/build-inline.cjs",
+    "gate": "node scripts/gate.cjs"
   },
   "keywords": [],
   "author": "",

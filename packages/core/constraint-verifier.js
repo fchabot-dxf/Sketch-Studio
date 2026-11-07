@@ -219,6 +219,14 @@ export function measureResidual(c, joints, shapes) {
         }
 
         case CONSTRAINT_TYPES.EQUAL: {
+            // Joint form [a,b,c,d]: | |ab| - |cd| | -- exactly the solver row (definitions.js equal). makeArc and every
+            // fillet emit this form for the arc's centre-to-rim equality; it used to fall through to 0 (never verified).
+            if (c.joints && c.joints.length >= 4) {
+                const a = joints.get(c.joints[0]), b = joints.get(c.joints[1]);
+                const p = joints.get(c.joints[2]), q = joints.get(c.joints[3]);
+                if (!a || !b || !p || !q) return 0;
+                return Math.abs(getDist(a, b) - getDist(p, q));
+            }
             if (!c.shapes || c.shapes.length < 2) return 0;
             const s1 = shapes.find(s => s.id === c.shapes[0]);
             const s2 = shapes.find(s => s.id === c.shapes[1]);

@@ -30,8 +30,10 @@ settings-panel-ui, tuning-wizard, wizard-base, wizard-placement, harness/differe
 `dd302f4^`), `shell-smoke.cjs` **12/12**. Your gate must show the same 9 and 12/12.
 
 **Reference repo is NOT on this machine.** Clone it read-only into the scratchpad (never inside this repo):
-`gh repo clone fchabot-dxf/geometric-CALCULATOR <scratch>/geometric-frame-calc`. Confirm it contains
-`shared/utils/quadFrameCalculator.js` and a Parallelogram calculator; if it does not, STOP and report.
+`gh repo clone fchabot-dxf/triangular-frame-calc <scratch>/geometric-frame-calc` (CORRECTED t399: the
+advisor first named `geometric-CALCULATOR`, an unrelated repo; seat A caught it). It holds `shared/` and one folder
+per shape, incl. `parallelogram-frame-calculator/src/{ParallelogramCalculator.js, components/ParallelogramControlsPanel.js,
+utils/parallelogramMapper.js}`.
 
 Steps (land each COMPLETELY, commit + push each, commit BY PATH: `git commit <paths> -F -`):
 1. **View-fit bug first** (pre-existing): opening the Sketch view in `apps/frame-calc` is over-zoomed; there is no

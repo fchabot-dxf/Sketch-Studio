@@ -10441,3 +10441,19 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
 - **Wrapper (`packages/core/constraint-solver.js`):** untouched — line 103 (`return { ...result, ... }`) already spreads all four fields through unchanged.
 - **Tests (`packages/core/tests/solver-stall-honesty.test.js`):** covers (a) solvable sketch (`stalled === false`, `structuralError < tol`, `stallError`/`dragReached` omitted), (b) over-constrained pinned conflict (`stalled === true`, `stallError > tol`, wrapper pass-through), and (c) pinned point drag (`dragReached === false`, `structuralError ~ 0` on both constraint-pinned free variable and coincident-welded `x0.length === 0` path, plus unconstrained contrast `dragReached === true`). Verified RED before the engine change (all 20/24 positive assertions on the new fields failed against unmodified `engine.js`), GREEN after.
 - **Gate:** 152 test files run one by one — 143 pass, same 9 pre-existing failures (`ai-vision-label-spacing`, `debug-panel`, `debug-whisker-align`, `input-manager-midpoint`, `settings-panel-ui`, `tuning-wizard`, `wizard-base`, `wizard-placement`, `harness/differential-planegcs`), all `solver-*` tests unchanged; `shell-smoke.cjs` 12/12; 0 leftover `sk-shell-smoke` headless Edge processes.
+
+
+## TURN 412 — solver honesty step 2a shadow run (corpus measurement) — branch agy1
+- **Harness (`tests/harness/shadow-converged.test.js`):** Built and committed shadow comparison test wrapping `NewtonSolver.prototype.solve` via preloaded hook across the full corpus of solver tests (`packages/core/tests/*.test.js` + `tests/harness/constraint-conformance.test.js`, `tests/harness/solver-scenarios.test.js`, and `tests/harness/solver-fuzz.test.js` with 160 seeds [150 baseline + 10 extra]). Runs cleanly in ~5.5s with zero persistent scratch files (uses process-isolated hook and cleanup).
+- **Corpus results (5,458 total solves evaluated):**
+  - **Total differences (proposed != current): 143**
+  - **Category (a) Genuine lies today (wrapper=true, maxResidual > tolerance): 0.** Across all 5,458 solves, the verifier override never reports `converged: true` when a constraint is genuinely violated.
+  - **Category (b) Drag-only differences: 134.** Solves where `hasSpring` is true:
+    - 2 in `solver-stall-honesty.test.js` (pinned point drags), 8 in `constraint-conformance.test.js`, 1 in `solver-scenarios.test.js` (Scenario 2 drag), 123 in `solver-fuzz.test.js (seeds 1..160)`.
+    - Every single one (134/134) has `maxResidual <= 0.001` and `structuralError <= 0.001` (well within CAD tolerance), but `structuralError >= tol` (`1e-6`) due to the stiff mouse spring penalty and structural ratio.
+    - Key finding for step 2: requiring `structuralError < tol` (1e-6) for drags would falsely fail 134 valid drag solves. A tolerance of `structuralError <= VERIFIER_TOLERANCE` (0.001) resolves all 134.
+  - **Category (c) False alarms (non-drag, maxResidual <= tolerance, proposed=false): 9.**
+    - All 9 occur in `packages/core/tests/document-roundtrip.test.js` on sketches containing `{ type: 'tangent', shapes: ['s_circle_test', 's_tangent_line_test'] }`.
+    - Cause: `engine.js` line 304 only synthesizes circle-circle tangent from `c.shapes`; for circle-line it expects `c.line && c.circle`, but `ConstraintManager.createConstraint` normalizes to `c.shapes = [circle, line]`. The engine produces `error: NaN` and `converged: false`, but the verifier correctly handles `c.shapes = [circle, line]`, finds residual = 0, and reports `converged: true`.
+    - The proposed rule (`engine.error <= tolerance`) rejects these valid fixtures because `NaN <= tolerance` is false.
+- **Gate:** 153 test files run one by one — 144 pass, same 9 pre-existing failures, new `shadow-converged.test.js` passes in 5.4s; `shell-smoke.cjs` 12/12; 0 leftover `sk-shell-smoke` headless Edge processes.

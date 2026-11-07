@@ -20,6 +20,45 @@
 
 ---
 
+## ▶ CURRENT TASK — TURN 399 — frame-calc SLICE A: calculator REGISTRY + shape picker + Parallelogram + Sketch view-fit
+
+Seat: worker (direct-message wire; report to advisor session `sketch-studio-bb`). Full background: the
+"QUEUED — port the remaining 4 frame-calc shapes" section below (read it; Slice 0 is done at `ee34837`).
+Owner commit `dd302f4` (Fillet/Trim/Break/ShaperHub) landed since; advisor baseline on it: 137 test files,
+**9 pre-existing failures** (ai-vision-label-spacing, debug-panel, debug-whisker-align, input-manager-midpoint,
+settings-panel-ui, tuning-wizard, wizard-base, wizard-placement, harness/differential-planegcs — identical at
+`dd302f4^`), `shell-smoke.cjs` **12/12**. Your gate must show the same 9 and 12/12.
+
+**Reference repo is NOT on this machine.** Clone it read-only into the scratchpad (never inside this repo):
+`gh repo clone fchabot-dxf/geometric-CALCULATOR <scratch>/geometric-frame-calc`. Confirm it contains
+`shared/utils/quadFrameCalculator.js` and a Parallelogram calculator; if it does not, STOP and report.
+
+Steps (land each COMPLETELY, commit + push each, commit BY PATH: `git commit <paths> -F -`):
+1. **View-fit bug first** (pre-existing): opening the Sketch view in `apps/frame-calc` is over-zoomed; there is no
+   fit logic in `apps/frame-calc/src/main.js`. After building the sketch, compute the geometry bounds and set the
+   view to frame it with a margin. Reuse an existing `#core`/`#ui` fit/zoom-extents helper if one exists (grep
+   first); only write a new one if none does, and then put it in the shared layer, not in frame-calc.
+2. **Declared registry**: one module, one ROW per shape — `{ id, label, engine, formFields, mapVertices }` (adjust
+   field names if the code demands, but keep it DATA). Trapezoid becomes row 1; `trapezoid-mapper.js` becomes its
+   `mapVertices`. The calculator view and the sketch path read the ACTIVE row; no `if (shape === ...)` branches.
+3. **Shape picker**: tabs in the frame-calc header following the original app's own shape-tab pattern. Orthogonal to
+   the Calculator/Sketch toggle. The `<title>` / `<h1>` "Frame Calc — Trapezoid" become the active row's label.
+4. **Parallelogram row**: engine is already `#core/frame-geometry.js` (`calculateQuadFrameGeometry`). Port its form
+   fields from the original; joint picker, shell, and dimension mode come for free from Slice 0 — verify they do.
+   `sketch-builder.js` should need NO change; if it does, say why.
+
+DO NOT: touch SketchStudio/Shaper/penplotter code (beyond a shared fit helper if step 1 needs one, additive only) ·
+port Polygon/Triangle/Stud (later slices) · add a legacy/compat path for the old single-shape layout · edit
+WORK-LOG entries other than your own new one.
+STOP and message the advisor if: a displayed saw-gauge/angle/length number changes for the Trapezoid defaults, or
+the Parallelogram engine output disagrees with the original's for the same inputs.
+
+Verify: live in a headless browser — Trapezoid numbers unchanged vs. before (screenshot both), Parallelogram numbers
+match the original app for 2 input sets, Sketch view opens fitted for both shapes; then the gate above. Write the
+WORK-LOG entry "TURN 399", push, message the advisor with the commit range.
+
+---
+
 
 > Read this + the **WORK-LOG.md** tail before starting. Target layout / plan: **ROADMAP.md**.
 > Why the last attempt (`8b7db3d`) was reset: see the WORK-LOG entry for it — it broke the live

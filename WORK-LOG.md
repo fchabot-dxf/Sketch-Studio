@@ -10559,3 +10559,19 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
   - Added `.evidence/` and `scripts/live-evidence-*.cjs` to `.gitignore`. Committed as `bf26746`.
   - Re-took live screenshot zoomed in on `p1 (0, 0)` with viewBox `'-1.2 -0.8 2.4 1.6'`; saved locally to `.evidence/416/slanted-line-whiskers.png` (33,927 bytes).
 - **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.
+
+
+## TURN 416c — Evidence untracking fix & whisker visibility diagnosis — branch agy1
+- **Part 1 (Evidence untracking):**
+  - Unstaged and removed `.evidence/416/slanted-line-whiskers.png` and `scripts/live-evidence-416.cjs` from the git index (`git rm --cached`).
+  - Committed removal as `c683df7` (`chore: remove evidence files from git tracking`).
+  - Pushed to `origin/agy1` (`516f333..c683df7`).
+  - Verified `git ls-tree -r --name-only origin/agy1 | Select-String "evidence"` prints nothing (0 tracked files).
+- **Part 2 (Whisker visibility root-cause diagnosis):**
+  - Investigated why arrows/whiskers are not visible near the point `p1` in `.evidence/416/slanted-line-whiskers.png`:
+    1. **Not arrows:** `packages/ui/svg-renderer.js` lines 644 & 648 renders `<line class="debug-whisker">` elements without arrowheads or marker symbols.
+    2. **Sub-pixel stroke:** `DEBUG_WHISKER_STROKE_PX` defaults to `0.03` px in `packages/core/settings-manager.js:62` and `svg-renderer.js:557`. With `stroke="#9CA3AF"` and `stroke-opacity="0.6"`, a 0.03px stroke contributes under 2% opacity to a single pixel and is imperceptible on screen.
+    3. **Enclosed within joint circle:** In `svg-renderer.js`, `whiskerOffset = scale(2)` (2 screen px) and `whiskerLen = scale(10)` (10 screen px), ending at 12 screen px from joint center. However, `BASE_JOINT_RADIUS = computeBaseJointRadiusFor(JOINT_RADIUS)` where `JOINT_RADIUS` defaults to `4`, yielding a joint circle radius of `4 * 4 = 16` screen px. The whisker line lies entirely within the 16px radius of the opaque white joint circle handle (`fill: var(--sk-joint-fill, white)`).
+    4. **Zoom-invariant occlusion:** Because both `scale(BASE_JOINT_RADIUS)` and `scale(whiskerLen)` use `scale(screenSize) = screenSize * zoom`, zooming scales both identically. In screen space, the joint circle is always 16 px in radius and the whisker is always 10 px long inside it.
+  - Conclusion: In the real app under default settings, whiskers are physically not visible on screen. This is a product finding, not a bug in the 416 DOF analysis.
+- **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.

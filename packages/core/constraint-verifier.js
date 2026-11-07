@@ -219,6 +219,14 @@ export function measureResidual(c, joints, shapes) {
         }
 
         case CONSTRAINT_TYPES.EQUAL: {
+            // Joint form [a,b,c,d]: | |ab| - |cd| | -- exactly the solver row (definitions.js equal). makeArc and every
+            // fillet emit this form for the arc's centre-to-rim equality; it used to fall through to 0 (never verified).
+            if (c.joints && c.joints.length >= 4) {
+                const a = joints.get(c.joints[0]), b = joints.get(c.joints[1]);
+                const p = joints.get(c.joints[2]), q = joints.get(c.joints[3]);
+                if (!a || !b || !p || !q) return 0;
+                return Math.abs(getDist(a, b) - getDist(p, q));
+            }
             if (!c.shapes || c.shapes.length < 2) return 0;
             const s1 = shapes.find(s => s.id === c.shapes[0]);
             const s2 = shapes.find(s => s.id === c.shapes[1]);
@@ -242,25 +250,29 @@ export function measureResidual(c, joints, shapes) {
         }
 
         case CONSTRAINT_TYPES.ANGLE: {
-            if (!c.shapes || c.shapes.length < 2) return 0;
-            const s1 = shapes.find(s => s.id === c.shapes[0]);
-            const s2 = shapes.find(s => s.id === c.shapes[1]);
-            if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line') return 0;
-            const a = joints.get(s1.joints[0]), b = joints.get(s1.joints[1]);
-            const p = joints.get(s2.joints[0]), q = joints.get(s2.joints[1]);
-            if (!a || !b || !p || !q) return 0;
-            const ang1 = Math.atan2(b.y - a.y, b.x - a.x);
-            const ang2 = Math.atan2(q.y - p.y, q.x - p.x);
-            let diff = ang1 - ang2;
-            while (diff <= -Math.PI) diff += 2 * Math.PI;
-            while (diff > Math.PI) diff -= 2 * Math.PI;
-            const target = (c.value || 0) * Math.PI / 180;
-            // Minimum over canonical equivalences (line direction ambiguity)
-            let minErr = Infinity;
-            for (const cand of [target, -target, target + Math.PI, -target + Math.PI, target - Math.PI, -target - Math.PI]) {
-                minErr = Math.min(minErr, Math.abs(diff - cand));
+            // EXACTLY the solver's residual (definitions.js angle): r = cross(u,v)*cos(t) - dot(u,v)*sin(t) = |u||v| sin(theta - t),
+            // theta = signed angle from u to v. It is zero iff theta == t (mod 180 deg) -- the solver accepts the line-direction
+            // ambiguity (t + 180) but NOT -t, which the old verifier also accepted. Reported as an angular error in radians
+            // (min(|d|, pi - |d|) with d = theta - t wrapped to (-pi, pi]) so VERIFIER_TOLERANCE keeps meaning "radians".
+            let a, b, p, q;
+            if (c.joints && c.joints.length >= 4) {
+                a = joints.get(c.joints[0]); b = joints.get(c.joints[1]); p = joints.get(c.joints[2]); q = joints.get(c.joints[3]);
+            } else {
+                if (!c.shapes || c.shapes.length < 2) return 0;
+                const s1 = shapes.find(s => s.id === c.shapes[0]);
+                const s2 = shapes.find(s => s.id === c.shapes[1]);
+                if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line') return 0;
+                a = joints.get(s1.joints[0]); b = joints.get(s1.joints[1]);
+                p = joints.get(s2.joints[0]); q = joints.get(s2.joints[1]);
             }
-            return minErr;
+            if (!a || !b || !p || !q) return 0;
+            const ux = b.x - a.x, uy = b.y - a.y, vx = q.x - p.x, vy = q.y - p.y;
+            if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return 0; // degenerate line: angle undefined
+            const theta = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+            let d = theta - (Number(c.value) || 0) * Math.PI / 180;
+            while (d <= -Math.PI) d += 2 * Math.PI;
+            while (d > Math.PI) d -= 2 * Math.PI;
+            return Math.min(Math.abs(d), Math.PI - Math.abs(d));
         }
 
         case CONSTRAINT_TYPES.MIDPOINT: {

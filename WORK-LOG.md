@@ -10881,3 +10881,26 @@ Per the TURN 418 plan + advisor decisions (Q3 automatic exclusion, Q4 no d=0 pas
     - `shaper-none.png`: Shaper canvas with grid hidden.
     - `shaper-points.png`: Shaper canvas with draft points in cream theme.
     - `penplotter-design-unchanged.png`: Pen Plotter Design canvas confirmed unchanged (`hasPaperSvg: true`, `canvasHasGridPattern: false`, `canvasHasInfiniteGrid: false`).
+
+
+## TURN 423 — Scoped gate leftover-browser check to smoke child PID — branch agy2
+
+- **Problem & Root Cause:**
+  - `scripts/gate.cjs` counted all `msedge.exe` instances matching `*sk-shell-smoke*` on the machine.
+  - A parallel smoke run by another seat caused gate to report `HEADLESS-LEFT 2` and fail (exit 1), despite the local smoke run having exited cleanly.
+
+- **Fix (`scripts/gate.cjs`):**
+  - Read `smokePid = smokeRes.pid` returned by `spawnSync(process.execPath, ['scripts/shell-smoke.cjs'])`.
+  - Filtered `countHeadless()`:
+    - `HEADLESS-LEFT`: counts only `msedge.exe` whose command line contains `*sk-shell-smoke-${smokePid}*`.
+    - `HEADLESS-OTHER`: counts `msedge.exe` whose command line contains `*sk-shell-smoke*` but not `${smokePid}`.
+  - Summary prints `HEADLESS-LEFT <n>` and `HEADLESS-OTHER <n>`.
+  - Gate exit rule checks `headlessLeft === 0`; `headlessOther` is informational and does not fail the gate.
+
+- **Verification & Proofs:**
+  1. **Parallel smoke proof:** Spawned a simulated other-seat headless Edge process with `--user-data-dir=...sk-shell-smoke-999999` and ran `gate.cjs`.
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 9`, exit code 0.
+  2. **Real leak detection proof:** Temporarily made `shell-smoke.cjs` skip `closeBrowser`.
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 17`, `HEADLESS-OTHER 0`, exit code 1 (gate failed as intended). Leaked processes reaped and change reverted.
+  3. **Clean gate run:** `npm run gate`:
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.

@@ -81,10 +81,16 @@ function main() {
   }
 
   // c. Count leftover headless msedge.exe processes matching "sk-shell-smoke"
+  // Scoped to THIS smoke run's profile dir (sk-shell-smoke-<pid>) so parallel runs on other seats don't trip the gate.
+  const smokePid = smokeRes.pid;
   let headlessLeft = 0;
+  let headlessOther = 0;
   const countHeadless = () => {
     try {
-      const psScript = `(Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -like "*sk-shell-smoke*" } | Measure-Object).Count`;
+      const pattern = smokePid ? `*sk-shell-smoke-${smokePid}*` : '*sk-shell-smoke*';
+      const psScript = smokePid
+        ? `$all = Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -like "*sk-shell-smoke*" }; $mine = ($all | Where-Object { $_.CommandLine -like "${pattern}" } | Measure-Object).Count; $other = ($all | Where-Object { $_.CommandLine -notlike "${pattern}" } | Measure-Object).Count; Write-Output "$mine,$other"`
+        : `$count = (Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -like "*sk-shell-smoke*" } | Measure-Object).Count; Write-Output "$count,0"`;
       const psRes = spawnSync('powershell', ['-NoProfile', '-Command', psScript], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
@@ -92,19 +98,27 @@ function main() {
         timeout: 15000,
       });
       if (psRes.stdout) {
-        return parseInt(psRes.stdout.trim(), 10) || 0;
+        const parts = psRes.stdout.trim().split(',');
+        return {
+          left: parseInt(parts[0], 10) || 0,
+          other: parseInt(parts[1], 10) || 0,
+        };
       }
     } catch (_) {}
-    return 0;
+    return { left: 0, other: 0 };
   };
 
-  headlessLeft = countHeadless();
+  let counts = countHeadless();
+  headlessLeft = counts.left;
+  headlessOther = counts.other;
   // Allow Windows process table a brief grace period to finish reaping after taskkill
   if (headlessLeft > 0) {
     const start = Date.now();
     while (Date.now() - start < 3000) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
-      headlessLeft = countHeadless();
+      counts = countHeadless();
+      headlessLeft = counts.left;
+      headlessOther = counts.other;
       if (headlessLeft === 0) break;
     }
   }
@@ -121,6 +135,7 @@ function main() {
   }
   console.log(`SMOKE ${smokeScore}`);
   console.log(`HEADLESS-LEFT ${headlessLeft}`);
+  console.log(`HEADLESS-OTHER ${headlessOther}`);
 
   // Exit rule: exit 0 only if every failure is in KNOWN_FAILURES (subset), smoke is 12/12, headless is 0
   const unknownFailures = failedFiles.filter(f => !KNOWN_FAILURES.includes(f));

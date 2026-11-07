@@ -7,6 +7,7 @@ import { findCornerAtPoint, calculateFilletGeometry, applyFillet } from '#core/f
 import { SNAP } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
+import { showDimInput } from '#ui/input-handlers/dimension-input.js';
 import { showNotification } from '#ui/notification-manager.js';
 
 const OVERLAY_ID = 'fillet-tool-overlay';
@@ -15,6 +16,13 @@ let _ctx = null;
 let _state = null;
 let hoverCorner = null;
 let currentRadius = 5.0; // default mm
+let _lastDim = null;     // radius dimension of the most recent fillet; its (edited) value is the next default
+
+// Adopt the value the user typed into the last fillet's inline input as the new default.
+function syncLastRadius(state) {
+  const c = _lastDim;
+  if (c && typeof c.value === 'number' && c.value > 0 && (state?.constraints || []).includes(c)) currentRadius = c.value;
+}
 
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
@@ -44,6 +52,7 @@ export function setupFilletTool(ctx, state) {
   _ctx = ctx;
   _state = state;
   hoverCorner = null;
+  _lastDim = null;
   setCursor('crosshair');
 
   const unit = getDocUnit();
@@ -79,6 +88,7 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
   const world = screenToWorld(svg, e.clientX, e.clientY);
   const thresh = SNAP.JOINT_PX / scale;
 
+  syncLastRadius(state);
   hoverCorner = findCornerAtPoint(state, world, thresh);
   renderFilletOverlay(svg, hoverCorner, viewState);
 }
@@ -91,6 +101,7 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   const world = screenToWorld(svg, e.clientX, e.clientY);
   const thresh = SNAP.JOINT_PX / scale;
 
+  syncLastRadius(state);
   const hit = findCornerAtPoint(state, world, thresh);
   if (!hit) return false;
 
@@ -107,6 +118,15 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
     const unit = getDocUnit();
     const formatted = formatUnit(res.radius, unit, { unit: true });
     showNotification(`Fillet applied (R = ${formatted})`, 'info');
+
+    // Land on the radius dimension with the input open, pre-filled with the default / last value.
+    // Enter commits (re-solves); Esc keeps the value. The committed value is remembered below.
+    if (res.radiusConstraint) {
+      try {
+        _lastDim = res.radiusConstraint;
+        showDimInput(svg, state, res.radiusConstraint);
+      } catch (_) {}
+    }
     return true;
   }
   return false;

@@ -10508,3 +10508,22 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
 - **Verification:**
   - Baseline run: `GATE files=154 pass=152 fail=2`, `FAIL tests/debug-whisker-align.test.js`, `FAIL tests/harness/differential-planegcs.test.js`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
   - Fail proof: Injected intentional failure into `tests/coords-resize-viewbox.test.js`. Re-ran gate: `GATE files=154 pass=151 fail=3` with `FAIL tests/coords-resize-viewbox.test.js`, exited 1. Reverted change, re-ran gate: exited 0.
+
+
+## TURN 416 — fix DOF whisker alignment for point-on-line & empty gate known list — branch agy1
+- **Part 1 (Gate list update):** Removed `tests/harness/differential-planegcs.test.js` from `scripts/gate.cjs` `KNOWN_FAILURES` after running `npm install` for `@salusoft89/planegcs`. All 9/9 PlaneGCS differential scenarios pass cleanly. Committed as `df0b006`.
+- **Part 2 (Whisker diagnosis & fix):**
+  - **Diagnosis confirmed from code:**
+    1. `tests/debug-whisker-align.test.js:55`: `assert(foundPos && foundNeg, 'Expected bi-directional whiskers aligned with the line (+ and -)')`.
+    2. `packages/ui/svg-renderer.js:639`: bi-directional whiskers along `freedomDir` require `jdof === 1 && freedomDir`.
+    3. `packages/core/constraint-status.js`: lines 416-418 placed `POINT_ON_LINE` target joints into `radialConstraints` and `radialLocked.add(targetId)`. In `svg-renderer.js:569`, `isRadial = radialLocked.has(jid)` caused linear whiskers to be skipped, while the arc whisker path at line 670 found no center/radius anchor and rendered nothing. Furthermore, for non-fixed lines, `POINT_ON_LINE` in Phase 2 BFS was never evaluated (queue was empty), leaving `jdof = 2`.
+  - **Fix (`packages/core/constraint-status.js`):**
+    1. Removed erroneous `radialLocked.add(targetId)` and `radialConstraints.get(targetId).add(...)` from `POINT_ON_LINE` BFS handler.
+    2. Added global `POINT_ON_LINE` pass before Phase 3 ensuring `applyDecIfNeeded(c, targetId)` records the 1 DOF linear reduction into `dofSources` without marking radial lock.
+    3. Emptied `KNOWN_FAILURES` in `scripts/gate.cjs` (`KNOWN_FAILURES = []`).
+- **Gate:**
+  - `npm run gate`: `GATE files=154 pass=154 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
+- **Live Verification:**
+  - Ran headless Edge using `scripts/live-evidence-416.cjs`, loaded app, enabled debug overlay (`SHOW_DEBUG_OVERLAY = true`, `SHOW_FREEDOM = true`), loaded slanted line `(-5,-5) -> (5,5)` with point `p1 (0,0)` on `L1`.
+  - Observed 6 whiskers in DOM: joints `a` and `b` show standard 2-DOF axis whiskers; point `p1` exhibits bi-directional whiskers strictly aligned along the 45° line (`+dir`: `0.02326, 0.02326 -> 0.13956, 0.13956`; `-dir`: `-0.02326, -0.02326 -> -0.13956, -0.13956`).
+  - Saved screenshot to `.evidence/416/slanted-line-whiskers.png` (35,794 bytes). Closed browser via CDP `Browser.close` + tree kill. 0 headless browsers left.

@@ -10575,3 +10575,22 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
     4. **Zoom-invariant occlusion:** Because both `scale(BASE_JOINT_RADIUS)` and `scale(whiskerLen)` use `scale(screenSize) = screenSize * zoom`, zooming scales both identically. In screen space, the joint circle is always 16 px in radius and the whisker is always 10 px long inside it.
   - Conclusion: In the real app under default settings, whiskers are physically not visible on screen. This is a product finding, not a bug in the 416 DOF analysis.
 - **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.
+
+
+## TURN 417 — Shared seat rules (AGENTS.md) & fleet inbox integration — branch agy1
+- **AGENTS.md:** Created at repo root adapted from `D:\APPS\Claude advisor - AGY worker\AGENTS.md`. Kept every rule intact and adapted repo-specific parts:
+  - Gate: `npm run gate` (`scripts/gate.cjs`; exit 0 = green; prints GATE, SMOKE, HEADLESS-LEFT).
+  - WORK-LOG.md at root (union-merged, append entry headed with task id).
+  - Project principles: references `PROJECT PRINCIPLES` in `NEXT-SESSION.md` (no copying).
+  - Worktrees under `D:\APPS\Sketch-Studio-<seat>`.
+  - Mid-task messaging documented via `python D:/APPS/fred-skills/antigravity/fleet-plugin/fleet_hook.py message <task id> <text>` appending to `<repo>/.fleet/inbox.jsonl`.
+  - File size: 3,861 bytes (well within 24 KB cap).
+- **CLAUDE.md:** Created at repo root with the single line `@AGENTS.md`.
+- **.gitignore:** Added `.fleet/` next to `.evidence/`.
+- **Fleet inbox proof:**
+  - Ran `python D:/APPS/fred-skills/antigravity/fleet-plugin/fleet_hook.py message 417 "inbox test"` from worktree `D:\APPS\Sketch-Studio-agy1`.
+  - Result: successfully appended to main checkout's inbox `D:\APPS\Sketch-Studio\.fleet\inbox.jsonl`.
+  - Verbatim line: `{"t": "15:25:49", "event": "message", "seat": "417", "text": "inbox test", "conversation": "80710c7e-539f-405b-98d8-e42a9cc90eab", "cwd": "D:\\APPS\\Sketch-Studio-agy1"}`.
+  - Wrote to main checkout folder `D:\APPS\Sketch-Studio\.fleet/` (resolved via `git rev-parse --git-common-dir`), not worktree folder.
+- **Product code changes:** None.
+- **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.

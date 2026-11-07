@@ -47,7 +47,8 @@ Thumbs.db
 HANDOFF.md
 .proc/
 
-# --- test evidence ---
+# --- test evidence & fleet inbox ---
 .evidence/
+.fleet/
 scripts/live-evidence-*.cjs
 

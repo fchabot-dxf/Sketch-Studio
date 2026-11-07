@@ -10910,3 +10910,24 @@ Two follow-ups to VCARVE-4 (merged ffb49dd):
      - Case B (Reload into explore -> click Vcarve tab first):
        - `#vcarve-region` options = 2, first option `"— pick a loop —"`, second option `"Loop 1 (1600 mm²)"`.
 - **Gate:** `npm run gate` (`scripts/gate.cjs`): `GATE files=154 pass=154 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.
+## TURN 423 — Scoped gate leftover-browser check to smoke child PID — branch agy2
+
+- **Problem & Root Cause:**
+  - `scripts/gate.cjs` counted all `msedge.exe` instances matching `*sk-shell-smoke*` on the machine.
+  - A parallel smoke run by another seat caused gate to report `HEADLESS-LEFT 2` and fail (exit 1), despite the local smoke run having exited cleanly.
+
+- **Fix (`scripts/gate.cjs`):**
+  - Read `smokePid = smokeRes.pid` returned by `spawnSync(process.execPath, ['scripts/shell-smoke.cjs'])`.
+  - Filtered `countHeadless()`:
+    - `HEADLESS-LEFT`: counts only `msedge.exe` whose command line contains `*sk-shell-smoke-${smokePid}*`.
+    - `HEADLESS-OTHER`: counts `msedge.exe` whose command line contains `*sk-shell-smoke*` but not `${smokePid}`.
+  - Summary prints `HEADLESS-LEFT <n>` and `HEADLESS-OTHER <n>`.
+  - Gate exit rule checks `headlessLeft === 0`; `headlessOther` is informational and does not fail the gate.
+
+- **Verification & Proofs:**
+  1. **Parallel smoke proof:** Spawned a simulated other-seat headless Edge process with `--user-data-dir=...sk-shell-smoke-999999` and ran `gate.cjs`.
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 9`, exit code 0.
+  2. **Real leak detection proof:** Temporarily made `shell-smoke.cjs` skip `closeBrowser`.
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 17`, `HEADLESS-OTHER 0`, exit code 1 (gate failed as intended). Leaked processes reaped and change reverted.
+  3. **Clean gate run:** `npm run gate`:
+     - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.

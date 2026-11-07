@@ -51,5 +51,55 @@ import { polyArea } from '#core/loop-geometry.js';
     assert(vcarveContours(null, { dStep: 2, halfAngleTan: 1 }).length === 0, 'null boundary → []');
   }
 
+  // 6. VCARVE-5a: Dumbbell split loop — 2 lobes joined by a thin neck
+  // At d=1 neck is intact (1 contour); at d=2..9 neck closes and splits into 2 independent islands (17 contours total)
+  {
+    const dumbbell = [{x:0,y:0},{x:20,y:0},{x:20,y:8},{x:40,y:8},{x:40,y:0},{x:60,y:0},{x:60,y:20},{x:40,y:20},{x:40,y:12},{x:20,y:12},{x:20,y:20},{x:0,y:20}];
+    const stack = vcarveContours(dumbbell, { dStep: 1, halfAngleTan: 1, maxIters: 200 });
+    assert(stack.length === 17, `dumbbell expected 17 contours, got ${stack.length}`);
+    const depths = stack.map((c) => c.depth);
+    assert(depths[0] === 1, 'first contour at depth 1 (connected neck)');
+    // from depth 2 to 9, each depth has 2 contours (one per lobe)
+    for (let d = 2; d <= 9; d++) {
+      const atD = stack.filter((c) => Math.abs(c.depth - d) < 1e-6);
+      assert(atD.length === 2, `depth ${d} has 2 split contours (one per lobe), got ${atD.length}`);
+    }
+    assert(Math.max(...depths) === 9, 'max depth reached is 9mm');
+  }
+
+  // 7. VCARVE-5a: Waisted pinch — angled neck where polygon-offset failed at d=1.0 producing 1 contour total
+  // Clipper splits into 2 lobes and yields 15 contours down to d=4.0
+  {
+    const waist = [{x:0,y:0},{x:20,y:0},{x:11,y:10},{x:20,y:20},{x:0,y:20},{x:9,y:10}];
+    const stack = vcarveContours(waist, { dStep: 0.5, halfAngleTan: 1, maxIters: 200 });
+    assert(stack.length === 15, `waist expected 15 contours, got ${stack.length}`);
+    assert(stack[0].depth === 0.5, 'first contour at depth 0.5');
+    // from depth 1.0 to 4.0, each depth step has 2 contours
+    for (let i = 2; i <= 8; i++) {
+      const d = i * 0.5;
+      const atD = stack.filter((c) => Math.abs(c.depth - d) < 1e-6);
+      assert(atD.length === 2, `depth ${d} has 2 split contours, got ${atD.length}`);
+    }
+  }
+
+  // 8. VCARVE-5a: Acute-corner fixture (20-degree wedge)
+  // Asserts corner sharpness: analytical apex displacement = d / sin(10°).
+  // Clipper apex vertex must not displace by more than dStep / 2 = 0.25mm.
+  {
+    const L = 50, halfAngle = (10 * Math.PI) / 180;
+    const y = L * Math.tan(halfAngle);
+    const wedge = [{ x: 0, y: 0 }, { x: L, y: -y }, { x: L, y: y }];
+    const stack = vcarveContours(wedge, { dStep: 0.5, halfAngleTan: 1, maxIters: 200 });
+    assert(stack.length === 14, `20° wedge expected 14 contours, got ${stack.length}`);
+    for (let i = 0; i < stack.length; i++) {
+      const d = (i + 1) * 0.5;
+      const wantApexX = d / Math.sin(halfAngle);
+      // find vertex closest to the wedge bisector (y ≈ 0)
+      const apex = stack[i].polygon.reduce((minP, p) => (p.x < minP.x ? p : minP), stack[i].polygon[0]);
+      const diff = Math.abs(apex.x - wantApexX);
+      assert(diff < 0.25, `contour ${i} apex diff ${diff.toFixed(4)}mm must be < dStep/2 (0.25mm)`);
+    }
+  }
+
   console.log('vcarve tests passed ✅');
 })().catch((e) => { console.error('vcarve tests failed ❌', e); process.exit(1); });

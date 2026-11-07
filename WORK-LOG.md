@@ -11072,3 +11072,42 @@ Plan for VCARVE-5a: replacing the simple-loop `#core/polygon-offset.js` inside `
 4. **Consolidation / Two-Engine Debt:**
    - VCARVE-5a will route `vcarve.js` to `#core/plot/clip.js`. `#core/polygon-offset.js` will remain in use solely by `apps/shaper/src/prepare-view.js` (for pocket inset / toolpath visualization).
    - Eventual unification of `prepare-view.js` to Clipper will retire `polygon-offset.js` entirely per ROADMAP.md.
+
+
+## TURN 425 — VCARVE-5a BUILD: V-carve contours that SPLIT via Clipper — branch agy1
+Built VCARVE-5a per the TURN 424 plan and advisor decisions:
+
+1. **REPLACED offset engine in `packages/core/vcarve.js`:**
+   - Deleted import and usage of `#core/polygon-offset.js`.
+   - Imported `{ ClipperLib, CLIP_SCALE }` from `#core/plot/clip.js`.
+   - Single source of truth for V-carve offsetting: `vcarveContours` uses `ClipperOffset(miterLimit = 2, arcTolerance = 0.25 * CLIP_SCALE)` with integer coordinates ($1\text{ µm}$ sub-micron precision).
+   - At each depth step, `co.Execute(sol, -d * CLIP_SCALE)` returns all split islands.
+   - Preserved flat `[{ polygon, depth }, ...]` data contract, depth-ascending ordering, consecutive sibling islands, 200 depth step cap (`maxContours`), and island explosion guard (`out.length >= maxContours * 2`).
+   - Single boundary input only (compound/holes deferred to 5b).
+
+2. **Acute-corner sharpness check (Decision 5):**
+   - Added a 20° acute wedge fixture ($L = 50\text{ mm}$, half-angle $10^\circ$, apex at origin).
+   - Analytical apex displacement along bisector is $x = d / \sin(10^\circ)$.
+   - Measured across all 14 depth steps ($d = 0.5..7.0\text{ mm}$):
+     - At $d = 0.5$: analytical $x = 2.8794\text{ mm}$, Clipper apex $x = 2.8770\text{ mm}$, diff $= 0.0024\text{ mm}$ ($2.4\text{ µm}$).
+     - Max vertex displacement across all 14 depth steps is $0.0026\text{ mm}$ ($2.6\text{ µm}$), which is 96× smaller than the stop threshold of $dStep / 2 = 0.25\text{ mm}$.
+     - Confirmed: Clipper does not blunt acute corners; corner sharpness is fully preserved.
+
+3. **Oracles updated (`tests/shaper-export.test.js`):**
+   - Updated 40×40 exact string oracles (`wantMM` and `wantIN`, lines 274-292) to Clipper's canonical vertex start point (`M 35 35 L 5 35 L 5 5 L 35 5 Z`).
+   - Added code comment and this log entry explaining that Clipper starts at the canonical bottom-right vertex (CW in screen coords), representing the exact same physical cut geometry.
+   - All other existing export tests (including zero-vcarve byte-identity and exclusion tests) remain 100% green and unchanged.
+
+4. **Tests:**
+   - `tests/vcarve.test.js`:
+     - Test 6 (Dumbbell split): 17 contours total across depths 1..9 mm (1 connected pass at $d=1$, 2 contours per depth at $d=2..9$, reaching center ridges at $(10,10)$ and $(50,10)$). Fail-first contrast against old engine which produced collinear self-intersections.
+     - Test 7 (Waisted pinch): 15 contours total across depths 0.5..4 mm (1 connected pass at $d=0.5$, 2 contours per depth at $d=1..4$). Fail-first contrast against old engine which returned `[]` at $d=1.0$ (only 1 contour total).
+     - Test 8 (Acute-corner wedge): 14 contours on 20° wedge, apex displacement diff $< 0.003\text{ mm} \ll dStep / 2$.
+   - `tests/shaper-export.test.js`:
+     - Test 20 (Dumbbell export parity): 17 paths emitted in Shaper SVG, exact path `d` and formatted `shaper:cutDepth` parity with `deriveVcarveContours`.
+
+5. **LIVE (headless Edge, real Shaper app):**
+   - Seeded dumbbell loop into IndexedDB, navigated directly to Vcarve tab, selected the loop.
+   - Inspected preview: `readoutText: '17 contours · max 9.00 mm'`, `polygonCount: 18` (1 outer boundary + 17 concentric depth-shaded contour paths).
+   - Saved screenshot to `.evidence/425/vcarve-dumbbell-preview.png` (re-opened: clearly displays the neck closing and both lobes concentric-carved to their respective centers).
+- **Gate:** `npm run gate` (`scripts/gate.cjs`): `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.

@@ -1,20 +1,19 @@
-// packages/core/vcarve.js — the PURE offset-stack core for V-carving (VCARVE-2, VCARVE-4). No DOM.
+// packages/core/vcarve.js — the PURE offset-stack core for V-carving (VCARVE-2, VCARVE-4, VCARVE-5a). No DOM.
 //
 // vcarveContours(boundary, { dStep, halfAngleTan, maxIters? }) → [{ polygon, depth }]: STACK a closed region's inward
 // offset contours at increasing inset d (d = dStep, 2·dStep, …). At inset d a V-bit cuts to depth d/halfAngleTan so the
-// groove HALF-WIDTH = d just reaches the boundary. `offsetPolygon(boundary, −d)` returns [] precisely when the inset
-// OVER-COLLAPSES (its self-intersection / over-inset guard) — that point is the local MEDIAL AXIS, so the loop
-// terminates there (FINITE; the engine implicitly traces the axis without computing it).
+// groove HALF-WIDTH = d just reaches the boundary.
 //
-// NOTE on engine limitation (Risk 6): offsetPolygon returns [] on ANY thin-neck / self-intersection
-// (polygon-offset.js:127), so the WHOLE stack terminates at the first pinch point across the region.
+// VCARVE-5a: powered by Angus Johnson's Clipper (#core/plot/clip.js). Unlike polygon-offset (which returned [] on thin
+// necks/splits), Clipper splits pinched regions into independent closed rings, allowing each island (letters B, 8, S,
+// dumbbells) to continue insetting until its own local medial axis ridge collapses.
 //
 // PURITY (the S-4a/S-4e split): the HOST computes `boundary` (the loop polygon — `loopPolygon`, which needs the DOM for
 // arcs) and passes it in; this module NEVER touches the DOM.
 //
 // VCARVE-4: deriveVcarveContours is the SINGLE canonical derivation shared between UI preview and machine SVG export.
 
-import { offsetPolygon } from './polygon-offset.js';
+import { ClipperLib, CLIP_SCALE } from './plot/clip.js';
 
 export function vbitHalfAngleTan(angle) {
   const halfAngle = (Number(angle) || 90) / 2;
@@ -27,11 +26,33 @@ export function vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000 
   const step = Number(dStep);
   const tan = Number(halfAngleTan);
   if (!(step > 0) || !(tan > 0)) return out;
+
+  const path = boundary.map((p) => ({
+    X: Math.round((p.x ?? p[0]) * CLIP_SCALE),
+    Y: Math.round((p.y ?? p[1]) * CLIP_SCALE),
+  }));
+  if (path.length > 1) {
+    const a = path[0], b = path[path.length - 1];
+    if (a.X === b.X && a.Y === b.Y) path.pop();
+  }
+  if (path.length < 3) return out;
+  if (!ClipperLib.Clipper.Orientation(path)) path.reverse();
+
+  const co = new ClipperLib.ClipperOffset(2 /* miterLimit */, 0.25 * CLIP_SCALE /* arcTolerance */);
+  co.AddPath(path, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+
   for (let i = 1; i <= maxIters; i++) {
     const d = step * i;
-    const contour = offsetPolygon(boundary, -d);
-    if (!Array.isArray(contour) || contour.length < 3) break; // over-collapse → the local medial axis → STOP
-    out.push({ polygon: contour, depth: d / tan });
+    const sol = new ClipperLib.Paths();
+    co.Execute(sol, -d * CLIP_SCALE);
+    if (!sol.length) break; // every island has reached its local medial axis ridge -> STOP
+    for (let s = 0; s < sol.length; s++) {
+      const ring = sol[s];
+      if (ring.length < 3) continue;
+      const pts = ring.map((pt) => ({ x: pt.X / CLIP_SCALE, y: pt.Y / CLIP_SCALE }));
+      out.push({ polygon: pts, depth: d / tan });
+      if (out.length >= maxIters * 2) return out; // island explosion guard
+    }
   }
   return out;
 }

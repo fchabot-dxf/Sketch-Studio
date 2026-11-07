@@ -413,3 +413,36 @@ export function filletHasCollapsedLine(state, arc) {
   }
   return false;
 }
+
+// ---- two-line pick (Fusion-style): click line 1, click line 2 ----
+
+/** Nearest LINE shape whose segment passes within `tolerance` of `worldPt`, or null. */
+export function findLineAtPoint(state, worldPt, tolerance = 10) {
+  if (!state || !state.joints || !worldPt) return null;
+  let best = null, bestD = tolerance;
+  for (const s of (state.shapes || [])) {
+    if (!s || s.type !== 'line' || !Array.isArray(s.joints) || s.joints.length < 2) continue;
+    const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]);
+    if (!a || !b) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    let t = L2 === 0 ? 0 : ((worldPt.x - a.x) * dx + (worldPt.y - a.y) * dy) / L2;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(worldPt.x - (a.x + t * dx), worldPt.y - (a.y + t * dy));
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best;
+}
+
+/**
+ * The fillet corner formed by exactly these two line shapes (they must meet at a shared/coincident joint and
+ * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
+ */
+export function findCornerBetweenLines(state, lineA, lineB) {
+  if (!state || !lineA || !lineB || lineA.id === lineB.id) return null;
+  for (const jid of lineA.joints) {
+    const corner = findCornerAtJoint(state, jid);
+    if (corner && ((corner.lineA.shape.id === lineA.id && corner.lineB.shape.id === lineB.id) ||
+                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) return corner;
+  }
+  return null;
+}

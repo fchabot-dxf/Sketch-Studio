@@ -1,4 +1,4 @@
-﻿// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MANAGER - Central coordinator
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared UI (#ui/input-manager.js). Relocated from apps/sketchstudio in slice S4f (the cluster ROOT).
@@ -29,6 +29,7 @@ import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
+import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -268,6 +269,7 @@ export function setupInput(svg, state, opts = {}) {
     setupBezierTool(svg, state);
     try { setupBreakTool(svg, state); } catch(_) {}  // TRACE-1
     try { setupTrimTool(svg, state);  } catch(_) {}  // TRACE-1
+    try { setupFilletTool(svg, state); } catch(_) {}
     setupPanZoom(svg, state);
     setupDimensionTool(svg, state);
     setupNumericInput(svg, state);
@@ -697,6 +699,9 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.TRIM:   // TRACE-1
             try { handled = handleTrimPointerDown(e, svg, state, state.view); } catch(_) {}
             break;
+        case TOOL_MODES.FILLET:
+            try { handled = handleFilletPointerDown(e, svg, state, state.view); } catch(_) {}
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -822,6 +827,8 @@ function handlePointerMove(e, svg, state) {
             try { handleBreakPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
         case TOOL_MODES.TRIM:   // TRACE-1
             try { handleTrimPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
+        case TOOL_MODES.FILLET:
+            try { handleFilletPointerMove(e, svg, state, state.view); handled = true; } catch(_) {} break;
         default: handled = handlePanZoomPointerMove(e, svg, state);
     }
     return handled; 
@@ -899,6 +906,8 @@ function handlePointerUp(e, svg, state) {
             try { handleBreakPointerUp(e, svg, state, state.view); } catch(_) {} break;
         case TOOL_MODES.TRIM:   // TRACE-1
             try { handleTrimPointerUp(e, svg, state, state.view); } catch(_) {} break;
+        case TOOL_MODES.FILLET:
+            try { handleFilletPointerUp(e, svg, state, state.view); } catch(_) {} break;
     }
     if (!handled) handled = handlePanZoomPointerUp(e, svg, state);
     // Force-hide magnifier on pointer up to ensure it doesn't persist after drag ends
@@ -1116,6 +1125,9 @@ function setupKeyboardShortcuts(state) {
         if (state.currentTool === TOOL_MODES.BEZIER) {
             try{ if (handleBezierKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
+        if (state.currentTool === TOOL_MODES.FILLET) {
+            try{ if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
+        }
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { state.undo(); e.preventDefault(); }
@@ -1251,7 +1263,24 @@ export function switchToTool(state, toolName) {
 
     // Fallback: set tool directly
     try {
+        if (state.currentTool === TOOL_MODES.TRIM && toolName !== TOOL_MODES.TRIM) {
+            try { resetTrimState(); } catch(_) {}
+        }
+        if (state.currentTool === TOOL_MODES.BREAK && toolName !== TOOL_MODES.BREAK) {
+            try { resetBreakState(); } catch(_) {}
+        }
+        if (state.currentTool === TOOL_MODES.FILLET && toolName !== TOOL_MODES.FILLET) {
+            try { resetFilletState(); } catch(_) {}
+        }
+
         state.currentTool = toolName;
+        if (toolName === TOOL_MODES.TRIM) {
+            try { setupTrimTool(); } catch(_) {}
+        } else if (toolName === TOOL_MODES.BREAK) {
+            try { setupBreakTool(); } catch(_) {}
+        } else if (toolName === TOOL_MODES.FILLET) {
+            try { setupFilletTool(canvasSvg || inputCtx.getCanvasSvg?.(), state); } catch(_) {}
+        }
         // Clear any preview state when switching tools
         try { clearPreview(state); } catch(_) {}
         // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
@@ -1331,6 +1360,7 @@ function handleEscape(state) {
     try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
     try{ resetBreakState(); }catch(_){ }  // TRACE-1
     try{ resetTrimState(); }catch(_){ }   // TRACE-1
+    try{ resetFilletState(); }catch(_){ }
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
 

@@ -231,30 +231,37 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
   let nShape = 0;
   const bump = (tag, reason, n = 1) => { const e = skipped.find((s) => s.tag === tag && s.reason === reason); if (e) e.count += n; else skipped.push({ tag, reason, count: n }); };
   let curCtm = IDENTITY_MATRIX; // the current descriptor's composed CTM (host-threaded); identity = untransformed
+  let curDescId = null;
   // J mints a joint at (x,y) SVG user coords: apply the element's CTM (group + element transforms) THEN the mm
   // scale. Default identity CTM keeps the no-transform path byte-identical with the pre-GRIEVANCE-2 importer.
   const J = (x, y) => { const p = applyMatrix(curCtm, x, y); const id = genJ(); joints.push({ id, x: p.x * scale, y: p.y * scale }); return id; };
   const SID = () => idPrefix + '_s' + (nShape++);
+  const pushShape = (s) => {
+    if (curDescId) s.descId = curDescId;
+    shapes.push(s);
+    return s;
+  };
   // a connected chain of line shapes through fresh joints; closed → also link last→first.
   const polyline = (pts, closed) => {
     if (!pts || pts.length < 2) return;
     const ids = pts.map((p) => J(p.x, p.y));
-    for (let k = 0; k < ids.length - 1; k++) shapes.push({ id: SID(), type: 'line', joints: [ids[k], ids[k + 1]] });
-    if (closed && ids.length > 2) shapes.push({ id: SID(), type: 'line', joints: [ids[ids.length - 1], ids[0]] });
+    for (let k = 0; k < ids.length - 1; k++) pushShape({ id: SID(), type: 'line', joints: [ids[k], ids[k + 1]] });
+    if (closed && ids.length > 2) pushShape({ id: SID(), type: 'line', joints: [ids[ids.length - 1], ids[0]] });
   };
 
   for (const d of (descriptors || [])) {
     if (!d || !d.tag) continue;
     curCtm = d.ctm || IDENTITY_MATRIX; // GRIEVANCE-2: bake the host-composed group/element transform per descriptor
+    curDescId = d.descId || d.sourceId || null;
     switch (d.tag) {
-      case 'line': { const a = J(num(d.x1), num(d.y1)), b = J(num(d.x2), num(d.y2)); shapes.push({ id: SID(), type: 'line', joints: [a, b] }); break; }
+      case 'line': { const a = J(num(d.x1), num(d.y1)), b = J(num(d.x2), num(d.y2)); pushShape({ id: SID(), type: 'line', joints: [a, b] }); break; }
       case 'rect': {
         const x = num(d.x), y = num(d.y), w = num(d.width), h = num(d.height);
         if (d.rx || d.ry) bump('rect', 'rounded corners squared off');
         polyline([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], true);
         break;
       }
-      case 'circle': { const c = J(num(d.cx), num(d.cy)); shapes.push({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale * linearScaleOf(curCtm) }); break; }
+      case 'circle': { const c = J(num(d.cx), num(d.cy)); pushShape({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale * linearScaleOf(curCtm) }); break; }
       case 'polyline': polyline(parsePoints(d.points), false); break;
       case 'polygon': polyline(parsePoints(d.points), true); break;
       case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) polyline(sp.pts, sp.closed); for (const r of sk) bump('path', r.reason, r.count); break; }

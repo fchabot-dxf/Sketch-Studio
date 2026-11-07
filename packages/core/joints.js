@@ -14,14 +14,14 @@ export function removeOrphanJoints(state) {
     const referenced = new Set();
     
     // Collect joints from shapes
-    for (const s of state.shapes) {
+    for (const s of (state.shapes || [])) {
         if (s && s.joints) {
             s.joints.forEach(j => referenced.add(j));
         }
     }
     
     // Collect joints from constraints
-    for (const c of state.constraints) {
+    for (const c of (state.constraints || [])) {
         if (!c) continue;
         
         if (c.joints && Array.isArray(c.joints)) {

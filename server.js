@@ -15,6 +15,27 @@ function mimeType(file){
 
 const server = http.createServer((req, res) => {
   try{
+    // Endpoint for /api/shaper-upload parity with Cloudflare Pages Function
+    if (req.method === 'POST' && ((req.url || '').split('?')[0]) === '/api/shaper-upload') {
+      let bodyStr = '';
+      req.on('data', chunk => { bodyStr += chunk; });
+      req.on('end', async () => {
+        try {
+          const body = JSON.parse(bodyStr);
+          const { uploadToShaperHub } = await import('./packages/core/shaper-cloud.js');
+          const result = await uploadToShaperHub(body);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     // Local-dev parity with the Cloudflare _redirects rule: root → the SketchStudio shell.
     if (((req.url || '/').split('?')[0]) === '/') {
       res.statusCode = 302;

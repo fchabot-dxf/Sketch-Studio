@@ -18,8 +18,8 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
-import { cutPlanEntries } from './cut-plan.js';            // SP1j-4: the shared cut-plan store
-import { CUT_TYPES } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
+import { cutPlanEntries, CUT_PLAN, keyOf } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
@@ -56,24 +56,147 @@ document.getElementById('export').addEventListener('click', () => {
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
-document.getElementById('btn-generate-svg').addEventListener('click', () => {
-  const status = document.getElementById('simexport-status');
+
+function generateShaperSvgPayload() {
   const entries = cutPlanEntries();
-  if (!entries.length) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
+  if (!entries.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
-  // SKETCH-4e: the HOST (has the DOM) computes each loop's boundary polygon for the island containment test; the
-  // serializer stays PURE (never calls the DOM-dependent sampleArc — the S-4a purity rule).
   const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-  // SP1j-3a: groupByCut ON (cleaner files). SKETCH-4e: islands ON (a grouped pocket with a contained loop → evenodd
-  // compound; non-grouped/non-nested plans are unaffected). The datum triangle stays OFF pending a "Drop Datum" toggle.
   const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true, islands: true }, loopPolys });
-  download('shaper-export.svg', svg);
-  if (status) status.textContent = `Exported ${entries.length} cut${entries.length === 1 ? '' : 's'} → shaper-export.svg`;
-});
+  return { svg, entries, state: st };
+}
+
+const btnGenerateSvg = document.getElementById('btn-generate-svg');
+if (btnGenerateSvg) {
+  btnGenerateSvg.addEventListener('click', () => {
+    const status = document.getElementById('simexport-status');
+    const payload = generateShaperSvgPayload();
+    if (!payload) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
+    download('shaper-export.svg', payload.svg);
+    if (status) status.innerHTML = `Exported ${payload.entries.length} cut${payload.entries.length === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
+  });
+}
+
+// Direct ShaperHub cloud sync (Wi-Fi sync to Origin)
+const syncModal = document.getElementById('shaper-sync-modal');
+const syncForm = document.getElementById('sync-modal-form');
+const syncEmail = document.getElementById('sync-email');
+const syncPassword = document.getElementById('sync-password');
+const syncFilename = document.getElementById('sync-filename');
+const syncRemember = document.getElementById('sync-remember');
+const syncStatus = document.getElementById('sync-modal-status');
+const syncCloseBtn = document.getElementById('sync-modal-close');
+const syncCancelBtn = document.getElementById('sync-btn-cancel');
+const syncSubmitBtn = document.getElementById('sync-btn-submit');
+const CRED_STORAGE_KEY = 'shaper_hub_creds';
+
+function closeSyncModal() {
+  if (syncModal && syncModal.open) syncModal.close();
+}
+
+if (syncCloseBtn) syncCloseBtn.addEventListener('click', closeSyncModal);
+if (syncCancelBtn) syncCancelBtn.addEventListener('click', closeSyncModal);
+
+const btnSyncShaper = document.getElementById('btn-sync-shaper');
+if (btnSyncShaper) {
+  btnSyncShaper.addEventListener('click', () => {
+    const status = document.getElementById('simexport-status');
+    const entries = cutPlanEntries();
+    if (!entries.length) {
+      if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.';
+      return;
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(CRED_STORAGE_KEY) || '{}');
+      if (saved.email && syncEmail) syncEmail.value = saved.email;
+      if (saved.password && syncPassword) syncPassword.value = saved.password;
+    } catch (_) {}
+
+    if (syncFilename && !syncFilename.value) {
+      syncFilename.value = 'shaper-export.svg';
+    }
+    if (syncStatus) {
+      syncStatus.className = 'sync-status';
+      syncStatus.textContent = '';
+    }
+    if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+    if (syncModal && typeof syncModal.showModal === 'function') {
+      syncModal.showModal();
+    }
+  });
+}
+
+if (syncForm) {
+  syncForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = generateShaperSvgPayload();
+    if (!payload) {
+      if (syncStatus) {
+        syncStatus.className = 'sync-status is-error';
+        syncStatus.textContent = 'No cuts assigned in Prepare.';
+      }
+      return;
+    }
+    const email = syncEmail ? syncEmail.value.trim() : '';
+    const password = syncPassword ? syncPassword.value : '';
+    let filename = (syncFilename ? syncFilename.value.trim() : '') || 'shaper-export.svg';
+    if (!filename.toLowerCase().endsWith('.svg')) filename += '.svg';
+
+    if (!email || !password) {
+      if (syncStatus) {
+        syncStatus.className = 'sync-status is-error';
+        syncStatus.textContent = 'Please enter both email and password.';
+      }
+      return;
+    }
+
+    if (syncStatus) {
+      syncStatus.className = 'sync-status is-loading';
+      syncStatus.textContent = 'Authenticating with Shaper and uploading...';
+    }
+    if (syncSubmitBtn) syncSubmitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/shaper-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, filename, svg: payload.svg })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Upload failed with status ${res.status}`);
+      }
+
+      if (syncRemember && syncRemember.checked) {
+        try { localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ email, password })); } catch (_) {}
+      } else {
+        try { localStorage.removeItem(CRED_STORAGE_KEY); } catch (_) {}
+      }
+
+      if (syncStatus) {
+        syncStatus.className = 'sync-status is-success';
+        syncStatus.textContent = `✓ Uploaded "${data.filename || filename}" to ShaperHub!`;
+      }
+      const expStatus = document.getElementById('simexport-status');
+      if (expStatus) {
+        expStatus.innerHTML = `✓ Synced <strong>${data.filename || filename}</strong> directly to ShaperHub! It will now appear on your Origin over Wi-Fi.`;
+      }
+      setTimeout(() => {
+        closeSyncModal();
+      }, 1200);
+    } catch (err) {
+      if (syncStatus) {
+        syncStatus.className = 'sync-status is-error';
+        syncStatus.textContent = `Error: ${err.message}`;
+      }
+      if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+    }
+  });
+}
 
 // SKETCH-4d: the GROUP / UNGROUP action (Shaper Design only). Ctrl+G groups the selected shapes (≥2) under a NEW
 // userGroupId; Ctrl+Shift+G ungroups the selection's group(s). Operates on the Design selection (state.selectedShapes);
@@ -126,6 +249,7 @@ const SVG_IMPORT_TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline'
 const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style']); // structural, not dropped geometry
 function svgImportDescriptors(svg) {
   const descs = [], skippedEls = [];
+  let descSeq = 0;
   // GRIEVANCE-2: recurse the tree threading a composed CTM down it, so nested group art (potrace / Illustrator /
   // Inkscape wrap ALL art in one transformed group) imports placed + un-flipped instead of empty. Each element's
   // CTM = the parent CTM composed with its own transform=; leaf descriptors carry it so #core can bake it in.
@@ -137,7 +261,9 @@ function svgImportDescriptors(svg) {
       if (tag === 'g' || tag === 'svg') { walk(el, elCtm); continue; } // groups (and a nested svg) recurse
       if (!SVG_IMPORT_TAGS.has(tag)) { if (tag && !SKIP_SILENT.has(tag)) skippedEls.push('<' + tag + '>'); continue; }
       const a = (n) => el.getAttribute(n);
-      const base = { tag, ctm: elCtm };
+      const descId = 'desc_' + (descSeq++);
+      const cutRecord = extractCutRecord(el, getDocUnit());
+      const base = { tag, ctm: elCtm, descId, cutRecord };
       if (tag === 'line') descs.push({ ...base, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
       else if (tag === 'rect') descs.push({ ...base, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
       else if (tag === 'circle') descs.push({ ...base, cx: a('cx'), cy: a('cy'), r: a('r') });
@@ -163,8 +289,53 @@ function importSvgToSketch(svgText, fileName) {
   activateSketch(st, sk.id);
   for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
   for (const s of shapes) st.shapes.push(s);
+
+  // Connect imported cut metadata to in-memory CUT_PLAN:
+  const cutRecordByDesc = new Map();
+  for (const d of descs) {
+    if (d.descId && d.cutRecord && (d.cutRecord.cutType || (d.cutRecord.cutDepth != null && d.cutRecord.cutDepth !== 'unset'))) {
+      cutRecordByDesc.set(d.descId, d.cutRecord);
+    }
+  }
+
+  let cutsAssigned = 0;
+  if (cutRecordByDesc.size > 0) {
+    const shapeById = new Map((st.shapes || []).map((s) => [s.id, s]));
+    const loops = findLoops(st);
+    const assignedShapeIds = new Set();
+
+    for (const loop of loops) {
+      const loopDescIds = new Set();
+      for (const edgeId of (loop.edges || [])) {
+        const shape = shapeById.get(edgeId);
+        if (shape && shape.descId) loopDescIds.add(shape.descId);
+      }
+      if (loopDescIds.size === 1) {
+        const descId = [...loopDescIds][0];
+        if (cutRecordByDesc.has(descId)) {
+          const rec = cutRecordByDesc.get(descId);
+          CUT_PLAN.set(keyOf('loop', loop.id), { ...rec });
+          for (const edgeId of (loop.edges || [])) assignedShapeIds.add(edgeId);
+          cutsAssigned++;
+        }
+      }
+    }
+
+    for (const s of shapes) {
+      if (assignedShapeIds.has(s.id)) continue;
+      if (s.descId && cutRecordByDesc.has(s.descId)) {
+        const rec = cutRecordByDesc.get(s.descId);
+        if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
+          CUT_PLAN.set(keyOf('edge', s.id), { ...rec, cutType: rec.cutType || 'online' });
+          cutsAssigned++;
+        }
+      }
+    }
+  }
+
   if (infoPanel) infoPanel.refresh();
-  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${label}${assumed ? ' (assumed)' : ''}${skipN ? ` · ${skipN} skipped` : ''}`);
+  const cutsMsg = cutsAssigned ? ` · ${cutsAssigned} cut${cutsAssigned === 1 ? '' : 's'} kept` : '';
+  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${label}${assumed ? ' (assumed)' : ''}${cutsMsg}${skipN ? ` · ${skipN} skipped` : ''}`);
 }
 // The Import ACTION: a button at the TOP of the left side panel (#design-panel-info) + a drag-drop on the Design
 // canvas. Wired in buildDesignUI (after the panel renders). The button sits ABOVE the info panel's content (it's a

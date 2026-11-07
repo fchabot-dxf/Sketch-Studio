@@ -17,6 +17,7 @@
 // No DOM. Pure function on state.joints / state.shapes.
 
 import { getLineIntersection } from './geometry.js';
+import { removeOrphanJoints } from './joints.js';
 
 const EPS = 1e-6; // parameter epsilon (avoid exact endpoints)
 
@@ -85,18 +86,22 @@ export function trimShape(state, shapeId, clickPt) {
     removed.push(shapeId);
 
   } else if (t0 <= EPS) {
-    // Leading interval [0, t1] → move the start joint to t1
+    // Leading interval [0, t1] → truncate start to t1
     const newPt = lerpPt(jA, jB, t1);
-    jA.x = newPt.x;
-    jA.y = newPt.y;
-    added.push(shapeId); // mutated in place
+    const mId = state.genJ?.() ?? ('jtrim_' + Date.now().toString(36) + '_0');
+    state.joints.set(mId, { x: newPt.x, y: newPt.y });
+    target.joints = [mId, bId];
+    removeOrphanJoints(state);
+    added.push(shapeId);
 
   } else if (t1 >= 1 - EPS) {
-    // Trailing interval [t0, 1] → move the end joint to t0
+    // Trailing interval [t0, 1] → truncate end to t0
     const newPt = lerpPt(jA, jB, t0);
-    jB.x = newPt.x;
-    jB.y = newPt.y;
-    added.push(shapeId); // mutated in place
+    const mId = state.genJ?.() ?? ('jtrim_' + Date.now().toString(36) + '_1');
+    state.joints.set(mId, { x: newPt.x, y: newPt.y });
+    target.joints = [aId, mId];
+    removeOrphanJoints(state);
+    added.push(shapeId);
 
   } else {
     // Interior interval [t0, t1]:
@@ -136,11 +141,11 @@ export function trimShape(state, shapeId, clickPt) {
 function segSegParam(jA, jB, jC, jD) {
   const dx1 = jB.x - jA.x, dy1 = jB.y - jA.y;
   const dx2 = jD.x - jC.x, dy2 = jD.y - jC.y;
-  const denom = dy2 * dx1 - dx2 * dy1;
+  const denom = dx1 * dy2 - dy1 * dx2;
   if (Math.abs(denom) < 1e-10) return null; // parallel
 
-  const t = ((jA.x - jC.x) * dy2 - (jA.y - jC.y) * dx2) / denom;
-  const u = ((jA.x - jC.x) * dy1 - (jA.y - jC.y) * dx1) / denom;
+  const t = ((jC.x - jA.x) * dy2 - (jC.y - jA.y) * dx2) / denom;
+  const u = ((jC.x - jA.x) * dy1 - (jC.y - jA.y) * dx1) / denom;
 
   if (t < -EPS || t > 1 + EPS) return null;
   if (u < -EPS || u > 1 + EPS) return null;

@@ -7,6 +7,8 @@
 // If a value is ever wrong for your Origin, fix it HERE — everything reads
 // from this table.
 
+import { parse as parseUnit } from '#core/units.js';
+
 export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 
 // Hex is UPPERCASE to round-trip byte-for-byte with Shaper's own exporter.
@@ -100,7 +102,15 @@ export function applyCutType(el, id) {
 // --- shaper:* namespaced attribute helpers -------------------------------
 
 export function getShaperAttr(el, name) {
-  return el.getAttributeNS(SHAPER_NS, name);
+  if (!el) return null;
+  if (el.getAttributeNS) {
+    const nsVal = el.getAttributeNS(SHAPER_NS, name);
+    if (nsVal != null) return nsVal;
+  }
+  if (el.getAttribute) {
+    return el.getAttribute(`shaper:${name}`) || el.getAttribute(name);
+  }
+  return null;
 }
 
 export function setShaperAttr(el, name, value) {
@@ -118,4 +128,54 @@ export function hasAnyShaperAttr(root) {
     }
   }
   return false;
+}
+
+const CUT_TYPE_ALIASES = {
+  outside: 'exterior',
+  exterior: 'exterior',
+  inside: 'interior',
+  interior: 'interior',
+  pocket: 'pocket',
+  online: 'online',
+  'on-line': 'online',
+  guide: 'guide',
+};
+
+// Extract a cut record from an incoming SVG element (e.g. from Fusion 360 Shaper utility).
+// Numeric fields are parsed to BASE mm per docUnit; unstated toolDia defaults to 1/8" (3.175 mm).
+export function extractCutRecord(el, docUnit = 'mm') {
+  if (!el) return null;
+  const rawType = getShaperAttr(el, 'cutType');
+  let cutType = null;
+  if (rawType) {
+    const normalized = String(rawType).trim().toLowerCase();
+    cutType = CUT_TYPE_ALIASES[normalized] || null;
+  }
+  if (!cutType) {
+    cutType = classify(el);
+  }
+
+  const rawDepth = getShaperAttr(el, 'cutDepth');
+  let cutDepth = 'unset';
+  if (rawDepth != null && String(rawDepth).trim() !== '' && String(rawDepth).trim().toLowerCase() !== 'unset') {
+    const parsed = parseUnit(rawDepth, docUnit);
+    if (parsed != null && Number.isFinite(parsed)) cutDepth = parsed;
+  }
+
+  const rawOffset = getShaperAttr(el, 'cutOffset');
+  let cutOffset = 0;
+  if (rawOffset != null && String(rawOffset).trim() !== '') {
+    const parsed = parseUnit(rawOffset, docUnit);
+    if (parsed != null && Number.isFinite(parsed)) cutOffset = parsed;
+  }
+
+  const rawDia = getShaperAttr(el, 'toolDia');
+  let toolDia = 3.175; // Shaper standard default 1/8" = 3.175 mm
+  if (rawDia != null && String(rawDia).trim() !== '') {
+    const parsed = parseUnit(rawDia, docUnit);
+    if (parsed != null && Number.isFinite(parsed) && parsed > 0) toolDia = parsed;
+  }
+
+  if (!cutType && cutDepth === 'unset' && cutOffset === 0 && !rawDia) return null;
+  return { cutType, cutDepth, cutOffset, toolDia };
 }

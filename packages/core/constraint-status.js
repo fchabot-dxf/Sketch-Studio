@@ -1,6 +1,22 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
 
+function getHVBetweenJoints(j1, j2, constraints) {
+    if (!constraints || !Array.isArray(constraints)) return null;
+    const c1 = getCoincidentJoints(j1, constraints);
+    const c2 = getCoincidentJoints(j2, constraints);
+    for (const c of constraints) {
+        if (!c || !c.joints || c.joints.length < 2) continue;
+        const in1 = c1.has(c.joints[0]) || c1.has(c.joints[1]);
+        const in2 = c2.has(c.joints[0]) || c2.has(c.joints[1]);
+        if (in1 && in2) {
+            if (c.type === CONSTRAINT_TYPES.HORIZONTAL || c.type === 'horizontal') return 'horizontal';
+            if (c.type === CONSTRAINT_TYPES.VERTICAL || c.type === 'vertical') return 'vertical';
+        }
+    }
+    return null;
+}
+
 export function analyzeConstraintStatus({ joints, shapes, constraints }) {
     // 1. Data Structures
     const jointDOFs = new Map(); // Default 2
@@ -253,9 +269,18 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                                     if (!dofSources.has(nId)) dofSources.set(nId, []);
                                     dofSources.get(nId).push(`anchor:${currentId}`);
                                 } catch(_) {}
-                                if (applyDecIfNeeded(c, nId)) {
+                                const hv = getHVBetweenJoints(currentId, nId, constraints);
+                                let axisLockAdded = false;
+                                if (hv === 'vertical' && lockedAxisY.has(currentId) && !lockedAxisY.has(nId)) {
+                                    lockedAxisY.add(nId);
+                                    axisLockAdded = true;
+                                } else if (hv === 'horizontal' && lockedAxisX.has(currentId) && !lockedAxisX.has(nId)) {
+                                    lockedAxisX.add(nId);
+                                    axisLockAdded = true;
+                                }
+                                if (applyDecIfNeeded(c, nId) || axisLockAdded) {
                                     constrainedJoints.add(nId);
-                                    if (!visitedInQueue.has(nId)) { processingQueue.push(nId); visitedInQueue.add(nId); }
+                                    if (axisLockAdded || !visitedInQueue.has(nId)) { processingQueue.push(nId); visitedInQueue.add(nId); }
                                 }
                             }
                         }
@@ -278,7 +303,16 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                                     if (!dofSources.has(nId)) dofSources.set(nId, []);
                                     dofSources.get(nId).push(`anchor:${centerId}`);
                                 } catch(_) {}
-                                if (applyDecIfNeeded(c, nId)) {
+                                const hv = getHVBetweenJoints(currentId, nId, constraints);
+                                let axisLockAdded = false;
+                                if (hv === 'vertical' && lockedAxisY.has(currentId) && !lockedAxisY.has(nId)) {
+                                    lockedAxisY.add(nId);
+                                    axisLockAdded = true;
+                                } else if (hv === 'horizontal' && lockedAxisX.has(currentId) && !lockedAxisX.has(nId)) {
+                                    lockedAxisX.add(nId);
+                                    axisLockAdded = true;
+                                }
+                                if (applyDecIfNeeded(c, nId) || axisLockAdded) {
                                     constrainedJoints.add(nId);
                                     if (!visitedInQueue.has(nId)) { processingQueue.push(nId); visitedInQueue.add(nId); }
                                 }
@@ -509,6 +543,15 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                 radialConstraints.get(a).add(srcId);
                 radialConstraints.get(b).add(srcId);
                 radialLocked.add(a); radialLocked.add(b);
+
+                const hv = getHVBetweenJoints(a, b, constraints);
+                if (hv === 'vertical') {
+                    if (lockedAxisY.has(a)) lockedAxisY.add(b);
+                    if (lockedAxisY.has(b)) lockedAxisY.add(a);
+                } else if (hv === 'horizontal') {
+                    if (lockedAxisX.has(a)) lockedAxisX.add(b);
+                    if (lockedAxisX.has(b)) lockedAxisX.add(a);
+                }
             }
         }
     }

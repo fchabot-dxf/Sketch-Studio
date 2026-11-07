@@ -6,6 +6,9 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { exportToFile } from './export-manager.js';
 
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
+import { setupTrimTool, resetTrimState } from '#ui/input-handlers/trim-tool.js';
+import { setupBreakTool, resetBreakState } from '#ui/input-handlers/break-tool.js';
+import { setupFilletTool, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { draw } from '#ui/svg-renderer.js';
@@ -19,8 +22,12 @@ export function setupUI(state){
   
   function setTool(t){ 
   dbg.log('app', 'Setting tool to:', t); // Debug log
-  // If we're switching away from the Line tool, run its deactivation cleanup
+  // If we're switching away from active tools, run cleanup
   try{ if(state.currentTool === TOOL_MODES.LINE && t !== TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
+  try{ if(state.currentTool === TOOL_MODES.TRIM && t !== TOOL_MODES.TRIM) resetTrimState(); }catch(_){ }
+  try{ if(state.currentTool === TOOL_MODES.BREAK && t !== TOOL_MODES.BREAK) resetBreakState(); }catch(_){ }
+  try{ if(state.currentTool === TOOL_MODES.FILLET && t !== TOOL_MODES.FILLET) resetFilletState(); }catch(_){ }
+
   state.currentTool = t; 
   state.active = null; // clear any in-progress action
     // Clear hover feedback and any rubber-band preview when switching tools
@@ -28,6 +35,10 @@ export function setupUI(state){
     // Request polyline reset; input handler will clear internal continuation state
     if(typeof state.resetPolyline === 'function') state.resetPolyline();
     state._clearPolylineRequest = true;
+
+    if (t === TOOL_MODES.TRIM) { try { setupTrimTool(); } catch(_) {} }
+    else if (t === TOOL_MODES.BREAK) { try { setupBreakTool(); } catch(_) {} }
+    else if (t === TOOL_MODES.FILLET) { try { setupFilletTool(document.getElementById('svgCanvas') || document.querySelector('svg'), state); } catch(_) {} }
     
     // S7c-2d: the shared tool ribbon owns the active highlight now — sync it to state.currentTool. Load-bearing:
     // setTool is called from OUTSIDE the ribbon (the auto-SELECT after clear/escape), and the render loop also

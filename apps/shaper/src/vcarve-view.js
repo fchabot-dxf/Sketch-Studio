@@ -5,10 +5,9 @@
 
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js';
-import { vcarveContours } from '#core/vcarve.js';
-import { VBIT_PRESETS, vbitHalfAngleTan } from './shaper.js';
+import { deriveVcarveContours } from '#core/vcarve.js';
+import { VBIT_PRESETS } from './shaper.js';
 
-const MAX_CONTOURS = 200; // perf cap on the stack size
 
 export function mountVcarveView(state) {
   const els = {
@@ -55,9 +54,7 @@ export function mountVcarveView(state) {
     if (!loop) { els.canvas.innerHTML = ''; els.readout.textContent = 'Pick a region to preview.'; return; }
     const boundary = loopPolygon(loop, state, shapeById());
     if (!boundary || boundary.length < 3) { els.canvas.innerHTML = ''; els.readout.textContent = 'Region has no boundary.'; return; }
-    const tan = vbitHalfAngleTan(r.vbit.angle);
-    const maxIters = Math.max(1, Math.min(MAX_CONTOURS, Math.floor((r.maxDepth * tan) / r.dStep)));
-    const contours = vcarveContours(boundary, { dStep: r.dStep, halfAngleTan: tan, maxIters });
+    const contours = deriveVcarveContours(boundary, r);
     render(els.canvas, boundary, contours, r.maxDepth);
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
     els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;

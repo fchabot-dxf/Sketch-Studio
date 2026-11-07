@@ -1,6 +1,7 @@
-import { exportShaperSVG, loopToPathD } from '#core/shaper-export.js';
+import { exportShaperSVG, loopToPathD, polyToPathD } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js'; // SKETCH-4e: island fixtures
+import { deriveVcarveContours } from '#core/vcarve.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -246,6 +247,104 @@ import { loopPolygon, polyArea } from '#core/loop-geometry.js'; // SKETCH-4e: is
       const state = islandState(INNER_IN, false); const { outer, inner } = byArea(state);
       const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }, { target: { kind: 'loop', id: inner }, rec: { cutType: 'interior' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
       assert((svg.match(/<path /g) || []).length === 2 && !/fill-rule="evenodd"/.test(svg), 'inner assigned + ungrouped → both emitted, no merge');
+    }
+  }
+
+  // ── VCARVE-4: V-carve cut-path export ──
+  // 14. 40×40 square loop, 90° V-bit, dStep 5, maxDepth 15 → 3 online paths at depths 5mm, 10mm, 15mm
+  {
+    const sqState = () => ({
+      joints: new Map([['A', { x: 0, y: 0 }], ['B', { x: 40, y: 0 }], ['C', { x: 40, y: 40 }], ['D', { x: 0, y: 40 }]]),
+      constraints: [],
+      shapes: [
+        { id: 'AB', type: 'line', joints: ['A', 'B'] }, { id: 'BC', type: 'line', joints: ['B', 'C'] },
+        { id: 'CD', type: 'line', joints: ['C', 'D'] }, { id: 'DA', type: 'line', joints: ['D', 'A'] },
+      ],
+    });
+    const state = sqState();
+    const loop = findLoops(state)[0];
+    state.vcarves = [
+      { id: 'vc1', region: loop.id, vbit: { angle: 90 }, dStep: 5, maxDepth: 15 }
+    ];
+    const loopPolys = {
+      [loop.id]: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }]
+    };
+    const svgMM = exportShaperSVG({ state, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys });
+    const wantMM = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
+      '  <path d="M 5 5 L 35 5 L 35 35 L 5 35 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5mm"/>',
+      '  <path d="M 10 10 L 30 10 L 30 30 L 10 30 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10mm"/>',
+      '  <path d="M 15 15 L 25 15 L 25 25 L 15 25 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15mm"/>',
+      '</svg>',
+    ].join('\n');
+    eq(svgMM, wantMM, 'vcarve export mm exact string');
+
+    // 15. Exact-string oracle in inches
+    const svgIN = exportShaperSVG({ state, entries: [], encoding: ENC5, docUnit: 'in', loopPolys });
+    const wantIN = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
+      '  <path d="M 5 5 L 35 5 L 35 35 L 5 35 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.1969in"/>',
+      '  <path d="M 10 10 L 30 10 L 30 30 L 10 30 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.3937in"/>',
+      '  <path d="M 15 15 L 25 15 L 25 25 L 15 25 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.5906in"/>',
+      '</svg>',
+    ].join('\n');
+    eq(svgIN, wantIN, 'vcarve export in exact string');
+
+    // 16. Automatic exclusion: loop with vcarve record is excluded from standard cut assignment
+    const svgExcl = exportShaperSVG({
+      state,
+      entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }],
+      encoding: ENC5,
+      docUnit: 'mm',
+      loopPolys
+    });
+    assert(!svgExcl.includes('shaper:cutType="outside"'), 'loop in vcarves is excluded from standard cut assignment');
+    assert((svgExcl.match(/shaper:cutType="online"/g) || []).length === 3, 'vcarve online cuts emitted instead');
+
+    // 17. Preview-vs-export parity: same contour count and coordinates
+    const previewContours = deriveVcarveContours(loopPolys[loop.id], state.vcarves[0]);
+    const exportedPaths = [...svgMM.matchAll(/<path d="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => ({
+      d: m[1],
+      depth: m[2],
+    }));
+    eq(exportedPaths.length, previewContours.length, 'preview vs export contour count parity');
+    for (let i = 0; i < previewContours.length; i++) {
+      const wantD = polyToPathD(previewContours[i].polygon);
+      eq(exportedPaths[i].d, wantD, `contour ${i} path d matches preview polygon`);
+      eq(exportedPaths[i].depth, `${previewContours[i].depth}mm`, `contour ${i} depth matches preview`);
+    }
+
+    // 18. Parity on non-trivial triangle with 60° bit
+    const triBoundary = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 30, y: 50 }];
+    const triRec = { id: 'vcTri', region: 'triLoop', vbit: { angle: 60 }, dStep: 4, maxDepth: 12 };
+    const triState = {
+      joints: new Map([['T1', { x: 0, y: 0 }], ['T2', { x: 60, y: 0 }], ['T3', { x: 30, y: 50 }]]),
+      shapes: [
+        { id: 't1', type: 'line', joints: ['T1', 'T2'] },
+        { id: 't2', type: 'line', joints: ['T2', 'T3'] },
+        { id: 't3', type: 'line', joints: ['T3', 'T1'] },
+      ],
+      constraints: [],
+      vcarves: [triRec],
+    };
+    const triLoopPolys = { triLoop: triBoundary };
+    const triSVG = exportShaperSVG({ state: triState, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys: triLoopPolys });
+    const triPreview = deriveVcarveContours(triBoundary, triRec);
+    const triExported = [...triSVG.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
+    eq(triExported.length, triPreview.length, 'tri preview vs export contour count parity');
+    for (let i = 0; i < triPreview.length; i++) {
+      eq(triExported[i], polyToPathD(triPreview[i].polygon), `tri contour ${i} path matches preview`);
+    }
+    // 19. Gating: zero vcarves (missing / [] / vcarve with no matching loop) → output BYTE-IDENTICAL to a no-vcarve state
+    {
+      const base = rectState();
+      const bl = findLoops(base)[0];
+      const entries = [{ target: { kind: 'loop', id: bl.id }, rec: { cutType: 'exterior', cutDepth: 6.35, toolDia: 3.175 } }];
+      const none = exportShaperSVG({ state: base, entries, encoding: ENC5, docUnit: 'mm' });
+      const emptyArr = exportShaperSVG({ state: { ...rectState(), vcarves: [] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
+      const orphan = exportShaperSVG({ state: { ...rectState(), vcarves: [{ id: 'v', region: 'loop_GONE', vbit: { angle: 90 }, dStep: 1, maxDepth: 5 }] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
+      eq(emptyArr, none, 'vcarves: [] → byte-identical');
+      eq(orphan, none, 'vcarve with no matching loop polygon → byte-identical');
     }
   }
 

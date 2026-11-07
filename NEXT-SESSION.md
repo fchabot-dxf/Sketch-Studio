@@ -22,7 +22,47 @@
 
 RETIRED t400 by owner ruling, see WORK-LOG TURN 400 (Frame Calc removed from Sketch-Studio).
 
-## ▶ CURRENT TASK (LANE B, parallel) — TURN 399b — Fillet lands on a live RADIUS dimension (owner-reported)
+## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410; workers move to ANTIGRAVITY
+
+**Owner ruling:** worker seats run on Antigravity by default; Claude workers only when the owner asks. The setup and the
+task-prompt template are in `fred-skills/antigravity/README.md`. The advisor needs a session started after the MCP
+registration, so the antigravity tools are loaded. Every write dispatch goes in its own worktree.
+
+**Landed on main today (all gated: 151 files, the 9 pre-existing failures listed below, shell-smoke 12/12; live on sketch-studio.pages.dev):**
+- Fillet, now Fusion-style: a live driving radius dim; two-line pick, then the radius input with a live preview at every
+  step; no clamp (only the zero-length R is refused); a virtual-sharp corner V keeps the overall dims (Fusion parity);
+  deleting the arc leaves the gap open, and V plus its dims survive deleting both lines (Fusion parity).
+- Solver: shared-endpoint tangent residual; opt-in `mutual` pointOnLine; H/V dims drive their projection (dimSign
+  lock); the equal Jacobian accumulates (filleted rects and every arc drag again).
+- Verifier = solver: line-line distance, equal joint form, signed angle, branch-locked perpendicular, parallel
+  zero-length guard, plus a guard test that every Definitions key has a verifier case.
+- Delete: neighbours sharing a joint survive. shell-smoke closes its browser (no more leaked Edge). Frame Calc removed.
+- Owner commit 5bffb68: Dim with a pre-selected line, plus filleted-rect rigidity status. Gated but NOT advisor-reviewed in depth.
+
+**Open, in priority order:**
+1. **Solver stall honesty** (engine.js:694 reports converged on a stalled/rejected LM step). Seat A's plan, ready to build:
+   - Step 1, additive: return `stalled`, `stallError`, `structuralError`, `dragReached`; `converged` unchanged.
+   - Step 2: flip `converged` for non-drag stalls (finalError ≤ VERIFIER_TOLERANCE) and for drag (structural residual
+     < tol), only after a shadow run over the whole suite shows ZERO wrapper-level differences.
+   - Step 3: gate, plus the live drag repro.
+   - Step 4, a separate commit: accept `xCand` only when cost decreased.
+   - DO-NOT: touch the wrapper override (constraint-solver.js:84) or the tolerances; make drag `converged` false
+     because the spring target wasn't reached; rename fields.
+   - Measured: through the wrapper, 0 of 6302 suite solves leak a false converged=true. The risk is the raw flag plus
+     verifier blind spots.
+2. **Owner decision pending:** should fillet join two NON-touching lines (Fusion extends/trims them to meet)? Today ours
+   says "Lines must meet at a corner to fillet".
+3. **The 9 pre-existing test failures** (ai-vision-label-spacing, debug-panel, debug-whisker-align, input-manager-midpoint,
+   settings-panel-ui, tuning-wizard, wizard-base, wizard-placement, harness/differential-planegcs, which is missing a
+   dependency). They're harmless but they hide new reds. Offered to the owner; not dispatched.
+4. A shapes-based `equal` on two lines sharing one joint dedups to 3 joints and becomes a silent no-op row (engine.js:367).
+   Known latent bug, not ticketed.
+
+**Fusion probes** (live, via the fusion360 MCP): Fusion keeps the sharp corner as a point with two coincident-to-curve
+constraints and keeps the dims on it; deleting the arc leaves the gap open; an oversized R overshoots the lines; the
+fillet button adds a radius dim. The owner's rule: report every divergence from Fusion; the owner decides.
+
+## (DONE) TURN 399b — Fillet lands on a live RADIUS dimension (owner-reported) — merged 18717d7
 
 Seat: worker B, worktree `D:\APPS\Sketch-Studio-fillet`, branch `fillet-dim`. Run EVERY git command from that
 worktree (`cd /d/APPS/Sketch-Studio-fillet && ...`); never run git in `D:\APPS\Sketch-Studio`. Advisor merges.

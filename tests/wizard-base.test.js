@@ -14,6 +14,15 @@
   assert(css.indexOf('display: block') !== -1, 'display should be applied when provided');
 
   // Test createWizardPanel factory
+  global.document = {
+    createElement: (tag) => ({
+      tagName: tag.toUpperCase(),
+      id: '',
+      style: { cssText: '' },
+      appendChild: () => {}
+    }),
+    body: { appendChild: () => {} }
+  };
   const created = await import('../apps/sketchstudio/ui/wizard-base.js');
   const { createWizardPanel } = created;
   const { panel: p2, header, closeBtn } = createWizardPanel({ id: 'x-test', title: 'Hello', closeId: 'x-close', width: 220, position: { bottom: '10px', right: '10px' }, padding: 8, display: 'block', center: false });

@@ -18,19 +18,26 @@
   joints.set('j1', { x: 100, y: 50 });
   const svg = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } }, getBoundingClientRect: () => ({ width: 800, height: 600 }), innerHTML: '' };
 
+  const extractLabelY = (html) => Array.from(html.matchAll(/<text\b[^>]*\bclass="debug-joint-label"[^>]*>/g))
+    .map(m => {
+      const ym = m[0].match(/\by="([\d\.\-]+)"/);
+      return ym ? parseFloat(ym[1]) : NaN;
+    }).filter(Number.isFinite);
+
   // Case A: AI_VISION = false -> default spacing
   SettingsManager.set('AI_VISION', false);
   draw(joints, [], svg, null, null, [], new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
   const outA = svg.innerHTML;
-  const matchesA = Array.from(outA.matchAll(/<text[^>]*class="debug-joint-label"[^>]*y="([\d\.\-]+)"/g)).map(m => parseFloat(m[1]));
+  const matchesA = extractLabelY(outA);
   assert(matchesA.length >= 1, 'Expected label text lines at AI_VISION=false');
 
   // Case B: AI_VISION = true -> tighter spacing; the vertical gap between lines should reduce
   SettingsManager.set('AI_VISION', true);
   svg.innerHTML = '';
+  svg._lastMarkup = null;
   draw(joints, [], svg, null, null, [], new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
   const outB = svg.innerHTML;
-  const matchesB = Array.from(outB.matchAll(/<text[^>]*class="debug-joint-label"[^>]*y="([\d\.\-]+)"/g)).map(m => parseFloat(m[1]));
+  const matchesB = extractLabelY(outB);
   assert(matchesB.length >= 1, 'Expected label text lines at AI_VISION=true');
 
   // If we have at least two lines, confirm spacing is tighter (or equal) under AI_VISION

@@ -7,14 +7,14 @@
     // Setup minimal state
     const state = { joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, selectedShapes: new Set(), selectedJoints: new Set() };
     // Line
-    state.joints.set('a', { x: 0, y: 0 }); state.joints.set('b', { x: 10, y: 0 }); state.shapes.push({ id: 'L1', type: 'line', joints: ['a','b'] });
+    state.joints.set('a', { x: 0, y: 0 }); state.joints.set('b', { x: 100, y: 0 }); state.shapes.push({ id: 'L1', type: 'line', joints: ['a','b'] });
     // free point joint
-    state.joints.set('pt', { x: 5, y: 10 });
+    state.joints.set('pt', { x: 50, y: 50 });
 
     state.currentTool = TOOL_MODES.MIDPOINT;
     // First click on line
-    state.snapTarget = { type: 'line', shape: state.shapes[0], pt: { x: 5, y: 0 }, isLocked: true, targetId: 'L1' };
-    const svg = { setPointerCapture: () => {}, releasePointerCapture: () => {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), viewBox: { baseVal: { width: 100, height: 100 } } };
+    state.snapTarget = { type: 'line', shape: state.shapes[0], pt: { x: 50, y: 0 }, isLocked: true, targetId: 'L1' };
+    const svg = { setPointerCapture: () => {}, releasePointerCapture: () => {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), viewBox: { baseVal: { x: 0, y: 0, width: 100, height: 100 } } };
     const { worldToScreen } = await import('../packages/ui/coords.js');
     let e = { clientX: worldToScreen(svg, state.snapTarget.pt).x, clientY: worldToScreen(svg, state.snapTarget.pt).y, pointerId: 1, pointerType: 'mouse', button: 0, preventDefault: () => {} };
     handlePointerDown(e, svg, state);

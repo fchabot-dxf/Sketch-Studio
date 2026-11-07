@@ -10594,3 +10594,172 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
   - Wrote to main checkout folder `D:\APPS\Sketch-Studio\.fleet/` (resolved via `git rev-parse --git-common-dir`), not worktree folder.
 - **Product code changes:** None.
 - **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.
+
+
+## TURN 418 (VCARVE-4 PLAN) — V-carve cut-path SVG export design — branch agy1
+
+### Context & References
+- **Ground truth:** Shaper V-carve tab is live in `apps/shaper` (`VCARVE-3a 1c4554b`, `VCARVE-3b e59a6b1`). State carries declared `state.vcarves = [{ id, region, vbit: { angle }, dStep, maxDepth }]` with undo/redo (`packages/core/document.js:45-46, 97-99`, `packages/ui/sketch-state.js:61-62, 84, 161`).
+- **Core offset stack:** `packages/core/vcarve.js:15-28` (`vcarveContours` using `offsetPolygon(boundary, -d)`).
+- **V-bit presets & angle math:** `apps/shaper/src/shaper.js:34-35` (`VBIT_PRESETS`, `vbitHalfAngleTan(angle) = Math.tan((angle/2) * Math.PI / 180)`).
+- **Shaper serializer:** `packages/core/shaper-export.js:1-248` (`exportShaperSVG`, pure, no DOM, host-passed `loopPolys`).
+- **Exact-string tests:** `tests/shaper-export.test.js:1-253` (SP1j-1, SP1j-2, SP1j-3, SKETCH-4e).
+
+---
+
+### 1. THE FORMAT: Shaper Cut Type & Per-Path Cut Depth
+- **Namespace:**
+  - `xmlns:shaper="http://www.shapertools.com/namespaces/shaper"` declared on the root `<svg>` (`packages/core/shaper-export.js:22, 246`).
+  - Standard SVG namespace: `xmlns="http://www.w3.org/2000/svg"` (`packages/core/shaper-export.js:21`).
+- **Cut type attribute & color encoding:**
+  - Attribute: `shaper:cutType="online"` (`packages/core/shaper-export.js:119`).
+  - Color encoding: `fill="none"` and `stroke="#7F7F7F"` (`apps/shaper/src/shaper.js:28`, `packages/core/shaper-export.js:112-115`).
+  - Semantics: In Shaper Origin, `online` centers the tool path directly on the vector line (`apps/shaper/src/shaper.js:28`: `desc: 'Center the cut on the path'`).
+- **Per-path cut depth attribute & units:**
+  - Attribute: `shaper:cutDepth="<value><unit>"` (`packages/core/shaper-export.js:120-121`).
+  - Suffix formatting: `format(dep, docUnit, { unit: true })` via `packages/core/units.js:43-55`.
+  - For `docUnit === 'mm'`: e.g. `shaper:cutDepth="5mm"`, `shaper:cutDepth="10mm"`.
+  - For `docUnit === 'in'`: e.g. `shaper:cutDepth="0.1969in"`, `shaper:cutDepth="0.3937in"`.
+  - Stored values live in base mm (1 world unit = 1 mm, `packages/core/units.js:13`).
+- **Geometry & viewBox coordinates:**
+  - Coordinate data in `d="M ... L ... Z"`, `width`, `height`, and `viewBox` are mm-canonical world units, unscaled by `docUnit` (`packages/core/shaper-export.js:11-12, 58-66`).
+- **Tool diameter attribute:**
+  - For standard cuts, `shaper:toolDia` is emitted (`packages/core/shaper-export.js:124-125`).
+  - For V-carve contours, `toolDia` is omitted (`WORK-LOG.md:6059-6060`: "`toolDia` OMITTED for vcarve (a V-bit's Ø varies with depth)").
+- **Verification status: VERIFIED.**
+  - Confirmed by actual Shaper sample files in repository:
+    `apps/shaper/samples/Untitled-2.svg:11`:
+    `<path ... stroke="#7F7F7F" fill="none" stroke-width="0.1" ... shaper:cutType="online" shaper:cutDepth="0.125 in" shaper:cutOffset="0.200 in" shaper:toolDia="0.250 in" ... />`
+    and `apps/shaper/samples/Untitled-2.svg:20`:
+    `<path ... stroke="#7F7F7F" fill="none" stroke-width="0.1" ... shaper:cutType="online" shaper:cutDepth="0.394 in" shaper:cutOffset="0in" shaper:toolDia="0.125in" ... />`
+  - Confirmed by parser: `apps/shaper/src/shaper.js:158-164` reading `getShaperAttr(el, 'cutDepth')`.
+  - Confirmed by unit tests: `tests/shaper-export.test.js:108-109, 118-121`.
+
+---
+
+### 2. THE MATH: Inset, Depth, Clamping & Termination
+- **Parameters:**
+  - `boundary`: ordered points of the region loop in base mm (`[{x, y}, ...]`).
+  - `angle`: V-bit included angle in degrees from `vbit.angle` (`apps/shaper/src/shaper.js:34`, 90°, 60°, 45°, 30°, 20°).
+  - `halfAngleTan`: $\tan(\text{angle}/2 \cdot \pi / 180)$ (`apps/shaper/src/shaper.js:35`).
+    - 90° bit: $\tan(45^\circ) = 1.0$ (1:1 depth to inset).
+    - 60° bit: $\tan(30^\circ) \approx 0.57735$ ($\approx 1.732\times$ depth).
+    - 45° bit: $\tan(22.5^\circ) \approx 0.41421$ ($\approx 2.414\times$ depth).
+    - 30° bit: $\tan(15^\circ) \approx 0.26795$ ($\approx 3.732\times$ depth).
+    - 20° bit: $\tan(10^\circ) \approx 0.17633$ ($\approx 5.671\times$ depth).
+  - `dStep`: radial horizontal inset step in base mm (default 0.5 mm, `apps/shaper/src/vcarve-view.js:27`).
+  - `maxDepth`: user-configured maximum cutting depth in base mm (default 6.0 mm, `apps/shaper/src/vcarve-view.js:27`).
+- **Depth of each contour:**
+  - For pass index $i = 1, 2, \dots$:
+    - Inset distance: $d = dStep \cdot i$ (mm).
+    - Inward contour: `contour = offsetPolygon(boundary, -d)`.
+    - Depth: $h = d / halfAngleTan$ (mm) (`packages/core/vcarve.js:25`).
+    - Derivation: With groove cross-section half-angle $\theta$, depth $h$ creates top half-width $w = h \cdot \tan(\theta)$. Setting tool offset $d = w$ ensures the V-cutter boundary meets the region edge.
+- **Step between contours:**
+  - Horizontal spacing: $\Delta d = dStep$ (mm).
+  - Vertical depth step: $\Delta h = dStep / halfAngleTan$ (mm).
+- **Max depth & clamping:**
+  - Maximum iterations: `maxIters = Math.max(1, Math.min(MAX_CONTOURS, Math.floor((maxDepth * halfAngleTan) / dStep)))` (`apps/shaper/src/vcarve-view.js:59`, with `MAX_CONTOURS = 200`).
+  - Depth bound: Because $i \le maxIters \le (maxDepth \cdot halfAngleTan) / dStep$, every contour depth satisfies $h \le maxDepth$. No contour ever exceeds `maxDepth`.
+- **Termination at medial axis (deepest point):**
+  - In `packages/core/vcarve.js:23-24`:
+    `const contour = offsetPolygon(boundary, -d);`
+    `if (!Array.isArray(contour) || contour.length < 3) break;`
+  - In `packages/core/polygon-offset.js`, when inward polygon edges collide/collapse at the medial axis ridge, `offsetPolygon` returns `[]`.
+  - The stack terminates cleanly at the innermost non-empty contour. No center-line jump or degenerate zero-area paths are emitted.
+- **Units:**
+  - All geometric calculations, `dStep`, `maxDepth`, and contour points are strictly base millimeters (mm).
+  - Serializer formats depth strings via `format(depth, docUnit, { unit: true })`.
+
+---
+
+### 3. THE DERIVATION: Single Shared Source of Truth
+- **Current state:**
+  - Preview derivation logic lives inline inside UI code in `apps/shaper/src/vcarve-view.js:58-60`:
+    ```javascript
+    const tan = vbitHalfAngleTan(r.vbit.angle);
+    const maxIters = Math.max(1, Math.min(MAX_CONTOURS, Math.floor((r.maxDepth * tan) / r.dStep)));
+    const contours = vcarveContours(boundary, { dStep: r.dStep, halfAngleTan: tan, maxIters });
+    ```
+- **Proposed architecture (DRY, pure, one source of truth):**
+  - Export a shared helper from `packages/core/vcarve.js`:
+    ```javascript
+    export function deriveVcarveContours(boundary, vcarveRec, { maxContours = 200 } = {}) {
+      if (!boundary || boundary.length < 3 || !vcarveRec) return [];
+      const angle = vcarveRec.vbit?.angle ?? 90;
+      const tan = Math.tan(((Number(angle) || 90) / 2) * Math.PI / 180);
+      const dStep = Number(vcarveRec.dStep) > 0 ? Number(vcarveRec.dStep) : 0.5;
+      const maxDepth = Number(vcarveRec.maxDepth) > 0 ? Number(vcarveRec.maxDepth) : 6;
+      const maxIters = Math.max(1, Math.min(maxContours, Math.floor((maxDepth * tan) / dStep)));
+      return vcarveContours(boundary, { dStep, halfAngleTan: tan, maxIters });
+    }
+    ```
+  - `apps/shaper/src/vcarve-view.js` imports `deriveVcarveContours` and replaces its inline derivation.
+  - `packages/core/shaper-export.js` imports `deriveVcarveContours` and uses it during export.
+- **How export gets the exact same boundary polygon:**
+  - The host app (`apps/shaper/src/main.js:67-68`) already computes `loopPolys[l.id] = loopPolygon(l, st, sById)` (using DOM arc sampling) and passes `loopPolys` into `exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys })`.
+  - For each `vcarve` record in `state.vcarves`:
+    - The boundary is looked up as `boundary = loopPolys[vcarve.region]`.
+    - Contours are derived via `deriveVcarveContours(boundary, vcarve)`.
+    - Each contour polygon is converted to an SVG path:
+      `d="M ${p0.x} ${p0.y} L ${p1.x} ${p1.y} ... Z"`.
+    - Tag emitted: `<path d="..." fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="..."/>`.
+  - Result: 100% byte-for-byte geometric parity between canvas preview and exported SVG toolpath.
+
+---
+
+### 4. GATING: Zero V-carves Byte-Identity
+- **Rule:** If `state.vcarves` is empty (`[]`), omitted, or contains no records with valid matching loops, the export output must remain 100% byte-identical to existing output.
+- **Tests proving byte-identity:**
+  - `tests/shaper-export.test.js`:
+    - Test 1 (`rect-loop outside: exact string`, lines 33-43): pins exact SP1j-1 SVG string.
+    - Test 3 (`empty plan → empty SVG`, lines 51-55).
+    - Test 7 (`circle loop → <circle> + attrs`, lines 93-103).
+    - Test 8 (`open edge → <line> + online attrs`, lines 105-110).
+    - Test 11 (`options.datum → red triangle first`, lines 144-155).
+    - Test 12 (`options.groupByCut`, lines 157-189).
+    - SKETCH-4e tests (`island compound evenodd paths`, lines 199-250).
+
+---
+
+### 5. TESTS: Exact-String Oracle Specification
+- **Test scenario in `tests/shaper-export.test.js`:**
+  - Shape: 40×40 mm square loop with joints `(0,0)`, `(40,0)`, `(40,40)`, `(0,40)`.
+  - V-carve record: `{ id: 'vc1', region: loop.id, vbit: { angle: 90 }, dStep: 5, maxDepth: 15 }`.
+  - Contours derived ($dStep = 5$, $\tan = 1.0$, $maxDepth = 15$):
+    - Pass 1 ($d = 5$ mm, depth 5 mm): 30×30 mm contour `M 5 5 L 35 5 L 35 35 L 5 35 Z`.
+    - Pass 2 ($d = 10$ mm, depth 10 mm): 20×20 mm contour `M 10 10 L 30 10 L 30 30 L 10 30 Z`.
+    - Pass 3 ($d = 15$ mm, depth 15 mm): 10×10 mm contour `M 15 15 L 25 15 L 25 25 L 15 25 Z`.
+    - Pass 4 ($d = 20$ mm): collapsed to point/line -> `offsetPolygon` returns `[]` (terminated).
+- **Exact Expected SVG:**
+  ```xml
+  <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">
+    <path d="M 5 5 L 35 5 L 35 35 L 5 35 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5mm"/>
+    <path d="M 10 10 L 30 10 L 30 30 L 10 30 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10mm"/>
+    <path d="M 15 15 L 25 15 L 25 25 L 15 25 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15mm"/>
+  </svg>
+  ```
+- **DocUnit variations:**
+  - With `docUnit: 'in'`, geometry coordinates stay mm (`viewBox="0 0 40 40"`, path coords `5`, `35`), while `shaper:cutDepth` formats as `"0.1969in"`, `"0.3937in"`, `"0.5906in"`.
+- **Gate:** Full gate pass via `npm run gate` (`scripts/gate.cjs`), exit 0, SMOKE 12/12, 0 headless left.
+
+---
+
+### 6. RISKS & OPEN QUESTIONS FOR THE OWNER
+1. **Tool diameter on V-carve online paths:**
+   - Standard Shaper cuts include `shaper:toolDia="3.175mm"`. On V-carve contours, tool diameter varies continuously with depth, so our design omits `shaper:toolDia`.
+   - *Question for owner:* On physical Shaper Origin hardware, does opening an SVG with `shaper:cutType="online"` without `shaper:toolDia` work seamlessly (Origin uses currently loaded bit / prompts for bit), or does Origin expect a nominal tip or shank diameter?
+2. **On-tool path selection workflow:**
+   - An exported V-carve consists of multiple nested concentric `online` paths.
+   - *Question for owner:* When loaded onto an Origin, does the operator tap each concentric path sequentially from shallow to deep, or does Shaper Origin offer automatic multi-pass depth sequencing?
+3. **Loop exclusion from standard Prepare cut-plan:**
+   - If a loop has both an entry in Prepare's `CUT_PLAN` (e.g. an assigned pocket or outside cut) AND an active entry in `state.vcarves`:
+   - *Design proposal:* The exporter should prioritize the V-carve and suppress standard cut assignment for that loop (matching `WORK-LOG.md:6184-6185`: "Prepare sees a vcarve region as VCARVE-HANDLED — excluded from std cut assign").
+   - *Question for owner:* Should this exclusion be automatic in the exporter, or should Prepare UI enforce mutual exclusivity?
+4. **Outermost boundary path ($d = 0$):**
+   - Our stack begins at $d = dStep$ (first inward inset). It does not emit a path along the region boundary at $d = 0$ (which would have depth 0 mm).
+   - *Question for owner:* Is omitting the boundary path ($d = 0$) correct, or is a shallow surface trace at $d = 0$ ever expected by woodworkers for chamfering?
+5. **Grouping behavior under `options.groupByCut`:**
+   - In `packages/core/shaper-export.js:233`, `<g>` grouping hoists identical cut attributes. Because each V-carve contour has a different `shaper:cutDepth`, their attributes are not identical, so they remain ungrouped `<path>` elements. This is valid and clean, but noted for completeness.
+6. **Robustness on intricate curved artwork:**
+   - Inward offsetting via `offsetPolygon` terminates at the first collapse. On complex letterforms with thin necks or acute reflex corners, some branches may terminate earlier than others. This is the known limitation of the discrete offset-stack approximation (v1) ahead of VCARVE-5 (true medial axis).

@@ -239,6 +239,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   const { joints, shapes, constraints } = state;
   const { cluster, lineA, lineB } = cornerInfo;
   const { tA, tB, centerPt, d } = geom;
+  const cornerPt0 = { x: cornerInfo.cornerPt.x, y: cornerInfo.cornerPt.y };
   const finalRadius = geom.radius;
 
   // Helper to generate joint IDs matching existing scheme
@@ -252,10 +253,14 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   const jCenter = genJ();
   const jTA = genJ();
   const jTB = genJ();
+  const jV = genJ(); // virtual sharp: the corner as it was (see below)
 
   joints.set(jCenter, { x: centerPt.x, y: centerPt.y, fixed: false });
   joints.set(jTA, { x: tA.x, y: tA.y, fixed: false });
   joints.set(jTB, { x: tB.x, y: tB.y, fixed: false });
+  // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by `mutual` pointOnLine so it
+  // follows them when the radius changes; overall dimensions attach to it. Not a shape => loops/export ignore it.
+  joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
 
   // Update line endpoint joints to the new tangent points
   lineA.shape.joints[lineA.cornerIdx] = jTA;
@@ -275,7 +280,19 @@ export function applyFillet(state, cornerInfo, radius = 5) {
         }
       }
 
-      // Re-link constraints targeting the old corner joints to the new tangent joints
+      // MEASUREMENT constraints (a joint-pair DISTANCE, a joint-form EQUAL) keep meaning the SHARP corner: any
+      // joint of the corner cluster is re-linked to the virtual-sharp joint V and the ORIGINAL value is kept,
+      // so editing the fillet radius never changes an overall dimension (Fusion's behaviour).
+      const isMeasure = !c.isRadius && (
+        (c.type === CONSTRAINT_TYPES.DISTANCE && Array.isArray(c.joints) && c.joints.length >= 2) ||
+        (c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length >= 4));
+      if (isMeasure) {
+        for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = jV;
+        continue;
+      }
+
+      // DIRECTIONAL constraints (H/V, parallel, perpendicular, angle, ...) keep relinking to the tangent joints:
+      // the line survives (trimmed) and keeps its direction.
       if (Array.isArray(c.joints)) {
         for (let k = 0; k < c.joints.length; k++) {
           if (c.joints[k] === lineA.cornerJoint) c.joints[k] = jTA;
@@ -283,12 +300,10 @@ export function applyFillet(state, cornerInfo, radius = 5) {
         }
       }
 
-      // Adjust distance/dimension values on lineA or lineB if present
-      if (c.type === CONSTRAINT_TYPES.DISTANCE && typeof c.value === 'number') {
-        const affectsA = c.shape === lineA.shape.id || (Array.isArray(c.joints) && c.joints.includes(jTA) && c.joints.includes(lineA.otherJoint));
-        const affectsB = c.shape === lineB.shape.id || (Array.isArray(c.joints) && c.joints.includes(jTB) && c.joints.includes(lineB.otherJoint));
-        if (affectsA) c.value = Math.max(0.1, c.value - d);
-        if (affectsB) c.value = Math.max(0.1, c.value - d);
+      // A shape-based LENGTH dimension of a trimmed line really does get shorter by d.
+      if (c.type === CONSTRAINT_TYPES.DISTANCE && typeof c.value === 'number' && !c.isRadius) {
+        if (c.shape === lineA.shape.id) c.value = Math.max(0.1, c.value - d);
+        if (c.shape === lineB.shape.id) c.value = Math.max(0.1, c.value - d);
       }
     }
   }
@@ -296,9 +311,15 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   // Create the arc shape
   const { shapes: arcShapes, constraints: arcConstraints } = makeArc(joints, jCenter, jTA, jTB, 'CENTER');
   const arcShape = arcShapes[0];
+  arcShape.filletSharp = jV; // data on the arc (survives undo/save): which joint is its virtual sharp corner
   // NOTE: no arcShape.radius -- the radius dimension below is the source of truth; a frozen scalar would go stale on edit.
   shapes.push(arcShape);
   constraints.push(...arcConstraints);
+
+  // V is held on both trimmed lines. Pushed BEFORE removeOrphanJoints, which would otherwise delete V (it is
+  // referenced by constraints only, not by a shape).
+  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineA.shape.id, mutual: true });
+  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineB.shape.id, mutual: true });
 
   // Delete the old corner cluster joints
   for (const jid of cluster) {
@@ -339,6 +360,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     centerPt,
     tA,
     tB,
-    joints: [jCenter, jTA, jTB]
+    joints: [jCenter, jTA, jTB],
+    virtualSharp: jV
   };
 }

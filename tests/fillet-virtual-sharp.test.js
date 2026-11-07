@@ -1,0 +1,119 @@
+// TURN 402: a dimension at a filleted corner keeps meaning the SHARP corner (virtual-sharp joint V,
+// two `mutual` pointOnLine constraints), so editing the fillet radius never changes the overall size.
+globalThis.document = globalThis.document || { getElementById: () => null };
+(async () => {
+  const assert = (c, m) => { if (!c) throw new Error(m); };
+  const { createEngine } = await import('#core/constraint-solver.js');
+  const { createSketchState } = await import('#ui/sketch-state.js');
+  const { ConstraintManager } = await import('#core/constraint-manager.js');
+  const { makeRectFromTwoJoints } = await import('#core/shapes.js');
+  const { CONSTRAINT_TYPES } = await import('#core/constants.js');
+  const { findCornerAtPoint, applyFillet } = await import('#core/fillet.js');
+  const { commitDimensionEdit } = await import('#ui/dimension-seams.js');
+  const { findLoops } = await import('#core/loop-finder.js');
+  const { deleteShapes } = await import('#core/delete-manager.js');
+
+  function build(W = 60, H = 40) {
+    const engine = createEngine(null); engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 120, h: 90 });
+    const c1 = engine.genJ(); engine.addJoint(c1, 0, 0, true);
+    const c3 = engine.genJ(); engine.addJoint(c3, W, H, false);
+    const b = makeRectFromTwoJoints(state.joints, c1, c3, engine.genJ);
+    for (const s of b.shapes) engine.addShape(s);
+    for (const c of b.constraints) ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' });
+    const hs = state.constraints.filter(c => c.type === 'horizontal'), vs = state.constraints.filter(c => c.type === 'vertical');
+    const bot = hs[1].joints, ver = vs[1].joints;
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [bot[0], bot[1]], value: W }, { source: 'dim' });
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: ver.slice(), value: H }, { source: 'dim' });
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [c1, c3], value: Math.hypot(W, H) }, { source: 'dim' });
+    engine.solve(500);
+    return { engine, state, c1, c3 };
+  }
+  const radiusOf = (state, arc) => { const [c, p] = arc.joints.map(j => state.joints.get(j)); return Math.hypot(p.x - c.x, p.y - c.y); };
+  const measures = (state) => state.constraints.filter(c => c.type === 'distance' && !c.isRadius && c.joints);
+
+  // ---- 60x40, width/height/diagonal dims; fillet the (60,40)-ish corner; edit R 8 -> 12, 20, 5
+  {
+    const { engine, state } = build();
+    const before = measures(state).map(c => c.value);
+    const corner = findCornerAtPoint(state, { x: 60, y: 40 }, 5);
+    const res = applyFillet(state, corner, 8);
+    assert(res.success && res.virtualSharp, 'fillet applies and reports V');
+    const V = state.joints.get(res.virtualSharp);
+    assert(V && V.virtualSharp === true, 'V exists as a flagged bare joint');
+    assert(!state.shapes.some(s => (s.joints || []).includes(res.virtualSharp)), 'V is not on any shape');
+    assert(res.arc.filletSharp === res.virtualSharp, 'arc remembers its virtual sharp');
+    assert(state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === res.virtualSharp && c.mutual).length === 2, 'two mutual pointOnLine on V');
+    assert(JSON.stringify(measures(state).map(c => c.value)) === JSON.stringify(before), 'measurement values are KEPT (not shrunk by d)');
+    assert(measures(state).some(c => c.joints.includes(res.virtualSharp)), 'a measurement dim is relinked to V');
+    let sr = engine.solve(500);
+    assert(sr.converged !== false && !sr.rankDeficient, 'converged, not rank deficient after fillet');
+    const rd = state.constraints.find(c => c.isRadius);
+    for (const R2 of [12, 20, 5]) {
+      const e = commitDimensionEdit(state, rd, R2);
+      assert(!e.reverted, `R -> ${R2} must be accepted`);
+      sr = engine.solve(500);
+      assert(sr.converged !== false && !sr.rankDeficient, `R -> ${R2}: converged, not rank deficient`);
+      assert(Math.abs(radiusOf(state, res.arc) - R2) < 1e-4, `arc radius ${R2}`);
+      const v = state.joints.get(res.virtualSharp);
+      assert(Math.abs(v.x - 60) < 1e-3 && Math.abs(v.y - 40) < 1e-3, `V stays at the sharp corner (60,40), got ${v.x},${v.y}`);
+      const now = measures(state).map(c => c.value);
+      assert(JSON.stringify(now) === JSON.stringify(before), 'dim values never change');
+    }
+    assert(findLoops(state).length === 1, 'still exactly one loop (V has no shape)');
+  }
+
+  // ---- non-90 degree corner with a dimension at it
+  {
+    const engine = createEngine(null); engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 120, h: 90 });
+    const J = (x, y, pin = false) => { const id = engine.genJ(); engine.addJoint(id, x, y, pin); return id; };
+    const A = J(0, 0, true), P = J(40, 0), B = J(60, Math.sqrt(3) * 20);
+    for (const s of [{ id: 'L1', type: 'line', joints: [A, P] }, { id: 'L2', type: 'line', joints: [P, B] }]) engine.addShape(s);
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.HORIZONTAL, { joints: [A, P] }, { source: 't' });
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [A, P], value: 40 }, { source: 'dim' });
+    engine.solve(500);
+    const corner = findCornerAtPoint(state, { x: 40, y: 0 }, 3);
+    assert(corner, 'non-90 corner found');
+    const res = applyFillet(state, corner, 6);
+    assert(res.success, 'non-90 fillet applies');
+    const dimA = state.constraints.find(c => c.type === 'distance' && !c.isRadius && c.joints.includes(A) && c.joints.includes(res.virtualSharp));
+    assert(dimA && dimA.value === 40, 'A-P dim relinked to V with value 40 kept');
+    const rd = state.constraints.find(c => c.isRadius);
+    for (const R2 of [3, 9]) {
+      const e = commitDimensionEdit(state, rd, R2);
+      assert(!e.reverted, `non-90 R -> ${R2} accepted`);
+      const v = state.joints.get(res.virtualSharp), a = state.joints.get(A);
+      assert(Math.abs(Math.hypot(v.x - a.x, v.y - a.y) - 40) < 1e-3, `A-V stays 40 at R ${R2}`);
+      assert(Math.abs(radiusOf(state, res.arc) - R2) < 1e-4, `non-90 arc radius ${R2}`);
+    }
+  }
+
+  // ---- the `mutual` flag is what makes the edit possible (legacy point-only Jacobian: V cannot follow)
+  {
+    const { engine, state } = build();
+    applyFillet(state, findCornerAtPoint(state, { x: 60, y: 40 }, 5), 8);
+    for (const c of state.constraints) if (c.mutual) delete c.mutual;
+    const e = commitDimensionEdit(state, state.constraints.find(c => c.isRadius), 20);
+    assert(e.reverted === true, 'without `mutual` the radius edit is refused (so the flag is load-bearing)');
+  }
+
+  // ---- undo/redo and serialization keep V; deleting the arc leaves V + open lines (Fusion parity)
+  {
+    const { state } = build();
+    const corner = findCornerAtPoint(state, { x: 60, y: 40 }, 5);
+    state.saveState();
+    applyFillet(state, corner, 8);
+    const hasV = () => [...state.joints.values()].some(j => j.virtualSharp);
+    assert(hasV(), 'V present after fillet');
+    state.undo(); assert(!hasV(), 'undo removes V with the fillet');
+    state.redo(); assert(hasV() && state.shapes.some(s => s.filletSharp), 'redo restores V and the arc marker');
+    const clone = JSON.parse(JSON.stringify({ joints: [...state.joints.entries()], shapes: state.shapes, constraints: state.constraints }));
+    assert(clone.joints.some(([, j]) => j.virtualSharp) && clone.shapes.some(s => s.filletSharp) && clone.constraints.some(c => c.mutual), 'virtualSharp / filletSharp / mutual survive serialization');
+    const arc = state.shapes.find(s => s.type === 'arc');
+    deleteShapes(state, [arc.id]);
+    assert(hasV() && state.constraints.filter(c => c.mutual).length === 2, 'deleting the arc leaves V and its two constraints (gap stays open, like Fusion)');
+    assert(state.shapes.filter(s => s.type === 'line').length === 4, 'the four lines survive');
+  }
+  console.log('fillet-virtual-sharp test passed ✅');
+})().catch(e => { console.error('fillet-virtual-sharp test failed ❌', e.message); process.exit(1); });

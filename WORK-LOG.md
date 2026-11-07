@@ -10508,3 +10508,70 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
 - **Verification:**
   - Baseline run: `GATE files=154 pass=152 fail=2`, `FAIL tests/debug-whisker-align.test.js`, `FAIL tests/harness/differential-planegcs.test.js`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
   - Fail proof: Injected intentional failure into `tests/coords-resize-viewbox.test.js`. Re-ran gate: `GATE files=154 pass=151 fail=3` with `FAIL tests/coords-resize-viewbox.test.js`, exited 1. Reverted change, re-ran gate: exited 0.
+
+
+## TURN 416 — fix DOF whisker alignment for point-on-line & empty gate known list — branch agy1
+- **Part 1 (Gate list update):** Removed `tests/harness/differential-planegcs.test.js` from `scripts/gate.cjs` `KNOWN_FAILURES` after running `npm install` for `@salusoft89/planegcs`. All 9/9 PlaneGCS differential scenarios pass cleanly. Committed as `df0b006`.
+- **Part 2 (Whisker diagnosis & fix):**
+  - **Diagnosis confirmed from code:**
+    1. `tests/debug-whisker-align.test.js:55`: `assert(foundPos && foundNeg, 'Expected bi-directional whiskers aligned with the line (+ and -)')`.
+    2. `packages/ui/svg-renderer.js:639`: bi-directional whiskers along `freedomDir` require `jdof === 1 && freedomDir`.
+    3. `packages/core/constraint-status.js`: lines 416-418 placed `POINT_ON_LINE` target joints into `radialConstraints` and `radialLocked.add(targetId)`. In `svg-renderer.js:569`, `isRadial = radialLocked.has(jid)` caused linear whiskers to be skipped, while the arc whisker path at line 670 found no center/radius anchor and rendered nothing. Furthermore, for non-fixed lines, `POINT_ON_LINE` in Phase 2 BFS was never evaluated (queue was empty), leaving `jdof = 2`.
+  - **Fix (`packages/core/constraint-status.js`):**
+    1. Removed erroneous `radialLocked.add(targetId)` and `radialConstraints.get(targetId).add(...)` from `POINT_ON_LINE` BFS handler.
+    2. Added global `POINT_ON_LINE` pass before Phase 3 ensuring `applyDecIfNeeded(c, targetId)` records the 1 DOF linear reduction into `dofSources` without marking radial lock.
+    3. Emptied `KNOWN_FAILURES` in `scripts/gate.cjs` (`KNOWN_FAILURES = []`).
+- **Gate:**
+  - `npm run gate`: `GATE files=154 pass=154 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
+- **Live Verification:**
+  - Ran headless Edge using `scripts/live-evidence-416.cjs`, loaded app, enabled debug overlay (`SHOW_DEBUG_OVERLAY = true`, `SHOW_FREEDOM = true`), loaded slanted line `(-5,-5) -> (5,5)` with point `p1 (0,0)` on `L1`.
+  - Observed 6 whiskers in DOM: joints `a` and `b` show standard 2-DOF axis whiskers; point `p1` exhibits bi-directional whiskers strictly aligned along the 45° line (`+dir`: `0.02326, 0.02326 -> 0.13956, 0.13956`; `-dir`: `-0.02326, -0.02326 -> -0.13956, -0.13956`).
+  - Saved screenshot to `.evidence/416/slanted-line-whiskers.png` (35,794 bytes). Closed browser via CDP `Browser.close` + tree kill. 0 headless browsers left.
+
+
+## TURN 416b — DOF impact corpus measurement & evidence untracking — branch agy1
+- **Part 1 (Stop-condition check & DOF impact measurement):**
+  - **Double-count prevention guard:** Verified and quoted verbatim from `packages/core/constraint-status.js`:
+    ```javascript
+    const isReductionApplied = (c, jid) => reductionApplied.has(jid) && reductionApplied.get(jid).has(c);
+    const applyDecIfNeeded = (c, jid) => {
+        if (!jid) return false;
+        if (isReductionApplied(c, jid)) return false;
+        ...
+        markReductionApplied(c, jid);
+        return true;
+    };
+    ```
+    Any constraint already recorded in the fixed-endpoints branch returns `false` at line 52 and is never double-applied.
+  - **Corpus comparison (448 total sketches evaluated):**
+    - Ran `analyzeConstraintStatus` across `origin/main` vs `agy1` on 448 sketches: every solve in `tests/harness/solver-scenarios.test.js`, solver test fixtures in `packages/core/tests/`, and the 4 required hand-built cases.
+    - 441 of 448 sketches are 100% identical.
+    - Exactly 7 sketches showed differences, all strictly localized to `pointOnLine` constraints on unfixed/floating lines that were previously skipped:
+      1. Hand-built Case 2 (`point on line, free ends`): total DOF 6 -> 5 (`p: d2->d1`).
+      2. Hand-built Case 4 (`rect with midpoint-on-line`): total DOF 5 -> 4 (`mid: d1->d0`).
+      3. `solver-point-on-line-mutual.test.js` (solves #1 & #2): total DOF 3 -> 2 (`V: d2->d1`).
+      4. `solver-point-on-circle.test.js` (solve #1): total DOF 2 -> 1 (`p: d2->d1`).
+      5. `solver-tangent-shapes-form.test.js` (solves #4 & #5): total DOF 20 -> 18 (`j_fillet: d2->d0`).
+    - Hand-built Case 1 (`fixed ends`) and Case 3 (`fixed ends + dim`) both remained `0` (`fully constrained`).
+    - Zero sketches flipped status between fully constrained and under-constrained.
+- **Part 2 (Repo hygiene):**
+  - Removed `.evidence/416/slanted-line-whiskers.png` and `scripts/live-evidence-416.cjs` from git cache via `git rm --cached`.
+  - Added `.evidence/` and `scripts/live-evidence-*.cjs` to `.gitignore`. Committed as `bf26746`.
+  - Re-took live screenshot zoomed in on `p1 (0, 0)` with viewBox `'-1.2 -0.8 2.4 1.6'`; saved locally to `.evidence/416/slanted-line-whiskers.png` (33,927 bytes).
+- **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.
+
+
+## TURN 416c — Evidence untracking fix & whisker visibility diagnosis — branch agy1
+- **Part 1 (Evidence untracking):**
+  - Unstaged and removed `.evidence/416/slanted-line-whiskers.png` and `scripts/live-evidence-416.cjs` from the git index (`git rm --cached`).
+  - Committed removal as `c683df7` (`chore: remove evidence files from git tracking`).
+  - Pushed to `origin/agy1` (`516f333..c683df7`).
+  - Verified `git ls-tree -r --name-only origin/agy1 | Select-String "evidence"` prints nothing (0 tracked files).
+- **Part 2 (Whisker visibility root-cause diagnosis):**
+  - Investigated why arrows/whiskers are not visible near the point `p1` in `.evidence/416/slanted-line-whiskers.png`:
+    1. **Not arrows:** `packages/ui/svg-renderer.js` lines 644 & 648 renders `<line class="debug-whisker">` elements without arrowheads or marker symbols.
+    2. **Sub-pixel stroke:** `DEBUG_WHISKER_STROKE_PX` defaults to `0.03` px in `packages/core/settings-manager.js:62` and `svg-renderer.js:557`. With `stroke="#9CA3AF"` and `stroke-opacity="0.6"`, a 0.03px stroke contributes under 2% opacity to a single pixel and is imperceptible on screen.
+    3. **Enclosed within joint circle:** In `svg-renderer.js`, `whiskerOffset = scale(2)` (2 screen px) and `whiskerLen = scale(10)` (10 screen px), ending at 12 screen px from joint center. However, `BASE_JOINT_RADIUS = computeBaseJointRadiusFor(JOINT_RADIUS)` where `JOINT_RADIUS` defaults to `4`, yielding a joint circle radius of `4 * 4 = 16` screen px. The whisker line lies entirely within the 16px radius of the opaque white joint circle handle (`fill: var(--sk-joint-fill, white)`).
+    4. **Zoom-invariant occlusion:** Because both `scale(BASE_JOINT_RADIUS)` and `scale(whiskerLen)` use `scale(screenSize) = screenSize * zoom`, zooming scales both identically. In screen space, the joint circle is always 16 px in radius and the whisker is always 10 px long inside it.
+  - Conclusion: In the real app under default settings, whiskers are physically not visible on screen. This is a product finding, not a bug in the 416 DOF analysis.
+- **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.

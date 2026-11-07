@@ -9,13 +9,8 @@ const { spawnSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 // KNOWN failures list with one-line reason comments.
-// Per task 415 amendment: exit 0 if every observed failure is in this list (subset).
-const KNOWN_FAILURES = [
-  // Real bug: bi-directional whiskers along slanted line never render (reported in turn 414)
-  'tests/debug-whisker-align.test.js',
-  // Environment: missing optional devDependency @salusoft89/planegcs
-  'tests/harness/differential-planegcs.test.js',
-];
+// Known failing tests list (empty now that all known failures are fixed).
+const KNOWN_FAILURES = [];
 
 const TEST_DIRS = [
   'tests',

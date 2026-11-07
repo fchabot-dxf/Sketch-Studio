@@ -413,9 +413,6 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                             if (fixedJoints.has(j1) && fixedJoints.has(j2)) {
                                 if (!processedConstraints.has(c)) {
                                     if (targetId && getDOF(targetId) > 0) {
-                                        if (!radialConstraints.has(targetId)) radialConstraints.set(targetId, new Set());
-                                        radialConstraints.get(targetId).add(c.id || (`pointOnLine:${c.shape || 'auto'}`));
-                                        radialLocked.add(targetId);
                                         if (applyDecIfNeeded(c, targetId) || axisLockAdded) {
                                             if (!visitedInQueue.has(targetId)) { processingQueue.push(targetId); visitedInQueue.add(targetId); }
                                             constrainedJoints.add(targetId);
@@ -725,6 +722,18 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                     }
                 }
             }
+        }
+    }
+
+    // Point-on-line: a point constrained to a line loses 1 DOF (slides along the line).
+    // This is linear freedom, not radial — never add to radialLocked or radialConstraints.
+    if (Array.isArray(constraints)) {
+        for (const c of constraints) {
+            if (!c || (c.type !== CONSTRAINT_TYPES.POINT_ON_LINE && c.type !== 'pointOnLine')) continue;
+            const targetId = c.joint;
+            if (!targetId || !joints.has(targetId)) continue;
+            applyDecIfNeeded(c, targetId);
+            constrainedJoints.add(targetId);
         }
     }
 

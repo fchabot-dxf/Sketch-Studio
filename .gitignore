@@ -46,3 +46,8 @@ Thumbs.db
 .handoff/
 HANDOFF.md
 .proc/
+
+# --- test evidence ---
+.evidence/
+scripts/live-evidence-*.cjs
+

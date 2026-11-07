@@ -3,11 +3,97 @@
   const SettingsManager = (await import('#core/settings-manager.js')).default;
   const { setupDebugPanel } = await import('../apps/sketchstudio/ui/debug-panel.js');
 
-  // Lightweight DOM shim
-  global.document = global.document || {};
-  global.document.createElement = global.document.createElement || (() => ({ style: {}, setAttribute: () => {}, appendChild: () => {}, innerHTML: '' }));
-  global.document.body = global.document.body || { appendChild: () => {} };
-  global.document.getElementById = global.document.getElementById || (() => null);
+  // Lightweight mock DOM supporting querySelector, events, element registry, and innerHTML parsing
+  const elements = new Map();
+  class MockElement {
+    constructor(tagName = 'div') {
+      this.tagName = tagName.toUpperCase();
+      this.id = '';
+      this.style = { cssText: '' };
+      this.children = [];
+      this.parentNode = null;
+      this.attrs = new Map();
+      this.listeners = new Map();
+      this._innerHTML = '';
+      this.checked = false;
+    }
+    setAttribute(k, v) { this.attrs.set(k, String(v)); if (k === 'id') { this.id = v; elements.set(v, this); } }
+    getAttribute(k) { return this.attrs.get(k) || null; }
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      if (child.id) elements.set(child.id, child);
+      return child;
+    }
+    insertBefore(child, ref) {
+      child.parentNode = this;
+      const idx = this.children.indexOf(ref);
+      if (idx !== -1) this.children.splice(idx, 0, child);
+      else this.children.push(child);
+      if (child.id) elements.set(child.id, child);
+      return child;
+    }
+    addEventListener(ev, cb) {
+      if (!this.listeners.has(ev)) this.listeners.set(ev, []);
+      this.listeners.get(ev).push(cb);
+    }
+    dispatchEvent(ev) {
+      const type = typeof ev === 'string' ? ev : ev.type;
+      const list = this.listeners.get(type) || [];
+      for (const cb of list) cb({ target: this });
+    }
+    querySelector(sel) {
+      for (const child of this.children) {
+        if (sel === 'input' && child.tagName === 'INPUT') return child;
+        if (sel.startsWith('#') && child.id === sel.slice(1)) return child;
+        const found = child.querySelector(sel);
+        if (found) return found;
+      }
+      return null;
+    }
+    set innerHTML(html) {
+      this._innerHTML = html;
+      const divMatch = html.match(/<div[^>]*>([\s\S]*?)<\/div>/i);
+      if (divMatch) {
+        const div = new MockElement('div');
+        this.appendChild(div);
+        const spanMatches = divMatch[1].matchAll(/<span\b[^>]*\bid="([^"]+)"[^>]*>/gi);
+        for (const m of spanMatches) {
+          const sp = new MockElement('span');
+          sp.id = m[1];
+          elements.set(sp.id, sp);
+          div.appendChild(sp);
+        }
+      }
+      const inputMatches = html.matchAll(/<input\b([^>]*)>/gi);
+      for (const m of inputMatches) {
+        const inp = new MockElement('input');
+        const attrs = m[1];
+        const idMatch = attrs.match(/\bid="([^"]+)"/);
+        if (idMatch) { inp.id = idMatch[1]; elements.set(inp.id, inp); }
+        const maxMatch = attrs.match(/\bmax="([^"]+)"/);
+        if (maxMatch) inp.setAttribute('max', maxMatch[1]);
+        const styleMatch = attrs.match(/\bstyle="([^"]+)"/);
+        if (styleMatch) inp.style.cssText = styleMatch[1];
+        this.appendChild(inp);
+      }
+    }
+    get innerHTML() { return this._innerHTML; }
+    contains(other) {
+      let p = other;
+      while (p) { if (p === this) return true; p = p.parentNode; }
+      return false;
+    }
+  }
+
+  const body = new MockElement('body');
+  global.Event = class Event { constructor(type) { this.type = type; } };
+  global.document = {
+    body,
+    createElement: (tag) => new MockElement(tag),
+    getElementById: (id) => elements.get(id) || null,
+    addEventListener: () => {}
+  };
 
   // Initialize panel
   setupDebugPanel({});

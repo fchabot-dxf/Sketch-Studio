@@ -594,32 +594,6 @@ export class NewtonSolver {
 
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
-    const x0 = this._pack();
-    if (x0.length === 0) {
-      // No free variables — every joint is pinned (all fixed, or merged into a
-      // fixed coincident cluster). The sketch can't move, but its constraints
-      // may still be VIOLATED (e.g. a distance on a joint welded to the origin).
-      // Check the residual instead of unconditionally claiming success.
-      const { r } = this._assemble(x0);
-      let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
-      const residual0 = Math.sqrt(s);
-      return { converged: residual0 < this.config.tol, error: residual0, rankDeficient: false };
-    }
-
-    let x = new Float64Array(x0); // current estimate
-    let lambda = this.config.lambdaInit;
-    let lastCost = Infinity;
-    let converged = false;
-    let finalError = 0;
-    // Tracks whether JᵀJ is singular at the final state (rank(J) < n).
-    // In CAD terms: the sketch is under-constrained — there are free directions
-    // along which the residual doesn't change. The solver may still report
-    // converged=true if it found a valid configuration; the flag tells the
-    // UI that the configuration is non-unique.
-    let rankDeficient = false;
-
-    // If a drag target exists (explicit via options OR implicit j.dragTarget on a joint), inject a temporary 'mouse-spring'
-    let cleanup = null;
     let dragOpt = options && options.dragTarget ? options.dragTarget : null;
     if (!dragOpt) {
       // auto-detect first joint carrying a dragTarget set by UI input handlers
@@ -630,7 +604,43 @@ export class NewtonSolver {
         }
       }
     }
+
+    const x0 = this._pack();
+    if (x0.length === 0) {
+      // No free variables — every joint is pinned (all fixed, or merged into a
+      // fixed coincident cluster). The sketch can't move, but its constraints
+      // may still be VIOLATED (e.g. a distance on a joint welded to the origin).
+      // Check the residual instead of unconditionally claiming success.
+      const { r } = this._assemble(x0);
+      let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
+      const residual0 = Math.sqrt(s);
+      let cleanup0 = null;
+      if (dragOpt) cleanup0 = this.interaction.attachMouseSpring(dragOpt);
+      const hasSpring0 = this._hasMouseSpring();
+      const { structuralError, dragReached } = this._splitResiduals(x0, residual0, hasSpring0);
+      if (cleanup0) cleanup0();
+      const out0 = { converged: residual0 < this.config.tol, error: residual0, rankDeficient: false, stalled: false, structuralError };
+      if (hasSpring0) out0.dragReached = dragReached;
+      return out0;
+    }
+
+    let x = new Float64Array(x0); // current estimate
+    let lambda = this.config.lambdaInit;
+    let lastCost = Infinity;
+    let converged = false;
+    let finalError = 0;
+    let exitedByStep = false;
+    // Tracks whether JᵀJ is singular at the final state (rank(J) < n).
+    // In CAD terms: the sketch is under-constrained — there are free directions
+    // along which the residual doesn't change. The solver may still report
+    // converged=true if it found a valid configuration; the flag tells the
+    // UI that the configuration is non-unique.
+    let rankDeficient = false;
+
+    // If a drag target exists (explicit via options OR implicit j.dragTarget on a joint), inject a temporary 'mouse-spring'
+    let cleanup = null;
     if (dragOpt) cleanup = this.interaction.attachMouseSpring(dragOpt);
+    const hasSpring = this._hasMouseSpring();
 
     // Relaxation pre-pass: only worthwhile when starting far from the solution.
     // Cheap cost-of-entry: one assemble to measure initial residual.
@@ -646,8 +656,11 @@ export class NewtonSolver {
           // want to know the sketch has freedom even though we found a fit.
           rankDeficient = this._checkRankDeficient(x);
           this._unpack(x);
+          const { structuralError, dragReached } = this._splitResiduals(x, pre.residual, hasSpring);
           if (cleanup) cleanup();
-          return { converged: true, error: pre.residual, rankDeficient };
+          const outPre = { converged: true, error: pre.residual, rankDeficient, stalled: false, structuralError };
+          if (hasSpring) outPre.dragReached = dragReached;
+          return outPre;
         }
       }
     }
@@ -704,7 +717,7 @@ export class NewtonSolver {
       }
 
       // Convergence by step magnitude
-      if (maxStep < this.config.tol) { converged = true; finalError = Math.sqrt(2 * costNew); x = xCand; break; }
+      if (maxStep < this.config.tol) { converged = true; finalError = Math.sqrt(2 * costNew); x = xCand; exitedByStep = true; break; }
 
       // keep last cost
       finalError = Math.sqrt(2 * costNew);
@@ -738,9 +751,50 @@ export class NewtonSolver {
 
     // write back
     this._unpack(x);
+    const stalled = exitedByStep && finalError > this.config.tol;
+    const { structuralError, dragReached } = this._splitResiduals(x, finalError, hasSpring);
     if (cleanup) cleanup();
 
-    return { converged, error: finalError, rankDeficient };
+    const out = { converged, error: finalError, rankDeficient, stalled, structuralError };
+    if (stalled) out.stallError = finalError;
+    if (hasSpring) out.dragReached = dragReached;
+    return out;
+  }
+
+  _hasMouseSpring() {
+    for (const c of this.constraints) {
+      if (c && !(c.isDriven || c.driven) && c.type === 'mouse_spring') return true;
+    }
+    return false;
+  }
+
+  // Separate non-spring structural residual norm from mouse_spring residual norm.
+  // When no spring is present, structuralError equals finalError exactly.
+  _splitResiduals(x, finalError, hasSpring) {
+    if (!hasSpring) return { structuralError: finalError, dragReached: undefined };
+    let springSum2 = 0;
+    for (const c of this.constraints) {
+      if (!c || c.isDriven || c.driven || c.type !== 'mouse_spring') continue;
+      const jointId = c.joints && c.joints.length > 0 ? c.joints[0] : null;
+      const j = jointId != null ? this.joints.get(jointId) : null;
+      if (!j || !c.value) continue;
+      const w = Math.sqrt(c.stiffness || 1e3);
+      const rx = w * (j.x - c.value[0]);
+      const ry = w * (j.y - c.value[1]);
+      springSum2 += rx * rx + ry * ry;
+    }
+    const dragReached = Math.sqrt(springSum2) < 1e-3;
+    const allC = this.constraints;
+    let structuralError = 0;
+    try {
+      this.constraints = allC.filter(c => !c || c.type !== 'mouse_spring');
+      const { r } = this._assemble(x);
+      let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
+      structuralError = Math.sqrt(s);
+    } finally {
+      this.constraints = allC;
+    }
+    return { structuralError, dragReached };
   }
 
   // One-shot rank-deficiency probe at position x. Re-assembles, builds JᵀJ

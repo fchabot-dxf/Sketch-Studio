@@ -10430,3 +10430,14 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
 - Live (headless): a diagonal line, Dimension tool, placed past the end → mode vertical, input pre-filled 40.0 (= |dy|); typed 25, Enter: line (-30,-42)→(2,-2) became (-30,-34.5)→(2,-9.5): every x unchanged (dx stays 32), only y moved, glyph 25.0. Shots: scratchpad shots401/408-1-dim-placed.png, 408-2-after-edit-25.png. 0 console errors, 0 headless left (CDP Browser.close; orphans from smoke runs stopped).
 - Gate: same 8 baseline failures in my glob (+ harness missing dep), shell-smoke 12/12.
 - Note: `dimSign`/`dimSignMode` now persist on H/V distance constraints (plain fields); a saved document gets them for free.
+
+
+## TURN 411 — solver honesty step 1 (additive stall / structural / drag diagnostics) — branch agy1
+- **Done (`packages/core/solver/engine.js`):** `NewtonSolver.solve` now returns additive diagnostic fields without changing `converged`, `error`, `rankDeficient`, `x = xCand`, or how `_assemble` builds rows:
+  - `stalled` (boolean): `true` iff the LM loop exited via `maxStep < this.config.tol` and `finalError > this.config.tol`; `false` on all other exits (`residual < tol`, pre-pass convergence, `x0.length === 0`, max-iter / damping break).
+  - `stallError` (number, omitted when `!stalled`): `finalError` at a stall exit.
+  - `structuralError` (number): residual norm (`Math.sqrt(sum(r[i]^2))`) over all non-`mouse_spring` rows. When no spring is present, equals `finalError` directly; when a spring is present, assembles with `mouse_spring` excluded (so `wStruct = 1`, uninflated by the drag penalty ratio).
+  - `dragReached` (boolean, omitted when no spring is present): `true` iff the `mouse_spring` rows' residual norm (`w * (p - target)`) is `< 1e-3`, else `false`.
+- **Wrapper (`packages/core/constraint-solver.js`):** untouched — line 103 (`return { ...result, ... }`) already spreads all four fields through unchanged.
+- **Tests (`packages/core/tests/solver-stall-honesty.test.js`):** covers (a) solvable sketch (`stalled === false`, `structuralError < tol`, `stallError`/`dragReached` omitted), (b) over-constrained pinned conflict (`stalled === true`, `stallError > tol`, wrapper pass-through), and (c) pinned point drag (`dragReached === false`, `structuralError ~ 0` on both constraint-pinned free variable and coincident-welded `x0.length === 0` path, plus unconstrained contrast `dragReached === true`). Verified RED before the engine change (all 20/24 positive assertions on the new fields failed against unmodified `engine.js`), GREEN after.
+- **Gate:** 152 test files run one by one — 143 pass, same 9 pre-existing failures (`ai-vision-label-spacing`, `debug-panel`, `debug-whisker-align`, `input-manager-midpoint`, `settings-panel-ui`, `tuning-wizard`, `wizard-base`, `wizard-placement`, `harness/differential-planegcs`), all `solver-*` tests unchanged; `shell-smoke.cjs` 12/12; 0 leftover `sk-shell-smoke` headless Edge processes.

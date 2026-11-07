@@ -40,7 +40,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Owner commit 5bffb68: Dim with a pre-selected line, plus filleted-rect rigidity status. Gated but NOT advisor-reviewed in depth.
 
 **Open, in priority order:**
-1. **Solver stall honesty** (engine.js:694 reports converged on a stalled/rejected LM step). Seat A's plan, ready to build:
+1. **Solver stall honesty: ARC CLOSED (advisor decision 2026-11-07, turns 411–413, Antigravity seat AGY-1).**
+   - Built: the engine now reports `stalled` / `stallError` / `structuralError` / `dragReached` (411, additive), plus a
+     permanent shadow harness, tests/harness/shadow-converged.test.js (412). It also fixed a real bug: a line-circle
+     tangent stored as `shapes` was silently skipped by the solver (413).
+   - Measured over 5,463 solves: 0 lies leak through the wrapper, and 0 false alarms. Drag differences vanish at
+     VERIFIER_TOLERANCE.
+   - Decision: do NOT flip `converged`. The flip changes nothing measurable, and the wrapper plus the
+     verifier-coverage guard already hold. If a future change makes shadow-converged go red, revisit.
+   - Original plan, kept for the record:
    - Step 1, additive: return `stalled`, `stallError`, `structuralError`, `dragReached`; `converged` unchanged.
    - Step 2: flip `converged` for non-drag stalls (finalError ≤ VERIFIER_TOLERANCE) and for drag (structural residual
      < tol), only after a shadow run over the whole suite shows ZERO wrapper-level differences.

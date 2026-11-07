@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { makeRectFromTwoJoints } from '../packages/core/shapes.js';
-import { findCornerAtJoint, findCornerAtPoint, calculateFilletGeometry, applyFillet, diagnoseNoFillet, defaultFilletRadius, parseFilletRadius } from '../packages/core/fillet.js';
+import { findCornerAtJoint, findCornerAtPoint, calculateFilletGeometry, applyFillet, diagnoseNoFillet, defaultFilletRadius, parseFilletRadius, findLineAtPoint, findCornerBetweenLines } from '../packages/core/fillet.js';
 import { findLoops } from '../packages/core/loop-finder.js';
 import { loopToPathD } from '../packages/core/shaper-export.js';
 
@@ -108,12 +108,14 @@ console.log('Running tests for packages/core/fillet.js...');
   applyFillet(st, findCornerAtPoint(st, { x: 80, y: 0 }, 5), 10);
   assert.strictEqual(saves, 0, 'applyFillet must not call saveState (tool layer owns the single undo step)');
 
-  // item 4: clamping is reported; no-op reasons are reported
+  // owner ruling (403): NO clamp -- an oversized radius is applied as asked, even past a line's far end
   const sm = mkRect(10, 6);
   const rc = applyFillet(sm, findCornerAtPoint(sm, { x: 10, y: 0 }, 5), 50);
-  assert(rc.success && rc.clamped === true && rc.radius < 50 && rc.requestedRadius === 50, 'clamp flagged with requested radius');
-  const sn = mkRect(80, 60);
-  assert.strictEqual(applyFillet(sn, findCornerAtPoint(sn, { x: 80, y: 0 }, 5), 5).clamped, false);
+  assert(rc.success && rc.radius === 50 && rc.clamped === undefined, 'oversized radius is applied unclamped');
+  // the single refusal: the radius whose tangent distance equals a line length would collapse that line to 0
+  const sk = mkRect(60, 40);
+  const col = applyFillet(sk, findCornerAtPoint(sk, { x: 60, y: 0 }, 5), 40);
+  assert(col.success === false && /collapse a line to zero length/.test(col.reason), 'R = line length is refused with a message');
 
   // already filleted: click the tangent point of the first fillet
   const sf = mkRect(80, 60);
@@ -140,6 +142,27 @@ console.log('Running tests for packages/core/fillet.js...');
   const sc = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 10, y: 0 }], ['c', { x: 20, y: 0 }]]), shapes: [], constraints: [] };
   const bad = applyFillet(sc, { pA: { x: 0, y: 0 }, cornerPt: { x: 10, y: 0 }, pB: { x: 20, y: 0 } }, 5);
   assert(bad && bad.success === false && /collinear/i.test(bad.reason), 'invalid geometry reports its reason');
+}
+
+// 5. TURN 403: two-line pick helpers (DOM-free)
+{
+  const joints = new Map(); let n = 0; const g = () => 'j_t5_' + (++n);
+  const a = g(), b = g();
+  joints.set(a, { x: 0, y: 0, fixed: false }); joints.set(b, { x: 80, y: 60, fixed: false });
+  const { shapes, constraints } = makeRectFromTwoJoints(joints, a, b, g);
+  const st = { joints, shapes, constraints };
+  const J = (id) => st.joints.get(id);
+  const mid = (sh) => ({ x: (J(sh.joints[0]).x + J(sh.joints[1]).x) / 2, y: (J(sh.joints[0]).y + J(sh.joints[1]).y) / 2 });
+  const top = findLineAtPoint(st, { x: 40, y: 0.5 }, 3);
+  assert(top && top.type === 'line', 'findLineAtPoint finds the line under the cursor');
+  assert.strictEqual(findLineAtPoint(st, { x: 40, y: 30 }, 3), null, 'nothing near: no line');
+  const right = findLineAtPoint(st, { x: 80, y: 30 }, 3), bottom = findLineAtPoint(st, { x: 40, y: 60 }, 3);
+  assert(top.id !== right.id && top.id !== bottom.id, 'distinct lines');
+  const adj = findCornerBetweenLines(st, top, right);
+  assert(adj && Math.hypot(adj.cornerPt.x - 80, adj.cornerPt.y - 0) < 1e-6, 'two lines meeting at a corner give that corner');
+  assert(findCornerBetweenLines(st, right, top), 'order does not matter');
+  assert.strictEqual(findCornerBetweenLines(st, top, bottom), null, 'opposite sides do not meet: null');
+  assert.strictEqual(findCornerBetweenLines(st, top, top), null, 'a line with itself: null');
 }
 
 console.log('✅ All fillet core tests passed!');

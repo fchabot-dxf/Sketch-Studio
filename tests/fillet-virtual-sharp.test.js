@@ -89,14 +89,54 @@ globalThis.document = globalThis.document || { getElementById: () => null };
     }
   }
 
-  // ---- the `mutual` flag is what makes the edit possible (legacy point-only Jacobian: V cannot follow)
+  // ---- TURN 403: oversized radii, seeded edits, no clamp (V must never move on the pinned 60x40)
   {
-    const { engine, state } = build();
-    applyFillet(state, findCornerAtPoint(state, { x: 60, y: 40 }, 5), 8);
-    for (const c of state.constraints) if (c.mutual) delete c.mutual;
-    const e = commitDimensionEdit(state, state.constraints.find(c => c.isRadius), 20);
-    assert(e.reverted === true, 'without `mutual` the radius edit is refused (so the flag is load-bearing)');
+    const atCorner = (state, res) => { const v = state.joints.get(res.virtualSharp); return Math.abs(v.x - 60) < 1e-3 && Math.abs(v.y - 40) < 1e-3; };
+    const setup = (R0) => { const b = build(); const res = applyFillet(b.state, findCornerAtPoint(b.state, { x: 60, y: 40 }, 5), R0); b.engine.solve(500); b.res = res; return b; };
+    const edit = (b, R2) => { const e = commitDimensionEdit(b.state, b.state.constraints.find(c => c.isRadius), R2); const sr = b.engine.solve(500); return { e, sr }; };
+
+    // a fresh oversized fillet applies unclamped and holds
+    for (const R0 of [50, 100, 200]) {
+      const b = setup(R0);
+      assert(b.res.success && b.res.radius === R0, `R${R0} applied unclamped`);
+      assert(atCorner(b.state, b.res) && Math.abs(radiusOf(b.state, b.res.arc) - R0) < 1e-4, `R${R0} converged with V at the corner`);
+    }
+    // the orderings that used to land in the zero-length trap
+    for (const [R0, R2] of [[50, 70], [50, 100], [8, 100], [200, 8], [8, 200], [100, 8], [50, 8], [8, 50]]) {
+      const b = setup(R0);
+      const { e, sr } = edit(b, R2);
+      assert(!e.reverted, `${R0} -> ${R2} must be accepted (${e.reason || ''})`);
+      assert(sr.converged !== false && !sr.rankDeficient, `${R0} -> ${R2}: converged, not rank deficient`);
+      assert(atCorner(b.state, b.res), `${R0} -> ${R2}: V stays at the corner`);
+      assert(Math.abs(radiusOf(b.state, b.res.arc) - R2) < 1e-4, `${R0} -> ${R2}: arc radius`);
+    }
+    // the exact singular values are refused with a message, and nothing changes
+    for (const Rbad of [40, 60]) {
+      const b = setup(8);
+      const before = JSON.stringify([...b.state.joints.entries()].map(([k, j]) => [k, +j.x.toFixed(6), +j.y.toFixed(6)]));
+      const { e } = edit(b, Rbad);
+      assert(e.reverted === true && /collapse a line to zero length/.test(e.reason || ''), `R${Rbad} refused with the collapse message`);
+      const after = JSON.stringify([...b.state.joints.entries()].map(([k, j]) => [k, +j.x.toFixed(6), +j.y.toFixed(6)]));
+      assert(before === after, `R${Rbad} refusal leaves the geometry untouched`);
+    }
+    // property: random radius sequences never move V and always converge
+    let seed = 987654321; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    for (let trial = 0; trial < 12; trial++) {
+      const b = setup(5 + rnd() * 30);
+      for (let k = 0; k < 12; k++) {
+        let R2 = 1 + rnd() * 199;
+        if (Math.abs(R2 - 40) < 0.05 || Math.abs(R2 - 60) < 0.05) R2 += 0.5; // stay off the exact singular values
+        const { e, sr } = edit(b, R2);
+        assert(!e.reverted, `property: R ${R2.toFixed(3)} accepted (trial ${trial}, step ${k}): ${e.reason || ''}`);
+        assert(sr.converged !== false, `property: converged at R ${R2.toFixed(3)}`);
+        assert(atCorner(b.state, b.res), `property: V moved at R ${R2.toFixed(3)} (trial ${trial}, step ${k})`);
+        assert(Math.abs(radiusOf(b.state, b.res.arc) - R2) < 1e-3, `property: radius ${R2.toFixed(3)}`);
+      }
+    }
   }
+
+  // (The `mutual` Jacobian is covered at solver level in packages/core/tests/solver-point-on-line-mutual.test.js;
+  //  since 403 a radius edit seeds the analytic geometry, so it no longer DEPENDS on the flag to converge.)
 
   // ---- undo/redo and serialization keep V; deleting the arc leaves V + open lines (Fusion parity)
   {

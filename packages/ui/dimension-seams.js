@@ -8,6 +8,7 @@
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist } from '#core/geometry.js';
+import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 
@@ -41,9 +42,22 @@ export function commitDimensionEdit(state, c, val) {
   const snap = new Map();
   if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
 
+  // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero
+  // length), and refuse the one singular value where a line would collapse. Snapshot above restores on refusal.
+  const filletArc = (c.isRadius && c.shape && state.shapes) ? state.shapes.find(s => s.id === c.shape && s.type === 'arc' && s.filletSharp) : null;
+  if (filletArc) {
+    const seeded = seedFilletForRadius(state, filletArc, val);
+    if (!seeded.ok) return { reverted: true, clash: '', reason: seeded.reason };
+  }
   c.value = val;
   if (shapeForRadius) shapeForRadius.radius = val;
   const result = engine.solve(ITER());
+  if (filletArc && filletHasCollapsedLine(state, filletArc)) {
+    c.value = oldValue;
+    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+    engine.solve(ITER());
+    return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
+  }
   if (result && result.converged === false) {
     const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
     c.value = oldValue;

@@ -9,6 +9,9 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
 
+/** A trimmed line shorter than this (world mm) counts as collapsed. */
+export const COLLAPSE_TOL = 1e-3;
+
 /** Default fillet radius in WORLD mm (1 world unit = 1 mm): 5 mm, or 1/4" = 6.35 mm for an inch document. */
 export function defaultFilletRadius(docUnit = 'mm') {
   return docUnit === 'in' ? 6.35 : 5;
@@ -190,11 +193,12 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
   let radius = Math.max(0.1, requestedRadius);
   let d = radius / tanHalf;
 
-  // Clamp if fillet tangent extends past either line segment
-  const maxD = Math.min(lenA, lenB) * 0.95;
-  if (d > maxD) {
-    d = maxD;
-    radius = d * tanHalf;
+  // NO clamp (owner ruling): an oversized radius is applied as asked; a tangent point may land past a line's far
+  // end (that line then runs "backwards", like Fusion). The ONE refusal is the singular value where a trimmed
+  // line would collapse to exactly zero length -- there the constraints are degenerate and the solver would
+  // report success with a wrong answer (verified in Node, turn 403).
+  if (Math.abs(d - lenA) < COLLAPSE_TOL || Math.abs(d - lenB) < COLLAPSE_TOL) {
+    return { valid: false, reason: `R = ${radius.toFixed(2)} would collapse a line to zero length; use a slightly different radius` };
   }
 
   const tA = { x: cornerPt.x + d * uA.x, y: cornerPt.y + d * uA.y };
@@ -356,11 +360,89 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     radiusConstraint,
     radius: finalRadius,
     requestedRadius: radius,
-    clamped: finalRadius < radius - 1e-6,
     centerPt,
     tA,
     tB,
     joints: [jCenter, jTA, jTB],
     virtualSharp: jV
   };
+}
+
+
+// ---- radius edit support for an existing fillet (arc.filletSharp = its virtual-sharp joint V) ----
+
+/** The two trimmed lines of a fillet arc, with their far (non-arc) and rim (arc) joints. */
+function filletLines(state, arc) {
+  const out = [];
+  for (const c of (state.constraints || [])) {
+    if (!c || c.type !== CONSTRAINT_TYPES.TANGENT || c.circle !== arc.id || !c.line) continue;
+    const line = (state.shapes || []).find(sh => sh && sh.id === c.line);
+    if (!line || !Array.isArray(line.joints)) continue;
+    const rim = line.joints.find(j => arc.joints.includes(j));
+    const far = line.joints.find(j => !arc.joints.includes(j));
+    if (rim && far) out.push({ line, rim, far });
+  }
+  return out;
+}
+
+/**
+ * Place the fillet's centre + two tangent joints at the ANALYTIC positions for `radius` (from V and the two
+ * lines' far endpoints), so the solver starts at the answer and only polishes -- it never has to walk a line
+ * through zero length. Returns {ok:true} or {ok:false, reason} (collinear / collapse / not a fillet).
+ */
+export function seedFilletForRadius(state, arc, radius) {
+  if (!state || !arc || !arc.filletSharp) return { ok: false, reason: 'not a fillet arc' };
+  const V = state.joints.get(arc.filletSharp);
+  const ls = filletLines(state, arc);
+  if (!V || ls.length !== 2) return { ok: false, reason: 'fillet geometry is incomplete' };
+  const [A, B] = ls;
+  const geom = calculateFilletGeometry(state.joints.get(A.far), V, state.joints.get(B.far), radius);
+  if (!geom.valid) return { ok: false, reason: geom.reason };
+  const put = (id, p) => { const j = state.joints.get(id); if (j) { j.x = p.x; j.y = p.y; } };
+  put(arc.joints[0], geom.centerPt);
+  put(A.rim, geom.tA);
+  put(B.rim, geom.tB);
+  return { ok: true };
+}
+
+/** True if either trimmed line of this fillet has collapsed to (near) zero length. */
+export function filletHasCollapsedLine(state, arc) {
+  for (const { rim, far } of filletLines(state, arc)) {
+    const a = state.joints.get(rim), b = state.joints.get(far);
+    if (a && b && Math.hypot(a.x - b.x, a.y - b.y) < COLLAPSE_TOL) return true;
+  }
+  return false;
+}
+
+// ---- two-line pick (Fusion-style): click line 1, click line 2 ----
+
+/** Nearest LINE shape whose segment passes within `tolerance` of `worldPt`, or null. */
+export function findLineAtPoint(state, worldPt, tolerance = 10) {
+  if (!state || !state.joints || !worldPt) return null;
+  let best = null, bestD = tolerance;
+  for (const s of (state.shapes || [])) {
+    if (!s || s.type !== 'line' || !Array.isArray(s.joints) || s.joints.length < 2) continue;
+    const a = state.joints.get(s.joints[0]), b = state.joints.get(s.joints[1]);
+    if (!a || !b) continue;
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    let t = L2 === 0 ? 0 : ((worldPt.x - a.x) * dx + (worldPt.y - a.y) * dy) / L2;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(worldPt.x - (a.x + t * dx), worldPt.y - (a.y + t * dy));
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best;
+}
+
+/**
+ * The fillet corner formed by exactly these two line shapes (they must meet at a shared/coincident joint and
+ * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
+ */
+export function findCornerBetweenLines(state, lineA, lineB) {
+  if (!state || !lineA || !lineB || lineA.id === lineB.id) return null;
+  for (const jid of lineA.joints) {
+    const corner = findCornerAtJoint(state, jid);
+    if (corner && ((corner.lineA.shape.id === lineA.id && corner.lineB.shape.id === lineB.id) ||
+                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) return corner;
+  }
+  return null;
 }

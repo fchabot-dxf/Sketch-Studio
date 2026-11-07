@@ -47,7 +47,7 @@ export function mountVcarveView(state) {
     const absorbedBy = new Map(); // holeId -> parentItem
     const holesMap = new Map();   // parentId -> [holeItem, ...]
     for (const it of items) {
-      const hids = holesOfLoop(it.loop, loops, state, loopPolys);
+      const hids = holesOfLoop(it.loop, loops, state, loopPolys, { excludeNested: true });
       if (hids.length) {
         const holeItems = hids.map((hid) => itemById.get(hid)).filter(Boolean);
         holesMap.set(it.id, holeItems);
@@ -98,7 +98,7 @@ export function mountVcarveView(state) {
     const boundary = loopPolygon(loop, state, sb);
     if (!boundary || boundary.length < 3) { els.canvas.innerHTML = ''; els.readout.textContent = 'Region has no boundary.'; return; }
     const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
-    const holeIds = holesOfLoop(loop, loops, state, loopPolys);
+    const holeIds = holesOfLoop(loop, loops, state, loopPolys, { excludeNested: true });
     const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
     render(els.canvas, boundary, contours, r.maxDepth, holePolys);

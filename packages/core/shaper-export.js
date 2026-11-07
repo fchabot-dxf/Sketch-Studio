@@ -215,7 +215,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       if (!vc || !vc.region) continue;
       vcarveLoops.add(vc.region);
       if (loopPolys) {
-        for (const hid of holesOfLoop(vc.region, loops, state, loopPolys)) {
+        for (const hid of holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true })) {
           vcarveLoops.add(hid);
         }
       }
@@ -249,7 +249,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       if (!vc || !vc.region) continue;
       const boundary = loopPolys[vc.region];
       if (!boundary || boundary.length < 3) continue;
-      const holeIds = holesOfLoop(vc.region, loops, state, loopPolys);
+      const holeIds = holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true });
       const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
       const contours = deriveVcarveContours(boundary, vc, { holes: holePolys });
       for (const c of contours) {

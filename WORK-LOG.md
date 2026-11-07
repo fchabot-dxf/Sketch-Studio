@@ -11332,3 +11332,27 @@ Built VCARVE-5b per the TURN 426 plan and advisor decisions:
      - Clean headless browser shutdown (`Browser.close` + taskkill).
 8. **Gate:**
    - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.
+
+
+## TURN 427b — Restore old pocket-island nested semantics via excludeNested option — branch agy1
+
+- **Problem:**
+  - `holesOfLoop` unconditionally applied depth-2 nested-island filtering to all callers.
+  - In SVG `fill-rule="evenodd"`, alternating nested loops toggle fill/hole (outer solid -> hole void -> dot solid).
+  - The old pocket-island exporter (`shaper-export.js`, SKETCH-4e) absorbed all grouped contained loops into the compound path. Applying the nested-island filter to pockets dropped the inner dot island, changing pocket export output.
+- **Fix:**
+  - Added `excludeNested = false` option to `holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true, excludeNested = false } = {})` in `packages/core/group-model.js`:
+    - `excludeNested: false` (default): returns ALL contained loops, preserving SKETCH-4e evenodd pocket compound path semantics.
+    - `excludeNested: true`: filters out candidates contained in another candidate hole (used for V-carve so bullseye dots stay uncut).
+  - Updated `packages/core/shaper-export.js`:
+    - Pocket export uses `holesOfLoop(L, loops, state, loopPolys)` (default `excludeNested: false`), keeping pocket export 100% byte-identical to `origin/main`.
+    - V-carve export uses `holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true })`.
+  - Updated `apps/shaper/src/vcarve-view.js`:
+    - `populateRegions()` and `recompute()` pass `{ excludeNested: true }`.
+- **Proof & Oracle Verification:**
+  - Added Test 22 in `tests/shaper-export.test.js` pinning pocket bullseye export to the exact string computed on `origin/main` (`e5a5f8a`):
+    `<svg ...><path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 25 25 L 35 25 L 35 35 L 25 35 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" ... /></svg>`.
+  - Verified failure when flipped: temporarily passing `excludeNested: true` in `shaper-export.js` pocket export produced failure (`got 2 subpaths, want 3 subpaths`). With default `excludeNested: false`, Test 22 passes byte-identically.
+  - In `tests/vcarve.test.js` Test 11: verified both `excludeNested: false` (returns all 2 contained loops) and `excludeNested: true` (returns only 1 hole, uncut dot).
+- **Gate:**
+  - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.

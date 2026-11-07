@@ -148,7 +148,11 @@ import { holesOfLoop } from '#core/group-model.js';
       'loop-hole': [{ x: 15, y: 15 }, { x: 45, y: 15 }, { x: 45, y: 45 }, { x: 15, y: 45 }],
       'loop-dot': [{ x: 25, y: 25 }, { x: 35, y: 25 }, { x: 35, y: 35 }, { x: 25, y: 35 }],
     };
-    const holes = holesOfLoop('loop-outer', loops, state, loopPolys);
+    // Default excludeNested=false (pockets): all contained loops returned
+    const allContained = holesOfLoop('loop-outer', loops, state, loopPolys);
+    assert(allContained.length === 2 && allContained.includes('loop-hole') && allContained.includes('loop-dot'), 'pocket semantics return all contained loops');
+    // excludeNested=true (vcarve): nested island inside hole is excluded
+    const holes = holesOfLoop('loop-outer', loops, state, loopPolys, { excludeNested: true });
     assert(holes.length === 1 && holes[0] === 'loop-hole', `outer loop hole must be loop-hole only, got ${JSON.stringify(holes)}`);
     // Carve loop-outer with its derived holes: loop-dot stays uncut
     const stack = vcarveContours(loopPolys['loop-outer'], { dStep: 1, halfAngleTan: 1, holes: holes.map((h) => loopPolys[h]) });

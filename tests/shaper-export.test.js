@@ -271,22 +271,26 @@ import { format } from '#core/units.js';
       [loop.id]: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }]
     };
     const svgMM = exportShaperSVG({ state, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys });
+    // 14. Exact-string oracle in mm
+    // VCARVE-5a (Clipper canonical vertex order): Clipper begins outer insets at bottom-right (35,35), clockwise,
+    // which describes the exact same physical cut as the old (5,5) CCW loop.
     const wantMM = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
-      '  <path d="M 5 5 L 35 5 L 35 35 L 5 35 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5mm"/>',
-      '  <path d="M 10 10 L 30 10 L 30 30 L 10 30 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10mm"/>',
-      '  <path d="M 15 15 L 25 15 L 25 25 L 15 25 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15mm"/>',
+      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5mm"/>',
+      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10mm"/>',
+      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15mm"/>',
       '</svg>',
     ].join('\n');
     eq(svgMM, wantMM, 'vcarve export mm exact string');
 
     // 15. Exact-string oracle in inches
+    // VCARVE-5a (Clipper canonical vertex order): same physical cut at Clipper's canonical start vertex.
     const svgIN = exportShaperSVG({ state, entries: [], encoding: ENC5, docUnit: 'in', loopPolys });
     const wantIN = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
-      '  <path d="M 5 5 L 35 5 L 35 35 L 5 35 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.1969in"/>',
-      '  <path d="M 10 10 L 30 10 L 30 30 L 10 30 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.3937in"/>',
-      '  <path d="M 15 15 L 25 15 L 25 25 L 15 25 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.5906in"/>',
+      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.1969in"/>',
+      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.3937in"/>',
+      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.5906in"/>',
       '</svg>',
     ].join('\n');
     eq(svgIN, wantIN, 'vcarve export in exact string');
@@ -346,6 +350,28 @@ import { format } from '#core/units.js';
       const orphan = exportShaperSVG({ state: { ...rectState(), vcarves: [{ id: 'v', region: 'loop_GONE', vbit: { angle: 90 }, dStep: 1, maxDepth: 5 }] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
       eq(emptyArr, none, 'vcarves: [] → byte-identical');
       eq(orphan, none, 'vcarve with no matching loop polygon → byte-identical');
+    }
+
+    // 20. VCARVE-5a: Dumbbell split loop export parity (17 split contours at depths 1..9mm)
+    {
+      const dbBoundary = [{x:0,y:0},{x:20,y:0},{x:20,y:8},{x:40,y:8},{x:40,y:0},{x:60,y:0},{x:60,y:20},{x:40,y:20},{x:40,y:12},{x:20,y:12},{x:20,y:20},{x:0,y:20}];
+      const dbRec = { id: 'vcDb', region: 'dbLoop', vbit: { angle: 90 }, dStep: 1, maxDepth: 10 };
+      const dbState = {
+        joints: new Map(dbBoundary.map((p, i) => ['D' + i, { x: p.x, y: p.y }])),
+        shapes: [],
+        constraints: [],
+        vcarves: [dbRec],
+      };
+      const dbLoopPolys = { dbLoop: dbBoundary };
+      const dbSVG = exportShaperSVG({ state: dbState, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys: dbLoopPolys });
+      const dbPreview = deriveVcarveContours(dbBoundary, dbRec);
+      eq(dbPreview.length, 17, 'dumbbell preview has 17 contours across split lobes');
+      const dbExported = [...dbSVG.matchAll(/<path d="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => ({ d: m[1], depth: m[2] }));
+      eq(dbExported.length, 17, 'dumbbell export emits all 17 split contours');
+      for (let i = 0; i < dbPreview.length; i++) {
+        eq(dbExported[i].d, polyToPathD(dbPreview[i].polygon), `db contour ${i} path matches preview`);
+        eq(dbExported[i].depth, format(dbPreview[i].depth, 'mm', { unit: true }), `db contour ${i} depth matches preview`);
+      }
     }
   }
 

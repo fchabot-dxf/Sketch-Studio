@@ -10931,3 +10931,30 @@ Two follow-ups to VCARVE-4 (merged ffb49dd):
      - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 17`, `HEADLESS-OTHER 0`, exit code 1 (gate failed as intended). Leaked processes reaped and change reverted.
   3. **Clean gate run:** `npm run gate`:
      - Result: `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.
+
+
+## TURN 423b — Match gate smoke PID as a whole token — branch agy2
+
+- **Problem & Root Cause:**
+  - `scripts/gate.cjs` used `-like "*sk-shell-smoke-${smokePid}*"` to match leftover headless Edge processes.
+  - The trailing wildcard `*` allowed PID prefix collisions: for example, a run with PID 123 would match another run's `--user-data-dir` containing `sk-shell-smoke-1234`, incorrectly counting the foreign browser as its own and causing a false gate failure.
+
+- **Fix (`scripts/gate.cjs`):**
+  - Updated process matching pattern to `sk-shell-smoke-${smokePid}(?=[\\\\/"''\\s]|$)` using regex matching (`-match` in PowerShell).
+  - The positive lookahead requires the PID token to be immediately followed by a path separator (`\` or `/`), a quote (`"` or `'`), whitespace, or the end of the argument/string.
+  - Prefix collisions like `sk-shell-smoke-1234` are rejected because `4` is not a token delimiter.
+
+- **Unit-Level Proof (`tests/gate-pid-match.test.js`):**
+  - Added unit test verifying both JS regex and PowerShell `-match`:
+    - PID 123 matches `sk-shell-smoke-123` in quoted, unquoted, trailing-slash, and end-of-line command lines.
+    - PID 123 rejects `sk-shell-smoke-1234` in all cases.
+    - PID 1234 matches its own command lines and rejects `sk-shell-smoke-123`.
+  - Output: `gate PID matching tests passed ✅`.
+
+- **Gate:**
+  - `npm run gate` (`scripts/gate.cjs`):
+    - `GATE files=156 pass=156 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

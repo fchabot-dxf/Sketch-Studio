@@ -79,7 +79,7 @@
        #design-canvas so the surrounding chrome (ribbon / info panel / mode-nav) stays DARK and SketchStudio is
        untouched. The renderer routes geometry colours through var(--sk-*, fallback); the Shaper :root sets them dark
        (would wash out on cream), so we RE-override them here to the light (dark-on-cream) palette — the sketcher.css
-       light defaults, but with a cream surface + cream-hollow joints. (No grid on this canvas — render ctx omits it.) */
+       light defaults, but with a cream surface + cream-hollow joints. (The shared canvas grid — #ui/canvas-grid.js, GRID_MODE — is drawn behind the geometry using the --sk-grid-* vars below.) */
     #design-canvas, #vcarve-canvas {         /* VCARVE-3a: the Vcarve canvas reuses the cream Design theme */
       background-color: #F4EFE1;             /* warm paper cream — explicitly not white */
       --sk-canvas-bg: #F4EFE1;

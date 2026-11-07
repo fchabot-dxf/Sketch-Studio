@@ -1,7 +1,7 @@
 // packages/ui/style-panel.js — the shared sketcher STYLE panel (S7c-2b).
 // DOM-ownership INVERSION vs apps/sketchstudio/ui/settings-panel.js: that file ADOPTS pre-existing #s-* HTML via
 // getElementById; this shared panel BUILDS its own DOM from a control SPEC (a bare host has no #s-* markup) and
-// owns its open/close. The 16 controls ARE the shared renderer knobs — they read/write the already-shared
+// owns its open/close. The 17 controls ARE the shared renderer knobs — they read/write the already-shared
 // SettingsManager (#core/settings-manager.js), so the shared renderer reacts live. App-agnostic chrome; themed via
 // --sk-* (light defaults → SketchStudio); self-contained <style>. Imports ONLY the settings store.
 
@@ -10,9 +10,12 @@ import { UNITS } from '#core/units.js';
 
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
 // for the S7c-2c swap. min/max/step carried from settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
-// number + paired range slider.
+// number + paired range slider. Declared control TYPES: 'checkbox' (boolean), 'select' (an `options: [{value,label}]`
+// enum — generic, e.g. GRID_MODE), and the default number+slider (needs min/max/step).
 const CONTROLS = [
   { key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
+  { key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
+    options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
   { key: 'SNAP_MAGNETISM',          label: 'Snap Magnetism',       min: 2,   max: 40,  step: 1 },
   { key: 'GRID_MAGNETISM',          label: 'Grid Magnetism',       min: 2,   max: 40,  step: 1 },
   { key: 'GRID_SIZE',               label: 'Grid Size',            min: 0.5, max: 20,  step: 0.5 },
@@ -88,12 +91,12 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
   closeX.addEventListener('click', () => close());
   head.append(titleEl, closeX);
 
-  // Body (16 controls from the spec)
+  // Body (17 controls from the spec)
   const body = document.createElement('div'); body.className = 'sk-style-body';
   for (const spec of CONTROLS) body.appendChild(buildControl(spec));
 
   // HOST-OPT-IN: document-unit selector (U3b). Rendered ONLY when showDocUnit:true (Shaper) — SketchStudio omits it,
-  // so its panel stays exactly the 16 CONTROLS / byte-identical. Writes DOC_UNIT; units-aware fields (cut params,
+  // so its panel stays exactly the 17 CONTROLS / byte-identical. Writes DOC_UNIT; units-aware fields (cut params,
   // dimension edit) re-read it on change.
   let docUnitSelect = null;
   if (showDocUnit) {
@@ -131,6 +134,12 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
       input.addEventListener('change', () => settings.set(spec.key, !!input.checked, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
       controlEls[spec.key] = { input };
+    } else if (spec.type === 'select') {
+      const input = document.createElement('select'); input.className = 'sk-style-input'; input.dataset.key = spec.key;
+      for (const o of spec.options) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; input.appendChild(opt); }
+      input.addEventListener('change', () => settings.set(spec.key, input.value, { persist: 'local' }));
+      top.appendChild(input); row.appendChild(top);
+      controlEls[spec.key] = { input };
     } else {
       const input = document.createElement('input'); input.type = 'number'; input.className = 'sk-style-input'; input.dataset.key = spec.key;
       input.min = String(spec.min); input.max = String(spec.max); input.step = String(spec.step);
@@ -152,6 +161,7 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
       const c = controlEls[spec.key]; if (!c) continue;
       const v = all[spec.key];
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
+      else if (spec.type === 'select') { c.input.value = spec.options.some((o) => o.value === v) ? v : spec.options[0].value; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
     if (docUnitSelect) docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';

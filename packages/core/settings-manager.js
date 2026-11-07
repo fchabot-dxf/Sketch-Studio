@@ -27,6 +27,9 @@ const DEFAULT_SETTINGS = {
     GRID_SIZE: 2,
     GRID_MAJOR_STEP: 10,
     SHOW_GRID: true,
+    // Grid style drawn by the shared canvas grid (#ui/canvas-grid.js): 'lines' | 'off' | 'points'. Default 'lines' = the
+    // grid SketchStudio always drew. A genuine display preference → persisted locally like the other display settings.
+    GRID_MODE: 'lines',
 
     // Visual defaults
     LINE_STROKE: 1.0,

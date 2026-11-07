@@ -1,8 +1,10 @@
 // Shared SVG renderer (#ui/svg-renderer.js) — used by SketchStudio today; Shaper's Design tab adopts it
 // in a later slice. Relocated VERBATIM from apps/sketchstudio in slice S3 (no logic change).
-// TODO(shaper): parameterize the DOM-id reaches (world-group, grid/grid-heavy, magnifier, dimInput,
-// window) before Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM.
+// TODO(shaper): parameterize the remaining DOM-id reaches (world-group, magnifier, dimInput, window) before
+// Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM. (The grid is no longer one of
+// them: it is created inside the canvas svg by #ui/canvas-grid.js, shared by SketchStudio and any mountSketch host.)
 import { dbg } from '#core/debug.js';
+import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
@@ -52,37 +54,12 @@ export function skv(color) {
 // does EXACTLY what the inline blocks did, reading SketchStudio's globals/DOM. draw() takes ctx = defaultRenderCtx
 // as a trailing optional param, so existing SketchStudio callers (which pass nothing) stay byte-identical.
 export const defaultRenderCtx = {
-  // (a) Retune the SVG grid <pattern>s to the current grid sizes / zoom (fixes stroke saturation on zoom).
-  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
+  // (a) Mount + retune the shared canvas grid (#ui/canvas-grid.js — the ONE grid: GRID_MODE lines/off/points, retuned to
+  // the current grid sizes / zoom so strokes don't saturate). `svg` is the canvas draw() was handed; the grid's
+  // <defs>/<rect> are created inside it (no longer hardcoded in apps/sketchstudio/index.html).
+  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, scale, svg }) {
     try {
-      const gridPattern = document.getElementById('grid');
-      const gridHeavyPattern = document.getElementById('grid-heavy');
-      if (gridPattern && gridHeavyPattern) {
-        gridPattern.setAttribute('width', GRID_SIZE);
-        gridPattern.setAttribute('height', GRID_SIZE);
-        gridHeavyPattern.setAttribute('width', GRID_MAJOR_STEP);
-        gridHeavyPattern.setAttribute('height', GRID_MAJOR_STEP);
-
-        const minorPath = gridPattern.querySelector('path');
-        if (minorPath) {
-          minorPath.setAttribute('d', `M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`);
-          // Clamp stroke width to prevent grid saturation when zooming out
-          const minorStroke = Math.min(scale(1), 0.2); // Max 0.2 units (10% of 2)
-          minorPath.setAttribute('stroke-width', minorStroke);
-        }
-
-        const majorRect = gridHeavyPattern.querySelector('rect');
-        if (majorRect) {
-          majorRect.setAttribute('width', GRID_MAJOR_STEP);
-          majorRect.setAttribute('height', GRID_MAJOR_STEP);
-        }
-        const majorPath = gridHeavyPattern.querySelector('path');
-        if (majorPath) {
-          majorPath.setAttribute('d', `M ${GRID_MAJOR_STEP} 0 L 0 0 0 ${GRID_MAJOR_STEP}`);
-          const majorStroke = Math.min(scale(2), 1.0); // Max 1.0 units (10% of 10)
-          majorPath.setAttribute('stroke-width', majorStroke);
-        }
-      }
+      updateGridFromSettings({ svgEl: svg, GRID_SIZE, GRID_MAJOR_STEP, scale });
     } catch (_) {}
   },
   // (b) Read the engine's last solve stats (written elsewhere by the solver) for the debug/AI-vision residual labels.
@@ -337,8 +314,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
   // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue.
-  // Ancillary (P3): the host's render ctx retunes the grid <pattern>s (default = SketchStudio's #grid DOM).
-  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, scale });
+  // Ancillary (P3): the host's render ctx mounts + retunes the shared canvas grid (default ctx → #ui/canvas-grid.js on `svg`).
+  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, scale, svg });
 
   // Closed-shape fills: build simple loops from grouped line shapes
   try {

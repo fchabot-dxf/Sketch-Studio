@@ -393,16 +393,8 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
     <main class="flex-1 relative bg-[#DBDBDB] flex flex-col overflow-hidden p-2 md:p-4">
         <div class="flex-1 bg-white rounded shadow-inner border border-slate-300 relative overflow-hidden">
             <svg id="svgCanvas" preserveAspectRatio="xMidYMid slice">
-                <defs>
-                    <pattern id="grid" width="2" height="2" patternUnits="userSpaceOnUse">
-                        <path d="M 2 0 L 0 0 0 2" fill="none" stroke="#CBD5E1" stroke-width="1"/>
-                    </pattern>
-                    <pattern id="grid-heavy" width="10" height="10" patternUnits="userSpaceOnUse">
-                        <rect width="10" height="10" fill="url(#grid)" />
-                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#93C5FD" stroke-width="2"/>
-                    </pattern>
-                </defs>
-                <rect id="infinite-grid" x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid-heavy)" />
+                <!-- The grid (<defs> patterns + #infinite-grid rect) is created INSIDE this svg by the shared
+                     #ui/canvas-grid.js (GRID_MODE: lines/off/points) — it no longer lives in this file. -->
                 <g id="world-group">
                     <g id="origin-datum">
                         <circle r="4" fill="none" stroke="#64748B" stroke-width="1.5" />

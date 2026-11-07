@@ -501,6 +501,7 @@ function ensureSketch() {
     isActive: () => currentMode === 'design',
     onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
     seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
+    grid: true,      // GRID-1: the shared GRID_MODE-driven canvas grid (Grid / None / Draft points in the settings modal)
   });
   buildDesignUI();
 

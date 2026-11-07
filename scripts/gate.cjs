@@ -82,15 +82,17 @@ function main() {
 
   // c. Count leftover headless msedge.exe processes matching "sk-shell-smoke"
   // Scoped to THIS smoke run's profile dir (sk-shell-smoke-<pid>) so parallel runs on other seats don't trip the gate.
+  // Matched as a whole token: the profile dir name must end right after the PID (followed by quote, space, slash, or end of arg),
+  // so that PID 123 does not match another run's 1234.
   const smokePid = smokeRes.pid;
   let headlessLeft = 0;
   let headlessOther = 0;
   const countHeadless = () => {
     try {
-      const pattern = smokePid ? `*sk-shell-smoke-${smokePid}*` : '*sk-shell-smoke*';
+      const pattern = smokePid ? `sk-shell-smoke-${smokePid}(?=[\\\\/"''\\s]|$)` : 'sk-shell-smoke';
       const psScript = smokePid
-        ? `$all = Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -like "*sk-shell-smoke*" }; $mine = ($all | Where-Object { $_.CommandLine -like "${pattern}" } | Measure-Object).Count; $other = ($all | Where-Object { $_.CommandLine -notlike "${pattern}" } | Measure-Object).Count; Write-Output "$mine,$other"`
-        : `$count = (Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -like "*sk-shell-smoke*" } | Measure-Object).Count; Write-Output "$count,0"`;
+        ? `$all = Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -match 'sk-shell-smoke' }; $mine = ($all | Where-Object { $_.CommandLine -match '${pattern}' } | Measure-Object).Count; $other = ($all | Where-Object { $_.CommandLine -notmatch '${pattern}' } | Measure-Object).Count; Write-Output "$mine,$other"`
+        : `$count = (Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -match 'sk-shell-smoke' } | Measure-Object).Count; Write-Output "$count,0"`;
       const psRes = spawnSync('powershell', ['-NoProfile', '-Command', psScript], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],

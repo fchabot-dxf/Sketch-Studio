@@ -291,6 +291,9 @@ function handleCommit() {
         const isAngleDim = uiState.target.type === CONSTRAINT_TYPES.ANGLE;
         const val = isAngleDim ? parseFloat(uiState.singleInput.value) : parseUnit(uiState.singleInput.value, getDocUnit());
         if (val != null && !isNaN(val)) {
+            uiState.target.isDriven = false;
+            uiState.target.driven = false;
+            uiState.target.__newlyPlaced = false;
             if (uiState.appState.saveState) uiState.appState.saveState();
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
@@ -341,6 +344,15 @@ function handlePreview() {
 }
 
 function handleCancel() {
+    if (uiState.mode === 'edit' && uiState.target && uiState.target.__newlyPlaced) {
+        const state = uiState.appState;
+        if (state && Array.isArray(state.constraints)) {
+            const idx = state.constraints.indexOf(uiState.target);
+            if (idx !== -1) state.constraints.splice(idx, 1);
+        }
+        uiState.target.__placing = false;
+        if (state && state.placingConstraint === uiState.target) state.placingConstraint = null;
+    }
     window.dispatchEvent(new CustomEvent('liveDimensionCancelled'));
     hideInput();
 }

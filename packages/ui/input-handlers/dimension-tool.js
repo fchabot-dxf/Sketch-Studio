@@ -83,11 +83,23 @@ export function setupDimensionTool(svg, appState) {
 }
 
 export function resetDimensionState(state) {
+    const pc = (state && state.placingConstraint) || dimensionState.placingConstraint;
+    if (pc && pc.__placing) {
+        if (state && Array.isArray(state.constraints)) {
+            const idx = state.constraints.indexOf(pc);
+            if (idx !== -1) state.constraints.splice(idx, 1);
+        }
+        pc.__placing = false;
+        pc.__newlyPlaced = false;
+    }
     dimensionState.pendingDimension = null;
     dimensionState.placingConstraint = null;
-    if (state && state.placingConstraint) state.placingConstraint = null;
-    if (state && state.active && state.active.mode === TOOL_MODES.DIMENSION) {
-        state.active = null;
+    dimensionState.editingConstraint = null;
+    if (state) {
+        state.placingConstraint = null;
+        if (state.active && state.active.mode === TOOL_MODES.DIMENSION) {
+            state.active = null;
+        }
     }
 }
 
@@ -120,34 +132,30 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             if (!j1 || !j2) return false;
 
             // If this line already has a driving distance dimension, don't auto-create another.
-            // Instead enter a pending state so a second line-click can be used to measure angle/line-line distance.
-            if (hasDrivingDistanceForShape(state, shape.id)) {
+            if (hasDrivingDistanceForShape(state, shape.id) || hasDrivingDistanceForJoints(state, shape.joints[0], shape.joints[1])) {
                 dimensionState.pendingDimension = { type: 'line', firstShapeId: shape.id };
                 showNotification(
-                    'Line already dimensioned. Click another line to measure angle or click the label to edit existing dimension. [ERR-DIM-01] Reason: Line already has a driving dimension.\nArgs: ' +
-                    JSON.stringify({ shape }),
+                    'Line already dimensioned. Click another line to measure angle or click the label to edit existing dimension.',
                     'info'
                 );
                 return true;
             }
 
-            // Otherwise create a DRIVEN (non-driving) dimension so activating the tool does not unexpectedly distort geometry.
-            beginDimUndo(state);
             const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
                 joints: [shape.joints[0], shape.joints[1]],
                 value: getDist(j1, j2),
                 dimMode: 'auto',
-                // Mark as non-driving initially so solver won't 'crush' geometry on activation.
-                isDriven: true
-            });
+                isDriven: false
+            }, { autoSolve: false });
             const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-            if (!c) { endDimUndo(state); return false; }
+            if (!c) return false;
 
             const w = placePos || { x: (j1.x + j2.x) / 2, y: (j1.y + j2.y) / 2 };
 
             logDim('create-line-dim', { id: c.id || '(new)', keepPlacing, placePos: w, keyboardPlaced: !!opts.keyboardPlaced });
 
             try { c.__placing = true; } catch(_){ }
+            try { c.__newlyPlaced = true; } catch(_){ }
             updateConstraintOffset(state, c, w);
             try { c.glyphPos = w; } catch(_){ }
 
@@ -160,7 +168,9 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
                 dimensionState.editingConstraint = c;
                 showEditInput(svg, state, c);
             }
-            endDimUndo(state);
+            if (state.selectedShapes) state.selectedShapes.clear();
+            if (state.selectedJoints) state.selectedJoints.clear();
+            if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
             return true;
         }
     }
@@ -171,20 +181,29 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         const j2 = state.joints.get(selectedJoints[1]);
         if (!j1 || !j2) return false;
 
-        beginDimUndo(state);
+        if (hasDrivingDistanceForJoints(state, selectedJoints[0], selectedJoints[1])) {
+            showNotification(
+                'Joints already dimensioned. Click the label to edit existing dimension.',
+                'info'
+            );
+            return true;
+        }
+
         const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
             joints: [selectedJoints[0], selectedJoints[1]],
             value: getDist(j1, j2),
-            dimMode: 'auto'
-        });
+            dimMode: 'auto',
+            isDriven: false
+        }, { autoSolve: false });
         const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-        if (!c) { endDimUndo(state); return false; }
+        if (!c) return false;
 
         const w = placePos || { x: (j1.x + j2.x) / 2, y: (j1.y + j2.y) / 2 };
 
         logDim('create-joints-dim', { id: c.id || '(new)', keepPlacing, placePos: w, keyboardPlaced: !!opts.keyboardPlaced });
 
         try { c.__placing = true; } catch(_){ }
+        try { c.__newlyPlaced = true; } catch(_){ }
         updateConstraintOffset(state, c, w);
         try { c.glyphPos = w; } catch(_){ }
 
@@ -197,7 +216,9 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             dimensionState.editingConstraint = c;
             showEditInput(svg, state, c);
         }
-        endDimUndo(state);
+        if (state.selectedShapes) state.selectedShapes.clear();
+        if (state.selectedJoints) state.selectedJoints.clear();
+        if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
         return true;
     }
 
@@ -207,6 +228,88 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
 /**
  * Handle pointer down for dimension creation
  */
+
+export function isDimensionPlacing(state) {
+    const pc = (state && state.placingConstraint) || dimensionState.placingConstraint;
+    return !!(pc && pc.__placing);
+}
+
+export function getPlacingConstraint(state) {
+    return (state && state.placingConstraint) || dimensionState.placingConstraint;
+}
+
+export function anchorPlacingDimension(svg, state) {
+    const pending = (state && state.placingConstraint) || dimensionState.placingConstraint;
+    if (!pending || !pending.__placing) return false;
+
+    // Check if geometry is already fully defined (Fixed/Constrained)
+    if (pending.joints && pending.joints.length === 2 && state) {
+        const [j1, j2] = pending.joints;
+        const status = analyzeConstraintStatus(state);
+        if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
+            const savedPositions = new Map();
+            for (const [id, j] of state.joints) savedPositions.set(id, { x: j.x, y: j.y });
+            const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
+            state.constraints.push(testConstraint);
+            try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
+            const a = state.joints.get(j1);
+            const b = state.joints.get(j2);
+            const dist = (a && b) ? getDist(a, b) : null;
+            const idx = state.constraints.indexOf(testConstraint);
+            if (idx !== -1) state.constraints.splice(idx, 1);
+            for (const [id, pos] of savedPositions) {
+                const j = state.joints.get(id);
+                if (j) { j.x = pos.x; j.y = pos.y; }
+            }
+
+            if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {
+                pending.isDriven = true;
+                pending.driven = true;
+                pending.__placing = false;
+                if (state && state.placingConstraint === pending) state.placingConstraint = null;
+                dimensionState.placingConstraint = null;
+                showNotification(
+                    'Geometry already defined. Dimension added as Driven. [ERR-DIM-02]',
+                    'info'
+                );
+                return true;
+            }
+        }
+    }
+
+    // Finalize value for H/V/aligned
+    if (pending.dimMode === 'horizontal' && pending.joints && pending.joints.length >= 2 && state) {
+        const j1 = state.joints.get(pending.joints[0]);
+        const j2 = state.joints.get(pending.joints[1]);
+        if (j1 && j2) pending.value = Math.abs(j2.x - j1.x);
+    } else if (pending.dimMode === 'vertical' && pending.joints && pending.joints.length >= 2 && state) {
+        const j1 = state.joints.get(pending.joints[0]);
+        const j2 = state.joints.get(pending.joints[1]);
+        if (j1 && j2) pending.value = Math.abs(j2.y - j1.y);
+    } else if (pending.joints && pending.joints.length >= 2 && state) {
+        const j1 = state.joints.get(pending.joints[0]);
+        const j2 = state.joints.get(pending.joints[1]);
+        if (j1 && j2) pending.value = getDist(j1, j2);
+    }
+
+    pending.__placing = false;
+    if (state && state.placingConstraint === pending) state.placingConstraint = null;
+    dimensionState.placingConstraint = null;
+
+    if (pending.isDriven || pending.driven) {
+        return true;
+    }
+
+    dimensionState.editingConstraint = pending;
+    try {
+        const svgEl = svg || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
+        showEditInput(svgEl, state, pending);
+    } catch(err) {
+        console.error(err);
+    }
+    return true;
+}
+
 export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) {
     logDim('pointer-down', {
         tool: state.currentTool,
@@ -880,18 +983,29 @@ export function updateConstraintOffset(state, c, w) {
                 // Promote to reference on a same-edge conflict, but NEVER DEMOTE an upstream driven decision
                 // (e.g. a rank-redundant CROSS-edge dim already marked driven by ConstraintManager) back to a
                 // driver — that's the "renders as driver despite the reference notice" bug. Keep both flags in sync.
-                c.isDriven = !!(c.isDriven || c.driven || hasConflict);
-                c.driven = c.isDriven;
+                const isReference = !!(c.isDriven || c.driven || c._forcedDriven || hasConflict);
+                c.isDriven = isReference;
+                c.driven = isReference;
 
                 const midX = (j1.x + j2.x) / 2;
                 const midY = (j1.y + j2.y) / 2;
                 
                 if (mode === 'horizontal') {
                     c.offset = w.y - midY;
+                    c.value = Math.abs(j2.x - j1.x);
+                    c.glyphPos = { x: midX, y: w.y };
                 } else if (mode === 'vertical') {
                     c.offset = w.x - midX;
+                    c.value = Math.abs(j2.y - j1.y);
+                    c.glyphPos = { x: w.x, y: midY };
                 } else {
                     try { c.offset = perpendicularDistance(w, j1, j2); } catch(_) { c.offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30; }
+                    c.value = getDist(j1, j2);
+                    const dx = j2.x - j1.x, dy = j2.y - j1.y;
+                    const len = Math.hypot(dx, dy);
+                    const nx = len > 0.01 ? -dy / len : 0;
+                    const ny = len > 0.01 ? dx / len : -1;
+                    c.glyphPos = { x: midX + nx * c.offset, y: midY + ny * c.offset };
                 }
             } else {
                 // After placement, just update offset (mode is locked)

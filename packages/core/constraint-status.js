@@ -1,5 +1,7 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
+import { NewtonSolver } from './solver/engine.js';
+import { Algebra } from './solver/algebra.js';
 
 function getHVBetweenJoints(j1, j2, constraints) {
     if (!constraints || !Array.isArray(constraints)) return null;
@@ -271,10 +273,14 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                                 } catch(_) {}
                                 const hv = getHVBetweenJoints(currentId, nId, constraints);
                                 let axisLockAdded = false;
-                                if (hv === 'vertical' && lockedAxisY.has(currentId) && !lockedAxisY.has(nId)) {
+                                const curPt = joints.get(currentId);
+                                const nPt = joints.get(nId);
+                                const sameY = curPt && nPt && Math.abs(curPt.y - nPt.y) < 1e-4;
+                                const sameX = curPt && nPt && Math.abs(curPt.x - nPt.x) < 1e-4;
+                                if ((hv === 'vertical' || (lockedAxisX.has(currentId) && lockedAxisX.has(nId) && sameX)) && lockedAxisY.has(currentId) && !lockedAxisY.has(nId)) {
                                     lockedAxisY.add(nId);
                                     axisLockAdded = true;
-                                } else if (hv === 'horizontal' && lockedAxisX.has(currentId) && !lockedAxisX.has(nId)) {
+                                } else if ((hv === 'horizontal' || (lockedAxisY.has(currentId) && lockedAxisY.has(nId) && sameY)) && lockedAxisX.has(currentId) && !lockedAxisX.has(nId)) {
                                     lockedAxisX.add(nId);
                                     axisLockAdded = true;
                                 }
@@ -291,30 +297,52 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                         const s = shapes.find(sh => sh.id === c.shape);
                         if (s && s.joints && s.joints.length > 1) {
                             const centerId = s.joints[0];
-                            const rimId = s.joints[1];
-                            const nId = (currentId === centerId) ? rimId : (currentId === rimId ? centerId : null);
-                            if (nId) {
-                                radialLocked.add(nId);
-                                if (!radialConstraints.has(nId)) radialConstraints.set(nId, new Set());
+                            const rimIds = s.joints.slice(1);
+                            if (currentId === centerId && isEffectivelyGrounded(currentId)) {
+                                for (const rimId of rimIds) {
+                                    radialLocked.add(rimId);
+                                    if (!radialConstraints.has(rimId)) radialConstraints.set(rimId, new Set());
+                                    const fid = c.id || (`radius:${c.shape || (c.joints || []).join('-')}`);
+                                    radialConstraints.get(rimId).add(fid);
+                                    try {
+                                        if (!dofSources.has(rimId)) dofSources.set(rimId, []);
+                                        dofSources.get(rimId).push(`anchor:${centerId}`);
+                                    } catch(_) {}
+                                    const hv = getHVBetweenJoints(centerId, rimId, constraints);
+                                    let axisLockAdded = false;
+                                    if (hv === 'vertical' && lockedAxisY.has(centerId) && !lockedAxisY.has(rimId)) {
+                                        lockedAxisY.add(rimId);
+                                        axisLockAdded = true;
+                                    } else if (hv === 'horizontal' && lockedAxisX.has(centerId) && !lockedAxisX.has(rimId)) {
+                                        lockedAxisX.add(rimId);
+                                        axisLockAdded = true;
+                                    }
+                                    if (applyDecIfNeeded(c, rimId) || axisLockAdded) {
+                                        constrainedJoints.add(rimId);
+                                        if (axisLockAdded || !visitedInQueue.has(rimId)) { processingQueue.push(rimId); visitedInQueue.add(rimId); }
+                                    }
+                                }
+                            } else if (rimIds.includes(currentId) && isEffectivelyGrounded(currentId)) {
+                                radialLocked.add(centerId);
+                                if (!radialConstraints.has(centerId)) radialConstraints.set(centerId, new Set());
                                 const fid = c.id || (`radius:${c.shape || (c.joints || []).join('-')}`);
-                                radialConstraints.get(nId).add(fid);
-                                // Record provenance + anchor joint id for downstream consumers
+                                radialConstraints.get(centerId).add(fid);
                                 try {
-                                    if (!dofSources.has(nId)) dofSources.set(nId, []);
-                                    dofSources.get(nId).push(`anchor:${centerId}`);
+                                    if (!dofSources.has(centerId)) dofSources.set(centerId, []);
+                                    dofSources.get(centerId).push(`anchor:${currentId}`);
                                 } catch(_) {}
-                                const hv = getHVBetweenJoints(currentId, nId, constraints);
+                                const hv = getHVBetweenJoints(currentId, centerId, constraints);
                                 let axisLockAdded = false;
-                                if (hv === 'vertical' && lockedAxisY.has(currentId) && !lockedAxisY.has(nId)) {
-                                    lockedAxisY.add(nId);
+                                if (hv === 'vertical' && lockedAxisY.has(currentId) && !lockedAxisY.has(centerId)) {
+                                    lockedAxisY.add(centerId);
                                     axisLockAdded = true;
-                                } else if (hv === 'horizontal' && lockedAxisX.has(currentId) && !lockedAxisX.has(nId)) {
-                                    lockedAxisX.add(nId);
+                                } else if (hv === 'horizontal' && lockedAxisX.has(currentId) && !lockedAxisX.has(centerId)) {
+                                    lockedAxisX.add(centerId);
                                     axisLockAdded = true;
                                 }
-                                if (applyDecIfNeeded(c, nId) || axisLockAdded) {
-                                    constrainedJoints.add(nId);
-                                    if (!visitedInQueue.has(nId)) { processingQueue.push(nId); visitedInQueue.add(nId); }
+                                if (applyDecIfNeeded(c, centerId) || axisLockAdded) {
+                                    constrainedJoints.add(centerId);
+                                    if (axisLockAdded || !visitedInQueue.has(centerId)) { processingQueue.push(centerId); visitedInQueue.add(centerId); }
                                 }
                             }
                         }
@@ -351,24 +379,53 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                     // If the line (defined by 2 joints) is fully fixed, decrement target joint
                     if (c.shape && c.joint) {
                         const s = shapes.find(sh => sh.id === c.shape);
-                        if (s && s.type === 'line' && s.joints) {
+                        if (s && s.type === 'line' && s.joints && s.joints.length >= 2) {
                             const [j1, j2] = s.joints;
+                            const targetId = c.joint;
+                            const hv = getHVBetweenJoints(j1, j2, constraints);
+                            let axisLockAdded = false;
+
+                            // If line is horizontal (or endpoints have Y locked), target joint has Y locked
+                            if (hv === 'horizontal' || (lockedAxisY.has(j1) && lockedAxisY.has(j2))) {
+                                if ((lockedAxisY.has(j1) || lockedAxisY.has(j2)) && !lockedAxisY.has(targetId)) {
+                                    lockedAxisY.add(targetId);
+                                    axisLockAdded = true;
+                                }
+                                if (lockedAxisY.has(targetId)) {
+                                    if (!lockedAxisY.has(j1)) { lockedAxisY.add(j1); axisLockAdded = true; }
+                                    if (!lockedAxisY.has(j2)) { lockedAxisY.add(j2); axisLockAdded = true; }
+                                }
+                            }
+
+                            // If line is vertical (or endpoints have X locked), target joint has X locked
+                            if (hv === 'vertical' || (lockedAxisX.has(j1) && lockedAxisX.has(j2))) {
+                                if ((lockedAxisX.has(j1) || lockedAxisX.has(j2)) && !lockedAxisX.has(targetId)) {
+                                    lockedAxisX.add(targetId);
+                                    axisLockAdded = true;
+                                }
+                                if (lockedAxisX.has(targetId)) {
+                                    if (!lockedAxisX.has(j1)) { lockedAxisX.add(j1); axisLockAdded = true; }
+                                    if (!lockedAxisX.has(j2)) { lockedAxisX.add(j2); axisLockAdded = true; }
+                                }
+                            }
+
                             // Check if BOTH endpoints are fixed (Green)
                             if (fixedJoints.has(j1) && fixedJoints.has(j2)) {
                                 if (!processedConstraints.has(c)) {
-                                    const targetId = c.joint;
                                     if (targetId && getDOF(targetId) > 0) {
-                                        // register radial/source provenance for point-on-line reductions
                                         if (!radialConstraints.has(targetId)) radialConstraints.set(targetId, new Set());
                                         radialConstraints.get(targetId).add(c.id || (`pointOnLine:${c.shape || 'auto'}`));
                                         radialLocked.add(targetId);
-                                        if (applyDecIfNeeded(c, targetId)) {
+                                        if (applyDecIfNeeded(c, targetId) || axisLockAdded) {
                                             if (!visitedInQueue.has(targetId)) { processingQueue.push(targetId); visitedInQueue.add(targetId); }
                                             constrainedJoints.add(targetId);
                                         }
                                         processedConstraints.add(c);
                                     }
                                 }
+                            } else if (axisLockAdded) {
+                                constrainedJoints.add(targetId);
+                                if (!visitedInQueue.has(targetId)) { processingQueue.push(targetId); visitedInQueue.add(targetId); }
                             }
                         }
                     }
@@ -417,6 +474,71 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                     }
                     break;
 
+                case CONSTRAINT_TYPES.TANGENT:
+                case 'tangent':
+                    {
+                        const lineShape = shapes.find(sh => sh.id === (c.line || (c.shapes && c.shapes[0])));
+                        const circShape = shapes.find(sh => sh.id === (c.circle || (c.shapes && c.shapes[1])));
+                        if (lineShape && circShape && lineShape.type === 'line' && (circShape.type === 'circle' || circShape.type === 'arc') && circShape.joints && circShape.joints.length >= 2) {
+                            const centerId = circShape.joints[0];
+                            const rimIds = circShape.joints.slice(1);
+                            const [lj1, lj2] = lineShape.joints;
+                            const hv = getHVBetweenJoints(lj1, lj2, constraints);
+                            const isHorizontal = hv === 'horizontal' || (lockedAxisY.has(lj1) && lockedAxisY.has(lj2));
+                            const isVertical = hv === 'vertical' || (lockedAxisX.has(lj1) && lockedAxisX.has(lj2));
+
+                            const sharedRim = lineShape.joints.find(j => rimIds.includes(j));
+                            let changed = false;
+
+                            if (isHorizontal) {
+                                if (lockedAxisY.has(lj1) || lockedAxisY.has(lj2)) {
+                                    if (!lockedAxisY.has(centerId)) { lockedAxisY.add(centerId); changed = true; }
+                                    if (sharedRim && !lockedAxisY.has(sharedRim)) { lockedAxisY.add(sharedRim); changed = true; }
+                                }
+                                if (sharedRim) {
+                                    if (lockedAxisX.has(sharedRim) && !lockedAxisX.has(centerId)) {
+                                        lockedAxisX.add(centerId); changed = true;
+                                    }
+                                    if (lockedAxisX.has(centerId) && !lockedAxisX.has(sharedRim)) {
+                                        lockedAxisX.add(sharedRim); changed = true;
+                                    }
+                                }
+                                if (lockedAxisY.has(centerId)) {
+                                    if (!lockedAxisY.has(lj1)) { lockedAxisY.add(lj1); changed = true; }
+                                    if (!lockedAxisY.has(lj2)) { lockedAxisY.add(lj2); changed = true; }
+                                }
+                            } else if (isVertical) {
+                                if (lockedAxisX.has(lj1) || lockedAxisX.has(lj2)) {
+                                    if (!lockedAxisX.has(centerId)) { lockedAxisX.add(centerId); changed = true; }
+                                    if (sharedRim && !lockedAxisX.has(sharedRim)) { lockedAxisX.add(sharedRim); changed = true; }
+                                }
+                                if (sharedRim) {
+                                    if (lockedAxisY.has(sharedRim) && !lockedAxisY.has(centerId)) {
+                                        lockedAxisY.add(centerId); changed = true;
+                                    }
+                                    if (lockedAxisY.has(centerId) && !lockedAxisY.has(sharedRim)) {
+                                        lockedAxisY.add(sharedRim); changed = true;
+                                    }
+                                }
+                                if (lockedAxisX.has(centerId)) {
+                                    if (!lockedAxisX.has(lj1)) { lockedAxisX.add(lj1); changed = true; }
+                                    if (!lockedAxisX.has(lj2)) { lockedAxisX.add(lj2); changed = true; }
+                                }
+                            }
+
+                            if (changed) {
+                                constrainedJoints.add(centerId);
+                                if (sharedRim) constrainedJoints.add(sharedRim);
+                                if (!visitedInQueue.has(centerId)) { processingQueue.push(centerId); visitedInQueue.add(centerId); }
+                                if (sharedRim && !visitedInQueue.has(sharedRim)) { processingQueue.push(sharedRim); visitedInQueue.add(sharedRim); }
+                            }
+
+                            applyDecIfNeeded(c, centerId);
+                            if (sharedRim) applyDecIfNeeded(c, sharedRim);
+                        }
+                    }
+                    break;
+
                 case CONSTRAINT_TYPES.EQUAL:
                     // Equal removes 1 DOF (length is determined by other shape)
                     if (c.shapes && c.shapes.length === 2) {
@@ -439,6 +561,34 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                             };
                             if (s1Fixed && !s2Fixed) propagate(s2);
                             else if (s2Fixed && !s1Fixed) propagate(s1);
+                        }
+                    }
+                    // Joint-level equal (e.g. arc rim circularity: [center, rim1, center, rim2])
+                    if (c.joints && c.joints.length === 4) {
+                        const [j1, j2, j3, j4] = c.joints;
+                        if (j1 === j3) {
+                            const center = j1;
+                            const r1 = j2;
+                            const r2 = j4;
+                            if (isEffectivelyGrounded(center)) {
+                                if (isEffectivelyGrounded(r1) && !isEffectivelyGrounded(r2)) {
+                                    radialLocked.add(r2);
+                                    if (!radialConstraints.has(r2)) radialConstraints.set(r2, new Set());
+                                    radialConstraints.get(r2).add(c.id || (`equal:${c.joints.join('-')}`));
+                                    if (applyDecIfNeeded(c, r2)) {
+                                        constrainedJoints.add(r2);
+                                        if (!visitedInQueue.has(r2)) { processingQueue.push(r2); visitedInQueue.add(r2); }
+                                    }
+                                } else if (isEffectivelyGrounded(r2) && !isEffectivelyGrounded(r1)) {
+                                    radialLocked.add(r1);
+                                    if (!radialConstraints.has(r1)) radialConstraints.set(r1, new Set());
+                                    radialConstraints.get(r1).add(c.id || (`equal:${c.joints.join('-')}`));
+                                    if (applyDecIfNeeded(c, r1)) {
+                                        constrainedJoints.add(r1);
+                                        if (!visitedInQueue.has(r1)) { processingQueue.push(r1); visitedInQueue.add(r1); }
+                                    }
+                                }
+                            }
                         }
                     }
                     break;
@@ -530,27 +680,49 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
     // during cluster-finalization rather than BFS propagation).
     if (Array.isArray(constraints)) {
         for (const c of constraints) {
-            if (!c || c.type !== CONSTRAINT_TYPES.DISTANCE || !c.joints || c.joints.length !== 2) continue;
-            const [a, b] = c.joints;
-            const aDOF = getDOF(a);
-            const bDOF = getDOF(b);
-            const srcId = c.id || (`distance:${(c.joints || []).join('-')}`);
-            // If either endpoint is (or became) grounded, register this distance as a
-            // radial source for both endpoints (counts toward radialConstraints).
-            if (aDOF <= 0 || bDOF <= 0) {
-                if (!radialConstraints.has(a)) radialConstraints.set(a, new Set());
-                if (!radialConstraints.has(b)) radialConstraints.set(b, new Set());
-                radialConstraints.get(a).add(srcId);
-                radialConstraints.get(b).add(srcId);
-                radialLocked.add(a); radialLocked.add(b);
+            if (!c || c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
+            if (c.joints && c.joints.length === 2) {
+                const [a, b] = c.joints;
+                const aDOF = getDOF(a);
+                const bDOF = getDOF(b);
+                const srcId = c.id || (`distance:${(c.joints || []).join('-')}`);
+                if (aDOF <= 0 || bDOF <= 0) {
+                    if (!radialConstraints.has(a)) radialConstraints.set(a, new Set());
+                    if (!radialConstraints.has(b)) radialConstraints.set(b, new Set());
+                    radialConstraints.get(a).add(srcId);
+                    radialConstraints.get(b).add(srcId);
+                    radialLocked.add(a); radialLocked.add(b);
 
-                const hv = getHVBetweenJoints(a, b, constraints);
-                if (hv === 'vertical') {
-                    if (lockedAxisY.has(a)) lockedAxisY.add(b);
-                    if (lockedAxisY.has(b)) lockedAxisY.add(a);
-                } else if (hv === 'horizontal') {
-                    if (lockedAxisX.has(a)) lockedAxisX.add(b);
-                    if (lockedAxisX.has(b)) lockedAxisX.add(a);
+                    const hv = getHVBetweenJoints(a, b, constraints);
+                    if (hv === 'vertical') {
+                        if (lockedAxisY.has(a)) lockedAxisY.add(b);
+                        if (lockedAxisY.has(b)) lockedAxisY.add(a);
+                    } else if (hv === 'horizontal') {
+                        if (lockedAxisX.has(a)) lockedAxisX.add(b);
+                        if (lockedAxisX.has(b)) lockedAxisX.add(a);
+                    }
+                }
+            } else if (c.isRadius && c.shape) {
+                const s = shapes.find(sh => sh.id === c.shape);
+                if (s && s.joints && s.joints.length > 1) {
+                    const centerId = s.joints[0];
+                    const rimIds = s.joints.slice(1);
+                    const cDOF = getDOF(centerId);
+                    const srcId = c.id || (`radius:${c.shape}`);
+                    if (cDOF <= 0) {
+                        for (const rimId of rimIds) {
+                            if (!radialConstraints.has(rimId)) radialConstraints.set(rimId, new Set());
+                            radialConstraints.get(rimId).add(srcId);
+                            radialLocked.add(rimId);
+                        }
+                    }
+                    for (const rimId of rimIds) {
+                        if (getDOF(rimId) <= 0) {
+                            if (!radialConstraints.has(centerId)) radialConstraints.set(centerId, new Set());
+                            radialConstraints.get(centerId).add(srcId);
+                            radialLocked.add(centerId);
+                        }
+                    }
                 }
             }
         }
@@ -681,6 +853,116 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             }
         }
     }
+
+    // 5. Solver-backed Rigidity Check (Numerical Rigidity Verification)
+    try {
+        const activeConstraints = (constraints || []).filter(c => !c.isDriven && !c.driven);
+        if (activeConstraints.length > 0 && joints && joints.size > 0) {
+            const solver = new NewtonSolver(joints, activeConstraints, shapes || []);
+            const x = solver._pack();
+            const n = x.length;
+            if (n === 0) {
+                for (const [id] of joints) {
+                    jointDOFs.set(id, 0);
+                    fixedJoints.add(id);
+                    constrainedJoints.add(id);
+                    lockedAxisX.add(id);
+                    lockedAxisY.add(id);
+                }
+            } else {
+                const { J, r, m } = solver._assemble(x);
+                let resSq = 0;
+                for (let i = 0; i < m; i++) resSq += r[i] * r[i];
+                if (Math.sqrt(resSq) < 1e-2) {
+                    const A = Algebra.allocMatrix(n, n);
+                    Algebra.gram(J, m, n, A);
+                    const Acopy = new Float64Array(A);
+                    const dx = new Float64Array(n);
+                    const fullRank = Algebra.choleskySolve(Acopy, n, dx);
+
+                    if (fullRank) {
+                        for (const [id] of joints) {
+                            jointDOFs.set(id, 0);
+                            fixedJoints.add(id);
+                            constrainedJoints.add(id);
+                            lockedAxisX.add(id);
+                            lockedAxisY.add(id);
+                        }
+                    } else {
+                        const AtA = new Float64Array(A);
+                        const V = new Float64Array(n * n);
+                        for (let i = 0; i < n; i++) V[i * n + i] = 1;
+                        for (let iter = 0; iter < 50; iter++) {
+                            let maxOff = 0;
+                            for (let p = 0; p < n - 1; p++) {
+                                for (let q = p + 1; q < n; q++) {
+                                    const apq = AtA[p * n + q];
+                                    maxOff = Math.max(maxOff, Math.abs(apq));
+                                    if (Math.abs(apq) > 1e-12) {
+                                        const app = AtA[p * n + p];
+                                        const aqq = AtA[q * n + q];
+                                        const theta = 0.5 * Math.atan2(2 * apq, aqq - app);
+                                        const c = Math.cos(theta), s = Math.sin(theta);
+                                        for (let i = 0; i < n; i++) {
+                                            const aip = AtA[i * n + p], aiq = AtA[i * n + q];
+                                            AtA[i * n + p] = c * aip - s * aiq;
+                                            AtA[i * n + q] = s * aip + c * aiq;
+                                        }
+                                        for (let i = 0; i < n; i++) {
+                                            const api = AtA[p * n + i], aqi = AtA[q * n + i];
+                                            AtA[p * n + i] = c * api - s * aqi;
+                                            AtA[q * n + i] = s * api + c * aqi;
+                                            const vip = V[i * n + p], viq = V[i * n + q];
+                                            V[i * n + p] = c * vip - s * viq;
+                                            V[i * n + q] = s * vip + c * viq;
+                                        }
+                                    }
+                                }
+                            }
+                            if (maxOff < 1e-12) break;
+                        }
+
+                        const nullVectors = [];
+                        for (let i = 0; i < n; i++) {
+                            if (AtA[i * n + i] < 1e-6) {
+                                const v = new Float64Array(n);
+                                for (let j = 0; j < n; j++) v[j] = V[j * n + i];
+                                nullVectors.push(v);
+                            }
+                        }
+
+                        const hasGrounded = [...joints.values()].some(j => j.fixed) || joints.has('j_origin');
+                        if (hasGrounded && nullVectors.length > 0) {
+                            for (let vi = 0; vi < solver._freeIds.length; vi++) {
+                                const repId = solver._freeIds[vi];
+                                const members = (solver._clusterMembers && solver._clusterMembers.get(repId)) || [repId];
+                                const colX = vi * 2;
+                                const colY = vi * 2 + 1;
+                                let xFree = false;
+                                let yFree = false;
+                                for (const nv of nullVectors) {
+                                    if (Math.abs(nv[colX]) > 1e-5) xFree = true;
+                                    if (Math.abs(nv[colY]) > 1e-5) yFree = true;
+                                }
+                                for (const mid of members) {
+                                    if (!xFree) lockedAxisX.add(mid);
+                                    if (!yFree) lockedAxisY.add(mid);
+                                    if (!xFree && !yFree) {
+                                        jointDOFs.set(mid, 0);
+                                        fixedJoints.add(mid);
+                                        constrainedJoints.add(mid);
+                                    } else if (!xFree || !yFree) {
+                                        if (jointDOFs.get(mid) > 1) jointDOFs.set(mid, 1);
+                                        constrainedJoints.add(mid);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (_) {}
 
     // Shape Logic — all shape types (lines, circles, arcs)
     for (const s of shapes) {

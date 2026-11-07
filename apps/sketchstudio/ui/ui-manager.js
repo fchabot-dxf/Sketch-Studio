@@ -116,7 +116,7 @@ export function setupUI(state){
 
     // Dimension tool with a preselection starts immediately
     if (t === TOOL_MODES.DIMENSION) {
-      try { const svgEl = document.querySelector('svg'); if (svgEl) startDimensionFromSelection(svgEl, state); } catch(_) {}
+      try { const svgEl = document.getElementById('svgCanvas') || document.querySelector('svg'); if (svgEl && !state.placingConstraint) startDimensionFromSelection(svgEl, state); } catch(_) {}
     }
   }
 

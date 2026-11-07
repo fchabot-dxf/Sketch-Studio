@@ -143,6 +143,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   function toolButton(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     b.dataset.tool = t.tool; b.title = t.label;
+    if (t.tool) b.id = 'tool-' + t.tool;
     // Support both symbol-id icons (icon) and raw inline SVG paths (iconSvg) for newer tools
     const icon = t.iconSvg
       ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
@@ -156,6 +157,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     const wrap = document.createElement('div'); wrap.className = 'sk-ribbon-dd';
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     b.dataset.tool = t.tool; b.title = t.label;
+    if (t.tool) b.id = 'tool-' + t.tool;
     b.innerHTML = iconSvg(t.icon) + `<span class="sk-ribbon-lbl">${t.label}</span><span class="sk-ribbon-dd-ind"></span>`;
     const useEl = b.querySelector('use');
     toolBtns.push({ btn: b, tool: t.tool });

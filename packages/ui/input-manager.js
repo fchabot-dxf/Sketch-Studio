@@ -18,7 +18,7 @@ import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from '#ui/input-handlers/pan-zoom.js';
-import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
+import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
@@ -81,7 +81,7 @@ export const defaultInputCtx = {
   // setActiveTool — switch via the toolbar button (primary path); returns true if it handled the switch.
   setActiveTool(toolName) {
     try {
-      const toolButton = document.getElementById('tool-' + toolName);
+      const toolButton = document.getElementById('tool-' + toolName) || (typeof document !== 'undefined' ? document.querySelector(`.sk-ribbon-btn[data-tool="${toolName}"], [data-tool="${toolName}"]`) : null);
       if (toolButton) {
         try {
           const activeEl = document.activeElement;
@@ -1092,19 +1092,25 @@ function setupKeyboardShortcuts(state) {
         // CRITICAL: If the target is an INPUT, the dimension input, or a TEXTAREA, do not process global shortcuts
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.id === 'dimInput')) return;
         // Route to focused tool handlers first
-        // Support quick numeric input while placing a dimension: press a number, decimal, or minus to open input immediately
-        if (state.currentTool === TOOL_MODES.DIMENSION && state.placingConstraint) {
-            if (state.placingConstraint.isDriven || state.placingConstraint.driven) return;
-            if (/^[0-9.\-]$/.test(e.key)) {
-                try {
-                    // Stop placement mode and open input so numeric entry starts immediately
-                    try { const pending = state.placingConstraint; if (pending) { try { pending.__placing = false; } catch(_){} try { if (state && state.placingConstraint && state.placingConstraint === pending) state.placingConstraint = null; } catch(_){} } } catch(_){}
-                    // Open input and pass the initial key so it can decide caret vs select behavior
-                    showEditInput(inputCtx.getCanvasSvg(), state, pending, e.key);
-
-                } catch(_){ }
+        // Dimension tool placing: Enter or click anchors & opens edit; digits open quick edit
+        if (state.currentTool === TOOL_MODES.DIMENSION && isDimensionPlacing(state)) {
+            if (e.key === 'Enter') {
                 e.preventDefault();
+                const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
+                anchorPlacingDimension(svgEl, state);
                 return;
+            }
+            if (/^[0-9.\-]$/.test(e.key)) {
+                const pc = getPlacingConstraint(state);
+                if (pc && !pc.isDriven && !pc.driven) {
+                    try {
+                        const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
+                        anchorPlacingDimension(svgEl, state);
+                        showEditInput(svgEl, state, pc, e.key);
+                    } catch(_){ }
+                    e.preventDefault();
+                    return;
+                }
             }
         }
 
@@ -1204,7 +1210,6 @@ function setupKeyboardShortcuts(state) {
         // Dimension tool
         if (key === 'd') {
             switchToTool(state, 'dim');
-            // Do not auto-create; arm the tool and let the first click create/place the dimension
             e.preventDefault();
         }
     });
@@ -1283,6 +1288,12 @@ export function switchToTool(state, toolName) {
         }
         // Clear any preview state when switching tools
         try { clearPreview(state); } catch(_) {}
+        if (toolName === TOOL_MODES.DIMENSION || toolName === 'dim') {
+            const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
+            if (svgEl && !state.placingConstraint) {
+                try { startDimensionFromSelection(svgEl, state); } catch(_) {}
+            }
+        }
         // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
         inputCtx.highlightActiveTool?.(toolName);
 
@@ -1342,11 +1353,8 @@ function handleDelete(state) {
 function handleEscape(state) {
     // If a dimension placement is in progress, cancel it and remove the temporary constraint
     try {
-        if (state.placingConstraint) {
-            try { const idx = state.constraints.indexOf(state.placingConstraint); if (idx !== -1) state.constraints.splice(idx, 1); } catch(_){}
-            try { state.placingConstraint.__placing = false; } catch(_){}
-            state.placingConstraint = null;
-            try { resetDimensionState(state); } catch(_){ try{ import('#ui/input-handlers/dimension-tool.js').then(m => m.resetDimensionState(state)); }catch(_){ } }
+        if (isDimensionPlacing(state)) {
+            resetDimensionState(state);
         }
     } catch(_) {}
 

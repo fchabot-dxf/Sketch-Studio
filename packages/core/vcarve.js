@@ -18,7 +18,6 @@ import { offsetPolygon } from './polygon-offset.js';
 
 export function vbitHalfAngleTan(angle) {
   const halfAngle = (Number(angle) || 90) / 2;
-  if (halfAngle === 45) return 1.0; // Math.tan(π/4) = 0.9999999999999999 → floor() would drop the last contour
   return Math.tan((halfAngle * Math.PI) / 180);
 }
 

@@ -152,7 +152,9 @@ export function createConstraint(type, params) {
             
         case CONSTRAINT_TYPES.POINT_ON_LINE:
             if (!params.joint || !params.shape) return null;
-            return { type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: params.joint, shape: params.shape };
+            const pol = { type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: params.joint, shape: params.shape };
+            if (params.mutual) pol.mutual = true; // opt-in: line endpoints also move (fillet virtual-sharp joint)
+            return pol;
             
         case CONSTRAINT_TYPES.HORIZONTAL:
         case CONSTRAINT_TYPES.VERTICAL:

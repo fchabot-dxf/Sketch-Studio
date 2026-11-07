@@ -109,6 +109,18 @@ export const Definitions = {
       const ux = bx - ax, uy = by - ay;
       const wx = px - ax, wy = py - ay;
       const denom = Math.hypot(ux, uy) || 1e-12;
+
+      // OPT-IN `mutual`: the point AND both line endpoints take part (full derivative of r = (w x u)/|u|).
+      // Used by a fillet's virtual-sharp joint V, which must FOLLOW its two trimmed lines when the radius
+      // is edited. Without the flag the legacy point-only form below is byte-identical.
+      if (params.mutual) {
+        const r = (wx * uy - wy * ux) / denom;
+        const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
+        outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
+        outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
+        outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
+        return;
+      }
       const inv = 1 / (denom * denom * denom); // used for derivative of 1/denom
 
       // d/dP ( (P-A) x U / |U| ) => ( uy, -ux ) / |U|

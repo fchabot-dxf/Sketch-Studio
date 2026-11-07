@@ -56,4 +56,32 @@ console.log('Running tests for packages/core/fillet.js...');
   assert(pathD.includes('A 12 12'), 'Arc segment must have radius 12');
 }
 
+// 3. Fillet carries a live driving RADIUS dimension; editing it re-solves the arc
+{
+  const { createNewtonSolver } = await import('../packages/core/solver/engine.js');
+  const joints = new Map();
+  let n = 0; const genJ = () => 'j_t3_' + (++n);
+  const a = genJ(), b = genJ();
+  joints.set(a, { x: 0, y: 0, fixed: false }); // unfixed: the case that used to refuse every edit
+  joints.set(b, { x: 80, y: 60, fixed: false });
+  const { shapes, constraints } = makeRectFromTwoJoints(joints, a, b, genJ);
+  const state = { joints, shapes, constraints };
+  const res = applyFillet(state, findCornerAtPoint(state, { x: 80, y: 0 }, 10), 7);
+  const rc = constraints.find(c => c.type === 'distance' && c.isRadius && c.shape === res.arc.id);
+  assert(rc, 'fillet must add a radius dimension on the new arc');
+  assert.strictEqual(rc.value, 7, 'radius dimension carries the fillet radius');
+  assert.strictEqual(rc.isDriven, false, 'radius dimension is driving');
+  assert.strictEqual(res.radiusConstraint, rc, 'result exposes the constraint for the inline input');
+  assert.strictEqual(res.arc.radius, undefined, 'arc must not carry a stale scalar radius');
+
+  // Editing the dimension re-solves the arc to the new radius
+  state.engine = createNewtonSolver(joints, constraints, shapes, {});
+  const { commitDimensionEdit } = await import('../packages/ui/dimension-seams.js');
+  const r = commitDimensionEdit(state, rc, 12);
+  assert.strictEqual(r.reverted, false, 'edit must converge: ' + r.clash);
+  const [cj, sj] = res.arc.joints;
+  const dist = Math.hypot(joints.get(cj).x - joints.get(sj).x, joints.get(cj).y - joints.get(sj).y);
+  assert(Math.abs(dist - 12) < 1e-3, 'arc radius re-solved to 12, got ' + dist);
+}
+
 console.log('✅ All fillet core tests passed!');

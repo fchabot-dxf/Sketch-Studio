@@ -196,7 +196,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   }
   // CREATE (rect gets the dropdown), EDIT (trim/break), INSPECT, CONSTRAIN
   buildGroup('Create', CREATE, (t) => (t.rectDropdown ? rectButton(t) : toolButton(t)));
-  buildGroup('Edit', EDIT, toolButton);  // TRACE-1: trim + break
+  buildGroup('Modify', EDIT, toolButton);  // TRACE-1: trim + break
   buildGroup('Inspect', INSPECT, toolButton);
   buildGroup('Constrain', CONSTRAIN, toolButton);
   // app-specific groups (Edit / Actions / …) appended by the host

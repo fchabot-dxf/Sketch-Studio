@@ -260,7 +260,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   // Create the arc shape
   const { shapes: arcShapes, constraints: arcConstraints } = makeArc(joints, jCenter, jTA, jTB, 'CENTER');
   const arcShape = arcShapes[0];
-  arcShape.radius = finalRadius;
+  // NOTE: no arcShape.radius -- the radius dimension below is the source of truth; a frozen scalar would go stale on edit.
   shapes.push(arcShape);
   constraints.push(...arcConstraints);
 
@@ -274,6 +274,18 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   constraints.push({ type: 'tangent', line: lineA.shape.id, circle: arcShape.id });
   constraints.push({ type: 'tangent', line: lineB.shape.id, circle: arcShape.id });
 
+  // Driving RADIUS dimension on the new arc -- same shape the Dimension tool makes for an arc
+  // (distance + isRadius + shape), so the fillet is a live, editable radius.
+  const radiusConstraint = {
+    type: CONSTRAINT_TYPES.DISTANCE,
+    shape: arcShape.id,
+    value: finalRadius,
+    isRadius: true,
+    isDriven: false,
+    offset: Math.max(finalRadius * 0.6, 6)
+  };
+  constraints.push(radiusConstraint);
+
   // Solve to ensure mathematical consistency
   try {
     if (state.engine && typeof state.engine.solve === 'function') {
@@ -284,6 +296,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   return {
     success: true,
     arc: arcShape,
+    radiusConstraint,
     radius: finalRadius,
     centerPt,
     tA,

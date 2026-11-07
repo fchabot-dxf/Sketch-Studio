@@ -143,7 +143,7 @@ async function cdpRun(dbgPort, url) {
       ['header tabs = design,export', c.headerTabs === 'design,export', c.headerTabs],
       ['header Style button', c.hasStyle === true, c.hasStyle],
       ['header Debug action', c.hasDebug === true, c.hasDebug],
-      ['ribbon groups = Create,Edit,Inspect,Constrain,Edit', c.ribbonGroups === 'Create,Edit,Inspect,Constrain,Edit', c.ribbonGroups],
+      ['ribbon groups = Create,Modify,Inspect,Constrain,Edit', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Edit', c.ribbonGroups],
       ['canvas visible (Design default)', c.canvasVisible === true, c.canvasVisible],
       ['Export tab shows the export view', c.exportShows === true, c.exportShows],
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],

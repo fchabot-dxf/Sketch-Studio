@@ -119,6 +119,28 @@ async function cdpRun(dbgPort, url) {
   return { errors, check: r && r.result ? r.result.value : null };
 }
 
+// Close the headless browser PROPERLY. On Windows msedge.exe re-launches into a separate real browser process, so
+// `proc.kill()` only kills the short-lived launcher and the real browser (plus its locked userDir) leaks on every
+// run. Ask the browser itself to quit over its browser-level CDP websocket, wait for exit, and fall back to a
+// process-tree kill.
+async function closeBrowser(proc, dbgPort) {
+  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
+  try {
+    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
+    if (v && v.webSocketDebuggerUrl) {
+      const ws = new WebSocket(v.webSocketDebuggerUrl);
+      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
+      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+      await Promise.race([exited, sleep(3000)]);
+      try { ws.close(); } catch (_) {}
+    }
+  } catch (_) { /* browser already gone or CDP unreachable: fall through to the kill */ }
+  try {
+    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
+    else proc.kill();
+  } catch (_) { /* already exited */ }
+}
+
 (async () => {
   const browser = findBrowser();
   if (!browser) { console.error('shell-smoke: no Edge/Chrome found — install one or set the path.'); process.exit(2); }
@@ -164,7 +186,7 @@ async function cdpRun(dbgPort, url) {
     console.error('shell-smoke error:', e.message);
     code = 1;
   } finally {
-    try { proc.kill(); } catch (_) {}
+    await closeBrowser(proc, dbgPort);
     try { server.close(); } catch (_) {}
     try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
   }

@@ -23,6 +23,17 @@ export function measureResidual(c, joints, shapes) {
                         if (center && rim) currentDist = getDist(center, rim);
                     }
                 }
+            } else if (c.shapes && c.shapes.length === 2 && !(c.joints && c.joints.length >= 2)) {
+                // Line-to-line distance: SAME convention as the solver row (solver/engine.js line-line synthesis,
+                // definitions.js distance.__lineLine) -- perpendicular distance from line 2's FIRST endpoint to the
+                // infinite line 1 -- so verifier and solver can never disagree. (Was unmeasured -> currentDist 0 ->
+                // residual == value -> converged=false and the dimension demoted to reference.)
+                const s1 = shapes.find(sh => sh.id === c.shapes[0]);
+                const s2 = shapes.find(sh => sh.id === c.shapes[1]);
+                if (s1 && s2 && s1.joints && s1.joints.length >= 2 && s2.joints && s2.joints.length >= 1) {
+                    const a = joints.get(s1.joints[0]), b = joints.get(s1.joints[1]), pt = joints.get(s2.joints[0]);
+                    if (a && b && pt) currentDist = Math.abs(perpendicularDistance(pt, a, b));
+                }
             } else if (c.joints && c.joints.length >= 2) {
                 const j1 = joints.get(c.joints[0]);
                 const j2 = joints.get(c.joints[1]);

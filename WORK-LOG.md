@@ -11136,3 +11136,35 @@ Built VCARVE-5a per the TURN 424 plan and advisor decisions:
    - Inspected preview: `readoutText: '17 contours · max 9.00 mm'`, `polygonCount: 18` (1 outer boundary + 17 concentric depth-shaded contour paths).
    - Saved screenshot to `.evidence/425/vcarve-dumbbell-preview.png` (re-opened: clearly displays the neck closing and both lobes concentric-carved to their respective centers).
 - **Gate:** `npm run gate` (`scripts/gate.cjs`): `GATE files=155 pass=155 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.
+
+
+## TURN 423c — Ignore lingering Edge helper processes in gate leak check — branch agy2
+
+- **Problem & Root Cause:**
+  - On Windows, Edge launches subordinate helper processes (`--type=crashpad-handler`, `--type=utility`, `--type=gpu-process`, etc.) sharing the `--user-data-dir` profile.
+  - When `shell-smoke.cjs` closes the browser, the main browser process exits cleanly. However, background helpers like crashpad-handler and utility services can linger for 1–2 minutes while flushing dumps or closing pipe handles.
+  - `scripts/gate.cjs` previously counted all `msedge.exe` matching `sk-shell-smoke-<pid>`, causing false gate failures (`HEADLESS-LEFT 2`, exit 1) when helpers outlasted the 3s grace window.
+
+- **Fix (`scripts/gate.cjs`) — Option (a):**
+  - Count only MAIN browser processes (command lines with no `--type=` argument) as leaks for `HEADLESS-LEFT`.
+  - Reason: In Chromium/Edge, the main browser process is the root of the process tree and is launched without a `--type=` flag. All child helper processes are subordinate and self-terminate once the main browser process terminates. Counting only main processes avoids imposing a 30s delay on gate runs while reliably detecting any actual leaked browser instances immediately.
+  - Filter in `countHeadless()`: `Where-Object { $_.CommandLine -match 'sk-shell-smoke' -and $_.CommandLine -notmatch '--type=' }`.
+
+- **Unit-Level Proof & Verification (`tests/gate-pid-match.test.js`):**
+  - Added unit test assertions covering real Edge helper command lines:
+    - Main process (`--headless=new --user-data-dir=...sk-shell-smoke-123` with no `--type=`) evaluates to `isMainProcess = true` and `testPowershellGateFilter = true`.
+    - Helper processes (`--type=crashpad-handler`, `--type=utility`, `--type=gpu-process`, `--type=renderer`) evaluate to `isMainProcess = false` and `testPowershellGateFilter = false` (never counted as leaks).
+    - Result: `gate PID matching and helper filtering tests passed ✅`.
+
+- **Real Leak Detection Proof (Main browser leak still fails gate):**
+  - Temporarily configured `shell-smoke.cjs` to spawn a detached browser and skip `closeBrowser`.
+  - Ran `node scripts/gate.cjs`: failed as expected with exit code 1 (`HEADLESS-LEFT 1`, `HEADLESS-OTHER 1`).
+  - Leaked process reaped and `shell-smoke.cjs` reverted.
+
+- **Gate:**
+  - `npm run gate` (`scripts/gate.cjs`):
+    - `GATE files=156 pass=156 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

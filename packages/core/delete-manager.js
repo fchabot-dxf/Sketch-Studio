@@ -74,13 +74,19 @@ export function deleteShapes(state, shapeIds) {
     }
   }
 
-  // Remove shapes that referenced removed joints (safety)
-  for (let i = state.shapes.length - 1; i >= 0; i--) {
-    const s = state.shapes[i];
-    if (!s) continue;
-    if (s.joints && s.joints.some(j => removedJoints.has(j))) {
-      state.shapes.splice(i, 1);
-      removed++;
+  // A joint goes only when NO surviving shape uses it. Shapes that merely SHARE a joint with a deleted
+  // shape (a fillet's rim joints, chained lines) survive; their shared joints stay. Constraints that reference
+  // a joint that is going away are dropped so nothing dangles (e.g. the arc's `equal` on its centre joint).
+  const usedBySurvivors = new Set();
+  for (const s of state.shapes) if (s && Array.isArray(s.joints)) s.joints.forEach(j => usedBySurvivors.add(j));
+  const goneJoints = new Set([...removedJoints].filter(j => !usedBySurvivors.has(j)));
+  if (goneJoints.size) {
+    for (let i = state.constraints.length - 1; i >= 0; i--) {
+      const c = state.constraints[i];
+      if (!c) continue;
+      if ((Array.isArray(c.joints) && c.joints.some(j => goneJoints.has(j))) || (c.joint && goneJoints.has(c.joint))) {
+        state.constraints.splice(i, 1);
+      }
     }
   }
 

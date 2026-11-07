@@ -3,7 +3,7 @@
 // Connects UI input with #core/fillet.js.
 
 import { screenToWorld } from '#ui/coords.js';
-import { findCornerAtPoint, calculateFilletGeometry, applyFillet } from '#core/fillet.js';
+import { findCornerAtPoint, calculateFilletGeometry, applyFillet, diagnoseNoFillet, defaultFilletRadius, parseFilletRadius } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
@@ -15,7 +15,8 @@ const OVERLAY_ID = 'fillet-tool-overlay';
 let _ctx = null;
 let _state = null;
 let hoverCorner = null;
-let currentRadius = 5.0; // default mm
+let currentRadius = null; // WORLD mm (1 unit = 1 mm); null until first setup. Survives tool switches.
+let _radiusUnit = null;    // doc unit the default was seeded for; a unit change re-seeds it
 let _lastDimCreated = null; // value the last fillet was created with (possibly geometry-clamped)
 let _lastDim = null;     // radius dimension of the most recent fillet; its (edited) value is the next default
 
@@ -23,7 +24,7 @@ let _lastDim = null;     // radius dimension of the most recent fillet; its (edi
 function syncLastRadius(state) {
   const c = _lastDim;
   // Only a value the user actually typed counts; a geometry clamp (5 -> 2.8) is not a chosen value.
-  if (c && typeof c.value === 'number' && c.value > 0 && Math.abs(c.value - _lastDimCreated) > 1e-9 && (state?.constraints || []).includes(c)) currentRadius = c.value;
+  if (c && typeof c.value === 'number' && c.value > 0 && Math.abs(c.value - _lastDimCreated) > 1e-9 && (state?.constraints || []).includes(c)) { currentRadius = c.value; _lastDim = null; }
 }
 
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
@@ -54,15 +55,16 @@ export function setupFilletTool(ctx, state) {
   _ctx = ctx;
   _state = state;
   hoverCorner = null;
-  _lastDim = null;
-  _lastDimCreated = null;
   setCursor('crosshair');
 
+  // Runs on EVERY activation: only seed the default the first time / when the doc unit changes, so the
+  // "last value used" survives tool switches for the session.
   const unit = getDocUnit();
-  if (unit === 'in') {
-    currentRadius = 0.25;
-  } else {
-    currentRadius = 5.0;
+  if (currentRadius == null || _radiusUnit !== unit) {
+    currentRadius = defaultFilletRadius(unit);
+    _radiusUnit = unit;
+    _lastDim = null;
+    _lastDimCreated = null;
   }
 }
 
@@ -75,6 +77,7 @@ export function setFilletRadius(val) {
   const num = Number(val);
   if (!isNaN(num) && num > 0) {
     currentRadius = num;
+    _lastDim = null; // an explicit set outranks the last fillet's dimension
   }
 }
 
@@ -105,9 +108,17 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   const thresh = SNAP.JOINT_PX / scale;
 
   syncLastRadius(state);
+  if (currentRadius == null) { currentRadius = defaultFilletRadius(getDocUnit()); _radiusUnit = getDocUnit(); }
   const hit = findCornerAtPoint(state, world, thresh);
-  if (!hit) return false;
+  if (!hit) {
+    const why = diagnoseNoFillet(state, world, thresh);
+    if (why) showNotification(why, 'warning');
+    return false;
+  }
+  const pre = calculateFilletGeometry(hit.pA, hit.cornerPt, hit.pB, currentRadius);
+  if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return false; }
 
+  // One history step per fillet, owned here in the tool layer like every other tool (core does not saveState).
   try { state.saveState?.(); } catch (_) {}
 
   const res = applyFillet(state, hit, currentRadius);
@@ -120,7 +131,9 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
 
     const unit = getDocUnit();
     const formatted = formatUnit(res.radius, unit, { unit: true });
-    showNotification(`Fillet applied (R = ${formatted})`, 'info');
+    showNotification(res.clamped
+      ? `Fillet applied -- R reduced to ${formatUnit(res.radius, unit, { unit: true })} to fit`
+      : `Fillet applied (R = ${formatted})`, res.clamped ? 'warning' : 'info');
 
     // Land on the radius dimension with the input open, pre-filled with the default / last value.
     // Enter commits (re-solves); Esc keeps the value. The committed value is remembered below.
@@ -142,12 +155,13 @@ export function handleFilletPointerUp() {
 
 export function handleFilletKeyDown(e, svg, state) {
   if (e.key === 'r' || e.key === 'R') {
-    const input = prompt('Enter Fillet Radius (' + getDocUnit() + '):', String(currentRadius));
+    const unit = getDocUnit();
+    const input = prompt('Enter Fillet Radius (' + unit + '):', formatUnit(currentRadius, unit));
     if (input !== null) {
-      const val = parseFloat(input);
-      if (!isNaN(val) && val > 0) {
+      const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
+      if (val != null) {
         setFilletRadius(val);
-        showNotification(`Fillet radius set to ${val} ${getDocUnit()}`, 'info');
+        showNotification(`Fillet radius set to ${formatUnit(val, unit, { unit: true })}`, 'info');
         if (hoverCorner) {
           const sEl = getSvgElement(_ctx);
           renderFilletOverlay(sEl, hoverCorner, state.view);
@@ -213,6 +227,6 @@ function renderFilletOverlay(svg, corner, viewState) {
     <line x1="${tA.x}" y1="${tA.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
     <line x1="${tB.x}" y1="${tB.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
     <!-- Radius label -->
-    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${radius.toFixed(1)}</text>
+    <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${formatUnit(radius, getDocUnit())}</text>
   `;
 }

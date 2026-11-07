@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { makeRectFromTwoJoints } from '../packages/core/shapes.js';
-import { findCornerAtJoint, findCornerAtPoint, calculateFilletGeometry, applyFillet } from '../packages/core/fillet.js';
+import { findCornerAtJoint, findCornerAtPoint, calculateFilletGeometry, applyFillet, diagnoseNoFillet, defaultFilletRadius, parseFilletRadius } from '../packages/core/fillet.js';
 import { findLoops } from '../packages/core/loop-finder.js';
 import { loopToPathD } from '../packages/core/shaper-export.js';
 
@@ -82,6 +82,64 @@ console.log('Running tests for packages/core/fillet.js...');
   const [cj, sj] = res.arc.joints;
   const dist = Math.hypot(joints.get(cj).x - joints.get(sj).x, joints.get(cj).y - joints.get(sj).y);
   assert(Math.abs(dist - 12) < 1e-3, 'arc radius re-solved to 12, got ' + dist);
+}
+
+// 4. TURN 401 items 2-4 (all DOM-free)
+{
+  // item 2: defaults live in world mm; the R-key parse is unit-aware
+  assert.strictEqual(defaultFilletRadius('mm'), 5);
+  assert.strictEqual(defaultFilletRadius('in'), 6.35, 'inch default is 1/4in = 6.35 mm, not 0.25 mm');
+  assert(Math.abs(parseFilletRadius('0.5', 'in') - 12.7) < 1e-9, 'bare number is in the doc unit');
+  assert.strictEqual(parseFilletRadius('12mm', 'in'), 12, 'a typed suffix overrides the doc unit');
+  assert.strictEqual(parseFilletRadius('abc', 'mm'), null);
+  assert.strictEqual(parseFilletRadius('-3', 'mm'), null, 'non-positive rejected');
+
+  const mkRect = (W, H) => {
+    const joints = new Map(); let n = 0; const g = () => 'j_t4_' + (++n);
+    const a = g(), b = g();
+    joints.set(a, { x: 0, y: 0, fixed: false }); joints.set(b, { x: W, y: H, fixed: false });
+    const { shapes, constraints } = makeRectFromTwoJoints(joints, a, b, g);
+    return { joints, shapes, constraints };
+  };
+
+  // item 3: core must not own history -- exactly one step per fillet comes from the tool layer
+  const st = mkRect(80, 60);
+  let saves = 0; st.saveState = () => { saves++; };
+  applyFillet(st, findCornerAtPoint(st, { x: 80, y: 0 }, 5), 10);
+  assert.strictEqual(saves, 0, 'applyFillet must not call saveState (tool layer owns the single undo step)');
+
+  // item 4: clamping is reported; no-op reasons are reported
+  const sm = mkRect(10, 6);
+  const rc = applyFillet(sm, findCornerAtPoint(sm, { x: 10, y: 0 }, 5), 50);
+  assert(rc.success && rc.clamped === true && rc.radius < 50 && rc.requestedRadius === 50, 'clamp flagged with requested radius');
+  const sn = mkRect(80, 60);
+  assert.strictEqual(applyFillet(sn, findCornerAtPoint(sn, { x: 80, y: 0 }, 5), 5).clamped, false);
+
+  // already filleted: click the tangent point of the first fillet
+  const sf = mkRect(80, 60);
+  const f1 = applyFillet(sf, findCornerAtPoint(sf, { x: 80, y: 0 }, 5), 10);
+  assert.strictEqual(findCornerAtPoint(sf, f1.tA, 1), null, 'filleted corner is not a corner any more');
+  assert.strictEqual(diagnoseNoFillet(sf, f1.tA, 1), 'This corner is already filleted');
+  assert.strictEqual(diagnoseNoFillet(sf, { x: 500, y: 500 }, 5), null, 'empty space: no toast');
+
+  // T-junction: a third line ending on a rect corner cluster
+  const stj = mkRect(80, 60);
+  const cj = [...stj.joints.keys()][0];
+  stj.joints.set('jx', { x: stj.joints.get(cj).x - 30, y: stj.joints.get(cj).y - 30, fixed: false });
+  const other = [...stj.joints.keys()].find(k => k !== cj && k !== 'jx');
+  stj.shapes.push({ id: 'extra', type: 'line', joints: [cj, 'jx'] });
+  assert.strictEqual(findCornerAtPoint(stj, stj.joints.get(cj), 1), null, 'three lines at a joint is not a fillet corner');
+  assert(/T-junction/.test(diagnoseNoFillet(stj, stj.joints.get(cj), 1)));
+
+  // line + arc: a corner where one member is an arc
+  const sla = { joints: new Map([['p', { x: 0, y: 0 }], ['q', { x: 10, y: 0 }], ['c', { x: 0, y: 10 }], ['r', { x: 10, y: 10 }]]), shapes: [
+    { id: 'L', type: 'line', joints: ['p', 'q'] }, { id: 'A', type: 'arc', joints: ['c', 'p', 'r'] }], constraints: [] };
+  assert.strictEqual(diagnoseNoFillet(sla, { x: 0, y: 0 }, 1), 'Fillet needs a corner between two lines');
+
+  // collinear -> structured failure, not a silent null
+  const sc = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 10, y: 0 }], ['c', { x: 20, y: 0 }]]), shapes: [], constraints: [] };
+  const bad = applyFillet(sc, { pA: { x: 0, y: 0 }, cornerPt: { x: 10, y: 0 }, pB: { x: 20, y: 0 } }, 5);
+  assert(bad && bad.success === false && /collinear/i.test(bad.reason), 'invalid geometry reports its reason');
 }
 
 console.log('✅ All fillet core tests passed!');

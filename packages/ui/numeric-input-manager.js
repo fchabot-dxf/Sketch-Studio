@@ -296,10 +296,10 @@ function handleCommit() {
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
             // Edit logic lives in the shared headless seam (so the harness drives the EXACT same code).
             // On a genuine over-constraint it refuses + reverts to the last valid shape; we just surface it.
-            const { reverted, clash } = commitDimensionEdit(uiState.appState, uiState.target, val);
+            const { reverted, clash, reason } = commitDimensionEdit(uiState.appState, uiState.target, val);
             if (reverted) {
                 showNotification(
-                    `Can't set to ${val}${clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
+                    `Can't set to ${val}${reason ? ` — ${reason}` : clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
                     "warning"
                 );
             }

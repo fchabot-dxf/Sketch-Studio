@@ -108,12 +108,14 @@ console.log('Running tests for packages/core/fillet.js...');
   applyFillet(st, findCornerAtPoint(st, { x: 80, y: 0 }, 5), 10);
   assert.strictEqual(saves, 0, 'applyFillet must not call saveState (tool layer owns the single undo step)');
 
-  // item 4: clamping is reported; no-op reasons are reported
+  // owner ruling (403): NO clamp -- an oversized radius is applied as asked, even past a line's far end
   const sm = mkRect(10, 6);
   const rc = applyFillet(sm, findCornerAtPoint(sm, { x: 10, y: 0 }, 5), 50);
-  assert(rc.success && rc.clamped === true && rc.radius < 50 && rc.requestedRadius === 50, 'clamp flagged with requested radius');
-  const sn = mkRect(80, 60);
-  assert.strictEqual(applyFillet(sn, findCornerAtPoint(sn, { x: 80, y: 0 }, 5), 5).clamped, false);
+  assert(rc.success && rc.radius === 50 && rc.clamped === undefined, 'oversized radius is applied unclamped');
+  // the single refusal: the radius whose tangent distance equals a line length would collapse that line to 0
+  const sk = mkRect(60, 40);
+  const col = applyFillet(sk, findCornerAtPoint(sk, { x: 60, y: 0 }, 5), 40);
+  assert(col.success === false && /collapse a line to zero length/.test(col.reason), 'R = line length is refused with a message');
 
   // already filleted: click the tangent point of the first fillet
   const sf = mkRect(80, 60);

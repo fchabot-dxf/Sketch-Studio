@@ -133,9 +133,7 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
 
     const unit = getDocUnit();
     const formatted = fmtR(res.radius, unit);
-    showNotification(res.clamped
-      ? `Fillet applied -- R reduced to ${fmtR(res.radius, unit)} to fit`
-      : `Fillet applied (R = ${formatted})`, res.clamped ? 'warning' : 'info');
+    showNotification(`Fillet applied (R = ${formatted})`, 'info');
 
     // Land on the radius dimension with the input open, pre-filled with the default / last value.
     // Enter commits (re-solves); Esc keeps the value. The committed value is remembered below.

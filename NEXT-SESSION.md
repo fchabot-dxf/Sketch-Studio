@@ -57,6 +57,43 @@ Verify: live in a headless browser — Trapezoid numbers unchanged vs. before (s
 match the original app for 2 input sets, Sketch view opens fitted for both shapes; then the gate above. Write the
 WORK-LOG entry "TURN 399", push, message the advisor with the commit range.
 
+## ▶ CURRENT TASK (LANE B, parallel) — TURN 399b — Fillet lands on a live RADIUS dimension (owner-reported)
+
+Seat: worker B, worktree `D:\APPS\Sketch-Studio-fillet`, branch `fillet-dim`. Run EVERY git command from that
+worktree (`cd /d/APPS/Sketch-Studio-fillet && ...`); never run git in `D:\APPS\Sketch-Studio`. Advisor merges.
+Lane A (frame-calc) is file-disjoint from this; do not touch `apps/frame-calc`.
+
+**Owner's words:** "in fillet the feature doesn't apply a fillet dimension, it should — land on a radius dimension
+with input ready, on a default or last value used."
+
+Ground truth (advisor-checked): `packages/core/fillet.js` `applyFillet` (~L195-292) creates the arc + 2 tangents
+but NO `radius` constraint. `packages/ui/input-handlers/fillet-tool.js` keeps `currentRadius` (L17, default 5 mm /
+0.25 in) and sets it through a browser `prompt()` (L121). The inline dimension input already exists:
+`showDimInput(svg, appState, constraint)` in `packages/ui/input-handlers/dimension-input.js:20`, committed via
+`commitDimensionEdit` in `packages/ui/dimension-seams.js:17`. `circle-tool.js` / `arc-tool.js` show the
+"remember last radius" pattern.
+
+Steps (commit + push each, commit BY PATH):
+1. After a successful fillet, add a DRIVING `radius` dimension on the new arc, valued at `currentRadius` (the
+   default, or the last value used). Use the same constraint shape the Dimension tool produces for an arc radius
+   (read `dimension-tool.js`; do not invent a new form). Check the DOF/constraint-status result is not
+   over-constrained with the two tangents + the radius.
+2. Immediately open the inline dimension input on that new dimension (`showDimInput`), pre-filled, ready to type.
+   Enter commits (re-solves the fillet to the typed radius); Esc keeps the default value. The committed value
+   becomes the new `currentRadius` for the next fillet.
+3. Retire the `prompt()` radius path (L121) if the inline flow fully replaces it; if some entry still needs it
+   (e.g. a key to pre-set the radius before clicking), say what and why you kept it.
+4. Small, same lane: the ribbon now has TWO groups labelled "Edit" (Trim/Break/Fillet, and the last group). Rename
+   the Trim/Break/Fillet group "Modify" in `packages/ui/tool-ribbon.js` and update the expectation in
+   `scripts/shell-smoke.cjs` to match.
+
+Test: add a case to `tests/fillet.test.js` asserting the radius constraint exists with the right value, and that
+changing its value re-solves the arc radius. Prove it can fail (comment out the constraint, watch it go red).
+Verify live in SketchStudio (headless): draw a rectangle, fillet a corner, screenshot the open input; type 12,
+Enter, screenshot the arc. Gate: the 9 pre-existing failures only, shell-smoke 12/12.
+STOP and message the advisor if a radius constraint makes the solver report over-constrained or fails to converge.
+WORK-LOG entry "TURN 399b" in YOUR worktree; message the advisor (`sketch-studio-bb`) with the commit range.
+
 ---
 
 

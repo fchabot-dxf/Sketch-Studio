@@ -1927,6 +1927,10 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
   - COMBINE / UNCOMBINE (Ctrl+Shift+C / Ctrl+Shift+U) are the power tool: several loops act as ONE profile with ONE
     param set; it overrides the derived face.
   - The SVG doesn't force Combine: the exporter builds the compound path from the picked profile.
+  - ⭐ GUIDING PRINCIPLE (owner, 2026-11-07): "in Shaper, the SVG IS the toolpath, not in ours". Our sketch is GEOMETRY
+    only; TOOLPATHS are a separate declared layer (profiles + per-profile cut params) over that geometry; the Shaper SVG
+    is DERIVED at export from both. Never make the user edit geometry (merge, recolour, duplicate shapes) just to
+    express a toolpath intent.
 - Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
   profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
   433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).

@@ -503,6 +503,7 @@ function ensureSketch() {
     seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
     grid: true,      // GRID-1: the shared GRID_MODE-driven canvas grid (Grid / None / Draft points in the settings modal)
   });
+  window.__designController = designController; // for test/evidence inspection
   buildDesignUI();
 
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then

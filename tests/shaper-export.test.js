@@ -373,6 +373,111 @@ import { format } from '#core/units.js';
         eq(dbExported[i].depth, format(dbPreview[i].depth, 'mm', { unit: true }), `db contour ${i} depth matches preview`);
       }
     }
+
+    // 21. VCARVE-5b: Frame with hole (40×40 outer, 10×10 hole) preview vs export parity (14 contours)
+    {
+      const frameOuter = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }];
+      const frameHole = [{ x: 15, y: 15 }, { x: 25, y: 15 }, { x: 25, y: 25 }, { x: 15, y: 25 }];
+      const frameRec = { id: 'vcFrame', region: 'loop_outer', vbit: { angle: 90 }, dStep: 1, maxDepth: 10 };
+      const frameState = {
+        joints: new Map([
+          ['FO0', { x: 0, y: 0 }], ['FO1', { x: 40, y: 0 }], ['FO2', { x: 40, y: 40 }], ['FO3', { x: 0, y: 40 }],
+          ['FH0', { x: 15, y: 15 }], ['FH1', { x: 25, y: 15 }], ['FH2', { x: 25, y: 25 }], ['FH3', { x: 15, y: 25 }],
+        ]),
+        shapes: [
+          { id: 'so1', type: 'line', joints: ['FO0', 'FO1'], userGroupId: 'g-frame' },
+          { id: 'so2', type: 'line', joints: ['FO1', 'FO2'], userGroupId: 'g-frame' },
+          { id: 'so3', type: 'line', joints: ['FO2', 'FO3'], userGroupId: 'g-frame' },
+          { id: 'so4', type: 'line', joints: ['FO3', 'FO0'], userGroupId: 'g-frame' },
+          { id: 'sh1', type: 'line', joints: ['FH0', 'FH1'], userGroupId: 'g-frame' },
+          { id: 'sh2', type: 'line', joints: ['FH1', 'FH2'], userGroupId: 'g-frame' },
+          { id: 'sh3', type: 'line', joints: ['FH2', 'FH3'], userGroupId: 'g-frame' },
+          { id: 'sh4', type: 'line', joints: ['FH3', 'FH0'], userGroupId: 'g-frame' },
+        ],
+        groups: [{ id: 'g-frame', name: 'Frame' }],
+        constraints: [],
+        vcarves: [frameRec],
+      };
+      const outerLoops = findLoops(frameState);
+      const outerLoop = outerLoops.find((l) => l.edges.includes('so1'));
+      const holeLoop = outerLoops.find((l) => l.edges.includes('sh1'));
+      frameRec.region = outerLoop.id;
+      const loopPolys = { [outerLoop.id]: frameOuter, [holeLoop.id]: frameHole };
+
+      const frameSVG = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: holeLoop.id }, rec: { cutType: 'interior' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const framePreview = deriveVcarveContours(frameOuter, frameRec, { holes: [frameHole] });
+      eq(framePreview.length, 14, 'frame preview has 14 contours');
+      const frameExported = [...frameSVG.matchAll(/<path d="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => ({ d: m[1], depth: m[2] }));
+      eq(frameExported.length, 14, 'frame export emits all 14 contours (absorbed hole excluded from interior cut)');
+      for (let i = 0; i < framePreview.length; i++) {
+        eq(frameExported[i].d, polyToPathD(framePreview[i].polygon), `frame contour ${i} path matches preview`);
+        eq(frameExported[i].depth, format(framePreview[i].depth, 'mm', { unit: true }), `frame contour ${i} depth matches preview`);
+      }
+    }
+
+    // 22. VCARVE-5b/TASK 427b: Pocket bullseye oracle — exact-string check from origin/main BEFORE 427.
+    // Under SKETCH-4e fill-rule="evenodd", ALL contained grouped loops (outer + hole + dot) are absorbed into ONE compound path.
+    // Proves pocket export remains 100% byte-identical to origin/main.
+    {
+      const bullState = {
+        joints: new Map([
+          ['O0', { x: 0, y: 0 }], ['O1', { x: 60, y: 0 }], ['O2', { x: 60, y: 60 }], ['O3', { x: 0, y: 60 }],
+          ['H0', { x: 15, y: 15 }], ['H1', { x: 45, y: 15 }], ['H2', { x: 45, y: 45 }], ['H3', { x: 15, y: 45 }],
+          ['D0', { x: 25, y: 25 }], ['D1', { x: 35, y: 25 }], ['D2', { x: 35, y: 35 }], ['D3', { x: 25, y: 35 }],
+        ]),
+        shapes: [
+          { id: 'so1', type: 'line', joints: ['O0', 'O1'], userGroupId: 'g-bull' },
+          { id: 'so2', type: 'line', joints: ['O1', 'O2'], userGroupId: 'g-bull' },
+          { id: 'so3', type: 'line', joints: ['O2', 'O3'], userGroupId: 'g-bull' },
+          { id: 'so4', type: 'line', joints: ['O3', 'O0'], userGroupId: 'g-bull' },
+          { id: 'sh1', type: 'line', joints: ['H0', 'H1'], userGroupId: 'g-bull' },
+          { id: 'sh2', type: 'line', joints: ['H1', 'H2'], userGroupId: 'g-bull' },
+          { id: 'sh3', type: 'line', joints: ['H2', 'H3'], userGroupId: 'g-bull' },
+          { id: 'sh4', type: 'line', joints: ['H3', 'H0'], userGroupId: 'g-bull' },
+          { id: 'sd1', type: 'line', joints: ['D0', 'D1'], userGroupId: 'g-bull' },
+          { id: 'sd2', type: 'line', joints: ['D1', 'D2'], userGroupId: 'g-bull' },
+          { id: 'sd3', type: 'line', joints: ['D2', 'D3'], userGroupId: 'g-bull' },
+          { id: 'sd4', type: 'line', joints: ['D3', 'D0'], userGroupId: 'g-bull' },
+        ],
+        groups: [{ id: 'g-bull', name: 'Bullseye' }],
+        constraints: [],
+      };
+      const outerPoly = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 60 }, { x: 0, y: 60 }];
+      const holePoly = [{ x: 15, y: 15 }, { x: 45, y: 15 }, { x: 45, y: 45 }, { x: 15, y: 45 }];
+      const dotPoly = [{ x: 25, y: 25 }, { x: 35, y: 25 }, { x: 35, y: 35 }, { x: 25, y: 35 }];
+
+      const loops = findLoops(bullState);
+      const outerLoop = loops.find((l) => l.edges.includes('so1'));
+      const holeLoop = loops.find((l) => l.edges.includes('sh1'));
+      const dotLoop = loops.find((l) => l.edges.includes('sd1'));
+      const loopPolys = {
+        [outerLoop.id]: outerPoly,
+        [holeLoop.id]: holePoly,
+        [dotLoop.id]: dotPoly,
+      };
+
+      const got = exportShaperSVG({
+        state: bullState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'pocket' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        options: { islands: true },
+        loopPolys,
+      });
+
+      // EXACT string computed on origin/main (commit e5a5f8a) before TASK 427:
+      const want = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 25 25 L 35 25 L 35 35 L 25 35 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>\n' +
+        '</svg>';
+
+      eq(got, want, 'pocket bullseye export is byte-identical to origin/main');
+    }
   }
 
   console.log('shaper-export tests passed ✅');

@@ -11168,3 +11168,191 @@ Built VCARVE-5a per the TURN 424 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+## TURN 426 (VCARVE-5b PLAN) — V-carve regions WITH HOLES (no code) — branch agy1
+Plan for VCARVE-5b: extending V-carve offsetting to compound regions with holes (letters O, A, B, and picture frames). The outer boundary insets inward while the hole boundary expands outward into the channel; both tool fronts advance toward each other and terminate at the medial axis ridge.
+
+### 1. The Declaration (How a V-carve Record States Its Holes)
+- **Existing Architecture (`packages/core/shaper-export.js:192-212` & `packages/core/group-model.js:52-67`):**
+  - SKETCH-4e established the project standard for island/hole relationships:
+    A loop is an island/hole if it belongs to the SAME user group (`groupOfLoop(L, state) === gid`) as the outer loop AND is strictly contained within the outer loop's polygon (`polygonContains(outerPoly, holePoly)` via `packages/core/loop-geometry.js:80-88`).
+  - Requiring an explicit group prevents independent parts nested on a stock sheet (e.g. a small square workpiece nested inside a large sheet rectangle) from being accidentally absorbed as holes.
+- **Record Structure (`state.vcarves`):**
+  - Project principle: **DERIVE over materialize**.
+  - The record continues to store `region: outerLoopId` (e.g. `{ id: 'vcarve-1', region: 'loop_outer', vbit: { angle: 90 }, dStep: 0.5, maxDepth: 6 }`).
+  - At runtime, the host derives holes dynamically:
+    ```javascript
+    function findHolesForLoop(outerLoopId, loops, state, loopPolys) {
+      const L = loops.find((l) => l.id === outerLoopId);
+      if (!L) return [];
+      const gid = groupOfLoop(L, state);
+      if (!gid) return [];
+      const outerPoly = loopPolys[L.id];
+      if (!outerPoly) return [];
+      const candidateHoles = [];
+      for (const hid of loopsInGroup(loops, state, gid)) {
+        if (hid === L.id) continue;
+        const hp = loopPolys[hid];
+        if (hp && polygonContains(outerPoly, hp)) candidateHoles.push({ id: hid, poly: hp });
+      }
+      // Filter out nested islands (depth 2): a hole cannot be contained in another hole
+      return candidateHoles
+        .filter((h) => !candidateHoles.some((other) => other.id !== h.id && polygonContains(other.poly, h.poly)))
+        .map((h) => h.poly);
+    }
+    ```
+- **Region Picker Display (`apps/shaper/src/vcarve-view.js:35-42`):**
+  - When a group contains an outer loop and holes:
+    - The dropdown displays: `Group 1: Loop 1 (1500 mm² · 1 hole)` or `Loop 1 (1500 mm² · 1 hole)`.
+    - Inner loops that are absorbed as holes in a group are either omitted from the dropdown or grayed out (`Loop 2 (hole in Loop 1)`), preventing conflicting standalone vcarve operations on an absorbed hole.
+
+### 2. The Derivation (`packages/core/vcarve.js`)
+- **Signature & Unified Code Path:**
+  ```javascript
+  export function vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000, holes = [] } = {})
+  export function deriveVcarveContours(boundary, record, { maxContours = 200, holes = [] } = {})
+  ```
+  - Exactly ONE function. Single-boundary calls simply omit `holes` (defaults to `[]`), running through the exact same code path with zero forks.
+- **Clipper Orientation & Setup:**
+  - Outer boundary: checked with `ClipperLib.Clipper.Orientation(outerPath)`. If false, reversed to ensure **positive orientation** (outer boundary).
+  - Hole boundaries: for each hole in `holes`, checked with `ClipperLib.Clipper.Orientation(holePath)`. If true, reversed to ensure **negative orientation** (Clipper hole).
+  - Setup:
+    ```javascript
+    const co = new ClipperLib.ClipperOffset(2 /* miterLimit */, 0.25 * CLIP_SCALE /* arcTolerance */);
+    co.AddPath(outerPath, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    for (const hPath of holePaths) {
+      co.AddPath(hPath, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    }
+    ```
+- **Contour Output at Each Depth Step:**
+  - `co.Execute(sol, -d * CLIP_SCALE)` is called with negative delta.
+  - The outer boundary insets inward; the hole boundaries offset outward into the material.
+  - At each depth $d$ before collision, `sol` contains **separate closed rings** (e.g. Ring 0 for outer wall slope, Ring 1 for hole wall slope).
+  - Each ring is pushed into the flat array: `{ polygon: pts, depth: d / tan }`.
+  - When the two slopes meet at the medial axis ridge, `sol.length` drops to 0, terminating the loop cleanly.
+- **Export Output (`packages/core/shaper-export.js:246-253`):**
+  - Emits one `<path shaper:cutType="online" shaper:cutDepth="..."/>` per ring.
+  - In physical V-carve machining, online paths are cut as separate closed toolpaths (shallowest to deepest). No artificial bridging or compound path is required for online cuts.
+
+### 3. Behaviour: No-Holes Byte-Identity
+- When `holes = []` (or omitted), only `outerPath` is added to `ClipperOffset`.
+- The execution path is identical line-for-line to VCARVE-5a.
+- **Protected Oracles:**
+  - `tests/shaper-export.test.js`: Test 14 (`wantMM` 40×40 exact string), Test 15 (`wantIN` exact string), Test 17 (preview parity), Test 18 (60° triangle), Test 19 (zero-vcarve byte-identity), Test 20 (Dumbbell split parity).
+  - `tests/vcarve.test.js`: Tests 1–5 (square math & guards), Test 6 (dumbbell), Test 7 (waist), Test 8 (20° wedge sharpness).
+  - All must remain 100% byte-for-byte identical.
+
+### 4. Edge Cases
+1. **Hole Touching Boundary:**
+   - In SketchStudio, topological loops sharing an edge are adjacent planar faces (`findLoops`), not strictly contained loops.
+   - `polygonContains(outer, inner)` enforces strict non-crossing containment (`segsCross` check). A touching loop returns false and is not treated as a hole.
+2. **Nested Islands (Bullseye / Dot inside 'O's hole):**
+   - Given Outer $A$ containing Hole $B$, and Island Dot $C$ inside $B$:
+   - The region being carved is the solid material between $A$ and $B$.
+   - Dot $C$ sits inside the void of $B$ and must remain uncarved raw stock.
+   - Filtering rule: A candidate hole is only a valid hole of $A$ if it is NOT contained within any other hole of $A$. This safely filters out depth-2 islands like $C$.
+3. **Hole Larger than Max Depth Reach:**
+   - E.g. 100×100 outer, 60×60 hole (channel width 20 mm), with `maxDepth = 6 mm` and 90° bit.
+   - The outer bevel insets 6 mm; the hole bevel offsets 6 mm.
+   - They do not meet; an 8 mm flat uncut plateau remains between them.
+   - Clipper handles this naturally: both insets proceed down to `maxIters = Math.floor(maxDepth * tan / dStep)` and stop, leaving the plateau uncarved.
+
+### 5. Test Suite Plan
+1. **Square Frame Fixture (`tests/vcarve.test.js`):**
+   - Geometry: 40×40 outer boundary with 10×10 hole centered at $(20, 20)$ (`x = 15..25, y = 15..25`).
+   - Channel wall thickness: $(40 - 10) / 2 = 15\text{ mm}$.
+   - Medial ridge: $15 / 2 = 7.5\text{ mm}$.
+   - Parameters: `dStep = 1.0 mm`, 90° bit (`tan = 1.0`), `maxDepth = 10 mm`.
+   - Expected progression:
+     - Depths: $d = 1, 2, 3, 4, 5, 6, 7\text{ mm}$ (7 depth levels).
+     - At each depth $d = 1..7$: exactly 2 contours (outer wall pass + hole wall pass).
+     - Total contours: $7 \times 2 = \mathbf{14\text{ contours}}$.
+     - At $d = 8\text{ mm}$ ($8 > 7.5\text{ mm}$): 0 rings (finite ridge collapse).
+   - Assertions:
+     - Exact count: 14 contours.
+     - Depths: pairs at 1, 2, 3, 4, 5, 6, 7 mm.
+     - Orientation: outer contour positive, hole contour negative.
+2. **Preview vs Export Parity Test (`tests/shaper-export.test.js`):**
+   - Frame loop with hole assigned in `state.vcarves`.
+   - Verify `exportShaperSVG` emits all 14 `<path shaper:cutType="online">` elements with matching `d` strings and depths.
+3. **Letter 'B' / Double-Hole Fixture:**
+   - 1 outer loop with 2 distinct holes.
+   - Verifies Clipper handles arbitrary number of simultaneous holes.
+4. **No-Hole Byte-Identity Check:**
+   - Verifies 40×40 square, dumbbell, and wedge exports remain byte-identical.
+
+### 6. Owner Questions
+1. **Nested Island Inside a Hole (Bullseye):**
+   - Confirm that an island $C$ inside hole $B$ of outer $A$ should remain uncut raw material when carving $A$. If the user wishes to carve $C$, they can assign a separate vcarve/cut entry to $C$.
+2. **Explicit Group vs Automatic Containment:**
+   - Should island detection strictly require the loops to be in a user group (`Ctrl+G` in Design, matching SKETCH-4e / `shaper-export.js:192-212`), OR should the Vcarve tab automatically treat any strictly contained loop as a hole even if ungrouped?
+   - *Recommendation:* Require the explicit group to remain consistent with SKETCH-4e and avoid treating independent parts drawn on a common stock boundary as holes.
+3. **Region Picker Presentation:**
+   - Should absorbed holes be hidden from the Vcarve region dropdown, or listed as disabled (`Loop 2 (hole in Loop 1)`)?
+   - (Recommendation: Hide or suffix as disabled so the user cannot accidentally assign a duplicate cut to an absorbed hole).
+
+
+## TURN 427 — BUILD VCARVE-5b (V-carve regions with holes) — branch agy1
+
+Built VCARVE-5b per the TURN 426 plan and advisor decisions:
+1. **Decision 1 (ONE SOURCE for "the holes of a loop"):**
+   - Extracted pocket-island derivation (`packages/core/shaper-export.js:192-212`) into ONE shared function `holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true } = {})` in `packages/core/group-model.js`.
+   - Used by BOTH the pocket export and the vcarve hole lookup.
+   - Purity preserved: `group-model.js` imports pure `polygonContains` from `./loop-geometry.js` (no DOM).
+   - Replaced manual pocket loop filtering in `shaper-export.js` with `holesOfLoop`: existing pocket-export output is verified 100% byte-identical across all SKETCH-4e tests.
+2. **Decision 2 (Explicit User Group):**
+   - `holesOfLoop` enforces user GROUP containment by default (`requireGroup: true`, matching SKETCH-4e).
+   - Structured with `requireGroup` option as a one-line switch if future needs automatic containment.
+3. **Decision 3 (Nested Islands):**
+   - Implemented depth-2 nested-island filtering in `holesOfLoop`: candidates contained inside any other candidate hole are filtered out, ensuring a bullseye dot inside a hole stays uncut raw stock.
+4. **Decision 4 (Region Picker UI in `apps/shaper/src/vcarve-view.js`):**
+   - `populateRegions()` derives holes across all loops:
+     - Outer loops with holes display as `Loop M (area mm² · k hole(s))`.
+     - Absorbed hole loops are listed DISABLED as `<option value="..." disabled>Loop N (hole in Loop M)</option>`.
+   - In `recompute()`: retrieves holes via `holesOfLoop`, passes `{ holes: holePolys }` to `deriveVcarveContours`, and renders both outer and hole boundaries in dark `#202020` stroke with depth-shaded contours in between.
+5. **Decision 5 (Derivation Signature & Clipper Holes):**
+   - `packages/core/vcarve.js`: `vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000, holes = [] } = {})` and `deriveVcarveContours(boundary, record, { maxContours = 200, holes = [] } = {})`.
+   - Single unified code path for both single-boundary and compound regions (no forks).
+   - Outer boundary is oriented positive (`Orientation === true`); hole boundaries are oriented negative (`Orientation === false`).
+   - Both added to `ClipperOffset` with `EndType.etClosedPolygon`. Inward step `-d * CLIP_SCALE` insets the outer boundary and outsets each hole into the channel, meeting at the medial ridge.
+6. **Tests Added & Verified:**
+   - `tests/vcarve.test.js`:
+     - Test 9: Frame (40×40 outer, 10×10 hole, dStep 1, 90° bit) produces exactly 14 contours (pairs at 1..7 mm, terminating at 7.5 mm ridge).
+     - Test 10: Two-hole "B"-like fixture (60×40 outer with two side-by-side holes produces 3 contours at d=1).
+     - Test 11: Bullseye fixture proves nested island inside hole is uncut and excluded from hole list.
+   - `tests/shaper-export.test.js`:
+     - Test 21: Frame preview vs export parity on all 14 contours with holes. Absorbed hole is excluded from standard cuts.
+     - All prior 20 tests pass unchanged (byte-identical).
+7. **LIVE Verification:**
+   - Headless Edge in `scripts/live-evidence-427.cjs`:
+     - Seeded 40×40 outer square + 10×10 hole square in IndexedDB.
+     - Restored into Design mode, grouped shapes via Ctrl+G (`makeGroup`).
+     - Opened Vcarve tab: dropdown confirmed `Loop 1 (1600 mm² · 1 hole)` and disabled `Loop 2 (hole in Loop 1)`.
+     - Selected Loop 1: verified readout `14 contours · max 7.00 mm`, 16 rendered polygons (2 boundaries + 14 depth-shaded contour rings).
+     - Captured screenshot to `.evidence/427/vcarve-frame-preview.png` (untracked).
+     - Clean headless browser shutdown (`Browser.close` + taskkill).
+8. **Gate:**
+   - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.
+
+
+## TURN 427b — Restore old pocket-island nested semantics via excludeNested option — branch agy1
+
+- **Problem:**
+  - `holesOfLoop` unconditionally applied depth-2 nested-island filtering to all callers.
+  - In SVG `fill-rule="evenodd"`, alternating nested loops toggle fill/hole (outer solid -> hole void -> dot solid).
+  - The old pocket-island exporter (`shaper-export.js`, SKETCH-4e) absorbed all grouped contained loops into the compound path. Applying the nested-island filter to pockets dropped the inner dot island, changing pocket export output.
+- **Fix:**
+  - Added `excludeNested = false` option to `holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true, excludeNested = false } = {})` in `packages/core/group-model.js`:
+    - `excludeNested: false` (default): returns ALL contained loops, preserving SKETCH-4e evenodd pocket compound path semantics.
+    - `excludeNested: true`: filters out candidates contained in another candidate hole (used for V-carve so bullseye dots stay uncut).
+  - Updated `packages/core/shaper-export.js`:
+    - Pocket export uses `holesOfLoop(L, loops, state, loopPolys)` (default `excludeNested: false`), keeping pocket export 100% byte-identical to `origin/main`.
+    - V-carve export uses `holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true })`.
+  - Updated `apps/shaper/src/vcarve-view.js`:
+    - `populateRegions()` and `recompute()` pass `{ excludeNested: true }`.
+- **Proof & Oracle Verification:**
+  - Added Test 22 in `tests/shaper-export.test.js` pinning pocket bullseye export to the exact string computed on `origin/main` (`e5a5f8a`):
+    `<svg ...><path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 25 25 L 35 25 L 35 35 L 25 35 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" ... /></svg>`.
+  - Verified failure when flipped: temporarily passing `excludeNested: true` in `shaper-export.js` pocket export produced failure (`got 2 subpaths, want 3 subpaths`). With default `excludeNested: false`, Test 22 passes byte-identically.
+  - In `tests/vcarve.test.js` Test 11: verified both `excludeNested: false` (returns all 2 contained loops) and `excludeNested: true` (returns only 1 hole, uncut dot).
+- **Gate:**
+  - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.

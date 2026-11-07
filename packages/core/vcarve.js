@@ -20,26 +20,41 @@ export function vbitHalfAngleTan(angle) {
   return Math.tan((halfAngle * Math.PI) / 180);
 }
 
-export function vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000 } = {}) {
+function toClipperPath(poly) {
+  if (!Array.isArray(poly) || poly.length < 3) return null;
+  const p = poly.map((pt) => ({
+    X: Math.round((pt.x ?? pt[0]) * CLIP_SCALE),
+    Y: Math.round((pt.y ?? pt[1]) * CLIP_SCALE),
+  }));
+  if (p.length > 1) {
+    const a = p[0], b = p[p.length - 1];
+    if (a.X === b.X && a.Y === b.Y) p.pop();
+  }
+  return p.length >= 3 ? p : null;
+}
+
+export function vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000, holes = [] } = {}) {
   const out = [];
-  if (!Array.isArray(boundary) || boundary.length < 3) return out;
   const step = Number(dStep);
   const tan = Number(halfAngleTan);
   if (!(step > 0) || !(tan > 0)) return out;
 
-  const path = boundary.map((p) => ({
-    X: Math.round((p.x ?? p[0]) * CLIP_SCALE),
-    Y: Math.round((p.y ?? p[1]) * CLIP_SCALE),
-  }));
-  if (path.length > 1) {
-    const a = path[0], b = path[path.length - 1];
-    if (a.X === b.X && a.Y === b.Y) path.pop();
-  }
-  if (path.length < 3) return out;
-  if (!ClipperLib.Clipper.Orientation(path)) path.reverse();
+  const outerPath = toClipperPath(boundary);
+  if (!outerPath) return out;
+  if (!ClipperLib.Clipper.Orientation(outerPath)) outerPath.reverse();
 
   const co = new ClipperLib.ClipperOffset(2 /* miterLimit */, 0.25 * CLIP_SCALE /* arcTolerance */);
-  co.AddPath(path, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+  co.AddPath(outerPath, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+
+  if (Array.isArray(holes)) {
+    for (const h of holes) {
+      const hp = toClipperPath(h);
+      if (!hp) continue;
+      // In ClipperOffset, holes MUST have negative orientation (Orientation === false) so -delta outsets the hole
+      if (ClipperLib.Clipper.Orientation(hp)) hp.reverse();
+      co.AddPath(hp, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    }
+  }
 
   for (let i = 1; i <= maxIters; i++) {
     const d = step * i;
@@ -57,12 +72,12 @@ export function vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000 
   return out;
 }
 
-export function deriveVcarveContours(boundary, record, { maxContours = 200 } = {}) {
+export function deriveVcarveContours(boundary, record, { maxContours = 200, holes = [] } = {}) {
   if (!Array.isArray(boundary) || boundary.length < 3 || !record) return [];
   const angle = record.vbit?.angle ?? 90;
   const tan = vbitHalfAngleTan(angle);
   const dStep = Number(record.dStep) > 0 ? Number(record.dStep) : 0.5;
   const maxDepth = Number(record.maxDepth) > 0 ? Number(record.maxDepth) : 6;
   const maxIters = Math.max(1, Math.min(maxContours, Math.floor((maxDepth * tan) / dStep + 1e-6)));
-  return vcarveContours(boundary, { dStep, halfAngleTan: tan, maxIters });
+  return vcarveContours(boundary, { dStep, halfAngleTan: tan, maxIters, holes });
 }

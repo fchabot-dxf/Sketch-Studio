@@ -373,6 +373,53 @@ import { format } from '#core/units.js';
         eq(dbExported[i].depth, format(dbPreview[i].depth, 'mm', { unit: true }), `db contour ${i} depth matches preview`);
       }
     }
+
+    // 21. VCARVE-5b: Frame with hole (40×40 outer, 10×10 hole) preview vs export parity (14 contours)
+    {
+      const frameOuter = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }];
+      const frameHole = [{ x: 15, y: 15 }, { x: 25, y: 15 }, { x: 25, y: 25 }, { x: 15, y: 25 }];
+      const frameRec = { id: 'vcFrame', region: 'loop_outer', vbit: { angle: 90 }, dStep: 1, maxDepth: 10 };
+      const frameState = {
+        joints: new Map([
+          ['FO0', { x: 0, y: 0 }], ['FO1', { x: 40, y: 0 }], ['FO2', { x: 40, y: 40 }], ['FO3', { x: 0, y: 40 }],
+          ['FH0', { x: 15, y: 15 }], ['FH1', { x: 25, y: 15 }], ['FH2', { x: 25, y: 25 }], ['FH3', { x: 15, y: 25 }],
+        ]),
+        shapes: [
+          { id: 'so1', type: 'line', joints: ['FO0', 'FO1'], userGroupId: 'g-frame' },
+          { id: 'so2', type: 'line', joints: ['FO1', 'FO2'], userGroupId: 'g-frame' },
+          { id: 'so3', type: 'line', joints: ['FO2', 'FO3'], userGroupId: 'g-frame' },
+          { id: 'so4', type: 'line', joints: ['FO3', 'FO0'], userGroupId: 'g-frame' },
+          { id: 'sh1', type: 'line', joints: ['FH0', 'FH1'], userGroupId: 'g-frame' },
+          { id: 'sh2', type: 'line', joints: ['FH1', 'FH2'], userGroupId: 'g-frame' },
+          { id: 'sh3', type: 'line', joints: ['FH2', 'FH3'], userGroupId: 'g-frame' },
+          { id: 'sh4', type: 'line', joints: ['FH3', 'FH0'], userGroupId: 'g-frame' },
+        ],
+        groups: [{ id: 'g-frame', name: 'Frame' }],
+        constraints: [],
+        vcarves: [frameRec],
+      };
+      const outerLoops = findLoops(frameState);
+      const outerLoop = outerLoops.find((l) => l.edges.includes('so1'));
+      const holeLoop = outerLoops.find((l) => l.edges.includes('sh1'));
+      frameRec.region = outerLoop.id;
+      const loopPolys = { [outerLoop.id]: frameOuter, [holeLoop.id]: frameHole };
+
+      const frameSVG = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: holeLoop.id }, rec: { cutType: 'interior' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const framePreview = deriveVcarveContours(frameOuter, frameRec, { holes: [frameHole] });
+      eq(framePreview.length, 14, 'frame preview has 14 contours');
+      const frameExported = [...frameSVG.matchAll(/<path d="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => ({ d: m[1], depth: m[2] }));
+      eq(frameExported.length, 14, 'frame export emits all 14 contours (absorbed hole excluded from interior cut)');
+      for (let i = 0; i < framePreview.length; i++) {
+        eq(frameExported[i].d, polyToPathD(framePreview[i].polygon), `frame contour ${i} path matches preview`);
+        eq(frameExported[i].depth, format(framePreview[i].depth, 'mm', { unit: true }), `frame contour ${i} depth matches preview`);
+      }
+    }
   }
 
   console.log('shaper-export tests passed ✅');

@@ -1,5 +1,6 @@
 import { vcarveContours } from '#core/vcarve.js';
 import { polyArea } from '#core/loop-geometry.js';
+import { holesOfLoop } from '#core/group-model.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -98,6 +99,67 @@ import { polyArea } from '#core/loop-geometry.js';
       const apex = stack[i].polygon.reduce((minP, p) => (p.x < minP.x ? p : minP), stack[i].polygon[0]);
       const diff = Math.abs(apex.x - wantApexX);
       assert(diff < 0.25, `contour ${i} apex diff ${diff.toFixed(4)}mm must be < dStep/2 (0.25mm)`);
+    }
+  }
+
+  // 9. VCARVE-5b: Frame (40×40 outer, 10×10 hole centered)
+  // Distance across wall is 15mm -> medial ridge collapses at 7.5mm.
+  // At dStep 1, tan 1: exactly 14 contours (pairs at depths 1..7 mm, 0 at 8 mm).
+  {
+    const outer = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }];
+    const hole = [{ x: 15, y: 15 }, { x: 25, y: 15 }, { x: 25, y: 25 }, { x: 15, y: 25 }];
+    const stack = vcarveContours(outer, { dStep: 1, halfAngleTan: 1, maxIters: 200, holes: [hole] });
+    assert(stack.length === 14, `frame expected 14 contours, got ${stack.length}`);
+    for (let d = 1; d <= 7; d++) {
+      const atD = stack.filter((c) => Math.abs(c.depth - d) < 1e-6);
+      assert(atD.length === 2, `depth ${d} has 2 contours (outer wall + hole wall), got ${atD.length}`);
+    }
+    const maxD = Math.max(...stack.map((c) => c.depth));
+    assert(maxD === 7, `max depth is 7mm (ridge at 7.5mm), got ${maxD}`);
+  }
+
+  // 10. VCARVE-5b: Two-hole fixture (60×40 outer, two 10×10 holes side-by-side)
+  {
+    const outer = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 40 }, { x: 0, y: 40 }];
+    const h1 = [{ x: 10, y: 15 }, { x: 20, y: 15 }, { x: 20, y: 25 }, { x: 10, y: 25 }];
+    const h2 = [{ x: 40, y: 15 }, { x: 50, y: 15 }, { x: 50, y: 25 }, { x: 40, y: 25 }];
+    const stack = vcarveContours(outer, { dStep: 1, halfAngleTan: 1, maxIters: 200, holes: [h1, h2] });
+    assert(stack.length > 0, 'two-hole fixture produces contours');
+    // at d=1, there are 3 rings (outer + 2 holes)
+    const atD1 = stack.filter((c) => Math.abs(c.depth - 1) < 1e-6);
+    assert(atD1.length === 3, `depth 1 has 3 contours (outer + 2 holes), got ${atD1.length}`);
+  }
+
+  // 11. VCARVE-5b: Bullseye — dot inside a hole is an uncut island (depth-2 nested island)
+  {
+    const state = {
+      shapes: [
+        { id: 's1', userGroupId: 'g1' }, { id: 's2', userGroupId: 'g1' }, { id: 's3', userGroupId: 'g1' },
+      ],
+      groups: [{ id: 'g1', name: 'Group 1' }],
+    };
+    const loops = [
+      { id: 'loop-outer', edges: ['s1'] },
+      { id: 'loop-hole', edges: ['s2'] },
+      { id: 'loop-dot', edges: ['s3'] },
+    ];
+    const loopPolys = {
+      'loop-outer': [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 60 }, { x: 0, y: 60 }],
+      'loop-hole': [{ x: 15, y: 15 }, { x: 45, y: 15 }, { x: 45, y: 45 }, { x: 15, y: 45 }],
+      'loop-dot': [{ x: 25, y: 25 }, { x: 35, y: 25 }, { x: 35, y: 35 }, { x: 25, y: 35 }],
+    };
+    const holes = holesOfLoop('loop-outer', loops, state, loopPolys);
+    assert(holes.length === 1 && holes[0] === 'loop-hole', `outer loop hole must be loop-hole only, got ${JSON.stringify(holes)}`);
+    // Carve loop-outer with its derived holes: loop-dot stays uncut
+    const stack = vcarveContours(loopPolys['loop-outer'], { dStep: 1, halfAngleTan: 1, holes: holes.map((h) => loopPolys[h]) });
+    assert(stack.length > 0, 'outer vcarve produced contours');
+    // None of the contours touch inside the 20..40 inner area of the hole (dot is untouched)
+    for (const c of stack) {
+      for (const p of c.polygon) {
+        // Point must NOT be strictly inside the dot (25 < x < 35, 25 < y < 35)
+        const insideDot = p.x > 25.01 && p.x < 34.99 && p.y > 25.01 && p.y < 34.99;
+        assert(!insideDot, `contour point (${p.x}, ${p.y}) encroached on uncut bullseye dot!`);
+      }
     }
   }
 

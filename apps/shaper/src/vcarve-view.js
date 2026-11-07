@@ -5,6 +5,7 @@
 
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js';
+import { holesOfLoop } from '#core/group-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 
@@ -34,11 +35,51 @@ export function mountVcarveView(state) {
 
   function populateRegions() {
     const sb = shapeById();
-    const items = findLoops(state).map((l) => ({ id: l.id, area: Math.abs(polyArea(loopPolygon(l, state, sb))) })).sort((a, b) => b.area - a.area);
-    els.region.innerHTML = items.length
-      ? '<option value="">— pick a loop —</option>' + items.map((it, i) => `<option value="${it.id}">Loop ${i + 1} (${it.area.toFixed(0)} mm²)</option>`).join('')
-      : '<option value="">(no closed loops)</option>';
-    if (rec().region && items.some((it) => it.id === rec().region)) els.region.value = rec().region;
+    const loops = findLoops(state);
+    const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
+    const items = loops
+      .map((l) => ({ id: l.id, loop: l, area: Math.abs(polyArea(loopPolys[l.id] || [])) }))
+      .sort((a, b) => b.area - a.area);
+
+    items.forEach((it, idx) => { it.num = idx + 1; });
+    const itemById = new Map(items.map((it) => [it.id, it]));
+
+    const absorbedBy = new Map(); // holeId -> parentItem
+    const holesMap = new Map();   // parentId -> [holeItem, ...]
+    for (const it of items) {
+      const hids = holesOfLoop(it.loop, loops, state, loopPolys);
+      if (hids.length) {
+        const holeItems = hids.map((hid) => itemById.get(hid)).filter(Boolean);
+        holesMap.set(it.id, holeItems);
+        for (const hit of holeItems) absorbedBy.set(hit.id, it);
+      }
+    }
+
+    if (!items.length) {
+      els.region.innerHTML = '<option value="">(no closed loops)</option>';
+      return;
+    }
+
+    let html = '<option value="">— pick a loop —</option>';
+    for (const it of items) {
+      if (absorbedBy.has(it.id)) {
+        const parent = absorbedBy.get(it.id);
+        html += `<option value="${it.id}" disabled>Loop ${it.num} (hole in Loop ${parent.num})</option>`;
+      } else {
+        const holes = holesMap.get(it.id) || [];
+        const holeSuffix = holes.length ? ` · ${holes.length} hole${holes.length === 1 ? '' : 's'}` : '';
+        html += `<option value="${it.id}">Loop ${it.num} (${it.area.toFixed(0)} mm²${holeSuffix})</option>`;
+      }
+    }
+    els.region.innerHTML = html;
+
+    const current = rec().region;
+    if (current && itemById.has(current) && !absorbedBy.has(current)) {
+      els.region.value = current;
+    } else if (current && absorbedBy.has(current)) {
+      rec().region = null;
+      els.region.value = '';
+    }
   }
 
   function syncControls() {
@@ -50,12 +91,17 @@ export function mountVcarveView(state) {
 
   function recompute() {
     const r = rec();
-    const loop = findLoops(state).find((l) => l.id === r.region);
+    const loops = findLoops(state);
+    const loop = loops.find((l) => l.id === r.region);
     if (!loop) { els.canvas.innerHTML = ''; els.readout.textContent = 'Pick a region to preview.'; return; }
-    const boundary = loopPolygon(loop, state, shapeById());
+    const sb = shapeById();
+    const boundary = loopPolygon(loop, state, sb);
     if (!boundary || boundary.length < 3) { els.canvas.innerHTML = ''; els.readout.textContent = 'Region has no boundary.'; return; }
-    const contours = deriveVcarveContours(boundary, r);
-    render(els.canvas, boundary, contours, r.maxDepth);
+    const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
+    const holeIds = holesOfLoop(loop, loops, state, loopPolys);
+    const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+    const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
+    render(els.canvas, boundary, contours, r.maxDepth, holePolys);
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
     els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;
   }
@@ -71,15 +117,20 @@ export function mountVcarveView(state) {
   return { refresh };
 }
 
-// Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + the nested contours DEPTH-SHADED
-// (deeper = darker). Auto-fits the viewBox to the region bbox. Non-scaling strokes keep line weight constant.
-function render(canvas, boundary, contours, maxDepth) {
-  const xs = boundary.map((p) => p.x), ys = boundary.map((p) => p.y);
+// Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + hole boundaries (dark)
+// + the nested contours DEPTH-SHADED (deeper = darker). Auto-fits the viewBox to the region bbox.
+// Non-scaling strokes keep line weight constant.
+function render(canvas, boundary, contours, maxDepth, holePolys = []) {
+  const allPts = [...boundary, ...holePolys.flat()];
+  const xs = allPts.map((p) => p.x), ys = allPts.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const w = Math.max(1e-3, maxX - minX), h = Math.max(1e-3, maxY - minY), m = Math.max(w, h) * 0.12 + 1;
   canvas.setAttribute('viewBox', `${minX - m} ${minY - m} ${w + 2 * m} ${h + 2 * m}`);
   const poly = (pts, attrs) => `<polygon points="${pts.map((p) => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join(' ')}" ${attrs}/>`;
   let s = poly(boundary, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
+  for (const hp of holePolys) {
+    s += poly(hp, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
+  }
   for (const c of contours) {
     const t = maxDepth > 0 ? Math.min(1, c.depth / maxDepth) : 0;
     const L = Math.round(66 - 44 * t); // 66% → 22% lightness (deeper = darker)

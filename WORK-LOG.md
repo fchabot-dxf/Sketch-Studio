@@ -11289,3 +11289,46 @@ Plan for VCARVE-5b: extending V-carve offsetting to compound regions with holes 
 3. **Region Picker Presentation:**
    - Should absorbed holes be hidden from the Vcarve region dropdown, or listed as disabled (`Loop 2 (hole in Loop 1)`)?
    - (Recommendation: Hide or suffix as disabled so the user cannot accidentally assign a duplicate cut to an absorbed hole).
+
+
+## TURN 427 — BUILD VCARVE-5b (V-carve regions with holes) — branch agy1
+
+Built VCARVE-5b per the TURN 426 plan and advisor decisions:
+1. **Decision 1 (ONE SOURCE for "the holes of a loop"):**
+   - Extracted pocket-island derivation (`packages/core/shaper-export.js:192-212`) into ONE shared function `holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true } = {})` in `packages/core/group-model.js`.
+   - Used by BOTH the pocket export and the vcarve hole lookup.
+   - Purity preserved: `group-model.js` imports pure `polygonContains` from `./loop-geometry.js` (no DOM).
+   - Replaced manual pocket loop filtering in `shaper-export.js` with `holesOfLoop`: existing pocket-export output is verified 100% byte-identical across all SKETCH-4e tests.
+2. **Decision 2 (Explicit User Group):**
+   - `holesOfLoop` enforces user GROUP containment by default (`requireGroup: true`, matching SKETCH-4e).
+   - Structured with `requireGroup` option as a one-line switch if future needs automatic containment.
+3. **Decision 3 (Nested Islands):**
+   - Implemented depth-2 nested-island filtering in `holesOfLoop`: candidates contained inside any other candidate hole are filtered out, ensuring a bullseye dot inside a hole stays uncut raw stock.
+4. **Decision 4 (Region Picker UI in `apps/shaper/src/vcarve-view.js`):**
+   - `populateRegions()` derives holes across all loops:
+     - Outer loops with holes display as `Loop M (area mm² · k hole(s))`.
+     - Absorbed hole loops are listed DISABLED as `<option value="..." disabled>Loop N (hole in Loop M)</option>`.
+   - In `recompute()`: retrieves holes via `holesOfLoop`, passes `{ holes: holePolys }` to `deriveVcarveContours`, and renders both outer and hole boundaries in dark `#202020` stroke with depth-shaded contours in between.
+5. **Decision 5 (Derivation Signature & Clipper Holes):**
+   - `packages/core/vcarve.js`: `vcarveContours(boundary, { dStep, halfAngleTan, maxIters = 1000, holes = [] } = {})` and `deriveVcarveContours(boundary, record, { maxContours = 200, holes = [] } = {})`.
+   - Single unified code path for both single-boundary and compound regions (no forks).
+   - Outer boundary is oriented positive (`Orientation === true`); hole boundaries are oriented negative (`Orientation === false`).
+   - Both added to `ClipperOffset` with `EndType.etClosedPolygon`. Inward step `-d * CLIP_SCALE` insets the outer boundary and outsets each hole into the channel, meeting at the medial ridge.
+6. **Tests Added & Verified:**
+   - `tests/vcarve.test.js`:
+     - Test 9: Frame (40×40 outer, 10×10 hole, dStep 1, 90° bit) produces exactly 14 contours (pairs at 1..7 mm, terminating at 7.5 mm ridge).
+     - Test 10: Two-hole "B"-like fixture (60×40 outer with two side-by-side holes produces 3 contours at d=1).
+     - Test 11: Bullseye fixture proves nested island inside hole is uncut and excluded from hole list.
+   - `tests/shaper-export.test.js`:
+     - Test 21: Frame preview vs export parity on all 14 contours with holes. Absorbed hole is excluded from standard cuts.
+     - All prior 20 tests pass unchanged (byte-identical).
+7. **LIVE Verification:**
+   - Headless Edge in `scripts/live-evidence-427.cjs`:
+     - Seeded 40×40 outer square + 10×10 hole square in IndexedDB.
+     - Restored into Design mode, grouped shapes via Ctrl+G (`makeGroup`).
+     - Opened Vcarve tab: dropdown confirmed `Loop 1 (1600 mm² · 1 hole)` and disabled `Loop 2 (hole in Loop 1)`.
+     - Selected Loop 1: verified readout `14 contours · max 7.00 mm`, 16 rendered polygons (2 boundaries + 14 depth-shaded contour rings).
+     - Captured screenshot to `.evidence/427/vcarve-frame-preview.png` (untracked).
+     - Clean headless browser shutdown (`Browser.close` + taskkill).
+8. **Gate:**
+   - `npm.cmd run gate`: `GATE files=156 pass=156 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit code 0.

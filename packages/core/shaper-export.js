@@ -15,9 +15,8 @@
 
 import { findLoops } from './loop-finder.js';
 import { format } from './units.js';
-import { loopsInGroup, groupOfLoop } from './group-model.js'; // SKETCH-4e: explicit-group islands
-import { polygonContains } from './loop-geometry.js';          // SKETCH-4e: containment (on host-passed polys)
-import { deriveVcarveContours } from './vcarve.js';             // VCARVE-4: canonical vcarve derivation
+import { holesOfLoop } from './group-model.js';       // SKETCH-4e / VCARVE-5b: shared hole derivation
+import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
@@ -189,8 +188,8 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const loops = findLoops(state || {});
   const loopById = new Map(loops.map((l) => [l.id, l]));
 
-  // SKETCH-4e: ISLANDS (explicit-group, options.islands, default OFF). For a POCKET cut on a loop that is in a user
-  // GROUP, the group's OTHER loops STRICTLY CONTAINED in it (polygonContains on the HOST-passed `loopPolys`) are its
+  // SKETCH-4e / VCARVE-5b: shared holesOfLoop derivation (explicit-group, default ON for vcarves, options.islands for pockets).
+  // For a POCKET cut on a loop that is in a user GROUP, the group's OTHER loops STRICTLY CONTAINED in it are its
   // HOLES → ONE compound `<path fill-rule="evenodd">` (the hole loops are absorbed, not emitted separately).
   let holesOf = null, absorbed = null;
   if (options.islands && loopPolys) {
@@ -200,25 +199,32 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       const c = encOf(e.rec.cutType);
       if (!c || c.cutType !== 'pocket') continue; // conservative: POCKET only
       const L = loopById.get(e.target.id); if (!L) continue;
-      const gid = groupOfLoop(L, state); if (!gid) continue;
-      const outerPoly = loopPolys[L.id]; if (!outerPoly) continue;
-      const holes = [];
-      for (const hid of loopsInGroup(loops, state, gid)) {
-        if (hid === L.id) continue;
-        const hp = loopPolys[hid];
-        if (hp && polygonContains(outerPoly, hp)) { holes.push(hid); absorbed.add(hid); }
+      const holes = holesOfLoop(L, loops, state, loopPolys);
+      if (holes.length) {
+        holesOf.set(L.id, holes);
+        for (const hid of holes) absorbed.add(hid);
       }
-      if (holes.length) holesOf.set(L.id, holes);
     }
   }
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
-  const vcarveLoops = new Set((state?.vcarves || []).map((v) => v && v.region).filter(Boolean));
+  const vcarveLoops = new Set();
+  if (Array.isArray(state?.vcarves)) {
+    for (const vc of state.vcarves) {
+      if (!vc || !vc.region) continue;
+      vcarveLoops.add(vc.region);
+      if (loopPolys) {
+        for (const hid of holesOfLoop(vc.region, loops, state, loopPolys)) {
+          vcarveLoops.add(hid);
+        }
+      }
+    }
+  }
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     if (e.target.kind === 'loop' && absorbed && absorbed.has(e.target.id)) continue; // a hole absorbed into a pocket
-    if (e.target.kind === 'loop' && vcarveLoops.has(e.target.id)) continue; // VCARVE-4: loop excluded by vcarve assignment
+    if (e.target.kind === 'loop' && vcarveLoops.has(e.target.id)) continue; // VCARVE-4/5b: loop excluded by vcarve assignment
     const c = encOf(e.rec.cutType);
     if (!c) continue;
     let geom = null;
@@ -236,14 +242,16 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
   }
 
-  // VCARVE-4: derive and emit contour stack from state.vcarves + loopPolys
+  // VCARVE-4/5b: derive and emit contour stack from state.vcarves + loopPolys (including holes)
   if (Array.isArray(state?.vcarves) && loopPolys) {
     const onlineEnc = encOf('online') || { id: 'online', cutType: 'online', fill: 'none', stroke: '#7F7F7F' };
     for (const vc of state.vcarves) {
       if (!vc || !vc.region) continue;
       const boundary = loopPolys[vc.region];
       if (!boundary || boundary.length < 3) continue;
-      const contours = deriveVcarveContours(boundary, vc);
+      const holeIds = holesOfLoop(vc.region, loops, state, loopPolys);
+      const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+      const contours = deriveVcarveContours(boundary, vc, { holes: holePolys });
       for (const c of contours) {
         const d = polyToPathD(c.polygon);
         if (!d) continue;

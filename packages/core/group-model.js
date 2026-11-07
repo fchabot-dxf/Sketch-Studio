@@ -8,6 +8,8 @@
 // ADDITIVE — declared here, NO consumer yet (the Group ACTION = S-4d; islands / export threading = S-4e) → both apps
 // byte-identical. Declared richly (name + sketch) so a future action / tree / export all read DATA, not new code.
 
+import { polygonContains } from './loop-geometry.js';
+
 // An entity's USER group — its stored `userGroupId`, or null (ungrouped). NOT the factory `groupId`.
 export function groupOf(shape) { return (shape && shape.userGroupId) || null; }
 
@@ -64,4 +66,43 @@ export function groupOfLoop(loop, state) {
   const gid = groupOf(shapeById.get(loop.edges[0]));
   if (!gid) return null;
   return loop.edges.every((eid) => groupOf(shapeById.get(eid)) === gid) ? gid : null;
+}
+
+// holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true } = {}) → string[] (loop ids)
+// Derive the direct holes of `loopOrId`:
+// 1. By default (`requireGroup: true`), holes must belong to the same explicit user GROUP (SKETCH-4e).
+//    Set `requireGroup: false` for pure geometric containment (one-line switch if future needs automatic).
+// 2. A candidate hole must be strictly contained inside the outer loop's polygon (`polygonContains`).
+// 3. Nested-island filter (bullseye): candidates contained inside any other candidate hole are excluded
+//    (a solid island inside a hole stays uncut).
+export function holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true } = {}) {
+  if (!loopOrId || !Array.isArray(loops) || !state || !loopPolys) return [];
+  const loop = typeof loopOrId === 'object' ? loopOrId : loops.find((l) => l && l.id === loopOrId);
+  if (!loop || !loop.id) return [];
+  const outerPoly = loopPolys[loop.id];
+  if (!outerPoly || outerPoly.length < 3) return [];
+
+  let candidateIds;
+  if (requireGroup) {
+    const gid = groupOfLoop(loop, state);
+    if (!gid) return [];
+    candidateIds = loopsInGroup(loops, state, gid).filter((hid) => hid !== loop.id);
+  } else {
+    candidateIds = loops.map((l) => l && l.id).filter((hid) => hid && hid !== loop.id);
+  }
+
+  const candidateHoles = [];
+  for (const hid of candidateIds) {
+    const hp = loopPolys[hid];
+    if (hp && hp.length >= 3 && polygonContains(outerPoly, hp)) {
+      candidateHoles.push({ id: hid, poly: hp });
+    }
+  }
+
+  // Nested-island filter: exclude any candidate that is inside another candidate hole
+  const directHoles = candidateHoles.filter((h) =>
+    !candidateHoles.some((other) => other.id !== h.id && polygonContains(other.poly, h.poly))
+  );
+
+  return directHoles.map((h) => h.id);
 }

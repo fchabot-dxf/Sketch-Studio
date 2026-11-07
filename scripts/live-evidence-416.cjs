@@ -172,6 +172,17 @@ async function closeBrowser(proc, dbgPort) {
     await Promise.race([loaded2, sleep(8000)]);
     await sleep(1500);
 
+    // Zoom in on p1 at (0, 0) so the bi-directional whiskers are clearly visible
+    const ZOOM_EXPR = `(() => {
+      const svg = document.getElementById('svgCanvas');
+      if (svg) {
+        svg.setAttribute('viewBox', '-1.2 -0.8 2.4 1.6');
+      }
+      return true;
+    })()`;
+    await send('Runtime.evaluate', { expression: ZOOM_EXPR });
+    await sleep(600);
+
     // 4. Inspect whiskers in DOM
     const INSPECT_EXPR = `(() => {
       const whiskers = Array.from(document.querySelectorAll('.debug-whisker')).map(l => ({

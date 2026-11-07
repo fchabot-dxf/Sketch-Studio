@@ -148,11 +148,19 @@ export function measureResidual(c, joints, shapes) {
                     const j3 = joints.get(s2.joints[0]);
                     const j4 = joints.get(s2.joints[1]);
                     if (j1 && j2 && j3 && j4) {
-                        const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
-                        const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
-                        let diff = Math.abs(a1 - a2);
-                        while (diff > Math.PI) diff -= Math.PI;
-                        return Math.abs(diff - Math.PI / 2);
+                        // Mirrors the solver residual (definitions.js perpendicular): no branch -> u.v (zero at +90 OR -90);
+                        // branch +-1 -> u x v - branch|u||v| (zero ONLY at theta == branch*90 deg, the locked handedness).
+                        // theta = signed angle u -> v; reported as an angular error in radians so VERIFIER_TOLERANCE keeps its meaning.
+                        const ux = j2.x - j1.x, uy = j2.y - j1.y, vx = j4.x - j3.x, vy = j4.y - j3.y;
+                        if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return 0; // degenerate line: angle undefined
+                        const theta = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+                        if (c.branch === 1 || c.branch === -1) {
+                            let d = theta - c.branch * Math.PI / 2;
+                            while (d <= -Math.PI) d += 2 * Math.PI;
+                            while (d > Math.PI) d -= 2 * Math.PI;
+                            return Math.abs(d);
+                        }
+                        return Math.abs(Math.PI / 2 - Math.abs(theta));
                     }
                 }
             }

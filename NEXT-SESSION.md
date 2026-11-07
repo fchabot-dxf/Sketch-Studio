@@ -22,11 +22,11 @@
 
 RETIRED t400 by owner ruling, see WORK-LOG TURN 400 (Frame Calc removed from Sketch-Studio).
 
-## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410; workers move to ANTIGRAVITY
+## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410
 
-**Owner ruling:** worker seats run on Antigravity by default; Claude workers only when the owner asks. The setup and the
-task-prompt template are in `fred-skills/antigravity/README.md`. The advisor needs a session started after the MCP
-registration, so the antigravity tools are loaded. Every write dispatch goes in its own worktree.
+**Owner ruling on seats:** the owner launches seats and the advisor tasks them, as before. The advisor may also launch
+a headless Antigravity worker on the spot when it needs one (see `fred-skills/antigravity/README.md`). Those workers
+don't show in the Antigravity panel, so report each one to the owner. Every write dispatch goes in its own worktree.
 
 **Landed on main today (all gated: 151 files, the 9 pre-existing failures listed below, shell-smoke 12/12; live on sketch-studio.pages.dev):**
 - Fillet, now Fusion-style: a live driving radius dim; two-line pick, then the radius input with a live preview at every

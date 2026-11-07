@@ -10486,3 +10486,25 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
   - Per-file test loop across all 154 files: 152 pass, exactly 2 failures (`tests/debug-whisker-align.test.js` [Class B] and `tests/harness/differential-planegcs.test.js` [Class C]), 0 new failures.
   - `shell-smoke.cjs`: 12/12 passed.
   - 0 leftover `msedge.exe` processes matching `sk-shell-smoke`.
+
+
+## TURN 415 — one-command gate + clean WORK-LOG merges — branch agy1
+- **scripts/gate.cjs:** Created self-contained gate runner (no new dependencies) that:
+  1. Gathers all test files across `tests/*.test.js`, `packages/core/tests/*.test.js`, and `tests/harness/*.test.js` (154 files total).
+  2. Runs each file with `node <file>` under a 90s limit, muting stdout to keep summary clean, and recording non-zero exits/timeouts as failures.
+  3. Executes `scripts/shell-smoke.cjs` and extracts its `X/12` pass count.
+  4. Counts leftover headless `msedge.exe` processes matching `sk-shell-smoke` via PowerShell `Get-CimInstance` with clean reaping grace period.
+  5. Emits the unified summary block:
+     ```
+     GATE files=<n> pass=<n> fail=<n>
+     FAIL <path>
+     KNOWN-NOW-PASSING <path>
+     SMOKE <X/12>
+     HEADLESS-LEFT <n>
+     ```
+  6. Per task amendment, exits 0 only if every observed failure is in `KNOWN_FAILURES` (subset), smoke is 12/12, and headless left is 0. Emits `KNOWN-NOW-PASSING` if a known failure starts passing.
+  7. Added `"gate": "node scripts/gate.cjs"` to `package.json` scripts.
+- **.gitattributes:** Created `.gitattributes` with `WORK-LOG.md merge=union` to prevent recurring merge conflicts across worker seats and main.
+- **Verification:**
+  - Baseline run: `GATE files=154 pass=152 fail=2`, `FAIL tests/debug-whisker-align.test.js`, `FAIL tests/harness/differential-planegcs.test.js`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exited 0.
+  - Fail proof: Injected intentional failure into `tests/coords-resize-viewbox.test.js`. Re-ran gate: `GATE files=154 pass=151 fail=3` with `FAIL tests/coords-resize-viewbox.test.js`, exited 1. Reverted change, re-ran gate: exited 0.

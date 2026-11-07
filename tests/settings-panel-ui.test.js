@@ -4,12 +4,19 @@
   const { applyPanelStyle } = await import('../apps/sketchstudio/ui/wizard-base.js');
 
   // Provide a minimal DOM shape the module expects
-  global.document = global.document || {};
-  const settingsEl = document.createElement('div'); settingsEl.id = 'settings-panel';
-  const exportEl = document.createElement('div'); exportEl.id = 'export-panel';
-
-  // insert into the fake DOM so setupSettingsPanel can find them
-  document.getElementById = (id) => (id === 'settings-panel' ? settingsEl : (id === 'export-panel' ? exportEl : null));
+  const elements = new Map();
+  const makeEl = (id) => {
+    const el = { id: id || '', style: { cssText: '' }, appendChild: () => {}, setAttribute: () => {}, addEventListener: () => {} };
+    if (id) elements.set(id, el);
+    return el;
+  };
+  global.document = {
+    createElement: makeEl,
+    getElementById: (id) => elements.get(id) || makeEl(id)
+  };
+  const settingsEl = document.createElement('div'); settingsEl.id = 'settings-panel'; elements.set('settings-panel', settingsEl);
+  const exportEl = document.createElement('div'); exportEl.id = 'export-panel'; elements.set('export-panel', exportEl);
+  const btnToggle = document.createElement('button'); btnToggle.id = 'btn-settings-toggle'; elements.set('btn-settings-toggle', btnToggle);
 
   // Call setup explicitly (module auto-setup is DOMContentLoaded guarded)
   if (typeof mod.setupSettingsPanel !== 'function') throw new Error('setupSettingsPanel missing');

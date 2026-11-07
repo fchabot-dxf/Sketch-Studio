@@ -10594,3 +10594,65 @@ Verify: 4 other apps headless (sketchstudio/shaper/penplotter/trace): 0 console 
   - Wrote to main checkout folder `D:\APPS\Sketch-Studio\.fleet/` (resolved via `git rev-parse --git-common-dir`), not worktree folder.
 - **Product code changes:** None.
 - **Gate:** `npm run gate`: `GATE files=154 pass=154 fail=0; SMOKE 12/12; HEADLESS-LEFT 0; exit 0`.
+
+
+## TURN 419b (GRID PLAN) — One shared canvas grid (SketchStudio + Shaper) — branch agy2
+
+- **Context & Decisions:**
+  - In TURN 419, verified ground-truth divergence: SketchStudio used static HTML `<pattern id="grid">` + `defaultRenderCtx.updateGrid`; Shaper's Design canvas had no grid (`sketch-canvas.js` omitted `updateGrid`); Pen Plotter drew its own grid via `apps/penplotter/src/paper-grid.js` (`paperGridMarkup`).
+  - Owner & Advisor decision: ONE shared grid module for the shared Design canvas. Move SketchStudio's pattern grid into shared code in `packages/ui/` so SketchStudio and Shaper use identical grid logic driven by `GRID_MODE` (`'lines'` | `'off'` | `'points'`, default `'lines'`).
+  - Pen Plotter is explicitly OUT of scope: its `paper-grid.js` serves all plotter tabs (Fill/Toolpath/Export); leave it untouched and do not mount the shared grid there.
+
+- **1. Module location & wiring across both canvas paths:**
+  - **Module:** `packages/ui/canvas-grid.js` (new file in `packages/ui/`).
+  - **Responsibilities:**
+    - `ensureCanvasGrid(svgEl)`: Idempotently creates SVG `<defs>` with `<pattern id="grid">`, `<pattern id="grid-heavy">`, and the backmost `<rect id="infinite-grid" x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid-heavy)" />` inside `svgEl` if not present. The pattern elements reference CSS variables `var(--sk-grid-minor, #CBD5E1)` and `var(--sk-grid-major, #93C5FD)`. Thus SketchStudio gets its default light theme and Shaper gets its warm cream palette (`apps/shaper/index.html:87`: `--sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896`).
+    - `updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode })`: Updates stroke widths, pattern dimensions, and mode display live.
+  - **SVG `<pattern>` markup origin:**
+    - Markup is created dynamically by `ensureCanvasGrid(svgEl)` in `packages/ui/canvas-grid.js` using `document.createElementNS('http://www.w3.org/2000/svg', ...)`.
+    - In `apps/sketchstudio/index.html:396-405`, the inline `<defs>` and `#infinite-grid` can be safely removed so `canvas-grid.js` is the single source of truth (or retained as initial fallback; `ensureCanvasGrid` is idempotent).
+  - **Wiring SketchStudio path:**
+    - In `packages/ui/svg-renderer.js:54-87`, `defaultRenderCtx.updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, scale })` delegates to `updateCanvasGrid` with `gridMode = SettingsManager.get('GRID_MODE') || 'lines'`.
+    - In `apps/sketchstudio/main.js:59` (`initApp()`), call `ensureCanvasGrid(svg)`.
+  - **Wiring Shaper path (`mountSketch`):**
+    - In `packages/ui/sketch-canvas.js:72-113`, `mountSketch(svgEl, opts = {})` accepts `opts.grid`.
+    - In `apps/shaper/src/main.js:491`, pass `grid: true` to `mountSketch`.
+    - When `opts.grid` is true, `mountSketch` calls `ensureCanvasGrid(svgEl)` and binds `renderCtx.updateGrid = ({ GRID_SIZE, GRID_MAJOR_STEP, scale }) => updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: SettingsManager.get('GRID_MODE') || 'lines' })`.
+    - In `apps/penplotter/src/sketch-stage.js:249`, `opts.grid` is omitted (falsy) -> Pen Plotter never mounts the shared grid and remains 100% untouched.
+
+- **2. Byte-identical default for SketchStudio:**
+  - Default `GRID_MODE` is `'lines'`.
+  - When `gridMode === 'lines'`, `updateCanvasGrid` applies the exact attribute math from `packages/ui/svg-renderer.js:56-85`:
+    - `#grid`: `width = GRID_SIZE`, `height = GRID_SIZE`, `path d = M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`, `stroke-width = Math.min(scale(1), 0.2)`.
+    - `#grid-heavy`: `width = GRID_MAJOR_STEP`, `height = GRID_MAJOR_STEP`, `rect width = GRID_MAJOR_STEP, height = GRID_MAJOR_STEP`, `path d = M ${GRID_MAJOR_STEP} 0 L 0 0 0 ${GRID_MAJOR_STEP}`, `stroke-width = Math.min(scale(2), 1.0)`.
+    - `#infinite-grid`: `<rect x="-50000" y="-50000" width="100000" height="100000" fill="url(#grid-heavy)" />`, `display` attribute cleared.
+  - **Verification tests proving byte-identical output:**
+    1. Node unit test `tests/canvas-grid-snapshot.test.js` asserting `outerHTML` of `<defs>` + `#infinite-grid` after `updateCanvasGrid` matches baseline snapshot string.
+    2. `scripts/shell-smoke.cjs` headless browser check asserting `#grid`, `#grid-heavy`, and `#infinite-grid` exist with expected attributes and 0 console errors.
+
+- **3. 'points' (draft points) and 'off' rendering:**
+  - **'off' mode:**
+    - `infiniteGridRect.setAttribute('display', 'none')`.
+    - Zero browser render overhead; instant restore when toggled back.
+  - **'points' mode:**
+    - Minor dots: Spaced every `GRID_SIZE` (default 2 units). In `<pattern id="grid">`, render `<circle cx="${GRID_SIZE/2}" cy="${GRID_SIZE/2}" r="${Math.min(scale(0.8), 0.15)}" fill="var(--sk-grid-minor, #CBD5E1)"/>` with pattern offset `x="${-GRID_SIZE/2}" y="${-GRID_SIZE/2}"` so dots land exactly on `(k * GRID_SIZE, m * GRID_SIZE)` intersection points.
+    - Major dots: Spaced every `GRID_MAJOR_STEP` (default 10 units). In `<pattern id="grid-heavy">`, render a slightly larger dot `<circle cx="0" cy="0" r="${Math.min(scale(1.2), 0.25)}" fill="var(--sk-grid-major, #93C5FD)"/>` over `<rect width="${GRID_MAJOR_STEP}" height="${GRID_MAJOR_STEP}" fill="url(#grid)"/>`.
+    - Dot radii scale dynamically with zoom so dots remain a crisp ~1.5px on screen regardless of zoom level.
+
+- **4. Settings control & shell-smoke update:**
+  - **Declaration:** In `packages/core/settings-manager.js:29-73`, add `GRID_MODE: 'lines'` to `DEFAULT_SETTINGS` (enum `'lines' | 'off' | 'points'`). Persists to `localStorage` under `sketch-studio-settings`.
+  - **UI control:** In `packages/ui/style-panel.js:14-31`, add `GRID_MODE` to `CONTROLS` as a 3-way select:
+    `{ key: 'GRID_MODE', label: 'Grid Mode', type: 'select', options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] }`.
+  - **App coverage:**
+    - SketchStudio (`apps/sketchstudio/main.js:128`): mounts `createStylePanel` -> shows all 17 controls.
+    - Shaper (`apps/shaper/src/main.js:430`): mounts `createStylePanel({ showDocUnit: true })` -> shows 17 controls + 1 docUnit row = 18 rows.
+    - Pen Plotter (`apps/penplotter/`): does not mount `createStylePanel` -> unaffected.
+  - **Smoke test update:** Update `scripts/shell-smoke.cjs:174`:
+    `['Style panel has 17 controls', c.styleControls === 17, c.styleControls]`.
+
+- **5. Codebase references audit (#grid, #infinite-grid, grid-heavy):**
+  - Confirmed via repository grep:
+    - `apps/sketchstudio/index.html:397, 400, 405`: `<pattern id="grid">`, `<pattern id="grid-heavy">`, `<rect id="infinite-grid">`.
+    - `packages/ui/svg-renderer.js:58, 59`: `document.getElementById('grid')`, `document.getElementById('grid-heavy')`.
+    - `packages/ui/svg-renderer.js:3`: TODO comment.
+  - Zero other files in the entire repo query `#grid`, `#infinite-grid`, or `grid-heavy`. All access is consolidated cleanly in `packages/ui/canvas-grid.js`.

@@ -16,12 +16,14 @@ let _ctx = null;
 let _state = null;
 let hoverCorner = null;
 let currentRadius = 5.0; // default mm
+let _lastDimCreated = null; // value the last fillet was created with (possibly geometry-clamped)
 let _lastDim = null;     // radius dimension of the most recent fillet; its (edited) value is the next default
 
 // Adopt the value the user typed into the last fillet's inline input as the new default.
 function syncLastRadius(state) {
   const c = _lastDim;
-  if (c && typeof c.value === 'number' && c.value > 0 && (state?.constraints || []).includes(c)) currentRadius = c.value;
+  // Only a value the user actually typed counts; a geometry clamp (5 -> 2.8) is not a chosen value.
+  if (c && typeof c.value === 'number' && c.value > 0 && Math.abs(c.value - _lastDimCreated) > 1e-9 && (state?.constraints || []).includes(c)) currentRadius = c.value;
 }
 
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
@@ -53,6 +55,7 @@ export function setupFilletTool(ctx, state) {
   _state = state;
   hoverCorner = null;
   _lastDim = null;
+  _lastDimCreated = null;
   setCursor('crosshair');
 
   const unit = getDocUnit();
@@ -124,6 +127,7 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
     if (res.radiusConstraint) {
       try {
         _lastDim = res.radiusConstraint;
+        _lastDimCreated = res.radiusConstraint.value;
         showDimInput(svg, state, res.radiusConstraint);
       } catch (_) {}
     }

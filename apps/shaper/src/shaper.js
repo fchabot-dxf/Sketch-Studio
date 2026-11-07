@@ -32,7 +32,8 @@ export const CUT_TYPES = [
 // VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
 // vcarveContours (depth = inset / halfAngleTan). 90° → 1 (depth = inset); 60° → tan30 ≈ 0.577 (cuts ~1.73× deeper).
 export const VBIT_PRESETS = [{ angle: 90 }, { angle: 60 }, { angle: 45 }, { angle: 30 }, { angle: 20 }];
-export function vbitHalfAngleTan(angle) { return Math.tan(((Number(angle) || 90) / 2) * Math.PI / 180); }
+// VCARVE-4: the ONE implementation lives in #core/vcarve.js (shared by the preview + the export); re-exported here.
+export { vbitHalfAngleTan } from '#core/vcarve.js';
 
 // shaper:* attributes Shaper writes per element (besides cutType, which we
 // derive from color). Order = inspector display order.

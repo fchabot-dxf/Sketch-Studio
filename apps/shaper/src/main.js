@@ -57,9 +57,17 @@ document.getElementById('export').addEventListener('click', () => {
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
+// VCARVE-4: vcarve records (a region picked in the Vcarve tab) are exportable even with no Prepare cut assigned.
+function activeVcarves() {
+  ensureSketch();
+  const vs = designController && designController.state && designController.state.vcarves;
+  return Array.isArray(vs) ? vs.filter((v) => v && v.region) : [];
+}
+
 function generateShaperSvgPayload() {
   const entries = cutPlanEntries();
-  if (!entries.length) return null;
+  const vcarves = activeVcarves();
+  if (!entries.length && !vcarves.length) return null;
   ensureSketch();
   try { designController.engine.solve(500); } catch (_) { /* best-effort solve before export */ }
   const st = designController.state;
@@ -67,7 +75,7 @@ function generateShaperSvgPayload() {
   const loopPolys = {};
   for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
   const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true, islands: true }, loopPolys });
-  return { svg, entries, state: st };
+  return { svg, entries, vcarves, state: st };
 }
 
 const btnGenerateSvg = document.getElementById('btn-generate-svg');
@@ -77,7 +85,8 @@ if (btnGenerateSvg) {
     const payload = generateShaperSvgPayload();
     if (!payload) { if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.'; return; }
     download('shaper-export.svg', payload.svg);
-    if (status) status.innerHTML = `Exported ${payload.entries.length} cut${payload.entries.length === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
+    const n = payload.entries.length + payload.vcarves.length;
+    if (status) status.innerHTML = `Exported ${n} cut${n === 1 ? '' : 's'} → <strong>shaper-export.svg</strong>. Drop it into <a href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" style="color:var(--sk-selection,#4c9aff); text-decoration:underline;">ShaperHub (My Files)</a> to sync with Origin.`;
   });
 }
 
@@ -106,7 +115,7 @@ if (btnSyncShaper) {
   btnSyncShaper.addEventListener('click', () => {
     const status = document.getElementById('simexport-status');
     const entries = cutPlanEntries();
-    if (!entries.length) {
+    if (!entries.length && !activeVcarves().length) {
       if (status) status.textContent = 'No cuts assigned — assign cut types in Prepare first.';
       return;
     }

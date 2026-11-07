@@ -17,6 +17,7 @@ import { findLoops } from './loop-finder.js';
 import { format } from './units.js';
 import { loopsInGroup, groupOfLoop } from './group-model.js'; // SKETCH-4e: explicit-group islands
 import { polygonContains } from './loop-geometry.js';          // SKETCH-4e: containment (on host-passed polys)
+import { deriveVcarveContours } from './vcarve.js';             // VCARVE-4: canonical vcarve derivation
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
@@ -85,6 +86,16 @@ export function loopToPathD(loop, state) {
   if (closing && closing.type === 'arc') {
     const fromP = pos(loop.joints[n - 1]);
     if (fromP) d += ' ' + arcSeg(closing, fromP, p0, state);
+  }
+  return d + ' Z';
+}
+
+// polyToPathD(pts) → a CLOSED SVG path "d" from an ordered array of polygon points [{x, y}, ...].
+export function polyToPathD(pts) {
+  if (!Array.isArray(pts) || pts.length < 2) return '';
+  let d = `M ${num(pts[0].x)} ${num(pts[0].y)}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += ` L ${num(pts[i].x)} ${num(pts[i].y)}`;
   }
   return d + ' Z';
 }
@@ -203,9 +214,11 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
+  const vcarveLoops = new Set((state?.vcarves || []).map((v) => v && v.region).filter(Boolean));
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     if (e.target.kind === 'loop' && absorbed && absorbed.has(e.target.id)) continue; // a hole absorbed into a pocket
+    if (e.target.kind === 'loop' && vcarveLoops.has(e.target.id)) continue; // VCARVE-4: loop excluded by vcarve assignment
     const c = encOf(e.rec.cutType);
     if (!c) continue;
     let geom = null;
@@ -221,6 +234,23 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     }
     else if (e.target.kind === 'edge') { const shape = shapeById.get(e.target.id); if (shape) geom = edgeGeom(shape, state); }
     if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
+  }
+
+  // VCARVE-4: derive and emit contour stack from state.vcarves + loopPolys
+  if (Array.isArray(state?.vcarves) && loopPolys) {
+    const onlineEnc = encOf('online') || { id: 'online', cutType: 'online', fill: 'none', stroke: '#7F7F7F' };
+    for (const vc of state.vcarves) {
+      if (!vc || !vc.region) continue;
+      const boundary = loopPolys[vc.region];
+      if (!boundary || boundary.length < 3) continue;
+      const contours = deriveVcarveContours(boundary, vc);
+      for (const c of contours) {
+        const d = polyToPathD(c.polygon);
+        if (!d) continue;
+        const common = colorAttrs(onlineEnc) + shaperAttrs({ cutDepth: c.depth }, onlineEnc, docUnit);
+        items.push({ common, tag: 'path', a: `d="${d}"` });
+      }
+    }
   }
 
   const body = [];

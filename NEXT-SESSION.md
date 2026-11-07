@@ -1915,7 +1915,12 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
 
 ---
 
-## STAGED — GRID-1 (quick win — dispatch after the sketch foundation): declared `GRID_MODE` setting (grid / off / draft-points) + the Shaper settings-modal control. Shared, SketchStudio byte-identical.
+## ▶ DISPATCHED 2026-11-07 — GRID-1, REVISED BY OWNER: a SHARED grid setting for ALL apps (not Shaper-only)
+Owner: "isn't that a SketchStudio feature". It is: the grid is drawn by the shared Design canvas. So `GRID_MODE`
+(lines / off / points, default lines) lives in the shared layer, and its control goes in the SHARED settings panel for every
+app (SketchStudio, Shaper, Pen Plotter). SketchStudio's panel goes 16 → 17 controls (intended), and shell-smoke is updated
+in the same task. The original Shaper-only scope below is SUPERSEDED.
+## (superseded) STAGED — GRID-1: declared `GRID_MODE` setting + the Shaper settings-modal control. Shared, SketchStudio byte-identical.
 
 User wants a **visible-grid setting in the Shaper settings modal**: **grid vs no grid vs draft points**. DECLARE it as a
 shared `GRID_MODE` enum (like `DOC_UNIT`) read by the canvas grid renderer; surface a 3-way control in the Shaper modal,

@@ -3,6 +3,7 @@
 
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { fitViewToGeometry } from '#ui/view-fit.js'; // VIEW-FIT: zoom-extents (shared, additive)
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -74,6 +75,8 @@ function ensureSketch() {
   const boardsOut = buildFrameSketch(sketchController, calcView.geom());
   attachFrameDimensions(sketchController, boardsOut);
   sketchController.engine.solve(500);
+  // VIEW-FIT: mountSketch's default view is a 120x90 box on the origin; frame the built frame instead.
+  fitViewToGeometry(document.getElementById('sketch-canvas'), sketchController.state);
   if (infoPanel) infoPanel.refresh();
 }
 

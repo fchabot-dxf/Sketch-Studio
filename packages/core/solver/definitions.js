@@ -475,12 +475,16 @@ export const Definitions = {
         const dx2 = cx - dx, dy2 = cy - dy;
         const l1 = Math.hypot(dx1, dy1) || 1e-12;
         const l2 = Math.hypot(dx2, dy2) || 1e-12;
+        // ACCUMULATE (+= / -=), never assign: the two lengths may share a joint. Every arc is
+        // equal [centre, rim1, centre, rim2] (shapes.js makeArc), so a === c, and an assignment let the
+        // second length's partial overwrite the first on the centre -> wrong Jacobian -> drags stalled
+        // (turn 404). outRow is zero-filled above, so this is exact for distinct joints too.
         // ∂len1/∂a = (dx1/l1, dy1/l1); ∂len1/∂b = (-dx1/l1, -dy1/l1)
-        outRow[a*2 + 0] = dx1 / l1; outRow[a*2 + 1] = dy1 / l1;
-        outRow[b*2 + 0] = -dx1 / l1; outRow[b*2 + 1] = -dy1 / l1;
+        outRow[a*2 + 0] += dx1 / l1; outRow[a*2 + 1] += dy1 / l1;
+        outRow[b*2 + 0] -= dx1 / l1; outRow[b*2 + 1] -= dy1 / l1;
         // subtract derivatives for second length (len1 - len2)
-        outRow[c*2 + 0] = -dx2 / l2; outRow[c*2 + 1] = -dy2 / l2;
-        outRow[d*2 + 0] = dx2 / l2; outRow[d*2 + 1] = dy2 / l2;
+        outRow[c*2 + 0] -= dx2 / l2; outRow[c*2 + 1] -= dy2 / l2;
+        outRow[d*2 + 0] += dx2 / l2; outRow[d*2 + 1] += dy2 / l2;
       }
     }
   },

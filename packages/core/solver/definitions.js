@@ -34,6 +34,10 @@ export const Definitions = {
       const ia = params.joints[0], ib = params.joints[1];
       const ax = positions[ia*2], ay = positions[ia*2+1];
       const bx = positions[ib*2], by = positions[ib*2+1];
+      // HORIZONTAL / VERTICAL dimension (params.dimMode): drives the PROJECTION, signed so a drag cannot flip it.
+      // s = params.dimSign (locked by the engine at first solve; +1 = b is right of / above-in-y of a).
+      if (params.dimMode === 'horizontal') return (params.dimSign || 1) * (bx - ax) - (params.value || 0);
+      if (params.dimMode === 'vertical') return (params.dimSign || 1) * (by - ay) - (params.value || 0);
       const dx = ax - bx, dy = ay - by;
       return Math.hypot(dx, dy) - (params.value || 0);
     },
@@ -63,6 +67,8 @@ export const Definitions = {
       const ia = params.joints[0], ib = params.joints[1];
       const ax = positions[ia*2], ay = positions[ia*2+1];
       const bx = positions[ib*2], by = positions[ib*2+1];
+      if (params.dimMode === 'horizontal') { const sg = params.dimSign || 1; outRow[ia*2] = -sg; outRow[ib*2] = sg; return; }
+      if (params.dimMode === 'vertical') { const sg = params.dimSign || 1; outRow[ia*2 + 1] = -sg; outRow[ib*2 + 1] = sg; return; }
       const dx = ax - bx, dy = ay - by;
       const r = Math.hypot(dx, dy) || 1e-12;
       outRow[ia*2 + 0] = dx / r; outRow[ia*2 + 1] = dy / r;

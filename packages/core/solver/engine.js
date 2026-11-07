@@ -267,6 +267,19 @@ export class NewtonSolver {
       // Prefer explicit `c.joints` when present (tests may pass joint-index arrays)
       params.joints = (c.joints || []).map(id => jointIndexMap.get(id));
 
+      // H/V dimension: lock WHICH SIDE b sits on (sign of the projection) on the constraint at first solve, so a drag
+      // across a cannot flip it (same idea as the perpendicular branch lock). Re-locked if the mode changes.
+      if (c.type === 'distance' && (c.dimMode === 'horizontal' || c.dimMode === 'vertical') && params.joints.length === 2 &&
+          typeof params.joints[0] === 'number' && typeof params.joints[1] === 'number') {
+        if (c.dimSign !== 1 && c.dimSign !== -1 || c.dimSignMode !== c.dimMode) {
+          const k = c.dimMode === 'horizontal' ? 0 : 1;
+          const d = densePositions[params.joints[1]*2 + k] - densePositions[params.joints[0]*2 + k];
+          c.dimSign = d < 0 ? -1 : 1;
+          c.dimSignMode = c.dimMode;
+        }
+        params.dimSign = c.dimSign;
+      }
+
       // Backwards compatibility: many constraints use `joint` + `shape` or `shapes` instead of `joints`.
       // Synthesize `params.joints` for common shape-backed constraints (pointOnLine, collinear, parallel, perpendicular).
       if ((!params.joints || params.joints.length === 0)) {

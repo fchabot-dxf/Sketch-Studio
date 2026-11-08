@@ -33,13 +33,13 @@ export function reliefDepth(cutTypeIn, cutDepth, T) {
     if (d === 0) return { kind: 'skip', reason: 'zero-depth' };
     return { kind: 'cut', depth: d, through: false, depthUnset: false };
   }
-  if (cutType === 'pocket') {
-    if (unset) return { kind: 'skip', reason: 'no-depth' };                          // never guess a pocket depth
+  if (cutType === 'pocket' || cutType === 'online') {                                // a pocket floor / an On Line groove (centred band)
+    if (unset) return { kind: 'skip', reason: 'no-depth' };                          // never guess a pocket / groove depth
     const d = Number(cutDepth);
     if (d <= 0) return { kind: 'skip', reason: 'no-depth' };
     return d >= T ? { kind: 'cut', depth: T, through: true, depthUnset: false } : { kind: 'cut', depth: d, through: false, depthUnset: false };
   }
-  return { kind: 'skip', reason: 'unsupported' };                                    // On Line = slice S2; Guide is never cut
+  return { kind: 'skip', reason: 'unsupported' };                                    // Guide is never cut
 }
 
 const toRing = (ring) => ring.map((p) => (Array.isArray(p) ? [p[0], p[1]] : [p.x, p.y]));
@@ -92,7 +92,8 @@ function wallStrips(m, regions, hTop, hBot) {
 }
 
 /**
- * buildRelief({ stock, items, bounds }) -> { stockBox, levels, meshes:{top,floor,wall,bottom,side}, stats }
+ * buildRelief({ stock, items, bounds }) -> { stockBox, levels, meshes:{top,floor,wall,bottom,side}, marks, stats }
+ *   marks   [{ key, kind:'depth-unset', point:[x,y] }] — an Outside/Inside cut shown THROUGH only because its depth is unset (the view draws a label there)
  *   stock   {thickness,width,height,margin} (defaults DEFAULT_STOCK); all base mm
  *   items   [{ key, cutType:'outside'|'inside'|'pocket'|..., cutDepth: mm | 'unset', footprints:[{ rings:[[{x,y}]], fillRule }] }]
  *   bounds  optional {minX,maxX,minY,maxY} of the design (joints); merged with the footprint rings for the derived size
@@ -101,7 +102,7 @@ function wallStrips(m, regions, hTop, hBot) {
 export function buildRelief({ stock, items = [], bounds = null } = {}) {
   const S = { ...DEFAULT_STOCK, ...(stock || {}) };
   const T = Number(S.thickness) > 0 ? Number(S.thickness) : DEFAULT_STOCK.thickness;
-  const skipped = [], unsetThrough = [], entries = [];
+  const skipped = [], unsetThrough = [], marks = [], entries = [];
 
   const b = bounds ? { ...bounds } : { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
   const pending = [];
@@ -115,7 +116,11 @@ export function buildRelief({ stock, items = [], bounds = null } = {}) {
       regions.push(...regionsFromRings(rings, fp.fillRule));
     }
     if (!regions.length) { skipped.push({ key: it.key, cutType: it.cutType, reason: 'nothing-cut' }); continue; }
-    if (rule.depthUnset) unsetThrough.push(it.key);
+    if (rule.depthUnset && !unsetThrough.includes(it.key)) { // one mark per cut (a profile's holes share its key), ON the cut: a vertex of its largest outer ring
+      unsetThrough.push(it.key);
+      const big = regions.reduce((m, r) => (Math.abs(area2(r.outer)) > Math.abs(area2(m.outer)) ? r : m), regions[0]);
+      marks.push({ key: it.key, kind: 'depth-unset', point: [big.outer[0][0], big.outer[0][1]] });
+    }
     pending.push({ depth: rule.depth, regions });
   }
 
@@ -163,7 +168,7 @@ export function buildRelief({ stock, items = [], bounds = null } = {}) {
   const triangles = Object.values(meshes).reduce((s, g) => s + g.indices.length / 3, 0);
   const areas = {};
   for (const [k, g] of Object.entries(meshes)) areas[k] = meshArea(g);
-  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: d >= T - 1e-9, regions: R[k] })), meshes, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length } };
+  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: d >= T - 1e-9, regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length } };
 }
 
 /** Total triangle area of a mesh (for tests and stats). */

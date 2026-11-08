@@ -49,9 +49,29 @@ export async function mountReviewView({ host, info, getInputs }) {
     return g;
   }
 
+  // A "depth unset" label ON the cut (an Outside/Inside shown through only because no depth was set): a screen-sized amber
+  // sprite at the mark point from buildRelief, always on top.
+  let labelTexture = null;
+  function markSprite(mark) {
+    if (!labelTexture) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+      const g = c.getContext('2d');
+      g.fillStyle = '#f59e0b'; g.beginPath(); g.roundRect(2, 2, 252, 60, 14); g.fill();
+      g.fillStyle = '#1b1405'; g.font = 'bold 30px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('depth unset', 128, 34);
+      labelTexture = new THREE.CanvasTexture(c);
+      labelTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, depthTest: false, transparent: true, sizeAttenuation: false }));
+    sp.scale.set(0.07, 0.0175, 1);
+    sp.position.set(mark.point[0], 1, mark.point[1]); // X = sketch x, Y = just above the top face, Z = sketch y
+    sp.renderOrder = 10; sp.userData.mark = mark.kind;
+    return sp;
+  }
+
   function disposeGroup() {
     if (!group) return;
-    group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isSprite) o.material.dispose(); });
     scene.remove(group); group = null;
   }
 
@@ -91,6 +111,7 @@ export async function mountReviewView({ host, info, getInputs }) {
       if (!m.indices.length) continue;
       group.add(new THREE.Mesh(geometryOf(m, T), material));
     }
+    for (const mk of rel.marks) group.add(markSprite(mk));
     scene.add(group);
     const firstBuild = !box;
     box = rel.stockBox;
@@ -98,11 +119,11 @@ export async function mountReviewView({ host, info, getInputs }) {
     if (firstBuild) reset(); else render();
     const ms = performance.now() - t0;
     lastSig = sig;
-    lastBuild = { ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough };
-    const notShown = rel.stats.skipped.filter((s) => s.reason === 'no-depth' || s.reason === 'unsupported' && s.cutType === 'online').length;
+    lastBuild = { ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length };
+    const notShown = rel.stats.skipped.filter((s) => s.reason === 'no-depth').length;
     const lines = [`${rel.stats.triangles} triangles · ${rel.stats.levels} level${rel.stats.levels === 1 ? '' : 's'} · built in ${ms.toFixed(0)} ms`];
-    if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through`);
-    if (notShown) lines.push(`${notShown} cut${notShown === 1 ? '' : 's'} not shown (Pocket with no depth, or On Line — coming next)`);
+    if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through (amber label)`);
+    if (notShown) lines.push(`${notShown} cut${notShown === 1 ? '' : 's'} not shown (Pocket or On Line with no depth)`);
     info.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');
     return lastBuild;
   }
@@ -113,6 +134,7 @@ export async function mountReviewView({ host, info, getInputs }) {
 
   function destroy() {
     ro.disconnect(); controls.dispose(); disposeGroup(); material.dispose();
+    if (labelTexture) labelTexture.dispose();
     renderer.dispose(); renderer.domElement.remove();
   }
   return { refresh, reset, top, fit, destroy, get lastBuild() { return lastBuild; } };

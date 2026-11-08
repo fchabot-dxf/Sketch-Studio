@@ -99,22 +99,38 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
 }
 
 /**
+ * deriveKeyFootprints(key, storedRec, state, loops, loopPolys) — THE ONE composition of the cut derivations for one plan
+ * target: effectiveCutRecord -> deriveProfileCuts -> deriveCutFootprint. Returns { rec, footprints } (rec = the effective
+ * record the footprints were derived with), or null when the target derives to nothing (stale key). Both Prepare's preview
+ * (computeLook) and the 3D Review (planReliefItems) call this; no cut geometry is computed here.
+ * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }.
+ */
+export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys) {
+  const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset: a stored one is ignored
+  const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
+  if (!cuts || !cuts.length) return null;
+  return { rec, footprints: deriveCutFootprint(cuts, rec, state) };
+}
+
+/** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */
+export function loopsWithPolygons(state) {
+  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
+  const loops = findLoops(state).map((l) => ({ ...l, polygon: loopPolygon(l, state, shapeById) }));
+  return { loops, loopPolys: Object.fromEntries(loops.map((l) => [l.id, l.polygon])) };
+}
+
+/**
  * planReliefItems(state, plan = CUT_PLAN) — TASK 459: the cut plan as the 3D Review's input, one item per derived footprint:
- * [{ key, cutType, cutDepth, footprints:[fp] }]. It only COMPOSES the three existing derivations (effectiveCutRecord ->
- * deriveProfileCuts -> deriveCutFootprint, exactly the chain Prepare's preview runs); no cut geometry is computed here.
- * Stale keys (a loop that no longer exists) derive to nothing, as in the exporter.
+ * [{ key, cutType, cutDepth, footprints:[fp] }], via deriveKeyFootprints. Stale keys derive to nothing, as in the exporter.
  */
 export function planReliefItems(state, plan = CUT_PLAN) {
-  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
-  const loops = findLoops(state).map((l) => ({ ...l, polygon: loopPolygon(l, state, shapeById) })); // the same host-side polygons Prepare and the exporter use
-  const loopPolys = Object.fromEntries(loops.map((l) => [l.id, l.polygon]));
+  const { loops, loopPolys } = loopsWithPolygons(state);
   const items = [];
   for (const [key, stored] of plan) {
     if (!stored || !stored.cutType) continue;
-    const rec = effectiveCutRecord(stored);
-    const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
-    if (!cuts || !cuts.length) continue;
-    for (const fp of deriveCutFootprint(cuts, rec, state)) items.push({ key, cutType: fp.cutType, cutDepth: rec.cutDepth, footprints: [fp] });
+    const d = deriveKeyFootprints(key, stored, state, loops, loopPolys);
+    if (!d) continue;
+    for (const fp of d.footprints) items.push({ key, cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp] });
   }
   return items;
 }

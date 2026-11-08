@@ -7,12 +7,12 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { cutTypeById, availableTypes, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
+import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
@@ -286,11 +286,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const lookCache = new Map(); // targetKey → { sig, region, path }
   const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${SettingsManager.get('DOC_UNIT')}`;
   const computeLook = (key, storedRec) => {
-    const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset — a stored one is ignored here
-    const { kind, id } = parseKey(key);
-    const t = { kind, id };
-    const cuts = deriveProfileCuts(t, rec, state, loops, loopPolys);
-    if (!cuts || !cuts.length) return { region: '', path: '', toolPaths: [] };
+    const derived = deriveKeyFootprints(key, storedRec, state, loops, loopPolys); // the ONE composition (cut-plan.js), shared with the 3D Review
+    if (!derived) return { region: '', path: '', toolPaths: [] };
+    const { rec, footprints } = derived;
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
     if (!ct) return { region: '', path: '', toolPaths: [] };
     // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
@@ -303,7 +301,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
     let region = '', path = '', hasTravel = false, chip = null;
     const toolPaths = [];
-    for (const fp of deriveCutFootprint(cuts, rec, state)) {
+    for (const fp of footprints) {
       const rings = fp.rings.filter((ring) => ring.length >= 3);
       // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing area
       const finish = (fp.finishRings || []).filter((ring) => ring.length >= 3);

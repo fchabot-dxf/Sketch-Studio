@@ -789,7 +789,12 @@ export function deriveCutFootprint(cuts, rec, state) {
           if (polygonContains(opened, ring)) rings.push(ring);
         }
       }
-      out.push({ kind: 'pocket', fillRule: 'evenodd', rings, center: null, chain: null });
+      // TASK 449: the finish-pass centre paths (the line the bit centre follows): the wall inset by r+off and each island
+      // grown by r+off (round joins) — the same erosion/dilation the footprint above is built from.
+      const dist = r + off;
+      const wall = r > 0 ? (dist === 0 ? cut.outerPoly : offsetPolygon(cut.outerPoly, -dist)) : [];
+      const islandCenters = r > 0 ? (cut.holePolys || []).map((hp) => (dist === 0 ? hp : offsetPolygon(hp, dist, { join: 'round' }))).filter((pg) => pg.length >= 3) : [];
+      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters });
     } else if (cut.kind === 'chain') {
       const rings = [];
       if (!isGuide && r > 0) {
@@ -800,12 +805,84 @@ export function deriveCutFootprint(cuts, rec, state) {
           if (line && line.length >= 2 && line.every(Boolean)) rings.push(...sweptPath(line, r));
         }
       }
-      out.push({ kind: isGuide ? 'guide' : 'chain', fillRule: 'nonzero', rings, center: null, chain: cut.chain });
+      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain });
     } else if (cut.polygon && cut.polygon.length >= 3) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
-      out.push({ kind: isGuide ? 'guide' : 'band', fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null });
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null });
+    }
+  }
+  return out;
+}
+
+// ── TASK 449: TRAVEL DIRECTION — Shaper Origin always cuts CONVENTIONALLY (owner rule: no climb mode, no switch). ─────────
+// First principles (screen = viewed from above, y DOWN in sketch/SVG coordinates; the rotation is stated as seen ON SCREEN):
+//  * The Origin's cutter rotates CLOCKWISE viewed from above (support article "Climb cutting and conventional cutting").
+//  * Conventional = at the point of contact the tooth moves in the SAME direction as the tool travels (the work, relative
+//    to the cutter, moves the opposite way, so the tooth opposes the work's feed). Check with a CW-rotating tooth: at the
+//    cutter's LEFT side (facing the travel direction, travel "up the screen") a clockwise tooth moves UP = along the
+//    travel; at its right side it moves DOWN = against it (climb).
+//  * The material the finish pass engages is the layer between the bit and the FINISHED WALL, i.e. on the wall side of the
+//    bit. So conventional = the wall/material stays on the LEFT of the direction of travel.
+//  * OUTSIDE cut (part inside the path, wall = the part's edge): part on the left -> COUNTER-clockwise around the part.
+//    INSIDE cut (bit inside a hole, wall outside it): wall on the left -> CLOCKWISE.
+//    POCKET finish pass: the outer wall is an inside cut (clockwise); an island is an outside cut (counter-clockwise).
+//  * An Outside profile's holes are emitted by deriveProfileCuts as INSIDE cuts, so they come out clockwise; an Inside
+//    profile's holes (islands) as outside cuts, counter-clockwise.
+//  * On line (material both sides) and Guide (not a cut): no direction (owner questions).
+// The exported SVG is NOT affected: the Origin picks the direction itself from the cut type; our winding is irrelevant.
+const TRAVEL_BY_ROLE = { outside: 'ccw', inside: 'cw', wall: 'cw', island: 'ccw' };
+
+// Order `poly` so it travels `direction` ('cw' | 'ccw') AS SEEN ON SCREEN. World y points down, so a positive shoelace
+// area (x_j*y_i - x_i*y_j) is a CLOCKWISE loop on screen.
+export function orientOnScreen(poly, direction) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) a += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+  const isCw = a > 0;
+  return ((direction === 'cw') === isCw) ? poly.slice() : poly.slice().reverse();
+}
+
+// Evenly spaced arrow marks {x, y, angle} (radians, direction of travel) along a CLOSED path — the static fallback for
+// users who prefer reduced motion.
+export function arrowsAlongClosed(path, count = 6) {
+  const n = path.length, seg = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) { const a = path[i], b = path[(i + 1) % n]; const l = Math.hypot(b.x - a.x, b.y - a.y); seg.push(l); total += l; }
+  const out = [];
+  if (!(total > 0)) return out;
+  for (let k = 0; k < count; k++) {
+    let s = ((k + 0.5) / count) * total, i = 0;
+    while (i < n - 1 && s > seg[i]) { s -= seg[i]; i++; }
+    const a = path[i], b = path[(i + 1) % n], t = seg[i] > 0 ? s / seg[i] : 0;
+    out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle: Math.atan2(b.y - a.y, b.x - a.x) });
+  }
+  return out;
+}
+
+/**
+ * deriveCutTravel(footprints) — the conventional TRAVEL of every cut that has one, from deriveCutFootprint's output (so the
+ * centre path is exactly the line the footprint/preview uses). Returns [{ role, direction, path, arrows }]:
+ *   role 'outside'|'inside'  — a band cut's centre path;  'wall'|'island' — a pocket's finish pass;
+ *   direction 'cw'|'ccw'     — as seen on screen;  path — the centre polygon ordered in that direction;  arrows — see above.
+ * On line, Guide and chains return nothing (no direction).
+ */
+export function deriveCutTravel(footprints) {
+  const out = [];
+  const push = (role, poly) => {
+    if (!poly || poly.length < 3) return;
+    const direction = TRAVEL_BY_ROLE[role];
+    const path = orientOnScreen(poly, direction);
+    out.push({ role, direction, path, arrows: arrowsAlongClosed(path, 6) });
+  };
+  for (const fp of footprints || []) {
+    if (fp.kind === 'pocket') {
+      push('wall', fp.wall);
+      for (const isl of fp.islandCenters || []) push('island', isl);
+    } else if (fp.kind === 'band') {
+      const t = fp.cutType;
+      if (t === 'exterior' || t === 'outside') push('outside', fp.center);
+      else if (t === 'interior' || t === 'inside') push('inside', fp.center);
     }
   }
   return out;

@@ -146,6 +146,13 @@
     #view-prepare { flex-direction: column; }
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; }
     /* SP1f: the cut-settings card — a floating panel, top-right of the Prepare view (shown when a target is selected). */
+    /* TASK 449: conventional travel — marching dashes along the bit-centre path (CSS animation, no RAF loop). stroke-dashoffset
+       DEcreasing moves the dashes FORWARD along the path (the path is already ordered in the travel direction). */
+    .sk-travel { fill: none; stroke-width: 2; stroke-opacity: 0.95; vector-effect: non-scaling-stroke; stroke-dasharray: 6 6; stroke-linecap: butt; animation: sk-march 0.9s linear infinite; }
+    @keyframes sk-march { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -12; } }
+    .sk-travel-arrows { display: none; }
+    @media (prefers-reduced-motion: reduce) { .sk-travel { animation: none; } .sk-travel-arrows { display: inline; } }
+    #prepare-dir-legend { position: absolute; left: 12px; bottom: 10px; z-index: 6; color: #9aa0a6; font: 12px system-ui, sans-serif; pointer-events: none; }
     #prepare-panel { position: absolute; top: 12px; right: 12px; width: 232px; z-index: 6; pointer-events: none; }
     #prepare-panel .cut-card { pointer-events: auto; background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; color: #cbd5e1; font: 13px system-ui, sans-serif; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
     .cut-card-title { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #9aa0a6; margin-bottom: 10px; }
@@ -262,6 +269,7 @@
   <section id="view-prepare" hidden>
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="prepare-panel"></div>
+    <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
   </section>
   <section id="view-simexport" hidden>
     <div id="simexport-panel">

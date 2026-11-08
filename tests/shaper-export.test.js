@@ -356,7 +356,7 @@ import { format } from '#core/units.js';
     const state = sqState();
     const loop = findLoops(state)[0];
     state.vcarves = [
-      { id: 'vc1', region: loop.id, vbit: { angle: 90 }, dStep: 5, maxDepth: 15 }
+      { id: 'vc1', region: 'loop:' + loop.id, vbit: { angle: 90 }, dStep: 5, maxDepth: 15 }
     ];
     const loopPolys = {
       [loop.id]: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }]
@@ -412,7 +412,6 @@ import { format } from '#core/units.js';
 
     // 18. Parity on non-trivial triangle with 60° bit
     const triBoundary = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 30, y: 50 }];
-    const triRec = { id: 'vcTri', region: 'triLoop', vbit: { angle: 60 }, dStep: 4, maxDepth: 12 };
     const triState = {
       joints: new Map([['T1', { x: 0, y: 0 }], ['T2', { x: 60, y: 0 }], ['T3', { x: 30, y: 50 }]]),
       shapes: [
@@ -421,9 +420,11 @@ import { format } from '#core/units.js';
         { id: 't3', type: 'line', joints: ['T3', 'T1'] },
       ],
       constraints: [],
-      vcarves: [triRec],
     };
-    const triLoopPolys = { triLoop: triBoundary };
+    const triLoop = findLoops(triState)[0];
+    const triRec = { id: 'vcTri', region: 'loop:' + triLoop.id, vbit: { angle: 60 }, dStep: 4, maxDepth: 12 };
+    triState.vcarves = [triRec];
+    const triLoopPolys = { [triLoop.id]: triBoundary };
     const triSVG = exportShaperSVG({ state: triState, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys: triLoopPolys });
     const triPreview = deriveVcarveContours(triBoundary, triRec);
     const triExported = [...triSVG.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
@@ -438,7 +439,7 @@ import { format } from '#core/units.js';
       const entries = [{ target: { kind: 'loop', id: bl.id }, rec: { cutType: 'exterior', cutDepth: 6.35, toolDia: 3.175 } }];
       const none = exportShaperSVG({ state: base, entries, encoding: ENC5, docUnit: 'mm' });
       const emptyArr = exportShaperSVG({ state: { ...rectState(), vcarves: [] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
-      const orphan = exportShaperSVG({ state: { ...rectState(), vcarves: [{ id: 'v', region: 'loop_GONE', vbit: { angle: 90 }, dStep: 1, maxDepth: 5 }] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
+      const orphan = exportShaperSVG({ state: { ...rectState(), vcarves: [{ id: 'v', region: 'loop:loop_GONE', vbit: { angle: 90 }, dStep: 1, maxDepth: 5 }] }, entries, encoding: ENC5, docUnit: 'mm', loopPolys: {} });
       eq(emptyArr, none, 'vcarves: [] → byte-identical');
       eq(orphan, none, 'vcarve with no matching loop polygon → byte-identical');
     }
@@ -446,14 +447,20 @@ import { format } from '#core/units.js';
     // 20. VCARVE-5a: Dumbbell split loop export parity (17 split contours at depths 1..9mm)
     {
       const dbBoundary = [{x:0,y:0},{x:20,y:0},{x:20,y:8},{x:40,y:8},{x:40,y:0},{x:60,y:0},{x:60,y:20},{x:40,y:20},{x:40,y:12},{x:20,y:12},{x:20,y:20},{x:0,y:20}];
-      const dbRec = { id: 'vcDb', region: 'dbLoop', vbit: { angle: 90 }, dStep: 1, maxDepth: 10 };
+      const dbShapes = dbBoundary.map((_, i) => ({
+        id: 'ds' + i,
+        type: 'line',
+        joints: ['D' + i, 'D' + ((i + 1) % dbBoundary.length)],
+      }));
       const dbState = {
         joints: new Map(dbBoundary.map((p, i) => ['D' + i, { x: p.x, y: p.y }])),
-        shapes: [],
+        shapes: dbShapes,
         constraints: [],
-        vcarves: [dbRec],
       };
-      const dbLoopPolys = { dbLoop: dbBoundary };
+      const dbLoop = findLoops(dbState)[0];
+      const dbRec = { id: 'vcDb', region: 'loop:' + dbLoop.id, vbit: { angle: 90 }, dStep: 1, maxDepth: 10 };
+      dbState.vcarves = [dbRec];
+      const dbLoopPolys = { [dbLoop.id]: dbBoundary };
       const dbSVG = exportShaperSVG({ state: dbState, entries: [], encoding: ENC5, docUnit: 'mm', loopPolys: dbLoopPolys });
       const dbPreview = deriveVcarveContours(dbBoundary, dbRec);
       eq(dbPreview.length, 17, 'dumbbell preview has 17 contours across split lobes');
@@ -494,7 +501,7 @@ import { format } from '#core/units.js';
       const outerLoops = findLoops(frameState);
       const outerLoop = outerLoops.find((l) => l.edges.includes('so1'));
       const holeLoop = outerLoops.find((l) => l.edges.includes('sh1'));
-      frameRec.region = outerLoop.id;
+      frameRec.region = 'loop:' + outerLoop.id;
       const loopPolys = { [outerLoop.id]: frameOuter, [holeLoop.id]: frameHole };
 
       // a) V-carve on outer profile only (no cut on hole): emits 14 vcarve contours, hole not emitted separately

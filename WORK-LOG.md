@@ -11917,3 +11917,35 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+## TURN 432b — Unified target-key resolver, sketch profiles list in #core, screenToWorld in views, vcarve region migration (TASK 432b) — branch agy1
+
+- **did:**
+  1. **ONE Target-Key Resolver (`packages/core/profile-model.js`)**:
+     - Added `resolveTargetKey(target, state, loops, loopPolys)` taking canonical cut-plan form (`'loop:<id>' | 'profile:<id>' | 'chain:<id>'` or `{ kind, id }`).
+     - Returns `{ outer, inners, profileId, invalid, reason, isDerived, isCombined, chain, d }` (or `null` if unrecognized).
+     - Routed Prepare (`profileLoopsForTarget`), Vcarve (`populateRegions`, `recompute`, `pickAtWorldPoint`), and Shaper export (profile cuts, loop pockets, vcarves) through `resolveTargetKey`.
+     - Deleted `matchEntry` from `vcarve-view.js` and `resolveVcarveSpec` from `shaper-export.js`.
+     - Deleted polygon-key fallback; updated test fixtures in `tests/shaper-export.test.js` (tests 14, 18, 19, 20, 21) to use canonical `'loop:<id>'` keys.
+  2. **Profile listing in `#core` (`packages/core/profile-model.js`, `apps/shaper/src/vcarve-view.js`)**:
+     - Added `listSketchProfiles(state, loops, loopPolys)` in `profile-model.js`: enumerates combined profiles first (via `resolveProfileViews`), then derived profiles for uncovered loops, sorted descending by area, with titles and net areas.
+     - `vcarve-view.js` calls `listSketchProfiles(state)` directly in `populateRegions()` to generate dropdown options with values `${it.key}`.
+  3. **Shared screen-to-world conversion (`apps/shaper/src/prepare-view.js`, `apps/shaper/src/vcarve-view.js`)**:
+     - Deleted local `clientToWorld` (and empty `catch (_) {}`) from both `prepare-view.js` and `vcarve-view.js`.
+     - Imported and used shared `screenToWorld` from `packages/ui/coords.js` across mouse/pointer handlers.
+  4. **Vcarve record migration (`apps/shaper/src/cut-plan.js`, `apps/shaper/src/main.js`)**:
+     - Updated `migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = null)` in `cut-plan.js` to migrate bare loop id vcarve records (`vc.region` without `:`) to `'loop:' + vc.region` (or `'profile:' + vc.region`), returning `{ dropped, moved, vcarveUpdated }`.
+     - Wired in `main.js` on Prepare mount, including `vcarveUpdated` in the `groupStatus` status message.
+  5. **Tests (`tests/prepare-profile-pick.test.js`, `tests/shaper-export.test.js`)**:
+     - Added unit tests P8b (vcarve migration), P9 (`resolveTargetKey` resolution of loop/profile/chain/invalid), and P10 (`listSketchProfiles` combined vs derived ordering and titles) in `tests/prepare-profile-pick.test.js`.
+     - Updated `tests/shaper-export.test.js` tests 14, 18, 19, 20, 21 to use `'loop:' + id` and true geometry for dumbbell.
+- **evidence:**
+  - `git grep -n "resolveVcarveSpec\|matchEntry\|clientToWorld" -- apps packages tests` -> 0 matches.
+  - `git grep -n "resolveTargetKey" -- apps packages tests` -> lists each consumer in `prepare-view.js`, `vcarve-view.js`, `shaper-export.js`, and `prepare-profile-pick.test.js`.
+  - `git grep -n "listSketchProfiles" -- apps packages tests` -> lists definition in `profile-model.js` and caller in `vcarve-view.js`.
+  - Gate (`npm run gate`):
+    - `GATE files=162 pass=162 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

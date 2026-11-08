@@ -17,7 +17,7 @@ import { findLoops, findOpenChains } from './loop-finder.js';
 import { format } from './units.js';
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 import { loopPolygon, loopToPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop } from './profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey } from './profile-model.js';
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -173,39 +173,6 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     return loopGeom(outerLoop, state, shapeById);
   };
 
-  // Resolve a V-carve region key ('profile:<id>', '<profileId>', '<loopId>', or a caller-provided polygon key)
-  // into { outerKey, holeIds, isCombined, profileId }.
-  const resolveVcarveSpec = (region) => {
-    if (!region || typeof region !== 'string') return null;
-    const polys = ensurePolys();
-    if (region.startsWith('profile:')) {
-      const pid = region.slice(8);
-      const v = profileViews && profileViews.get(pid);
-      if (!v || v.invalid || !v.outerLoopId) return null;
-      return { outerKey: v.outerLoopId, holeIds: v.innerLoopIds, isCombined: true, profileId: pid };
-    }
-    if (profileViews && profileViews.has(region)) {
-      const v = profileViews.get(region);
-      if (!v || v.invalid || !v.outerLoopId) return null;
-      return { outerKey: v.outerLoopId, holeIds: v.innerLoopIds, isCombined: true, profileId: region };
-    }
-    if (loopById.has(region)) {
-      const prof = resolveProfileForLoop(region, state, loops, polys);
-      if (!prof || !prof.outer) return null;
-      if (!prof.isDerived) {
-        const v = profileViews && profileViews.get(prof.id);
-        if (v && v.invalid) return null;
-        return { outerKey: prof.outer, holeIds: prof.inners, isCombined: true, profileId: prof.id };
-      }
-      return { outerKey: prof.outer, holeIds: prof.inners, isCombined: false, profileId: null };
-    }
-    // Caller-supplied boundary polygon in loopPolys without a matching sketch loop (e.g. standalone polygon fixtures)
-    if (polys[region] && polys[region].length >= 3) {
-      return { outerKey: region, holeIds: [], isCombined: false, profileId: null };
-    }
-    return null;
-  };
-
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
   const vcarveExcludedLoops = new Set();
@@ -214,13 +181,14 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   if (hasVcarves) {
     for (const vc of state.vcarves) {
       if (!vc || !vc.region) continue;
-      const spec = resolveVcarveSpec(vc.region);
-      if (!spec) continue;
-      resolvedVcarves.push({ vc, spec });
-      vcarveExcludedLoops.add(spec.outerKey);
+      const spec = resolveTargetKey(vc.region, state, loops, ensurePolys());
+      if (!spec || spec.invalid || !spec.outer) continue;
+      const vcarveSpec = { outerKey: spec.outer, holeIds: spec.inners || [], isCombined: spec.isCombined, profileId: spec.profileId };
+      resolvedVcarves.push({ vc, spec: vcarveSpec });
+      vcarveExcludedLoops.add(spec.outer);
       if (spec.isCombined && spec.profileId) {
         vcarveExcludedProfiles.add(spec.profileId);
-        for (const hid of spec.holeIds) vcarveExcludedLoops.add(hid);
+        for (const hid of (spec.inners || [])) vcarveExcludedLoops.add(hid);
       }
     }
   }
@@ -235,24 +203,20 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     if (e.target.kind === 'loop') {
       const loop = loopById.get(e.target.id);
       if (loop && c.cutType === 'pocket' && (loops.length >= 2 || hasProfiles)) {
-        const prof = resolveProfileForLoop(loop.id, state, loops, ensurePolys());
-        if (prof && !prof.isDerived) {
-          const v = profileViews && profileViews.get(prof.id);
-          if (!v || v.invalid || !v.outerLoopId) continue;
-          geom = compoundOrLoopGeom(loopById.get(v.outerLoopId), v.innerLoopIds);
-        } else if (prof) {
+        const prof = resolveTargetKey({ kind: 'loop', id: loop.id }, state, loops, ensurePolys());
+        if (prof && !prof.invalid && prof.outer) {
           geom = compoundOrLoopGeom(loopById.get(prof.outer), prof.inners);
         }
       } else if (loop) {
         geom = loopGeom(loop, state, shapeById);
       }
     } else if (e.target.kind === 'profile') {
-      const v = profileViews && profileViews.get(e.target.id);
-      if (v && !v.invalid && v.outerLoopId) {
+      const prof = resolveTargetKey({ kind: 'profile', id: e.target.id }, state, loops, ensurePolys());
+      if (prof && !prof.invalid && prof.outer) {
         if (c.cutType === 'pocket') {
-          geom = v.d ? { tag: 'path', a: `d="${v.d}" fill-rule="evenodd"` } : compoundOrLoopGeom(loopById.get(v.outerLoopId), v.innerLoopIds);
+          geom = prof.d ? { tag: 'path', a: `d="${prof.d}" fill-rule="evenodd"` } : compoundOrLoopGeom(loopById.get(prof.outer), prof.inners);
         } else {
-          const outerLoop = loopById.get(v.outerLoopId);
+          const outerLoop = loopById.get(prof.outer);
           if (outerLoop) geom = loopGeom(outerLoop, state, shapeById);
         }
       }

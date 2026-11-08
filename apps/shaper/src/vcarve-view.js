@@ -4,25 +4,12 @@
 // Holes come from the picked profile (combined profile if one covers it, else derived direct holes). Shaper-only.
 
 import { findLoops } from '#core/loop-finder.js';
-import { loopPolygon, polyArea } from '#core/loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint } from '#core/profile-model.js';
+import { loopPolygon } from '#core/loop-geometry.js';
+import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
-
-function clientToWorld(svgEl, cx, cy) {
-  try {
-    const ctm = svgEl.getScreenCTM && svgEl.getScreenCTM();
-    if (ctm && svgEl.createSVGPoint) {
-      const pt = svgEl.createSVGPoint();
-      pt.x = cx;
-      pt.y = cy;
-      const w = pt.matrixTransform(ctm.inverse());
-      return { x: w.x, y: w.y };
-    }
-  } catch (_) {}
-  return null;
-}
+import { screenToWorld } from '#ui/coords.js';
 
 export function mountVcarveView(state) {
   const els = {
@@ -62,85 +49,8 @@ export function mountVcarveView(state) {
   const shapeById = () => new Map((state.shapes || []).map((s) => [s.id, s]));
   const numFrom = (v, d) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : d; };
 
-  function computeProfilesSnapshot() {
-    const sb = shapeById();
-    const loops = findLoops(state);
-    const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
-    const views = resolveProfileViews(state, loops, loopPolys);
-
-    const entries = [];
-    const coveredLoops = new Set();
-
-    for (const p of (state.profiles || [])) {
-      const v = views.get(p.id);
-      if (!v || v.invalid || !v.outerLoopId) continue;
-      const boundary = loopPolys[v.outerLoopId] || [];
-      if (boundary.length < 3) continue;
-      const holePolys = v.innerLoopIds.map((hid) => loopPolys[hid]).filter((hp) => hp && hp.length >= 3);
-      const outerArea = Math.abs(polyArea(boundary));
-      const holeArea = holePolys.reduce((acc, hp) => acc + Math.abs(polyArea(hp)), 0);
-      coveredLoops.add(v.outerLoopId);
-      for (const hid of v.innerLoopIds) coveredLoops.add(hid);
-      entries.push({
-        key: 'profile:' + p.id,
-        profileId: p.id,
-        outerLoopId: v.outerLoopId,
-        holeIds: [...v.innerLoopIds],
-        boundary,
-        holePolys,
-        sortArea: outerArea,
-        netArea: Math.max(0, outerArea - holeArea),
-        isCombined: true,
-        title: p.name || p.id,
-      });
-    }
-
-    for (const l of loops) {
-      if (coveredLoops.has(l.id)) continue;
-      const boundary = loopPolys[l.id] || [];
-      if (boundary.length < 3) continue;
-      const prof = resolveProfileForLoop(l.id, state, loops, loopPolys);
-      const holeIds = prof ? [...prof.inners] : [];
-      const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((hp) => hp && hp.length >= 3);
-      const outerArea = Math.abs(polyArea(boundary));
-      const holeArea = holePolys.reduce((acc, hp) => acc + Math.abs(polyArea(hp)), 0);
-      entries.push({
-        key: l.id,
-        profileId: null,
-        outerLoopId: l.id,
-        holeIds,
-        boundary,
-        holePolys,
-        sortArea: outerArea,
-        netArea: Math.max(0, outerArea - holeArea),
-        isCombined: false,
-        title: null,
-      });
-    }
-
-    entries.sort((a, b) => b.sortArea - a.sortArea);
-    let derivedIdx = 1;
-    for (const e of entries) {
-      if (!e.isCombined) e.title = `Profile ${derivedIdx++}`;
-    }
-
-    const matchEntry = (regionKey) => {
-      if (!regionKey) return null;
-      const exact = entries.find((e) => e.key === regionKey);
-      if (exact) return exact;
-      if (regionKey.startsWith('profile:')) {
-        const pid = regionKey.slice(8);
-        return entries.find((e) => e.profileId === pid) || null;
-      }
-      // Match combined profile if regionKey is its profileId or one of its member loopIds
-      return entries.find((e) => e.profileId === regionKey || e.outerLoopId === regionKey || e.holeIds.includes(regionKey)) || null;
-    };
-
-    return { loops, loopPolys, views, entries, matchEntry };
-  }
-
   function populateRegions() {
-    const { entries, matchEntry } = computeProfilesSnapshot();
+    const entries = listSketchProfiles(state);
 
     if (!entries.length) {
       els.region.innerHTML = '<option value="">(no closed profiles)</option>';
@@ -155,10 +65,11 @@ export function mountVcarveView(state) {
     els.region.innerHTML = html;
 
     const current = rec().region;
-    const matched = matchEntry(current);
-    if (matched) {
-      rec().region = matched.key;
-      els.region.value = matched.key;
+    const matched = resolveTargetKey(current, state);
+    if (matched && !matched.invalid && matched.outer) {
+      const key = matched.profileId ? `profile:${matched.profileId}` : `loop:${matched.outer}`;
+      rec().region = key;
+      els.region.value = key;
     } else if (current) {
       rec().region = null;
       els.region.value = '';
@@ -175,22 +86,27 @@ export function mountVcarveView(state) {
   let lastRegion = null;
   function recompute() {
     const r = rec();
-    const { loops, loopPolys, matchEntry } = computeProfilesSnapshot();
-    const matched = matchEntry(r.region);
-    const activeKey = matched ? matched.key : null;
+    const sb = shapeById();
+    const loops = findLoops(state);
+    const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
+    const matched = resolveTargetKey(r.region, state, loops, loopPolys);
+    const activeKey = (matched && !matched.invalid && matched.outer)
+      ? (matched.profileId ? `profile:${matched.profileId}` : `loop:${matched.outer}`)
+      : null;
     const regionChanged = (lastRegion !== activeKey);
     lastRegion = activeKey;
 
-    if (!matched) {
+    if (!matched || matched.invalid || !matched.outer) {
       const allPolys = loops.map((l) => loopPolys[l.id]).filter((p) => p && p.length >= 3);
       renderUnpicked(els.canvas, allPolys, vcarveViewState);
       els.readout.textContent = 'Pick a region to preview.';
       return;
     }
 
-    const { boundary, holePolys } = matched;
+    const boundary = loopPolys[matched.outer] || [];
+    const holePolys = (matched.inners || []).map((hid) => loopPolys[hid]).filter((hp) => hp && hp.length >= 3);
     const otherPolys = loops
-      .filter((l) => l.id !== matched.outerLoopId && !matched.holeIds.includes(l.id))
+      .filter((l) => l.id !== matched.outer && !(matched.inners || []).includes(l.id))
       .map((l) => loopPolys[l.id])
       .filter((p) => p && p.length >= 3);
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
@@ -201,17 +117,11 @@ export function mountVcarveView(state) {
 
   function pickAtWorldPoint(wp) {
     if (!wp) return null;
-    const { loops, loopPolys, views } = computeProfilesSnapshot();
-    const prof = resolveProfileAtPoint(wp, state, loops, loopPolys);
+    const prof = resolveProfileAtPoint(wp, state);
     if (!prof || !prof.outer) return null;
-    let nextKey = null;
-    if (!prof.isDerived) {
-      const v = views.get(prof.id);
-      if (!v || v.invalid || !v.outerLoopId) return null;
-      nextKey = 'profile:' + prof.id;
-    } else {
-      nextKey = prof.outer;
-    }
+    const nextKey = prof.isDerived ? `loop:${prof.outer}` : `profile:${prof.id}`;
+    const matched = resolveTargetKey(nextKey, state);
+    if (!matched || matched.invalid) return null;
     try { state.saveState && state.saveState(); } catch (_) {}
     rec().region = nextKey;
     populateRegions();
@@ -230,7 +140,7 @@ export function mountVcarveView(state) {
     const dy = (e.clientY || 0) - downPt.y;
     downPt = null;
     if (Math.hypot(dx, dy) >= 4) return; // pan drag, not a click
-    const wp = clientToWorld(els.canvas, e.clientX || 0, e.clientY || 0);
+    const wp = screenToWorld(els.canvas, e.clientX || 0, e.clientY || 0);
     if (wp) pickAtWorldPoint(wp);
   };
   els.canvas.addEventListener('pointerdown', onCanvasDown);

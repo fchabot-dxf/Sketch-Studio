@@ -13,8 +13,9 @@ import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset 
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, polygonContains, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
+import { screenToWorld } from '#ui/coords.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -46,14 +47,6 @@ export function renderPrepareGeometry(state, svgEl) {
 }
 
 // ── Loop boundary polygons + hit-test — LIFTED to #core/loop-geometry.js (SKETCH-4a); re-imported above. ──
-
-function clientToWorld(svgEl, cx, cy) {
-  try {
-    const ctm = svgEl.getScreenCTM && svgEl.getScreenCTM();
-    if (ctm && svgEl.createSVGPoint) { const pt = svgEl.createSVGPoint(); pt.x = cx; pt.y = cy; const w = pt.matrixTransform(ctm.inverse()); return { x: w.x, y: w.y }; }
-  } catch (_) {}
-  return null;
-}
 
 const SVG_NS_G = SVG_NS;
 const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
@@ -207,27 +200,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
 
   const profileLoopsForTarget = (t) => {
     if (!t) return null;
-    if (t.kind === 'profile') {
-      const v = profileViews.get(t.id);
-      if (!v || v.invalid || !v.outerLoopId) return null;
-      const outer = loopById.get(v.outerLoopId);
-      if (!outer || outer.polygon.length < 3) return null;
-      const holes = v.innerLoopIds.map((hid) => loopById.get(hid)).filter((hl) => hl && hl.polygon.length >= 3);
-      return { outer, holes, isDerived: false, profileId: t.id };
-    }
-    if (t.kind === 'loop') {
-      const prof = resolveProfileForLoop(t.id, state, loops, loopPolys);
-      if (!prof || !prof.outer) return null;
-      if (!prof.isDerived) {
-        const v = profileViews.get(prof.id);
-        if (!v || v.invalid || !v.outerLoopId) return null;
-      }
-      const outer = loopById.get(prof.outer);
-      if (!outer || outer.polygon.length < 3) return null;
-      const holes = (prof.inners || []).map((hid) => loopById.get(hid)).filter((hl) => hl && hl.polygon.length >= 3);
-      return { outer, holes, isDerived: Boolean(prof.isDerived), profileId: prof.id };
-    }
-    return null;
+    const spec = resolveTargetKey(t, state, loops, loopPolys);
+    if (!spec || spec.invalid || !spec.outer) return null;
+    const outer = loopById.get(spec.outer);
+    if (!outer || outer.polygon.length < 3) return null;
+    const holes = (spec.inners || []).map((hid) => loopById.get(hid)).filter((hl) => hl && hl.polygon.length >= 3);
+    return { outer, holes, isDerived: Boolean(spec.isDerived), profileId: spec.profileId };
   };
 
   // Precompute per-edge hit geometry once (Prepare geometry is static) — lines/circles analytic, arcs sampled.
@@ -389,7 +367,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const onMove = (e) => {
     if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
     setHover(resolveTarget(wp));
   };
@@ -403,7 +381,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       handlePanZoomPointerDown(e, svgEl, viewState);
       return;
     }
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     const t = wp ? resolveTarget(wp) : null;
     if (e.shiftKey) {
       if (t) {

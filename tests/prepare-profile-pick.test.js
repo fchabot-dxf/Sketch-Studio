@@ -2,7 +2,7 @@
 import assert from 'node:assert';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon, polyArea, sampleArc } from '#core/loop-geometry.js';
-import { makeProfile, resolveProfileViews, resolveProfileForLoop, derivedProfileForLoop } from '#core/profile-model.js';
+import { makeProfile, resolveProfileViews, resolveProfileForLoop, derivedProfileForLoop, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { mountPrepareView } from '../apps/shaper/src/prepare-view.js';
 import { keyOf, parseKey, CUT_PLAN, migrateEdgeRecords } from '../apps/shaper/src/cut-plan.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
@@ -426,6 +426,89 @@ const ENC5 = [
     const chainKey = keyOf('chain', 'chain_open_line');
     assert(testPlan.has(chainKey), `P8: plan has ${chainKey}`);
     assert.strictEqual(testPlan.get(chainKey).cutType, 'online', 'P8: moved cutType preserved');
+  }
+
+  // P8b: migrateEdgeRecords converts bare loop/profile ids in vcarves to 'loop:<id>' / 'profile:<id>'.
+  {
+    const state = makeFrameState();
+    const loops = findLoops(state);
+    const chains = findOpenChains(state, loops);
+    const outerLoop = loops.find((l) => l.edges.includes('so1'));
+    const testVcarves = [
+      { id: 'vc1', region: outerLoop.id, vbit: { angle: 90 } },
+      { id: 'vc2', region: 'profile-1', vbit: { angle: 60 } },
+      { id: 'vc3', region: 'loop:' + outerLoop.id, vbit: { angle: 90 } }, // already canonical -> not changed
+    ];
+    const res = migrateEdgeRecords(loops, chains, new Map(), testVcarves);
+    assert.strictEqual(res.vcarveUpdated, 2, 'P8b: 2 vcarves migrated to canonical form');
+    assert.strictEqual(testVcarves[0].region, `loop:${outerLoop.id}`, 'P8b: bare loop id converted to loop:<id>');
+    assert.strictEqual(testVcarves[1].region, 'profile:profile-1', 'P8b: bare profile-1 converted to profile:profile-1');
+    assert.strictEqual(testVcarves[2].region, `loop:${outerLoop.id}`, 'P8b: canonical key unchanged');
+  }
+
+  // P9: resolveTargetKey resolves loop, profile, and chain keys cleanly; rejects invalid keys.
+  {
+    const state = makeFrameState();
+    const loops = findLoops(state);
+    const outerLoop = loops.find((l) => l.edges.includes('so1'));
+    const holeLoop = loops.find((l) => l.edges.includes('si1'));
+
+    // Derived loop
+    const derivedSpec = resolveTargetKey(`loop:${outerLoop.id}`, state, loops);
+    assert(derivedSpec && !derivedSpec.invalid, 'P9: derived loop spec resolved');
+    assert.strictEqual(derivedSpec.outer, outerLoop.id, 'P9: outer loop id matches');
+    assert.deepStrictEqual(derivedSpec.inners, [holeLoop.id], 'P9: inners has hole loop id');
+    assert.strictEqual(derivedSpec.isDerived, true, 'P9: isDerived is true');
+
+    // Combined profile
+    makeProfile(state, outerLoop, [holeLoop], 'Combined Frame');
+    const profSpec = resolveTargetKey('profile:profile-1', state, loops);
+    assert(profSpec && !profSpec.invalid, 'P9: combined profile resolved');
+    assert.strictEqual(profSpec.profileId, 'profile-1', 'P9: profileId matches');
+    assert.strictEqual(profSpec.outer, outerLoop.id, 'P9: combined outer matches');
+    assert.deepStrictEqual(profSpec.inners, [holeLoop.id], 'P9: combined inners matches');
+    assert.strictEqual(profSpec.isCombined, true, 'P9: isCombined is true');
+
+    // Chain
+    const openState = {
+      joints: new Map([['X0', { x: 0, y: 0 }], ['X1', { x: 10, y: 0 }]]),
+      shapes: [{ id: 'xline', type: 'line', joints: ['X0', 'X1'] }],
+      constraints: [],
+    };
+    const openChains = findOpenChains(openState, []);
+    const chainSpec = resolveTargetKey(`chain:${openChains[0].id}`, openState, []);
+    assert(chainSpec && !chainSpec.invalid, 'P9: chain spec resolved');
+    assert.strictEqual(chainSpec.kind, 'chain', 'P9: kind is chain');
+    assert.strictEqual(chainSpec.chain.id, 'chain_xline', 'P9: chain id matches');
+
+    // Invalid / unknown
+    assert.strictEqual(resolveTargetKey('unknown:123', state), null, 'P9: unknown prefix returns null');
+    assert.strictEqual(resolveTargetKey('bare_id_no_colon', state), null, 'P9: bare id without colon returns null');
+    const missingLoop = resolveTargetKey('loop:nonexistent', state, loops);
+    assert(missingLoop.invalid, 'P9: nonexistent loop key marked invalid');
+  }
+
+  // P10: listSketchProfiles returns combined profiles first (sorted descending by area), then derived profiles for uncovered loops.
+  {
+    const state = makeFrameState();
+    const loops = findLoops(state);
+    const outerLoop = loops.find((l) => l.edges.includes('so1'));
+    const holeLoop = loops.find((l) => l.edges.includes('si1'));
+
+    // Before combine: 2 derived profiles (outer frame minus hole, and hole loop)
+    const beforeList = listSketchProfiles(state);
+    assert.strictEqual(beforeList.length, 2, 'P10: 2 profiles before combine');
+    assert.strictEqual(beforeList[0].key, `loop:${outerLoop.id}`, 'P10: largest loop first');
+    assert.deepStrictEqual(beforeList[0].holeIds, [holeLoop.id], 'P10: hole loop in holeIds');
+    assert.strictEqual(beforeList[1].key, `loop:${holeLoop.id}`, 'P10: hole loop profile second');
+
+    // After combine: 1 combined profile covering both loops
+    makeProfile(state, outerLoop, [holeLoop], 'My Frame');
+    const afterList = listSketchProfiles(state);
+    assert.strictEqual(afterList.length, 1, 'P10: 1 combined profile covering both loops');
+    assert.strictEqual(afterList[0].key, 'profile:profile-1', 'P10: key is profile:profile-1');
+    assert.strictEqual(afterList[0].title, 'My Frame', 'P10: title is My Frame');
+    assert.strictEqual(afterList[0].isCombined, true, 'P10: isCombined is true');
   }
 
   // E1: export a frame with Pocket on the outer: one evenodd path, 2 subpaths, no group anywhere.

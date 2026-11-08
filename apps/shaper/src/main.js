@@ -568,9 +568,13 @@ function showMode(mode) {
     const st = designController.state;
     const loops = findLoops(st);
     const chains = findOpenChains(st, loops);
-    const { dropped, moved } = migrateEdgeRecords(loops, chains);
-    if (dropped + moved > 0) {
-      groupStatus(`Cut plan updated: ${moved} edge cut${moved === 1 ? '' : 's'} moved to chain, ${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
+    const { dropped, moved, vcarveUpdated } = migrateEdgeRecords(loops, chains, CUT_PLAN, st.vcarves);
+    if (dropped + moved + (vcarveUpdated || 0) > 0) {
+      const parts = [];
+      if (moved > 0) parts.push(`${moved} edge cut${moved === 1 ? '' : 's'} moved to chain`);
+      if (dropped > 0) parts.push(`${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
+      if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
+      groupStatus(`Cut plan updated: ${parts.join(', ')}`);
     }
     prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
     window.__prepareView = prepareView;

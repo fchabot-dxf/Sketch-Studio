@@ -27,15 +27,19 @@ export function cutPlanEntries() {
 }
 
 /**
- * migrateEdgeRecords(loops, chains, plan = CUT_PLAN) → { dropped, moved }
+ * migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = null) → { dropped, moved, vcarveUpdated }
  * For each `edge:<shapeId>` key:
  *   - if the shape is in a loop → delete the record and count it;
  *   - if it's in a chain whose `chain:<id>` key has no record → move it there;
  *   - otherwise delete it and count it.
+ * For each vcarve in `vcarves` with a bare loop/profile id (no ':'):
+ *   - converts it to the canonical 'loop:<id>' or 'profile:<id>' format.
  */
-export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN) {
+export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = null) {
   const loopEdgeIds = new Set();
+  const loopIds = new Set();
   for (const l of (loops || [])) {
+    loopIds.add(l.id);
     for (const eid of (l.edges || [])) loopEdgeIds.add(eid);
   }
   const chainByShapeId = new Map();
@@ -48,6 +52,7 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN) {
 
   let dropped = 0;
   let moved = 0;
+  let vcarveUpdated = 0;
 
   for (const [key, rec] of [...plan.entries()]) {
     const { kind, id } = parseKey(key);
@@ -73,5 +78,19 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN) {
     }
   }
 
-  return { dropped, moved };
+  if (Array.isArray(vcarves)) {
+    for (const vc of vcarves) {
+      if (vc && vc.region && typeof vc.region === 'string' && !vc.region.includes(':')) {
+        if (loopIds.has(vc.region)) {
+          vc.region = 'loop:' + vc.region;
+          vcarveUpdated++;
+        } else if (vc.region.startsWith('profile-')) {
+          vc.region = 'profile:' + vc.region;
+          vcarveUpdated++;
+        }
+      }
+    }
+  }
+
+  return { dropped, moved, vcarveUpdated };
 }

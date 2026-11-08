@@ -1,7 +1,7 @@
 // packages/core/profile-model.js — Profile data model + validation + topology resilience + resolver.
 // Supports COMBINE tool (compound profiles with holes) and the DERIVED face resolver (Fusion 360 profile picking).
 
-import { findLoops } from './loop-finder.js';
+import { findLoops, findOpenChains } from './loop-finder.js';
 import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD } from './loop-geometry.js';
 
 const EPS = 1e-9;
@@ -458,4 +458,180 @@ export function resolveProfileAtPoint(point, state, loops, loopPolys) {
   containing.sort((a, b) => a.area - b.area);
   const innermost = containing[0].loop;
   return resolveProfileForLoop(innermost.id, state, allLoops, loopPolys);
+}
+
+/**
+ * ONE Unified Target-Key Resolver.
+ * Takes a target key in the cut-plan form ('loop:<id>' | 'profile:<id>' | 'chain:<id>' or { kind, id })
+ * and resolves it against the sketch loops/profiles/chains.
+ * Returns { outer, inners, profileId, invalid, reason, isDerived, isCombined, chain, d } (or null if unrecognized).
+ *
+ * @param {string|object} target - Target key string ('loop:<id>', 'profile:<id>', 'chain:<id>') or { kind, id }
+ * @param {object} state - Sketch state
+ * @param {Array} [loops] - Optional precomputed loops
+ * @param {object|Map} [loopPolys] - Optional precomputed loop polygons
+ * @returns {object|null}
+ */
+export function resolveTargetKey(target, state, loops, loopPolys) {
+  if (!target) return null;
+  let kind = '', id = '';
+  if (typeof target === 'string') {
+    const idx = target.indexOf(':');
+    if (idx === -1) return null;
+    kind = target.slice(0, idx);
+    id = target.slice(idx + 1);
+  } else if (typeof target === 'object') {
+    kind = target.kind;
+    id = target.id;
+  }
+  if (!kind || !id) return null;
+
+  const allLoops = loops || (state ? findLoops(state) : []);
+
+  if (kind === 'profile') {
+    const views = resolveProfileViews(state, allLoops, loopPolys);
+    const v = views.get(id);
+    if (!v) {
+      return { outer: null, inners: [], profileId: id, invalid: true, reason: 'Profile not found', isCombined: true, isDerived: false, d: '' };
+    }
+    return {
+      outer: v.outerLoopId,
+      inners: v.innerLoopIds ? [...v.innerLoopIds] : [],
+      profileId: id,
+      invalid: Boolean(v.invalid),
+      reason: v.reason || null,
+      isCombined: true,
+      isDerived: false,
+      d: v.d || '',
+    };
+  }
+
+  if (kind === 'loop') {
+    const loop = allLoops.find((l) => l.id === id);
+    if (!loop) {
+      return { outer: null, inners: [], profileId: null, invalid: true, reason: 'Loop not found', isDerived: true, isCombined: false, d: '' };
+    }
+    // Combined profile wins if one covers this loop
+    const prof = resolveProfileForLoop(id, state, allLoops, loopPolys);
+    if (!prof || !prof.outer) {
+      return { outer: null, inners: [], profileId: null, invalid: true, reason: 'Loop profile not found', isDerived: true, isCombined: false, d: '' };
+    }
+    if (!prof.isDerived) {
+      const views = resolveProfileViews(state, allLoops, loopPolys);
+      const v = views.get(prof.id);
+      return {
+        outer: v?.outerLoopId || prof.outer,
+        inners: v?.innerLoopIds ? [...v.innerLoopIds] : [...prof.inners],
+        profileId: prof.id,
+        invalid: Boolean(v?.invalid),
+        reason: v?.reason || null,
+        isCombined: true,
+        isDerived: false,
+        d: v?.d || '',
+      };
+    }
+    return {
+      outer: prof.outer,
+      inners: [...prof.inners],
+      profileId: null,
+      invalid: false,
+      reason: null,
+      isDerived: true,
+      isCombined: false,
+      d: '',
+    };
+  }
+
+  if (kind === 'chain') {
+    const chains = findOpenChains(state || {}, allLoops);
+    const chain = chains.find((c) => c.id === id);
+    if (!chain) {
+      return { chain: null, id, invalid: true, reason: 'Chain not found', kind: 'chain' };
+    }
+    return { chain, id, invalid: false, reason: null, kind: 'chain' };
+  }
+
+  return null;
+}
+
+/**
+ * List all closed profiles for a sketch:
+ * Combined profiles first (resolved from state.profiles), then derived profiles for any uncovered loops.
+ * Returns an array of profile descriptors suitable for UI dropdowns, sorting, and preview rendering.
+ *
+ * @param {object} state - Sketch state
+ * @param {Array} [loops] - Optional precomputed loops
+ * @param {object|Map} [loopPolys] - Optional precomputed loop polygons
+ * @returns {Array<{ key: string, profileId: string|null, outerLoopId: string, holeIds: string[], boundary: Array<{x,y}>, holePolys: Array<Array<{x,y}>>, sortArea: number, netArea: number, isCombined: boolean, title: string }>}
+ */
+export function listSketchProfiles(state, loops, loopPolys) {
+  const sb = new Map((state?.shapes || []).map((s) => [s.id, s]));
+  const allLoops = loops || (state ? findLoops(state) : []);
+  const polys = {};
+  for (const l of allLoops) {
+    if (loopPolys) {
+      const p = (loopPolys instanceof Map) ? loopPolys.get(l.id) : loopPolys[l.id];
+      if (p && p.length) { polys[l.id] = p; continue; }
+    }
+    polys[l.id] = l.edges ? loopPolygon(l, state, sb) : [];
+  }
+  const views = resolveProfileViews(state, allLoops, polys);
+
+  const entries = [];
+  const coveredLoops = new Set();
+
+  for (const p of (state?.profiles || [])) {
+    const v = views.get(p.id);
+    if (!v || v.invalid || !v.outerLoopId) continue;
+    const boundary = polys[v.outerLoopId] || [];
+    if (boundary.length < 3) continue;
+    const holePolys = (v.innerLoopIds || []).map((hid) => polys[hid]).filter((hp) => hp && hp.length >= 3);
+    const outerArea = Math.abs(polyArea(boundary));
+    const holeArea = holePolys.reduce((acc, hp) => acc + Math.abs(polyArea(hp)), 0);
+    coveredLoops.add(v.outerLoopId);
+    for (const hid of (v.innerLoopIds || [])) coveredLoops.add(hid);
+    entries.push({
+      key: 'profile:' + p.id,
+      profileId: p.id,
+      outerLoopId: v.outerLoopId,
+      holeIds: [...(v.innerLoopIds || [])],
+      boundary,
+      holePolys,
+      sortArea: outerArea,
+      netArea: Math.max(0, outerArea - holeArea),
+      isCombined: true,
+      title: p.name || p.id,
+    });
+  }
+
+  for (const l of allLoops) {
+    if (coveredLoops.has(l.id)) continue;
+    const boundary = polys[l.id] || [];
+    if (boundary.length < 3) continue;
+    const prof = resolveProfileForLoop(l.id, state, allLoops, polys);
+    const holeIds = prof ? [...(prof.inners || [])] : [];
+    const holePolys = holeIds.map((hid) => polys[hid]).filter((hp) => hp && hp.length >= 3);
+    const outerArea = Math.abs(polyArea(boundary));
+    const holeArea = holePolys.reduce((acc, hp) => acc + Math.abs(polyArea(hp)), 0);
+    entries.push({
+      key: 'loop:' + l.id,
+      profileId: null,
+      outerLoopId: l.id,
+      holeIds,
+      boundary,
+      holePolys,
+      sortArea: outerArea,
+      netArea: Math.max(0, outerArea - holeArea),
+      isCombined: false,
+      title: null,
+    });
+  }
+
+  entries.sort((a, b) => b.sortArea - a.sortArea);
+  let derivedIdx = 1;
+  for (const e of entries) {
+    if (!e.isCombined) e.title = `Profile ${derivedIdx++}`;
+  }
+
+  return entries;
 }

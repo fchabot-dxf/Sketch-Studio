@@ -13222,3 +13222,6 @@ TURN 497 edge detail: the procedural edge now has seeded uneven ply thickness (c
 
 ## TURN 497 (final change)
 Real plywood edge texture apps/shaper/assets/birch-plywood-edge.jpg (736px, 142,045 B) on side/wall faces; v = y/EDGE_TILE_MM (25), u along the wall (x or z by normal). Procedural ply generator, constants and tests removed. Face texture on top/floor/bottom; Wood toggle switches both. Gate green (222/222, SMOKE 12/12). Evidence .evidence/497/.
+
+## TURN 497 (edge scale)
+Edge scale from ply density: PLY_PER_MM = 13/19.05; IMAGE_PLY_COUNT = 26 (dark-stripe count on the middle-column luminance profile, stable at smoothing windows 5 and 7); EDGE_TILE_MM = 26 / PLY_PER_MM = 38.1 mm. 19.05 mm shows 13 plies, 12.7 mm shows 8.7. Tests added. Gate green 222/222.

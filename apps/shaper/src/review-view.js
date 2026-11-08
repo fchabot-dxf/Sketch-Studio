@@ -9,7 +9,9 @@ const BOARD = [0.85, 0.70, 0.50]; // warm board colour: the flat look (Wood off)
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
 const FACE_MESHES = new Set(['top', 'floor', 'bottom']); // show the birch face grain; side / wall show the plywood edge image
-export const EDGE_TILE_MM = 25;     // one repeat of the plywood-edge image covers 25 x 25 mm (its ~45 layers read as ~0.5 mm plies)
+export const PLY_PER_MM = 13 / 19.05; // 3/4 inch Baltic birch has 13 plies in 19.05 mm; the same density at any thickness
+export const IMAGE_PLY_COUNT = 26;    // light/dark layers in one vertical repeat of birch-plywood-edge.jpg (luminance profile of the middle column, stable at smoothing windows 5 and 7)
+export const EDGE_TILE_MM = IMAGE_PLY_COUNT / PLY_PER_MM; // 38.1 mm per image repeat
 export const EDGE_URL = new URL('../assets/birch-plywood-edge.jpg', import.meta.url).href;
 
 // Edge UVs from WORLD position: v = y / EDGE_TILE_MM (so the layers line up across the board edge and every cut wall); u runs along

@@ -4,124 +4,18 @@
 // The page is a tiny fixture with the apps' import map (served by this test), so no app code runs besides the store.
 
 import assert from 'node:assert';
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { launchBrowser } from './helpers/cdp-browser.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url === '/__fixture.html') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<!doctype html><script type="importmap">{"imports":{"#core/":"/packages/core/","#ui/":"/packages/ui/"}}</script><body>fixture</body>'); return; }
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
+const FIXTURE = '<!doctype html><script type="importmap">{"imports":{"#core/":"/packages/core/","#ui/":"/packages/ui/"}}</script><body>fixture</body>';
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9410 + Math.floor((Date.now() % 80));
-  const userDir = path.join(os.tmpdir(), 'sk-test-474-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '474', fixtures: { '/__fixture.html': FIXTURE } });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { evalJs, waitFor, navigate, port } = cdp;
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
-    const goto = async () => {
-      const loaded = once('Page.loadEventFired');
-      await send('Page.navigate', { url: `http://127.0.0.1:${port}/__fixture.html` });
-      await Promise.race([loaded, sleep(8000)]);
-      await sleep(300);
-    };
-
-    await goto();
+    await navigate(`http://127.0.0.1:${port}/__fixture.html`, 8000);
+    await waitFor(`document.readyState === 'complete' && document.body.textContent === 'fixture'`, 'fixture page loaded');
     // ---- 1. the OLD autosave slot (written the way the pre-474 buffer did) is migrated into the design "Untitled"
     const legacy = { version: 1, geometry: { joints: [['j1', { x: 7, y: 7 }]], shapes: [], constraints: [] }, hosts: { penplotter: { v: 1 }, shaper: { cut: 'pocket' } } };
     await evalJs(`new Promise((res, rej) => {
@@ -153,6 +47,7 @@ await (async () => {
       const A = createProjectStore({ adapter: createIdbAdapter() });
       const B = createProjectStore({ adapter: createIdbAdapter() });   // "another tab"
       const wait = (ms) => new Promise(r => setTimeout(r, ms));
+      const until = (ok, ms) => new Promise((res) => { const t0 = Date.now(); const tick = () => (ok() || Date.now() - t0 > ms ? res() : setTimeout(tick, 10)); tick(); });
       let pings = 0; A.subscribe(() => pings++);
       const atelier = await A.createProject('Atelier'); await wait(5);
       const bits = await A.createProject('Bits'); await wait(5);
@@ -176,7 +71,7 @@ await (async () => {
       out.afterDup = (await A.listRecent()).map(d => d.name).sort();
       await A.remove(d2.id);
       out.afterRemove = (await A.listRecent()).map(d => d.name).sort();
-      await wait(100);
+      await until(() => pings >= 8, 100);
       out.pings = pings;
       return JSON.stringify(out);
     })()`));
@@ -198,15 +93,12 @@ await (async () => {
       const B = createProjectStore({ adapter: createIdbAdapter() });
       let n = 0; A.subscribe(() => n++);
       await B.createProject('From another tab');
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise((res) => { const t0 = Date.now(); const tick = () => (n >= 1 || Date.now() - t0 > 300 ? res() : setTimeout(tick, 10)); tick(); });
       return n;
     })()`);
     assert(ping >= 1, 'a change in another tab notifies this tab (BroadcastChannel): ' + ping);
     console.log('project-store-idb: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

@@ -8,159 +8,46 @@
 
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 // ── Part 1: Headless browser check (Shaper & Pen Plotter, real CDP key events) ─────────────────────────────────
 
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
-
-async function sendRealKey(send, key, code, vk, modifiers = 0, text = '') {
-  const down = { type: text ? 'keyDown' : 'rawKeyDown', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
-  if (text) down.text = text;
-  await send('Input.dispatchKeyEvent', down);
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers });
-}
-
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) {
+  const cdp = await launchBrowser({ tag: '434', width: 800, height: 600 });
+  if (!cdp) {
     console.log('Part 1 skipped: no headless Edge/Chrome binary installed');
     return;
   }
-  const { server, port } = await startServer();
-  const dbgPort = 9510 + Math.floor((Date.now() % 400));
-  const userDir = path.join(os.tmpdir(), 'sk-test-434-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const { port, send, evalJs, waitFor, navigate } = cdp;
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => {
-      const i = ++id;
-      pending.set(i, res);
-      ws.send(JSON.stringify({ id: i, method: m, params: p }));
-    });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
-
     const hosts = [
       {
         name: 'Shaper',
         path: '/apps/shaper/index.html',
+        readyExpr: `!!document.querySelector('[data-mode="design"]')`,
         enterExpr: `(() => { const b = document.querySelector('[data-mode="design"]'); if (b) b.click(); })()`,
         ctxExpr: `() => ({ svg: document.getElementById('design-canvas'), state: window.__designController.state, engine: window.__designController.engine })`,
       },
       {
         name: 'Pen Plotter',
         path: '/apps/penplotter/index.html',
+        readyExpr: `[...document.querySelectorAll('.stage-btn')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`,
         enterExpr: `(() => { const b = [...document.querySelectorAll('.stage-btn')].find(x => /design/i.test(x.textContent)); if (b) b.click(); })()`,
         ctxExpr: `() => ({ svg: document.getElementById('design-canvas'), state: window.__sketch.controller.state, engine: window.__sketch.controller.engine })`,
       },
     ];
 
     for (const host of hosts) {
-      const loaded = once('Page.loadEventFired');
-      await send('Page.navigate', { url: `http://127.0.0.1:${port}${host.path}` });
-      await Promise.race([loaded, sleep(8000)]);
-      await sleep(500);
+      await navigate(`http://127.0.0.1:${port}${host.path}`, 8000);
+      await waitFor(host.readyExpr, `${host.name} to load`);
       await evalJs(host.enterExpr);
-      await sleep(300);
+      await waitFor(`(() => { const { svg, state, engine } = (${host.ctxExpr})(); return !!state && !!engine && svg.getBoundingClientRect().width > 0; })()`, `${host.name} Design canvas to show`);
 
       // 1. All runtime numeric inputs must have computed display === 'none'
       const displays = await evalJs(`(() => {
@@ -209,7 +96,7 @@ await (async () => {
       await sendRealKey(send, '0', 'Digit0', 48, 0, '0');
       await sleep(40);
       await sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r');
-      await sleep(120);
+      await waitFor(`(() => { const { state } = (${host.ctxExpr})(); const c = state.constraints.find(x => x.type === 'distance'); return !!c && c.value === 80 && getComputedStyle(document.getElementById('dimInput')).display === 'none' && !(document.activeElement && document.activeElement.id === 'dimInput'); })()`, `${host.name} dimension to commit 80 and #dimInput to hide and release focus`);
 
       const postCommit = await evalJs(`(() => {
         const { state } = (${host.ctxExpr})();
@@ -230,7 +117,7 @@ await (async () => {
 
       // Dispatch ONE real Ctrl+Z (modifiers: 2 = Ctrl) -> must revert 80 -> 50 and change history!
       await sendRealKey(send, 'z', 'KeyZ', 90, 2, '');
-      await sleep(120);
+      await waitFor(`(() => { const { state } = (${host.ctxExpr})(); const c = state.constraints.find(x => x.type === 'distance'); return !!c && c.value !== 80; })()`, `${host.name} Ctrl+Z to revert the dimension`);
 
       const postUndo = await evalJs(`(() => {
         const { state } = (${host.ctxExpr})();
@@ -244,12 +131,8 @@ await (async () => {
       assert(postUndo.histLen < postCommit.histLen, `${host.name}: one real Ctrl+Z must step back history (${postCommit.histLen} -> ${postUndo.histLen})`);
       console.log(`Part 1 passed (${host.name}): idle hidden, activeElement=${postCommit.activeTag} after Enter, 1x Ctrl+Z reverted 80 -> ${postUndo.val} ✅`);
     }
-
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();
 

@@ -62,7 +62,7 @@ if (process.platform === 'win32') {
 }
 
 // 3. Main process vs helper process (--type=) filtering (TASK 423c)
-const cmd123_main = '"C:\\Program Files\\Edge\\msedge.exe" --headless=new --disable-gpu --no-sandbox --no-first-run --disable-extensions --remote-debugging-port=9455 --user-data-dir="C:\\Temp\\sk-shell-smoke-123" about:blank';
+const cmd123_main = '"C:\\Program Files\\Edge\\msedge.exe" --headless=new --disable-gpu --no-sandbox --no-first-run --disable-extensions --user-data-dir="C:\\Temp\\sk-shell-smoke-123" about:blank';
 const cmd123_crashpad = '"C:\\Program Files\\Edge\\msedge.exe" --type=crashpad-handler --user-data-dir="C:\\Temp\\sk-shell-smoke-123" /prefetch:4';
 const cmd123_utility = '"C:\\Program Files\\Edge\\msedge.exe" --type=utility --utility-sub-type=network.mojom.NetworkService --user-data-dir="C:\\Temp\\sk-shell-smoke-123"';
 const cmd123_gpu = '"C:\\Program Files\\Edge\\msedge.exe" --type=gpu-process --user-data-dir="C:\\Temp\\sk-shell-smoke-123"';

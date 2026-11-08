@@ -3,127 +3,20 @@
 // cut-type preview fields), the card look. Headless Edge, real mouse events.
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CUT_TYPES } from '../apps/shaper/src/shaper.js';
+import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
-
-async function sendRealKey(send, key, code, vk, modifiers = 0, text = '') {
-  const down = { type: text ? 'keyDown' : 'rawKeyDown', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
-  if (text) down.text = text;
-  await send('Input.dispatchKeyEvent', down);
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers });
-}
-
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9510 + Math.floor((Date.now() % 400));
-  const userDir = path.join(os.tmpdir(), 'sk-test-455-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '455' });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { send, evalJs, waitFor, navigate, port } = cdp;
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
@@ -148,11 +41,10 @@ await (async () => {
     for (const [name, hex] of Object.entries(tokens)) assert.ok(new RegExp('--' + name + ':\\s*' + hex, 'i').test(html), `token --${name} = ${hex} is declared once in index.html`);
 
     // ── 2. the state model in the real app (real mouse): idle / hover / selected / selected+hover, same for every type ──
-    const loaded = once('Page.loadEventFired');
-    await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-    await Promise.race([loaded, sleep(8000)]);
-    await sleep(1500);
-    await clickEl('[data-mode="design"]'); await sleep(1200);
+    await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
+    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
+    await clickEl('[data-mode="design"]');
+    await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     await evalJs(`(async () => {
       const { findLoops, findOpenChains } = await import('/packages/core/loop-finder.js');
       const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
@@ -176,7 +68,8 @@ await (async () => {
       CUT_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', ...base });
       CUT_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 6.35 });
     })()`);
-    await clickEl('[data-mode="prepare"]'); await sleep(1000);
+    await clickEl('[data-mode="prepare"]');
+    await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare view drawn');
     const world = (wx, wy) => evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
     const move = async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }); await sleep(200); };
     const snap = () => evalJs(`(() => {
@@ -215,7 +108,8 @@ await (async () => {
       await move(pt.x, pt.y);
       const sh = await snap();
       assert.ok(sh.hlSelect >= 1 && sh.bandFill !== s.bandFill, `${type}: selected+hover is selected with a brighter band`);
-      await click(away.x, away.y); await sleep(200); // deselect (click on empty space)
+      await click(away.x, away.y);
+      await waitFor(`document.querySelectorAll('#prepare-canvas .sk-band').length === 0`, type + ' deselected'); // deselect (click on empty space)
       const after = await snap();
       assert.deepStrictEqual([after.bands, after.chips, after.hlSelect], [0, 0, 0], type + ': back to idle after deselect');
     }
@@ -237,7 +131,9 @@ await (async () => {
       return { bg: c.backgroundColor, radius: c.borderRadius, field: f.backgroundColor, labelCase: getComputedStyle(l).textTransform, dPrefix: !!document.querySelector('.cut-dia-prefix'), presets: [...document.querySelectorAll('.cut-preset')].map((b) => b.textContent) }; })()`);
     assert.strictEqual(card.bg, 'rgb(10, 10, 11)'); assert.strictEqual(card.field, 'rgb(42, 43, 45)'); assert.strictEqual(card.labelCase, 'lowercase'); assert.ok(card.dPrefix);
     assert.deepStrictEqual(card.presets, ['.02', '⅛', '¼', '½']);
-    await clickEl('.cut-type-trigger'); await sleep(200);
+    const popOpen = (sel) => waitFor(`(() => { const e = document.querySelector('${sel}'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; })()`, sel + ' open');
+    const planHas = (cond) => waitFor(`import('/apps/shaper/src/cut-plan.js').then(({ CUT_PLAN }) => [...CUT_PLAN.values()].some((r) => r.cutType === 'exterior' && (${cond})))`, 'exterior cut record: ' + cond);
+    await clickEl('.cut-type-trigger'); await popOpen('.cut-type-menu');
     const typeRows = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => ({ id: o.dataset.id, icon: !!o.querySelector('svg.cut-ic'), current: o.classList.contains('is-current'), disabled: o.classList.contains('is-disabled') }))`);
     assert.ok(typeRows.every((o) => o.icon), 'every type row has an icon');
     assert.deepStrictEqual(typeRows.filter((o) => o.current).map((o) => o.id), ['exterior'], 'the current type is highlighted');
@@ -261,17 +157,17 @@ await (async () => {
 
     // the selected target is the outside rect: open the cut card popovers
     const cardR = await rectOf('.cut-card');
-    await clickEl('.cut-type-trigger'); await sleep(150);
+    await clickEl('.cut-type-trigger'); await popOpen('.cut-type-menu');
     const pm = await rectOf('.cut-type-menu');
     assert.ok(pm.right <= cardR.left, 'the cut-type popover opens to the LEFT of the card');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-menu')).borderTopColor`), 'rgb(44, 101, 255)', 'blue popover border');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-trigger .cut-caret')).transform`), 'matrix(-1, 0, 0, -1, 0, 0)', 'the chevron flips while open');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-opt.is-current')).backgroundColor`), 'rgb(24, 46, 109)', 'the current type row is filled #182E6D');
-    await clickEl('.cut-type-trigger'); await sleep(150);
+    await clickEl('.cut-type-trigger'); await waitFor(`document.querySelector('.cut-type-menu').hidden === true`, 'cut-type menu closed');
     assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').hidden`), true, 'clicking again closes it');
 
     // offset: focus selects the value and opens the 3x2 presets popover to the left
-    await clickEl('.cut-offset'); await sleep(200);
+    await clickEl('.cut-offset'); await popOpen('.cut-offset-pop');
     const op = await rectOf('.cut-offset-pop');
     assert.ok(op && op.right <= cardR.left, 'offset presets open to the LEFT');
     const labels = await evalJs(`[...document.querySelectorAll('.cut-offset-pop .cut-preset')].map((b) => b.textContent)`);
@@ -279,7 +175,8 @@ await (async () => {
     assert.strictEqual(await evalJs(`(() => { const i = document.querySelector('.cut-offset'); return i.selectionStart === 0 && i.selectionEnd === i.value.length && i.value.length > 0; })()`), true, 'the offset value is selected on focus');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-offset-pop')).display`) !== 'none', true);
     const eighth = await rectOf('.cut-offset-pop .cut-preset:nth-child(6)');
-    await click(Math.round(eighth.cx), Math.round(eighth.cy)); await sleep(200);
+    await click(Math.round(eighth.cx), Math.round(eighth.cy));
+    await planHas('Math.abs(r.cutOffset - 3.175) < 1e-9');
     let plan = await planRec();
     const outsideRec = plan.map(([, r]) => r).find((r) => r.cutType === 'exterior');
     assert.ok(Math.abs(outsideRec.cutOffset - 3.175) < 1e-9, 'picking 1/8 stores 3.175 mm as the offset');
@@ -291,18 +188,20 @@ await (async () => {
     // cutter shape: the row sits below bit diameter; popover to the left with flat / ball / V-bit (+ the V-bit angle presets)
     const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].map((r) => r.dataset.param || r.dataset.row)`);
     assert.deepStrictEqual(order, ['cutDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter');
-    await clickEl('.cut-shape-trigger'); await sleep(200);
+    await clickEl('.cut-shape-trigger'); await popOpen('.cut-shape-pop');
     const sp = await rectOf('.cut-shape-pop');
     assert.ok(sp && sp.right <= cardR.left, 'cutter shape popover opens to the LEFT');
     assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.cut-shape-pop .cut-type-opt')].map((o) => o.dataset.shape)`), ['endmill', 'ballnose', 'vbit']);
     assert.strictEqual(await evalJs(`document.querySelectorAll('.cut-shape-pop .cut-shape-angles').length`), 0, 'V-bit angles appear only when V-bit is chosen');
-    await clickEl('.cut-shape-pop .cut-type-opt[data-shape="ballnose"]'); await sleep(200);
-    plan = await planRec();
-    assert.strictEqual(plan.map(([, r]) => r).find((r) => r.cutType === 'exterior').cutterShape, 'ballnose', 'cutterShape is stored on the cut record');
-    await clickEl('.cut-shape-trigger'); await sleep(200);
-    await clickEl('.cut-shape-pop .cut-type-opt[data-shape="vbit"]'); await sleep(200); // stays open and now shows its angles
+    await clickEl('.cut-shape-pop .cut-type-opt[    data-shape="ballnose"]');
+        await planHas(`r.cutterShape === 'ballnose'`);
+        plan = await planRec();
+        assert.strictEqual(plan.map(([, r]) => r).find((r) => r.cutType === 'exterior').cutterShape, 'ballnose', 'cutterShape is stored on the cut record');
+        await clickEl('.cut-shape-trigger'); await popOpen('.cut-shape-pop');
+        await clickEl('.cut-shape-pop .cut-type-opt[data-shape="vbit"]'); await waitFor(`!!document.querySelector('.cut-shape-pop .cut-shape-angles')`, 'V-bit angles shown'); // stays open and now shows its angles
     assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.cut-shape-pop .cut-shape-angles .cut-preset')].map((b) => b.textContent)`), ['90°', '60°', '45°', '30°', '20°'], 'the V-bit angles are the existing VBIT_PRESETS');
-    await clickEl('.cut-shape-pop .cut-shape-angles .cut-preset[data-angle="60"]'); await sleep(200);
+    await clickEl('.cut-shape-pop .cut-shape-angles .cut-preset[data-angle="60"]');
+    await planHas('r.cutterAngle === 60');
     plan = await planRec();
     const rec = plan.map(([, r]) => r).find((r) => r.cutType === 'exterior');
     assert.deepStrictEqual([rec.cutterShape, rec.cutterAngle], ['vbit', 60], 'a V-bit angle comes from VBIT_PRESETS');
@@ -319,10 +218,7 @@ await (async () => {
       assert.ok(!/cutter|vbit|ballnose/i.test(exp({ cutterShape: 'vbit', cutterAngle: 60 })));
     }
     console.log('prepare-look: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

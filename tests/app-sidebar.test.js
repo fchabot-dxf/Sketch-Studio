@@ -2,12 +2,9 @@
 // apps and marks the current one; Esc / outside click close it; focus stays trapped while open; the old app-switcher dropdown is gone.
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { APPS, appTitle, appIconDataUri } from '../packages/ui/app-registry.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { CUT_TYPES, effectiveCutRecord } from '../apps/shaper/src/shaper.js';
@@ -17,116 +14,12 @@ import { deriveCutFootprint } from '#core/profile-model.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
-
-async function sendRealKey(send, key, code, vk, modifiers = 0, text = '') {
-  const down = { type: text ? 'keyDown' : 'rawKeyDown', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
-  if (text) down.text = text;
-  await send('Input.dispatchKeyEvent', down);
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers });
-}
-
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9510 + Math.floor((Date.now() % 400));
-  const userDir = path.join(os.tmpdir(), 'sk-test-473-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '473', width: 1400, height: 800 });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, evalJs, waitFor, navigate } = cdp;
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
@@ -140,7 +33,6 @@ await (async () => {
     };
     const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
 
-    await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
     const hosts = [
       { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
       { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
@@ -163,18 +55,18 @@ await (async () => {
       fs.writeFileSync(path.join(REPO_ROOT, '.evidence', '473', '_icons.html'), `<body style="background:#3F4145;margin:0;font:14px system-ui;color:#fff">${row(16)}${row(64)}<div style="margin:14px;display:flex;gap:30px">${APPS.map((a) => `<span>${a.name}</span>`).join('')}</div></body>`);
     }
     const key2 = async (k, code, vk, mods = 0) => { await sendRealKey(send, k, code, vk, mods); await sleep(150); };
+    const SIDEBAR_OPEN = `document.querySelector('.sk-sidebar').classList.contains('open')`;
     for (const host of hosts) {
-      const l = once('Page.loadEventFired');
-      await send('Page.navigate', { url: `http://127.0.0.1:${port}${host.path}` });
-      await Promise.race([l, sleep(10000)]);
-      await sleep(1800);
+      await navigate(`http://127.0.0.1:${port}${host.path}`, 10000);
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn') && !!document.querySelector('link[rel="icon"]') && !!document.querySelector('.sk-sidebar')`, `${host.id} to mount its sidebar`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-appsw').length`), 0, `${host.id}: the app-switcher dropdown is gone`);
       assert.ok([appTitle(host.id), appTitle(host.id, 'Untitled')].includes(await evalJs(`document.title`)), `${host.id}: document.title comes from the registry (with the design name once a design exists)`);
       assert.strictEqual(await evalJs(`document.querySelector('link[rel="icon"]').getAttribute('href')`), appIconDataUri(host.id), `${host.id}: the favicon comes from the registry`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar-btn').length`), 1, `${host.id}: one sidebar button`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: closed at start`);
       // open with a real click on the header button
-      await clickEl('.sk-sidebar-btn'); await sleep(400);
+      await clickEl('.sk-sidebar-btn');
+      await waitFor(`${SIDEBAR_OPEN} && !!document.querySelector('.sk-sidebar [data-section="goto"] [data-app]')`, `${host.id}: the drawer to open`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), true, `${host.id}: the button opens the drawer`);
       const acts = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-section="actions"] [data-action]')].map((b) => b.dataset.action)`);
       assert.deepStrictEqual(acts, host.actions, `${host.id}: its own actions, no other host's`);
@@ -192,19 +84,21 @@ await (async () => {
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').contains(document.activeElement)`), true);
       // Esc closes
       await key2('Escape', 'Escape', 27);
+      await waitFor(`!(${SIDEBAR_OPEN})`, `${host.id}: Esc to close the drawer`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: Esc closes`);
       // reopen, click OUTSIDE (the backdrop) closes
-      await clickEl('.sk-sidebar-btn'); await sleep(300);
+      await clickEl('.sk-sidebar-btn');
+      await waitFor(SIDEBAR_OPEN, `${host.id}: the drawer to reopen`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), true);
-      await click(1100, 500); await sleep(300);
+      await click(1100, 500);
+      await waitFor(`!(${SIDEBAR_OPEN})`, `${host.id}: the outside click to close the drawer`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: an outside click closes`);
       console.log(`${host.id}: sidebar ok (${acts.join(', ')})`);
     }
     // ── a second VIEW plugs in (the future Projects browser): registered views swap the drawer body, drill down and come back ──
     {
-      const l = once('Page.loadEventFired');
-      await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-      await Promise.race([l, sleep(10000)]); await sleep(1500);
+      await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 10000);
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, 'Shaper to mount its sidebar');
       await evalJs(`(async () => {
         const { createAppSidebar } = await import('/packages/ui/app-sidebar.js');
         const sb = createAppSidebar({ current: 'shaper', docName: 'T', actions: [{ id: 'projects', label: 'Projects', onClick: () => {} }, { id: 'danger', label: 'Danger', confirm: 'Sure?', onClick: () => { window.__ran = (window.__ran || 0) + 1; } }],
@@ -214,26 +108,28 @@ await (async () => {
           } } } });
         document.body.appendChild(sb.el); window.__sb2 = sb; sb.open();
       })()`);
-      await sleep(300);
+      await waitFor(`(() => { const b = document.querySelector('.sk-sidebar [data-action="danger"]'); return !!b && window.__sb2.isOpen() && b.getBoundingClientRect().width > 0; })()`, 'the second sidebar to open');
       // an action with `confirm` asks inline first; Cancel returns to the list without running it
-      await clickEl('.sk-sidebar [data-action="danger"]'); await sleep(200);
+      await clickEl('.sk-sidebar [data-action="danger"]');
+      await waitFor(`!!document.querySelector('.sk-sidebar .sk-sidebar-confirm')`, 'the confirm prompt');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar .sk-sidebar-confirm')`), true, 'a confirm action asks before running');
-      await clickEl('.sk-sidebar-confirm .cancel'); await sleep(200);
+      await clickEl('.sk-sidebar-confirm .cancel');
+      await waitFor(`!document.querySelector('.sk-sidebar .sk-sidebar-confirm')`, 'Cancel to dismiss the confirm prompt');
       assert.strictEqual(await evalJs(`(window.__ran || 0) === 0 && !!document.querySelector('.sk-sidebar [data-action="danger"]')`), true, 'Cancel runs nothing and restores the row');
-      await evalJs(`window.__sb2.showView('projects')`); await sleep(300);
+      await evalJs(`window.__sb2.showView('projects')`);
+      await waitFor(`!!document.querySelector('.sk-sidebar-view')`, 'the projects view to render');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view').dataset.view`), 'projects', 'the extra view replaced the main body');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`), false, 'the main list is not shown while the view is');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl`), 'projects');
-      await clickEl('.sk-sidebar-view .row'); await sleep(200); // drill into a project
+      await clickEl('.sk-sidebar-view .row');
+      await waitFor(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl === 'designs of Kitchen'`, 'the view to drill into a project');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl`), 'designs of Kitchen', 'drills down a level inside the view');
-      await clickEl('.sk-sidebar-back'); await sleep(200);
+      await clickEl('.sk-sidebar-back');
+      await waitFor(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`, 'the back arrow to return to the main view');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`), true, 'the back arrow returns to the main view');
     }
     console.log('app-sidebar: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

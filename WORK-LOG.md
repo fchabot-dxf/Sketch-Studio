@@ -13219,3 +13219,6 @@ Fusion glyph polish (Default byte-identical: dump md5 fe31d63a.../00434aba... id
 
 ## TURN 491 (midpoint addition)
 icon-midpoint redrawn as Fusion's: apex-up triangle over a short baseline bar, no end ticks; same paint (white face, HALO_PX outline, no white stroke). No other glyph/sprite shape touched. Evidence .evidence/491/midpoint-after.png (before = midpoint tile in glyph-sheet-before.png).
+
+## TURN 491 (midpoint correction)
+Supersedes the hand-drawn midpoint: icon-midpoint is now the existing toolbar triangle, path 'M6.5,2 L11.5,11 L1.5,11 Z' (viewBox 13x13) copied from 'icon-midpoint' in packages/ui/cursor-manager.js; no ticks/baseline; same Fusion paint. Evidence .evidence/491/midpoint-before.png / midpoint-after.png.

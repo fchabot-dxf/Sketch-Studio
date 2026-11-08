@@ -89,12 +89,12 @@ export const FUSION_GLYPHS = {
       { d: 'M19.775,83.029l-10.338,0l0,-0.804l10.338,0l0,0.804Z' },
     ],
   },
-  // Not in the sprite (drawn to match): a line with end ticks and a triangle marking its middle.
+  // The toolbar/cursor midpoint triangle: path "M6.5,2 L11.5,11 L1.5,11 Z" (viewBox 0 0 13 13) copied from
+  // 'icon-midpoint' in packages/ui/cursor-manager.js (the symbol the ribbon 'Mid' button uses).
   'icon-midpoint': {
-    cx: 0, cy: 0, size: 14,
+    cx: 6.5, cy: 6.5, size: 13,
     els: [
-      { d: 'M0,-5.6L4.6,1.6L-4.6,1.6Z' },
-      { d: rect(-5.6, 3, 11.2, 1.2) },
+      { d: 'M6.5,2L11.5,11L1.5,11Z' },
     ],
   },
   // Not in the sprite (drawn to match, same stroke weight 0.8): a point sitting on a line.

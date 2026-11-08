@@ -12314,3 +12314,99 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 440 (PLAN) — Pen Plotter Design Geometry Export
+
+### 1. A Toolpath's Target: How Design Geometry Exports by Default
+- **Default values in `state.js:219-242` (`makeToolpath`):**
+  - `targetType`: `"selection"` (legacy discriminator)
+  - `targetArtLayerId`: `targetArtLayerId` (defaults to `null`)
+  - `targetShapeIds`: `[]` (starts empty)
+  - `plotColorId`: `null` (defaults to null; scheme color used)
+- **Pen Plotter Pen Model:**
+  - `state.plotColors`: array of physical pens `{ id, name, color, strokeWidth, penSlot }`.
+  - Quoting `state.js:162-167` `penIdForShape`:
+    ```javascript
+    export function penIdForShape(shapeId) {
+        const hex = shapeColorFor(shapeId);
+        if (!hex || !state.plotColors.length) return null;
+        const idx = nearestColorIndex(hex, state.plotColors.map(p => p.color));
+        return idx >= 0 ? state.plotColors[idx].id : null;
+    }
+    ```
+  - Quoting `state.js:172-177` `toolpathPenId`:
+    ```javascript
+    export function toolpathPenId(tp) {
+        if (!tp) return null;
+        if (tp.plotColorId) return tp.plotColorId;
+        for (const id of (tp.targetShapeIds || [])) { const p = penIdForShape(id); if (p) return p; }
+        return null;
+    }
+    ```
+- **How a Toolpath Knows Which Shapes Belong to It:**
+  1. *Explicit targets:* When `tp.targetShapeIds && tp.targetShapeIds.length > 0`, it resolves those exact shape IDs (checking `state.artLayers` first, then `#core` sketch shapes via `resolveCoreShapes`).
+  2. *Explicit art layer:* When `tp.targetArtLayerId` is set, it resolves the shapes of that art layer (`state.artLayers.find(l => l.id === tp.targetArtLayerId).shapes`).
+  3. *Default / Pen-matching (#core sketch):* When `!tp.targetArtLayerId` and `(!tp.targetShapeIds || tp.targetShapeIds.length === 0)`:
+     - The toolpath targets `#core` sketch geometry (`state.coreSketch.shapes`) filtered by pen:
+       - `tpPen = toolpathPenId(tp)`
+       - If `tpPen != null`: matches `#core` shapes where `penIdForShape(sh.id) === tpPen`.
+       - If `tpPen == null`:
+         - If `state.plotColors.length === 0` (clean project start, no palette defined): all shapes have `penIdForShape(sh.id) === null`, so the default toolpath targets ALL `#core` sketch shapes.
+         - If `state.plotColors.length > 0`: targets `#core` shapes unassigned to any palette pen (`penIdForShape(sh.id) === null`).
+     - This ensures that drawing in Design with the default starter "Outline" toolpath automatically targets and exports all drawn Design geometry without requiring manual target-editing or selection!
+
+### 2. Preview / Export Split Audit & Unification
+- **The Split Today:**
+  - `apps/penplotter/src/export.js:87-105` defines `collectToolpathShapes(tp)`: branches on `tp.targetType === "layer"`, falls back to `state.selectedShapeIds` when `tp.targetShapeIds` is empty, returns `[]` when selection is empty.
+  - `apps/penplotter/src/preview.js:151-170` defines `resolveToolpathShapes(tp)`: checks `tp.targetShapeIds`, then `tp.targetArtLayerId`, else `[]`.
+  - `apps/penplotter/src/interaction.js:331` imports and calls `resolveToolpathShapes` from `preview.js`.
+  - Neither of them resolves the default toolpath to `#core` sketch shapes, and export diverges from preview.
+- **Unification Plan:**
+  - Place ONE unified function `collectToolpathShapes(tp)` in `apps/penplotter/src/core-geometry.js`.
+  - Signature: `collectToolpathShapes(tp)` (reads `state` from `./state.js`).
+  - Returns: `Array<PlotterShape>` (array of shape objects ready for `expandToolpathShapes`, polylines in mm/world coords).
+  - Both `export.js` and `preview.js` (and `interaction.js`) will import and use this single `collectToolpathShapes`.
+
+### 3. Status of the Art Store
+- The art store (`state.artLayers`) stays!
+- UNIFY-7 retired the drawing tools and Draw tab for art layers, replacing the authoring canvas with the `#ui` Design sketcher.
+- However, the art store was NOT deleted:
+  - SVG imports still parse into `state.artLayers` (via `svg-import.js`).
+  - Existing project files and test fixtures continue to store art shapes in `state.artLayers`.
+- The unified collector handles both `state.artLayers` and `state.coreSketch` cleanly without breaking imported SVGs or existing art layer workflows.
+
+
+## TURN 440 — Unified Pen Plotter Shapes-of-Toolpath Resolution & Design Export
+
+### 1. Root Cause & Architecture
+- **Root Cause Verified:**
+  - `apps/penplotter/src/export.js:87-105` `collectToolpathShapes` branched on `tp.targetType === 'layer'`, looking up `tp.targetArtLayerId` in `state.artLayers`, then falling back to `state.selectedShapeIds` when `tp.targetShapeIds` was empty. When drawing in Design, geometry went to `#core` sketch (`state.coreSketch`), which only resolved if explicit IDs were passed.
+  - `apps/penplotter/src/preview.js:151-170` had its own separate `resolveToolpathShapes` that only read `targetShapeIds` or `targetArtLayerId`.
+  - The default starter "Outline" toolpath has `targetShapeIds: []` and `targetArtLayerId: null`. Neither preview nor export resolved `#core` sketch shapes for this default toolpath.
+- **Unified Collector (`apps/penplotter/src/core-geometry.js`):**
+  - Implemented single source of truth `collectToolpathShapes(tp)`.
+  - Resolution precedence:
+    1. Explicit `tp.targetShapeIds`: resolves IDs from `state.artLayers` and `#core` sketch via `resolveCoreShapes`.
+    2. Explicit `tp.targetArtLayerId`: resolves `state.artLayers` shapes.
+    3. Default / #core sketch geometry: when `!tp.targetArtLayerId` and `targetShapeIds` is empty, matches `#core` sketch shapes against the toolpath's pen (`toolpathPenId(tp)`), or all shapes when no pen/palette is configured.
+    4. Legacy art store fallback: resolves unassigned art layer shapes if no sketch shapes exist.
+- **Preview & Export Wiring:**
+  - `apps/penplotter/src/export.js` and `apps/penplotter/src/preview.js` now import and use the single unified `collectToolpathShapes(tp)`.
+
+### 2. Verification & Evidence
+- **Automated Tests (`tests/penplotter-export.test.js`):**
+  - Test 1: Design sketch with rectangle (4 lines) + separate line -> `buildGcodeEntries()` produces 1 entry (`1_Outline.gcode`) containing rapid moves and pen-down contouring moves with flipped Y coordinates (`y_mach = 200 - y_world`). Rect corners: `(10, 180) -> (50, 180) -> (50, 140) -> (10, 140) -> (10, 180)`. Line: `(60, 130) -> (80, 110)`.
+  - Test 2: Imported SVG art layer -> exports 1 entry with identical behavior.
+  - Test 3: Exact parity between `preview.js` and `export.js` verified.
+- **Headless Live Evidence Capture (`.evidence/440/`):**
+  - Repro executed end-to-end via headless Edge CDP on `/apps/penplotter/index.html`:
+    - Design: populated rectangle and line in `window.__sketch.controller.state`.
+    - Toolpath: switched to Toolpath stage (recalculated preview overlay).
+    - Export: switched to Export stage, clicked `#exportBtn`.
+    - Toast confirmed: `"Exported 1 G-code file → plotter_gcode.zip"`.
+    - Downloaded `plotter_gcode.zip` (MD5: `4A074E793A062E0755585809B1C64980`), containing `1_Outline.gcode` (MD5: `4F43475084DC3C16813F03D140C9E508`).
+    - Captured screenshot `.evidence/440/export-stage.png` (MD5: `781F06A91DF3E1B3E3A723BC9A4CB415`).
+- **Hygiene & Gate:**
+  - Headless browsers: 0 left.
+  - `node scripts/gate.cjs`: `GATE files=164 pass=164 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

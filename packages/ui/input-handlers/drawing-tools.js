@@ -11,7 +11,7 @@ import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLine
 import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
 import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from '#ui/input-handlers/circle-tool.js';
-// Polygon tool removed: polygon-tool.js import removed
+import { handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { handleJointSelection } from '#ui/input-handlers/selection-tools.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
@@ -35,7 +35,7 @@ export function setupDrawingTools(svg, state) {
     if (!state.rectMode) {
         state.rectMode = RECT_MODES.TWO_POINT;
     }
-    // Initialize line, rect, circle, polygon and arc tools
+    // Initialize line, rect, circle and arc tools (the polygon tool keeps no setup: no numeric input of its own)
     setupLineTool(svg, state);
     setupRectTool(svg, state);
     setupCircleTool(svg, state);
@@ -76,6 +76,8 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
             return handleRectPointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerDown(e, svg, state, hitSnap, w);
+        case TOOL_MODES.POLYGON:
+            return handlePolygonPointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.ARC:
             // If user clicked on a JOINT that belongs to an existing arc, start a joint drag instead of creating a new arc
             try {
@@ -125,6 +127,8 @@ export function handleDrawingPointerMove(e, svg, state, w) {
             return handleRectPointerMove(e, svg, state, w);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerMove(e, svg, state, w);
+        case TOOL_MODES.POLYGON:
+            return handlePolygonPointerMove(e, svg, state, w);
         case TOOL_MODES.ARC:
             return handleArcPointerMove(e, svg, state, w);
         default:
@@ -156,6 +160,8 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
             return handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging);
         case TOOL_MODES.CIRCLE:
             return handleCirclePointerUp(e, svg, state, hitSnap, w, wasDragging);
+        case TOOL_MODES.POLYGON:
+            return handlePolygonPointerUp(e, svg, state, hitSnap, w);
         case TOOL_MODES.ARC:
             return handleArcPointerUp(e, svg, state, hitSnap, w, wasDragging);
     }
@@ -178,7 +184,7 @@ export function resetDrawingState(state) {
     try { resetLineState(state); } catch(_) {}
     try { resetRectState(state); } catch(_) {}
     try { resetCircleState(state); } catch(_) {}
-    // Polygon tool removed; no reset needed
+    try { resetPolygonState(state); } catch(_) {}
     try { resetArcState(state); } catch(_) {}
     try { clearPreview(state); } catch(_) {}
 }

@@ -1,6 +1,6 @@
 // tests/relief-model.test.js — TASK 459: the 3D Review terrace model (pure #core, no WebGL).
 import assert from 'node:assert';
-import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea } from '#core/relief-model.js';
+import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea, createReliefCache } from '#core/relief-model.js';
 import { regionsFromRings, unionRegions, diffRegions } from '#core/plot/clip.js';
 import { deriveCutFootprint, deriveCutFootprintAt } from '#core/profile-model.js';
 import { cutterTerraces, cutterProfile, SHAPE_SLICES } from '#core/cutter-profile.js';
@@ -277,6 +277,78 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   near(r.stats.areas.floor, 800, 1e-3, 'both floors present');
   near(r.stats.areas.top, 10000 - 800, 1e-3, 'top loses BOTH pockets');
   near(r.stats.areas.wall, 80 * 3 + 80 * 8, 1e-3, 'each pocket wall at its own depth');
+}
+
+// WINDING: every triangle's geometric normal (from its index order, counter-clockwise = front face) agrees with the stored normal, for every
+// mesh: a face wound the wrong way is culled by the renderer (invisible from outside) even though its stored normal is right.
+{
+  const r = buildRelief({ stock, bounds, items: [
+    { key: 'a', cutType: 'inside', cutDepth: T, footprints: fp([rect(10, 10, 20, 20)]) },
+    { key: 'p', cutType: 'pocket', cutDepth: 5, footprints: fp([rect(50, 10, 30, 30), rect(60, 20, 10, 10)], 'evenodd') },
+    { key: 'q', cutType: 'pocket', cutDepth: 9, footprints: fp([rect(55, 15, 8, 8)]) },
+  ] });
+  let checked = 0;
+  for (const [name, g] of Object.entries(r.meshes)) {
+    for (let t = 0; t < g.indices.length; t += 3) {
+      const [a, b, c] = [0, 1, 2].map((v) => g.indices[t + v] * 3);
+      const P = g.positions, N = g.normals;
+      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+      const dot = (uy * vz - uz * vy) * N[a] + (uz * vx - ux * vz) * N[a + 1] + (ux * vy - uy * vx) * N[a + 2];
+      assert.ok(dot > 0, `${name}: triangle ${t / 3} is wound against its normal`); checked++;
+    }
+  }
+  assert.ok(checked > 40);
+}
+
+// BUILD CACHE (TASK 471): a cached rebuild is the SAME mesh, byte for byte, as a cold build; it redoes only what a change touches
+{
+  const st = { joints: new Map([['a', { x: 10, y: 10 }], ['b', { x: 70, y: 10 }], ['c', { x: 70, y: 50 }], ['d', { x: 10, y: 50 }]]), constraints: [],
+    shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })) };
+  const loop = findLoops(st)[0];
+  st.vcarves = [{ id: 'vc', region: 'loop:' + loop.id, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 3 }];
+  const mk = () => [...planReliefItems(st, new Map()),
+    { key: 'p', sig: 'pocket-a', cutType: 'pocket', cutDepth: 5, footprints: fp([rect(75, 5, 20, 20)]) },
+    { key: 'h', sig: 'hole-a', cutType: 'inside', cutDepth: 'unset', footprints: fp([rect(75, 35, 10, 10)]) }];
+  const same = (a, b, msg) => { for (const k of ['top', 'floor', 'wall', 'bottom', 'side']) for (const f of ['positions', 'normals', 'indices']) assert.deepStrictEqual(Array.from(a.meshes[k][f]), Array.from(b.meshes[k][f]), `${msg}: ${k}.${f}`); };
+  const items0 = mk();
+  assert.ok(items0.every((i) => typeof i.sig === 'string' && i.sig.length > 3), 'every planned item carries a content signature');
+  assert.deepStrictEqual(mk().map((i) => i.sig), items0.map((i) => i.sig), 'signatures are stable across calls');
+  const cache = createReliefCache();
+  const cold = buildRelief({ stock, bounds, items: mk() });
+  const fill = buildRelief({ stock, bounds, items: mk(), cache });
+  same(cold, fill, 'cache fill = cold');
+  assert.ok(fill.stats.cache.misses > 0 && fill.stats.cache.hits === 0);
+  const warm = buildRelief({ stock, bounds, items: mk(), cache });
+  same(cold, warm, 'warm = cold');
+  assert.strictEqual(warm.stats.cache.misses, 0, 'an unchanged rebuild redoes nothing');
+  // a stock thickness change (a through level moves): same regions, redone only where the depth matters
+  const thick = { ...stock, thickness: 25 };
+  const w2 = buildRelief({ stock: thick, bounds, items: mk(), cache });
+  same(buildRelief({ stock: thick, bounds, items: mk() }), w2, 'thickness change');
+  assert.strictEqual(w2.stats.cache.misses, 0, 'a thickness change reuses every cached region / triangulation');
+  // one cut changes (its signature changes): only the levels it touches are redone, and the mesh still equals a cold build
+  const items2 = mk(); const pi = items2.findIndex((i) => i.key === 'p'); items2[pi] = { ...items2[pi], sig: 'pocket-b', cutDepth: 9 };
+  const w3 = buildRelief({ stock, bounds, items: items2, cache });
+  same(buildRelief({ stock, bounds, items: items2.map((i) => ({ ...i, sig: undefined })) }), w3, 'one cut changed');
+  assert.ok(w3.stats.cache.hits > w3.stats.cache.misses, `most work is reused (${w3.stats.cache.hits} hits, ${w3.stats.cache.misses} misses)`);
+  // the SAME depth but different geometry (new signature): every level must follow the new regions, not the cached ones
+  const items3 = mk(); const hi = items3.findIndex((i) => i.key === 'h'); items3[hi] = { ...items3[hi], sig: 'hole-b', footprints: fp([rect(77, 37, 6, 6)]) };
+  const pj = items3.findIndex((i) => i.key === 'p'); items3[pj] = { ...items3[pj], sig: 'pocket-c', footprints: fp([rect(76, 6, 18, 18)]) };
+  same(buildRelief({ stock, bounds, items: items3.map((i) => ({ ...i, sig: undefined })) }), buildRelief({ stock, bounds, items: items3, cache }), 'same depth, new geometry');
+  // a different BOARD (explicit width clips the cuts): the cached clip / level work must not leak across boards
+  const narrow = { ...stock, width: 60, height: 60 };
+  same(buildRelief({ stock: narrow, bounds, items: mk() }), buildRelief({ stock: narrow, bounds, items: mk(), cache }), 'smaller board');
+  same(buildRelief({ stock, bounds, items: mk() }), buildRelief({ stock, bounds, items: mk(), cache }), 'back to the big board');
+  // the cache keeps only what the LAST build used
+  buildRelief({ stock, bounds, items: [items0.find((i) => i.key === 'h')], cache });
+  assert.ok(cache.item.size <= 1 && cache.E.size <= 1, 'unused entries are dropped');
+  // an item without a signature switches the cache off for that build (nothing stored, nothing stale served)
+  const c2 = createReliefCache();
+  const r2 = buildRelief({ stock, bounds, items: [{ key: 'x', cutType: 'inside', cutDepth: T, footprints: fp([rect(5, 5, 10, 10)]) }], cache: c2 });
+  assert.strictEqual(r2.stats.cache, null); assert.strictEqual(c2.item.size, 0);
+  // signatures follow the content: a moved joint or a changed record changes the signature
+  st.joints.get('c').x = 71; const moved = planReliefItems(st, new Map());
+  assert.notStrictEqual(moved[0].sig, items0[0].sig, 'moving a joint changes the ring signatures');
 }
 
 // (8) determinism

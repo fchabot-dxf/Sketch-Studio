@@ -36,7 +36,7 @@ import { browserFileSeam } from '#ui/project-file.js';
  *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
  *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive indicator.
  *
- * Returns { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, designId, store }.
+ * Returns { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, store }.
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange } = {}) {
   let lastSig = null;
@@ -95,5 +95,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
     return p ? load(p) : null;
   }
 
-  return { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, designId: () => boundId, store };
+  /** After store.cloud.moveProjectToDrive / makeProjectLocal: the design this buffer is bound to may have a new id (`designIds` = { old: new }). */
+  function followMoves(designIds) { if (boundId && designIds && designIds[boundId]) boundId = designIds[boundId]; }
+
+  return { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId: () => boundId, store };
 }

@@ -186,6 +186,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const GLYPH_BG_DIAMETER_PX = Math.round(SYMBOL_SIZE_PX * 1.6); // derived background circle size (was 32 when symbol=20) 
   const INFERENCE_SIZE_PX = getNum('GLYPH_INFERENCE_SIZE_PX', 24);    // Inference hint icon size
   const GLYPH_OFFSET_PX = getNum('GLYPH_OFFSET_PX', 40);      // Offset from joints/shapes (increased to avoid overlap)
+  const TANGENT_GLYPH_OFFSET_PX = 6;                          // A tangent glyph sits this far (screen px) off its tangency point, outside the curve
 
   // Dimension value label: a filled box with white bold text (default), or — DIM_LABEL_BOX off — plain text in the
   // dimension colour straight on the dimension line.
@@ -2042,16 +2043,18 @@ switch(c.type){
         if(!lineShape || !circleShape || !lineShape.joints || !circleShape.joints) return;
         const la = joints.get(lineShape.joints[0]); const lb = joints.get(lineShape.joints[1]); const center = joints.get(circleShape.joints[0]);
         if(!la || !lb || !center) return;
-        const mx = (la.x + lb.x) / 2, my = (la.y + lb.y) / 2;
         const { nx, ny } = perpendicularNormal(la, lb);
-        const offset = scale(GLYPH_OFFSET_PX);
-        const gx = mx + nx * offset, gy = my + ny * offset;
+        // The ONE tangent glyph sits at the tangency point (foot of the perpendicular from the centre onto the line),
+        // pushed TANGENT_GLYPH_OFFSET_PX off it, away from the centre (outside the curve).
+        const ldx = lb.x - la.x, ldy = lb.y - la.y, ll = ldx * ldx + ldy * ldy;
+        const tt = ll > 1e-9 ? ((center.x - la.x) * ldx + (center.y - la.y) * ldy) / ll : 0.5;
+        const tx = la.x + ldx * tt, ty = la.y + ldy * tt;
+        const side = ((center.x - tx) * nx + (center.y - ty) * ny) > 0 ? -1 : 1;
+        const offset = scale(TANGENT_GLYPH_OFFSET_PX);
+        const gx = tx + nx * offset * side, gy = ty + ny * offset * side;
         const isHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
         const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
-        const smartPos = smartGlyphPosMap.get(c);
-        const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : (smartPos ? { x: smartPos.x, y: smartPos.y } : { x: gx, y: gy });
-        try{ c.glyphPos = pos; }catch(_){ }
-        // Render standard tangent icon
+        const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : { x: gx, y: gy };
         drawUnifiedGlyph(c, pos.x, pos.y, 'icon-tangent');
         break;
       }

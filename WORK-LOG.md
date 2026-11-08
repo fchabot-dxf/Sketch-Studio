@@ -13225,3 +13225,6 @@ Supersedes the hand-drawn midpoint: icon-midpoint is now the existing toolbar tr
 
 ## TURN 491 (midpoint scale)
 Fusion midpoint triangle (cursor-manager.js 'icon-midpoint') scaled to the other glyphs' extent: size 13 -> 11.7. Evidence .evidence/491/midpoint-after.png.
+
+## TURN 491 (tangent glyph)
+Tangent glyph now sits at the tangency point (foot of the perpendicular from the circle/arc centre onto the line), TANGENT_GLYPH_OFFSET_PX = 6 off it, outside the curve; one glyph per tangent constraint (was: line midpoint + 40px normal / smart-layout fan). Fixed in the one TANGENT case of drawConstraintGlyph in svg-renderer.js. Applies to Default too (the old position was wrong there as well). Test tests/tangent-glyph-position.test.js (line+circle, fillet corner: within 6px, no shared position). Evidence .evidence/491/fillet-before.png / fillet-after.png. Icon reuse rule: no new icon drawn this turn (tangent uses the existing icon-tangent).

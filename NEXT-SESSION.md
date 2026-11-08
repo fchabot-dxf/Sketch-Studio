@@ -168,6 +168,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
           fill-rule="nonzero". Matches our pocket colour. A pocket can carry a manual offset ("0.125 in"). A circle
           pocket (0.300 in) sitting inside a rect pocket (0.400 in) is written as two SEPARATE plain paths, not one
           evenodd compound. Still no On Line sample.
+        - OWNER DECISION: "follow each except shape structure for now". TASK 456 (queued, first free seat): attribute
+          formats exactly as Studio (depth "0.100 in"; offset always, "0in" / "0.063 in"; toolDia always, "0.125in";
+          attribute order cutType, depth, offset, bit). Keep our flat elements and <circle>. mm format unverified.
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would
           settle the pocket/on-line encoding and the On Line offset question.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on

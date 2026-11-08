@@ -50,6 +50,12 @@ function endDimUndo(state){
     if (!state) return;
     try { if (state.endUndoGroup) state.endUndoGroup(); } catch(_) {}
 }
+function finalizeDimBirth(c, state){
+    endDimUndo(state);
+    if (!c) return;
+    try { c.__newlyPlaced = true; } catch(_) {}
+    c.__birthHistoryLength = state && state.history ? state.history.length : null;
+}
 
 export function setupDimensionTool(svg, appState) {
     dimensionState.pendingDimension = null;
@@ -173,8 +179,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             if (state.selectedShapes) state.selectedShapes.clear();
             if (state.selectedJoints) state.selectedJoints.clear();
             if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
-            endDimUndo(state);
-            c.__birthHistoryLength = state.history ? state.history.length : null;
+            finalizeDimBirth(c, state);
             return true;
         }
     }
@@ -224,8 +229,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         if (state.selectedShapes) state.selectedShapes.clear();
         if (state.selectedJoints) state.selectedJoints.clear();
         if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
-        endDimUndo(state);
-        c.__birthHistoryLength = state.history ? state.history.length : null;
+        finalizeDimBirth(c, state);
         return true;
     }
 
@@ -437,6 +441,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
 
                     if (targetConstraint) {
                         startPlacing(svg, state, targetConstraint, e, w);
+                        finalizeDimBirth(targetConstraint, state);
                     }
                     return true;
                 }
@@ -584,7 +589,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 startPlacing(svg, state, c, e, w);
             }
             dimensionState.pendingDimension = null;
-            endDimUndo(state);
+            finalizeDimBirth(c, state);
             return true;
         }
 
@@ -609,7 +614,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
             startPlacing(svg, state, c, e, w);
             updateConstraintOffset(state, c, w); // Initialize dimMode and isDriven status
             dimensionState.pendingDimension = null;
-            endDimUndo(state);
+            finalizeDimBirth(c, state);
             return true;
         }
 
@@ -678,7 +683,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 state.drag = null; 
             }
             updateConstraintOffset(state, c, w); // Initialize dimMode and isDriven status
-            endDimUndo(state);
+            finalizeDimBirth(c, state);
             return true;
         }
         else if (shape.type === 'circle' || shape.type === 'arc') {
@@ -730,7 +735,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
             } else {
                 state.drag = null;
             }
-            endDimUndo(state);
+            finalizeDimBirth(c, state);
             return true;
         }
     }

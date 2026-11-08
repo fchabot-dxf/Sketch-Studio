@@ -259,7 +259,210 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // MEASURE: Click path dimension undo count
+  // CLICK PATH TESTS (TASK 438b)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // C1: Click Line -> create + commit 75 -> 1 undo removes dim
+  {
+    console.log('Running C1: click line single-undo...');
+    const { state, lineShape, j1, j2 } = createTestSketch();
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    handleDimensionPointerDown(pt, svg, state, null, { shape: lineShape }, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+    dimInput.value = '75';
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Enter', stopPropagation: () => {} });
+
+    assert(state.history.length === historyBefore + 1, `History should grow by 1, had ${historyBefore}, got ${state.history.length}`);
+    const dim = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(dim, 'Distance constraint must exist');
+    assert(dim.value === 75, `Distance constraint value should be 75, got ${dim.value}`);
+
+    state.undo();
+
+    const dimAfter = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(!dimAfter, `One undo() must leave NO distance constraint, but found: ${JSON.stringify(dimAfter)}`);
+    const pt1 = state.joints.get(j1);
+    const pt2 = state.joints.get(j2);
+    const len = Math.hypot(pt2.x - pt1.x, pt2.y - pt1.y);
+    assert(Math.abs(len - 100) < 1e-3, `Line must be at original length 100, got ${len}`);
+    assert(state.history.length === historyBefore, `History length must be restored to ${historyBefore}`);
+    console.log('C1 passed ✅');
+  }
+
+  // C1-Esc1: Click Line -> Escape while placing (resetDimensionState)
+  {
+    console.log('Running C1-Esc1: click line Escape while placing...');
+    const { state, lineShape } = createTestSketch();
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    handleDimensionPointerDown(pt, svg, state, null, { shape: lineShape }, null);
+    assert(state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'Placing constraint added');
+
+    resetDimensionState(state);
+
+    assert(state.history.length === historyBefore, `History length must be unchanged after Escape while placing, had ${historyBefore}, got ${state.history.length}`);
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No distance constraint after resetDimensionState');
+    console.log('C1-Esc1 passed ✅');
+  }
+
+  // C1-Esc2: Click Line -> anchor -> Escape in value box (handleCancel)
+  {
+    console.log('Running C1-Esc2: click line Escape in value box...');
+    const { state, lineShape } = createTestSketch();
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    handleDimensionPointerDown(pt, svg, state, null, { shape: lineShape }, null);
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation: () => {} });
+
+    assert(!isInputActive(), 'Input must be closed');
+    assert(state.history.length === historyBefore, `History length must be unchanged after Escape in value box, had ${historyBefore}, got ${state.history.length}`);
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No distance constraint after Escape');
+    console.log('C1-Esc2 passed ✅');
+  }
+
+  // C2: Click Radius (circle shape) -> create + commit 35 -> 1 undo removes dim
+  {
+    console.log('Running C2: click radius single-undo...');
+    const engine = createEngine(null);
+    engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
+    const jc = engine.genJ();
+    engine.addJoint(jc, 0, 0, true);
+    const jr = engine.genJ();
+    engine.addJoint(jr, 20, 0, false);
+    const circleShape = { id: 's_circle1', type: 'circle', joints: [jc], radius: 20 };
+    state.shapes.push(circleShape);
+    setupNumericInput(svg, state);
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt = { clientX: 20, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    handleDimensionPointerDown(pt, svg, state, null, { shape: circleShape }, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+    dimInput.value = '35';
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Enter', stopPropagation: () => {} });
+
+    assert(state.history.length === historyBefore + 1, `History should grow by 1, had ${historyBefore}, got ${state.history.length}`);
+    const dim = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(dim, 'Radius distance constraint must exist');
+    assert(dim.value === 35, `Radius value should be 35, got ${dim.value}`);
+
+    state.undo();
+
+    const dimAfter = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(!dimAfter, `One undo() must leave NO radius constraint, but found: ${JSON.stringify(dimAfter)}`);
+    assert(state.history.length === historyBefore, `History length must be restored to ${historyBefore}`);
+    console.log('C2 passed ✅');
+  }
+
+  // C2-Esc: Click Radius -> Escape while placing
+  {
+    console.log('Running C2-Esc: click radius Escape while placing...');
+    const engine = createEngine(null);
+    engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
+    const jc = engine.genJ();
+    engine.addJoint(jc, 0, 0, true);
+    const jr = engine.genJ();
+    engine.addJoint(jr, 20, 0, false);
+    const circleShape = { id: 's_circle1', type: 'circle', joints: [jc], radius: 20 };
+    state.shapes.push(circleShape);
+    setupNumericInput(svg, state);
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt = { clientX: 20, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    handleDimensionPointerDown(pt, svg, state, null, { shape: circleShape }, null);
+    assert(state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'Placing constraint added');
+
+    resetDimensionState(state);
+
+    assert(state.history.length === historyBefore, `History length must be unchanged after Escape while placing radius, had ${historyBefore}, got ${state.history.length}`);
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No radius constraint after resetDimensionState');
+    console.log('C2-Esc passed ✅');
+  }
+
+  // C3: Click Two Points (point-to-point) -> create + commit 60 -> 1 undo removes dim
+  {
+    console.log('Running C3: click two points single-undo...');
+    const { state, j1, j2 } = createTestSketch();
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt1 = { clientX: 0, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const pt2 = { clientX: 100, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const joint1 = state.joints.get(j1);
+    const joint2 = state.joints.get(j2);
+
+    // Click 1st joint
+    handleDimensionPointerDown(pt1, svg, state, { id: j1, j: joint1 }, null, null);
+    // Click 2nd joint
+    handleDimensionPointerDown(pt2, svg, state, { id: j2, j: joint2 }, null, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+    dimInput.value = '60';
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Enter', stopPropagation: () => {} });
+
+    assert(state.history.length === historyBefore + 1, `History should grow by 1, had ${historyBefore}, got ${state.history.length}`);
+    const dim = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(dim, 'Point-to-point distance constraint must exist');
+    assert(dim.value === 60, `Value should be 60, got ${dim.value}`);
+
+    state.undo();
+
+    const dimAfter = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.DISTANCE);
+    assert(!dimAfter, `One undo() must leave NO distance constraint, but found: ${JSON.stringify(dimAfter)}`);
+    assert(state.history.length === historyBefore, `History length must be restored to ${historyBefore}`);
+    console.log('C3 passed ✅');
+  }
+
+  // C3-Esc: Click Two Points -> Escape while placing
+  {
+    console.log('Running C3-Esc: click two points Escape while placing...');
+    const { state, j1, j2 } = createTestSketch();
+    state.saveState();
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt1 = { clientX: 0, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const pt2 = { clientX: 100, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const joint1 = state.joints.get(j1);
+    const joint2 = state.joints.get(j2);
+
+    handleDimensionPointerDown(pt1, svg, state, { id: j1, j: joint1 }, null, null);
+    handleDimensionPointerDown(pt2, svg, state, { id: j2, j: joint2 }, null, null);
+    assert(state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'Placing constraint added');
+
+    resetDimensionState(state);
+
+    assert(state.history.length === historyBefore, `History length must be unchanged after Escape while placing 2-point dim, had ${historyBefore}, got ${state.history.length}`);
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No distance constraint after resetDimensionState');
+    console.log('C3-Esc passed ✅');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // MEASURE: Click path dimension undo count (must now be 1)
   // ─────────────────────────────────────────────────────────────────────────
   {
     console.log('Running click-path measurement...');
@@ -284,6 +487,7 @@
       undoCount++;
     }
     console.log(`CLICK_PATH_UNDO_COUNT: ${undoCount}`);
+    assert(undoCount === 1, `CLICK_PATH_UNDO_COUNT must now be 1, got ${undoCount}`);
   }
 
   console.log('ALL dimension-undo-step tests passed ✅');

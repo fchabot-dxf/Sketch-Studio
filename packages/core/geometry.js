@@ -263,3 +263,28 @@ export function getArcParams(p1, p2, p3) {
     const radius = Math.hypot(x1 - centerX, y1 - centerY);
     return { center: { x: centerX, y: centerY }, radius };
 }
+
+
+// TASK 448: the angular SPAN an arc [centre, start, end] covers, matching calculateArcPath exactly (explicit SVG
+// largeArc+sweep flags if present, else the shortest way). Returns { a0, span, dir } — start angle (atan2, world coords),
+// swept angle in [0, 2PI], dir = +1 (increasing angle, SVG sweep=1) or -1.
+export function arcSweepInfo(center, start, end, options = {}) {
+    const a0 = Math.atan2(start.y - center.y, start.x - center.x);
+    const a1 = Math.atan2(end.y - center.y, end.x - center.x);
+    const TAU = Math.PI * 2;
+    const mod = (v) => ((v % TAU) + TAU) % TAU;
+    if (typeof options.sweep === 'boolean' && typeof options.largeArc === 'boolean') {
+        const dir = options.sweep ? 1 : -1;
+        return { a0, span: mod((a1 - a0) * dir), dir };
+    }
+    let diff = a1 - a0;
+    while (diff <= -Math.PI) diff += TAU;
+    while (diff > Math.PI) diff -= TAU;
+    return { a0, span: Math.abs(diff), dir: diff > 0 ? 1 : -1 };
+}
+
+// Is the direction `angle` (radians) inside the arc's sweep (see arcSweepInfo)?
+export function angleInArcSweep(info, angle) {
+    const TAU = Math.PI * 2;
+    return ((((angle - info.a0) * info.dir) % TAU) + TAU) % TAU <= info.span + 1e-12;
+}

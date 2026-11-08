@@ -6,7 +6,7 @@
 import { dbg } from '#core/debug.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
-import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection } from '#core/geometry.js';
+import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -2240,7 +2240,9 @@ switch(c.type){
           const center = j1;
           const shape = shapes.find(s => s.id === c.shape);
           // Always use actual geometry radius for drawing the arrow so it stays attached to the rim
-          const actualRadius = (shape && typeof shape.radius === 'number') ? shape.radius : 0;
+          // (TASK 448: an arc made without a stored radius falls back to centre->start-joint, so the leader meets the rim)
+          const arcStart = (shape && shape.type === 'arc' && shape.joints && shape.joints[1]) ? joints.get(shape.joints[1]) : null;
+          const actualRadius = (shape && typeof shape.radius === 'number') ? shape.radius : (arcStart ? getDist(center, arcStart) : 0);
           const radius = actualRadius;
 
           const isPlacing = !!c.__placing;
@@ -2252,7 +2254,9 @@ switch(c.type){
           const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
 
           // Direction from center to label (use offset as radial distance)
-          const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0);
+          // TASK 448: the label's angle around the centre = the declared constraint field `labelAngle` (default 0 = the
+          // old horizontal-right leader, so saved dimensions without it look exactly as before).
+          const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : (Number.isFinite(c.labelAngle) ? c.labelAngle : 0));
           // Prefer explicit placement from import/export: __pos (preferred), then glyphPos, else computed offset
           let labelX, labelY;
           if (c && c.__pos) { labelX = c.__pos.x; labelY = c.__pos.y; }
@@ -2266,6 +2270,24 @@ switch(c.type){
 
           // Draw leader line
           out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+
+          // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
+          // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
+          if (shape && shape.type === 'arc' && shape.joints && shape.joints.length >= 3 && radius > 0) {
+            const pS = joints.get(shape.joints[1]), pE = joints.get(shape.joints[2]);
+            if (pS && pE) {
+              const info = arcSweepInfo(center, pS, pE, { largeArc: shape.largeArc, sweep: shape.sweep });
+              if (!angleInArcSweep(info, angle)) {
+                const TAU = Math.PI * 2;
+                const wrap = (v) => { v = ((v % TAU) + TAU) % TAU; return v > Math.PI ? v - TAU : v; }; // signed short-way angle
+                const aStart = info.a0, aEnd = info.a0 + info.span * info.dir;
+                const dS = wrap(angle - aStart), dE = wrap(angle - aEnd);
+                const fromStart = Math.abs(dS) <= Math.abs(dE);
+                const from = fromStart ? pS : pE, d = fromStart ? dS : dE;
+                out.push(`<path d="M ${from.x} ${from.y} A ${radius} ${radius} 0 0 ${d > 0 ? 1 : 0} ${edgeX} ${edgeY}" fill="none" class="dim-arc-extension" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.8}"/>`);
+              }
+            }
+          }
 
           // Draw radius line
           out.push(`<line x1="${center.x}" y1="${center.y}" x2="${edgeX}" y2="${edgeY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-dasharray="${scale(3)},${scale(2)}" stroke-opacity="${visualOpacity * 0.6}"/>`);

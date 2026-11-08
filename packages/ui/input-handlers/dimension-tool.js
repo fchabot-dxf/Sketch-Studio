@@ -742,7 +742,7 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
             // above; mirror the `line` branch just above (same function) for placing/drag wiring.
             try { c.__placing = true; } catch(_){ }
             try { c.glyphPos = w; } catch(_){ }
-            try{ c.offset = getDist(center, w) - radius; }catch(_){ c.offset = SolverConfig.DIMENSION_OFFSET || 30; }
+            placeRadiusLabel(c, center, w);
             state.placingConstraint = c;
             dimensionState.placingConstraint = c;
 
@@ -968,13 +968,20 @@ function detectDimMode(j1, j2, w) {
     return 'horizontal';
 }
 
+// TASK 448: THE one place a radius/diameter dimension's label placement is written (birth, drag while placing, and
+// dragging an existing dimension all call it): the label's DISTANCE from the centre (offset) and its ANGLE around the
+// centre (labelAngle), so the leader can sit at any angle and the label lands where it is dropped.
+export function placeRadiusLabel(c, center, w) {
+    c.offset = getDist(center, w);
+    c.labelAngle = Math.atan2(w.y - center.y, w.x - center.x);
+}
+
 export function updateConstraintOffset(state, c, w) {
     if (c.isRadius) {
         const shape = state.shapes ? state.shapes.find(s => s.id === c.shape) : null;
         const center = (shape && shape.joints && shape.joints[0]) ? state.joints.get(shape.joints[0]) : null;
         if (center) {
-            const radius = (typeof c.value === 'number') ? c.value : ((shape && typeof shape.radius === 'number') ? shape.radius : 0);
-            try { c.offset = getDist(center, w) - radius; } catch(_) { c.offset = SolverConfig.DIMENSION_OFFSET || 30; }
+            placeRadiusLabel(c, center, w);
         }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
         // Angle Dimension: Offset is radius from intersection

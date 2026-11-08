@@ -216,6 +216,8 @@ export function createConstraint(type, params) {
                 };
                 if (params.__pos) radiusObj.__pos = params.__pos;
                 if (params.glyphPos) radiusObj.glyphPos = params.glyphPos;
+                // TASK 448: the label's angle around the centre (radians; absent = 0 = today's horizontal-right leader)
+                if (Number.isFinite(params.labelAngle)) radiusObj.labelAngle = params.labelAngle;
                 return radiusObj;
             }
             // Line-Line Distance (Parallel)

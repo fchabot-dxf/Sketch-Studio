@@ -18,6 +18,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { placeRadiusLabel } from '#ui/input-handlers/dimension-tool.js'; // TASK 448: the one radius-label placement writer
 
 // Local state for selection tools
 let selectionState = {
@@ -595,10 +596,7 @@ export function handleSelectionPointerMove(e, svg, state) {
         } else if (c && c.isRadius) {
             const shape = c.shape ? state.shapes.find(s => s.id === c.shape) : null;
             const center = (shape && shape.joints && shape.joints[0]) ? state.joints.get(shape.joints[0]) : null;
-            const radius = (typeof c.value === 'number') ? c.value : (shape && typeof shape.radius === 'number' ? shape.radius : 0);
-            if (center) {
-                c.offset = getDist(center, wpt) - radius;
-            }
+            if (center) placeRadiusLabel(c, center, wpt);
         } else {
             const j1 = state.joints.get(c.joints[0]);
             const j2 = state.joints.get(c.joints[1]);

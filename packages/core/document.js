@@ -42,6 +42,14 @@ export function serializeDocument(state, { hosts } = {}) {
       sketches: Array.isArray(state.sketches) ? state.sketches.map((s) => ({ ...s })) : undefined,
       activeSketchId: state.activeSketchId,
       groups: Array.isArray(state.groups) ? state.groups.map((g) => ({ ...g })) : undefined,
+      profiles: Array.isArray(state.profiles)
+        ? state.profiles.map((p) => ({
+            ...p,
+            inners: p.inners ? [...p.inners] : [],
+            outerShapes: p.outerShapes ? [...p.outerShapes] : [],
+            innerShapes: p.innerShapes ? p.innerShapes.map((arr) => [...arr]) : [],
+          }))
+        : undefined,
       vcarves: Array.isArray(state.vcarves)
         ? state.vcarves.map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined }))
         : undefined,
@@ -93,6 +101,17 @@ export function deserializeDocument(doc, state) {
   if (Array.isArray(state.groups)) {
     state.groups.length = 0;
     state.groups.push(...(g.groups || []).map((x) => ({ ...x })));
+  }
+  if (Array.isArray(state.profiles)) {
+    state.profiles.length = 0;
+    state.profiles.push(
+      ...(g.profiles || []).map((p) => ({
+        ...p,
+        inners: p.inners ? [...p.inners] : [],
+        outerShapes: p.outerShapes ? [...p.outerShapes] : [],
+        innerShapes: p.innerShapes ? p.innerShapes.map((arr) => [...arr]) : [],
+      }))
+    );
   }
   if (Array.isArray(state.vcarves)) {
     state.vcarves.length = 0;

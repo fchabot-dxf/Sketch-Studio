@@ -113,7 +113,9 @@ export function mountSketch(svgEl, opts = {}) {
   // Render ctx: omits getSolverStats/injectDebugStyle (no-op-safe, P3). updateGrid is only supplied when the host opts
   // in with opts.grid (Shaper) → the shared canvas grid (#ui/canvas-grid.js, GRID_MODE-driven) is mounted into svgEl;
   // omitted (Pen Plotter, Trace) → no grid is drawn on this canvas, exactly as before.
-  const renderCtx = {};
+  const renderCtx = {
+    getState: () => state,
+  };
   if (opts.grid && svgEl) {
     renderCtx.updateGrid = (a) => { try { updateGridFromSettings({ ...a, svgEl }); } catch (_) { /* grid is non-essential */ } };
   }

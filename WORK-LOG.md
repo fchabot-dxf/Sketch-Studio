@@ -11575,3 +11575,52 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
    - Confirm shortcut key for Combine in Design mode: `Ctrl+Shift+C` (with Uncombine as `Ctrl+Shift+U`), keeping `Ctrl+G` strictly for shape grouping.
 3. **Uncombine Granularity:**
    - Confirm that Uncombine disbands the entire combined profile back into individual loops (rather than removing one hole at a time).
+
+
+---
+
+## TURN 431 · feat(profile): COMBINE slice 1 & profile resolver (TASK 431)
+
+- **did:**
+  - Implemented COMBINE slice 1:
+    - `packages/core/profile-model.js`:
+      - `validateCombine(selectedShapeIds, loops, loopPolys, state)`: validates $\ge 2$ loops, outer by largest area, inners strictly contained, no hole-hole crossings, no nested holes.
+      - `makeProfile(state, outerLoop, innerLoops, name)`: creates profile record with `outer`, `inners`, `outerShapes`, `innerShapes`, `invalid: false`.
+      - `uncombineProfile(state, profileId)`: disbands profile from state.
+      - `profilesOf`, `profileForLoop`, `profileForShape`.
+      - `resolveProfiles(state, loops, loopPolys)`: topology-resilient resolver matching loops by shape overlap; survives outer corner and hole corner fillets (updates loop IDs and expands `outerShapes`/`innerShapes`); marks `invalid: true` with user-facing `invalidReason` if a loop is broken or containment is lost.
+      - `profileToPathD(profile, state, loops)`: generates SVG compound path string `d` with `fill-rule="evenodd"` support for lines, arcs, and circles.
+      - Per Amendments 1, 2, 4 (FINAL):
+        - `directlyContainedLoops(parentLoop, allLoops, loopPolys, state)`: depth-1 hole extraction with intermediate loop filtering.
+        - `derivedProfileForLoop(loopId, loops, loopPolys, state)`: derived face profile (outer loop minus directly-contained holes).
+        - `resolveProfileForLoop(loopId, state, loops, loopPolys)`: unified resolver returning combined profile if one applies, else derived face.
+        - `resolveProfileAtPoint(point, state, loops, loopPolys)`: point-picking resolver for innermost containing loop.
+    - `packages/ui/sketch-state.js`:
+      - Added `profiles: []` to state.
+      - Captured deep-cloned profiles in `_captureSnapshot` and restored in `_restoreSnapshot` (undo/redo).
+      - Guarded `document.getElementById('btn-undo')` against headless / Node.js environments.
+    - `packages/core/document.js`:
+      - Serialized `state.profiles` in `serializeDocument`.
+      - Restored `g.profiles` in `deserializeDocument`.
+    - `packages/ui/tool-ribbon.js`:
+      - Added `Combine` (`#btn-combine`) and `Uncombine` (`#btn-uncombine`) buttons to `Modify` group with custom SVG icons and shortcut tooltips.
+      - Updated `toolButton` to dispatch action events on click.
+    - `apps/shaper/src/main.js`:
+      - Added `doCombine()` and `doUncombine()` with status toasts.
+      - Wired `Ctrl+Shift+C` -> `doCombine()` and `Ctrl+Shift+U` -> `doUncombine()`.
+      - Wired ribbon action dispatch `on: (name, detail) => ...`.
+    - `packages/ui/sketch-canvas.js`:
+      - Supplied `getState: () => state` in `renderCtx` for `draw(...)`.
+    - `packages/ui/svg-renderer.js`:
+      - Rendered compound background tint for combined profiles (`fill-rule="evenodd"`, `pointer-events="none"`, `fill="var(--sk-profile-fill, #7aa7e0)"`).
+      - Rendered red dashed warning outline and tint when `p.invalid === true` (`stroke="#ef4444"`, `stroke-dasharray="4 4"`).
+    - `tests/profile-model.test.js`:
+      - 8 comprehensive test suites: validation, creation, uncombine, undo/redo, document serialization round-trip, outer corner fillet resilience, hole corner fillet resilience, broken edge invalidation, and derived-face resolution (frame, bullseye, side-by-side, point picking, combine override).
+    - `scripts/live-evidence-431.cjs`:
+      - Live headless script in Edge exercising seed frame -> Combine via ribbon -> canvas tint with open hole -> fillet outer corner preserved -> break hole invalid warning. Clean CDP teardown.
+- **evidence:**
+  - `node tests/profile-model.test.js`: `profile-model tests passed ✅`.
+  - `npm run gate`: `GATE files=157 pass=157 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+  - `.evidence/431/combine-frame-tint.png`: 77,535 bytes, shows combined frame with blue tint and open hole.
+  - `.evidence/431/combine-fillet-preserved.png`: 86,362 bytes, shows filleted corner at R=5 with profile intact (5 outer shapes, 4 hole shapes).
+  - `.evidence/431/combine-invalid-warning.png`: 79,730 bytes, shows broken hole with dashed red invalid warning outline on canvas.

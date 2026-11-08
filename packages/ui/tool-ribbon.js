@@ -24,6 +24,8 @@ const EDIT = [
   { tool: TOOL_MODES.TRIM,  iconSvg: '<path d="M4 12h6M14 12h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#ef4444"/>', label: 'Trim' },
   { tool: TOOL_MODES.BREAK, iconSvg: '<path d="M5 12h5M14 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="#fbbf24" stroke-width="2" fill="none"/>', label: 'Break' },
   { tool: TOOL_MODES.FILLET, iconSvg: '<path d="M5 19V12a7 7 0 0 1 7-7h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M5 12V5h7" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2" fill="none"/>', label: 'Fillet' },
+  { action: 'combine', id: 'btn-combine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.5" fill="none"/>', label: 'Combine', title: 'Combine Shapes (Ctrl+Shift+C)' },
+  { action: 'uncombine', id: 'btn-uncombine', iconSvg: '<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2" fill="none"/><rect x="8.5" y="8.5" width="7" height="7" stroke="currentColor" stroke-width="1.4" fill="none"/>', label: 'Uncomb', title: 'Uncombine Profile (Ctrl+Shift+U)' },
 ];
 const INSPECT = [
   { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim' },
@@ -142,15 +144,26 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   }
   function toolButton(t) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
-    b.dataset.tool = t.tool; b.title = t.label;
-    if (t.tool) b.id = 'tool-' + t.tool;
+    if (t.id) b.id = t.id;
+    else if (t.tool) b.id = 'tool-' + t.tool;
+    else if (t.action) b.id = 'action-' + t.action;
+    b.title = t.title || t.label;
+    if (t.tool) b.dataset.tool = t.tool;
+    if (t.action) b.dataset.action = t.action;
     // Support both symbol-id icons (icon) and raw inline SVG paths (iconSvg) for newer tools
     const icon = t.iconSvg
       ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
       : iconSvg(t.icon);
     b.innerHTML = icon + `<span class="sk-ribbon-lbl">${t.label}</span>`;
-    b.addEventListener('click', () => selectTool(t.tool));
-    toolBtns.push({ btn: b, tool: t.tool });
+    b.addEventListener('click', () => {
+      if (t.action) {
+        if (typeof t.onClick === 'function') t.onClick();
+        fire('action', { id: b.id, action: t.action });
+      } else {
+        selectTool(t.tool);
+      }
+    });
+    if (t.tool) toolBtns.push({ btn: b, tool: t.tool });
     return b;
   }
   function rectButton(t) {

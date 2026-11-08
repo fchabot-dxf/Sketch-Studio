@@ -23,6 +23,9 @@ import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
+import { resolveProfiles, profileToPathD } from '#core/profile-model.js';
+import { findLoops } from '#core/loop-finder.js';
+import { loopPolygon } from '#core/loop-geometry.js';
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -42,6 +45,7 @@ const SK_VAR = {
   '#9CA3AF': '--sk-muted',
   '#0891b2': '--sk-perpendicular-stroke',
   'white': '--sk-joint-fill',
+  '#7aa7e0': '--sk-profile-fill',
 };
 export function skv(color) {
   if (typeof color !== 'string') return color;
@@ -377,6 +381,27 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
   } catch (_){ }
+
+  // Combined profile background tints (evenodd, holes open; warning style if invalid)
+  try {
+    const st = ctx?.getState ? ctx.getState() : (typeof window !== 'undefined' && window.__sketchState ? window.__sketchState : null);
+    if (st && Array.isArray(st.profiles) && st.profiles.length > 0) {
+      const loops = findLoops(st);
+      const sb = new Map((st.shapes || []).map(s => [s.id, s]));
+      const loopPolys = Object.fromEntries(loops.map(l => [l.id, loopPolygon(l, st, sb)]));
+      resolveProfiles(st, loops, loopPolys);
+      for (const p of st.profiles) {
+        const d = profileToPathD(p, st, loops);
+        if (d) {
+          if (p.invalid) {
+            out.push(`<path d="${d}" fill="rgba(239, 68, 68, 0.18)" stroke="#ef4444" stroke-width="${scale(1.5)}" stroke-dasharray="${scale(4)} ${scale(4)}" fill-rule="evenodd" pointer-events="none"/>`);
+          } else {
+            out.push(`<path d="${d}" style="fill:${skv('#7aa7e0')}" fill-opacity="0.18" stroke="none" fill-rule="evenodd" pointer-events="none"/>`);
+          }
+        }
+      }
+    }
+  } catch (_) {}
   
   // Draw origin axes with zoom-scaled stroke
   const originStroke = scale(1.5);

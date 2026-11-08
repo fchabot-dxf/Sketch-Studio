@@ -7,8 +7,8 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
-import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints } from './cut-plan.js'; // SP1j-4: shared cut-plan store
+import { cutTypeById, availableTypes, STOCK_TYPE_ID } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor, deriveKeyFootprints, stockKeyOf } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
@@ -143,6 +143,7 @@ function edgeStrokeMarkup(s, state, cls) {
 export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
+  const onNotice = opts.onNotice || (() => {}); // TASK 472: a transient one-line notice (the Stock role moved)
   svgEl.innerHTML = ''; // clean re-mount
 
   // Local view state for Prepare canvas, initialized by fitting to sketch extents
@@ -293,7 +294,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (!ct) return { region: '', path: '', toolPaths: [] };
     // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
     // type uses the same state model; only the SHAPE differs. A Guide is a line only (no band, dashes or chip).
-    if (ct.id === 'guide') return { region: '', path: '', hasTravel: false, toolPaths: [] };
+    if (ct.id === 'guide' || ct.id === STOCK_TYPE_ID) return { region: '', path: '', hasTravel: false, toolPaths: [] }; // a Guide / the Stock: a line only (the Stock has its label)
     // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
@@ -370,13 +371,25 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       lastChip.set(key, pos);
       out += depthChip(pos.x, pos.y, look.depth);
     }
+    // TASK 472: the Stock loop always carries its label (it is the board): "STOCK <thickness>" just above the loop's top-left corner
+    const sk = stockKeyOf(CUT_PLAN);
+    if (sk) {
+      const spec = resolveTargetKey(parseKey(sk), state, loops, loopPolys);
+      const poly = spec && !spec.invalid && spec.outer ? loopPolys[spec.outer] : null;
+      if (poly && poly.length >= 3) {
+        const x0 = Math.min(...poly.map((p) => p.x)), y0 = Math.min(...poly.map((p) => p.y));
+        const t = Number(CUT_PLAN.get(sk).cutDepth), set = CUT_PLAN.get(sk).cutDepth !== 'unset' && Number.isFinite(t);
+        const txt = 'STOCK ' + (set ? formatShaperParam(t, SettingsManager.get('DOC_UNIT') || 'mm') : '(thickness unset)');
+        out += `<text class="sk-stock-label" x="${x0}" y="${y0 - 2.5}">${txt}</text>`;
+      }
+    }
     chipG.innerHTML = out;
   };
   // idle guide lines are the one coloured exception: thin blue
-  const guideShapeIds = () => {
+  const shapeIdsOfType = (cutType) => {
     const ids = new Set();
     for (const [key, rec] of CUT_PLAN) {
-      if (!(rec && rec.cutType === 'guide')) continue;
+      if (!(rec && rec.cutType === cutType)) continue;
       const { kind, id } = parseKey(key);
       const addLoop = (lid) => { const l = loopById.get(lid); if (l) for (const e of (l.edges || [])) ids.add(e); };
       if (kind === 'loop') addLoop(id);
@@ -386,8 +399,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return ids;
   };
   const refreshEdgeClasses = () => {
-    const guides = guideShapeIds();
-    svgEl.querySelectorAll('[data-shape-id]').forEach((el) => el.classList.toggle('sk-edge-guide', guides.has(el.getAttribute('data-shape-id'))));
+    const guides = shapeIdsOfType('guide'), stocks = shapeIdsOfType('stock'); // TASK 472: the Stock loop is drawn distinctly (warm tan, dashed)
+    svgEl.querySelectorAll('[data-shape-id]').forEach((el) => {
+      const sid = el.getAttribute('data-shape-id');
+      el.classList.toggle('sk-edge-guide', guides.has(sid)); el.classList.toggle('sk-edge-stock', stocks.has(sid));
+    });
   };
   // ONE reactive refresh: repaint the look layers (getLook recomputes only the changed target — its sig changed). Wired
   // to every cut-field change AND to hover / selection changes so the look follows the state.
@@ -485,6 +501,17 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       if (selection.size === 0) return null;
       const ct = cutTypeById(cutType);
       let lastRec = null;
+      if (cutType === STOCK_TYPE_ID) { // ONE Stock per document: the role MOVES to this loop (the previous holder is unassigned) and the notice says so
+        const targets = [...selection.values()].filter((t) => t.kind !== 'chain');
+        const t = targets[targets.length - 1];
+        if (!t) return null;
+        const prev = stockKeyOf(CUT_PLAN), mine = targetKey(t);
+        if (prev && prev !== mine) { setFieldFor(prev, 'cutType', null); onNotice('Stock moved to this loop (there is one Stock per document)'); }
+        else if (!prev) onNotice('This closed loop is now the Stock: the board in Review');
+        lastRec = setFieldFor(mine, 'cutType', STOCK_TYPE_ID);
+        refreshLook();
+        return lastRec;
+      }
       for (const t of selection.values()) {
         if (t.kind === 'chain' && ct && ct.targetKind !== 'path') continue;
         lastRec = setFieldFor(targetKey(t), 'cutType', cutType);

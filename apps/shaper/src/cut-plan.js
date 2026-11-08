@@ -6,7 +6,7 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord, effectiveCutRecord } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID } from './shaper.js';
 import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey } from '#core/profile-model.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops } from '#core/loop-finder.js';
@@ -166,7 +166,7 @@ export function planReliefItems(state, plan = CUT_PLAN) {
   }
 
   for (const [key, stored] of plan) {
-    if (!stored || !stored.cutType || carved.has(key)) continue;
+    if (!stored || !stored.cutType || carved.has(key) || stored.cutType === STOCK_TYPE_ID) continue; // a Stock loop is the board, not a cut (planStockProfile)
     const d = deriveKeyFootprints(key, stored, state, loops, loopPolys);
     if (!d) continue;
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
@@ -176,4 +176,35 @@ export function planReliefItems(state, plan = CUT_PLAN) {
     d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) }));
   }
   return items;
+}
+
+
+/** The key of the Stock loop in the plan ('loop:<id>' | 'profile:<id>'), or null. ONE stock per document: Prepare moves the role, and if a
+ *  loaded document somehow holds two, the first in the plan wins. */
+export function stockKeyOf(plan = CUT_PLAN) {
+  for (const [key, rec] of plan) if (rec && rec.cutType === STOCK_TYPE_ID) return key;
+  return null;
+}
+
+/**
+ * planStockProfile(state, plan = CUT_PLAN) — TASK 472: the board profile of the Stock loop, or null when there is none (or it no longer
+ * derives to a loop). { key, thickness (base mm, or null when unset), outer, holes (closed rings [[x,y],...]), sig }. The rings are the
+ * loop polygons the derivation already yields for the target (deriveProfileCuts): the outer loop, and the holes of an explicit combined profile.
+ * No geometry is computed here.
+ */
+export function planStockProfile(state, plan = CUT_PLAN) {
+  const key = stockKeyOf(plan);
+  if (!key) return null;
+  const { loops, loopPolys } = loopsWithPolygons(state);
+  const rec = effectiveCutRecord(plan.get(key));
+  const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
+  const ring = (poly) => { const r = poly.map((p) => [p.x, p.y]); return r.concat([r[0].slice()]); };
+  const outerCut = (cuts || []).find((c) => !c.isHole && c.polygon && c.polygon.length >= 3);
+  if (!outerCut) return null;
+  // Holes only from an EXPLICIT combined profile ('profile:<id>', made with Combine): the loops merely DRAWN inside a plain Stock loop
+  // (the parts to be cut out of the board) are NOT holes of the board; deriveProfileCuts would call them holes of a derived profile.
+  const holes = parseKey(key).kind === 'profile' ? cuts.filter((c) => c.isHole && c.polygon && c.polygon.length >= 3).map((c) => ring(c.polygon)) : [];
+  const t = Number(rec.cutDepth);
+  const outer = ring(outerCut.polygon);
+  return { key, thickness: rec.cutDepth !== 'unset' && Number.isFinite(t) && t > 0 ? t : null, outer, holes, sig: sigHash([outer, holes]) };
 }

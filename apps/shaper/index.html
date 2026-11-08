@@ -116,6 +116,7 @@
     #review-side { width: 300px; flex: none; overflow: auto; padding: 16px; background: #0f1320; border-left: 1px solid #1f2535; display: flex; flex-direction: column; gap: 14px; }
     .review-stock { display: flex; flex-direction: column; gap: 6px; color: #cbd5e1; font-size: 13px; }
     .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .review-stock-note { color: #9aa0a6; font-size: 12px; line-height: 1.4; }
     .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
     /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
     #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
@@ -163,6 +164,7 @@
       --sk-prep-geo-selected: #1BE09E;    /* selected geometry: bold mint (2px) */
       --sk-prep-geo-hover: #1BE09E;       /* hover on an unassigned target: thin mint */
       --sk-prep-geo-hover-cut: #F6F7F9;   /* hover on a target WITH a cut: bold white boundary (~3px; slightly brighter/thicker than idle) */
+      --sk-prep-stock: #E3B873;           /* the Stock loop (the board): warm tan, dashed, with its STOCK label */
       --sk-prep-guide: #2C9AFF;           /* idle guide: thin blue, the only idle exception */
       --sk-prep-band-selected: #34715F;   /* selected cut band / fill (the pocket sample #35695B is the same within anti-aliasing) */
       --sk-prep-band-selected-hot: #3D8670; /* ~ selected + hover: a slightly brighter band (not sampled) */
@@ -187,6 +189,10 @@
     #prepare-canvas { flex: 1; width: 100%; min-height: 0; background: var(--sk-prep-bg); }
     .sk-edge { fill: none; stroke: var(--sk-prep-geo); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
     .sk-edge.sk-edge-guide { stroke: var(--sk-prep-guide); }
+    .sk-edge.sk-edge-stock { stroke: var(--sk-prep-stock); stroke-width: 1.75; stroke-dasharray: 7 3.5; }
+    .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
+    #prepare-notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
+    #prepare-notice[hidden] { display: none; }
     .sk-hl { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     .sk-hl-select { stroke: var(--sk-prep-geo-selected); stroke-width: 2.25; }
     .sk-hl-hover-cut { stroke: var(--sk-prep-geo-hover-cut); stroke-width: 3; }
@@ -356,6 +362,7 @@
   <section id="view-prepare" hidden>
     <svg id="prepare-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="prepare-panel"></div>
+    <div id="prepare-notice" hidden></div>
     <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
   </section>
   <section id="view-review" hidden>
@@ -366,7 +373,8 @@
     </div>
     <aside id="review-side">
     <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
-      <label>Thickness <input id="review-stock-thickness" type="text" inputmode="decimal"></label></div>
+      <label>Thickness <input id="review-stock-thickness" type="text" inputmode="decimal"></label>
+      <div id="review-stock-note" class="review-stock-note"></div></div>
     <div id="simexport-panel">
       <h2 class="simexport-title">Export</h2>
       <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>

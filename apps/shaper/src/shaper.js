@@ -41,7 +41,20 @@ export const CUT_TYPES = [
   { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
   { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  // TASK 472: STOCK = the board itself, drawn as a closed profile in Design and marked here. NOT a cut: the Review extrudes it to its
+  // thickness (the one depth row, relabelled). The EXPORT writes it as a GUIDE (owner: "ok guide then": Shaper's docs call a guide
+  // "uncuttable", so the stock line can never be cut by accident): the guide's colour and cutType, its thickness in cutDepth, in
+  // the same order and format as every other cut; `exportParams` = the attributes the exported element carries (a guide keeps all
+  // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
+  // re-importing gives a Guide the owner can re-mark Stock.
+  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthLabel: 'Thickness', icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
 ];
+
+// TASK 472: the id of the Stock type, and the encoding the EXPORT gets: CUT_TYPES with each entry's `exportParams` (if any) as its
+// `params`, so a Stock loop exports exactly like a Guide while its Prepare card shows only the thickness row.
+export const STOCK_TYPE_ID = 'stock';
+export const exportEncoding = () => CUT_TYPES.map((t) => (t.exportParams ? { ...t, params: t.exportParams } : t));
+
 
 // VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
 // vcarveContours (depth = inset / halfAngleTan). 90° → 1 (depth = inset); 60° → tan30 ≈ 0.577 (cuts ~1.73× deeper).

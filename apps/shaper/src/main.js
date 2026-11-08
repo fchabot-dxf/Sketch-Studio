@@ -17,14 +17,14 @@ import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from '
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
-import { getStock, setStockField } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
+import { getStock, setStockField, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
-import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
+import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
@@ -79,7 +79,7 @@ function generateShaperSvgPayload() {
   const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-  const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true }, loopPolys });
+  const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: getDocUnit(), options: { groupByCut: true }, loopPolys });
   return { svg, entries, vcarves, state: st };
 }
 
@@ -590,7 +590,7 @@ function mountPrepare() {
       if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
       groupStatus(`Cut plan updated: ${parts.join(', ')}`);
     }
-    prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel, onNotice: prepareNotice });
     prepareSig = geomSig(st);
     window.__prepareView = prepareView;
     refreshCutPanel(); // no selection yet → the card stays hidden
@@ -637,7 +637,7 @@ function showMode(mode) {
 const reviewInputs = (st) => {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  return { stock: getStock(), items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null };
+  return { stock: resolveStock(st, CUT_PLAN).stock, items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null };
 };
 const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), st.vcarves || [], [...st.joints.values()].map((j) => [j.x, j.y])]);
 async function enterReview(st) {
@@ -647,13 +647,20 @@ async function enterReview(st) {
       info.textContent = 'Loading 3D…';
       reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state) });
     }
+    showStockThickness();
     reviewView.refresh(reviewSig(st));
   } catch (e) { info.textContent = 'Review failed: ' + e.message; throw e; }
 }
 {
   const thick = document.getElementById('review-stock-thickness');
   const unit = () => SettingsManager.get('DOC_UNIT') || 'mm';
-  const showThick = () => { thick.value = formatUnit(getStock().thickness, unit(), { decimals: 3 }); };
+  const note = document.getElementById('review-stock-note');
+  const showThick = () => {
+    const loop = designController ? resolveStock(designController.state, CUT_PLAN).fromLoop : null; // TASK 472: with a Stock loop the thickness is set on that loop in Prepare
+    thick.value = formatUnit(loop ? loop.thickness : getStock().thickness, unit(), { decimals: 3 });
+    thick.disabled = !!loop;
+    note.textContent = loop ? (loop.thicknessSet ? 'The board is your Stock loop; set its thickness in Prepare.' : 'The board is your Stock loop; no thickness set on it, so the default applies. Set it in Prepare.') : 'No Stock loop: the board is the design bounds + margin.';
+  };
   showStockThickness = showThick;
   showThick();
   thick.addEventListener('change', () => {
@@ -665,6 +672,14 @@ async function enterReview(st) {
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => reviewView && reviewView.fit());
+}
+
+// TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)
+let prepareNoticeTimer = null;
+function prepareNotice(msg) {
+  const el = document.getElementById('prepare-notice'); if (!el) return;
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(prepareNoticeTimer); prepareNoticeTimer = setTimeout(() => { el.hidden = true; }, 4500);
 }
 
 modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mode)));

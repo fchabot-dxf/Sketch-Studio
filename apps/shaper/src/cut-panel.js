@@ -8,7 +8,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
-const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior'];
+const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior', 'stock']; // TASK 472: Stock last (it is the board, not a cut)
 // TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 18x18 inner markup in currentColor); colours are CSS tokens.
 const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 18 18" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
 
@@ -186,6 +186,10 @@ export function createCutPanel(hostEl, opts = {}) {
     depthInput.value = isUnset(current.cutDepth) ? '' : fmt(current.cutDepth);
     // TASK 450b: show only the rows of the params this cut type declares (Guide: none; On line: no Offset)
     card.querySelectorAll('.cut-row[data-param]').forEach((row) => { row.style.display = cutTypeHasParam(current.cutType, row.dataset.param) ? '' : 'none'; });
+    // TASK 472: the cutter shape belongs with the bit: a type without a bit diameter (Stock) has no shape row; its depth row reads Thickness
+    card.querySelector('.cut-row[data-row="cutterShape"]').style.display = cutTypeHasParam(current.cutType, 'toolDia') ? '' : 'none';
+    const curType = current.cutType ? cutTypeById(current.cutType) : null;
+    card.querySelector('.cut-row[data-param="cutDepth"] .cut-field-label').textContent = (curType && curType.depthLabel) || 'Depth';
     const off = Number(current.cutOffset) || 0;
     offsetInput.value = fmt(off);
     flipBtn.classList.toggle('is-on', off < 0);

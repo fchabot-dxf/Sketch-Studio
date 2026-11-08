@@ -210,10 +210,25 @@ function memo(cache, touched, map, key, make) {
   return cache[map].get(key);
 }
 
+// TASK 472: the board profile from a Stock loop: { outer, holes } closed rings [[x,y],...] -> { region, box, sig } or null (fewer than
+// 3 points = no profile, the rectangle applies). The signature keys the build cache to this exact shape.
+function boardProfile(profile) {
+  if (!profile || !Array.isArray(profile.outer) || profile.outer.length < 3) return null;
+  const close = (g) => { const r = toRing(g); const a = r[0], z = r[r.length - 1]; return (a[0] === z[0] && a[1] === z[1]) ? r : [...r, [a[0], a[1]]]; };
+  const outer = close(profile.outer), holes = (profile.holes || []).filter((g) => g && g.length >= 3).map(close);
+  const box = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  for (const q of outer) { box.minX = Math.min(box.minX, q[0]); box.maxX = Math.max(box.maxX, q[0]); box.minY = Math.min(box.minY, q[1]); box.maxY = Math.max(box.maxY, q[1]); }
+  let sig = profile.sig;
+  if (sig == null) { let h = 2166136261; const str = JSON.stringify([outer, holes]); for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } sig = h.toString(36); }
+  return { region: { outer, holes }, box, sig };
+}
+const regionsArea = (rs) => rs.reduce((s, r) => s + Math.abs(area2(r.outer)) / 2 - r.holes.reduce((q, h) => q + Math.abs(area2(h)) / 2, 0), 0);
+
 /**
  * buildRelief({ stock, items, bounds }) -> { stockBox, levels, meshes:{top,floor,wall,bottom,side}, marks, stats }
  *   marks   [{ key, keys, kind:'depth-unset', point:[x,y] }] (one per SPOT; `keys` = every cut sharing it) — an Outside/Inside cut shown THROUGH only because its depth is unset (the view draws a label there)
- *   stock   {thickness,width,height,margin} (defaults DEFAULT_STOCK); all base mm
+ *   stock   {thickness,width,height,margin,profile?} (defaults DEFAULT_STOCK); all base mm. profile = { outer, holes, sig? } closed rings: the
+ *           board IS that profile (a Stock loop: any shape, holes allowed), extruded to the thickness; width/height/margin then do not apply
  *   items   [{ key, cutType:'outside'|'inside'|'pocket'|'online'|..., cutDepth: mm | 'unset', footprints:[{ rings:[[{x,y}]], fillRule }],
  *              shape?: { cutterShape, cutterAngle, toolDia }, footprintsAt?: (halfWidth) => footprints, slices? }]
  *              (shape + footprintsAt make a ball-nose / V-bit groove: terraces over its profile, see cutter-profile.js)
@@ -247,7 +262,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
       const near = marks.find((m) => Math.hypot(m.point[0] - pt[0], m.point[1] - pt[1]) < MARK_MERGE_MM); // one label per SPOT (an Outside + an Inside on one hole)
       if (near) near.keys.push(it.key); else marks.push({ key: it.key, keys: [it.key], kind: 'depth-unset', point: pt });
     }
-    r.pieces.forEach((pc, j) => pending.push({ id: `${ik}#${j}`, depth: pc.depth === null ? rule.depth : pc.depth, regions: pc.regions }));
+    r.pieces.forEach((pc, j) => pending.push({ key: it.key, id: `${ik}#${j}`, depth: pc.depth === null ? rule.depth : pc.depth, regions: pc.regions }));
   }
 
   lap('footprints');
@@ -256,14 +271,22 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, m = Number(S.margin) || 0;
   const w = Number(S.width) > 0 ? Number(S.width) : (b.maxX - b.minX) + 2 * m;
   const h = Number(S.height) > 0 ? Number(S.height) : (b.maxY - b.minY) + 2 * m;
-  const box = { minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2, thickness: T };
-  const rect = [rectRegion(box)];
-  const bx = `${box.minX},${box.maxX},${box.minY},${box.maxY}`; // every board-dependent cache key carries the board
+  // TASK 472: S.profile = { outer, holes, sig? } (closed rings [[x,y],...]) = the board IS that profile (any shape, holes allowed),
+  // taken from a Stock loop; without it the board is the derived / explicit rectangle above. `rect` is the board REGION list either way.
+  const prof = boardProfile(S.profile);
+  let box = { minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2, thickness: T };
+  let rect = [rectRegion(box)];
+  if (prof) { rect = [prof.region]; box = { ...prof.box, thickness: T }; }
+  const bx = prof ? `P${prof.sig}` : `${box.minX},${box.maxX},${box.minY},${box.maxY}`; // every board-dependent cache key carries the board
+  const outsideStock = [], partlyOutside = [];
 
   for (const p of pending) {
-    const regs = memoC('clip', `${p.id}@${bx}`, () => intersectRegions(p.regions, rect)); // a cut cannot leave the board
-    if (regs.length) entries.push({ id: p.id, depth: p.depth, regions: regs });
-    else skipped.push({ cutType: 'any', reason: 'outside-stock' });
+    const clipped = memoC('clip', `${p.id}@${bx}`, () => { // a cut cannot leave the board: nothing is cut where there is no board
+      const regs = intersectRegions(p.regions, rect);
+      return { regs, partial: regs.length > 0 && regionsArea(p.regions) - regionsArea(regs) > 1e-6 };
+    });
+    if (clipped.regs.length) { entries.push({ id: p.id, depth: p.depth, regions: clipped.regs }); if (clipped.partial && !partlyOutside.includes(p.key)) partlyOutside.push(p.key); }
+    else { skipped.push({ key: p.key, cutType: 'any', reason: 'outside-stock' }); if (!outsideStock.includes(p.key)) outsideStock.push(p.key); }
   }
 
   lap('clip');
@@ -297,8 +320,14 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   lap('walls');
   const throughR = depths.length && depths[depths.length - 1] >= T - 1e-9 ? R[depths.length - 1] : [];
   emitFlat(bottom, memoC('flat', `bot|${bx}|${throughR.length ? rKey[depths.length - 1] : ''}`, () => flatTris(throughR.length ? diffRegions(rect, throughR) : rect)), -T, -1);
+  if (prof) { // the board's own edge, outward (away from the material), from the top face down to the bottom
+    for (const e of boundaryEdges(rect)) {
+      const [x1, y1, x2, y2] = e, dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), nrm = [dy / len, 0, -dx / len]; // material on the LEFT => outward = right
+      tri(side, [x1, 0, y1], [x2, 0, y2], [x2, -T, y2], nrm); tri(side, [x1, 0, y1], [x2, -T, y2], [x1, -T, y1], nrm);
+    }
+  }
   const corners = [[box.minX, box.minY], [box.maxX, box.minY], [box.maxX, box.maxY], [box.minX, box.maxY]];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < (prof ? 0 : 4); i++) {
     const p = corners[i], q = corners[(i + 1) % 4], dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy) || 1;
     const nrm = [dy / len, 0, -dx / len]; // outward for the CCW-in-(x,y) corner order above (right-hand normal)
     const a = [p[0], 0, p[1]], bb = [q[0], 0, q[1]], c = [q[0], -T, q[1]], d = [p[0], -T, p[1]];
@@ -311,7 +340,7 @@ export function buildRelief({ stock, items = [], bounds = null, cache = null } =
   const triangles = Object.values(meshes).reduce((s, g) => s + g.indices.length / 3, 0);
   const areas = {};
   for (const [k, g] of Object.entries(meshes)) areas[k] = meshArea(g);
-  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: d >= T - 1e-9, regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null } };
+  return { stockBox: box, levels: depths.map((d, k) => ({ depth: d, through: d >= T - 1e-9, regions: R[k] })), meshes, marks, stats: { triangles, areas, skipped, unsetThrough, levels: depths.length, ms: (lap('mesh'), ms), cache: C ? { hits, misses } : null, outsideStock, partlyOutside, board: prof ? 'profile' : 'rectangle' } };
 }
 
 /** Total triangle area of a mesh (for tests and stats). */

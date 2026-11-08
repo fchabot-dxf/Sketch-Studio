@@ -129,8 +129,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - On Line: the cutter centre on the path; "offsets are not an option".
         - Guide: "uncuttable".
         - Cut type can be assigned in the file OR on the tool.
-        - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450:
-          On Line and Guide have no offset (UI hidden, never exported).
+        - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450
+          (CC-A), amended by the owner ("cut params for guide lines don't make sense"):
+          - one `params` declaration per CUT_TYPES record;
+          - Guide = no params at all; On Line = depth + bit, no offset.
         - POCKET OFFSET, ANSWERED (support 360005473253 "Pocketing procedure" + owner):
           - the Origin adds an automatic pocket offset = 1/4 of the bit diameter (since the "Napa" software; 1/6
             before), set by the machine;

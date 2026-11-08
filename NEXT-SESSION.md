@@ -131,7 +131,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - Cut type can be assigned in the file OR on the tool.
         - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450:
           On Line and Guide have no offset (UI hidden, never exported).
-        - OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
+        - POCKET OFFSET, ANSWERED (support 360005473253 "Pocketing procedure" + owner):
+          - the Origin adds an automatic pocket offset = 1/4 of the bit diameter (since the "Napa" software; 1/6
+            before), set by the machine;
+          - owner: "0 is always a 1/4 offset", and a manual offset adds on top;
+          - finish = change the cut type to Inside, same depth, no offset.
+          - TASK 452 (queued, CC-A): the pocket preview shows the clearing boundary at r + D/4 + offset (declare
+            D/4 on the pocket cut-type record) AND the Inside finish pass to the wall (its direction already from
+            449).
+        - (was) OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
           RESULT after the finish pass; the clearing pass itself stops at that offset.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on
         the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449, dispatched to CC-A. Owner: "pocket cuts offset by default allowing a finish pass", so
@@ -187,6 +195,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Cause: svg-renderer.js ~:2257 angle = j2 ? ... : 0; radius dims have no j2, so it's always horizontal-right.
   - Arc extension outside the sweep (Fusion).
   - DONE: 448 merged a0c6a43 (labelAngle; one writer, placeRadiusLabel; Fusion parity unchecked).
+- PEN PLOTTER AUDIT 443 merged efb3601 (WORK-LOG "TURN 443"). Ticketing:
+  - 451 persistence (CC-B, dispatched).
+  - Queued:
+    - 453 validation batch (doc dialog -5/0/empty/text; feeds F0, pen-up = pen-down Z, tolerance <= 0; fill spacing
+      <= 0 possibly looping forever in hatch.js:20 / dots.js:17);
+    - 454: the Active Toolpath panel stays on the old toolpath after + Outline/+ Fill (edits go to the wrong
+      toolpath);
+    - minors 7-13 and the lingering empty default Outline toolpath, as one batch.
+  - Already fixed: #2 by 444b, #14 by 446.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

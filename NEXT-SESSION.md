@@ -273,6 +273,12 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     Eighth screenshot: an idle Guide = thin BLUE #2C9AFF (the only idle exception).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
+- DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
+- Owner: "no parametric shape"; the compass export check was only to confirm no other encoding exists (none: plain
+  paths with C curves).
+- OWNER REFERENCE (screenshot): Shaper Studio's REVIEW tab is a rendered result of the cuts on a wood-grain
+  (topographic-line) background: through-cuts open, pockets and grooves recessed with inner shadow by depth, idle
+  geometry faint. Candidate for our Simulate tab (one derivation: 447 footprints + depth). Owner to confirm it's wanted.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

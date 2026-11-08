@@ -84,6 +84,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - 2026-11-08 morning: the owner said "do it". Both seats are switched to Claude Sonnet 5.5 (High).
   - AGY-2 resumed 435.
   - AGY-1 restarted 443.
+- 09:01 Claude Sonnet 5.5 out too (~152 h); Claude Opus likely shares that pool. Only GPT-OSS 120B is left in Antigravity.
+  - AGY-2 committed WIP 435 to agy2 (df85ff0).
+  - AGY-1: 443 barely started.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

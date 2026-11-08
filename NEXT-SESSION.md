@@ -98,6 +98,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - 446 merged fea3874: pen rows had no CSS; now they fit and the x is clickable.
     - 429 merged 1553fde: the log no longer floods; repeats collapse with a numeric count.
     - Now on 437: the spindle-motion PLAN.
+    - QUEUED next for CC-A: 447, the owner's ask (screenshot: the pocket hatch is the tool-CENTER inset with sharp
+      corners).
+      - Prepare shows the TRUE bit footprint: pocket via #core openPolygon (polygon-offset.js:136, declared but
+        unused); inside/outside show rounded corners plus the leftover corner material.
+      - One derivation; export unchanged.
     - Noticed: an unlabeled grey pen-group row in Toolpath Operations (cosmetic; batch it with the audit's cosmetics).
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.
   - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).

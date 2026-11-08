@@ -166,7 +166,7 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             for (const s of dofSources.get(jid)) {
                 const t = (s && s.split) ? s.split(':')[0] : s;
                 if (t === 'distance' || t === 'radius' || t === 'origin' || t === 'ground'
-                    || t === 'fixed' || t === 'anchor' || t === 'horizontal' || t === 'vertical') continue;
+                    || t === 'fixed' || t === 'anchor' || t === 'horizontal' || t === 'vertical' || t === 'tangent') continue;
                 other++;
             }
         }
@@ -529,9 +529,6 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
                                 if (!visitedInQueue.has(centerId)) { processingQueue.push(centerId); visitedInQueue.add(centerId); }
                                 if (sharedRim && !visitedInQueue.has(sharedRim)) { processingQueue.push(sharedRim); visitedInQueue.add(sharedRim); }
                             }
-
-                            applyDecIfNeeded(c, centerId);
-                            if (sharedRim) applyDecIfNeeded(c, sharedRim);
                         }
                     }
                     break;
@@ -766,7 +763,7 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
             for (const s of dofSources.get(id)) {
                 const type = (s && s.split && s.split(':')[0]) ? s.split(':')[0] : s;
                 if (type === 'distance' || type === 'radius' || type === 'ground' || type === 'origin'
-                    || type === 'fixed' || type === 'anchor' || type === 'horizontal' || type === 'vertical') continue;
+                    || type === 'fixed' || type === 'anchor' || type === 'horizontal' || type === 'vertical' || type === 'tangent') continue;
                 // Count 'equal', 'midpoint', 'point_on_line', 'parallel', 'perpendicular', 'collinear', etc.
                 otherReductions++;
             }

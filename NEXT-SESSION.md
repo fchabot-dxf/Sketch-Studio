@@ -39,6 +39,28 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Delete: neighbours sharing a joint survive. shell-smoke closes its browser (no more leaked Edge). Frame Calc removed.
 - Owner commit 5bffb68: Dim with a pre-selected line, plus filleted-rect rigidity status. Gated but NOT advisor-reviewed in depth.
 
+**▶ LIVE QUEUE (turn 431, 2026-11-07).** Task texts are in the advisor's scratchpad (task_<id>.txt).
+- 19:24 BOTH seats hit the Gemini Flash quota (429, resets ~22:40). 431b pushed as f31e66f with no REPORT:
+  - items 1-3 are good;
+  - item 4 correctly BLOCKED (no change signal), but resolveProfiles then lost its only live caller.
+  - Next for AGY-1: 431c (advisor decision: a PURE resolveProfileViews called in draw; delete the mutating resolve and
+    the stored invalid/d).
+  - AGY-2 was mid-436.
+- (history) 431 (AGY-1): the Combine slice review found 4 problems:
+  - dead Combine buttons in non-Shaper apps;
+  - the action lives in the Shaper host;
+  - five copies of the profile clone;
+  - per-frame resolve that mutates state, behind a window fallback.
+- DONE: 428b, the lying DOF colours, merged c7c4e89 (root-cause only: tangent double-count removed).
+- In flight: 436 (AGY-2), Prepare/Vcarve pan+zoom via the shared pan-zoom.js (owner-reported).
+- Next, in this order:
+  - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
+  - 429: log flood + JSON;
+  - 434: stray #dimInput box;
+  - 435: shared Undo/Redo;
+  - 432: Select picks profiles, after 431b merges;
+  - 433: cut semantics on profiles.
+
 **Open, in priority order:**
 1. **Solver stall honesty: ARC CLOSED (advisor decision 2026-11-07, turns 411–413, Antigravity seat AGY-1).**
    - Built: the engine now reports `stalled` / `stallError` / `structuralError` / `dragReached` (411, additive), plus a
@@ -1914,6 +1936,26 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
 > sketch→`<g>` · widen islands · group tree-node · GRID-1 (staged) · SP1i · JOINTS.
 
 ---
+
+## ▶ COMBINE + PROFILE SELECTION — owner rulings 2026-11-07 (tasks 430–432, Antigravity seat AGY-1)
+- Holes are NOT automatic in the background. The owner picks.
+- FINAL DECISION (owner chose option B after discussion; "better than Shaper Studio, which has no GUI for toolpath
+  layers"):
+  - The Select tool's click inside a region picks its PROFILE = the loop minus its directly-contained loops (derived at
+    pick time, as Fusion does). A click inside a hole picks the hole/island's own profile. SHIFT+CLICK adds profiles.
+  - Each profile has its OWN cut params. A loop can be both a hole of the outer profile (no params) and its own profile
+    with its own cut. Export: the outer as one compound evenodd path, the island as a separate path; both are valid
+    Shaper SVG.
+  - COMBINE / UNCOMBINE (Ctrl+Shift+C / Ctrl+Shift+U) are the power tool: several loops act as ONE profile with ONE
+    param set; it overrides the derived face.
+  - The SVG doesn't force Combine: the exporter builds the compound path from the picked profile.
+  - ⭐ GUIDING PRINCIPLE (owner, 2026-11-07): "in Shaper, the SVG IS the toolpath, not in ours". Our sketch is GEOMETRY
+    only; TOOLPATHS are a separate declared layer (profiles + per-profile cut params) over that geometry; the Shaper SVG
+    is DERIVED at export from both. Never make the user edit geometry (merge, recolour, duplicate shapes) just to
+    express a toolpath intent.
+- Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
+  profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
+  433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).
 
 ## ▶ DISPATCHED 2026-11-07 — GRID-1, REVISED BY OWNER: a SHARED grid setting for ALL apps (not Shaper-only)
 Owner: "isn't that a SketchStudio feature". It is: the grid is drawn by the shared Design canvas. So `GRID_MODE`

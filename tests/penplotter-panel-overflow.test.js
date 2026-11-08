@@ -136,10 +136,11 @@ await (async () => {
     };
     const waitFor = async (expression, what, timeoutMs = 20000) => {
       const end = Date.now() + timeoutMs;
+      let lastErr = null;
       for (;;) {
-        let v; try { v = await evalJs(expression); } catch (_) { v = false; }
+        let v; try { v = await evalJs(expression); } catch (e) { v = false; lastErr = e; }
         if (v) return v;
-        if (Date.now() > end) throw new Error('timed out waiting for ' + what);
+        if (Date.now() > end) throw new Error('timed out waiting for ' + what + (lastErr ? ' (last error: ' + lastErr.message + ')' : ''));
         await sleep(50);
       }
     };

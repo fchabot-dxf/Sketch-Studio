@@ -527,6 +527,7 @@ function ensureSketch() {
 // other three are absolute overlays (hidden attr). Drives the Design RAF lifecycle + persists the active mode.
 function showMode(mode) {
   if (!VIEWS[mode]) mode = 'explore';
+  const enteringMode = (mode !== currentMode);
   currentMode = mode;
   VIEWS.explore.style.display = (mode === 'explore') ? '' : 'none';
   VIEWS.design.hidden    = (mode !== 'design');   // make the canvas visible BEFORE start() so frame 1 sees a laid-out svg
@@ -545,15 +546,17 @@ function showMode(mode) {
     try { designController.engine.solve(500); } catch (_) {}
     if (!vcarveView) vcarveView = mountVcarveView(designController.state);
     else vcarveView.refresh();
+    window.__vcarveView = vcarveView;
   }
   // SP1a/SP1c: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then mount
   // a Prepare-local view: edges (no joints) + topological-loop hover-highlight. Render-on-demand — geometry is
   // static in Prepare, so loops are found once on (re)mount; the highlight redraws only on hover-change (no RAF).
-  if (mode === 'prepare') {
+  if (mode === 'prepare' && (enteringMode || !prepareView)) {
     ensureSketch();
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
     prepareView = mountPrepareView(designController.state, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    window.__prepareView = prepareView;
     refreshCutPanel(); // no selection yet → the card stays hidden
   }
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }

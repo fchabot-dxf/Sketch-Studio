@@ -13,6 +13,7 @@ import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset 
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -117,6 +118,23 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   if (!state || !svgEl) return { loops: [], selection: new Map(), destroy() {} };
   const onSelectionChange = opts.onSelectionChange || (() => {});
   svgEl.innerHTML = ''; // clean re-mount
+
+  // Local view state for Prepare canvas, initialized by fitting to sketch extents
+  const view = { x: 0, y: 0, w: 120, h: 90 };
+  const viewState = {
+    view,
+    allowEmptyPan: true,
+    _panZoom: {
+      isPanning: false,
+      lastPanPoint: null,
+      lastTouchDistance: null,
+      touchPoints: new Map(),
+      isPinching: false,
+      lastPinchCenter: null,
+      lastPinchDistance: null,
+    },
+  };
+  fitViewToExtents(svgEl, view, state);
   // SP1h4: a diagonal HATCH pattern (pocket preview colour) for the cleared region. userSpaceOnUse → world-unit
   // spacing (scales with the geometry). One <defs> per mount; referenced by the pocket cleared-region fill.
   const defs = document.createElementNS(SVG_NS, 'defs');
@@ -244,25 +262,52 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const k = t ? targetKey(t) : null, pk = hovered ? targetKey(hovered) : null;
     if (k !== pk) { hovered = t; renderHover(); } // redraw on hover-CHANGE only
   };
-  const onMove = (e) => { const wp = clientToWorld(svgEl, e.clientX, e.clientY); if (!wp) return; setHover(resolveTarget(wp)); };
+  const onWheel = (e) => {
+    handlePanZoomWheel(e, svgEl, viewState);
+  };
+  const onMove = (e) => {
+    if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
+    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    if (!wp) return;
+    setHover(resolveTarget(wp));
+  };
   const onLeave = () => setHover(null);
   const onDown = (e) => {
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY); if (!wp) return;
-    const t = resolveTarget(wp);
+    // Two-finger touch pinch or middle-button drag: always pan/zoom
+    if (e.pointerType === 'touch' && handlePanZoomPointerDown(e, svgEl, viewState)) {
+      return;
+    }
+    if (e.button === 1) {
+      handlePanZoomPointerDown(e, svgEl, viewState);
+      return;
+    }
+    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    const t = wp ? resolveTarget(wp) : null;
     selection.clear();                       // single-select BEHAVIOR (shift-click multi-select is a later slice)
-    if (t) selection.set(targetKey(t), t);   // click empty → cleared selection
+    if (t) {
+      selection.set(targetKey(t), t);        // select target
+    } else {
+      // Click empty canvas: cleared selection and initiate empty-canvas pan drag
+      handlePanZoomPointerDown(e, svgEl, viewState);
+    }
     renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected loop drops its hover)
     onSelectionChange(t || null);            // notify the cut panel (selected target | null)
   };
+  const onUp = (e) => {
+    handlePanZoomPointerUp(e, svgEl, viewState);
+  };
+  svgEl.addEventListener('wheel', onWheel, { passive: false });
   svgEl.addEventListener('pointermove', onMove);
   svgEl.addEventListener('pointerleave', onLeave);
   svgEl.addEventListener('pointerdown', onDown);
+  svgEl.addEventListener('pointerup', onUp);
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
 
   const selectedTarget = () => [...selection.values()][0] || null;
   return {
     loops, selection, resolveTarget, selectedTarget,
+    view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
     // Write the cut type onto the current single selection + refresh the tool-aware look (panel calls this).
@@ -271,9 +316,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // on-line band re-widths on a toolDia change; offset/depth feed h2–h4.
     setFieldOnSelected(field, value) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), field, value); refreshLook(); return rec; },
     destroy() {
+      svgEl.removeEventListener('wheel', onWheel);
       svgEl.removeEventListener('pointermove', onMove);
       svgEl.removeEventListener('pointerleave', onLeave);
       svgEl.removeEventListener('pointerdown', onDown);
+      svgEl.removeEventListener('pointerup', onUp);
     },
   };
 }

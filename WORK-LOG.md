@@ -11451,3 +11451,55 @@ Built VCARVE-5b per the TURN 426 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 436 — Shaper Prepare & Vcarve shared pan/zoom + fit-to-extents — branch agy2
+
+- **Shared Pan/Zoom & Fit-to-Extents (`packages/ui/input-handlers/pan-zoom.js` & `packages/ui/input-manager.js`):**
+  - Extracted `handlePanZoomWheel(e, svg, state)` from `packages/ui/input-manager.js` (`handleWheel`) into `packages/ui/input-handlers/pan-zoom.js` (same `1.0015` exponential zoom factor, `[1e-3, 1e6]` width limits, stationary cursor anchor, and `updateViewBox`), and updated `input-manager.js` `handleWheel` to delegate directly to `handlePanZoomWheel` before updating active tool snap/previews (zero behavior change for Design).
+  - Exported `updateViewBox(svg, view)`, added per-state `_panZoom` isolation (`getPanZoomState(state)`), added opt-in `state.allowEmptyPan` for left-drag empty-canvas panning outside `TOOL_MODES.PAN`, and added `{ attachListeners: true }` support to `setupPanZoom`.
+  - Lifted `computeGeometryBounds(state)` and `fitViewToExtents(svg, view, state, options)` into `packages/ui/input-handlers/pan-zoom.js`, reusing the extents pattern from `apps/sketchstudio/ui/ui-manager.js:283-337` and `packages/core/shaper-export.js:104-119` (`boundsOf`), plus true arc sweep bounds (`sampleArc` in DOM; analytical endpoints + cardinal sweep extrema in Node, excluding unrendered center joint).
+
+- **Shaper Prepare & Vcarve Wiring (`apps/shaper/src/prepare-view.js`, `apps/shaper/src/vcarve-view.js`, `apps/shaper/src/main.js`):**
+  - `prepare-view.js`: Initialized local `view` + `viewState` (`allowEmptyPan: true`, isolated `_panZoom`), called `fitViewToExtents(svgEl, view, state)` on mount, and wired `handlePanZoomWheel` + `handlePanZoomPointerDown/Move/Up` (middle-drag anywhere, two-finger touch pinch, empty-canvas left-drag; loop/edge click-selection via live `svgEl.getScreenCTM()` in `clientToWorld` and `worldTolerance`).
+  - `vcarve-view.js` (confirmed affected — previously had only static viewBox auto-fit on render): Wired `setupPanZoom(els.canvas, vcarveViewState, { attachListeners: true })`, auto-fitting `vcarveViewState.view` on initial render or region change while preserving user pan/zoom across parameter edits (`vbit`, `dStep`, `maxDepth`).
+  - `main.js`: Guarded Prepare mount with `enteringMode || !prepareView` so the zoomed/panned view is kept while staying in Prepare; exposed `window.__prepareView` and `window.__vcarveView`.
+  - Shared grid (`packages/ui/canvas-grid.js`): Left off Prepare per item 4 — `ensureCanvasGrid` enforces one `#grid` per document (`canvas-grid.js:99-105`), which `#design-canvas` already owns in `apps/shaper/index.html`.
+
+- **Verification & Evidence:**
+  - Unit tests (`tests/shaper-prepare-pan-zoom.test.js`): 9/9 checks passed (bounds, arc sweep bounds, Prepare auto-fit on mount, cursor-stationary wheel zoom, empty-canvas left-drag pan, middle-drag pan, loop click-selection after zoom+pan, view preservation across cut-plan edits, and Vcarve wheel zoom + drag pan).
+  - Live headless Edge captures (`.evidence/436/`, untracked):
+    - `.evidence/436/before-prepare-autofit.png` (MD5 `d485a743153730ba2e6d702b01f84e18`): `80x50` rectangle with `r=12` hole auto-fitted and centered on entering Prepare (`viewBox="-11.0749... 5.0 122.1498... 60.0"`), unselected.
+    - `.evidence/436/after-prepare-zoomed-panned-selected.png` (MD5 `ed411a78a62e9f21b0dfc0bc809e8f48`): zoomed in on top-left corner + panned (`viewBox="-8.0418... 5.2402... 72.2868... 35.5072..."`), outer loop selected via click (`loop_s_bottom-s_left-s_right-s_top`) with blue selection highlight and Cut card open.
+    - `.evidence/436/vcarve-before-autofit.png` (MD5 `ef88cc502680804e5ac6e7ab93ce24be`) & `.evidence/436/vcarve-after-zoomed-panned.png` (MD5 `699269ab157537c28dfe2f4385d9dc8b`): Vcarve auto-fitted then zoomed + panned into top-left corner contours.
+  - Gate (`npm run gate`):
+    - `GATE files=158 pass=158 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.
+
+
+## TURN 436b — Unify geometry bounds in `#core` + single fit-to-extents across Shaper & SketchStudio — branch agy2
+
+- **Single `#core` Geometry Bounds (`packages/core/geometry-bounds.js`):**
+  - Moved `computeGeometryBounds(state)` out of `#ui` into `packages/core/geometry-bounds.js` (pure `#core`, zero DOM).
+  - Replaced the dual `sampleArc` / fallback arc branches with ONE analytical W3C SVG circular-arc sweep extrema path (`M p2 A r0 r0 0 la sw p3` endpoint-to-center conversion + cardinal angles `0, π/2, π, -π/2` crossed along the sweep, excluding the unrendered center joint `p1`), plus analytical cubic bezier derivative extrema. Live app and Node tests now execute the exact same code.
+  - Updated `packages/ui/input-handlers/pan-zoom.js` `fitViewToExtents` to import `computeGeometryBounds` from `#core/geometry-bounds.js` and corrected its doc comment to accurately state what the code does.
+
+- **SketchStudio Recenter Unified (`apps/sketchstudio/ui/ui-manager.js`):**
+  - Replaced the 56-line hand-rolled `#btn-recenter-view` bounds/fit loop (`ui-manager.js:283-337`) with `fitViewToExtents(svg, state.view, state)` imported from `#ui/input-handlers/pan-zoom.js`.
+  - Measured before/after `#svgCanvas` `viewBox` on an off-origin D-shaped sketch (`j_origin=(0,0)`, chord `j_s=(40,20)..j_e=(100,20)`, `CENTER` arc `j_c=(70,-20)` with radius `50` bulging to `(70,30)`):
+    - **Before (`ui-manager.js` hand-rolled loop):** `viewBox="-10 -22.845394736842106 120 45.69078947368421"` (`view={x:50, y:0, w:120}`) — included `j_origin` (`x=0`) and unrendered arc center `j_c` (`y=-20`), while ignoring the arc bulge at `y=30` (clipping the bottom of the arc off-canvas at `y=22.85`).
+    - **After (shared `fitViewToExtents`):** `viewBox="34 12.299342105263158 72 25.401315789473685"` (`view={x:70, y:25, w:72}`) — excluded `j_origin` and `j_c`, included the true arc bulge apex `(70,30)`, and centered `[40..100] x [20..30]` symmetrically with 20% padding.
+  - Left `packages/core/shaper-export.js` `boundsOf` untouched per instruction (0 diff lines; SP1j exact-string export tests green) and documented its 5 exact differences in REPORT 436b.
+
+- **Verification & Gate:**
+  - Added pure `#core` unit suite `packages/core/tests/geometry-bounds.test.js` (7 cases, `typeof document === 'undefined'` asserted) and Check 10 in `tests/shaper-prepare-pan-zoom.test.js` (`setupUI` `#btn-recenter-view` delegation).
+  - Live headless SketchStudio captures in `.evidence/436b/` (`before-sketchstudio-recenter.png` MD5 `3024d18f0e56176f220ced295387dfe2`, `after-sketchstudio-recenter.png` MD5 `74d9173c6de35dc3c77b644b9c127d50`).
+  - Gate (`npm run gate`):
+    - `GATE files=159 pass=159 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

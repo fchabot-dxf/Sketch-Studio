@@ -1,5 +1,5 @@
 import { dbg } from '#core/debug.js';
-import { DEFAULT_VIEW } from '#core/constants.js';
+import { fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
@@ -279,62 +279,7 @@ export function setupUI(state){
     recenterBtn.addEventListener('click', () => {
       const svg = document.getElementById('svgCanvas');
       if (!svg || !state || !state.view) return;
-      
-      // Calculate geometry bounds
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      let hasGeometry = false;
-      
-      // Include all joints
-      for (const [id, j] of state.joints.entries()) {
-        if (!j) continue;
-        minX = Math.min(minX, j.x);
-        minY = Math.min(minY, j.y);
-        maxX = Math.max(maxX, j.x);
-        maxY = Math.max(maxY, j.y);
-        hasGeometry = true;
-      }
-      
-      // Include circle radii
-      for (const s of state.shapes) {
-        if (!s) continue;
-        if (s.type === 'circle' && s.joints && s.joints[0]) {
-          const c = state.joints.get(s.joints[0]);
-          const r = (typeof s.radius === 'number') ? s.radius : 0;
-          if (c && r > 0) {
-            minX = Math.min(minX, c.x - r);
-            minY = Math.min(minY, c.y - r);
-            maxX = Math.max(maxX, c.x + r);
-            maxY = Math.max(maxY, c.y + r);
-          }
-        }
-      }
-      
-      if (!hasGeometry) {
-        // No geometry, use default view
-        state.view.x = DEFAULT_VIEW.x;
-        state.view.y = DEFAULT_VIEW.y;
-        state.view.w = DEFAULT_VIEW.w;
-      } else {
-        // Center on geometry bounds
-        const cx = (minX + maxX) / 2;
-        const cy = (minY + maxY) / 2;
-        const w = maxX - minX;
-        const h = maxY - minY;
-        
-        // Add 20% padding
-        const padding = 1.2;
-        state.view.x = cx;
-        state.view.y = cy;
-        state.view.w = Math.max(10, w * padding); // Minimum 10 units
-      }
-      
-      const rect = svg.getBoundingClientRect();
-      if (rect && rect.height > 0) {
-        state.view.h = state.view.w / (rect.width / rect.height);
-      } else {
-        state.view.h = DEFAULT_VIEW.h;
-      }
-      svg.setAttribute('viewBox', `${state.view.x - state.view.w / 2} ${state.view.y - state.view.h / 2} ${state.view.w} ${state.view.h}`);
+      fitViewToExtents(svg, state.view, state);
     });
   }
 

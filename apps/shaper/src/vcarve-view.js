@@ -8,6 +8,7 @@ import { loopPolygon, polyArea } from '#core/loop-geometry.js';
 import { holesOfLoop } from '#core/group-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
+import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 
 
 export function mountVcarveView(state) {
@@ -21,6 +22,21 @@ export function mountVcarveView(state) {
     canvas: document.getElementById('vcarve-canvas'),
   };
   if (!els.canvas) return { refresh() {} };
+
+  const vcarveViewState = {
+    view: null,
+    allowEmptyPan: true,
+    _panZoom: {
+      isPanning: false,
+      lastPanPoint: null,
+      lastTouchDistance: null,
+      touchPoints: new Map(),
+      isPinching: false,
+      lastPinchCenter: null,
+      lastPinchDistance: null,
+    },
+  };
+  const panZoomCleanup = setupPanZoom(els.canvas, vcarveViewState, { attachListeners: true });
 
   if (!Array.isArray(state.vcarves)) state.vcarves = [];
   // ONE record (the tab edits a single vcarve for now); DERIVE the stack — never materialize it.
@@ -89,8 +105,11 @@ export function mountVcarveView(state) {
     els.maxdepth.value = r.maxDepth + ' mm';
   }
 
+  let lastRegion = null;
   function recompute() {
     const r = rec();
+    const regionChanged = (lastRegion !== r.region);
+    lastRegion = r.region;
     const loops = findLoops(state);
     const loop = loops.find((l) => l.id === r.region);
     if (!loop) { els.canvas.innerHTML = ''; els.readout.textContent = 'Pick a region to preview.'; return; }
@@ -101,7 +120,7 @@ export function mountVcarveView(state) {
     const holeIds = holesOfLoop(loop, loops, state, loopPolys, { excludeNested: true });
     const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
-    render(els.canvas, boundary, contours, r.maxDepth, holePolys);
+    render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged);
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
     els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;
   }
@@ -114,18 +133,36 @@ export function mountVcarveView(state) {
 
   function refresh() { populateRegions(); syncControls(); recompute(); }
   refresh();
-  return { refresh };
+  return {
+    refresh,
+    viewState: vcarveViewState,
+    destroy() {
+      if (panZoomCleanup && typeof panZoomCleanup.destroy === 'function') panZoomCleanup.destroy();
+    },
+  };
 }
 
 // Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + hole boundaries (dark)
 // + the nested contours DEPTH-SHADED (deeper = darker). Auto-fits the viewBox to the region bbox.
 // Non-scaling strokes keep line weight constant.
-function render(canvas, boundary, contours, maxDepth, holePolys = []) {
+function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveViewState = null, regionChanged = false) {
   const allPts = [...boundary, ...holePolys.flat()];
   const xs = allPts.map((p) => p.x), ys = allPts.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const w = Math.max(1e-3, maxX - minX), h = Math.max(1e-3, maxY - minY), m = Math.max(w, h) * 0.12 + 1;
-  canvas.setAttribute('viewBox', `${minX - m} ${minY - m} ${w + 2 * m} ${h + 2 * m}`);
+  if (vcarveViewState) {
+    if (regionChanged || !vcarveViewState.view) {
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const rect = (canvas.getBoundingClientRect && canvas.getBoundingClientRect()) || null;
+      const aspect = (rect && rect.width && rect.height) ? (rect.width / rect.height) : (4 / 3);
+      const reqW = Math.max(w + 2 * m, (h + 2 * m) * aspect);
+      vcarveViewState.view = { x: cx, y: cy, w: reqW, h: reqW / aspect };
+      updateViewBox(canvas, vcarveViewState.view);
+    }
+  } else {
+    canvas.setAttribute('viewBox', `${minX - m} ${minY - m} ${w + 2 * m} ${h + 2 * m}`);
+  }
   const poly = (pts, attrs) => `<polygon points="${pts.map((p) => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join(' ')}" ${attrs}/>`;
   let s = poly(boundary, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
   for (const hp of holePolys) {

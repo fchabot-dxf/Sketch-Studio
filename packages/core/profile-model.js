@@ -778,23 +778,29 @@ export function deriveCutFootprint(cuts, rec, state) {
   const isGuide = rec.cutType === 'guide';
   for (const cut of cuts) {
     if (cut.isCompound) {
-      const opened = (r > 0) ? openPolygon(cut.outerPoly, r, off) : [];
+      // TASK 452: the Origin's real TWO-STAGE pocket. Stage 1 CLEARS with the cutter kept back from the wall by the Origin's
+      // automatic offset (rec.autoOffset, declared on the pocket CUT_TYPES record = 1/4 of the cutter diameter) plus the
+      // user's cutOffset: opened region (outer minus islands grown the same way). Stage 2 is the FINISH pass the user then
+      // runs as an INSIDE cut at zero offset along the walls (and an Outside cut around islands): a swept band reaching the
+      // wall, so the uncleared strip it removes is visible. The 449 travel direction rides on the finish centre paths.
+      const margin = off + (Number(rec.autoOffset) || 0);
+      const opened = (r > 0) ? openPolygon(cut.outerPoly, r, margin) : [];
       const rings = [];
       if (opened.length >= 3) {
         rings.push(opened);
         for (const hp of (cut.holePolys || [])) {
-          const grown = offsetPolygon(hp, r + off, { join: 'round' });
+          const grown = offsetPolygon(hp, r + margin, { join: 'round' });
           const closed = grown.length >= 3 ? offsetPolygon(grown, -r) : [];
           const ring = closed.length >= 3 ? closed : hp;
           if (polygonContains(opened, ring)) rings.push(ring);
         }
       }
-      // TASK 449: the finish-pass centre paths (the line the bit centre follows): the wall inset by r+off and each island
-      // grown by r+off (round joins) — the same erosion/dilation the footprint above is built from.
-      const dist = r + off;
-      const wall = r > 0 ? (dist === 0 ? cut.outerPoly : offsetPolygon(cut.outerPoly, -dist)) : [];
-      const islandCenters = r > 0 ? (cut.holePolys || []).map((hp) => (dist === 0 ? hp : offsetPolygon(hp, dist, { join: 'round' }))).filter((pg) => pg.length >= 3) : [];
-      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters });
+      const wall = r > 0 ? offsetPolygon(cut.outerPoly, -r) : [];
+      const islandCenters = r > 0 ? (cut.holePolys || []).map((hp) => offsetPolygon(hp, r, { join: 'round' })).filter((pg) => pg.length >= 3) : [];
+      const finishRings = [];
+      if (wall.length >= 3) finishRings.push(...sweptPath(wall, r, { closed: true }));
+      for (const ic of islandCenters) finishRings.push(...sweptPath(ic, r, { closed: true }));
+      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters });
     } else if (cut.kind === 'chain') {
       const rings = [];
       if (!isGuide && r > 0) {

@@ -297,6 +297,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
     const footprintFill = `fill:${color}; fill-opacity:0.28; stroke:none;`;
+    const finishFill = `fill:#f59e0b; fill-opacity:0.30; stroke:none;`; // TASK 452: finish pass (distinct from the green clearing hatch)
     const pocketFill = `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
     const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
     const dashStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
@@ -304,6 +305,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     let region = '', path = '', hasTravel = false;
     for (const fp of deriveCutFootprint(cuts, rec, state)) {
       const rings = fp.rings.filter((ring) => ring.length >= 3);
+      // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing hatch
+      const finish = (fp.finishRings || []).filter((ring) => ring.length >= 3);
+      if (finish.length) region += `<path d="${finish.map(polyRingD).join(' ')}" fill-rule="nonzero" style="${finishFill}"/>`;
       if (rings.length) region += `<path d="${rings.map(polyRingD).join(' ')}" fill-rule="${fp.fillRule}" style="${fp.kind === 'pocket' ? pocketFill : footprintFill}"/>`;
       // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
       // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line / guide have none.

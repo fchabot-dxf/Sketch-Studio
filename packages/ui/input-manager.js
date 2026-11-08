@@ -1041,7 +1041,7 @@ function handleWheel(e, svg, state) {
 }
 
 // Export core input handlers to allow programmatic tests and external wiring
-export { handlePointerDown, handlePointerMove, handlePointerUp, setupEventListeners, handleWheel };
+export { handlePointerDown, handlePointerMove, handlePointerUp, setupEventListeners, handleWheel, setupKeyboardShortcuts };
 
 export function updateViewBox(svg, view) {
     const rect = svg.getBoundingClientRect();
@@ -1117,7 +1117,14 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { state.undo(); e.preventDefault(); }
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+            state.undo();
+            e.preventDefault();
+        } else if (mod && ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y')) {
+            state.redo();
+            e.preventDefault();
+        }
 
         // Toggle fixed on selection
         if (e.key.toLowerCase() === 'f') {

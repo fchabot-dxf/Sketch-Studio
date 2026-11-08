@@ -86,6 +86,8 @@ function injectStyles() {
   user-select: none; -webkit-tap-highlight-color: transparent; }
 .sk-ribbon-btn:hover { background: var(--sk-ribbon-hover, #f0f0f0); }
 .sk-ribbon-btn:active { transform: scale(0.95); }
+.sk-ribbon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.sk-ribbon-btn:disabled:hover { background: transparent; transform: none; }
 .sk-ribbon-btn.active { background: var(--sk-selection, #3B82F6); color: #fff;
   border-color: var(--sk-selection-border, #1E40AF); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
 .sk-ribbon-btn.active .sk-ribbon-ic { color: #fff; }
@@ -222,16 +224,53 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   buildGroup('Modify', modifyTools, toolButton);  // TRACE-1: trim + break
   buildGroup('Inspect', INSPECT, toolButton);
   buildGroup('Constrain', CONSTRAIN, toolButton);
-  // app-specific groups (Edit / Actions / …) appended by the host
+
+  // EDIT: shared built-in Undo / Redo (all hosts)
+  const editFrag = document.createDocumentFragment();
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'sk-ribbon-btn';
+  undoBtn.id = 'btn-undo';
+  undoBtn.title = 'Undo (Ctrl+Z)';
+  undoBtn.innerHTML = `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sk-ribbon-lbl">Undo</span>`;
+  undoBtn.addEventListener('click', () => {
+    if (state && typeof state.undo === 'function') state.undo();
+    fire('action', { id: 'btn-undo', action: 'undo' });
+    refresh();
+  });
+
+  const redoBtn = document.createElement('button');
+  redoBtn.type = 'button';
+  redoBtn.className = 'sk-ribbon-btn';
+  redoBtn.id = 'btn-redo';
+  redoBtn.title = 'Redo (Ctrl+Y, Ctrl+Shift+Z)';
+  redoBtn.innerHTML = `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 7v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sk-ribbon-lbl">Redo</span>`;
+  redoBtn.addEventListener('click', () => {
+    if (state && typeof state.redo === 'function') state.redo();
+    fire('action', { id: 'btn-redo', action: 'redo' });
+    refresh();
+  });
+  editFrag.append(undoBtn, redoBtn);
+  el.appendChild(group('Edit', editFrag));
+
+  // app-specific groups (Actions / …) appended by the host
   (extraGroups || []).forEach((grp) => {
     const frag = document.createDocumentFragment();
     (grp.buttons || []).forEach(bd => frag.appendChild(extraButton(bd)));
     el.appendChild(group(grp.label || '', frag));
   });
 
+  const unlistenHistory = (state && typeof state.addHistoryListener === 'function')
+    ? state.addHistoryListener(() => refresh())
+    : null;
+
   function refresh() {
     const cur = state && state.currentTool;
     toolBtns.forEach(({ btn, tool }) => btn.classList.toggle('active', tool === cur));
+    const canUndo = (state && typeof state.canUndo === 'function') ? state.canUndo() : Boolean(state && state.history && state.history.length > 0);
+    const canRedo = (state && typeof state.canRedo === 'function') ? state.canRedo() : Boolean(state && state.redoStack && state.redoStack.length > 0);
+    undoBtn.disabled = !canUndo;
+    redoBtn.disabled = !canRedo;
   }
 
   refresh();
@@ -239,6 +278,9 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     el,
     render: (container) => { if (container) container.appendChild(el); refresh(); return el; },
     refresh,
-    destroy: () => { try { el.remove(); } catch (_) {} },
+    destroy: () => {
+      if (unlistenHistory) unlistenHistory();
+      try { el.remove(); } catch (_) {}
+    },
   };
 }

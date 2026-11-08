@@ -3,8 +3,6 @@
 // VERBATIM from apps/sketchstudio/main.js (P5 pre) so SketchStudio AND Shaper's Design canvas share ONE state
 // shape. Pure relocation — no field changed.
 // Params: `engine` (the constraint engine) + `view` (the viewBox state object, shared with the host's view loop).
-// TODO(shaper): the undo helpers reach `#btn-undo` (guarded → no-op in a host without it); parameterize if a
-// host wants its own undo button.
 import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
@@ -48,6 +46,8 @@ export function createSketchState(engine, view) {
     history: [],  // Store last 5 states for undo
     maxHistory: 5,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
+    // TASK 435: callbacks run after every history change (the shared ribbon's Undo/Redo enable state subscribes).
+    _historyListeners: new Set(),
     _undoGroupActive: false,
     _undoGroupDepth: 0,
     // BURN-DOWN-2: deep-clone the live store into a snapshot object (extracted from saveStateForce so undo/redo
@@ -100,15 +100,35 @@ export function createSketchState(engine, view) {
       this.selectedShapes.clear();
       this.active = null;
     },
+    canUndo: function() { return this.history.length > 0; },
+    canRedo: function() { return this.redoStack.length > 0; },
+    // TASK 435: subscribe to history changes; returns the unsubscribe function.
+    addHistoryListener: function(fn) {
+      this._historyListeners.add(fn);
+      return () => this._historyListeners.delete(fn);
+    },
+    _notifyHistory: function() {
+      for (const fn of this._historyListeners) fn();
+    },
+    // TASK 435: drop every undo AND redo step (Clear All: "not undoable"), then tell the listeners.
+    clearHistory: function() {
+      this.history.length = 0;
+      this.redoStack.length = 0;
+      this._notifyHistory();
+    },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     saveStateForce: function(){
       this.history.push(this._captureSnapshot());
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
-      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
-      if(undoBtn) undoBtn.disabled = false;
+      this._notifyHistory();
     },
-    discardSnapshotAt(len) { if (this.history.length !== len) return false; this.history.pop(); return true; },
+    discardSnapshotAt(len) {
+      if (this.history.length !== len) return false;
+      this.history.pop();
+      this._notifyHistory();
+      return true;
+    },
     // Normal save - during an active undo group we still create segment snapshots (they will be compressed on commit)
     saveState: function() {
       if(this._undoGroupActive){
@@ -145,6 +165,7 @@ export function createSketchState(engine, view) {
       }catch(_){ }
       this._undoGroupInfo = null;
       this._undoGroupActive = false;
+      this._notifyHistory();
     },
     // Cancel the active undo group and revert to the snapshot taken before the group started.
     cancelUndoGroup: function(){
@@ -185,6 +206,7 @@ export function createSketchState(engine, view) {
       try{ removeOrphanJoints(this); }catch(_){ }
       this._undoGroupInfo = null;
       this._undoGroupActive = false;
+      this._notifyHistory();
       return true;
     },
     undo: function() {
@@ -193,9 +215,7 @@ export function createSketchState(engine, view) {
       this.redoStack.push(this._captureSnapshot());
       const snapshot = this.history.pop();
       this._restoreSnapshot(snapshot); // cleanup after undo is disabled; trust the snapshot as saved
-      // Update undo button state
-      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
-      if(undoBtn && this.history.length === 0) undoBtn.disabled = true;
+      this._notifyHistory();
     },
     // BURN-DOWN-2: re-apply the most recently undone state (symmetric with undo()). No-op when nothing was undone.
     redo: function() {
@@ -205,8 +225,7 @@ export function createSketchState(engine, view) {
       if(this.history.length > this.maxHistory) this.history.shift();
       const snapshot = this.redoStack.pop();
       this._restoreSnapshot(snapshot);
-      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
-      if(undoBtn) undoBtn.disabled = this.history.length === 0;
+      this._notifyHistory();
     }
   };
 

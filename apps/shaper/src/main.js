@@ -18,12 +18,12 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
-import { cutPlanEntries, CUT_PLAN, keyOf } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
-import { findLoops } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
+import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
@@ -329,13 +329,18 @@ function importSvgToSketch(svgText, fileName) {
       }
     }
 
-    for (const s of shapes) {
-      if (assignedShapeIds.has(s.id)) continue;
-      if (s.descId && cutRecordByDesc.has(s.descId)) {
-        const rec = cutRecordByDesc.get(s.descId);
-        if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
-          CUT_PLAN.set(keyOf('edge', s.id), { ...rec, cutType: rec.cutType || 'online' });
-          cutsAssigned++;
+    const chains = findOpenChains(st, loops);
+    for (const c of chains) {
+      for (const s of (c.shapes || [])) {
+        if (s.descId && cutRecordByDesc.has(s.descId)) {
+          const rec = cutRecordByDesc.get(s.descId);
+          if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
+            const chainKey = keyOf('chain', c.id);
+            if (!CUT_PLAN.has(chainKey)) {
+              CUT_PLAN.set(chainKey, { ...rec, cutType: rec.cutType || 'online' });
+              cutsAssigned++;
+            }
+          }
         }
       }
     }
@@ -560,7 +565,14 @@ function showMode(mode) {
     ensureSketch();
     try { designController.engine.solve(500); } catch (_) {}
     if (prepareView) prepareView.destroy();
-    prepareView = mountPrepareView(designController.state, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    const st = designController.state;
+    const loops = findLoops(st);
+    const chains = findOpenChains(st, loops);
+    const { dropped, moved } = migrateEdgeRecords(loops, chains);
+    if (dropped + moved > 0) {
+      groupStatus(`Cut plan updated: ${moved} edge cut${moved === 1 ? '' : 's'} moved to chain, ${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
+    }
+    prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
     window.__prepareView = prepareView;
     refreshCutPanel(); // no selection yet → the card stays hidden
   }

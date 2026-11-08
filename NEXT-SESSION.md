@@ -94,7 +94,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
       the toolpath panels, svg-import, interaction).
     - 444b merged 00248c7: one keystroke = one history by active stage; dead #undoBtn wiring gone. It confirmed
       that Design Ctrl+Z used to undo a toolpath too.
-    - Now on 445: pens not undoable (history.js serialize skips plotColors).
+    - 445 merged 27f9fc8: pens are undoable.
+    - Now on 446: the pen row overflows, so the delete x sits under the canvas and is unclickable.
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.
   - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
   - Both report to the advisor (sketch-studio-e1) by SendMessage.

@@ -7,7 +7,7 @@
 
 import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
+import { cutTypeById, availableTypes, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
@@ -284,7 +284,8 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit).
   const lookCache = new Map(); // targetKey → { sig, region, path }
   const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${SettingsManager.get('DOC_UNIT')}`;
-  const computeLook = (key, rec) => {
+  const computeLook = (key, storedRec) => {
+    const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset — a stored one is ignored here
     const { kind, id } = parseKey(key);
     const t = { kind, id };
     const cuts = deriveProfileCuts(t, rec, state, loops, loopPolys);

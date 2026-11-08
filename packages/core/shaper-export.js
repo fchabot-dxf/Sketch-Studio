@@ -80,13 +80,14 @@ function colorAttrs(enc) {
   if (enc.stroke && enc.stroke !== 'none') s += ` stroke="${enc.stroke}"`;
   return s;
 }
-// attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0) / toolDia (if >0) unit-suffixed.
+// attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0 AND the encoding doesn't declare `offset: false`,
+// TASK 450: On Line / Guide take none, so a stored value is never written) / toolDia (if >0) unit-suffixed.
 function shaperAttrs(rec, enc, docUnit) {
   let s = ` shaper:cutType="${enc.cutType}"`;
   const dep = Number(rec.cutDepth);
   if (rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${format(dep, docUnit, { unit: true })}"`;
   const off = Number(rec.cutOffset);
-  if (Number.isFinite(off) && off !== 0) s += ` shaper:cutOffset="${format(off, docUnit, { unit: true })}"`;
+  if (enc.offset !== false && Number.isFinite(off) && off !== 0) s += ` shaper:cutOffset="${format(off, docUnit, { unit: true })}"`;
   const tool = Number(rec.toolDia);
   if (Number.isFinite(tool) && tool > 0) s += ` shaper:toolDia="${format(tool, docUnit, { unit: true })}"`;
   return s;

@@ -19,14 +19,17 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //   targetKind  — 'region' (acts on a closed area) | 'path' (acts on a single vector). Drives the gating rule:
 //                 a LOOP target accepts all 5; an EDGE target accepts only the 'path' types (online/guide).
 //   menuLabel   — the cut-menu label (matches Shaper's wording).
+//   offset      — TASK 450: `false` = the type takes NO offset (Shaper: On Line centres the cutter on the path, "offsets are not
+//                 an option"; Guide is uncuttable). Read via cutTypeAllowsOffset(): the card hides the Offset row, the export never
+//                 writes shaper:cutOffset, and the preview treats the stored offset as 0. A stored value is left untouched.
 //   previewFill / previewStroke — a DARK-canvas-legible palette (green family) for the Prepare cut-plan preview;
 //                 the export colors (e.g. exterior=#000) are invisible/illegible on the dark Prepare canvas.
 export const CUT_TYPES = [
   { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a' },
   { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e' },
   { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80' },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399' },
-  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635' },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399', offset: false },
+  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635', offset: false },
 ];
 
 // VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
@@ -46,6 +49,16 @@ export const SHAPER_FIELDS = ['cutDepth', 'cutOffset', 'toolDia'];
 
 export function cutTypeById(id) {
   return CUT_TYPES.find((t) => t.id === id) || null;
+}
+
+// TASK 450: does this cut type take an offset? Declared on the CUT_TYPES record (`offset: false`); unknown / unset type = yes.
+export function cutTypeAllowsOffset(id) {
+  const t = id ? cutTypeById(id) : null;
+  return !(t && t.offset === false);
+}
+// The record the PREVIEW should use: an offset stored on a type that takes none is ignored (never migrated or deleted).
+export function effectiveCutRecord(rec) {
+  return (rec && rec.cutOffset && !cutTypeAllowsOffset(rec.cutType)) ? { ...rec, cutOffset: 0 } : rec;
 }
 
 // A fresh per-target cut record. Numeric fields are in BASE mm (U3a; 1 world unit = 1 mm) — the cut panel

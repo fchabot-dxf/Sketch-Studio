@@ -3,7 +3,7 @@
 // callbacks. Cut params parse/format through #core/units.js per the document unit, and RE-LABEL when DOC_UNIT changes.
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
-import { availableTypes, cutTypeById } from './shaper.js';
+import { availableTypes, cutTypeById, cutTypeAllowsOffset } from './shaper.js';
 import SettingsManager from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
@@ -57,7 +57,7 @@ export function createCutPanel(hostEl, opts = {}) {
           <span class="cut-unit">mm</span>
         </div>
       </div>
-      <div class="cut-row">
+      <div class="cut-row cut-row-offset">
         <label class="cut-field-label">Offset</label>
         <div class="cut-inline">
           <button type="button" class="cut-flip" title="Flip offset direction" aria-pressed="false">&#8644;</button>
@@ -78,7 +78,7 @@ export function createCutPanel(hostEl, opts = {}) {
 
   const $ = (sel) => card.querySelector(sel);
   const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), curLabel = $('.cut-type-cur'), curSw = $('.cut-sw');
-  const depthInput = $('.cut-depth'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
+  const depthInput = $('.cut-depth'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), offsetRow = $('.cut-row-offset'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
   let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM };
@@ -126,6 +126,8 @@ export function createCutPanel(hostEl, opts = {}) {
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
     depthInput.value = isUnset(current.cutDepth) ? '' : fmt(current.cutDepth);
+    // TASK 450: types declared `offset: false` (On line, Guide) have no Offset row (a stored value is left alone, ignored elsewhere)
+    offsetRow.style.display = cutTypeAllowsOffset(current.cutType) ? '' : 'none';
     const off = Number(current.cutOffset) || 0;
     offsetInput.value = fmt(off);
     flipBtn.classList.toggle('is-on', off < 0);

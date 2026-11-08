@@ -100,8 +100,12 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - Now on 437: the spindle-motion PLAN.
     - QUEUED next for CC-A: 447, the owner's ask (screenshot: the pocket hatch is the tool-CENTER inset with sharp
       corners).
-      - Prepare shows the TRUE bit footprint: pocket via #core openPolygon (polygon-offset.js:136, declared but
-        unused); inside/outside show rounded corners plus the leftover corner material.
+      - Owner: "all types of cuts". Prepare shows the TRUE bit footprint for EVERY cut type:
+        - pocket: #core openPolygon (polygon-offset.js:136, declared but unused);
+        - inside/outside: rounded corners plus the leftover corner material;
+        - on line, closed and open chains: the band = the path dilated by r, with round corners and round end caps;
+        - V-carve: each contour's real surface width (2 * depth * tan(half-angle));
+        - guide: not a cut, so no footprint (stays dashed).
       - One derivation; export unchanged.
     - Noticed: an unlabeled grey pen-group row in Toolpath Operations (cosmetic; batch it with the audit's cosmetics).
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.

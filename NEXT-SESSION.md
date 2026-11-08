@@ -110,7 +110,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
       - DONE: 447 merged f2de291 (deriveCutFootprint + sweptPath in #core; export untouched).
     - OWNER ANSWERS on the Shaper Origin (2026-11-08), the ground truth for every Shaper feature:
       - Q1 path ORDER: the operator picks the order, so our SVG order does not matter;
-      - Q2 PASSES: the Shaper divides deep cuts into passes automatically;
+      - Q2 PASSES: the Shaper divides deep cuts into passes automatically. Shaper support "Modifying the Pass Depth":
+        - pass depth is set ON THE ORIGIN'S UI only (toggle + value); no SVG attribute exists for it;
+        - default = the bit diameter (a 1/4in bit gives 1/4in passes);
+        - toggle OFF → one pass (two if "Roughing Passes" is on);
+        - so we never model or export pass depth (no rec.passDepth field);
       - Q3 DIRECTION: the Shaper decides climb/conventional from the cut type (inside vs outside), so SVG winding
         does not matter;
       - Q4 PLUNGE/RETRACT: wherever the user decides;

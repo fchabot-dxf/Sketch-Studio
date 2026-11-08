@@ -8,6 +8,7 @@
 // state). Selection is reset on restore to avoid dangling shape ids.
 
 import { state } from "./state.js";
+import { captureHistoryState, applyHistoryState } from "./plotter-doc.js"; // TASK 451: one list of what the plotter owns, shared with persistence
 
 const MAX_HISTORY = 100;
 const undoStack = [];
@@ -44,24 +45,11 @@ export function redo() {
 }
 
 function serialize() {
-    return JSON.stringify({
-        artLayers: state.artLayers,
-        activeArtLayerId: state.activeArtLayerId,
-        toolpaths: state.toolpaths,
-        plotColors: state.plotColors, // TASK 445: the pens (toolpaths/art layers reference them by id, so they restore together)
-        activeToolpathId: state.activeToolpathId,
-        doc: { ...state.doc },
-    });
+    return JSON.stringify(captureHistoryState());
 }
 
 function restore(snap) {
-    const s = JSON.parse(snap);
-    state.artLayers = s.artLayers;
-    state.activeArtLayerId = s.activeArtLayerId;
-    state.toolpaths = s.toolpaths || [];
-    state.plotColors = s.plotColors || [];
-    state.activeToolpathId = s.activeToolpathId || null;
-    state.doc = s.doc;
+    applyHistoryState(JSON.parse(snap));
     state.selectedShapeIds = new Set();
     state.interaction = null;
     if (_onRestore) _onRestore();

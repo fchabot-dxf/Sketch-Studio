@@ -5,6 +5,14 @@ import { nearestColorIndex } from "#core/color-match.js"; // UNIFY-4c: digital -
 
 let nextId = 1;
 export const uid = (prefix = "id") => `${prefix}${nextId++}`;
+/** Move the id counter past every id in `ids` ("toolpath12" -> 13+), so ids minted after a restore can't collide with
+ *  restored ones (the counter restarts at 1 on each page load). */
+export function reseedUid(ids) {
+    for (const id of ids) {
+        const m = /(\d+)$/.exec(String(id));
+        if (m) nextId = Math.max(nextId, +m[1] + 1);
+    }
+}
 
 export const state = {
     doc: { w: 200, h: 200 },     // always stored in mm (plot/G-code unit)
@@ -125,9 +133,9 @@ export function makeShapeStyle(stroke = "#000000", fill = null, width = DEFAULT_
 /** The style record for a shape, NORMALIZED — or null when the shape has no style at all.
  *  MIGRATION: the pre-STYLE-1 store held a BARE HEX per shape (shapeColors: id -> "#rrggbb"). A string value is
  *  read as { stroke: hex, fill: null, width: default } — the same single-color behaviour it had before — so an older
- *  document, a cloud restore, or any code still writing a plain hex keeps rendering and bucketing. (Nothing in the
- *  app persists this map today — history.serialize covers artLayers/toolpaths/doc only — so this tolerance IS the
- *  migration; there is no stored payload to rewrite.) */
+ *  document, a cloud restore, or any code still writing a plain hex keeps rendering and bucketing. (TASK 451: the map IS
+ *  now persisted, via plotter-doc.js, but only ever written in the record form, so this tolerance stays for older
+ *  in-memory writers; no stored payload holds a bare hex.) */
 export function shapeStyle(shapeId) {
     const v = state.shapeStyles.get(shapeId);
     if (v == null) return null;

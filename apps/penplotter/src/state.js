@@ -255,8 +255,17 @@ export function initLayers() {
     state.artLayers = [];
     state.activeArtLayerId = null;
     const toolpath = makeToolpath("Outline", "outline");
+    toolpath.placeholder = true; // TASK 465: the starter toolpath; dropped once real toolpaths are made from a selection
     state.toolpaths = [toolpath];
     state.activeToolpathId = toolpath.id;
+}
+
+/** The untouched starter toolpath initLayers seeds: still marked, still empty, still at its default settings. */
+export function isPristinePlaceholder(tp) {
+    if (!tp.placeholder || (tp.targetShapeIds || []).length || tp.plotColorId || tp.mixOf) return false;
+    const fresh = makeToolpath(tp.name, tp.type);
+    const mine = (t) => JSON.stringify([t.outline, t.fill, t.drawOutline, t.export, t.visible]);
+    return mine(tp) === mine(fresh);
 }
 
 export function activeArtLayer() {

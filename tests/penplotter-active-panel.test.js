@@ -172,6 +172,7 @@ await (async () => {
     await clickEl('.stage-btn[data-stage="toolpath"]'); await sleep(700);
 
     // 1. + Fill from the selection -> the panel shows the NEW fill, and editing Spacing changes THAT toolpath only
+    await clickEl('#addOutlineTp'); await sleep(500);   // TASK 465: the first toolpath made from a selection replaces the empty starter one
     const v0 = await view();
     await clickEl('#addFillTp'); await sleep(500);
     const v1 = await view();

@@ -24,7 +24,7 @@ async function onExportClick() {
     try {
         const entries = buildGcodeEntries();
         if (entries.length === 0) {
-            return toast("Nothing to plot — add vectors to your art layers first.", true);
+            return toast("Nothing to plot — draw or import geometry on the Design tab, then target it with + Outline or + Fill.", true);
         }
         const zip = buildZip(entries);
         downloadBlob(zip, "plotter_gcode.zip");

@@ -227,8 +227,13 @@ export function mountSketchStage(view, ctx = {}) {
       mixToggle.disabled = !canMix;
       const mixed = canMix && isMixed(one);
       if (document.activeElement !== mixToggle) mixToggle.checked = mixed;
-      const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length;
-      if (msig !== lastMixSig) { lastMixSig = msig; mixStatus.textContent = mixed ? mixSummary(one) : ''; }
+      // TASK 465: a coloured shape + an EMPTY palette used to leave the box silently disabled; say what is missing.
+      const noPens = !!one && !!mixColorFor(one) && state.plotColors.length === 0;
+      const msig = (one || '') + '|' + mixed + '|' + state.toolpaths.length + '|' + noPens;
+      if (msig !== lastMixSig) {
+        lastMixSig = msig;
+        mixStatus.textContent = mixed ? mixSummary(one) : (noPens ? 'Pen-mix needs pens: add one with + Pen on the Toolpath tab.' : '');
+      }
     }
     // DOC-SIZE-IN-DESIGN: keep the Document button's label in sync with state.doc (updates after a modal size edit).
     if (docBtn) {

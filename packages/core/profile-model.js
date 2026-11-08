@@ -27,6 +27,7 @@ function polysCross(polyA, polyB) {
 
 function getPoly(loop, loopPolys, state) {
   if (!loop) return [];
+  if (loop.polygon && Array.isArray(loop.polygon) && loop.polygon.length) return loop.polygon;
   if (loopPolys) {
     const p = (loopPolys instanceof Map) ? loopPolys.get(loop.id) : loopPolys[loop.id];
     if (p && p.length) return p;
@@ -634,4 +635,121 @@ export function listSketchProfiles(state, loops, loopPolys) {
   }
 
   return entries;
+}
+
+/**
+ * ONE Unified Cut Derivation for Profiles and Targets.
+ * Given a target (or key) and a cut record, resolves the cut operations to perform:
+ * - POCKET: compound cut with outer loop and all directly-contained holes
+ * - EXTERIOR (Outside): holes emitted FIRST as 'interior' (offsetSide: -1), outer emitted LAST as 'exterior' (offsetSide: +1)
+ * - INTERIOR (Inside): holes emitted FIRST as 'exterior' (offsetSide: +1), outer emitted LAST as 'interior' (offsetSide: -1)
+ * - ONLINE: holes emitted FIRST as 'online' (offsetSide: 0), outer emitted LAST as 'online' (offsetSide: 0)
+ * - GUIDE: holes emitted FIRST as 'guide' (offsetSide: 0), outer emitted LAST as 'guide' (offsetSide: 0)
+ * - CHAIN: open chain emitted with offsetSide: 0
+ *
+ * Sketches without holes emit only the outer cut (byte-identical to simple loops).
+ *
+ * @param {string|object} target - Target key string or { kind, id } or resolved spec
+ * @param {object} rec - Cut record ({ cutType, cutDepth, cutOffset, toolDia })
+ * @param {object} state - Sketch state
+ * @param {Array} [loops] - Optional precomputed loops
+ * @param {object|Map} [loopPolys] - Optional precomputed loop polygons
+ * @returns {Array<object>} Array of cut descriptors
+ */
+export function deriveProfileCuts(target, rec, state, loops, loopPolys) {
+  if (!target || !rec || !rec.cutType) return [];
+  const allLoops = loops || (state ? findLoops(state) : []);
+  const spec = (typeof target === 'object' && target !== null && 'outer' in target && 'inners' in target)
+    ? target
+    : resolveTargetKey(target, state, allLoops, loopPolys);
+
+  if (!spec || spec.invalid) return [];
+
+  if (spec.kind === 'chain') {
+    return [{
+      kind: 'chain',
+      chain: spec.chain,
+      cutType: rec.cutType,
+      offsetSide: 0,
+      rec: { ...rec },
+      isHole: false,
+      isCompound: false,
+    }];
+  }
+
+  if (!spec.outer) return [];
+
+  const outerLoop = allLoops.find((l) => l.id === spec.outer);
+  if (!outerLoop) return [];
+
+  const holeLoops = (spec.inners || [])
+    .map((hid) => allLoops.find((l) => l.id === hid))
+    .filter(Boolean);
+
+  const outerPoly = getPoly(outerLoop, loopPolys, state);
+  const holePolys = holeLoops.map((hl) => getPoly(hl, loopPolys, state));
+
+  const ct = rec.cutType;
+  const isOutside = ct === 'exterior' || ct === 'outside';
+  const isInside = ct === 'interior' || ct === 'inside';
+
+  if (ct === 'pocket') {
+    return [{
+      kind: 'profile',
+      cutType: 'pocket',
+      isCompound: true,
+      isHole: false,
+      outerLoop,
+      holeLoops,
+      outerPoly,
+      holePolys,
+      outerOffsetSide: -1,
+      holeOffsetSide: 1,
+      rec: { ...rec, cutType: 'pocket' },
+      d: spec.d || '',
+      profileId: spec.profileId,
+    }];
+  }
+
+  const cuts = [];
+  const holeCutType = isOutside
+    ? (ct === 'outside' ? 'inside' : 'interior')
+    : isInside
+    ? (ct === 'inside' ? 'outside' : 'exterior')
+    : ct;
+
+  const outerCutType = ct;
+
+  const holeOffsetSide = isOutside ? -1 : isInside ? 1 : 0;
+  const outerOffsetSide = isOutside ? 1 : isInside ? -1 : 0;
+
+  // Holes FIRST
+  for (let i = 0; i < holeLoops.length; i++) {
+    cuts.push({
+      kind: 'loop',
+      loop: holeLoops[i],
+      loopId: holeLoops[i].id,
+      polygon: holePolys[i],
+      cutType: holeCutType,
+      offsetSide: holeOffsetSide,
+      isHole: true,
+      isCompound: false,
+      rec: { ...rec, cutType: holeCutType },
+    });
+  }
+
+  // Outer LAST
+  cuts.push({
+    kind: 'loop',
+    loop: outerLoop,
+    loopId: outerLoop.id,
+    polygon: outerPoly,
+    cutType: outerCutType,
+    offsetSide: outerOffsetSide,
+    isHole: false,
+    isCompound: false,
+    rec: { ...rec, cutType: outerCutType },
+  });
+
+  return cuts;
 }

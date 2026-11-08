@@ -571,7 +571,51 @@ const ENC5 = [
     assert(hasDotCut, 'E2: dot path exported as separate element with online cut');
   }
 
-  console.log('prepare-profile-pick (P1-P8, E1-E2) tests passed ✅');
+  // P9: TASK 433b: Frame with Outside (exterior) cut → toolpath layer has kerf on BOTH boundaries
+  {
+    const state = makeFrameState();
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const view = mountPrepareView(state, svgEl);
+
+    // Select the frame (click at 5, 5 in outer ring)
+    const pt = worldToClient(svgEl, 5, 5);
+    svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
+
+    // Apply Outside cut with 3.175mm tool
+    view.applyCutTypeToSelected('exterior');
+    const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
+    const polyMatches = toolpathG.innerHTML.match(/points="([^"]+)"/g) || [];
+    assert(polyMatches.length >= 2, `P9: outside cut on frame must render toolpaths for both boundaries, got ${polyMatches.length}`);
+
+    // Verify outer toolpath expands outward (-1.5875) and hole toolpath shrinks inward into hole void (16.5875)
+    assert(toolpathG.innerHTML.includes('-1.5875'), 'P9: outer toolpath expands outward by +toolDia/2');
+    assert(toolpathG.innerHTML.includes('16.5875'), 'P9: hole toolpath shrinks inward into hole void by -toolDia/2');
+    view.destroy();
+  }
+
+  // P10: TASK 433b: Frame with Inside (interior) cut → toolpath layer has kerf on BOTH boundaries (duality)
+  {
+    const state = makeFrameState();
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const view = mountPrepareView(state, svgEl);
+
+    // Select the frame (click at 5, 5 in outer ring)
+    const pt = worldToClient(svgEl, 5, 5);
+    svgEl.dispatchEvent({ type: 'pointerdown', clientX: pt.clientX, clientY: pt.clientY, button: 0 });
+
+    // Apply Inside cut with 3.175mm tool
+    view.applyCutTypeToSelected('interior');
+    const toolpathG = svgEl.querySelector('#prepare-toolpath-group');
+    const polyMatches = toolpathG.innerHTML.match(/points="([^"]+)"/g) || [];
+    assert(polyMatches.length >= 2, `P10: inside cut on frame must render toolpaths for both boundaries, got ${polyMatches.length}`);
+
+    // Verify outer toolpath shrinks inward into face (1.5875) and hole toolpath expands outward into face (13.4125)
+    assert(toolpathG.innerHTML.includes('1.5875'), 'P10: outer toolpath shrinks inward into face by -toolDia/2');
+    assert(toolpathG.innerHTML.includes('13.4125'), 'P10: hole toolpath expands outward into face by +toolDia/2');
+    view.destroy();
+  }
+
+  console.log('prepare-profile-pick (P1-P10, E1-E2) tests passed ✅');
 })().catch((e) => {
   console.error('prepare-profile-pick tests failed ❌', e);
   process.exit(1);

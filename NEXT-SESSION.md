@@ -74,7 +74,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - DONE: 433b merged b27101f.
   - DONE: 440 merged 016654f (Pen Plotter exports Design geometry; one collectToolpathShapes). Its art-layer
     fallback serves only OLD saved files, a named legacy branch until UNIFY-7.
-  - AGY-1 now on 441 (target-edit mode leak).
+  - DONE: 441 merged 09b4271 (target-edit ends on stage leave via the existing onLeave hook; it could also edit
+    targets from Export).
+  - AGY-1 now on 443: the Pen Plotter audit sweep, FIND ONLY.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

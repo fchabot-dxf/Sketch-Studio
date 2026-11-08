@@ -11983,3 +11983,128 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 433 (PROFILE CUT SEMANTICS PLAN) — Cut-Type Semantics on Profiles with Holes — branch agy1
+
+### 1. Context & Today's Audit
+- **Problem**: Since TASK 432, a picked profile in Prepare represents an entire face region: either a derived profile (outer loop minus its directly contained holes) or a combined profile (`profile:<id>`).
+- **Export Today (`packages/core/shaper-export.js:203-222`)**:
+  - `pocket` (`shaper:cutType="pocket"`): constructs a compound `evenodd` path containing both the outer loop and its hole subpaths (`lines 208, 217`).
+  - *Every other cut type* (`exterior`, `interior`, `online`, `guide`): lines 211 and 220 call `geom = loopGeom(outerLoop, state, shapeById)`. Holes (`prof.inners`) are silently discarded!
+- **Prepare Preview Today (`apps/shaper/src/prepare-view.js:288-341`)**:
+  - `computeLook`: for `pocket` (`lines 304-328`), insets outer and outsets holes (`clearedHoles`) to render the pocket hatch.
+  - For `exterior` and `interior` (`lines 329-333`), it runs `offsetPolygon(pl.outer.polygon, ...)` on the outer loop only. Holes are not offset or shown as cut paths.
+  - For `guide` and `online` (`lines 335-341`), it calls `targetMarkup` which draws the raw compound loops without tool-kerf offset.
+- **Declared Cut Types (`apps/shaper/src/shaper.js:24-30`)**:
+  - `CUT_TYPES` declares exactly 5 types: `exterior` (Outside), `interior` (Inside), `pocket` (Pocket), `online` (On line), and `guide` (Guide).
+
+---
+
+### 2. Profile Cut Semantics Table (All Declared Cut Types)
+When a target profile has outer loop $O$ and directly contained hole loops $\{H_1, H_2, \dots, H_k\}$:
+
+| Cut Type ID (`shaper.js:24-30`) | Menu Label | Outer Loop $O$ Cut Type | Outer Offset Side | Hole Loops $H_i$ Cut Type | Hole Offset Side | Emitted SVG Form |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `exterior` | Outside | `outside` (`#000000`) | Outward ($+r$) | `inside` (`#FFFFFF` / `#000000`) | Inward ($-r$) | Holes first as `inside` `<path>`, then outer as `outside` `<path>` |
+| `interior` | Inside | `inside` (`#FFFFFF` / `#000000`) | Inward ($-r$) | `outside` (`#000000`) | Outward ($+r$) | Holes first as `outside` `<path>`, then outer as `inside` `<path>` |
+| `pocket` | Pocket | `pocket` (`#7F7F7F`) | Inward ($-r$) | `pocket` (hole boundary) | Outward ($+r$) | ONE compound `<path d="M...Z M...Z" fill-rule="evenodd" shaper:cutType="pocket"/>` |
+| `online` | On line | `online` (`none` / `#7F7F7F`) | Center ($0$) | `online` (`none` / `#7F7F7F`) | Center ($0$) | Hole `<path>` elements first, then outer `<path>` (each `shaper:cutType="online"`) |
+| `guide` | Guide | `guide` (`#0068FF`) | None | `guide` (`#0068FF`) | None | Hole `<path>` elements first, then outer `<path>` (each `shaper:cutType="guide"`) |
+
+*Note on Offset Distances*: $r = \frac{\text{toolDia}}{2} + \text{cutOffset}$. Outer loop positive offset expands outward from the material; inner hole loop positive offset in `inside` cuts expands inward into the hole void, preserving the material of the face.
+
+---
+
+### 3. Cut Order & Shaper Origin Machine Behaviour
+- **Code & Notes Audit**:
+  - `packages/core/shaper-export.js:140-270`: elements are gathered into an `items` array in first-seen order, or grouped under `<g fill="..." shaper:cutType="...">` if `options.groupByCut: true` is passed (`main.js:77`).
+  - `WORK-LOG.md:11089-11091`: previously discussed V-carve split island depth-first sequencing; no machine-enforcement claims exist in code or logs for 2D profile cuts.
+- **Findings**:
+  - In standard CNC / woodworking, cutting interior holes **before** exterior perimeters is essential so the workpiece stays firmly clamped/supported by the raw stock until the final through-cut frees the part.
+  - In our generated SVG, hole paths will always be emitted **before** outer boundary paths.
+  - **UNVERIFIED (Owner Question)**: Does the Shaper Origin handheld router firmware enforce SVG document element order when executing cuts, or does it display all paths on screen and allow the operator to manually select/cut them in arbitrary order? (Emitting holes first in the SVG is physically correct regardless, but machine-side strict sequencing is unverified in repository notes).
+
+---
+
+### 4. Single-Source Derivation Architecture (Preview & Export Parity)
+To prevent drift between the Prepare canvas visualizer and the SVG exporter, both must consume ONE shared derivation function in `#core`.
+- **Proposed Helper**: `deriveProfileCuts(targetKey, rec, state, loops, loopPolys)` in `packages/core/profile-model.js`:
+  ```javascript
+  // Returns:
+  // {
+  //   isCompound: boolean,
+  //   cuts: [
+  //     { loopId, role: 'outer'|'hole', cutType: 'inside'|'outside'|'online'|'guide'|'pocket', offsetSide: 1|-1|0, poly: [...] },
+  //     ...
+  //   ]
+  // }
+  ```
+- **How Shaper Export consumes it (`packages/core/shaper-export.js`)**:
+  - Iterates `cuts`.
+  - For `pocket` (`isCompound: true`): builds compound `evenodd` `d = outerD + ' ' + holeDs.join(' ')` with `shaper:cutType="pocket"`.
+  - For other types: emits each cut path in order (holes first, then outer), stamping the derived `cutType` and the profile's cut parameters (`cutDepth`, `cutOffset`, `toolDia`).
+- **How Prepare Preview consumes it (`apps/shaper/src/prepare-view.js:computeLook`)**:
+  - Iterates the exact same `cuts`.
+  - For `pocket`: uses outer polygon inset by $r$ and hole polygons outset by $r$ to draw the hatch pattern.
+  - For `outside` / `inside`: applies `offsetPolygon(poly, offsetSide * r)` for each cut (both outer and holes!), rendering kerf band + dashed centerline for EVERY path of the profile.
+  - For `online` / `guide`: renders kerf band and center dashed line directly on the loop polygons.
+
+---
+
+### 5. Island Semantics (Holes Inside Holes)
+- **Owner Principle**: "An island is only cut if it has its own record."
+- **Topology Behavior**:
+  - `directlyContainedLoops(parentLoop, allLoops)` (`profile-model.js:366-398`) filters out depth-2 loops: if loop $O$ contains loop $H$, and loop $H$ contains loop $I$ (island), $I$ is **never** part of $O$'s profile. $O$'s profile has hole $H$ only.
+  - Case `exterior`: $O$ cuts `outside`, $H$ cuts `inside`. Island $I$ sits in the void of $H$. If $I$ has no record, $I$ is not cut (it drops out with the slug). If $I$ has its own cut record, $I$ is emitted as its own distinct path with its own parameters.
+  - Case `interior`: $O$ cuts `inside`, $H$ cuts `outside`. Island $I$ is part of the protected material inside $H$. If $I$ has no record, $I$ is untouched.
+  - Case `pocket`: $O$ and $H$ form an evenodd pocket. Material between $O$ and $H$ is cleared; the area inside $H$ (containing $I$) is preserved. $I$ is only cut if assigned its own cut record.
+  - In all cases, an island is strictly isolated from the parent profile's cut and never cut automatically.
+
+---
+
+### 6. Exact-String Export Tests to Add (`tests/shaper-export.test.js`)
+Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40). Target `loop:loop_O` (or `profile:profile-1`).
+
+1. **Test: Profile with hole — Exterior (`outside`) cut**:
+   ```xml
+   <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">
+     <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>
+     <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside"/>
+   </svg>
+   ```
+2. **Test: Profile with hole — Interior (`inside`) cut**:
+   ```xml
+   <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">
+     <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#000000" shaper:cutType="outside"/>
+     <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>
+   </svg>
+   ```
+3. **Test: Profile with hole — Pocket (`pocket`) cut**:
+   ```xml
+   <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">
+     <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 20 20 L 40 20 L 40 40 L 20 40 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>
+   </svg>
+   ```
+4. **Test: Profile with hole — On-line (`online`) cut**:
+   ```xml
+   <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">
+     <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>
+     <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>
+   </svg>
+   ```
+5. **Test: Profile with hole — Guide (`guide`)**:
+   ```xml
+   <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">
+     <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>
+     <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>
+   </svg>
+   ```
+
+---
+
+### 7. Owner Questions (Plainly Listed)
+1. **Shaper Origin Cut Order Enforcement**: Does the real Shaper Origin tool firmware enforce cut ordering from SVG element sequence, or does it merely display the paths on screen for the operator to select and cut in any order?
+2. **Interior Cut Semantics**: Does assigning `Inside` to a profile with holes intend duality (outer is `inside`, holes are `outside` to preserve the island), or does `Inside` on a compound face indicate a through-pocket? (Plan proposes duality).
+3. **Compound vs Discrete Paths for `online` / `guide`**: For `online` and `guide` cuts on a profile with holes, should they emit as separate `<path>` elements (one per loop, allowing discrete selection on tool), or as a single compound `<path d="M...Z M...Z">`? (Plan proposes discrete paths, holes first).
+4. **Parameter Inheritance**: Generated hole cuts inherit all cut parameters (`cutDepth`, `cutOffset`, `toolDia`) from the profile's assignment. An explicit cut assigned directly to a hole loop in Prepare overrides this derivation. Please confirm this meets intent.

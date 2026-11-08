@@ -3,7 +3,7 @@ import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js';
 import { makeProfile } from '#core/profile-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
-import { format } from '#core/units.js';
+import { format, formatShaperParam } from '#core/units.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -39,7 +39,7 @@ import { format } from '#core/units.js';
     const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }], encoding: ENC, docUnit: 'mm' });
     const want = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="100mm" height="50mm" viewBox="0 0 100 50">',
-      '  <path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000" shaper:cutType="outside"/>',
+      '  <path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
       '</svg>',
     ].join('\n');
     eq(svg, want, 'rect-loop outside: exact string');
@@ -64,7 +64,8 @@ import { format } from '#core/units.js';
     const entries = [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior' } }];
     const mm = exportShaperSVG({ state, entries, encoding: ENC, docUnit: 'mm' });
     const inch = exportShaperSVG({ state, entries, encoding: ENC, docUnit: 'in' });
-    eq(inch, mm, 'docUnit does not scale geometry (mm-canonical)');
+    const noOffset = (x) => x.replace(/ shaper:cutOffset="[^"]*"/g, ''); // the offset suffix follows docUnit ("0in" / "0mm"); the geometry must not
+    eq(noOffset(inch), noOffset(mm), 'docUnit does not scale geometry (mm-canonical)');
     assert(mm.includes('viewBox="0 0 100 50"') && mm.includes('L 100 50 L'), 'coords unscaled mm');
   }
 
@@ -99,7 +100,7 @@ import { format } from '#core/units.js';
     const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'pocket', cutDepth: 6.35, toolDia: 3.175 } }], encoding: ENC5, docUnit: 'mm' });
     const want = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="50mm" height="50mm" viewBox="-15 -5 50 50">',
-      '  <circle cx="10" cy="20" r="25" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6.35mm" shaper:toolDia="3.175mm"/>',
+      '  <circle cx="10" cy="20" r="25" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6.350 mm" shaper:cutOffset="0mm" shaper:toolDia="3.175 mm"/>',
       '</svg>',
     ].join('\n');
     eq(svg, want, 'circle loop → <circle> + attrs');
@@ -109,7 +110,7 @@ import { format } from '#core/units.js';
   {
     const state = { joints: new Map([['P', { x: 0, y: 0 }], ['Q', { x: 80, y: 0 }]]), constraints: [], shapes: [{ id: 'e1', type: 'line', joints: ['P', 'Q'] }] };
     const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'chain', id: 'chain_e1' }, rec: { cutType: 'online', toolDia: 3.175 } }], encoding: ENC5, docUnit: 'mm' });
-    assert(svg.includes('<path d="M 0 0 L 80 0" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:toolDia="3.175mm"/>'), 'open chain → <path> + online attrs');
+    assert(svg.includes('<path d="M 0 0 L 80 0" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutOffset="0mm" shaper:toolDia="3.175 mm"/>'), 'open chain → <path> + online attrs');
   }
 
   // 9. Cut-param attrs — docUnit drives the SUFFIX (geometry stays mm); cutOffset 0 / cutDepth unset → omitted
@@ -118,11 +119,11 @@ import { format } from '#core/units.js';
     const loop = findLoops(state)[0];
     const entry = (rec) => [{ target: { kind: 'loop', id: loop.id }, rec }];
     const mm = exportShaperSVG({ state, entries: entry({ cutType: 'exterior', cutDepth: 6.35, cutOffset: 0, toolDia: 3.175 }), encoding: ENC5, docUnit: 'mm' });
-    assert(mm.includes('shaper:cutDepth="6.35mm"') && mm.includes('shaper:toolDia="3.175mm"'), 'mm param suffixes');
-    assert(!mm.includes('cutOffset'), 'cutOffset 0 omitted');
+    assert(mm.includes('shaper:cutDepth="6.350 mm"') && mm.includes('shaper:toolDia="3.175 mm"'), 'mm param suffixes (3 decimals + space + unit)');
+    assert(mm.includes('shaper:cutOffset="0mm"'), 'cutOffset 0 is written as "0mm" (Studio: "0in"); mm form UNVERIFIED');
     const inch = exportShaperSVG({ state, entries: entry({ cutType: 'exterior', cutDepth: 6.35, cutOffset: 0.5, toolDia: 3.175 }), encoding: ENC5, docUnit: 'in' });
-    assert(inch.includes('shaper:cutDepth="0.25in"') && inch.includes('shaper:toolDia="0.125in"'), 'inch param suffixes');
-    assert(inch.includes('shaper:cutOffset="0.0197in"'), 'cutOffset emitted when ≠0');
+    assert(inch.includes('shaper:cutDepth="0.250 in"') && inch.includes('shaper:toolDia="0.125 in"'), 'inch param suffixes (3 decimals + space + unit)');
+    assert(inch.includes('shaper:cutOffset="0.020 in"'), 'cutOffset emitted when ≠0');
     const unset = exportShaperSVG({ state, entries: entry({ cutType: 'exterior', cutDepth: 'unset', toolDia: 3.175 }), encoding: ENC5, docUnit: 'mm' });
     assert(!unset.includes('cutDepth'), "cutDepth='unset' omitted");
   }
@@ -151,7 +152,7 @@ import { format } from '#core/units.js';
     const want = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="100mm" height="50mm" viewBox="0 0 100 50">',
       '  <polygon points="0,0 20,0 0,10" fill="#FF0000" stroke="none"/>',
-      '  <path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000" shaper:cutType="outside"/>',
+      '  <path d="M 0 0 L 100 0 L 100 50 L 0 50 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
       '</svg>',
     ].join('\n');
     eq(svg, want, 'options.datum → red triangle first');
@@ -181,14 +182,14 @@ import { format } from '#core/units.js';
       { target: { kind: 'loop', id: circle.id }, rec: { cutType: 'pocket' } },
     ];
     const grouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm', options: { groupByCut: true } });
-    assert(grouped.includes('<g fill="#000000" shaper:cutType="outside">'), 'group: <g> with hoisted attrs');
+    assert(grouped.includes('<g fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm">'), 'group: <g> with hoisted attrs');
     assert((grouped.match(/<g /g) || []).length === 1 && grouped.includes('</g>'), 'group: exactly one <g>…</g>');
     assert((grouped.match(/<path d="[^"]*"\/>/g) || []).length === 2, 'group: 2 children with NO cut attrs (inherited)');
-    assert(/<circle cx="50" cy="60" r="10" fill="#7F7F7F" shaper:cutType="pocket"\/>/.test(grouped), 'group: the unique pocket stays ungrouped (keeps its attrs)');
+    assert(/<circle cx="50" cy="60" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutOffset="0mm"\/>/.test(grouped), 'group: the unique pocket stays ungrouped (keeps its attrs)');
 
     const ungrouped = exportShaperSVG({ state, entries, encoding: ENC5, docUnit: 'mm' }); // default OFF
     assert(!ungrouped.includes('<g '), 'default: no grouping');
-    assert((ungrouped.match(/<path d="[^"]*" fill="#000000" shaper:cutType="outside"\/>/g) || []).length === 2, 'default: each rect keeps its own attrs');
+    assert((ungrouped.match(/<path d="[^"]*" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"\/>/g) || []).length === 2, 'default: each rect keeps its own attrs');
   }
 
   // 13. options OFF (default) → no datum polygon, no <g> (the j1/j2 cases above already pin the exact strings)
@@ -230,13 +231,13 @@ import { format } from '#core/units.js';
       return { outer: ls[0].id, inner: ls[ls.length - 1].id, outerLoop: ls[0].loop, innerLoop: ls[ls.length - 1].loop };
     };
 
-    // a) Frame (outer + 1 hole) with NO group anywhere → ONE evenodd compound path (outer + hole; hole has no cut of its own)
+    // a) Frame (outer + 1 hole) with NO group anywhere → ONE compound path, hole wound opposite, no fill-rule (outer + hole; hole has no cut of its own)
     {
       const state = frameOrBesideState(INNER_IN, false);
       const { outer } = byArea(state);
       const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm' });
       assert((svg.match(/<path /g) || []).length === 1, 'frame (no group): ONE compound path');
-      assert(/fill-rule="evenodd"/.test(svg) && /shaper:cutType="pocket"/.test(svg), 'frame (no group): evenodd + pocket attrs');
+      assert(!/fill-rule/.test(svg) && /shaper:cutType="pocket"/.test(svg), 'frame (no group): NO fill-rule (Studio parity; holes wound opposite) + pocket attrs');
       const d = (svg.match(/d="([^"]+)"/) || [])[1] || '';
       assert((d.match(/Z/g) || []).length === 2, 'frame (no group): outer + hole subpaths (2 × Z)');
     }
@@ -265,8 +266,8 @@ import { format } from '#core/units.js';
       });
       const paths = [...svg.matchAll(/<path ([^>]+)\/>/g)].map((m) => m[1]);
       eq(paths.length, 2, 'outer pocket + hole own interior cut → BOTH exported');
-      assert(paths[0].includes('fill-rule="evenodd"') && paths[0].includes('shaper:cutType="pocket"') && (paths[0].match(/Z/g) || []).length === 2, 'outer keeps hole open (evenodd, 2 × Z)');
-      assert(!paths[1].includes('fill-rule="evenodd"') && paths[1].includes('shaper:cutType="inside"') && paths[1].includes('shaper:cutDepth="12mm"'), 'hole exported separately with its own cut params');
+      assert(!paths[0].includes('fill-rule') && paths[0].includes('shaper:cutType="pocket"') && (paths[0].match(/Z/g) || []).length === 2, 'outer keeps hole open (hole wound opposite, no fill-rule, 2 × Z)');
+      assert(!paths[1].includes('fill-rule="evenodd"') && paths[1].includes('shaper:cutType="inside"') && paths[1].includes('shaper:cutDepth="12.000 mm"'), 'hole exported separately with its own cut params');
     }
 
     // d) 3-circle Bullseye (outer r=40, ring r=24, dot r=10) with NO group anywhere:
@@ -309,7 +310,7 @@ import { format } from '#core/units.js';
         docUnit: 'mm',
       });
       assert((svgWithDot.match(/<path /g) || []).length === 1, 'outer ring emitted as 1 compound path');
-      assert(svgWithDot.includes('<circle cx="0" cy="0" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="3mm"/>'), 'dot island emitted as its own <circle> with its own cutDepth');
+      assert(svgWithDot.includes('<circle cx="0" cy="0" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="3.000 mm" shaper:cutOffset="0mm"/>'), 'dot island emitted as its own <circle> with its own cutDepth');
       // Ring loop still unassigned → not emitted as its own cut
       assert(!svgWithDot.includes('r="24"'), 'unassigned ring loop only bounds outer pocket');
       assert(Boolean(lRing), 'ring loop exists');
@@ -338,7 +339,7 @@ import { format } from '#core/units.js';
         encoding: PK,
         docUnit: 'mm',
       });
-      assert(svgCombined.includes('fill-rule="evenodd"') && svgCombined.includes('A 40 40') && svgCombined.includes('A 10 10') && !svgCombined.includes('A 24 24'), 'combined profile (outer + dot) overrides derived ring hole');
+      assert(!svgCombined.includes('fill-rule') && svgCombined.includes('A 40 40') && svgCombined.includes('A 10 10') && !svgCombined.includes('A 24 24'), 'combined profile (outer + dot) overrides derived ring hole');
     }
   }
 
@@ -367,9 +368,9 @@ import { format } from '#core/units.js';
     // which describes the exact same physical cut as the old (5,5) CCW loop.
     const wantMM = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
-      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5mm"/>',
-      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10mm"/>',
-      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15mm"/>',
+      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="5.000 mm" shaper:cutOffset="0mm"/>',
+      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="10.000 mm" shaper:cutOffset="0mm"/>',
+      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="15.000 mm" shaper:cutOffset="0mm"/>',
       '</svg>',
     ].join('\n');
     eq(svgMM, wantMM, 'vcarve export mm exact string');
@@ -379,9 +380,9 @@ import { format } from '#core/units.js';
     const svgIN = exportShaperSVG({ state, entries: [], encoding: ENC5, docUnit: 'in', loopPolys });
     const wantIN = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="40mm" height="40mm" viewBox="0 0 40 40">',
-      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.1969in"/>',
-      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.3937in"/>',
-      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.5906in"/>',
+      '  <path d="M 35 35 L 5 35 L 5 5 L 35 5 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.197 in" shaper:cutOffset="0in"/>',
+      '  <path d="M 30 30 L 10 30 L 10 10 L 30 10 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.394 in" shaper:cutOffset="0in"/>',
+      '  <path d="M 25 25 L 15 25 L 15 15 L 25 15 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutDepth="0.591 in" shaper:cutOffset="0in"/>',
       '</svg>',
     ].join('\n');
     eq(svgIN, wantIN, 'vcarve export in exact string');
@@ -407,7 +408,7 @@ import { format } from '#core/units.js';
     for (let i = 0; i < previewContours.length; i++) {
       const wantD = polyToPathD(previewContours[i].polygon);
       eq(exportedPaths[i].d, wantD, `contour ${i} path d matches preview polygon`);
-      eq(exportedPaths[i].depth, format(previewContours[i].depth, 'mm', { unit: true }), `contour ${i} depth matches preview`);
+      eq(exportedPaths[i].depth, formatShaperParam(previewContours[i].depth, 'mm'), `contour ${i} depth matches preview`);
     }
 
     // 18. Parity on non-trivial triangle with 60° bit
@@ -468,7 +469,7 @@ import { format } from '#core/units.js';
       eq(dbExported.length, 17, 'dumbbell export emits all 17 split contours');
       for (let i = 0; i < dbPreview.length; i++) {
         eq(dbExported[i].d, polyToPathD(dbPreview[i].polygon), `db contour ${i} path matches preview`);
-        eq(dbExported[i].depth, format(dbPreview[i].depth, 'mm', { unit: true }), `db contour ${i} depth matches preview`);
+        eq(dbExported[i].depth, formatShaperParam(dbPreview[i].depth, 'mm'), `db contour ${i} depth matches preview`);
       }
     }
 
@@ -519,7 +520,7 @@ import { format } from '#core/units.js';
       eq((frameSVG.match(/<path /g) || []).length, 14, 'no extra path when hole has no cut assigned');
       for (let i = 0; i < framePreview.length; i++) {
         eq(frameExported[i].d, polyToPathD(framePreview[i].polygon), `frame contour ${i} path matches preview`);
-        eq(frameExported[i].depth, format(framePreview[i].depth, 'mm', { unit: true }), `frame contour ${i} depth matches preview`);
+        eq(frameExported[i].depth, formatShaperParam(framePreview[i].depth, 'mm'), `frame contour ${i} depth matches preview`);
       }
 
       // b) Hole ALSO assigned its own interior cut: hole bounds outer vcarve AND exports its own inside cut
@@ -585,7 +586,7 @@ import { format } from '#core/units.js';
       });
 
       const wantOuterOnly = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>\n' +
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 15 45 L 45 45 L 45 15 Z" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutOffset="0mm"/>\n' +
         '</svg>';
 
       eq(gotOuterOnly, wantOuterOnly, 'pocket bullseye outer-only export has direct hole only (island uncut)');
@@ -603,8 +604,8 @@ import { format } from '#core/units.js';
       });
 
       const wantWithIslandCut = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6mm"/>\n' +
-        '  <path d="M 25 25 L 35 25 L 35 35 L 25 35 Z" fill="#000000" shaper:cutType="outside" shaper:cutDepth="12mm"/>\n' +
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 15 45 L 45 45 L 45 15 Z" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6.000 mm" shaper:cutOffset="0mm"/>\n' +
+        '  <path d="M 25 25 L 35 25 L 35 35 L 25 35 Z" fill="#000000" shaper:cutType="outside" shaper:cutDepth="12.000 mm" shaper:cutOffset="0mm"/>\n' +
         '</svg>';
 
       eq(gotWithIslandCut, wantWithIslandCut, 'pocket bullseye + island own cut exports compound outer + separate island path');
@@ -653,8 +654,8 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside" shaper:cutOffset="0mm"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 1: exterior cut on profile with hole');
@@ -671,8 +672,8 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#000000" shaper:cutType="outside"/>',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 2: interior cut on profile with hole');
@@ -689,7 +690,7 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 20 20 L 40 20 L 40 40 L 20 40 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 20 20 L 20 40 L 40 40 L 40 20 Z" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 3: pocket cut on profile with hole');
@@ -706,8 +707,8 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutOffset="0mm"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 4: online cut on profile with hole');
@@ -724,8 +725,8 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide" shaper:cutOffset="0mm"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 5: guide on profile with hole');
@@ -745,9 +746,9 @@ import { format } from '#core/units.js';
       });
       const want = [
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside"/>',
-        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside" shaper:cutOffset="0mm"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside" shaper:cutOffset="0mm"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:cutOffset="0mm"/>',
         '</svg>',
       ].join('\n');
       eq(svg, want, 'TASK 433b test 6: Q4 outer outside + hole own online = 3 paths');

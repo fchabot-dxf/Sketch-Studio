@@ -157,7 +157,7 @@ import { exportShaperSVG } from '#core/shaper-export.js';
     });
 
     assert(exportedSvg.includes('shaper:cutType="pocket"'), 'exported has cutType pocket');
-    assert(exportedSvg.includes('shaper:cutDepth="0.25in"'), 'exported has cutDepth 0.25in');
+    assert(exportedSvg.includes('shaper:cutDepth="0.250 in"'), 'exported has cutDepth 0.250 in');
     assert(exportedSvg.includes('shaper:cutType="guide"'), 'exported has cutType guide');
   }
 

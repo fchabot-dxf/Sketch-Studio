@@ -119,8 +119,14 @@ function arcSeg(shape, fromPos, toPos, state) {
 // `L x y`; arcs → a direction-aware `A …` segment; single-circle loops → two `A r r` half-arcs + `Z`. A line CLOSING
 // edge is left to Z (so a pure-line loop is identical to SP1j-1); an arc closing edge is drawn explicitly. Returns ''
 // on a missing loop / joint position.
-export function loopToPathD(loop, state) {
+export function loopToPathD(loop, state, { reverse = false } = {}) {
   if (!loop || !Array.isArray(loop.joints) || !state || !state.joints) return '';
+  if (reverse && Array.isArray(loop.edges) && loop.edges.length > 1) {
+    // TASK 456: walk the SAME loop the other way round: joints [j0,j1..jn-1] -> [j0,jn-1..j1], edges [e0..en-1] -> [en-1..e0]
+    // (edge k joins joint k to joint k+1; the closing edge joins jn-1 to j0). arcSeg is direction-aware, so arcs flip their sweep.
+    const j = loop.joints;
+    return loopToPathD({ ...loop, joints: [j[0], ...j.slice(1).reverse()], edges: loop.edges.slice().reverse() }, state);
+  }
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const edges = Array.isArray(loop.edges) ? loop.edges : [];
   if (edges.length === 1) {
@@ -130,7 +136,8 @@ export function loopToPathD(loop, state) {
       const c = cid ? state.joints.get(cid) : null;
       const r = Number(s.radius) || 0;
       if (!c || !(r > 0)) return '';
-      return `M ${num(c.x - r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x + r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x - r)} ${num(c.y)} Z`;
+      const sw = reverse ? 1 : 0; // a hole circle winds the other way
+      return `M ${num(c.x - r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 ${sw} ${num(c.x + r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 ${sw} ${num(c.x - r)} ${num(c.y)} Z`;
     }
   }
   if (loop.joints.length < 2) return '';
@@ -151,6 +158,16 @@ export function loopToPathD(loop, state) {
     if (fromP) d += ' ' + arcSeg(closing, fromP, p0, state);
   }
   return d + ' Z';
+}
+
+// compoundPathD(outerLoop, holeLoops, state) — TASK 456: THE one place a compound path "d" is built (combined profiles, pockets
+// with islands, outside/inside profiles with holes): the outer loop plus each hole wound the OPPOSITE way, exactly like Shaper
+// Studio, so it fills correctly under BOTH nonzero (the default, so no fill-rule attribute is needed) and evenodd. '' when the
+// outer is missing.
+export function compoundPathD(outerLoop, holeLoops, state) {
+  const outerD = loopToPathD(outerLoop, state);
+  if (!outerD) return '';
+  return [outerD, ...(holeLoops || []).map((hl) => loopToPathD(hl, state, { reverse: true })).filter(Boolean)].join(' ');
 }
 
 // chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines/arcs).

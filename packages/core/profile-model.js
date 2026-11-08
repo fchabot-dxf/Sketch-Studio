@@ -2,7 +2,7 @@
 // Supports COMBINE tool (compound profiles with holes) and the DERIVED face resolver (Fusion 360 profile picking).
 
 import { findLoops, findOpenChains } from './loop-finder.js';
-import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, sampleArc } from './loop-geometry.js';
+import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, compoundPathD, sampleArc } from './loop-geometry.js';
 import { offsetPolygon, openPolygon, sweptPath } from './polygon-offset.js';
 
 const EPS = 1e-9;
@@ -252,16 +252,7 @@ export function resolveProfileViews(state, loops, loopPolys) {
       }
     }
 
-    const outerD = matchedOuter ? loopToPathD(matchedOuter, state) : '';
-    const innerDs = [];
-    for (const hl of matchedInners) {
-      const hd = loopToPathD(hl, state);
-      if (hd) innerDs.push(hd);
-    }
-    const dParts = [];
-    if (outerD) dParts.push(outerD);
-    dParts.push(...innerDs);
-    const d = dParts.join(' ');
+    const d = matchedOuter ? compoundPathD(matchedOuter, matchedInners, state) : ''; // holes wound opposite to the outer (TASK 456)
 
     const outerLoopId = matchedOuter ? matchedOuter.id : null;
     const innerLoopIds = matchedInners.map((l) => l.id);

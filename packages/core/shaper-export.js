@@ -14,9 +14,9 @@
 // xmlns:shaper declaration the on-tool Origin ignores every custom attr.
 
 import { findLoops, findOpenChains } from './loop-finder.js';
-import { format } from './units.js';
+import { formatShaperParam } from './units.js';
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
-import { loopPolygon, loopToPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
+import { loopPolygon, loopToPathD, compoundPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
 import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, deriveProfileCuts } from './profile-model.js';
 export { loopToPathD, polyToPathD };
 
@@ -80,18 +80,18 @@ function colorAttrs(enc) {
   if (enc.stroke && enc.stroke !== 'none') s += ` stroke="${enc.stroke}"`;
   return s;
 }
-// attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0) / toolDia (if >0) unit-suffixed, and ONLY the
-// params the INJECTED encoding declares in `params` (TASK 450b: On line has no cutOffset, so a value stored on an old On line
-// record is never written; Guide keeps all three). An encoding without `params` (the stub encodings in tests) writes all.
+// attribute-first shaper:* in Shaper Studio's order — cutType, cutDepth (only when set), cutOffset (ALWAYS: "0in" when zero),
+// toolDia (ALWAYS) — written through the ONE formatter (units.js formatShaperParam: "0.100 in" / "-2.000 in" / "0.125 in";
+// TASK 456, from four real Studio exports), and ONLY the params the INJECTED encoding declares in `params` (an encoding
+// without `params`, i.e. the stub encodings in tests, writes all).
 function shaperAttrs(rec, enc, docUnit) {
   let s = ` shaper:cutType="${enc.cutType}"`;
   const has = (k) => !Array.isArray(enc.params) || enc.params.includes(k);
   const dep = Number(rec.cutDepth);
-  if (has('cutDepth') && rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${format(dep, docUnit, { unit: true })}"`;
-  const off = Number(rec.cutOffset);
-  if (has('cutOffset') && Number.isFinite(off) && off !== 0) s += ` shaper:cutOffset="${format(off, docUnit, { unit: true })}"`;
+  if (has('cutDepth') && rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${formatShaperParam(dep, docUnit)}"`;
+  if (has('cutOffset')) s += ` shaper:cutOffset="${formatShaperParam(Number.isFinite(Number(rec.cutOffset)) ? Number(rec.cutOffset) : 0, docUnit, { zeroBare: true })}"`;
   const tool = Number(rec.toolDia);
-  if (has('toolDia') && Number.isFinite(tool) && tool > 0) s += ` shaper:toolDia="${format(tool, docUnit, { unit: true })}"`;
+  if (has('toolDia') && rec.toolDia != null && Number.isFinite(tool)) s += ` shaper:toolDia="${formatShaperParam(tool, docUnit)}"`;
   return s;
 }
 
@@ -165,13 +165,8 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const compoundOrLoopGeom = (outerLoop, holeIds) => {
     if (!outerLoop) return null;
     if (Array.isArray(holeIds) && holeIds.length > 0) {
-      let d = loopToPathD(outerLoop, state);
-      for (const hid of holeIds) {
-        const hl = loopById.get(hid);
-        const hd = hl ? loopToPathD(hl, state) : '';
-        if (hd) d += ' ' + hd;
-      }
-      return d ? { tag: 'path', a: `d="${d}" fill-rule="evenodd"` } : null;
+      const d = compoundPathD(outerLoop, holeIds.map((hid) => loopById.get(hid)).filter(Boolean), state); // holes wound opposite: no fill-rule needed
+      return d ? { tag: 'path', a: `d="${d}"` } : null;
     }
     return loopGeom(outerLoop, state, shapeById);
   };
@@ -207,7 +202,7 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
       let geom = null;
       if (cut.isCompound) {
         if (cut.d) {
-          geom = { tag: 'path', a: `d="${cut.d}" fill-rule="evenodd"` };
+          geom = { tag: 'path', a: `d="${cut.d}"` };
         } else if (cut.holeLoops && cut.holeLoops.length > 0) {
           geom = compoundOrLoopGeom(cut.outerLoop, cut.holeLoops.map((h) => h.id));
         } else {

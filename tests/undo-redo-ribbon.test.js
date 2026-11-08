@@ -312,7 +312,7 @@
     svg.id = 'svgCanvas';
     globalThis.document.body.appendChild(svg);
 
-    setupEventListeners(svg, state, { isActive: () => true });
+    setupKeyboardShortcuts(state, {});
 
     // Setup state and save
     state.saveState();

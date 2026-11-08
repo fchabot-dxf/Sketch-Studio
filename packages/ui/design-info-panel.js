@@ -9,6 +9,7 @@
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch
 import { formatConstraintValue } from '#ui/svg-renderer.js';
+import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 
 // constraint type → row icon + label (keys = CONSTRAINT_TYPES values from #core/constants.js)
 const TYPE_META = {
@@ -44,7 +45,14 @@ function injectStyles() {
 .sk-info-row:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); }
 .sk-info-row.sel { background: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); color: #fff; }
 .sk-info-ic { width: 1.1em; text-align: center; opacity: 0.85; }
-.sk-info-lbl { flex: 1; }
+.sk-info-lbl { white-space: nowrap; }
+.sk-info-geo { flex: 1; min-width: 0; opacity: 0.75; overflow-wrap: anywhere; }
+.sk-info-geo::before { content: '· '; }
+.sk-info-row.err { color: var(--sk-error, #e5484d); }
+.sk-info-row.err.sel { color: #fff; background: var(--sk-error, #e5484d); }
+/* A light sub-header per constraint type inside an expanded sketch. */
+.sk-info-grp { font-size: 0.8em; font-weight: 700; letter-spacing: 0.03em; opacity: 0.55; padding: 4px 6px 1px; }
+.sk-info-grp.err { color: var(--sk-error, #e5484d); opacity: 0.9; }
 .sk-info-val { opacity: 0.8; font-variant-numeric: tabular-nums; }
 /* SKETCH-1b: the gated sketch-tree — a Sketch node with its constraints nested as children. */
 .sk-tree-hdr { display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; }
@@ -83,6 +91,28 @@ function injectStyles() {
 
 function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 'constraint') }; }
 
+// The row's type label (Radius/Diameter are distance dimensions); also the key rows are grouped by.
+function rowLabel(c) {
+  return c.isRadius || c.type === 'radius' ? 'Radius'
+    : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter'
+      : c.type === 'angle' ? 'Angle' : typeMeta(c.type).label;
+}
+const GROUP_ORDER = Object.values(TYPE_META).map((m) => m.label).flatMap((l) => (l === 'Distance' ? [l, 'Radius', 'Diameter'] : [l]));
+
+// Constraints the solver reports as unsatisfied. Constraints carry no id, so a row matches the solver's entry by
+// id when there is one, else by type + joints + shapes (skipped when the constraint binds neither).
+function constraintKey(c) {
+  const js = Array.isArray(c.joints) ? c.joints : [], ss = Array.isArray(c.shapes) ? c.shapes : [];
+  return (js.length || ss.length) ? `${c.type}|${js.join(',')}|${ss.join(',')}|${c.value}` : null;
+}
+function failingConstraints(engine, cons) {
+  const stats = engine && engine.getSolveStats && engine.getSolveStats();
+  const errs = stats && Array.isArray(stats.constraintErrors) ? stats.constraintErrors : [];
+  const ids = new Set(errs.map((e) => e.id).filter((id) => id != null));
+  const keys = new Set(errs.map(constraintKey).filter(Boolean));
+  return new Set(cons.filter((c) => !(c.isDriven || c.driven) && ((c.id != null && ids.has(c.id)) || keys.has(constraintKey(c)))));
+}
+
 /**
  * createDesignInfoPanel({ state, engine }) → { el, render(container), refresh, destroy }
  *   Reads state.constraints / state.selectedConstraints / state.joints / state.shapes (the shared sketch state).
@@ -94,6 +124,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
   // SKETCH-1c: which sketch nodes are collapsed — PANEL/UI state only (survives re-renders; NOT the export-bound
   // sketch model, which feeds the <g> export). A pure presentation concern.
   const collapsedSketchIds = new Set();
+  const knownSketchIds = new Set(); // sketches already seen — a new one starts collapsed, then follows the caret
   const el = document.createElement('div'); el.className = 'sk-info';
   const dofEl = document.createElement('div'); dofEl.className = 'sk-info-dof';
   const listEl = document.createElement('div'); listEl.className = 'sk-info-list';
@@ -106,19 +137,24 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     } catch (_) { return null; }
   }
 
-  // One constraint row (icon + label + value), click toggles state.selectedConstraints (the renderer auto-highlights).
+  // One constraint row (icon + label + geometry + value), click toggles state.selectedConstraints (the renderer
+  // auto-highlights); hovering sets state.hoveredConstraint, which the renderer lights up with the geometry it binds.
   // SKETCH-3: `linkTo` (the other sketch name(s)) marks a CROSS-SKETCH link — a `⇄ Sketch N` reference + a .sk-link-row.
+  let geoLabel = labelGeometry([]);
+  let failing = new Set();
+  let hoveredByPanel = null;
   function buildRow(c, sel, linkTo) {
     const m = typeMeta(c.type);
-    const label = c.isRadius || c.type === 'radius' ? 'Radius'
-      : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter'
-        : c.type === 'angle' ? 'Angle' : m.label;
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row' + (linkTo ? ' sk-link-row' : '');
+    const label = rowLabel(c);
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row' + (linkTo ? ' sk-link-row' : '') + (failing.has(c) ? ' err' : '');
     if (sel && sel.has(c)) row.classList.add('sel');
     const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
     const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${formatConstraintValue(c)}</span>` : '';
     const link = linkTo ? ` <span class="sk-link-to" title="Cross-sketch link">⇄ ${linkTo}</span>` : '';
-    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${label}</span>${val}${driven}${link}`;
+    const geo = constraintGeometryText(c, (state && state.shapes) || [], geoLabel);
+    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${label}</span><span class="sk-info-geo">${geo}</span>${val}${driven}${link}`;
+    row.addEventListener('mouseenter', () => { hoveredByPanel = c; state.hoveredConstraint = c; });
+    row.addEventListener('mouseleave', () => { if (state.hoveredConstraint === c) state.hoveredConstraint = null; if (hoveredByPanel === c) hoveredByPanel = null; });
     row.addEventListener('click', () => {
       if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
       if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
@@ -138,6 +174,22 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     dofEl.innerHTML = `<b>${cons.length}</b> constraint${cons.length === 1 ? '' : 's'}${dofTxt}${solved}`;
 
     listEl.innerHTML = '';
+    geoLabel = labelGeometry((state && state.shapes) || []);
+    failing = failingConstraints(engine, cons);
+
+    // Rows grouped by type under a light "<Type> · <n>" sub-header; failing constraints first, in the error colour.
+    function appendGrouped(wrap, items) {
+      const groups = new Map();
+      const add = (key, it, err) => { if (!groups.has(key)) groups.set(key, { err, items: [] }); groups.get(key).items.push(it); };
+      for (const it of items) add(failing.has(it.c) ? 'Problems' : rowLabel(it.c), it, failing.has(it.c));
+      const rank = (k) => (k === 'Problems' ? -1 : (GROUP_ORDER.indexOf(k) < 0 ? GROUP_ORDER.length : GROUP_ORDER.indexOf(k)));
+      for (const k of [...groups.keys()].sort((a, b) => rank(a) - rank(b))) {
+        const g = groups.get(k);
+        const h = document.createElement('div'); h.className = 'sk-info-grp' + (g.err ? ' err' : ''); h.textContent = `${k} · ${g.items.length}`;
+        wrap.appendChild(h);
+        for (const it of g.items) wrap.appendChild(buildRow(it.c, sel, it.linkTo));
+      }
+    }
 
     // SKETCH-1b: when opted in, a sketch-ROOTED tree — a Sketch node per state.sketches with its constraints nested as
     // children (bucketed via constraintSketch; single-sketch → all under 'Sketch 1'). DEFAULT (off) = the FLAT list →
@@ -154,6 +206,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       const activeId = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
       const nameById = new Map(sketches.map((s) => [s.id, s.name])); // SKETCH-3: for the cross-sketch link reference
       for (const sk of sketches) {
+        if (!knownSketchIds.has(sk.id)) { knownSketchIds.add(sk.id); collapsedSketchIds.add(sk.id); } // collapsed by default
         const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
         const collapsed = collapsedSketchIds.has(sk.id);
         const node = document.createElement('div'); node.className = 'sk-sketch-node' + (sk.visible === false ? ' is-hidden' : '');
@@ -188,11 +241,11 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         if (!collapsed) {
           const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';
           if (!kids.length) { const e = document.createElement('div'); e.className = 'sk-sketch-empty'; e.textContent = 'No constraints yet.'; childWrap.appendChild(e); }
-          else for (const c of kids) {
+          else appendGrouped(childWrap, kids.map((c) => {
             const cs = constraintSketch(c, state); // a Set → spanning → a cross-sketch link naming the OTHER sketch(es)
             const linkTo = (cs instanceof Set) ? [...cs].filter((id) => id !== sk.id).map((id) => nameById.get(id) || id).join(', ') : null;
-            childWrap.appendChild(buildRow(c, sel, linkTo));
-          }
+            return { c, linkTo };
+          }));
           node.appendChild(childWrap);
         }
         listEl.appendChild(node);
@@ -209,6 +262,6 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     el,
     render: (container) => { if (container) container.appendChild(el); refresh(); return el; },
     refresh,
-    destroy: () => { try { el.remove(); } catch (_) {} },
+    destroy: () => { if (hoveredByPanel && state.hoveredConstraint === hoveredByPanel) state.hoveredConstraint = null; try { el.remove(); } catch (_) {} },
   };
 }

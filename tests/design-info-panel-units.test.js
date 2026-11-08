@@ -127,6 +127,12 @@ function setupDOM() {
 
 setupDOM();
 
+// Sketch nodes start collapsed: click the caret to expand (the panel re-renders; the caret element is replaced).
+function expandSketch(container) {
+  const caret = container.querySelector('.sk-sketch-tw');
+  caret.listeners.get('click')[0]({ stopPropagation() {} });
+}
+
 (async () => {
   console.log('Testing TASK 439: Sketch tree dimension values in document units...');
 
@@ -267,6 +273,7 @@ setupDOM();
       const panelTree = createDesignInfoPanel({ state, showSketchTree: true });
       const containerTree = document.createElement('div');
       panelTree.render(containerTree);
+      expandSketch(containerTree);
 
       const rowsTree = containerTree.querySelectorAll('.sk-info-row');
       assert(rowsTree.length === allConstraints.length, `Tree should have ${allConstraints.length} rows, got ${rowsTree.length}`);
@@ -296,6 +303,7 @@ setupDOM();
     const panelNonValued = createDesignInfoPanel({ state: stateNonValued, showSketchTree: true });
     const contNonValued = document.createElement('div');
     panelNonValued.render(contNonValued);
+    expandSketch(contNonValued);
     const rowNonValued = contNonValued.querySelector('.sk-info-row');
     const valSpanNonValued = rowNonValued.querySelector('.sk-info-val');
     assert(valSpanNonValued === null, 'non-valued constraint row has no .sk-info-val');

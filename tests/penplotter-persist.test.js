@@ -181,7 +181,7 @@ await (async () => {
       const b = makeToolpath('Disc', 'fill'); b.targetShapeIds = [circle]; b.plotColorId = state.plotColors[state.plotColors.length - 1].id;
       b.fill = { pattern: 'crosshatch', angle: 30, spacing: 1.5, offset: 0.5 };
       state.toolpaths = [a, b]; state.activeToolpathId = b.id;
-      state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2 };
+      state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2, export_files: 'pen' };
       state.plotColors[0].name = 'Fine red'; state.plotColors[0].width = 0.3;
     })()`);
     await sleep(1800); // a poll tick passes, so the sidecar written AFTER the setup is the one saved

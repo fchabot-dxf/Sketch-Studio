@@ -3,6 +3,7 @@ import { buildGcodeEntries, collectToolpathShapes } from '../apps/penplotter/src
 import { resolveToolpathShapes } from '../apps/penplotter/src/preview.js';
 
 (async () => {
+  state.settings.export_files = 'toolpath'; // these cases assert the per-toolpath file names (TASK 482)
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
 
   // 1. Design geometry export: shared sketch with rect + line -> 1 G-code entry with flipped Y

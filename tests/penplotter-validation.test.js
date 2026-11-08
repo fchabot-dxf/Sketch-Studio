@@ -104,7 +104,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   assert.strictEqual(state.toolpaths[1].outline.passes, 3, 'passes is an integer');
   assert.strictEqual(state.toolpaths[1].outline.dash_length, 0.1, 'dash length clamped');
   assert.strictEqual(state.toolpaths[1].outline.dash_gap, 0, 'dash gap clamped');
-  assert.deepStrictEqual(state.settings, { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1, tolerance_mm: 0.001 }, 'settings clamped, equal pen Z -> defaults: ' + JSON.stringify(state.settings));
+  assert.deepStrictEqual(state.settings, { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1, tolerance_mm: 0.001, export_files: 'pen' }, 'settings clamped, equal pen Z -> defaults: ' + JSON.stringify(state.settings));
   assert.deepStrictEqual(sanitizeDoc(null), { w: 200, h: 200 });
 }
 console.log('penplotter-validation: ok');

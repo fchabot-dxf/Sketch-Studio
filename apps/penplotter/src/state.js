@@ -60,7 +60,7 @@ export const state = {
     // New toolpaths created via the + Outline / + Fill buttons inherit
     // this plotColorId so they land in the folder you just clicked.
     selectedPenId: null,
-    settings: { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1000, tolerance_mm: 0.1 },
+    settings: { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1000, tolerance_mm: 0.1, export_files: "pen" },
     viewport: { scale: 1, panX: 0, panY: 0 },
     interaction: null,
     spaceDown: false,

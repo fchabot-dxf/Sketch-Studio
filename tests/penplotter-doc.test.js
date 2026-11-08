@@ -22,7 +22,7 @@ import { captureHistoryState, applyHistoryState, capturePlotterDoc, applyPlotter
   tp.fill = { pattern: 'zigzag', angle: 30, spacing: 1.5, offset: 0.5 };
   const ol = makeToolpath('Tri', 'outline'); ol.outline.passes = 3; ol.outline.style = 'dashed';
   state.toolpaths = [ol, tp]; state.activeToolpathId = tp.id;
-  state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2 };
+  state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2, export_files: 'pen' };
   setShapeStyle('s9', { stroke: '#0000ff', fill: '#00ff00', width: 0.8 });
   state.staticShapeIds = new Set(['s9', 's10']);
   const saved = JSON.parse(JSON.stringify(capturePlotterDoc()));
@@ -33,7 +33,7 @@ import { captureHistoryState, applyHistoryState, capturePlotterDoc, applyPlotter
   saved.toolpaths[1].plotColorId = 'pen' + n;
 
   state.doc = { w: 200, h: 200 }; state.plotColors = []; state.toolpaths = []; state.activeToolpathId = null;
-  state.settings = { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1000, tolerance_mm: 0.1 };
+  state.settings = { pen_up_z: 5, pen_down_z: -1, draw_feed: 2000, z_feed: 1000, tolerance_mm: 0.1, export_files: 'pen' };
   state.shapeStyles = new Map(); state.staticShapeIds = new Set();
 
   applyPlotterDoc(saved);

@@ -12476,3 +12476,14 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
 - **Hygiene & Gate:**
   - Headless browsers: 0 left.
   - `node scripts/gate.cjs`: `GATE files=166 pass=166 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+
+## TURN 435 (CC-A) -- ONE shared Undo/Redo for every app
+- packages/ui/sketch-state.js: canUndo()/canRedo(), addHistoryListener(fn)->unsubscribe, clearHistory(); every history change (saveStateForce, discardSnapshotAt, endUndoGroup, cancelUndoGroup, undo, redo) notifies. The old `document.getElementById('btn-undo')` reach + its TODO are gone. Listener errors are NOT swallowed (no silent catch); `_historyListeners` is a plain Set field.
+- packages/ui/tool-ribbon.js: built-in "Edit" group (Undo `#btn-undo`, Redo `#btn-redo`) in every host, enabled from state.canUndo/canRedo, refreshed from the history listener (destroy() unsubscribes). Trace now passes its state to the ribbon (it had none).
+- packages/ui/input-manager.js: Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y redo next to Ctrl/Cmd+Z; setupKeyboardShortcuts exported for the test.
+- Host copies removed: SketchStudio extraGroups Undo + its click handler + `undoBtn` refs in Clear All (Clear All stays, as group "Actions"; it now calls state.clearHistory() so redo is dropped too -- before it only spliced history); Pen Plotter #designUndoBtn/#designRedoBtn/#design-undo-row (scaffold, handlers, panelTick sync, CSS).
+- scripts/shell-smoke.cjs: ribbon groups assertion now `Create,Modify,Inspect,Constrain,Edit,Actions`: Edit is the shared built-in group; SketchStudio's own Clear All moved to its own "Actions" group (was inside Edit).
+- Behaviour changes for existing users: Shaper/Trace/Pen Plotter ribbons gain Edit group; SketchStudio Undo button keeps its id/position group but gains Redo; Ctrl+Y/Ctrl+Shift+Z now redo everywhere using the shared input-manager; Clear All also clears redo. One Ctrl+Z restores exactly what it did (dimension-undo-step + fillet tests green).
+- Tests: tests/undo-redo-ribbon.test.js (canUndo/canRedo/notify, ribbon enable across saveState/undo/redo, 4 redo key combos). Non-vacuous: against origin/main sketch-state.js it fails "state.canUndo is not a function".
+- Live (headless, real mouse/keys): .evidence/435/ (local). Line -> Undo click -> Redo click -> Ctrl+Z -> Ctrl+Y -> Ctrl+Shift+Z in Shaper, SketchStudio, Pen Plotter; lines count and both disabled flags track correctly.
+- NOT touched (report): apps/penplotter/src/history.js is a separate legacy ART-layer undo/redo (its own stacks, `#undoBtn`/`#redoBtn` ids that exist nowhere in the DOM, own window keydown Ctrl+Z/Y/Shift+Z). Dormant with art tools retired (UNIFY-7b) but still installed by draw-stage.js -- a second Ctrl+Z listener; suggest a removal task.

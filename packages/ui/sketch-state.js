@@ -46,6 +46,8 @@ export function createSketchState(engine, view) {
     history: [],  // Store last 5 states for undo
     maxHistory: 5,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
+    // TASK 435: callbacks run after every history change (the shared ribbon's Undo/Redo enable state subscribes).
+    _historyListeners: new Set(),
     _undoGroupActive: false,
     _undoGroupDepth: 0,
     // BURN-DOWN-2: deep-clone the live store into a snapshot object (extracted from saveStateForce so undo/redo
@@ -99,21 +101,20 @@ export function createSketchState(engine, view) {
       this.active = null;
     },
     canUndo: function() { return this.history.length > 0; },
-    canRedo: function() { return Boolean(this.redoStack && this.redoStack.length > 0); },
+    canRedo: function() { return this.redoStack.length > 0; },
+    // TASK 435: subscribe to history changes; returns the unsubscribe function.
     addHistoryListener: function(fn) {
-      if (!this._historyListeners) this._historyListeners = new Set();
-      if (typeof fn === 'function') {
-        this._historyListeners.add(fn);
-        return () => this._historyListeners.delete(fn);
-      }
-      return () => {};
+      this._historyListeners.add(fn);
+      return () => this._historyListeners.delete(fn);
     },
     _notifyHistory: function() {
-      if (this._historyListeners) {
-        for (const fn of this._historyListeners) {
-          try { fn(); } catch (_) {}
-        }
-      }
+      for (const fn of this._historyListeners) fn();
+    },
+    // TASK 435: drop every undo AND redo step (Clear All: "not undoable"), then tell the listeners.
+    clearHistory: function() {
+      this.history.length = 0;
+      this.redoStack.length = 0;
+      this._notifyHistory();
     },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     saveStateForce: function(){
@@ -164,6 +165,7 @@ export function createSketchState(engine, view) {
       }catch(_){ }
       this._undoGroupInfo = null;
       this._undoGroupActive = false;
+      this._notifyHistory();
     },
     // Cancel the active undo group and revert to the snapshot taken before the group started.
     cancelUndoGroup: function(){

@@ -313,15 +313,14 @@ export function setupUI(state){
         if(state && state.selectedJoints && typeof state.selectedJoints.clear === 'function') state.selectedJoints.clear();
         if(state && state.selectedShapes && typeof state.selectedShapes.clear === 'function') state.selectedShapes.clear();
         if(state && state.selectedConstraints && typeof state.selectedConstraints.clear === 'function') state.selectedConstraints.clear();
-        if(state && Array.isArray(state.history)) state.history.splice(0);
+        if(state && typeof state.clearHistory === 'function') state.clearHistory(); // undo AND redo; ribbon buttons follow
 
         // Re-init engine store (creates origin joint, etc.)
         if(typeof state.initStore === 'function') state.initStore();
 
-        // Reset UI mode and undo button
+        // Reset UI mode
         setTool(TOOL_MODES.SELECT);
         const mt = document.getElementById('modeText'); if(mt) mt.innerText = 'MODE: SELECT';
-        if(undoBtn) undoBtn.disabled = true;
       }catch(err){
         console.error('[clear] error clearing canvas', err);
       }

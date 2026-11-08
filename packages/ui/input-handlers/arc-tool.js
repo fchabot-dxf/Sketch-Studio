@@ -155,7 +155,7 @@ export function handleArcPointerMove(e, svg, state, w) {
 
     safeUpdatePreview(state, 'arc', [], previewPt, { 
         subMode: 'arc-cse', 
-        center: state.active.center, 
+        center: { x: center.x, y: center.y }, // TASK 470: the resolved point, not the joint id (the joint can vanish before the next frame)
         radius, 
         startAngle, 
         endAngle,

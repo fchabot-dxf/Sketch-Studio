@@ -1271,8 +1271,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         // Draw simple line from first fixed point to cursor while user positions the second point
         out.push(`<line x1="${p1.x}" y1="${p1.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if (active.preview.center && typeof active.preview.radius === 'number'){
-        const centerJ = (joints.has(active.preview.center)) ? joints.get(active.preview.center) : null;
-        const centerPt = centerJ || active.preview.center;
+        // TASK 470: preview.center is a resolved {x,y} (preview-manager.js contract) - never a joint id to look up here.
+        const centerPt = active.preview.center;
         if(centerPt){
           const radius = active.preview.radius;
           const startAngle = active.preview.startAngle !== undefined ? active.preview.startAngle : Math.atan2((p.y - centerPt.y),(p.x - centerPt.x));

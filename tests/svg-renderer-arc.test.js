@@ -56,14 +56,14 @@
     assert(hasPreviewLine, 'Start-point preview should draw a line to cursor');
   })();
 
-  // Test 4: Preview arc (center+radius) should draw an arc with center indicators
+  // Test 4: Preview arc (center+radius) should draw an arc with center indicators (TASK 470: the centre is a resolved point)
   (() => {
     const svg = makeSVG();
     const joints = new Map();
     joints.set('c', { x: 200, y: 200 });
 
     const shapes = [];
-    const active = { mode: 'arc', preview: { type: 'arc', center: 'c', radius: 40, startAngle: 0, endAngle: Math.PI/2 } };
+    const active = { mode: 'arc', preview: { type: 'arc', center: { x: 200, y: 200 }, radius: 40, startAngle: 0, endAngle: Math.PI/2 } };
 
     draw(joints, shapes, svg, active, null, [], new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
     const hasCenterDot = /<circle[^>]+cx="200"[^>]*r="3"/.test(svg.innerHTML);

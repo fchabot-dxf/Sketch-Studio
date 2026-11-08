@@ -107,7 +107,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - V-carve: each contour's real surface width (2 * depth * tan(half-angle));
         - guide: not a cut, so no footprint (stays dashed).
       - Owner style rule: leftover corner material is NOT highlighted (normal style).
-      - DISPATCHED to CC-A after the 437 plan merged (edf52fb).
+      - DONE: 447 merged f2de291 (deriveCutFootprint + sweptPath in #core; export untouched).
     - 437 plan (WORK-LOG "TURN 437"):
       - S1 = extract deriveCutSequence (export byte-identical) + toggle, arrows, Play;
       - S2-S5 later;
@@ -149,7 +149,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - QUEUED 448 (owner, screenshot): radius dims placeable anywhere along the arc.
   - Cause: svg-renderer.js ~:2257 angle = j2 ? ... : 0; radius dims have no j2, so it's always horizontal-right.
   - Arc extension outside the sweep (Fusion).
-  - Goes to the first free seat.
+  - Dispatched to CC-A.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

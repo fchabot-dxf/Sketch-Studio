@@ -19,6 +19,11 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //   targetKind  — 'region' (acts on a closed area) | 'path' (acts on a single vector). Drives the gating rule:
 //                 a LOOP target accepts all 5; an EDGE target accepts only the 'path' types (online/guide).
 //   menuLabel   — the cut-menu label (matches Shaper's wording).
+//   autoOffsetFraction — TASK 452: the Origin keeps a pocket's cutter this fraction of the cutter diameter BACK from the wall
+//                 automatically ("Pocketing procedure": "Origin automatically adds a small offset when performing a pocket cut,
+//                 allowing you finish up the edge with an Inside cut", "equal to 1/4th of the specified cutter diameter" since the
+//                 Napa software). The user's own cutOffset ADDS to it. Declared ONCE here; effectiveCutRecord() turns it into
+//                 rec.autoOffset (mm) for the preview. The Origin's own offset is never written to the export.
 //   params      — TASK 450/450b: WHICH cut params the type has, ONE declaration (subset of SHAPER_FIELDS): outside/inside/pocket
 //                 = cutDepth+cutOffset+toolDia; On line = cutDepth+toolDia (Shaper: "offsets are not an option"); Guide keeps all
 //                 three (Shaper Studio allows it: the type can be changed ON THE TOOL later and the params travel with the path). The cut card shows only those rows, the export writes only those attributes, the preview ignores
@@ -28,7 +33,7 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 export const CUT_TYPES = [
   { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a', params: ['cutDepth', 'cutOffset', 'toolDia'] },
   { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e', params: ['cutDepth', 'cutOffset', 'toolDia'] },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80', params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80', params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
   { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399', params: ['cutDepth', 'toolDia'] },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635', params: ['cutDepth', 'cutOffset', 'toolDia'] },
 ];
@@ -65,6 +70,8 @@ export function effectiveCutRecord(rec) {
   if (!cutTypeHasParam(rec.cutType, 'cutDepth')) out.cutDepth = 'unset';
   if (!cutTypeHasParam(rec.cutType, 'cutOffset')) out.cutOffset = 0;
   if (!cutTypeHasParam(rec.cutType, 'toolDia')) out.toolDia = 0;
+  const t = cutTypeById(rec.cutType);
+  out.autoOffset = (t && t.autoOffsetFraction) ? (Number(out.toolDia) || 0) * t.autoOffsetFraction : 0; // TASK 452: the Origin's automatic pocket offset
   return out;
 }
 

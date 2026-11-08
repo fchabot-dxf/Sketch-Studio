@@ -12862,3 +12862,8 @@ Seat CC-B. From TURN 443/451: the buffer key is shared by every app and a save w
 **Behaviour changes for existing users:** (1) sidecars of other apps now survive a save (the point); (2) a stored buffer keeps a host's entry for as long as the key lives (no pruning of a host that stops writing); (3) each write is now a get+put in one transaction (still one write per change). A save from a stale tab can still overwrite the OTHER fields (geometry) of a newer one, as before.
 
 **Gate:** `GATE files=180 pass=180 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+
+## TURN 461
+- Updated the design-info row label to show Radius or Diameter for those dimension variants and Angle for angle constraints; all other labels continue using their existing metadata.
+- Extended `tests/design-info-panel-units.test.js` to assert that a circle radius row says "Radius" and a plain distance row remains "Distance".
+- Validation: focused test passed; `npm.cmd run gate` printed `GATE files=181 pass=181 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

@@ -278,6 +278,8 @@ setupDOM();
         const canvasText = canvasLabelMatches[i];
         assert(treeValText === canvasText, `Tree row ${i}: "${treeValText}" must equal canvas "${canvasText}"`);
       }
+      assert(rowsTree[0].querySelector('.sk-info-lbl').textContent === 'Distance', 'Plain distance row label remains Distance');
+      assert(rowsTree[3].querySelector('.sk-info-lbl').textContent === 'Radius', 'Circle radius row label is Radius');
       console.log(`✓ [DOC_UNIT=${unit}] Tree text equals canvas label text for all types!`);
     }
 

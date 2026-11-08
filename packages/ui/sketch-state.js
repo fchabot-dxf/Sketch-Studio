@@ -9,6 +9,12 @@ import { dbg } from '#core/debug.js';
 import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
 import { cloneProfiles } from '#core/profile-model.js';
 
+// TASK 466: THE undo depth, declared once and shared by every app (one shared state). It was 5, far too shallow for a CAD tool.
+// Measured snapshot cost (headless Edge): the owner's 8x11 dewalt SVG imported in Shaper (1693 shapes, 33 cuts) = 384 KB JSON /
+// ~276 KB heap per snapshot; a synthetic large sketch (2000 shapes, 4000 joints, 500 constraints, 300 cuts) = 424 KB JSON /
+// ~539 KB heap. At depth 100 that is ~28 MB typical, ~54 MB worst (history + redo together never exceed the depth).
+export const HISTORY_DEPTH = 100;
+
 export function createSketchState(engine, view) {
   const state = {
     // SKETCH-1a: the sketch container — state.sketches + activeSketchId (default single 'Sketch 1'). ADDITIVE; nothing
@@ -46,8 +52,8 @@ export function createSketchState(engine, view) {
     // TASK 463: OPTIONAL generic host hook so a host's own undoable data rides in the SAME snapshots (one history, no second
     // stack): { capture() -> JSON-safe data, restore(data) }. Shaper uses it for its cut plan. null = nothing extra.
     hostSnapshot: null,
-    history: [],  // Store last 5 states for undo
-    maxHistory: 5,
+    history: [],  // the last HISTORY_DEPTH states for undo
+    maxHistory: HISTORY_DEPTH,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
     // TASK 435: callbacks run after every history change (the shared ribbon's Undo/Redo enable state subscribes).
     _historyListeners: new Set(),

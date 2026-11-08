@@ -143,7 +143,6 @@ await (async () => {
     const nav = async (u) => { const l = once('Page.loadEventFired'); await send('Page.navigate', { url: u }); await Promise.race([l, sleep(8000)]); await sleep(1500); };
     const plan = () => evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...CUT_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)); })()`).then(JSON.parse);
     const hist = () => evalJs(`window.__designController.state.history.length`);
-    const clearHist = () => evalJs(`(() => { const st = window.__designController.state; st.history.length = 0; st.redoStack.length = 0; })()`); // the history keeps only 5 steps: measure from empty
     const ctrl = (k, code, vk, extra = 0) => key(k, code, vk, 2 | extra);
     const recs = async () => (await plan()).map(([, r]) => r);
 
@@ -187,7 +186,7 @@ await (async () => {
     assert.strictEqual((await recs())[0].cutDepth, depthSet);
 
     // ── offset preset, bit preset, cutter shape + angle: each ONE step; a no-op pick adds none ──
-    await clearHist(); h0 = await hist();
+    h0 = await hist();
     await clickEl('.cut-offset'); await sleep(200);
     const p16 = await evalJs(`(() => { const r = document.querySelector('.cut-offset-pop .cut-preset:nth-child(5)').getBoundingClientRect(); return { x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) }; })()`);
     await click(p16.x, p16.y); await sleep(200);
@@ -200,7 +199,7 @@ await (async () => {
     assert.strictEqual(await hist(), h0, 'picking the value it already has adds NO step');
     await clickEl('.cut-shape-trigger'); await sleep(150);
     await clickEl('.cut-shape-pop .cut-type-opt[data-shape="vbit"]'); await sleep(200);
-    await clearHist(); h0 = await hist();
+    h0 = await hist();
     await clickEl('.cut-shape-pop .cut-shape-angles .cut-preset[data-angle="60"]'); await sleep(200);
     assert.strictEqual(await hist(), h0 + 1, 'choosing a V-bit angle (shape + angle) is ONE step');
     let r0 = (await recs())[0];
@@ -211,7 +210,6 @@ await (async () => {
     await ctrl('y', 'KeyY', 89); await sleep(200);
 
     // ── the ribbon Undo/Redo buttons (Design) reflect it and drive the same history ──
-    await clearHist();
     await clickEl('.cut-presets .cut-preset:nth-child(2)'); await sleep(200);
     await clickEl('.cut-presets .cut-preset:nth-child(4)'); await sleep(200);
     await ctrl('z', 'KeyZ', 90); await sleep(200); // one step undone, one still undoable

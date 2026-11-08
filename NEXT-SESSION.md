@@ -324,6 +324,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     recent; save/open .sketch.json; the old autosave slot migrates to "Untitled"; a storage-adapter seam for Drive.
   - NEXT: Google Drive adapter. The owner's OAuth client already exists (see the PERSISTENCE epic, client
     983232817866-...; origins sketch-studio.pages.dev + localhost:8000; drive.file). Then wire the sidebar to 474.
+    - OWNER (2026-11-08): "allow to have reneweable token" = stay signed in across days, no hourly re-login. PORT
+      DDCS Studio's solved design (read-only ref D:/APPS/DDCS-Studio/DDCS-Studio/server/googleAuth.js +
+      functions/auth/google/[action].js + web/ui/cloud/googleDrive.js mintFresh/silentRefresh): the Google REFRESH
+      token held server-side in an AES-GCM sealed __Host- httpOnly cookie by Pages Functions on the app's OWN origin
+      (/auth/google/start|callback|token|logout, PKCE, offline access); unconfigured = every route 404 and the client
+      falls back to the GIS token popup (localhost:8000 has no Functions). Owner steps when it lands: redirect URI
+      https://sketch-studio.pages.dev/auth/google/callback; `wrangler pages secret put` GOOGLE_CLIENT_ID /
+      GOOGLE_CLIENT_SECRET / SESSION_KEY; consent screen PUBLISHED to production (Testing = refresh tokens die after
+      7 days; drive.file is non-sensitive, so no verification review).
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

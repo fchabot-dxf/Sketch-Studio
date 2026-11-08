@@ -1,13 +1,21 @@
 # Worker seat rules (this repo runs a Claude advisor with worker seats)
 
-Read by Antigravity (AGENTS.md) and by Claude Code (imported from CLAUDE.md), so they hold for EVERY worker, whatever
-runs it. They apply when the advisor gives you a task; the task's own instructions win on conflict.
+Read natively by Antigravity and GitHub Copilot, and by Claude Code (imported from CLAUDE.md), so they hold for EVERY
+worker, whatever runs it. They apply when the advisor gives you a task; the task's own instructions win on conflict.
+
+## Opening a seat
+If a message is just `worker`: reply exactly `🔨 WORKER SEAT READY: waiting for a task from the advisor.` and stop.
+Don't read files or run anything; the advisor's first task tells you what you need.
 
 ## Project Principles
 - Re-anchor here EVERY rep: see the **PROJECT PRINCIPLES** section at the top of NEXT-SESSION.md (North Star: ONE reusable Design tab; DECLARE over hand-roll; NO SHORTCUTS). Do not duplicate it here; read and follow it directly from NEXT-SESSION.md.
 
 ## Where and what
-- Work ONLY in the worktree and branch the task names. Worktrees live under `D:\APPS\Sketch-Studio-<seat>` (e.g. `D:\APPS\Sketch-Studio-agy1` on branch `agy1`). Never run git in another folder, the main checkout included. No worktree named, or it doesn't exist: stop and say so.
+- Work ONLY in your seat's worktree: the one the task names (they live under `D:\APPS\Sketch-Studio-<seat>`, e.g.
+  `D:\APPS\Sketch-Studio-agy1` on branch `agy1`), or, if it names none, the isolated worktree your session was created
+  in (a Copilot Agents-window chat: VS Code made it, on an `agents/...` branch; your working directory is already
+  there). Never run git in another folder, the main checkout included. If you are in the repo's MAIN checkout and the
+  task names no worktree: stop and say so.
 - Do exactly the one task. Report anything else you find; don't fix it.
 
 ## Running things
@@ -46,7 +54,7 @@ runs it. They apply when the advisor gives you a task; the task's own instructio
 
 ## Talking to the advisor
 - Need to tell it something mid-task (a heads-up, a fact another seat needs) without stopping? From your worktree:
-  Antigravity: `python D:/APPS/fred-skills/antigravity/fleet-plugin/fleet_hook.py message <task id> <text>` (appends to `<repo>/.fleet/inbox.jsonl`);
+  Antigravity or Copilot: `python D:/APPS/fred-skills/antigravity/fleet-plugin/fleet_hook.py message <task id> <text>` (appends to `<repo>/.fleet/inbox.jsonl`);
   Claude: SendMessage to the advisor. Then carry on. Messages for another seat go through the advisor.
 - To ASK (you can't go on without an answer): end your turn with the REPORT, status BLOCKED, the question under `uncertain:`. Never guess to avoid asking.
 - For EACH stop condition in the task, say in the REPORT how you checked it and the result. "Tests pass" is not a check unless a test asserts exactly that.

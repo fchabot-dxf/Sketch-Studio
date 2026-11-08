@@ -11,7 +11,7 @@ import { canvasWrap } from "./dom.js";
 import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6: fit once, then apply the shared view
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
-import { installToolpathLayersPanel, renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
+import { installToolpathLayersPanel, renderToolpathLayersPanel, exitTargetEditing } from "./toolpath-layers-panel.js";
 import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-panel.js"; // MERGE-1: the fill/outline editor, inline
 import { installPlotColorsPanel, renderPlotColorsPanel } from "./plot-colors-panel.js";     // S3-1: pens surfaced here
 import { installSettingsPanel, loadDefaults } from "./settings.js";                          // S3-2: machine settings relocated here
@@ -67,7 +67,12 @@ export function mountToolpathStage(view) {
   installPlotColorsPanel();     // S3-1: pens add/rename/recolor/width/delete-with-reassign (was hidden in drawHost)
   installSettingsPanel();       // S3-2: doc size / unit / feeds / pen-heights / tolerance / auto-recalc (was in Export)
   loadDefaults();               // hydrate the settings inputs from state.settings
-  return { onEnter };
+  return { onEnter, onLeave };
+}
+
+// On leave: TASK 441 — end target-editing on stage change so it doesn't leak into Export or Design.
+function onLeave() {
+  exitTargetEditing();
 }
 
 // On entry: adopt the shared canvas, switch to toolpath view, recompute + render (art + optimized overlay + panels).

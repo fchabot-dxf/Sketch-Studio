@@ -65,7 +65,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - AGY-2: hadn't started 438.
 - ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
   - AGY-1 resumed 432, with the full-loop amendment.
-  - AGY-2 started 438.
+  - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2 now on 438b, the same for the
+    click doors (measured 2 undos).
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;

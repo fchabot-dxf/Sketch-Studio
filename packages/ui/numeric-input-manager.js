@@ -3,7 +3,6 @@
 // before Shaper adopts this — it currently builds its inputs straight into the SketchStudio document.
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
-import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { commitDimensionEdit } from '#ui/dimension-seams.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -269,30 +268,23 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // If target is driven or fully fixed endpoints, skip opening the editor and force driven.
     if (constraint.isDriven || constraint.driven) return;
     try {
-        if (constraint.type === CONSTRAINT_TYPES.DISTANCE && constraint.joints && constraint.joints.length === 2 && state) {
-            // Exclude the target constraint from the status check so the 'edit' validation
-            // doesn't treat the constraint itself as already applied (prevents self-inflicted driven decision).
-            const constraintsForStatus = (state.constraints || []).filter(c => c !== constraint);
-            const status = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: constraintsForStatus });
-            const [a, b] = constraint.joints;
-            const dofA = status.jointDOFs?.get(a);
-            const dofB = status.jointDOFs?.get(b);
-            const rigidA = status.fixedJoints.has(a) || (typeof dofA === 'number' && dofA <= 0);
-            const rigidB = status.fixedJoints.has(b) || (typeof dofB === 'number' && dofB <= 0);
-            if (rigidA && rigidB) {
+        if (constraint.type === CONSTRAINT_TYPES.DISTANCE && constraint.joints && constraint.joints.length === 2 && state && state.engine && typeof state.engine.isDistanceRedundant === 'function') {
+            // Decide by the solver's rank test (the global truth), not per-joint DOF: a joint can read DOF 0 locally
+            // (e.g. a fillet's virtual sharp) while the sketch still has freedom for this dimension to drive.
+            // The constraint is lifted out of the engine's list so it is not compared against itself.
+            const idx = state.constraints.indexOf(constraint);
+            if (idx !== -1) state.constraints.splice(idx, 1);
+            let redundant;
+            try {
+                redundant = state.engine.isDistanceRedundant({ ...constraint, isDriven: false, driven: false });
+            } finally {
+                if (idx !== -1) state.constraints.splice(idx, 0, constraint);
+            }
+            if (redundant) {
                 constraint.isDriven = true;
                 constraint.driven = true;
-                // Add joint status details for debugging
-                const jointStatus = {
-                    a,
-                    b,
-                    fixedJoints: Array.from(status.fixedJoints),
-                    constrainedJoints: Array.from(status.constrainedJoints),
-                    jointDOFs: Object.fromEntries(status.jointDOFs)
-                };
                 showNotification(
-                    'Dimension added as Driven (geometry is fixed). [ERR-DRIVEN-02] Reason: Geometry is fixed during numeric input/edit, cannot drive.\nArgs: ' +
-                    JSON.stringify({ constraint, jointStatus }),
+                    'Dimension added as Driven (already determined by existing constraints). [ERR-DRIVEN-02]',
                     'info'
                 );
                 return;

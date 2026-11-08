@@ -12115,3 +12115,30 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 439b — Revert unrequested sketch fallback in panel and remove format aliases — branch agy2
+
+- **Root Cause & Issue Addressed:**
+  - `packages/ui/design-info-panel.js:154` had introduced a panel-side fallback resolving `c.shape` and `c.shapes` to their sketch or `DEFAULT_SKETCH_ID` to handle circle radius and angle constraints lacking a `joints` array. Per AGENTS.md, panel-level fallback is an unrequested behaviour change across sketches and belongs in `#core/sketch-model.js` (`constraintSketch`), not `#ui`.
+  - `packages/ui/svg-renderer.js` exported convenience aliases `formatDimensionValue` and `formatDimensionLabel` alongside `formatConstraintValue`.
+
+- **Implementation:**
+  - `packages/ui/design-info-panel.js`:
+    - Reverted `kids` filter back to: `const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });`
+    - Removed unused `sketchOf` import.
+  - `packages/ui/svg-renderer.js`:
+    - Deleted `export const formatDimensionValue` and `export const formatDimensionLabel`. `formatConstraintValue` remains the sole, canonical formatter.
+    - Verified 0 remaining references to either alias across `packages/`, `apps/`, and `tests/`.
+  - `tests/design-info-panel-units.test.js`:
+    - Updated test to exercise both flat panel mode (`showSketchTree: false`, verifying all 5 valued constraint types against canvas labels) and sketch tree mode (`showSketchTree: true`, verifying joint-based constraints against canvas labels).
+  - Repro noted for advisor ticketing: Circle radius (`c.shape`) and angle (`c.shapes`) constraints lack `joints`, so `#core/sketch-model.js` `constraintSketch` returns `null` (`ids.size === 0`), causing `showSketchTree: true` to filter them out of the tree.
+
+- **Verification & Evidence:**
+  - `node tests/design-info-panel-units.test.js`: passed cleanly.
+  - Repo gate (`npm run gate`):
+    - `GATE files=164 pass=164 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

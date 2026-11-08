@@ -52,8 +52,6 @@ export function formatConstraintValue(c, options = {}) {
   return numStr;
 }
 
-export const formatDimensionValue = formatConstraintValue;
-export const formatDimensionLabel = formatConstraintValue;
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';

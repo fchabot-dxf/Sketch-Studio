@@ -232,25 +232,25 @@ setupDOM();
 
       assert(canvasLabelMatches.length >= 5, `Canvas should render at least 5 dim labels in ${unit}, got ${canvasLabelMatches.length}`);
 
-      // B. Render via Design Info Panel sketch tree (showSketchTree: true)
+      // B. Render via Design Info Panel (both flat list and sketch tree)
       const state = {
         joints,
         shapes,
         constraints: allConstraints,
         selectedConstraints: new Set(),
       };
-      const panel = createDesignInfoPanel({ state, showSketchTree: true });
-      const container = document.createElement('div');
-      panel.render(container);
 
-      // Query rows in the sketch tree
-      const rows = container.querySelectorAll('.sk-info-row');
-      assert(rows.length === allConstraints.length, `Tree should have ${allConstraints.length} rows, got ${rows.length}`);
+      // B1. Flat panel mode (showSketchTree: false) — renders all constraints
+      const panelFlat = createDesignInfoPanel({ state, showSketchTree: false });
+      const containerFlat = document.createElement('div');
+      panelFlat.render(containerFlat);
 
-      // For each constraint, verify tree text equals canvas label text
+      const rowsFlat = containerFlat.querySelectorAll('.sk-info-row');
+      assert(rowsFlat.length === allConstraints.length, `Flat panel should have ${allConstraints.length} rows, got ${rowsFlat.length}`);
+
       for (let i = 0; i < allConstraints.length; i++) {
         const c = allConstraints[i];
-        const row = rows[i];
+        const row = rowsFlat[i];
         const valSpan = row.querySelector('.sk-info-val');
         assert(valSpan, `Row ${i} must have .sk-info-val`);
         const treeValText = valSpan.textContent.trim();
@@ -259,9 +259,25 @@ setupDOM();
         assert(treeValText === canvasText,
           `[DOC_UNIT=${unit}] Type "${c.type}" (dimMode=${c.dimMode}, isRadius=${c.isRadius}): tree text "${treeValText}" must equal canvas label text "${canvasText}"`);
 
-        // Also assert exact string
         const expected = formatConstraintValue(c);
         assert(treeValText === expected, `Tree text "${treeValText}" must match formatConstraintValue "${expected}"`);
+      }
+
+      // B2. Tree panel mode (showSketchTree: true) — checks tree rows for joint-based constraints
+      const panelTree = createDesignInfoPanel({ state, showSketchTree: true });
+      const containerTree = document.createElement('div');
+      panelTree.render(containerTree);
+
+      const rowsTree = containerTree.querySelectorAll('.sk-info-row');
+      // Joint-based constraints (cAligned, cH, cV) resolve via constraintSketch to Sketch 1
+      assert(rowsTree.length >= 3, `Tree should have at least 3 joint-based rows, got ${rowsTree.length}`);
+      for (let i = 0; i < rowsTree.length; i++) {
+        const row = rowsTree[i];
+        const valSpan = row.querySelector('.sk-info-val');
+        assert(valSpan, `Tree row ${i} must have .sk-info-val`);
+        const treeValText = valSpan.textContent.trim();
+        const canvasText = canvasLabelMatches[i];
+        assert(treeValText === canvasText, `Tree row ${i}: "${treeValText}" must equal canvas "${canvasText}"`);
       }
       console.log(`✓ [DOC_UNIT=${unit}] Tree text equals canvas label text for all types!`);
     }

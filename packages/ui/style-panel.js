@@ -7,6 +7,7 @@
 
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
+import { STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate } from './style-templates.js';
 
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
 // for the S7c-2c swap. min/max/step carried from settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
@@ -52,7 +53,7 @@ function injectStyles() {
 .sk-style-close { background: none; border: 0; cursor: pointer; font-size: 18px; line-height: 1;
   color: var(--sk-style-muted, #64748b); }
 .sk-style-body { display: flex; flex-direction: column; gap: 8px; }
-.sk-style-row { display: flex; flex-direction: column; gap: 4px; }
+.sk-style-row, .sk-style-tpl { display: flex; flex-direction: column; gap: 4px; }
 .sk-style-rowtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .sk-style-input { width: 80px; text-align: right; padding: 2px 4px; border-radius: 4px; background: transparent;
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
@@ -93,6 +94,19 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
 
   // Body (17 controls from the spec)
   const body = document.createElement('div'); body.className = 'sk-style-body';
+
+  // Template select (shared by every host): picking one writes its settings live. Any later knob edit shows
+  // "Custom" (the edits are kept).
+  const tplRow = document.createElement('div'); tplRow.className = 'sk-style-tpl'; // not a knob row: the shell smoke counts .sk-style-row = 17 knobs
+  const tplTop = document.createElement('div'); tplTop.className = 'sk-style-rowtop';
+  const tplLab = document.createElement('span'); tplLab.className = 'sk-style-label'; tplLab.textContent = 'Template';
+  const tplSelect = document.createElement('select'); tplSelect.className = 'sk-style-input'; tplSelect.dataset.key = 'STYLE_TEMPLATE';
+  for (const t of [...STYLE_TEMPLATES, { id: CUSTOM_TEMPLATE_ID, name: 'Custom' }]) {
+    const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; tplSelect.appendChild(o);
+  }
+  tplSelect.addEventListener('change', () => { if (tplSelect.value !== CUSTOM_TEMPLATE_ID) applyStyleTemplate(tplSelect.value, settings); });
+  tplTop.append(tplLab, tplSelect); tplRow.appendChild(tplTop); body.appendChild(tplRow);
+
   for (const spec of CONTROLS) body.appendChild(buildControl(spec));
 
   // HOST-OPT-IN: document-unit selector (U3b). Rendered ONLY when showDocUnit:true (Shaper) — SketchStudio omits it,
@@ -165,6 +179,7 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
     if (docUnitSelect) docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
+    tplSelect.value = activeStyleTemplateId(all);
   }
 
   // Live re-populate on any external change. subscribe RETURNS its unsubscribe — keep it; call it in destroy().

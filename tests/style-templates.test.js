@@ -1,0 +1,93 @@
+// tests/style-templates.test.js — TASK 481: shared Style templates (settings only; the renderer is untouched).
+import assert from 'node:assert';
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+};
+global.document = { head: { appendChild() {} }, getElementById: () => null, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }) };
+
+const { default: SettingsManager } = await import('../packages/core/settings-manager.js');
+const { draw } = await import('../packages/ui/svg-renderer.js');
+const { STYLE_TEMPLATES, STYLE_SETTING_KEYS, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate, getStyleTemplate } =
+  await import('../packages/ui/style-templates.js');
+
+// The fixed sketch: rectangle with a fillet, hexagon, a construction diagonal (dimensions are constraints).
+const joints = new Map(); const shapes = [];
+const J = (id, x, y) => joints.set(id, { x, y });
+J('a', 100, 100); J('b', 300, 100); J('c', 300, 200); J('d', 100, 200);
+for (const [i, [p, q]] of [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'a']].entries()) shapes.push({ id: 'r' + i, type: 'line', joints: [p, q] });
+shapes.push({ id: 'diag', type: 'line', joints: ['a', 'c'], construction: true });
+const hex = [];
+for (let i = 0; i < 6; i++) { J('h' + i, 500 + 60 * Math.cos(i * Math.PI / 3), 300 + 60 * Math.sin(i * Math.PI / 3)); hex.push('h' + i); }
+hex.forEach((p, i) => shapes.push({ id: 'hx' + i, type: 'line', joints: [p, hex[(i + 1) % 6]] }));
+const constraints = [
+  { id: 'k1', type: 'distance', joints: ['a', 'b'], value: 200 },
+  { id: 'k2', type: 'distance', joints: ['b', 'c'], value: 100 },
+];
+const render = (sel = new Set(), hov = null) => {
+  const svg = {
+    viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } },
+    getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }),
+    innerHTML: '',
+  };
+  draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, sel, hov, null, null, null, null, false, null);
+  return svg.innerHTML;
+};
+const strokeWidths = (m) => [...m.matchAll(/stroke-width="([\d.]+)"/g)].map((x) => +x[1]);
+
+const before = render();
+assert(before.length > 200, 'the fixed sketch renders markup');
+
+// 1. declaration: settings only, every template covers the same keys, no tokens
+for (const t of STYLE_TEMPLATES) {
+  assert(!('tokens' in t), t.id + ' declares no tokens');
+  assert.deepStrictEqual(Object.keys(t.settings).sort(), [...STYLE_SETTING_KEYS].sort(), t.id + ' covers every template key');
+}
+assert.deepStrictEqual(STYLE_TEMPLATES.map((t) => t.id), ['default', 'fusion', 'compact', 'presentation']);
+const defaults = SettingsManager.getDefaults();
+assert.strictEqual(defaults.STYLE_TEMPLATE, 'default', 'the chosen template reuses the old PRESET slot');
+assert(!('PRESET' in defaults), 'PRESET is gone (renamed)');
+for (const k of STYLE_SETTING_KEYS) assert.strictEqual(getStyleTemplate('default').settings[k], defaults[k], 'Default = factory ' + k);
+
+// 2. Fusion sets the expected settings and renders thinner lines; Default restores today's markup exactly
+applyStyleTemplate('fusion');
+const f = SettingsManager.getAll();
+assert.strictEqual(f.STYLE_TEMPLATE, 'fusion');
+assert.strictEqual(f.LINE_STROKE, 0.25); assert.strictEqual(f.JOINT_RADIUS, 0.75);
+assert.strictEqual(f.HOVER_FEEDBACK_MULT, 2); assert.strictEqual(f.SELECTION_FEEDBACK_MULT, 2.33);
+assert.strictEqual(activeStyleTemplateId(f), 'fusion');
+const fusion = render();
+assert.notStrictEqual(fusion, before, 'Fusion changes the look');
+assert(Math.max(...strokeWidths(fusion)) < Math.max(...strokeWidths(before)), 'Fusion strokes are thinner');
+applyStyleTemplate('compact'); applyStyleTemplate('presentation');
+applyStyleTemplate('default');
+assert.strictEqual(render(), before, 'Default restores the original markup byte-for-byte');
+assert.strictEqual(activeStyleTemplateId(SettingsManager.getAll()), 'default');
+
+// 3. Custom after an edit (the edit is kept)
+applyStyleTemplate('fusion');
+SettingsManager.set('LINE_STROKE', 0.5);
+assert.strictEqual(activeStyleTemplateId(SettingsManager.getAll()), CUSTOM_TEMPLATE_ID);
+assert.strictEqual(SettingsManager.get('LINE_STROKE'), 0.5);
+
+// 4. persistence across reload: a fresh module instance reads the same localStorage
+applyStyleTemplate('presentation');
+const fresh = (await import(pathToFileURL(new URL('../packages/core/settings-manager.js', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')).href + '?reload')).default;
+assert.strictEqual(fresh.get('STYLE_TEMPLATE'), 'presentation');
+assert.strictEqual(activeStyleTemplateId(fresh.getAll()), 'presentation');
+assert.strictEqual(fresh.get('LINE_STROKE'), getStyleTemplate('presentation').settings.LINE_STROKE);
+
+// 5. every host that mounts the Style panel gets the select (it is built inside the shared createStylePanel)
+const panel = fs.readFileSync(new URL('../packages/ui/style-panel.js', import.meta.url), 'utf8');
+assert(/dataset\.key = 'STYLE_TEMPLATE'/.test(panel) && /STYLE_TEMPLATES/.test(panel), 'the shared panel builds the Template select');
+const hosts = ['../apps/sketchstudio/main.js', '../apps/shaper/src/main.js'];
+for (const h of hosts) {
+  assert(/createStylePanel\(/.test(fs.readFileSync(new URL(h, import.meta.url), 'utf8')), h + ' mounts the shared Style panel');
+}
+
+console.log('style-templates.test.js passed');

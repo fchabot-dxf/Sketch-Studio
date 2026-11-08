@@ -66,8 +66,8 @@ const DEFAULT_SETTINGS = {
     // AI Vision: high-density debug/AI diagnostics mode (false by default)
     AI_VISION: false,
 
-    // Preset name
-    PRESET: 'CAD',
+    // The Style panel's chosen template id (#ui/style-templates.js); replaces the never-read PRESET: 'CAD'.
+    STYLE_TEMPLATE: 'default',
 
     // Document unit (U1, INERT): the display/input unit for dimension + cut-param fields. Base = 1 world unit = 1 mm
     // (see #core/units.js); switching RE-LABELS (no resize). Default 'mm' = the base, so a bare number is unchanged.

@@ -11870,3 +11870,43 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 438 — Single undo step for newly placed dimensions (pre-selection + value commit) — branch agy2
+
+- **Root Cause & Mechanism:**
+  - History snapshots capture state *before* mutations. In commit `5bffb68`, `startDimensionFromSelection` in `packages/ui/input-handlers/dimension-tool.js` (Case A single line and Case B two joints) lost `beginDimUndo(state)` / `endDimUndo(state)`, capturing no snapshot prior to dimension creation.
+  - When committing the first value of a new dimension in `packages/ui/numeric-input-manager.js` (`handleCommit`), `saveState()` was invoked unconditionally after the dimension already existed, pushing a snapshot holding "line + dimension at measured value".
+  - Consequently, Undo #1 restored the dimension at its measured value, and Undo #2 reverted the line.
+
+- **Implementation (Minimal, Exact, Reusing Existing Undo Groups):**
+  - `packages/ui/input-handlers/dimension-tool.js`:
+    - Wrapped pre-selection constraint creation in `beginDimUndo(state)` / `endDimUndo(state)` in both Case A (single line) and Case B (two joints), identical to click paths.
+    - Recorded `c.__birthHistoryLength = state.history ? state.history.length : null;` upon birth after `endDimUndo`.
+    - In `resetDimensionState`, called `state.discardSnapshotAt(pc.__birthHistoryLength)` when `pc.__newlyPlaced === true` before clearing flags.
+  - `packages/ui/numeric-input-manager.js`:
+    - In `handleCommit`: added `const isFirstValue = uiState.target.__newlyPlaced === true;` before clearing `__newlyPlaced`, and skipped `saveState()` when `isFirstValue === true` (`if (!isFirstValue && uiState.appState.saveState) uiState.appState.saveState();`).
+    - In `handleCancel`: called `uiState.appState.discardSnapshotAt(uiState.target.__birthHistoryLength)` when `uiState.target.__newlyPlaced === true`.
+  - `packages/ui/sketch-state.js`:
+    - Added atomic helper `discardSnapshotAt(len) { if (this.history.length !== len) return false; this.history.pop(); return true; }`.
+  - Untouched: Click paths (:540-:740), `anchorPlacingDimension`, `input-manager.js`, and all other tools.
+
+- **Verification & Evidence:**
+  - Added `tests/dimension-undo-step.test.js`:
+    - T1 (Line pre-selection): Ran red before fix (`Error: One undo() must leave NO distance constraint, but found: {"type":"distance",...}`), passes green with fix.
+    - T2 (Two selected joints): Commits value 50, 1 undo removes distance constraint and restores original distance. Passed green.
+    - T3 (Escape while placing): `resetDimensionState` leaves history length unchanged and no constraint. Passed green.
+    - T4 (Escape in value box): `handleCancel` leaves history length unchanged and no constraint. Passed green.
+    - T5 (Regression): Editing an existing dimension adds exactly 1 history entry, and 1 undo restores previous value. Passed green.
+    - T6 (Fillet single-undo): `tests/fillet.test.js`, `tests/fillet-virtual-sharp.test.js`, `tests/filleted-rectangle-rigidity.test.js`, `tests/filleted-underconstrained-movability.test.js` all green.
+    - Measured click path: `CLICK_PATH_UNDO_COUNT: 2`.
+  - Updated `tests/dimension-preselection-workflow.test.js` to assert single undo step across preselection and value commit.
+  - Live Headless Edge Captures in `.evidence/438/`:
+    - Shaper: `shaper-before-undo.png` (`md5=0a190b4a26cd2d76334925d00ce43889`) vs `shaper-after-undo.png` (`md5=f70ce42cc728341c795b204284ae9dd4`).
+    - SketchStudio: `sketchstudio-before-undo.png` (`md5=1c0ca23ea16c8a99f88658c9986c1b38`) vs `sketchstudio-after-undo.png` (`md5=60ed068d692a1918128afaf07e3b9375`).
+  - Gate (`cmd.exe /c "cd /d D:\APPS\Sketch-Studio-agy2 && npm run gate"`):
+    - `GATE files=162 pass=162 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

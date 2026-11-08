@@ -75,6 +75,7 @@ export const TOOL_MODES = {
   LINE: 'line',
   RECT: 'rect',
   CIRCLE: 'circle',
+  POLYGON: 'polygon', // TASK 483: regular polygon (N plain lines + equal constraints); N = POLYGON_SIDES
   ARC: 'arc',
   BEZIER: 'bezier',
   TRIM: 'trim',   // TRACE-1: trim a line/polyline segment at intersections
@@ -90,6 +91,9 @@ export const TOOL_MODES = {
   DIMENSION: 'dim',
   MIDPOINT: 'midpoint'
 };
+
+// TASK 483: the regular polygon's side count: declared ONCE (the tool, the ribbon field and the builder all clamp with it).
+export const POLYGON_SIDES = { min: 3, max: 64, default: 6 };
 
 // Rectangle drawing modes
 export const RECT_MODES = {

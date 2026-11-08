@@ -1,12 +1,20 @@
 // Unified Preview Manager
 // Centralizes preview state and keeps backwards-compatible active.preview
-//
+
+import { POLYGON_SIDES } from '#core/constants.js';
+
 // CONTRACT (TASK 470): a preview is a transient SNAPSHOT of values the tool just computed, so it carries RESOLVED POINTS
 // ({x,y}), never joint ids the renderer would have to look up a frame later (the joint may be gone by then: tool reset,
 // undo). The PRODUCER owns the resolution (it has the joints in hand); this module enforces the shape. An arc preview whose
 // centre / radius / angles / cursor are not finite is not a preview at all: it is cleared, never half-drawn.
 
 const isPoint = (q) => !!q && Number.isFinite(q.x) && Number.isFinite(q.y);
+
+/** TASK 483: a polygon preview needs a finite cursor point and a whole side count inside POLYGON_SIDES. */
+export function isValidPolygonPreview(properties, cursorPoint) {
+    const n = properties && properties.sides;
+    return isPoint(cursorPoint) && Number.isInteger(n) && n >= POLYGON_SIDES.min && n <= POLYGON_SIDES.max;
+}
 
 /** The one declared shape of an arc preview (centre-start-end): everything the renderer reads must be finite. */
 export function isValidArcPreview(properties, cursorPoint) {
@@ -16,6 +24,7 @@ export function isValidArcPreview(properties, cursorPoint) {
 
 export function updatePreview(state, toolType, fixedPoints, cursorPoint, properties = {}) {
     if (toolType === 'arc' && !isValidArcPreview(properties, cursorPoint)) { clearPreview(state); return; } // TASK 470: not a preview
+    if (toolType === 'polygon' && !isValidPolygonPreview(properties, cursorPoint)) { clearPreview(state); return; } // TASK 483
     try {
         state.preview = {
             type: toolType,
@@ -40,6 +49,9 @@ export function updatePreview(state, toolType, fixedPoints, cursorPoint, propert
                         break;
                     case 'circle':
                         state.active.preview = { type: 'circle', center: fixedPoints && fixedPoints[0] ? fixedPoints[0] : null, radius: properties && properties.radius ? properties.radius : undefined, pt: cursorPoint };
+                        break;
+                    case 'polygon':
+                        state.active.preview = { type: 'polygon', sides: properties.sides, pt: cursorPoint };
                         break;
                     case 'arc':
                         // Only center-start-end arc preview supported; centre is a resolved {x,y} (validated above)

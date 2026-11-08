@@ -2,7 +2,7 @@
 // SHAPES - Shape creation functions
 // 
 
-import { CONSTRAINT_TYPES } from './constants.js';
+import { CONSTRAINT_TYPES, POLYGON_SIDES } from './constants.js';
 import { getDist, angleBetween } from './geometry.js';
 
 /**
@@ -214,45 +214,56 @@ export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstructi
     return { shapes, constraints };
 }
 
+/** N kept inside POLYGON_SIDES (3..64); anything non-numeric -> the declared default. */
+export function clampPolygonSides(n) {
+    const v = Math.round(Number(n));
+    if (!Number.isFinite(v)) return POLYGON_SIDES.default;
+    return Math.min(POLYGON_SIDES.max, Math.max(POLYGON_SIDES.min, v));
+}
+
+let polySeq = 0;
 /**
- * Create a regular polygon from center to vertex.
+ * Create a REGULAR polygon from a centre joint and a first corner joint (TASK 483). Plain geometry, no parametric shape kind:
+ *   - N `line` shapes between N corner joints that are SHARED by neighbouring sides (the first corner is `vertexId`);
+ *   - N construction `line` shapes centre -> corner (the radii);
+ *   - constraints that keep it regular when edited: all SIDES equal and all RADII equal, each as a chain of N-1 `equal`
+ *     constraints (a cyclic N would repeat one: a redundant constraint, which the solver must not be fed).
+ * Unknowns: the centre (2) + N corners (2N); constraints: 2(N-1); so exactly 4 degrees of freedom are left: position (2),
+ * size (1) and rotation (1), which is what "a regular polygon" has. Equal radii put the corners on one circle around the
+ * centre and equal sides make the steps between them equal, so the shape cannot drift into a rhombus or a star.
+ * The edge shapes carry a shared `groupId` like a rect's (the renderer's closed-shape key); the radii do not.
  */
-export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstruction=false) {
+export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstruction = false) {
     const center = joints.get(centerId);
     const vertex = joints.get(vertexId);
     if (!center || !vertex) return { shapes: [], constraints: [] };
 
+    const n = clampPolygonSides(numSides);
     const radius = getDist(center, vertex);
     const startAngle = angleBetween(center, vertex);
-    const groupId = `poly_${Date.now()}`;
-    const base = Date.now();
+    const seq = Date.now() + '_' + (++polySeq);   // digits first: ids stay unique even for two polygons in the same millisecond
+    const groupId = 'poly_' + seq;
 
-    const corners = [];
-    for (let i = 0; i < numSides; i++) {
-        const angle = startAngle + (i * 2 * Math.PI / numSides);
-        const x = center.x + radius * Math.cos(angle);
-        const y = center.y + radius * Math.sin(angle);
-
-        const jA = (i === 0) ? vertexId : genJ();
-        const jB = genJ();
-
-        if (i !== 0) joints.set(jA, { x, y, fixed: false });
-        joints.set(jB, { x, y, fixed: false });
-        corners.push({ a: jA, b: jB });
+    const corners = [vertexId];
+    for (let i = 1; i < n; i++) {
+        const angle = startAngle + (i * 2 * Math.PI / n);
+        const id = genJ();
+        joints.set(id, { x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle), fixed: false });
+        corners.push(id);
     }
 
-    const shapes = [];
-    const constraints = [];
-
-    for (let i = 0; i < numSides; i++) {
-        const next = (i + 1) % numSides;
-        const edge = { id: `s_poly_${base}_${i}`, type: 'line', joints: [corners[i].a, corners[next].a], groupId };
-        if (isConstruction) edge.isConstruction = true;
-        shapes.push(edge);
-        constraints.push({ type: CONSTRAINT_TYPES.COINCIDENT, joints: [corners[i].a, corners[i].b] });
-        shapes.push({ id: `s_poly_radial_${base}_${i}`, type: 'line', joints: [centerId, corners[i].a], groupId, isConstruction: true });
+    const shapes = [], constraints = [];
+    const sideIds = [], radiusIds = [];
+    for (let i = 0; i < n; i++) {
+        const sideId = `s_poly_${seq}_${i}`, radId = `s_poly_radial_${seq}_${i}`;
+        shapes.push({ id: sideId, type: 'line', joints: [corners[i], corners[(i + 1) % n]], groupId, isConstruction: !!isConstruction });
+        shapes.push({ id: radId, type: 'line', joints: [centerId, corners[i]], isConstruction: true });
+        sideIds.push(sideId); radiusIds.push(radId);
     }
-
+    for (let i = 0; i + 1 < n; i++) {
+        constraints.push({ type: CONSTRAINT_TYPES.EQUAL, shapes: [sideIds[i], sideIds[i + 1]] });
+        constraints.push({ type: CONSTRAINT_TYPES.EQUAL, shapes: [radiusIds[i], radiusIds[i + 1]] });
+    }
     return { shapes, constraints };
 }
 

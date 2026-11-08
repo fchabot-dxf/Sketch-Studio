@@ -112,6 +112,10 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>`
     },
+    'icon-tool-polygon': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M12 2.5 L20.2 7.25 V16.75 L12 21.5 L3.8 16.75 V7.25 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>`
+    },
     'icon-tool-bezier': {
         // A cubic curve with its two endpoint anchors (currentColor) and two control-point handles (accent red).
         viewBox: '0 0 24 24',
@@ -130,6 +134,7 @@ const TOOL_CURSOR_MAP = {
     [TOOL_MODES.LINE]: 'icon-tool-line',
     [TOOL_MODES.RECT]: 'icon-tool-rect',
     [TOOL_MODES.CIRCLE]: 'icon-tool-circle',
+    [TOOL_MODES.POLYGON]: 'icon-tool-polygon',
     [TOOL_MODES.ARC]: 'icon-tool-arc-cse',
     [TOOL_MODES.BEZIER]: 'icon-tool-bezier',
     [TOOL_MODES.DIMENSION]: 'icon-tool-dim',

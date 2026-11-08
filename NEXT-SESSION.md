@@ -60,7 +60,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - DONE: 434 merged 5d84d1f. Numeric inputs own their CSS. Also fixed: the live-dim inputs (the owner's "°" box) and the
   fillet input. Small leftovers: the input is hidden two ways (class + inline display) and has `typeof document` guards.
   Clean them up when that file is next touched.
-- In flight: 438 (AGY-2), dimension = one undo step.
+- 20:12 BOTH seats out of Gemini 4 Argon (resets in ~159 h). Flash returns ~22:40, Claude/GPT ~22:07.
+  - AGY-1: 432 is half-done, UNCOMMITTED in D:\APPS\Sketch-Studio-agy1 (10 files modified); it resumes there.
+  - AGY-2: hadn't started 438.
+- Queued for AGY-2: 438 (dimension = one undo step).
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;

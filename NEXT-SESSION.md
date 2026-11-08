@@ -74,7 +74,24 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - DONE: 433b merged b27101f.
   - DONE: 440 merged 016654f (Pen Plotter exports Design geometry; one collectToolpathShapes). Its art-layer
     fallback serves only OLD saved files, a named legacy branch until UNIFY-7.
-  - AGY-1 now on 441 (target-edit mode leak).
+  - DONE: 441 merged 09b4271 (target-edit ends on stage leave via the existing onLeave hook; it could also edit
+    targets from Export).
+  - AGY-1 now on 443: the Pen Plotter audit sweep, FIND ONLY.
+- 2026-11-08 00:44: BOTH seats out of Gemini 3.8 Flash for ~151 h. Argon is also out (~6 days). Claude models
+  should be available; switching family is the owner's call.
+  - AGY-1: 443 had just started (only an untracked scratch/).
+  - AGY-2: 435 is half-done and UNCOMMITTED in Sketch-Studio-agy2 (7 modified files + tests/undo-redo-ribbon.test.js).
+- 2026-11-08 morning: the owner said "do it". Both seats are switched to Claude Sonnet 5.5 (High).
+  - AGY-2 resumed 435.
+  - AGY-1 restarted 443.
+- 09:01 Claude Sonnet 5.5 out too (~152 h); Claude Opus likely shares that pool. Only GPT-OSS 120B is left in Antigravity.
+  - AGY-2 committed WIP 435 to agy2 (df85ff0).
+  - AGY-1: 443 barely started.
+- Owner opened 2 Claude Code worker sessions (Sonnet). Seat table:
+  - CC-A = sketch-studio-77, worktree Sketch-Studio-agy2, branch agy2, on 435 (resume from WIP df85ff0).
+  - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
+  - Both report to the advisor (sketch-studio-e1) by SendMessage.
+  - The AGY seats are parked until their quota resets; their worktrees are now the CC seats'.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.
@@ -82,8 +99,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
     existing duplicate got stamped (Escape deletes it). Sent 438c.
     DONE: 438b/438c merged fb8bb23. DONE: 439/439b merged 842c557 (tree values in the document unit).
-    AGY-2 now on 442: radius/angle constraints are missing from the sketch tree (sketch-model.js constraintSketch
-    reads joints only).
+    DONE: 442 merged a067383 (shape-based constraints now listed in the tree). AGY-2 now on 435 (shared Undo/Redo
+    + the redo shortcut).
+    Noticed: the tree labels a radius dimension "Distance" (cosmetic, not ticketed).
     OWNER QUESTION: Escape in the value box of a NEW click-made dimension now DELETES it (it used to keep it at the
     measured value); this matches the pre-selection path.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
@@ -106,7 +124,6 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;
-  - 435: shared Undo/Redo;
   - 433: cut semantics on profiles.
 
 **Open, in priority order:**

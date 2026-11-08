@@ -12443,3 +12443,36 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 441 — Cleanly Exit Target-Editing Mode on Stage Router Navigation
+
+### 1. Diagnosis & Seam Location
+- **Where target-editing starts:**
+  - `apps/penplotter/src/toolpath-layers-panel.js:664` (`enterTargetEditing(toolpath)`).
+  - Invoked from `toolpath-layers-panel.js:266` (double-click name), `toolpath-layers-panel.js:360` (double-click row), and `toolpath-layers-panel.js:410` (inside `createToolpathAndEdit` triggered by `+ Outline` and `+ Fill` buttons).
+- **Where Esc ends it:**
+  - `apps/penplotter/src/keyboard.js:32`: `if (e.key === "Escape") { if (state.targetEditingToolpathId) { exitTargetEditing(); return; } }`.
+  - Defined in `apps/penplotter/src/toolpath-layers-panel.js:676` (`exitTargetEditing()`).
+- **Stage router integration in `apps/penplotter/src/main.js`:**
+  - `main.js:77` already provides the generic onLeave hook mechanism:
+    `if (prev && prev !== id && mounted[prev] && mounted[prev].onLeave) mounted[prev].onLeave();`
+  - In `apps/penplotter/src/toolpath-stage.js`, `mountToolpathStage` previously returned only `{ onEnter }`.
+  - Added `onLeave: exitTargetEditing` so leaving the Toolpath stage invokes `exitTargetEditing()`, removing `body.target-editing` and hiding `#targetEditBanner`.
+- **Investigation: Can canvas clicks on Export stage change fill targets while leaking?**
+  - **Yes**: Because `body.target-editing` disables pointer events on the toolpath overlay (`.tp-group`), clicks on the Export stage land directly on `#canvas`. `onDown` -> `startSelect` -> `selectCoreShape` checks `state.targetEditingToolpathId` and calls `syncTargetEditingSelection()`, mutating `tp.targetShapeIds`.
+
+### 2. Verification & Evidence
+- **Automated Tests (`tests/penplotter-target-editing.test.js`):**
+  - Unit test verifying:
+    1. `enterTargetEditing(tp)` sets `state.targetEditingToolpathId`, adds `target-editing` class to body, and shows `#targetEditBanner`.
+    2. Shapes selected and synced to `tp.targetShapeIds`.
+    3. Calling `mounted.onLeave()` clears `targetEditingToolpathId`, removes `target-editing` class from body, and hides `#targetEditBanner`.
+    4. Targets (`tp.targetShapeIds`) are fully preserved.
+    5. Direct `exitTargetEditing()` verified identical to `onLeave`.
+- **Headless Live Evidence Capture (`.evidence/441/`):**
+  - Before: `.evidence/441/before-leak-export.png` (MD5: `4EC745E05638CBFCE28B3E7946BFBAE5`) shows the leaked pink banner and green dashed border on `#canvas` over the Export stage.
+  - After: `.evidence/441/after-fixed-export.png` (MD5: `EF2144F84E6F0226E1AAC6C3C339D87A`) shows clean Export stage with no banner, no dashed outline, and targets kept.
+- **Hygiene & Gate:**
+  - Headless browsers: 0 left.
+  - `node scripts/gate.cjs`: `GATE files=166 pass=166 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

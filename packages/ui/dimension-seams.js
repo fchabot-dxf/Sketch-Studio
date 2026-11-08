@@ -11,6 +11,8 @@ import { getDist } from '#core/geometry.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
+const STEP_FRACTION = 0.1;
+const MAX_EDIT_STEPS = 40;
 
 // Commit a numeric edit to a DRIVING dimension's value. Snapshot → set → solve; on a genuine
 // non-convergence REFUSE + REVERT to the last valid shape (restore value + positions, re-solve).
@@ -51,7 +53,19 @@ export function commitDimensionEdit(state, c, val) {
   }
   c.value = val;
   if (shapeForRadius) shapeForRadius.radius = val;
-  const result = engine.solve(ITER());
+  // Walk the value in steps of at most STEP_FRACTION of the old value, solving at each: one big jump lets the solver land on
+  // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
+  // continuously. A fillet radius edit is already seeded analytically above, so it takes the single solve.
+  let result;
+  const span = Math.abs(val - oldValue);
+  const steps = (!filletArc && !shapeForRadius && Number.isFinite(span) && Math.abs(oldValue) > 0)
+    ? Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(oldValue) * STEP_FRACTION)))) : 1;
+  for (let k = 1; k <= steps; k++) {
+    c.value = k === steps ? val : oldValue + (val - oldValue) * (k / steps);
+    result = engine.solve(ITER());
+    if (result && result.converged === false) break;
+  }
+  c.value = val;
   if (filletArc && filletHasCollapsedLine(state, filletArc)) {
     c.value = oldValue;
     if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });

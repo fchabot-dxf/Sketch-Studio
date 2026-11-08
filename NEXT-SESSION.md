@@ -87,6 +87,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - 09:01 Claude Sonnet 5.5 out too (~152 h); Claude Opus likely shares that pool. Only GPT-OSS 120B is left in Antigravity.
   - AGY-2 committed WIP 435 to agy2 (df85ff0).
   - AGY-1: 443 barely started.
+- Owner opened 2 Claude Code worker sessions (Sonnet). Seat table:
+  - CC-A = sketch-studio-77, worktree Sketch-Studio-agy2, branch agy2, on 435 (resume from WIP df85ff0).
+  - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
+  - Both report to the advisor (sketch-studio-e1) by SendMessage.
+  - The AGY seats are parked until their quota resets; their worktrees are now the CC seats'.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

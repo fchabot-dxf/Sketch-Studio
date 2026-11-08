@@ -1,10 +1,10 @@
 // packages/core/loop-geometry.js — loop boundary polygons + point-in-polygon CONTAINMENT. Lifted from
-// apps/shaper/src/prepare-view.js (SKETCH-4a) so ISLANDS (S-4d) / vcarve / joints can reuse the geometry.
+// apps/shaper/src/prepare-view.js (SKETCH-4a) so profile resolution / vcarve / joints can reuse the geometry.
 //
 // PURITY NOTE: `sampleArc` samples the TRUE rendered curve via the browser SVG path API (getPointAtLength), so
 // `loopPolygon` for an ARC loop needs the DOM (degrades to the endpoints in Node). `loopPolygon` for LINE/CIRCLE
-// loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. (S-4d keeps
-// `shaper-export` pure by having the export HOST compute the loop polygons and pass them in.)
+// loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. The export
+// HOST can precompute loop polygons in the browser and pass them in to keep `shaper-export` pure.
 
 import { calculateArcPath } from './geometry.js';
 
@@ -75,8 +75,8 @@ function segsCross(p1, p2, p3, p4) {
 }
 
 // SKETCH-4a: does `outer` STRICTLY contain `inner` (non-touching nesting)? A representative inner point inside outer
-// AND polyArea(inner) < polyArea(outer) AND no edge of inner crosses any edge of outer. Used by the island detector
-// (a loop-with-a-hole → an evenodd compound path).
+// AND polyArea(inner) < polyArea(outer) AND no edge of inner crosses any edge of outer. Used by profile hole
+// resolution (a profile with holes → an evenodd compound path).
 export function polygonContains(outer, inner) {
   if (!Array.isArray(outer) || !Array.isArray(inner) || outer.length < 3 || inner.length < 3) return false;
   if (polyArea(inner) >= polyArea(outer)) return false;     // equal or larger → not strictly contained
@@ -115,13 +115,25 @@ function arcSeg(shape, fromPos, toPos, state) {
 }
 
 // loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Lines →
-// `L x y`; arcs → a direction-aware `A …` segment. A line CLOSING edge is left to Z (so a pure-line loop is identical
-// to SP1j-1); an arc closing edge is drawn explicitly. Returns '' on a missing loop / joint position.
+// `L x y`; arcs → a direction-aware `A …` segment; single-circle loops → two `A r r` half-arcs + `Z`. A line CLOSING
+// edge is left to Z (so a pure-line loop is identical to SP1j-1); an arc closing edge is drawn explicitly. Returns ''
+// on a missing loop / joint position.
 export function loopToPathD(loop, state) {
-  if (!loop || !Array.isArray(loop.joints) || loop.joints.length < 2 || !state || !state.joints) return '';
+  if (!loop || !Array.isArray(loop.joints) || !state || !state.joints) return '';
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
-  const pos = (nid) => state.joints.get(nid);
   const edges = Array.isArray(loop.edges) ? loop.edges : [];
+  if (edges.length === 1) {
+    const s = shapeById.get(edges[0]);
+    if (s && s.type === 'circle') {
+      const cid = (Array.isArray(s.joints) && s.joints[0]) || loop.joints[0];
+      const c = cid ? state.joints.get(cid) : null;
+      const r = Number(s.radius) || 0;
+      if (!c || !(r > 0)) return '';
+      return `M ${num(c.x - r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x + r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x - r)} ${num(c.y)} Z`;
+    }
+  }
+  if (loop.joints.length < 2) return '';
+  const pos = (nid) => state.joints.get(nid);
   const n = loop.joints.length;
   const p0 = pos(loop.joints[0]);
   if (!p0) return '';

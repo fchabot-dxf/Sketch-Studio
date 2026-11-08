@@ -1,10 +1,8 @@
 // packages/core/profile-model.js — Profile data model + validation + topology resilience + resolver.
 // Supports COMBINE tool (compound profiles with holes) and the DERIVED face resolver (Fusion 360 profile picking).
-// Additive in Slice 1: no CAM consumer switches yet.
 
 import { findLoops } from './loop-finder.js';
-import { loopPolygon, polyArea, polygonContains, pointInPolygon } from './loop-geometry.js';
-import { loopToPathD } from './loop-geometry.js';
+import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD } from './loop-geometry.js';
 
 const EPS = 1e-9;
 const cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -65,24 +63,6 @@ function matchLoop(targetShapeIds, candidateLoops) {
     return bestLoop;
   }
   return null;
-}
-
-/**
- * Convert a single loop to an SVG path 'd' string (handles lines, arcs, and single-circle loops).
- */
-function singleLoopToPathD(loop, state, shapeById) {
-  if (!loop || !state || !state.joints) return '';
-  if (Array.isArray(loop.edges) && loop.edges.length === 1) {
-    const s = shapeById.get(loop.edges[0]);
-    if (s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length >= 1) {
-      const c = state.joints.get(s.joints[0]);
-      const r = Number(s.radius) || 0;
-      if (c && r > 0) {
-        return `M ${c.x - r} ${c.y} A ${r} ${r} 0 1 0 ${c.x + r} ${c.y} A ${r} ${r} 0 1 0 ${c.x - r} ${c.y} Z`;
-      }
-    }
-  }
-  return loopToPathD(loop, state);
 }
 
 /**
@@ -270,10 +250,10 @@ export function resolveProfileViews(state, loops, loopPolys) {
       }
     }
 
-    const outerD = matchedOuter ? singleLoopToPathD(matchedOuter, state, shapeById) : '';
+    const outerD = matchedOuter ? loopToPathD(matchedOuter, state) : '';
     const innerDs = [];
     for (const hl of matchedInners) {
-      const hd = singleLoopToPathD(hl, state, shapeById);
+      const hd = loopToPathD(hl, state);
       if (hd) innerDs.push(hd);
     }
     const dParts = [];

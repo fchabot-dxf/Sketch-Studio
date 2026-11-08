@@ -1,7 +1,10 @@
 // apps/shaper/src/cut-plan.js — the Shaper Prepare CUT-PLAN store. Per-target cut assignments keyed by
-// `${kind}:${id}`. Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter) — loop ids are
-// deterministic (SP1b) + edge ids are stable. This is app STATE (not a pure algorithm → NOT #core). Extracted from
-// prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH the Prepare look AND the SVG exporter.
+// `${kind}:${id}`:
+//   • `loop:<outerLoopId>`  — a derived profile (keeps its outer loop's key so saved plans still load)
+//   • `profile:<profileId>` — an explicit combined profile (created via Combine)
+//   • `edge:<shapeId>`      — an open/single vector edge
+// Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
+// Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord } from './shaper.js';
 

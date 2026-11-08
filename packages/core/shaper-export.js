@@ -15,9 +15,9 @@
 
 import { findLoops } from './loop-finder.js';
 import { format } from './units.js';
-import { holesOfLoop } from './group-model.js';       // SKETCH-4e / VCARVE-5b: shared hole derivation
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
-import { loopToPathD, polyToPathD } from './loop-geometry.js';
+import { loopPolygon, loopToPathD, polyToPathD } from './loop-geometry.js';
+import { resolveProfileViews, resolveProfileForLoop } from './profile-model.js';
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -138,9 +138,9 @@ function datumPolygon(datum) {
   return `<polygon points="0,0 ${num(legX)},0 0,${num(legY)}" fill="#FF0000" stroke="none"/>`;
 }
 
-// exportShaperSVG({ state, entries, encoding, docUnit, options }) → an SVG string.
-//   state    — { joints: Map(id→{x,y}), shapes, constraints }   (loops re-derived via findLoops at export time)
-//   entries  — [{ target:{kind,id}, rec:{cutType, cutDepth, cutOffset, toolDia} }]   (the Prepare cut plan)
+// exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys }) → an SVG string.
+//   state    — { joints: Map(id→{x,y}), shapes, constraints, profiles?, vcarves? } (loops re-derived via findLoops)
+//   entries  — [{ target:{kind,id}, rec:{cutType, cutDepth, cutOffset, toolDia} }] (the Prepare cut plan: loop / profile / edge)
 //   encoding — [{ id, cutType, fill, stroke }, …] INJECTED       (cutType id → the Shaper machine encoding)
 //   docUnit  — 'mm' | 'cm' | 'in' — suffixes the cut PARAMS; the geometry stays mm-canonical.
 //   options  — { datum?, groupByCut? } — DECLARED unsurfaced features, DEFAULT OFF (so callers/oracles are unchanged):
@@ -154,70 +154,136 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
   const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
   const loops = findLoops(state || {});
   const loopById = new Map(loops.map((l) => [l.id, l]));
+  const hasProfiles = Array.isArray(state?.profiles) && state.profiles.length > 0;
+  const hasVcarves = Array.isArray(state?.vcarves) && state.vcarves.length > 0;
 
-  // SKETCH-4e / VCARVE-5b: shared holesOfLoop derivation (explicit-group, default ON for vcarves, options.islands for pockets).
-  // For a POCKET cut on a loop that is in a user GROUP, the group's OTHER loops STRICTLY CONTAINED in it are its
-  // HOLES → ONE compound `<path fill-rule="evenodd">` (the hole loops are absorbed, not emitted separately).
-  let holesOf = null, absorbed = null;
-  if (options.islands && loopPolys) {
-    holesOf = new Map(); absorbed = new Set();
-    for (const e of ents) {
-      if (!e || !e.target || e.target.kind !== 'loop' || !e.rec) continue;
-      const c = encOf(e.rec.cutType);
-      if (!c || c.cutType !== 'pocket') continue; // conservative: POCKET only
-      const L = loopById.get(e.target.id); if (!L) continue;
-      const holes = holesOfLoop(L, loops, state, loopPolys);
-      if (holes.length) {
-        holesOf.set(L.id, holes);
-        for (const hid of holes) absorbed.add(hid);
+  let polyMap = null;
+  const ensurePolys = () => {
+    if (polyMap) return polyMap;
+    polyMap = {};
+    if (loopPolys && typeof loopPolys === 'object') {
+      if (loopPolys instanceof Map) {
+        for (const [k, v] of loopPolys.entries()) polyMap[k] = v;
+      } else {
+        Object.assign(polyMap, loopPolys);
       }
     }
-  }
+    for (const l of loops) {
+      if (!polyMap[l.id] || !polyMap[l.id].length) {
+        polyMap[l.id] = loopPolygon(l, state || {}, shapeById);
+      }
+    }
+    return polyMap;
+  };
+  const profileViews = hasProfiles ? resolveProfileViews(state, loops, ensurePolys()) : null;
+
+  const compoundOrLoopGeom = (outerLoop, holeIds) => {
+    if (!outerLoop) return null;
+    if (Array.isArray(holeIds) && holeIds.length > 0) {
+      let d = loopToPathD(outerLoop, state);
+      for (const hid of holeIds) {
+        const hl = loopById.get(hid);
+        const hd = hl ? loopToPathD(hl, state) : '';
+        if (hd) d += ' ' + hd;
+      }
+      return d ? { tag: 'path', a: `d="${d}" fill-rule="evenodd"` } : null;
+    }
+    return loopGeom(outerLoop, state, shapeById);
+  };
+
+  // Resolve a V-carve region key ('profile:<id>', '<profileId>', '<loopId>', or a caller-provided polygon key)
+  // into { outerKey, holeIds, isCombined, profileId }.
+  const resolveVcarveSpec = (region) => {
+    if (!region || typeof region !== 'string') return null;
+    const polys = ensurePolys();
+    if (region.startsWith('profile:')) {
+      const pid = region.slice(8);
+      const v = profileViews && profileViews.get(pid);
+      if (!v || v.invalid || !v.outerLoopId) return null;
+      return { outerKey: v.outerLoopId, holeIds: v.innerLoopIds, isCombined: true, profileId: pid };
+    }
+    if (profileViews && profileViews.has(region)) {
+      const v = profileViews.get(region);
+      if (!v || v.invalid || !v.outerLoopId) return null;
+      return { outerKey: v.outerLoopId, holeIds: v.innerLoopIds, isCombined: true, profileId: region };
+    }
+    if (loopById.has(region)) {
+      const prof = resolveProfileForLoop(region, state, loops, polys);
+      if (!prof || !prof.outer) return null;
+      if (!prof.isDerived) {
+        const v = profileViews && profileViews.get(prof.id);
+        if (v && v.invalid) return null;
+        return { outerKey: prof.outer, holeIds: prof.inners, isCombined: true, profileId: prof.id };
+      }
+      return { outerKey: prof.outer, holeIds: prof.inners, isCombined: false, profileId: null };
+    }
+    // Caller-supplied boundary polygon in loopPolys without a matching sketch loop (e.g. standalone polygon fixtures)
+    if (polys[region] && polys[region].length >= 3) {
+      return { outerKey: region, holeIds: [], isCombined: false, profileId: null };
+    }
+    return null;
+  };
 
   // resolve each entry → { common (cut attrs), tag, a (geometry attrs) }
   const items = [];
-  const vcarveLoops = new Set();
-  if (Array.isArray(state?.vcarves)) {
+  const vcarveExcludedLoops = new Set();
+  const vcarveExcludedProfiles = new Set();
+  const resolvedVcarves = [];
+  if (hasVcarves) {
     for (const vc of state.vcarves) {
       if (!vc || !vc.region) continue;
-      vcarveLoops.add(vc.region);
-      if (loopPolys) {
-        for (const hid of holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true })) {
-          vcarveLoops.add(hid);
-        }
+      const spec = resolveVcarveSpec(vc.region);
+      if (!spec) continue;
+      resolvedVcarves.push({ vc, spec });
+      vcarveExcludedLoops.add(spec.outerKey);
+      if (spec.isCombined && spec.profileId) {
+        vcarveExcludedProfiles.add(spec.profileId);
+        for (const hid of spec.holeIds) vcarveExcludedLoops.add(hid);
       }
     }
   }
+
   for (const e of ents) {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
-    if (e.target.kind === 'loop' && absorbed && absorbed.has(e.target.id)) continue; // a hole absorbed into a pocket
-    if (e.target.kind === 'loop' && vcarveLoops.has(e.target.id)) continue; // VCARVE-4/5b: loop excluded by vcarve assignment
+    if (e.target.kind === 'loop' && vcarveExcludedLoops.has(e.target.id)) continue;
+    if (e.target.kind === 'profile' && vcarveExcludedProfiles.has(e.target.id)) continue;
     const c = encOf(e.rec.cutType);
     if (!c) continue;
     let geom = null;
     if (e.target.kind === 'loop') {
       const loop = loopById.get(e.target.id);
-      if (loop && holesOf && holesOf.has(loop.id)) { // POCKET-with-holes → an evenodd compound
-        let d = loopToPathD(loop, state);
-        for (const hid of holesOf.get(loop.id)) { const hl = loopById.get(hid); const hd = hl ? loopToPathD(hl, state) : ''; if (hd) d += ' ' + hd; }
-        if (d) geom = { tag: 'path', a: `d="${d}" fill-rule="evenodd"` };
+      if (loop && c.cutType === 'pocket' && (loops.length >= 2 || hasProfiles)) {
+        const prof = resolveProfileForLoop(loop.id, state, loops, ensurePolys());
+        if (prof && !prof.isDerived) {
+          const v = profileViews && profileViews.get(prof.id);
+          if (!v || v.invalid || !v.outerLoopId) continue;
+          geom = compoundOrLoopGeom(loopById.get(v.outerLoopId), v.innerLoopIds);
+        } else if (prof) {
+          geom = compoundOrLoopGeom(loopById.get(prof.outer), prof.inners);
+        }
       } else if (loop) {
         geom = loopGeom(loop, state, shapeById);
       }
+    } else if (e.target.kind === 'profile') {
+      const v = profileViews && profileViews.get(e.target.id);
+      if (v && !v.invalid && v.outerLoopId) {
+        geom = compoundOrLoopGeom(loopById.get(v.outerLoopId), v.innerLoopIds);
+      }
+    } else if (e.target.kind === 'edge') {
+      const shape = shapeById.get(e.target.id);
+      if (shape) geom = edgeGeom(shape, state);
     }
-    else if (e.target.kind === 'edge') { const shape = shapeById.get(e.target.id); if (shape) geom = edgeGeom(shape, state); }
     if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
   }
 
-  // VCARVE-4/5b: derive and emit contour stack from state.vcarves + loopPolys (including holes)
-  if (Array.isArray(state?.vcarves) && loopPolys) {
+  // VCARVE-4 + profile holes: derive and emit contour stack from state.vcarves + profile holes
+  if (resolvedVcarves.length > 0) {
+    const polys = ensurePolys();
     const onlineEnc = encOf('online') || { id: 'online', cutType: 'online', fill: 'none', stroke: '#7F7F7F' };
-    for (const vc of state.vcarves) {
-      if (!vc || !vc.region) continue;
-      const boundary = loopPolys[vc.region];
+    for (const { vc, spec } of resolvedVcarves) {
+      const boundary = polys[spec.outerKey];
       if (!boundary || boundary.length < 3) continue;
-      const holeIds = holesOfLoop(vc.region, loops, state, loopPolys, { excludeNested: true });
-      const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+      const holePolys = spec.holeIds.map((hid) => polys[hid]).filter((p) => p && p.length >= 3);
       const contours = deriveVcarveContours(boundary, vc, { holes: holePolys });
       for (const c of contours) {
         const d = polyToPathD(c.polygon);

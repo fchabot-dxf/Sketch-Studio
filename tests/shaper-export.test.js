@@ -1,6 +1,7 @@
 import { exportShaperSVG, loopToPathD, polyToPathD } from '#core/shaper-export.js';
 import { findLoops } from '#core/loop-finder.js';
-import { loopPolygon, polyArea } from '#core/loop-geometry.js'; // SKETCH-4e: island fixtures
+import { loopPolygon, polyArea } from '#core/loop-geometry.js';
+import { makeProfile } from '#core/profile-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { format } from '#core/units.js';
 
@@ -198,56 +199,146 @@ import { format } from '#core/units.js';
     assert(!svg.includes('<polygon') && !svg.includes('<g '), 'options default OFF → no datum / no group');
   }
 
-  // ── SKETCH-4e: ISLANDS — an explicit GROUP of nested loops → a compound fill-rule="evenodd" path ──
+  // ── TASK 432: PROFILE HOLES & ISLANDS (derived direct holes + Combine override; user groups have NO hole meaning) ──
   {
-    const PK = [{ id: 'pocket', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none' }, { id: 'interior', cutType: 'inside', fill: '#FFFFFF', stroke: '#000000' }];
-    // outer 40×40 + inner 20×20, all 8 lines in 'group-1' (override per case)
-    const islandState = (innerJoints, grouped) => {
+    const PK = [
+      { id: 'pocket', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none' },
+      { id: 'interior', cutType: 'inside', fill: '#FFFFFF', stroke: '#000000' },
+      { id: 'exterior', cutType: 'outside', fill: '#000000', stroke: 'none' },
+    ];
+    // outer 40×40 + second 20×20 loop (inside or beside), NO groups unless testing that groups are ignored
+    const frameOrBesideState = (innerJoints, grouped = false) => {
       const J = new Map([['A', { x: 0, y: 0 }], ['B', { x: 40, y: 0 }], ['C', { x: 40, y: 40 }], ['D', { x: 0, y: 40 }], ...innerJoints]);
       const g = grouped ? 'group-1' : undefined;
-      const Ln = (id, p, q) => ({ id, type: 'line', joints: [p, q], userGroupId: g });
-      return { joints: J, constraints: [], shapes: [
-        Ln('OA', 'A', 'B'), Ln('OB', 'B', 'C'), Ln('OC', 'C', 'D'), Ln('OD', 'D', 'A'),
-        Ln('IE', 'E', 'F'), Ln('IF', 'F', 'G'), Ln('IG', 'G', 'H'), Ln('IH', 'H', 'E'),
-      ] };
+      const Ln = (id, p, q) => ({ id, type: 'line', joints: [p, q], ...(g ? { userGroupId: g } : {}) });
+      return {
+        joints: J,
+        constraints: [],
+        groups: grouped ? [{ id: 'group-1', name: 'OrgGroup' }] : [],
+        profiles: [],
+        shapes: [
+          Ln('OA', 'A', 'B'), Ln('OB', 'B', 'C'), Ln('OC', 'C', 'D'), Ln('OD', 'D', 'A'),
+          Ln('IE', 'E', 'F'), Ln('IF', 'F', 'G'), Ln('IG', 'G', 'H'), Ln('IH', 'H', 'E'),
+        ],
+      };
     };
     const INNER_IN = [['E', { x: 10, y: 10 }], ['F', { x: 30, y: 10 }], ['G', { x: 30, y: 30 }], ['H', { x: 10, y: 30 }]];   // inside
     const INNER_OUT = [['E', { x: 50, y: 10 }], ['F', { x: 70, y: 10 }], ['G', { x: 70, y: 30 }], ['H', { x: 50, y: 30 }]]; // beside
-    const polysFor = (state) => { const sb = new Map(state.shapes.map((s) => [s.id, s])); const o = {}; for (const l of findLoops(state)) o[l.id] = loopPolygon(l, state, sb); return o; };
-    const byArea = (state) => { const sb = new Map(state.shapes.map((s) => [s.id, s])); const ls = findLoops(state).map((l) => ({ id: l.id, a: polyArea(loopPolygon(l, state, sb)) })).sort((x, y) => y.a - x.a); return { outer: ls[0].id, inner: ls[ls.length - 1].id }; };
+    const byArea = (state) => {
+      const sb = new Map(state.shapes.map((s) => [s.id, s]));
+      const ls = findLoops(state).map((l) => ({ id: l.id, loop: l, a: polyArea(loopPolygon(l, state, sb)) })).sort((x, y) => y.a - x.a);
+      return { outer: ls[0].id, inner: ls[ls.length - 1].id, outerLoop: ls[0].loop, innerLoop: ls[ls.length - 1].loop };
+    };
 
-    // grouped + nested + islands ON → ONE evenodd compound (outer + hole; inner absorbed)
+    // a) Frame (outer + 1 hole) with NO group anywhere → ONE evenodd compound path (outer + hole; hole has no cut of its own)
     {
-      const state = islandState(INNER_IN, true); const { outer } = byArea(state);
-      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
-      assert((svg.match(/<path /g) || []).length === 1, 'island: ONE compound path');
-      assert(/fill-rule="evenodd"/.test(svg) && /shaper:cutType="pocket"/.test(svg), 'island: evenodd + pocket attrs');
+      const state = frameOrBesideState(INNER_IN, false);
+      const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm' });
+      assert((svg.match(/<path /g) || []).length === 1, 'frame (no group): ONE compound path');
+      assert(/fill-rule="evenodd"/.test(svg) && /shaper:cutType="pocket"/.test(svg), 'frame (no group): evenodd + pocket attrs');
       const d = (svg.match(/d="([^"]+)"/) || [])[1] || '';
-      assert((d.match(/Z/g) || []).length === 2, 'island: outer + hole subpaths (2 × Z)');
+      assert((d.match(/Z/g) || []).length === 2, 'frame (no group): outer + hole subpaths (2 × Z)');
     }
-    // islands OFF (default) → plain pocket, no evenodd, one subpath
+
+    // b) Side-by-side shapes (even when grouped) → NOT merged
     {
-      const state = islandState(INNER_IN, true); const { outer } = byArea(state);
-      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', loopPolys: polysFor(state) });
-      assert(!/fill-rule="evenodd"/.test(svg) && ((svg.match(/d="([^"]+)"/) || [])[1].match(/Z/g) || []).length === 1, 'islands OFF → plain pocket');
+      const state = frameOrBesideState(INNER_OUT, true);
+      const { outer } = byArea(state);
+      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm' });
+      assert(!/fill-rule="evenodd"/.test(svg), 'side-by-side (grouped) → no evenodd');
+      assert(((svg.match(/d="([^"]+)"/) || [])[1].match(/Z/g) || []).length === 1, 'side-by-side → single subpath');
     }
-    // NESTED but NOT grouped → not merged (the inner is unassigned → not emitted either)
+
+    // c) Frame where outer has pocket AND hole ALSO has its own cut → outer exports as compound evenodd AND hole exports as its own path
     {
-      const state = islandState(INNER_IN, false); const { outer } = byArea(state);
-      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
-      assert(!/fill-rule="evenodd"/.test(svg), 'nested but NOT grouped → no merge');
+      const state = frameOrBesideState(INNER_IN, false);
+      const { outer, inner } = byArea(state);
+      const svg = exportShaperSVG({
+        state,
+        entries: [
+          { target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket', cutDepth: 5 } },
+          { target: { kind: 'loop', id: inner }, rec: { cutType: 'interior', cutDepth: 12 } },
+        ],
+        encoding: PK,
+        docUnit: 'mm',
+      });
+      const paths = [...svg.matchAll(/<path ([^>]+)\/>/g)].map((m) => m[1]);
+      eq(paths.length, 2, 'outer pocket + hole own interior cut → BOTH exported');
+      assert(paths[0].includes('fill-rule="evenodd"') && paths[0].includes('shaper:cutType="pocket"') && (paths[0].match(/Z/g) || []).length === 2, 'outer keeps hole open (evenodd, 2 × Z)');
+      assert(!paths[1].includes('fill-rule="evenodd"') && paths[1].includes('shaper:cutType="inside"') && paths[1].includes('shaper:cutDepth="12mm"'), 'hole exported separately with its own cut params');
     }
-    // GROUPED but NOT nested (beside) → not merged
+
+    // d) 3-circle Bullseye (outer r=40, ring r=24, dot r=10) with NO group anywhere:
+    //    - pocket on outer only → compound evenodd path (outer + ring, 2 × Z); dot NOT emitted
+    //    - pocket on outer + own cut on dot → compound evenodd path for outer + separate <circle> for dot
     {
-      const state = islandState(INNER_OUT, true); const { outer } = byArea(state);
-      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
-      assert(!/fill-rule="evenodd"/.test(svg), 'grouped but NOT nested → no merge');
+      const circBullState = () => ({
+        joints: new Map([['C', { x: 0, y: 0 }]]),
+        constraints: [],
+        groups: [],
+        profiles: [],
+        shapes: [
+          { id: 'cOuter', type: 'circle', joints: ['C'], radius: 40 },
+          { id: 'cRing', type: 'circle', joints: ['C'], radius: 24 },
+          { id: 'cDot', type: 'circle', joints: ['C'], radius: 10 },
+        ],
+      });
+      const st = circBullState();
+      const loops = findLoops(st);
+      const lOuter = loops.find((l) => l.edges[0] === 'cOuter');
+      const lRing = loops.find((l) => l.edges[0] === 'cRing');
+      const lDot = loops.find((l) => l.edges[0] === 'cDot');
+
+      const svgOuterOnly = exportShaperSVG({
+        state: st,
+        entries: [{ target: { kind: 'loop', id: lOuter.id }, rec: { cutType: 'pocket', cutDepth: 6 } }],
+        encoding: PK,
+        docUnit: 'mm',
+      });
+      assert((svgOuterOnly.match(/<path /g) || []).length === 1 && !svgOuterOnly.includes('<circle '), '3-circle bullseye outer only: 1 compound path, dot not emitted');
+      assert(svgOuterOnly.includes('A 40 40') && svgOuterOnly.includes('A 24 24') && !svgOuterOnly.includes('A 10 10'), 'outer compound path includes outer(40) + ring(24), excludes dot(10)');
+
+      const svgWithDot = exportShaperSVG({
+        state: st,
+        entries: [
+          { target: { kind: 'loop', id: lOuter.id }, rec: { cutType: 'pocket', cutDepth: 6 } },
+          { target: { kind: 'loop', id: lDot.id }, rec: { cutType: 'pocket', cutDepth: 3 } },
+        ],
+        encoding: PK,
+        docUnit: 'mm',
+      });
+      assert((svgWithDot.match(/<path /g) || []).length === 1, 'outer ring emitted as 1 compound path');
+      assert(svgWithDot.includes('<circle cx="0" cy="0" r="10" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="3mm"/>'), 'dot island emitted as its own <circle> with its own cutDepth');
+      // Ring loop still unassigned → not emitted as its own cut
+      assert(!svgWithDot.includes('r="24"'), 'unassigned ring loop only bounds outer pocket');
+      assert(Boolean(lRing), 'ring loop exists');
     }
-    // inner ASSIGNED its own cut + NOT grouped → both emitted separately (no merge)
+
+    // e) Combined profile (`profile:<id>`) overrides derived face and exports with ONE param set
     {
-      const state = islandState(INNER_IN, false); const { outer, inner } = byArea(state);
-      const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: outer }, rec: { cutType: 'pocket' } }, { target: { kind: 'loop', id: inner }, rec: { cutType: 'interior' } }], encoding: PK, docUnit: 'mm', options: { islands: true }, loopPolys: polysFor(state) });
-      assert((svg.match(/<path /g) || []).length === 2 && !/fill-rule="evenodd"/.test(svg), 'inner assigned + ungrouped → both emitted, no merge');
+      const st = {
+        joints: new Map([['C', { x: 0, y: 0 }]]),
+        constraints: [],
+        groups: [],
+        profiles: [],
+        shapes: [
+          { id: 'cOuter', type: 'circle', joints: ['C'], radius: 40 },
+          { id: 'cRing', type: 'circle', joints: ['C'], radius: 24 },
+          { id: 'cDot', type: 'circle', joints: ['C'], radius: 10 },
+        ],
+      };
+      const loops = findLoops(st);
+      const lOuter = loops.find((l) => l.edges[0] === 'cOuter');
+      const lDot = loops.find((l) => l.edges[0] === 'cDot');
+      const prof = makeProfile(st, lOuter, [lDot]);
+      const svgCombined = exportShaperSVG({
+        state: st,
+        entries: [{ target: { kind: 'profile', id: prof.id }, rec: { cutType: 'pocket', cutDepth: 8 } }],
+        encoding: PK,
+        docUnit: 'mm',
+      });
+      assert(svgCombined.includes('fill-rule="evenodd"') && svgCombined.includes('A 40 40') && svgCombined.includes('A 10 10') && !svgCombined.includes('A 24 24'), 'combined profile (outer + dot) overrides derived ring hole');
     }
   }
 
@@ -374,7 +465,8 @@ import { format } from '#core/units.js';
       }
     }
 
-    // 21. VCARVE-5b: Frame with hole (40×40 outer, 10×10 hole) preview vs export parity (14 contours)
+    // 21. Frame with hole (40×40 outer, 10×10 hole, NO group) preview vs export parity (14 contours),
+    //     plus hole loop can ALSO carry its own independent cut if assigned.
     {
       const frameOuter = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }];
       const frameHole = [{ x: 15, y: 15 }, { x: 25, y: 15 }, { x: 25, y: 25 }, { x: 15, y: 25 }];
@@ -385,16 +477,17 @@ import { format } from '#core/units.js';
           ['FH0', { x: 15, y: 15 }], ['FH1', { x: 25, y: 15 }], ['FH2', { x: 25, y: 25 }], ['FH3', { x: 15, y: 25 }],
         ]),
         shapes: [
-          { id: 'so1', type: 'line', joints: ['FO0', 'FO1'], userGroupId: 'g-frame' },
-          { id: 'so2', type: 'line', joints: ['FO1', 'FO2'], userGroupId: 'g-frame' },
-          { id: 'so3', type: 'line', joints: ['FO2', 'FO3'], userGroupId: 'g-frame' },
-          { id: 'so4', type: 'line', joints: ['FO3', 'FO0'], userGroupId: 'g-frame' },
-          { id: 'sh1', type: 'line', joints: ['FH0', 'FH1'], userGroupId: 'g-frame' },
-          { id: 'sh2', type: 'line', joints: ['FH1', 'FH2'], userGroupId: 'g-frame' },
-          { id: 'sh3', type: 'line', joints: ['FH2', 'FH3'], userGroupId: 'g-frame' },
-          { id: 'sh4', type: 'line', joints: ['FH3', 'FH0'], userGroupId: 'g-frame' },
+          { id: 'so1', type: 'line', joints: ['FO0', 'FO1'] },
+          { id: 'so2', type: 'line', joints: ['FO1', 'FO2'] },
+          { id: 'so3', type: 'line', joints: ['FO2', 'FO3'] },
+          { id: 'so4', type: 'line', joints: ['FO3', 'FO0'] },
+          { id: 'sh1', type: 'line', joints: ['FH0', 'FH1'] },
+          { id: 'sh2', type: 'line', joints: ['FH1', 'FH2'] },
+          { id: 'sh3', type: 'line', joints: ['FH2', 'FH3'] },
+          { id: 'sh4', type: 'line', joints: ['FH3', 'FH0'] },
         ],
-        groups: [{ id: 'g-frame', name: 'Frame' }],
+        groups: [],
+        profiles: [],
         constraints: [],
         vcarves: [frameRec],
       };
@@ -404,9 +497,10 @@ import { format } from '#core/units.js';
       frameRec.region = outerLoop.id;
       const loopPolys = { [outerLoop.id]: frameOuter, [holeLoop.id]: frameHole };
 
+      // a) V-carve on outer profile only (no cut on hole): emits 14 vcarve contours, hole not emitted separately
       const frameSVG = exportShaperSVG({
         state: frameState,
-        entries: [{ target: { kind: 'loop', id: holeLoop.id }, rec: { cutType: 'interior' } }],
+        entries: [],
         encoding: ENC5,
         docUnit: 'mm',
         loopPolys,
@@ -414,16 +508,28 @@ import { format } from '#core/units.js';
       const framePreview = deriveVcarveContours(frameOuter, frameRec, { holes: [frameHole] });
       eq(framePreview.length, 14, 'frame preview has 14 contours');
       const frameExported = [...frameSVG.matchAll(/<path d="([^"]+)"[^>]*shaper:cutDepth="([^"]+)"/g)].map((m) => ({ d: m[1], depth: m[2] }));
-      eq(frameExported.length, 14, 'frame export emits all 14 contours (absorbed hole excluded from interior cut)');
+      eq(frameExported.length, 14, 'frame export emits all 14 contours');
+      eq((frameSVG.match(/<path /g) || []).length, 14, 'no extra path when hole has no cut assigned');
       for (let i = 0; i < framePreview.length; i++) {
         eq(frameExported[i].d, polyToPathD(framePreview[i].polygon), `frame contour ${i} path matches preview`);
         eq(frameExported[i].depth, format(framePreview[i].depth, 'mm', { unit: true }), `frame contour ${i} depth matches preview`);
       }
+
+      // b) Hole ALSO assigned its own interior cut: hole bounds outer vcarve AND exports its own inside cut
+      const frameSVGWithHoleCut = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: holeLoop.id }, rec: { cutType: 'interior' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      eq((frameSVGWithHoleCut.match(/<path /g) || []).length, 15, '14 vcarve contours + 1 interior path for hole own cut');
+      assert(frameSVGWithHoleCut.includes('shaper:cutType="inside"'), 'hole own interior cut is preserved');
     }
 
-    // 22. VCARVE-5b/TASK 427b: Pocket bullseye oracle — exact-string check from origin/main BEFORE 427.
-    // Under SKETCH-4e fill-rule="evenodd", ALL contained grouped loops (outer + hole + dot) are absorbed into ONE compound path.
-    // Proves pocket export remains 100% byte-identical to origin/main.
+    // 22. TASK 432: Pocket bullseye exact-string oracle (NO group anywhere).
+    //     Outer's derived profile has ONLY its direct hole (15..45); the depth-2 island dot (25..35) is NOT absorbed,
+    //     and is exported only when assigned its own cut, as its own path.
     {
       const bullState = {
         joints: new Map([
@@ -432,20 +538,21 @@ import { format } from '#core/units.js';
           ['D0', { x: 25, y: 25 }], ['D1', { x: 35, y: 25 }], ['D2', { x: 35, y: 35 }], ['D3', { x: 25, y: 35 }],
         ]),
         shapes: [
-          { id: 'so1', type: 'line', joints: ['O0', 'O1'], userGroupId: 'g-bull' },
-          { id: 'so2', type: 'line', joints: ['O1', 'O2'], userGroupId: 'g-bull' },
-          { id: 'so3', type: 'line', joints: ['O2', 'O3'], userGroupId: 'g-bull' },
-          { id: 'so4', type: 'line', joints: ['O3', 'O0'], userGroupId: 'g-bull' },
-          { id: 'sh1', type: 'line', joints: ['H0', 'H1'], userGroupId: 'g-bull' },
-          { id: 'sh2', type: 'line', joints: ['H1', 'H2'], userGroupId: 'g-bull' },
-          { id: 'sh3', type: 'line', joints: ['H2', 'H3'], userGroupId: 'g-bull' },
-          { id: 'sh4', type: 'line', joints: ['H3', 'H0'], userGroupId: 'g-bull' },
-          { id: 'sd1', type: 'line', joints: ['D0', 'D1'], userGroupId: 'g-bull' },
-          { id: 'sd2', type: 'line', joints: ['D1', 'D2'], userGroupId: 'g-bull' },
-          { id: 'sd3', type: 'line', joints: ['D2', 'D3'], userGroupId: 'g-bull' },
-          { id: 'sd4', type: 'line', joints: ['D3', 'D0'], userGroupId: 'g-bull' },
+          { id: 'so1', type: 'line', joints: ['O0', 'O1'] },
+          { id: 'so2', type: 'line', joints: ['O1', 'O2'] },
+          { id: 'so3', type: 'line', joints: ['O2', 'O3'] },
+          { id: 'so4', type: 'line', joints: ['O3', 'O0'] },
+          { id: 'sh1', type: 'line', joints: ['H0', 'H1'] },
+          { id: 'sh2', type: 'line', joints: ['H1', 'H2'] },
+          { id: 'sh3', type: 'line', joints: ['H2', 'H3'] },
+          { id: 'sh4', type: 'line', joints: ['H3', 'H0'] },
+          { id: 'sd1', type: 'line', joints: ['D0', 'D1'] },
+          { id: 'sd2', type: 'line', joints: ['D1', 'D2'] },
+          { id: 'sd3', type: 'line', joints: ['D2', 'D3'] },
+          { id: 'sd4', type: 'line', joints: ['D3', 'D0'] },
         ],
-        groups: [{ id: 'g-bull', name: 'Bullseye' }],
+        groups: [],
+        profiles: [],
         constraints: [],
       };
       const outerPoly = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 60 }, { x: 0, y: 60 }];
@@ -462,21 +569,38 @@ import { format } from '#core/units.js';
         [dotLoop.id]: dotPoly,
       };
 
-      const got = exportShaperSVG({
+      const gotOuterOnly = exportShaperSVG({
         state: bullState,
         entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'pocket' } }],
         encoding: ENC5,
         docUnit: 'mm',
-        options: { islands: true },
         loopPolys,
       });
 
-      // EXACT string computed on origin/main (commit e5a5f8a) before TASK 427:
-      const want = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
-        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 25 25 L 35 25 L 35 35 L 25 35 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>\n' +
+      const wantOuterOnly = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>\n' +
         '</svg>';
 
-      eq(got, want, 'pocket bullseye export is byte-identical to origin/main');
+      eq(gotOuterOnly, wantOuterOnly, 'pocket bullseye outer-only export has direct hole only (island uncut)');
+
+      // When the dot island ALSO has its own cut, it is exported as its own separate path
+      const gotWithIslandCut = exportShaperSVG({
+        state: bullState,
+        entries: [
+          { target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'pocket', cutDepth: 6 } },
+          { target: { kind: 'loop', id: dotLoop.id }, rec: { cutType: 'exterior', cutDepth: 12 } },
+        ],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+
+      const wantWithIslandCut = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">\n' +
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 15 15 L 45 15 L 45 45 L 15 45 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6mm"/>\n' +
+        '  <path d="M 25 25 L 35 25 L 35 35 L 25 35 Z" fill="#000000" shaper:cutType="outside" shaper:cutDepth="12mm"/>\n' +
+        '</svg>';
+
+      eq(gotWithIslandCut, wantWithIslandCut, 'pocket bullseye + island own cut exports compound outer + separate island path');
     }
   }
 

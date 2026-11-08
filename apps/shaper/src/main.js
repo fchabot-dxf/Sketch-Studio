@@ -22,9 +22,9 @@ import { cutPlanEntries, CUT_PLAN, keyOf } from './cut-plan.js'; // SP1j-4: the 
 import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
-import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
-import { findLoops } from '#core/loop-finder.js';        // SKETCH-4e: enumerate loops for island polys
-import { loopPolygon } from '#core/loop-geometry.js';     // SKETCH-4e: HOST computes loop polys (DOM) → serializer stays pure
+import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
+import { findLoops } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
+import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
 
@@ -74,7 +74,7 @@ function generateShaperSvgPayload() {
   const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-  const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true, islands: true }, loopPolys });
+  const svg = exportShaperSVG({ state: st, entries, encoding: CUT_TYPES, docUnit: getDocUnit(), options: { groupByCut: true }, loopPolys });
   return { svg, entries, vcarves, state: st };
 }
 
@@ -209,8 +209,7 @@ if (syncForm) {
 
 // SKETCH-4d: the GROUP / UNGROUP action (Shaper Design only). Ctrl+G groups the selected shapes (≥2) under a NEW
 // userGroupId; Ctrl+Shift+G ungroups the selection's group(s). Operates on the Design selection (state.selectedShapes);
-// the group belongs to the active sketch (makeGroup). A transient status toast is the cue — the renderer's factory
-// groupId/fill is UNTOUCHED (we only set userGroupId). Unblocks islands (S-4e export). Shaper-only.
+// the group belongs to the active sketch (makeGroup) for organisation only (no hole meaning). Shaper-only.
 let _grpStatusEl = null, _grpStatusTimer = null;
 function groupStatus(msg) {
   if (!_grpStatusEl) {

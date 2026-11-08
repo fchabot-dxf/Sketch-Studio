@@ -1,14 +1,10 @@
 // packages/core/group-model.js — the user GROUP substrate (SKETCH-4c). A GROUP is an ad-hoc sub-container inside a
-// sketch (Sketch > Group > Entity): a `userGroupId` membership tag on SHAPES + a `state.groups` list
-// [{ id, name, sketchId }]. PURE (no DOM).
+// sketch (Sketch > Group > Entity) for organisation only: a `userGroupId` membership tag on SHAPES + a `state.groups`
+// list [{ id, name, sketchId }]. PURE (no DOM).
 //
 // CRITICAL: `userGroupId` is DISTINCT from the shape factories' `groupId` (the RENDERER's closed-shape-fill key —
-// LEFT UNTOUCHED). The user group never reads/writes the factory `groupId`.
-//
-// ADDITIVE — declared here, NO consumer yet (the Group ACTION = S-4d; islands / export threading = S-4e) → both apps
-// byte-identical. Declared richly (name + sketch) so a future action / tree / export all read DATA, not new code.
-
-import { polygonContains } from './loop-geometry.js';
+// LEFT UNTOUCHED). The user group never reads/writes the factory `groupId`. User groups carry NO toolpath/hole meaning
+// (holes and combined faces belong exclusively to `#core/profile-model.js`).
 
 // An entity's USER group — its stored `userGroupId`, or null (ungrouped). NOT the factory `groupId`.
 export function groupOf(shape) { return (shape && shape.userGroupId) || null; }
@@ -52,61 +48,9 @@ export function shapesInGroup(state, gid) {
 }
 
 // loopsInGroup(loops, state, gid) → the loop ids whose ALL edge-shapes carry the group's `userGroupId` (a fully
-// grouped loop). The island/export consumer reads these. (Disconnected island loops never share edges.)
+// grouped loop).
 export function loopsInGroup(loops, state, gid) {
   const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
   return (loops || []).filter((l) => Array.isArray(l.edges) && l.edges.length &&
     l.edges.every((eid) => { const s = shapeById.get(eid); return s && groupOf(s) === gid; })).map((l) => l.id);
-}
-
-// groupOfLoop(loop, state) → the `userGroupId` a loop belongs to (when ALL its edge-shapes share one), else null.
-export function groupOfLoop(loop, state) {
-  if (!loop || !Array.isArray(loop.edges) || !loop.edges.length) return null;
-  const shapeById = new Map(((state && state.shapes) || []).map((s) => [s.id, s]));
-  const gid = groupOf(shapeById.get(loop.edges[0]));
-  if (!gid) return null;
-  return loop.edges.every((eid) => groupOf(shapeById.get(eid)) === gid) ? gid : null;
-}
-
-// holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true, excludeNested = false } = {}) → string[] (loop ids)
-// Derive the holes of `loopOrId`:
-// 1. By default (`requireGroup: true`), holes must belong to the same explicit user GROUP (SKETCH-4e).
-//    Set `requireGroup: false` for pure geometric containment (one-line switch if future needs automatic).
-// 2. A candidate hole must be strictly contained inside the outer loop's polygon (`polygonContains`).
-// 3. Nested-island filter: when `excludeNested: true` (used by V-carve, where bullseye dots stay uncut),
-//    candidates contained inside any other candidate hole are filtered out.
-//    When `excludeNested: false` (default, used by pocket export), ALL contained loops are returned,
-//    preserving SKETCH-4e evenodd compound path semantics where nested islands alternate.
-export function holesOfLoop(loopOrId, loops, state, loopPolys, { requireGroup = true, excludeNested = false } = {}) {
-  if (!loopOrId || !Array.isArray(loops) || !state || !loopPolys) return [];
-  const loop = typeof loopOrId === 'object' ? loopOrId : loops.find((l) => l && l.id === loopOrId);
-  if (!loop || !loop.id) return [];
-  const outerPoly = loopPolys[loop.id];
-  if (!outerPoly || outerPoly.length < 3) return [];
-
-  let candidateIds;
-  if (requireGroup) {
-    const gid = groupOfLoop(loop, state);
-    if (!gid) return [];
-    candidateIds = loopsInGroup(loops, state, gid).filter((hid) => hid !== loop.id);
-  } else {
-    candidateIds = loops.map((l) => l && l.id).filter((hid) => hid && hid !== loop.id);
-  }
-
-  const candidateHoles = [];
-  for (const hid of candidateIds) {
-    const hp = loopPolys[hid];
-    if (hp && hp.length >= 3 && polygonContains(outerPoly, hp)) {
-      candidateHoles.push({ id: hid, poly: hp });
-    }
-  }
-
-  if (excludeNested) {
-    const directHoles = candidateHoles.filter((h) =>
-      !candidateHoles.some((other) => other.id !== h.id && polygonContains(other.poly, h.poly))
-    );
-    return directHoles.map((h) => h.id);
-  }
-
-  return candidateHoles.map((h) => h.id);
 }

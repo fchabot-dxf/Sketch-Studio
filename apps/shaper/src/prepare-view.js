@@ -12,7 +12,7 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
@@ -300,10 +300,18 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
     const dashStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
 
-    let region = '', path = '';
+    let region = '', path = '', hasTravel = false;
     for (const fp of deriveCutFootprint(cuts, rec, state)) {
       const rings = fp.rings.filter((ring) => ring.length >= 3);
       if (rings.length) region += `<path d="${rings.map(polyRingD).join(' ')}" fill-rule="${fp.fillRule}" style="${fp.kind === 'pocket' ? pocketFill : footprintFill}"/>`;
+      // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
+      // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line / guide have none.
+      const travel = deriveCutTravel([fp]);
+      for (const t of travel) {
+        path += `<path class="sk-travel" d="${polyRingD(t.path)}" style="stroke:${color};"/>`;
+        path += `<g class="sk-travel-arrows" style="fill:${color};">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
+        hasTravel = true;
+      }
       if (fp.kind === 'pocket') {
         const label = rings.length ? pocketDepthLabel(rec.cutDepth) : '';
         if (label) {
@@ -312,11 +320,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         }
       } else if (fp.chain) {
         path += (fp.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, fp.kind === 'guide' ? dashStyle : centerStyle)).join('');
-      } else if (fp.center) {
+      } else if (fp.center && !travel.length) {
         path += polyMarkup(fp.center, fp.kind === 'guide' ? dashStyle : centerStyle);
       }
     }
-    return { region, path };
+    return { region, path, hasTravel };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
@@ -324,7 +332,12 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const renderToolpaths = () => { let out = ''; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType) out += getLook(key, rec).path; toolpathG.innerHTML = out; };
   // ONE reactive refresh: repaint BOTH layers (getLook recomputes only the changed target — its sig changed). Wired
   // to every cut-field change (cutType / toolDia / cutOffset) so the look updates LIVE without a re-mount.
-  const refreshLook = () => { renderCuts(); renderToolpaths(); };
+  const refreshLook = () => {
+    renderCuts(); renderToolpaths();
+    // TASK 449: the one-line direction legend shows only while some cut has a travel direction
+    const legend = document.getElementById('prepare-dir-legend');
+    if (legend) { let any = false; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
+  };
 
   const renderSelection = () => {
     let out = '';

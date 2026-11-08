@@ -13215,3 +13215,5 @@ Fusion template colours + glyph look (Default byte-identical: dump of a fixed sk
 
 ## TURN 504
 Added assets/constraint-glyphs.svg (14 glyphs, 32x32 cells, 48px pitch, presentation attrs only) + assets/constraint-glyphs-preview.png (8x, headless Edge). No app code touched. Fusion reference images were not accessible (/tmp path absent); glyphs follow conventional Fusion symbols.
+
+TURN 504 change: dropped glyph-point-on-line (same glyph as coincident); now 13 glyphs; coincident label reads 'coincident (also point on line)'.

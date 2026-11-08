@@ -135,6 +135,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
           - CORRECTED (owner: "Studio allows it"): Guide KEEPS depth/offset/bit, since the cut type can be changed on
             the tool later;
           - On Line = depth + bit, no offset (Shaper docs). Owner Q: does Studio show an offset for On Line?
+          - DONE: 450/450b merged 020317e. Left over: a stale comment in shaper-export.js ("Guide has none of the
+            three"), fixed in 452's first commit.
         - POCKET OFFSET, ANSWERED (support 360005473253 "Pocketing procedure" + owner):
           - the Origin adds an automatic pocket offset = 1/4 of the bit diameter (since the "Napa" software; 1/6
             before), set by the machine;
@@ -162,6 +164,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
           - we omit a zero offset and an unset bit; Studio always writes them;
           - we write flat elements and <circle>; Studio uses <g>-wrapped paths.
           Untested whether the Origin minds any of these.
+        - Second Studio file ("... copy 1 (2).svg"): POCKET = fill="#7F7F7F", NO stroke and no stroke-width,
+          fill-rule="nonzero". Matches our pocket colour. A pocket can carry a manual offset ("0.125 in"). A circle
+          pocket (0.300 in) sitting inside a rect pocket (0.400 in) is written as two SEPARATE plain paths, not one
+          evenodd compound. Still no On Line sample.
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would
           settle the pocket/on-line encoding and the On Line offset question.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on

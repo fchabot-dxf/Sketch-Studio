@@ -11,7 +11,14 @@ export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).
 const FACE_MESHES = new Set(['top', 'floor', 'bottom']); // show the birch face grain; side / wall show the procedural ply layers
 export const PLY_MM = 1.5;                  // one ply per ~1.5 mm of thickness (19.05 mm -> 13 plies)
 export const MIN_PLIES = 3;
-export const PLY_TONES = [[226, 190, 140], [186, 146, 96]]; // light / dark tan strips (near BOARD), alternating
+export const PLY_TONES = [[235, 217, 184], [217, 185, 140]]; // cream (#EBD9B8) / warm tan (#D9B98C); the top ply is cream
+export const PLY_PALETTE = [PLY_TONES[0], PLY_TONES[1], [205, 191, 179], PLY_TONES[0]]; // + grey-beige (#CDBFB3); each ply picks one at random
+
+// small seeded PRNG (mulberry32): the edge texture is identical on every render
+function seededRandom(seed) {
+  let a = (seed * 2654435761) >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
 
 export const plyCount = (thickness) => Math.max(MIN_PLIES, Math.round(thickness / PLY_MM));
 
@@ -74,21 +81,46 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
     edgeMaterial.needsUpdate = true;
   };
   function setWood(on) { woodOn = !!on; applyWood(); render(); }
-  // The edge texture spans the full stock thickness (v: 0 = top .. 1 = bottom), one strip per ply; rebuilt only when the ply count changes.
+  // The edge texture spans the full stock thickness (v: 0 = top .. 1 = bottom): `n` plies of seeded, uneven thickness (so it never
+  // changes between renders), each a random cream / grey-beige / tan tone with finer sub-layers, fibre streaks and the odd thin
+  // red-brown glue line. Rebuilt only when the ply count changes.
   function ensureEdgeTexture(T) {
     const n = plyCount(T);
     if (n === edgePlies && edgeTexture) return;
     if (edgeTexture) edgeTexture.dispose();
-    const PX = 16, W = 128, c = document.createElement('canvas'); c.width = W; c.height = n * PX;
+    const rnd = seededRandom(n);
+    const PX = 24, W = 128, H = n * PX, c = document.createElement('canvas'); c.width = W; c.height = H;
     const g = c.getContext('2d');
+    const weights = Array.from({ length: n }, () => 0.55 + rnd() * 0.9);
+    const total = weights.reduce((a, b) => a + b, 0);
+    const shade = (t, k) => `rgb(${Math.min(255, Math.round(t[0] * k))},${Math.min(255, Math.round(t[1] * k))},${Math.min(255, Math.round(t[2] * k))})`;
+    const COL = 4; // the layer edges wobble per 4 px column: irregular, fibrous boundaries
+    let y0 = 0;
     for (let i = 0; i < n; i++) {
-      const tone = PLY_TONES[i % 2];
-      g.fillStyle = `rgb(${tone[0]},${tone[1]},${tone[2]})`; g.fillRect(0, i * PX, W, PX);
-      for (let s = 0; s < 14; s++) { // a hint of fibre: faint short horizontal streaks inside the ply
-        const y = i * PX + 1 + ((s * 7919) % (PX - 2)), x = (s * 104729) % W, len = 12 + ((s * 31) % 40);
-        g.fillStyle = s % 2 ? 'rgba(90,60,30,0.12)' : 'rgba(255,240,210,0.14)';
+      const y1 = i === n - 1 ? H : y0 + (weights[i] / total) * H;
+      const tone = i === 0 ? PLY_TONES[0] : PLY_PALETTE[Math.floor(rnd() * PLY_PALETTE.length)];
+      const subs = 1 + Math.floor(rnd() * 3), cuts = [y0];
+      for (let s = 1; s < subs; s++) cuts.push(y0 + ((y1 - y0) * s) / subs + (rnd() - 0.5) * 2);
+      cuts.push(y1);
+      for (let s = 0; s < subs; s++) {
+        g.fillStyle = shade(tone, 0.96 + rnd() * 0.08);
+        for (let x = 0; x < W; x += COL) {
+          const top = Math.round(cuts[s] + (s === 0 && i === 0 ? 0 : (rnd() - 0.5) * 1.6)), bot = Math.round(cuts[s + 1] + (s === subs - 1 && i === n - 1 ? 0 : 0.8));
+          g.fillRect(x, top, COL, Math.max(1, bot - top));
+        }
+      }
+      for (let s = 0; s < 10; s++) { // fibre streaks: faint short horizontal lines inside the ply
+        const y = y0 + 1 + rnd() * Math.max(1, y1 - y0 - 2), x = rnd() * W, len = 10 + rnd() * 40;
+        g.fillStyle = s % 2 ? 'rgba(120,90,60,0.10)' : 'rgba(255,245,225,0.12)';
         g.fillRect(x, y, len, 1); g.fillRect(x - W, y, len, 1);
       }
+      if (i > 0 && rnd() < 0.3) { // an occasional thin red-brown line on the ply boundary
+        g.fillStyle = 'rgba(160,110,74,0.55)'; g.fillRect(0, Math.round(y0), W, 1);
+      }
+      y0 = y1;
+    }
+    for (let y = 0; y < H; y++) { // a little per-row noise
+      g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.025)' : 'rgba(255,255,255,0.03)'; g.fillRect(0, y, W, 1);
     }
     edgeTexture = new THREE.CanvasTexture(c);
     edgeTexture.colorSpace = THREE.SRGBColorSpace;

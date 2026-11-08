@@ -226,6 +226,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     dashes ~#CBDAD6.
     Seventh screenshot: a selected Guide = mint line only; hover band #27282B; chip "↓ unset"; the cut panel
     restyle (black card #0A0A0B, fields #2A2B2D, lowercase labels, D-prefixed bit, preset row).
+    Eighth screenshot: an idle Guide = thin BLUE #2C9AFF (the only idle exception).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

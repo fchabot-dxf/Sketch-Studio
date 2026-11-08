@@ -77,6 +77,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - DONE: 441 merged 09b4271 (target-edit ends on stage leave via the existing onLeave hook; it could also edit
     targets from Export).
   - AGY-1 now on 443: the Pen Plotter audit sweep, FIND ONLY.
+- 2026-11-08 00:44: BOTH seats out of Gemini 3.8 Flash for ~151 h. Argon is also out (~6 days). Claude models
+  should be available; switching family is the owner's call.
+  - AGY-1: 443 had just started (only an untracked scratch/).
+  - AGY-2: 435 is half-done and UNCOMMITTED in Sketch-Studio-agy2 (7 modified files + tests/undo-redo-ribbon.test.js).
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

@@ -124,9 +124,13 @@ export async function mountReviewView({ host, info, getInputs }) {
     if (firstBuild) reset(); else render();
     const ms = performance.now() - t0;
     lastSig = sig;
-    lastBuild = { ms, stages: rel.stats.ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length };
+    lastBuild = { ms, stages: rel.stats.ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length, outsideStock: rel.stats.outsideStock, partlyOutside: rel.stats.partlyOutside, board: rel.stats.board };
     const notShown = rel.stats.skipped.filter((s) => s.reason === 'no-depth').length;
     const lines = [`${rel.stats.triangles} triangles · ${rel.stats.levels} level${rel.stats.levels === 1 ? '' : 's'} · built in ${ms.toFixed(0)} ms`];
+    if (rel.stats.board === 'profile') lines.push('Board: your Stock loop (any shape), extruded to its thickness');
+    const nOut = rel.stats.outsideStock.length, nPart = rel.stats.partlyOutside.length;
+    if (nOut) lines.push(`${nOut} cut${nOut === 1 ? '' : 's'} lie${nOut === 1 ? 's' : ''} wholly outside the stock: nothing is cut there`);
+    if (nPart) lines.push(`${nPart} cut${nPart === 1 ? '' : 's'} extend${nPart === 1 ? 's' : ''} past the stock edge: only the part on the board is cut`);
     if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through (amber label)`);
     if (notShown) lines.push(`${notShown} cut${notShown === 1 ? '' : 's'} not shown (Pocket or On Line with no depth)`);
     info.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');

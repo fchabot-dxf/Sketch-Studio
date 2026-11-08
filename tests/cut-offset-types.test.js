@@ -139,7 +139,7 @@ await (async () => {
     // ── declaration + export + preview (pure) ──
     const ALL3 = ['cutDepth', 'cutOffset', 'toolDia'];
     const decl = Object.fromEntries(CUT_TYPES.map((t) => [t.id, t.params]));
-    assert.deepStrictEqual(decl, { exterior: ALL3, interior: ALL3, pocket: ALL3, online: ALL3, guide: ALL3 }, 'ONE params declaration per cut type');
+    assert.deepStrictEqual(decl, { exterior: ALL3, interior: ALL3, pocket: ALL3, online: ALL3, guide: ALL3, stock: ['cutDepth'] }, 'ONE params declaration per cut type (TASK 472: Stock has only the thickness row)');
     assert.ok(cutTypeHasParam('exterior', 'cutOffset') && cutTypeHasParam('online', 'cutOffset') && cutTypeHasParam('online', 'toolDia') && cutTypeHasParam('guide', 'cutDepth') && cutTypeHasParam('guide', 'cutOffset') && cutTypeHasParam('guide', 'toolDia'), 'guide keeps all three (Studio allows it)');
     assert.ok(cutTypeHasParam(null, 'cutOffset'), 'no type chosen yet: nothing hidden');
     assert.deepStrictEqual(effectiveCutRecord({ cutType: 'guide', cutDepth: 5, cutOffset: 2, toolDia: 6 }), { cutType: 'guide', cutDepth: 5, cutOffset: 2, toolDia: 6, autoOffset: 0 }, 'a guide keeps its params (and has no automatic offset)');

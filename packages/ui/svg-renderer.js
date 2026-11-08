@@ -16,7 +16,44 @@ import { format as formatUnit } from '#core/units.js';
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
 // The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
 // (no explicit re-render wire needed).
-const formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { decimals: 1 });
+export const formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { decimals: 1 });
+
+/**
+ * Shared formatter for constraint / dimension values (S5b / TASK 439).
+ * Single source of truth for both canvas dimension labels and the side panel's sketch tree.
+ * Covers: distance (aligned, horizontal, vertical), radius, diameter, and angle.
+ * Lengths format in the document unit (SettingsManager DOC_UNIT); angles are never unit-converted.
+ */
+export function formatConstraintValue(c, options = {}) {
+  if (!c) return '';
+  const val = (typeof options === 'number') ? options :
+    (typeof options.value === 'number') ? options.value :
+    (typeof c.value === 'number') ? c.value : (typeof c === 'number' ? c : null);
+  if (val == null || !Number.isFinite(val)) return '';
+
+  const isPlacing = typeof options === 'object' && !!options.isPlacing;
+  const isDrivenFlag = typeof options === 'object' && options.driven !== undefined
+    ? !!options.driven
+    : !!(c.isDriven || c.driven);
+  const wrapParens = isDrivenFlag || isPlacing;
+
+  if (c.type === CONSTRAINT_TYPES.ANGLE || c.type === 'angle') {
+    const s = Number(val).toFixed(1) + '°';
+    return wrapParens ? `(${s})` : s;
+  }
+  const lenStr = formatLenLabel(val);
+  const numStr = wrapParens ? `(${lenStr})` : lenStr;
+  if (c.isRadius || c.type === 'radius') {
+    return 'R ' + numStr;
+  }
+  if (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') {
+    return 'Ø ' + numStr;
+  }
+  return numStr;
+}
+
+export const formatDimensionValue = formatConstraintValue;
+export const formatDimensionLabel = formatConstraintValue;
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
@@ -2211,7 +2248,7 @@ switch(c.type){
           
           // If driven or placing, show actual geometry value. If driving, show target value.
           const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualRadius;
-          const displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
+          const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
 
           // Direction from center to label (use offset as radial distance)
           const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0);
@@ -2256,7 +2293,7 @@ switch(c.type){
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
-            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">R ${displayVal}</text>
+            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
             <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
@@ -2280,7 +2317,7 @@ switch(c.type){
             // Horizontal: measure X distance, dim line is horizontal, extensions are vertical
             const projDist = Math.abs(j2.x - j1.x);
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
+            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
             
             const midY = (j1.y + j2.y) / 2;
             const dimY = midY + offset;
@@ -2300,7 +2337,7 @@ switch(c.type){
             // Vertical: measure Y distance, dim line is vertical, extensions are horizontal
             const projDist = Math.abs(j2.y - j1.y);
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
+            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
             
             const midX = (j1.x + j2.x) / 2;
             const dimX = midX + offset;
@@ -2319,7 +2356,7 @@ switch(c.type){
           } else {
             // Aligned (default — existing behavior)
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : len;
-            displayVal = (isDrivenFlag || isPlacing) ? `(${formatLenLabel(valToShow)})` : formatLenLabel(valToShow);
+            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
             
             nx = 0; ny = -1;
             if (len > 0.01) { nx = -dy / len; ny = dx / len; }
@@ -2468,7 +2505,7 @@ switch(c.type){
             // Always display the smaller equivalent angle (<= 180°)
             const currentAngleShown = (currentAngleDeg > 180) ? (360 - currentAngleDeg) : currentAngleDeg;
             const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : currentAngleShown;
-            const displayVal = (isDrivenFlag || isPlacing) ? `(${valToShow.toFixed(1)}°)` : valToShow.toFixed(1) + '°';
+            const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
 
             const cIdx = constraints.indexOf(c);
             

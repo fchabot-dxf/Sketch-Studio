@@ -12077,3 +12077,41 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 439 — Format sketch tree dimension values in document units — branch agy2
+
+- **Root Cause & Issue Addressed:**
+  - In `packages/ui/design-info-panel.js:115` (the shared Design info panel sketch tree), constraint values were formatted using `c.value.toFixed(1)`. This rendered raw internal millimeters (`76.2` for a 3-inch dimension), while the canvas label showed `"3.0"` in inches (`DOC_UNIT = 'in'`).
+  - Angle constraints rendered without degrees symbol (`45.0` instead of `45.0°`).
+  - Radius constraints rendered without the standard `R ` prefix present on the canvas label (`R 3.0`).
+
+- **Implementation:**
+  - `packages/ui/svg-renderer.js`:
+    - Exported `formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { decimals: 1 })` (line 19).
+    - Introduced and exported unified `formatConstraintValue(c, options = {})` (and aliases `formatDimensionValue`, `formatDimensionLabel` at lines 27-61):
+      - Angle constraints (`CONSTRAINT_TYPES.ANGLE`): formats degrees (`toFixed(1) + '°'`), never unit-converted.
+      - Radius constraints (`isRadius: true` or `type: 'radius'`): formats length in `DOC_UNIT` with `'R '` prefix (`'R ' + numStr`).
+      - Diameter constraints (`isDiameter: true`, `dimMode: 'diameter'`, or `type: 'diameter'`): formats length in `DOC_UNIT` with `'Ø '` prefix (`'Ø ' + numStr`).
+      - Linear constraints (aligned, horizontal, vertical distance): formats length in `DOC_UNIT` (`numStr`).
+      - Reference / driven constraints (`isDriven || driven`): wraps value in parentheses (`(3.0)`, `R (3.0)`, `(45.0°)`), matching ISO CAD drafting conventions on canvas and tree.
+    - Updated canvas label rendering sites in `svg-renderer.js` (radius :2248, horizontal :2318, vertical :2338, aligned :2358, angle :2507) to use `formatConstraintValue(c, { value: valToShow, isPlacing })`.
+  - `packages/ui/design-info-panel.js`:
+    - Imported `formatConstraintValue` from `#ui/svg-renderer.js`.
+    - Updated `buildRow` line 116 to render `formatConstraintValue(c)` inside `.sk-info-val`, ensuring 100% parity with canvas labels.
+    - Updated sketch tree bucketing in line 154 to resolve shape-based constraints without explicit `joints` arrays (e.g. circle radius with `c.shape` and angle with `c.shapes`) to their home sketch (fallback `DEFAULT_SKETCH_ID`).
+
+- **Verification & Evidence:**
+  - `tests/design-info-panel-units.test.js`:
+    - Direct tests for all valued types (`distance`, `H distance`, `V distance`, `radius`, `diameter`, `angle`) in both `DOC_UNIT = 'in'` and `'mm'`.
+    - Verified `tree text === canvas label text` across both units and all constraint types.
+    - Verified non-valued constraints produce no value span in the tree.
+  - Live headless tests (`.evidence/439/capture-evidence-439.cjs`):
+    - Shaper (`.evidence/439/shaper-units.png`): tree shows `Distance 3.0`, canvas label shows `3.0` side by side (md5: `d38a95a06dd51c036dd8c0bef69f4ad9`).
+    - SketchStudio (`.evidence/439/sketchstudio-units.png`): tree shows `Distance 3.0`, canvas label shows `3.0` side by side (md5: `bf1cfc1c482b97b26c3eaf079a0547ac`).
+  - Repo gate (`npm run gate`):
+    - `GATE files=164 pass=164 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

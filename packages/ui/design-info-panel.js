@@ -8,6 +8,7 @@
 
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch
+import { formatConstraintValue } from '#ui/svg-renderer.js';
 
 // constraint type → row icon + label (keys = CONSTRAINT_TYPES values from #core/constants.js)
 const TYPE_META = {
@@ -112,7 +113,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row' + (linkTo ? ' sk-link-row' : '');
     if (sel && sel.has(c)) row.classList.add('sel');
     const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
-    const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${c.value.toFixed(1)}</span>` : '';
+    const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${formatConstraintValue(c)}</span>` : '';
     const link = linkTo ? ` <span class="sk-link-to" title="Cross-sketch link">⇄ ${linkTo}</span>` : '';
     row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}${link}`;
     row.addEventListener('click', () => {

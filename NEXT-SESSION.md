@@ -220,6 +220,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     Idle unselected = ONLY the SVG line, thin white; the cut visuals appear on hover/selection (owner).
     Sixth screenshot, sampled: idle line #DFE1E7 ~1px; selected band #34715F (one token); mint #1BE09E ~2px;
     dashes ~#CBDAD6.
+    Seventh screenshot: a selected Guide = mint line only; hover band #27282B; chip "↓ unset"; the cut panel
+    restyle (black card #0A0A0B, fields #2A2B2D, lowercase labels, D-prefixed bit, preset row).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

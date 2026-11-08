@@ -12312,3 +12312,38 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
   - SVG imports still parse into `state.artLayers` (via `svg-import.js`).
   - Existing project files and test fixtures continue to store art shapes in `state.artLayers`.
 - The unified collector handles both `state.artLayers` and `state.coreSketch` cleanly without breaking imported SVGs or existing art layer workflows.
+
+
+## TURN 440 — Unified Pen Plotter Shapes-of-Toolpath Resolution & Design Export
+
+### 1. Root Cause & Architecture
+- **Root Cause Verified:**
+  - `apps/penplotter/src/export.js:87-105` `collectToolpathShapes` branched on `tp.targetType === 'layer'`, looking up `tp.targetArtLayerId` in `state.artLayers`, then falling back to `state.selectedShapeIds` when `tp.targetShapeIds` was empty. When drawing in Design, geometry went to `#core` sketch (`state.coreSketch`), which only resolved if explicit IDs were passed.
+  - `apps/penplotter/src/preview.js:151-170` had its own separate `resolveToolpathShapes` that only read `targetShapeIds` or `targetArtLayerId`.
+  - The default starter "Outline" toolpath has `targetShapeIds: []` and `targetArtLayerId: null`. Neither preview nor export resolved `#core` sketch shapes for this default toolpath.
+- **Unified Collector (`apps/penplotter/src/core-geometry.js`):**
+  - Implemented single source of truth `collectToolpathShapes(tp)`.
+  - Resolution precedence:
+    1. Explicit `tp.targetShapeIds`: resolves IDs from `state.artLayers` and `#core` sketch via `resolveCoreShapes`.
+    2. Explicit `tp.targetArtLayerId`: resolves `state.artLayers` shapes.
+    3. Default / #core sketch geometry: when `!tp.targetArtLayerId` and `targetShapeIds` is empty, matches `#core` sketch shapes against the toolpath's pen (`toolpathPenId(tp)`), or all shapes when no pen/palette is configured.
+    4. Legacy art store fallback: resolves unassigned art layer shapes if no sketch shapes exist.
+- **Preview & Export Wiring:**
+  - `apps/penplotter/src/export.js` and `apps/penplotter/src/preview.js` now import and use the single unified `collectToolpathShapes(tp)`.
+
+### 2. Verification & Evidence
+- **Automated Tests (`tests/penplotter-export.test.js`):**
+  - Test 1: Design sketch with rectangle (4 lines) + separate line -> `buildGcodeEntries()` produces 1 entry (`1_Outline.gcode`) containing rapid moves and pen-down contouring moves with flipped Y coordinates (`y_mach = 200 - y_world`). Rect corners: `(10, 180) -> (50, 180) -> (50, 140) -> (10, 140) -> (10, 180)`. Line: `(60, 130) -> (80, 110)`.
+  - Test 2: Imported SVG art layer -> exports 1 entry with identical behavior.
+  - Test 3: Exact parity between `preview.js` and `export.js` verified.
+- **Headless Live Evidence Capture (`.evidence/440/`):**
+  - Repro executed end-to-end via headless Edge CDP on `/apps/penplotter/index.html`:
+    - Design: populated rectangle and line in `window.__sketch.controller.state`.
+    - Toolpath: switched to Toolpath stage (recalculated preview overlay).
+    - Export: switched to Export stage, clicked `#exportBtn`.
+    - Toast confirmed: `"Exported 1 G-code file → plotter_gcode.zip"`.
+    - Downloaded `plotter_gcode.zip` (MD5: `4A074E793A062E0755585809B1C64980`), containing `1_Outline.gcode` (MD5: `4F43475084DC3C16813F03D140C9E508`).
+    - Captured screenshot `.evidence/440/export-stage.png` (MD5: `781F06A91DF3E1B3E3A723BC9A4CB415`).
+- **Hygiene & Gate:**
+  - Headless browsers: 0 left.
+  - `node scripts/gate.cjs`: `GATE files=164 pass=164 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

@@ -7,7 +7,7 @@ import { $, toast } from "./dom.js";
 import { expandLayerWithFill } from "#core/plot/fills/index.js";   // PP-6: shared fill registry
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-6: shared outline registry
 import { toolpathToGcode, buildZip } from "#core/plot/index.js";   // PP-6: shared vpype gcode + zip
-import { resolveCoreShapes } from "./core-geometry.js";           // UNIFY-2: target #core geometry directly
+import { collectToolpathShapes } from "./core-geometry.js";         // TASK 440: unified shapes-of-a-toolpath
 
 export function installExportButton() {
     $("#exportBtn").onclick = onExportClick;
@@ -84,25 +84,7 @@ function expandToolpathShapes(tp, targetShapes) {
     return [...outlineShapes, ...fillOnly];
 }
 
-export function collectToolpathShapes(tp) {
-    if (tp.targetType === "layer") {
-        const layer = state.artLayers.find(l => l.id === tp.targetArtLayerId);
-        return layer ? layer.shapes : [];
-    }
-    const selectedIds = new Set(tp.targetShapeIds.length ? tp.targetShapeIds : state.selectedShapeIds);
-    if (selectedIds.size === 0) return [];
-    const out = [];
-    const found = new Set();
-    for (const layer of state.artLayers) {
-        for (const s of layer.shapes) {
-            if (selectedIds.has(s.id)) { out.push(s); found.add(s.id); }
-        }
-    }
-    // UNIFY-2: unmatched ids may name #core SKETCH geometry -> resolve directly (no bake). Coexists with art.
-    const rest = [...selectedIds].filter(id => !found.has(id));
-    if (rest.length) out.push(...resolveCoreShapes(rest));
-    return out;
-}
+export { collectToolpathShapes };
 
 function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);

@@ -8,7 +8,7 @@ import { toolpathColor, orderedToolpaths, penWidthFor } from "./state.js";
 import { toolpathToPolylines } from "#core/plot/index.js";        // PP-4a: shared vpype pipeline
 import { expandLayerWithFill } from "#core/plot/fills/index.js";  // PP-4a: shared fill registry
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-4a: shared outline registry
-import { resolveCoreShapes, coreSketchSig } from "./core-geometry.js"; // UNIFY-2: target #core geometry directly
+import { resolveCoreShapes, coreSketchSig, collectToolpathShapes } from "./core-geometry.js"; // UNIFY-2 / TASK 440
 
 const DEBOUNCE_MS = 350;
 
@@ -146,28 +146,9 @@ function expandToolpathShapes(tp, targetShapes) {
     return expandLayerOutline(targetShapes, tp.outline);
 }
 
-/** Resolve a toolpath's `targetShapeIds` (or `targetArtLayerId`) into
- *  the underlying shape objects from state.artLayers. */
-export function resolveToolpathShapes(tp) {
-    if (tp.targetShapeIds && tp.targetShapeIds.length) {
-        const ids = new Set(tp.targetShapeIds);
-        const out = [];
-        const found = new Set();
-        for (const al of state.artLayers) {
-            for (const s of al.shapes) if (ids.has(s.id)) { out.push(s); found.add(s.id); }
-        }
-        // UNIFY-2: any target id NOT in the art store may name #core SKETCH geometry -> resolve it directly
-        // (coreShapeToPolyline at collect-time, no bake). Coexists with art targeting.
-        const rest = tp.targetShapeIds.filter(id => !found.has(id));
-        if (rest.length) out.push(...resolveCoreShapes(rest));
-        return out;
-    }
-    if (tp.targetArtLayerId) {
-        const al = state.artLayers.find(l => l.id === tp.targetArtLayerId);
-        return al ? al.shapes.slice() : [];
-    }
-    return [];
-}
+/** TASK 440: Unified shapes-of-a-toolpath resolution (delegates to collectToolpathShapes). */
+export const resolveToolpathShapes = collectToolpathShapes;
+export { collectToolpathShapes };
 
 // Late-resolved import to avoid a circular eval.
 let _render = null;

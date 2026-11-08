@@ -12410,3 +12410,36 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
 - **Hygiene & Gate:**
   - Headless browsers: 0 left.
   - `node scripts/gate.cjs`: `GATE files=164 pass=164 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+## TURN 442 — Resolve shape-based constraints in constraintSketch — branch agy2
+
+- **Root Cause & Issue Addressed:**
+  - `packages/core/sketch-model.js:33-43` `constraintSketch` only inspected `constraint.joints`. Shape-based constraints (such as circle radius with `c.shape`, angle with `c.shapes`, and tangent/parallel/perpendicular/equal with `c.shapes`) have no `joints` array, so `ids.size === 0` returned `null`.
+  - As a result, in `packages/ui/design-info-panel.js:154`, the sketch tree filtered out all shape-based constraints from their owning sketches, displaying "No constraints yet." when only shape-based constraints were present.
+
+- **Implementation:**
+  - `packages/core/sketch-model.js`:
+    - Updated `constraintSketch(constraint, state)` to resolve `constraint.shape` and `constraint.shapes` through `sketchOf(resolveShape(...))`, querying `state.shapes`.
+    - Maintained exact return contract: single sketch id → string; spanning ≥2 sketches → Set; no entities resolved → null.
+    - Preserved `packages/ui/design-info-panel.js` completely untouched.
+  - Grep callers analysis:
+    - Callers of `constraintSketch`: `packages/ui/design-info-panel.js` (lines 154 and 189) and `tests/sketch-model.test.js`.
+    - In `design-info-panel.js:154`, shape-based constraints are now properly bucketed under their home sketch. In line 189, cross-sketch shape constraints (e.g. angle between lines in different sketches) properly receive the spanning cross-sketch link notation (`⮂ OtherSketch`). No caller changes behaviour beyond being listed in its sketch.
+
+- **Verification & Evidence:**
+  - `tests/sketch-model.test.js`:
+    - Verified fail-first: radius on circle in sketch-2 failed before change; now asserts:
+      - radius on a circle in sketch-2 → `'sketch-2'`.
+      - angle between lines across sketches → `Set {'sketch-1', 'sketch-2'}`.
+      - empty shapes array → `null`.
+      - existing joint-based constraints remain unchanged.
+  - `tests/design-info-panel-units.test.js`:
+    - Updated tree mode test to verify that all constraints (both joint-based and shape-based) resolve to Sketch 1 and render in the sketch tree.
+  - Live headless test (`.evidence/442/capture-evidence-442.cjs`):
+    - Headless SketchStudio: circle with radius dimension. Tree lists row under Sketch 1 with label `Distance` and value `R 25.0` (matching canvas label `R 25.0`).
+    - Screenshot: `.evidence/442/sketchstudio-circle-radius-tree.png` (md5: `56c2193f4e978209485aae9f7168428a`).
+  - Repo gate (`npm run gate`):
+    - `GATE files=164 pass=164 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

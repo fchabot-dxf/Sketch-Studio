@@ -28,14 +28,30 @@ export function stampSketch(entity, state) {
   return entity;
 }
 
-// A constraint's sketch: the HOME id (a string) when all its joints share one sketch; else the SET of the spanning
-// sketchIds (the cross-sketch LINK signal — the constraint shows under each). null when it resolves no joints.
+// A constraint's sketch: the HOME id (a string) when all its joints/shapes share one sketch; else the SET of the spanning
+// sketchIds (the cross-sketch LINK signal — the constraint shows under each). null when it resolves no joints or shapes.
 export function constraintSketch(constraint, state) {
   const joints = state && state.joints;
   const ids = new Set();
   for (const jid of ((constraint && constraint.joints) || [])) {
     const j = (joints && typeof joints.get === 'function') ? joints.get(jid) : null;
     ids.add(sketchOf(j));
+  }
+  const shapes = state && state.shapes;
+  const resolveShape = (sid) => {
+    if (!sid) return null;
+    if (typeof sid === 'object' && sid.id) return sid;
+    if (Array.isArray(shapes)) return shapes.find((s) => s && s.id === sid);
+    if (shapes && typeof shapes.get === 'function') return shapes.get(sid);
+    return null;
+  };
+  if (constraint && constraint.shape) {
+    ids.add(sketchOf(resolveShape(constraint.shape)));
+  }
+  if (constraint && Array.isArray(constraint.shapes)) {
+    for (const sid of constraint.shapes) {
+      ids.add(sketchOf(resolveShape(sid)));
+    }
   }
   if (ids.size === 0) return null;
   if (ids.size === 1) return [...ids][0];

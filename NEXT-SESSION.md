@@ -145,6 +145,25 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
             449).
         - (was) OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
           RESULT after the finish pass; the clearing pass itself stops at that offset.
+      - REAL SHAPER STUDIO EXPORT (owner file "8x11 dewalt plongeante copy 1.svg", 2026-11-08), the ground truth
+        for our exporter. Studio writes:
+        - each element as <g id="sg-UUID" transform=matrix(...)> wrapping <path id="basePath-..." stroke-width="0.1"
+          fill-rule="nonzero" transform=matrix(...)>; circles as 4-arc paths, never <circle>;
+        - outside: fill="#000000", no stroke attribute; inside: stroke="#000000" fill="#FFFFFF"; guide: fill and
+          stroke "#0068FF". These match our colours. (No pocket or on-line in this file.)
+        - attributes:
+          - shaper:cutType always;
+          - shaper:cutDepth only when set, as "0.100 in" (3 decimals + SPACE);
+          - shaper:cutOffset ALWAYS: "0in" when zero, else "0.063 in" / "-2.000 in" (negative offsets exist);
+          - shaper:toolDia always, "0.125in" (no space).
+        - Guides carry depth/offset/bit (confirms the 450 correction).
+        DIVERGENCES from ours, for the owner to decide (not chased):
+          - number format: ours "0.25in"/"6.35mm" (trimmed, no space) vs Studio "0.100 in";
+          - we omit a zero offset and an unset bit; Studio always writes them;
+          - we write flat elements and <circle>; Studio uses <g>-wrapped paths.
+          Untested whether the Origin minds any of these.
+        - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would
+          settle the pocket/on-line encoding and the On Line offset question.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on
         the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449, dispatched to CC-A. Owner: "pocket cuts offset by default allowing a finish pass", so
         the pocket finish pass shows a direction (wall CW, islands CCW). Outside = CCW on screen, inside = CW; on line /

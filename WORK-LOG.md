@@ -11983,3 +11983,97 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 438b — Single undo step for click-placed dimensions — branch agy2
+
+- **Root Cause & Mechanism:**
+  - In TASK 438, pre-selection dimensions were fixed to be a single undo step. However, dimensions created by CLICKING with the Dim tool still exhibited `CLICK_PATH_UNDO_COUNT: 2`.
+  - While click paths (`packages/ui/input-handlers/dimension-tool.js`) had `beginDimUndo(state)` at birth, they lacked the `c.__newlyPlaced = true` and `c.__birthHistoryLength` stamps that 438 introduced.
+  - As a result, when the first value was committed in `packages/ui/numeric-input-manager.js`, `isFirstValue` evaluated to false, causing `handleCommit` to push an extra snapshot ("line + dimension at measured value").
+  - On Escape during placement or before value commit, click paths previously leaked a history snapshot without removing the pending dimension cleanly from history.
+
+- **Implementation (Single Unified Helper & All Click Doors):**
+  - Unified helper in `packages/ui/input-handlers/dimension-tool.js`:
+    ```javascript
+    function finalizeDimBirth(c, state, inheritedBirthLength){
+        endDimUndo(state);
+        if (!c) return;
+        try { c.__newlyPlaced = true; } catch (_) {}
+        c.__birthHistoryLength = typeof inheritedBirthLength === 'number'
+            ? inheritedBirthLength
+            : (state && state.history ? state.history.length : null);
+    }
+    ```
+  - Routed all 7 dimension birth doors through `finalizeDimBirth`:
+    1. Pre-selection Case A (single line): `startDimensionFromSelection`
+    2. Pre-selection Case B (two joints): `startDimensionFromSelection`
+    3. Click line: `handleDimensionPointerDown` Case B (`shape.type === 'line'`)
+    4. Click circle/arc radius: `handleDimensionPointerDown` Case B (`shape.type === 'circle' || shape.type === 'arc'`)
+    5. Click point-to-point: `handleDimensionPointerDown` Case B (`hitJoint` second click)
+    6. Click point-to-line: `handleDimensionPointerDown` Case A (`hitShape.shape.type === 'line'`)
+    7. Upgrade line-to-line / angle: `handleDimensionPointerDown` Case 2a (inherits `pending.__birthHistoryLength`)
+  - Escape Behavior Analysis (Keep vs Delete):
+    - During placement (before anchor / in cursor-placement mode): Click path has always deleted the pending dimension via `resetDimensionState(state)` (`state.constraints.splice`). With `finalizeDimBirth`, it now additionally discards the birth snapshot via `state.discardSnapshotAt(pc.__birthHistoryLength)`. Pre-selection and click paths both delete the pending constraint and restore history length.
+    - In value box (`#dimInput`): With `c.__newlyPlaced = true`, `handleCancel` deletes the uncommitted constraint and discards the birth snapshot, matching pre-selection and standard CAD (Fusion 360) behavior.
+
+- **Verification & Evidence:**
+  - Extended `tests/dimension-undo-step.test.js` with tests C1, C1-Esc1, C1-Esc2, C2, C2-Esc, C3, C3-Esc:
+    - C1 (Click line): create + commit 75 -> 1 undo removes distance constraint and restores line length 100.
+    - C1-Esc1: Click line -> Escape while placing leaves history unchanged and no constraint.
+    - C1-Esc2: Click line -> Escape in value box leaves history unchanged and no constraint.
+    - C2 (Click radius): create + commit 35 -> 1 undo removes radius constraint.
+    - C2-Esc: Click radius -> Escape while placing leaves history unchanged and no constraint.
+    - C3 (Click two points): create + commit 60 -> 1 undo removes point-to-point constraint.
+    - C3-Esc: Click two points -> Escape while placing leaves history unchanged and no constraint.
+    - Click path measurement: asserts `CLICK_PATH_UNDO_COUNT === 1` (verified changed from 2 to 1).
+  - Fillet regression tests: all 4 fillet test suites remain green.
+  - Live Headless Capture in `.evidence/438b/`:
+    - Shaper (`/apps/shaper/index.html`):
+      - Line created, Dim tool selected, line clicked directly (no pre-selection), value 3 committed.
+      - Before undo: `shaper-before-undo.png` (`md5=d884ca0585478e4f745cea1cc3e78d38`) shows line with dimension 3.0.
+      - Dispatched ONE Ctrl+Z:
+      - After undo: `shaper-after-undo.png` (`md5=040f9de1361a22784f16eb0d7b4d941e`) shows line with no dimension.
+      - Different MD5s verified.
+  - Gate (`cmd.exe /c "cd /d D:\APPS\Sketch-Studio-agy2 && npm run gate"`):
+    - `GATE files=162 pass=162 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.
+
+
+## TURN 438c — Fix angle/line-line upgrade birth & existing constraint recovery — branch agy2
+
+- **Root Cause & Issues Addressed:**
+  1. **Angle / Line-Line Upgrade Birth (Bug 1):**
+     - When upgrading from a pending line dimension to an angle or line-line distance constraint (lines ~380-450 in `packages/ui/input-handlers/dimension-tool.js`), the code spliced out `pending` and called `ConstraintManager.createConstraint` with no `beginDimUndo(state)` before it, yet called `finalizeDimBirth(targetConstraint, state)`.
+     - Consequently, no birth snapshot existed for the new angle dimension; `isFirstValue` in `handleCommit` skipped the commit snapshot, causing the angle dimension to have no undo entry of its own. A single `Ctrl+Z` undesirably rolled back the user's previous action (e.g., drawing lines).
+     - Furthermore, Escape in the value box popped the prior action's history snapshot via `discardSnapshotAt`.
+  2. **Existing Constraint Recovery (Bug 2):**
+     - When clicking two lines that already had an angle or distance constraint, `createConstraint` returned a duplicate, and the recovery fallback found the existing constraint. It then incorrectly stamped the existing constraint with `finalizeDimBirth`, marking an already existing dimension as newly placed.
+     - Pressing Escape in its value box invoked `handleCancel`, which deleted the user's pre-existing dimension from the canvas and popped history.
+  3. **Clarification on Escape-in-Value-Box Behavior Change (Correction 3):**
+     - On `origin/main`, only pre-selection paths set `__newlyPlaced`, so `handleCancel` previously kept click-placed dimensions at their measured value when Escape was pressed in the input box.
+     - With `finalizeDimBirth` stamping `__newlyPlaced = true` across all newly created dimension doors (click and pre-selection alike), `handleCancel` now consistently deletes uncommitted, newly-created dimensions on Escape, matching standard CAD (Fusion 360) behavior.
+
+- **Implementation:**
+  - `packages/ui/input-handlers/dimension-tool.js`:
+    - In `handleDimensionPointerDown` (case 2a upgrade):
+      - Discarded `pending`'s temporary birth snapshot via `state.discardSnapshotAt(pending.__birthHistoryLength)` when discarding `pending`.
+      - Checked upfront whether an existing constraint of `type` already exists between `s1` and `s2`. If found, recovered it via `startPlacing` without opening or closing an undo birth, and without calling `finalizeDimBirth`.
+      - For brand new constraints, opened a birth with `beginDimUndo(state)` directly before `ConstraintManager.createConstraint`, followed by `finalizeDimBirth(targetConstraint, state)` on success, or `endDimUndo(state)` + `discardSnapshotAt` on failure.
+  - `tests/dimension-undo-step.test.js`:
+    - Added test C4: click two non-parallel lines → angle dimension → value 45 committed → ONE undo removes angle dimension (lines remain intact) → second undo rolls back prior action (reverting to base line 0).
+    - Added test C4-Esc: Escape in angle value box leaves history length and top snapshot reference exactly identical to pre-dimension state, leaving no angle or distance constraint.
+    - Added test C5: dimensioning two lines that already share an angle constraint → Escape in value box leaves the existing angle dimension completely intact in `state.constraints` and history unchanged.
+
+- **Verification & Evidence:**
+  - `node tests/dimension-undo-step.test.js`: all tests T1-T5, C1-C3 (with Esc variants), C4, C4-Esc, C5 pass green (`CLICK_PATH_UNDO_COUNT: 1`).
+  - Fillet regression tests: all 4 suites (`fillet.test.js`, `fillet-virtual-sharp.test.js`, `filleted-rectangle-rigidity.test.js`, `filleted-underconstrained-movability.test.js`) pass green.
+  - Repo gate (`cmd.exe /c "cd /d D:\APPS\Sketch-Studio-agy2 && npm run gate"`):
+    - `GATE files=162 pass=162 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

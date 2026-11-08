@@ -8,6 +8,7 @@ import { canvas, SVG_NS } from "./dom.js";
 import { requestPreview, buildToolpathOverlay, buildSimulationOverlay } from "./preview.js";
 import { renderPlotColorsPanel } from "./plot-colors-panel.js";
 import { renderToolpathLayersPanel } from "./toolpath-layers-panel.js";
+import { syncActiveLayerPanel } from "./active-layer-panel.js"; // TASK 454: the Active Toolpath panel follows state.activeToolpathId
 import { coreShapeToPolyline } from "#core/core-shape-to-polyline.js"; // RENDER-FIX: show the #core geometry on this canvas
 import { paperGridMarkup } from "./paper-grid.js"; // DESIGN-PAPER-BOUNDS: shared paper+grid (also drawn on the Design canvas)
 
@@ -47,6 +48,7 @@ export function renderArt(opts = {}) {
     if (!opts.skipPanels) {
         if (typeof document !== "undefined" && document.getElementById("plotColors")) renderPlotColorsPanel();
         if (typeof document !== "undefined" && document.getElementById("toolpathLayers")) renderToolpathLayersPanel();
+        if (typeof document !== "undefined" && document.getElementById("activeLayerContent")) syncActiveLayerPanel();
     }
 }
 

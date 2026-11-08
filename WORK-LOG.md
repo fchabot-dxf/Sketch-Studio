@@ -12862,3 +12862,22 @@ Seat CC-B. From TURN 443/451: the buffer key is shared by every app and a save w
 **Behaviour changes for existing users:** (1) sidecars of other apps now survive a save (the point); (2) a stored buffer keeps a host's entry for as long as the key lives (no pruning of a host that stops writing); (3) each write is now a get+put in one transaction (still one write per change). A save from a stale tab can still overwrite the OTHER fields (geometry) of a newer one, as before.
 
 **Gate:** `GATE files=180 pass=180 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+
+## TURN 454 (Active Toolpath panel follows state.activeToolpathId)
+Seat CC-B. Audit finding #3: after + Outline / + Fill from a selection the Active Toolpath panel kept showing the OLD toolpath (and its dropdown listed only the old toolpaths), so edits went to the wrong one.
+
+**Reproduced live first** (`tests/penplotter-active-panel.test.js`, real clicks, unfixed code): real click on the circle edge in Design, Toolpath tab, real click on + Fill: `+ Fill: active fill 2 | panel shows ANOTHER toolpath | labels Toolpath,Draw,Style,Passes` and `AssertionError: the Active Toolpath panel follows the new active toolpath  actual 'toolpath1'  expected 'toolpath4'`.
+
+**Where activeToolpathId is set** (grep): `toolpath-layers-panel.js` 323 (delete), 347 (row click), 409 (createToolpathAndEdit), 500 (createToolpathsFromSelection, the bug), 666 (enterTargetEditing); `interaction.js` 210/252/345/347 (canvas/box selection); `keyboard.js:40` (Esc deselect -> null); `mix-toolpaths.js:46`; `svg-import.js:67`; `active-layer-panel.js:59` (its own dropdown); `state.js:259` (initLayers); `history.js` via `applyHistoryState` (`plotter-doc.js`: undo/redo/restore). Only 3 of ~12 sites refreshed the panel, each with its own `import(...).then(renderActiveLayerPanel)`.
+
+**Fix: ONE refresh point.** `active-layer-panel.js` `syncActiveLayerPanel()`, called from `render-art.js` `renderArt()` in the same panel-refresh block that already redraws the Pens and Operations panels (every path above ends in `render()`/`renderArt`). It rebuilds the panel only when its signature changed: `[activeToolpathId, [id,name,type] of every toolpath, active toolpath's fill/outline/drawOutline]`. An edit made THROUGH the panel records its own signature first (`rememberShown`) so typing never rebuilds the input under the cursor. Removed the per-site calls: `toolpath-layers-panel.js` (row click, enterTargetEditing), `interaction.js` (2), `toolpath-stage.js` onEnter, `sketch-stage.js` post-restore. `renderActiveLayerPanel` is now module-private.
+
+**One more mismatch closed:** with `activeToolpathId == null` (Esc deselects everything, `keyboard.js:40`) the panel used to fall back to the FIRST toolpath and edit it. It now shows a blank dropdown entry and "No active toolpath — pick one above or click a row."
+
+**Tests** (real clicks, in the gate): + Fill shows the new fill's Pattern/Angle/Spacing/Offset controls; typing Spacing 3.5 changes ONLY that toolpath (`spacing: [2] -> [2,3.5]`); row click -> panel follows; delete the active -> panel shows the new active, lists exactly the remaining toolpaths; Esc -> "none" state; row click after none; undo and redo -> panel matches state. Fails on the unfixed code (quote above).
+
+**Behaviour changes for existing users:** (1) the panel now follows every active-toolpath change (the point); (2) NEW: no active toolpath -> the panel shows "none", it no longer edits the first toolpath behind the user's back; (3) the dropdown shows an extra blank entry in that state only.
+
+**Callers swept:** `renderActiveLayerPanel` last external callers removed (5 sites above); `grep renderActiveLayerPanel` now shows only active-layer-panel.js.
+
+**Gate:** `GATE files=182 pass=182 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

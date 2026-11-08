@@ -12,7 +12,7 @@ import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
 import { installToolpathLayersPanel, renderToolpathLayersPanel, exitTargetEditing } from "./toolpath-layers-panel.js";
-import { installActiveLayerPanel, renderActiveLayerPanel } from "./active-layer-panel.js"; // MERGE-1: the fill/outline editor, inline
+import { installActiveLayerPanel } from "./active-layer-panel.js"; // MERGE-1: the fill/outline editor, inline
 import { installPlotColorsPanel, renderPlotColorsPanel } from "./plot-colors-panel.js";     // S3-1: pens surfaced here
 import { installSettingsPanel, loadDefaults } from "./settings.js";                          // S3-2: machine settings relocated here
 
@@ -90,6 +90,5 @@ function onEnter() {
   recalcPreview();            // fresh optimized path on entry (an explicit recompute, like the button)
   renderArt();                // art + the optimized overlay (renderArt also refreshes the ops + pens panels)
   renderToolpathLayersPanel();
-  renderActiveLayerPanel();   // MERGE-1: show the selected op's fill/outline editor inline
   renderPlotColorsPanel();    // S3-1: show the pens palette
 }

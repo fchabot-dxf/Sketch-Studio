@@ -346,7 +346,6 @@ function toolpathRow(toolpath, penColor) {
         }
         state.activeToolpathId = toolpath.id;
         render();
-        import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
     };
 
     // Double-click anywhere on the row (except the name span, which has
@@ -670,7 +669,6 @@ export function enterTargetEditing(toolpath) {
     toast(`Editing target for "${toolpath.name}" — click shapes, Esc to finish`);
     showTargetBanner(toolpath.name); // BURN-DOWN-4: persistent on-canvas banner (toast fades; this stays while editing)
     render();
-    import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
 }
 
 export function exitTargetEditing() {

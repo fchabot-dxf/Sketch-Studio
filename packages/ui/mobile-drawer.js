@@ -6,7 +6,7 @@
 // style-panel.js's open/close idiom (Escape + outside-click + a close-X) for UX consistency with the rest of
 // this codebase's overlay chrome.
 //
-// createMobileDrawer({ panelEl, breakpoint, label, hideOnMobile }) → { toggleEl, open, close, toggle, isOpen, destroy }
+// createMobileDrawer({ panelEl, breakpoint, label, hideOnMobile, side: 'left'|'right' }) → { toggleEl, open, close, toggle, isOpen, destroy }
 //   panelEl: the host's EXISTING side-panel container (the <aside> that already holds the mounted info-panel
 //     content via the host's own mount code, e.g. createDesignInfoPanel(...).render(panelEl)). This component
 //     adds behavior to it in place — it does not move, rebuild, or take ownership of its children.
@@ -36,6 +36,8 @@ function injectStyles(breakpoint) {
     width: 280px; max-width: 85vw; overflow-y: auto; transform: translateX(-100%);
     transition: transform 0.2s ease; box-shadow: 2px 0 16px rgba(0,0,0,0.35); }
   .sk-drawer-panel.sk-drawer-open { transform: translateX(0); }
+  .sk-drawer-panel.sk-drawer-right { left: auto; right: 0; transform: translateX(100%); box-shadow: -2px 0 16px rgba(0,0,0,0.35); }
+  .sk-drawer-panel.sk-drawer-right.sk-drawer-open { transform: translateX(0); }
   .sk-drawer-close { display: block; position: absolute; top: 6px; right: 8px; z-index: 1; background: transparent;
     border: 0; font-size: 16px; line-height: 1; cursor: pointer; color: inherit; opacity: 0.7; padding: 4px; }
   .sk-drawer-close:hover { opacity: 1; }
@@ -45,10 +47,11 @@ function injectStyles(breakpoint) {
   stylesInjected = true;
 }
 
-export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel', hideOnMobile = [] } = {}) {
+export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel', hideOnMobile = [], side = 'left' } = {}) {
   if (!panelEl) throw new Error('createMobileDrawer: panelEl is required');
   injectStyles(breakpoint);
   panelEl.classList.add('sk-drawer-panel');
+  if (side === 'right') panelEl.classList.add('sk-drawer-right');
   for (const el of hideOnMobile) { if (el) el.classList.add('sk-drawer-hide-mobile'); }
 
   const closeX = document.createElement('button');
@@ -90,7 +93,7 @@ export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel',
       close();
       try { toggleEl.remove(); } catch (_) {}
       try { closeX.remove(); } catch (_) {}
-      panelEl.classList.remove('sk-drawer-panel', 'sk-drawer-open');
+      panelEl.classList.remove('sk-drawer-panel', 'sk-drawer-open', 'sk-drawer-right');
       for (const el of hideOnMobile) { if (el) el.classList.remove('sk-drawer-hide-mobile'); }
     },
   };

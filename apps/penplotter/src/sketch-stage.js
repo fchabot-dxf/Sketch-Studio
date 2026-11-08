@@ -18,7 +18,7 @@ import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/
 import { closedPolygonFor } from '#core/plot/fills/utils.js';          // STYLE-3: the pipeline's OWN closed-shape test
 import { state, shapeStyle, setShapeStyle, makeShapeStyle, docSizeLabel } from './state.js'; // UNIFY-4c/STYLE-1: the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
-import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
+import { importFileToCore } from './core-import.js';                     // UNIFY-5 / TASK 478: import SVG or DXF -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { STYLE_WIDTH, keepNumber } from './fields.js';                  // TASK 453: declared width range
@@ -56,14 +56,14 @@ const SCAFFOLD = `
         <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
              but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
              CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
-        <div id="dropOverlay">Drop an SVG to import</div>
+        <div id="dropOverlay">Drop an SVG or DXF to import</div>
       </div>
       <aside id="design-panel">
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9654;</button>
         <div id="design-panel-actions">
           <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
-          <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
-          <input id="importSvgFile" type="file" accept=".svg,image/svg+xml" hidden>
+          <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG or a Fusion sketch DXF as constrainable #core geometry">Import SVG / DXF</button>
+          <input id="importSvgFile" type="file" accept=".svg,image/svg+xml,.dxf" hidden>
           <div id="importStatus" class="dp-note"></div>
           <!-- STYLE-2: the Style section (legacy style-panel.js, ported to the #core style record). STROKE drives the
                OUTLINE pen, FILL drives the FILL pen. Width is DISPLAY-only. The preset-swatch popover + the "mixed"
@@ -370,7 +370,7 @@ export function mountSketchStage(view, ctx = {}) {
   // imports are marked static (fast). Surfaces the skipped/degraded count. Returns the result (dev/test seam).
   const importStatus = view.querySelector('#importStatus');
   const doImport = (text, name) => {
-    const res = importSvgToCore(text, name || 'Imported.svg', controller);
+    const res = importFileToCore(text, name || 'Imported.svg', controller);
     underlayDirty = true; // new static geometry -> redraw the underlay
     // IMPORT-DOC-SIZE: the import SET the paper size — re-fit this canvas to the new paper. The paper rect itself and
     // the Document button label refresh on the next panelTick (its doc-size signature changed).
@@ -410,8 +410,8 @@ export function mountSketchStage(view, ctx = {}) {
     dropWrap.addEventListener('drop', (e) => {
       e.preventDefault(); showDrop(false);
       const files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
-      const f = files.find((x) => /\.svg$/i.test(x.name) || x.type === 'image/svg+xml');
-      if (!f) { if (importStatus) importStatus.textContent = files.length ? 'Only .svg files can be imported.' : ''; return; }
+      const f = files.find((x) => /\.(svg|dxf)$/i.test(x.name) || x.type === 'image/svg+xml');
+      if (!f) { if (importStatus) importStatus.textContent = files.length ? 'Only .svg and .dxf files can be imported.' : ''; return; }
       readIntoImport(f);
     });
   }

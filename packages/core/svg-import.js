@@ -13,7 +13,9 @@
 // attribute are now APPLIED: the host recurses the tree and threads a composed CTM (per element) into each
 // descriptor; parseTransform / multiplyMatrix / applyMatrix below build + bake it. IMPORT-3 widens coverage.
 
-const PHYS = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72 }; // physical units → mm
+import { arcShape, svgCircularArcCentre, isSimilarity } from './import-arcs.js'; // TASK 478: the ONE circular-arc shape helper (shared with the DXF importer)
+
+export const PHYS = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72 }; // physical units → mm
 const PX_MM = 25.4 / 96;                                  // 1 CSS px → mm (SVG default, 96 dpi)
 const FLATTEN_STEPS = 16;                                 // de Casteljau subdivision per bézier
 
@@ -102,7 +104,7 @@ function flattenQuad(x0, y0, x1, y1, x2, y2, push) {
 // arcSteps(sweep) — FLATTEN_STEPS per 90° of sweep. The SAME density de Casteljau gives one bézier quadrant, so an
 // ellipse or an arc flattens at the resolution of the C/Q curves beside it (a full ring = 4 quadrants = 64 segments).
 // One rule, so the pipeline never sees a mix of fine curves and coarse arcs.
-function arcSteps(sweep) { return Math.max(2, Math.ceil(FLATTEN_STEPS * Math.abs(sweep) / (Math.PI / 2))); }
+export function arcSteps(sweep) { return Math.max(2, Math.ceil(FLATTEN_STEPS * Math.abs(sweep) / (Math.PI / 2))); }
 
 // ellipsePoints(cx, cy, rx, ry) → the sampled ring of an axis-aligned ellipse in SVG USER space; the caller's CTM
 // then supplies any rotation/skew (so a rotated <ellipse transform="rotate(30)"> comes in rotated, not re-derived).
@@ -180,7 +182,7 @@ export function parsePathSubpaths(d) {
     i++; return num(t) ? 1 : 0;
   };
   const push = (x, y) => { if (cur) cur.pts.push({ x, y }); };
-  const begin = (x, y) => { if (cur && cur.pts.length) subpaths.push(cur); cur = { pts: [{ x, y }], closed: false }; };
+  const begin = (x, y) => { if (cur && cur.pts.length) subpaths.push(cur); cur = { pts: [{ x, y }], closed: false, arcs: [] }; };
   while (i < toks.length) {
     if (/[a-zA-Z]/.test(toks[i])) { cmd = toks[i]; i++; }
     if (!cmd) { i++; continue; }
@@ -209,8 +211,12 @@ export function parsePathSubpaths(d) {
       case 'A': {
         const rx = N(), ry = N(), rot = N(), fA = FLAG(), fS = FLAG();
         let x = N(), y = N(); if (rel) { x += cx; y += cy; }
+        const from = cur ? cur.pts.length - 1 : 0;
         const degraded = flattenArc(cx, cy, rx, ry, rot, fA, fS, x, y, push);
         if (degraded) skip(degraded);
+        // TASK 478: remember each real arc (flattened points from+1..to stay in `pts` as today); the importer turns a CIRCULAR one
+        // (rx = ry, similarity CTM) into an arc shape and keeps the flattening otherwise.
+        else if (cur && cur.pts.length - 1 > from) cur.arcs.push({ from, to: cur.pts.length - 1, x1: cx, y1: cy, x2: x, y2: y, rx, ry, fA, fS });
         cx = x; cy = y; pKind = ''; break;
       }
       case 'Z': { if (cur) { cur.closed = true; subpaths.push(cur); cur = null; } cx = startX; cy = startY; pKind = ''; break; }
@@ -249,6 +255,39 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
     if (closed && ids.length > 2) pushShape({ id: SID(), type: 'line', joints: [ids[ids.length - 1], ids[0]] });
   };
 
+  // TASK 478: one path SUBPATH -> connected lines + REAL arcs. A circular `A` (rx = ry, and a similarity CTM: uniform scale + rotation /
+  // flip, no skew) becomes ONE #core arc shape whose start / end joints are SHARED with the neighbouring segments (so the loop stays
+  // closed); its flattened points are dropped. The Y flip of a CTM reverses the sweep (det < 0). Any other arc keeps today's flattening
+  // (counted). A closed subpath whose last point returns to the first uses ONE joint there (no zero-length closing line).
+  const subpath = (sp) => {
+    const pts = sp.pts;
+    if (!pts || pts.length < 2) return;
+    const n = pts.length;
+    const sameXY = (p, q) => Math.abs(p.x - q.x) <= 1e-9 * (1 + Math.abs(p.x)) && Math.abs(p.y - q.y) <= 1e-9 * (1 + Math.abs(p.y));
+    const wrap = sp.closed && n > 2 && sameXY(pts[0], pts[n - 1]);
+    const circular = isSimilarity(curCtm);
+    const det = curCtm[0] * curCtm[3] - curCtm[1] * curCtm[2];
+    const arcAt = new Map(); const keep = new Array(n).fill(true);
+    for (const a of (sp.arcs || [])) {
+      if (circular && Math.abs(Math.abs(a.rx) - Math.abs(a.ry)) <= 1e-6 * Math.max(Math.abs(a.rx), Math.abs(a.ry)) && svgCircularArcCentre(a.x1, a.y1, a.rx, a.fA, a.fS, a.x2, a.y2)) {
+        arcAt.set(a.from, a); for (let k = a.from + 1; k < a.to; k++) keep[k] = false;
+      } else bump('path', 'non-circular or skewed arc flattened to lines');
+    }
+    const id = new Array(n).fill(null);
+    for (let i = 0; i < n; i++) { if (!keep[i]) continue; id[i] = (wrap && i === n - 1) ? id[0] : J(pts[i].x, pts[i].y); }
+    let prev = 0;
+    for (let i = 1; i < n; i++) {
+      if (!keep[i]) continue;
+      const a = arcAt.get(prev);
+      if (a && a.to === i) {
+        const c = svgCircularArcCentre(a.x1, a.y1, a.rx, a.fA, a.fS, a.x2, a.y2);
+        pushShape(arcShape(SID(), J(c.cx, c.cy), id[prev], id[i], { largeArc: !!a.fA, sweep: det < 0 ? !a.fS : !!a.fS }));
+      } else if (id[prev] !== id[i]) pushShape({ id: SID(), type: 'line', joints: [id[prev], id[i]] });
+      prev = i;
+    }
+    if (sp.closed && !wrap && n > 2 && id[prev] !== id[0]) pushShape({ id: SID(), type: 'line', joints: [id[prev], id[0]] });
+  };
+
   for (const d of (descriptors || [])) {
     if (!d || !d.tag) continue;
     curCtm = d.ctm || IDENTITY_MATRIX; // GRIEVANCE-2: bake the host-composed group/element transform per descriptor
@@ -264,7 +303,7 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
       case 'circle': { const c = J(num(d.cx), num(d.cy)); pushShape({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale * linearScaleOf(curCtm) }); break; }
       case 'polyline': polyline(parsePoints(d.points), false); break;
       case 'polygon': polyline(parsePoints(d.points), true); break;
-      case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) polyline(sp.pts, sp.closed); for (const r of sk) bump('path', r.reason, r.count); break; }
+      case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) subpath(sp); for (const r of sk) bump('path', r.reason, r.count); break; }
       // IMPORT-2B-2: <ellipse> → a closed polyline ring. #core has no ellipse SHAPE, so this is the audit's [R]
       // route: flatten at the pipeline's own curve density (arcSteps). SVG2 rx/ry="auto" = "use the other radius";
       // either radius still 0 means the browser does not render it either, so it is FLAGGED, not silently dropped.

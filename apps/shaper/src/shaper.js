@@ -141,12 +141,38 @@ function colorOf(el, attr) {
   return norm(el.getAttribute(attr));
 }
 
+// TASK 478: colours are matched with a TOLERANCE, declared ONCE here beside CUT_TYPES: the Fusion add-in writes
+// fill="rgb(121,121,121)" / rgb(134,134,134) / rgb(106,106,106) for pockets (three different greys, one per depth), not Studio's exact
+// #7F7F7F. A GREY (r, g, b within `grey.spread` of each other, level between `grey.min` and `grey.max`) matches a declared grey; black,
+// white and the guide blue match within `channel` per channel. rgb(), #rgb, #rrggbb and the names all parse.
+export const COLOR_TOLERANCE = { channel: 12, grey: { spread: 12, min: 40, max: 215 } };
+
+// A CSS colour -> [r, g, b] (0-255), or null ('none', transparent, an unknown form).
+function rgbOf(c) {
+  if (c == null) return null;
+  const t = String(c).trim().toLowerCase();
+  if (t === '' || t === 'none' || t === 'transparent') return null;
+  const m = /^rgba?\(\s*([\d.]+)(%?)\s*[, ]\s*([\d.]+)(%?)\s*[, ]\s*([\d.]+)(%?)/.exec(t);
+  if (m) return [[m[1], m[2]], [m[3], m[4]], [m[5], m[6]]].map(([v, pct]) => Math.round(pct ? parseFloat(v) * 2.55 : parseFloat(v)));
+  const hex = norm(t);
+  const h = /^#([0-9a-f]{6})$/.exec(hex);
+  return h ? [0, 2, 4].map((i) => parseInt(h[1].slice(i, i + 2), 16)) : null;
+}
+const isGrey = (rgb) => { const sp = Math.max(...rgb) - Math.min(...rgb), lv = (rgb[0] + rgb[1] + rgb[2]) / 3; return sp <= COLOR_TOLERANCE.grey.spread && lv >= COLOR_TOLERANCE.grey.min && lv <= COLOR_TOLERANCE.grey.max; };
+// Does an element colour (`actual`) match a DECLARED encoding colour (`declared`)? 'none' only matches 'none'.
+function colorMatches(declared, actual) {
+  const d = rgbOf(declared), a = rgbOf(actual);
+  if (!d || !a) return !d && !a;
+  if (isGrey(d)) return isGrey(a);
+  return d.every((v, i) => Math.abs(v - a[i]) <= COLOR_TOLERANCE.channel);
+}
+
 // Which cut type (if any) does this element's current fill/stroke encode?
 export function classify(el) {
   const f = colorOf(el, 'fill');
   const s = colorOf(el, 'stroke');
   for (const t of CUT_TYPES) {
-    if (norm(t.fill) === f && norm(t.stroke) === s) return t.id;
+    if (colorMatches(t.fill, f) && colorMatches(t.stroke, s)) return t.id;
   }
   return null;
 }

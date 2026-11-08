@@ -7,10 +7,10 @@
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID } from './shaper.js';
-import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey } from '#core/profile-model.js';
+import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey, makeProfile } from '#core/profile-model.js';
 import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
-import { findLoops } from '#core/loop-finder.js';
-import { loopPolygon } from '#core/loop-geometry.js';
+import { findLoops, findOpenChains } from '#core/loop-finder.js';
+import { loopPolygon, pointInPolygon } from '#core/loop-geometry.js';
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -207,4 +207,54 @@ export function planStockProfile(state, plan = CUT_PLAN) {
   const t = Number(rec.cutDepth);
   const outer = ring(outerCut.polygon);
   return { key, thickness: rec.cutDepth !== 'unset' && Number.isFinite(t) && t > 0 ? t : null, outer, holes, sig: sigHash([outer, holes]) };
+}
+
+
+/**
+ * assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) — TASK 478: connect the cut metadata an SVG import carried (one record per
+ * source element, keyed by the shapes' `descId`) to the plan; returns how many cuts were assigned.
+ *  - an element that forms ONE closed loop -> 'loop:<id>' (as before);
+ *  - a COMPOUND element (several closed subpaths in one <path>: the Fusion add-in's pocket with an island) -> its biggest loop is the outer,
+ *    the loops inside it are its HOLES, and the plan gets ONE explicit combined profile ('profile:<id>', makeProfile) with the record: a
+ *    pocket with a hole, not two separate pockets (the island must stay uncut); subpaths outside the outer keep their own loop record;
+ *  - an open chain keeps today's rule (On Line / Guide, or any record with a depth).
+ */
+export function assignImportedCuts(state, cutRecordByDesc, plan = CUT_PLAN) {
+  if (!cutRecordByDesc || cutRecordByDesc.size === 0) return 0;
+  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
+  const { loops } = loopsWithPolygons(state);
+  const polyArea = (poly) => { let a = 0; for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p.x * q.y - q.x * p.y; } return Math.abs(a / 2); };
+  const byDesc = new Map(); // descId -> [loop] (loops whose edges all come from that one element)
+  for (const loop of loops) {
+    const ids = new Set();
+    for (const e of (loop.edges || [])) { const sh = shapeById.get(e); if (sh && sh.descId) ids.add(sh.descId); }
+    if (ids.size !== 1) continue;
+    const d = [...ids][0];
+    if (!cutRecordByDesc.has(d)) continue;
+    if (!byDesc.has(d)) byDesc.set(d, []);
+    byDesc.get(d).push(loop);
+  }
+  let n = 0;
+  for (const [d, list] of byDesc) {
+    const rec = cutRecordByDesc.get(d);
+    if (list.length === 1) { plan.set(keyOf('loop', list[0].id), { ...rec }); n++; continue; }
+    const sorted = [...list].sort((a, b) => polyArea(b.polygon) - polyArea(a.polygon));
+    const outer = sorted[0];
+    const inside = sorted.slice(1).filter((l) => pointInPolygon(outer.polygon, l.polygon[0]));
+    const apart = sorted.slice(1).filter((l) => !inside.includes(l));
+    if (inside.length) { const prof = makeProfile(state, outer, inside); plan.set(keyOf('profile', prof.id), { ...rec }); n++; }
+    else { plan.set(keyOf('loop', outer.id), { ...rec }); n++; }
+    for (const l of apart) { plan.set(keyOf('loop', l.id), { ...rec }); n++; }
+  }
+  for (const c of findOpenChains(state, loops)) {
+    for (const sh of (c.shapes || [])) {
+      if (!sh.descId || !cutRecordByDesc.has(sh.descId)) continue;
+      const rec = cutRecordByDesc.get(sh.descId);
+      if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
+        const chainKey = keyOf('chain', c.id);
+        if (!plan.has(chainKey)) { plan.set(chainKey, { ...rec, cutType: rec.cutType || 'online' }); n++; }
+      }
+    }
+  }
+  return n;
 }

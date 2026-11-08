@@ -113,6 +113,7 @@ export function findLoops(state) {
   const edges = [];
   for (const s of shapes) {
     if (!s || !Array.isArray(s.joints)) continue;
+    if (s.isConstruction) continue; // TASK 478: construction geometry (a Fusion DASHED line) is never a cut path, so it must not split a loop
     if (s.type === 'line' && s.joints.length >= 2) {
       const a = node(s.joints[0]), b = node(s.joints[1]);
       if (a && b && a !== b) edges.push({ shapeId: s.id, a, b });
@@ -147,7 +148,7 @@ export function findOpenChains(state, loops) {
   }
 
   const shapes = state.shapes || [];
-  const candidateShapes = shapes.filter((s) => s && s.id && !loopEdgeIds.has(s.id));
+  const candidateShapes = shapes.filter((s) => s && s.id && !loopEdgeIds.has(s.id) && !s.isConstruction); // TASK 478: construction is never a chain either
   if (!candidateShapes.length) return [];
 
   const node = buildNodeMap(state);

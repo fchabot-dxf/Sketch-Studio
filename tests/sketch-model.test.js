@@ -48,6 +48,18 @@ import { createSketches, sketchOf, stampSketch, constraintSketch, entitiesInSket
     state.joints.set('q', { x: 0, y: 0, sketchId: 'sketch-2' });
     const r = constraintSketch({ id: 'c1', type: 'coincident', joints: ['p', 'q'] }, state);
     assert(r instanceof Set && r.size === 2 && r.has('sketch-1') && r.has('sketch-2'), 'cross-sketch → spanning Set {sketch-1, sketch-2}');
+
+    // 5b. shape-based constraints: radius on circle in sketch-2, angle across sketches
+    state.shapes.push({ id: 'circ1', type: 'circle', sketchId: 'sketch-2' });
+    const rad = constraintSketch({ id: 'r1', type: 'distance', isRadius: true, shape: 'circ1', value: 20 }, state);
+    assert(rad === 'sketch-2', 'radius on a circle in sketch-2 → sketch-2');
+
+    state.shapes.push({ id: 'line1', type: 'line', sketchId: 'sketch-1' });
+    state.shapes.push({ id: 'line2', type: 'line', sketchId: 'sketch-2' });
+    const ang = constraintSketch({ id: 'ang1', type: 'angle', shapes: ['line1', 'line2'], value: 45 }, state);
+    assert(ang instanceof Set && ang.size === 2 && ang.has('sketch-1') && ang.has('sketch-2'), 'angle across sketches → Set of both');
+
+    assert(constraintSketch({ shapes: [] }, state) === null, 'empty shapes → null');
   }
 
   // 6. addSketch — appends 'Sketch N' (lowest free id); activateSketch sets the active; stamping follows the active

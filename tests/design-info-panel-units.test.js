@@ -263,14 +263,13 @@ setupDOM();
         assert(treeValText === expected, `Tree text "${treeValText}" must match formatConstraintValue "${expected}"`);
       }
 
-      // B2. Tree panel mode (showSketchTree: true) — checks tree rows for joint-based constraints
+      // B2. Tree panel mode (showSketchTree: true) — all constraints (joint- and shape-based) resolve to Sketch 1
       const panelTree = createDesignInfoPanel({ state, showSketchTree: true });
       const containerTree = document.createElement('div');
       panelTree.render(containerTree);
 
       const rowsTree = containerTree.querySelectorAll('.sk-info-row');
-      // Joint-based constraints (cAligned, cH, cV) resolve via constraintSketch to Sketch 1
-      assert(rowsTree.length >= 3, `Tree should have at least 3 joint-based rows, got ${rowsTree.length}`);
+      assert(rowsTree.length === allConstraints.length, `Tree should have ${allConstraints.length} rows, got ${rowsTree.length}`);
       for (let i = 0; i < rowsTree.length; i++) {
         const row = rowsTree[i];
         const valSpan = row.querySelector('.sk-info-val');

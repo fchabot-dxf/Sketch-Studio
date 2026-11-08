@@ -322,6 +322,21 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     GO TO apps; replaces the app-switcher dropdown); must allow a 2nd view: a Fusion-style Projects browser.
   - CC-B 474 PROJECTS store: Fusion Data Panel model (owner screenshot): PROJECTS (folders, pinned) contain DESIGNS;
     recent; save/open .sketch.json; the old autosave slot migrates to "Untitled"; a storage-adapter seam for Drive.
+  - MERGED 2026-11-08 (gated): 472 47388c6 (Stock), 476 41d394b (grid LOD; snapping still GRID_SIZE: owner Q open),
+    473 3083832 (sidebar + app registry: names Sketch/Shaper/Pen Plotter/Trace, icons, titles), 474 c4f1628
+    (projects store), 475 78ae8cb (Design panel well made, docked RIGHT; left = file sidebar).
+    - OWNER RULING 2026-11-08: snapping stays on the FINE grid (GRID_SIZE) when the displayed grid is coarser (476 question closed).
+  - RUNNING: CC-A 479 (sidebar wired to projects + Projects browser); CC-B 480 (Drive + renewable server session);
+    CC-C 478 TAKEOVER (DXF import + Shaper's Fusion add-in SVGs: greys = pockets, cm depths, holes, real arcs;
+    fixtures = the owner's two files).
+  - COPILOT OUT OF MONTHLY QUOTA (2026-11-08) mid-task: 477 (shared CDP test helper: approved, but its re-merge of main
+    is half done, a conflict in document-buffer-hosts) and 481 (style templates: Default/Fusion/2 more, SETTINGS ONLY,
+    reuse the dead PRESET key; Fusion = 1.5 px lines, 3 px joints, hover x2, select x2.3) are PARKED with uncommitted
+    work in their D:/APPS/Sketch-Studio.worktrees/ folders. Resume on quota or with a free Claude seat.
+  - OWNER DECISIONS 2026-11-08: our own Fusion add-in LATER, SOLID BODY from the start, sending to ShaperHub through
+    our existing uploader (shaper-cloud.js via /api/shaper-upload); Shaper's add-in is compiled .pyc: never decompile.
+    Colours in Style + Fusion colours (black fully / blue free, brown construction, blue profile fill, no glyph badge,
+    no dim box) = a follow-up after 481 unless the owner says no.
   - NEXT: Google Drive adapter. The owner's OAuth client already exists (see the PERSISTENCE epic, client
     983232817866-...; origins sketch-studio.pages.dev + localhost:8000; drive.file). Then wire the sidebar to 474.
     - OWNER (2026-11-08): "allow to have reneweable token" = stay signed in across days, no hourly re-login. PORT

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SVG Editor — Shaper Origin</title>
+  <title>Shaper · Sketch Studio</title>
   <link rel="stylesheet" href="styles/main.css">
   <!-- Shared sketcher theme contract (P1). Linked AFTER main.css so Shaper's own :root override (below) wins. -->
   <link rel="stylesheet" href="../../packages/ui/sketcher.css">
@@ -46,6 +46,8 @@
       --sk-error: #f87171;
       /* S7b: dark chrome for the shared tool ribbon (light defaults live in the component; this :root retints). */
       --sk-ribbon-bg: #111827;
+      /* TASK 473: the app sidebar in the Studio dark look */
+      --sk-sidebar-bg: #1C1D20; --sk-sidebar-fg: #ECEDEF; --sk-sidebar-goto-bg: #101113; --sk-sidebar-hover: #2A2B2E; --sk-sidebar-sep: #303134; --sk-sidebar-accent: #2C65FF;
       --sk-ribbon-sep: #1f2937;
       --sk-ribbon-hover: rgba(255,255,255,0.08);
       --sk-ribbon-fg: #cbd5e1;
@@ -289,8 +291,8 @@
 </head>
 <body>
   <header class="toolbar">
-    <!-- SWITCH-1: the shared two-way app-switcher (replaces the static brand + the DEPLOY-1 one-way back-link). -->
-    <span id="app-switcher-host"></span>
+    <!-- TASK 473: the shared app sidebar button (mounted in main.js). -->
+    <span id="app-sidebar-host"></span>
     <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
     <span id="save-status" class="save-status"></span>
     <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->

@@ -13,14 +13,13 @@ export function installExportButton() {
     $("#exportBtn").onclick = onExportClick;
 }
 
-async function onExportClick() {
+export async function onExportClick() {
     if (state.toolpaths.every(tp => !tp.export)) {
         return toast("No active toolpaths selected for export — check at least one.", true);
     }
 
-    const btn = $("#exportBtn");
-    btn.disabled = true;
-    btn.textContent = "Exporting…";
+    const btn = $("#exportBtn"); // null when the sidebar triggers the export before the Export stage was ever mounted
+    if (btn) { btn.disabled = true; btn.textContent = "Exporting…"; }
     try {
         const entries = buildGcodeEntries();
         if (entries.length === 0) {
@@ -33,8 +32,7 @@ async function onExportClick() {
         toast(e.message, true);
         console.error(e);
     } finally {
-        btn.disabled = false;
-        btn.textContent = "Export G-code (.zip)";
+        if (btn) { btn.disabled = false; btn.textContent = "Export G-code (.zip)"; }
     }
 }
 

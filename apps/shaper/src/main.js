@@ -26,7 +26,9 @@ import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
-import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
@@ -37,9 +39,21 @@ canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
 inspector.init(document.getElementById('inspector'));
 
-// SWITCH-1: mount the shared two-way app-switcher into the header brand slot.
-const _swHost = document.getElementById('app-switcher-host');
-if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'shaper' }).el);
+// TASK 473: the shared app sidebar (hamburger, document actions, GO TO) in the header brand slot. This host declares ITS actions:
+// Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
+const _swHost = document.getElementById('app-sidebar-host');
+if (_swHost) {
+  _swHost.appendChild(createAppSidebar({
+    current: 'shaper', docName: 'Untitled',
+    actions: [
+      { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
+        const payload = generateShaperSvgPayload();
+        if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
+        download('shaper-export.svg', payload.svg);
+      } },
+    ],
+  }).el);
+}
 
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Explore/Vcarve/Prepare — designController may not exist yet, so its state is read lazily.

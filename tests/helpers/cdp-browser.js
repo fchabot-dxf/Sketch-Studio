@@ -109,9 +109,13 @@ export async function launchBrowser(opts = {}) {
         try { execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { console.warn('cdp-browser: taskkill failed: ' + e.message); }
       } else proc.kill();
     }
-    await Promise.race([exited, sleep(3000)]);
+    await Promise.race([exited, sleep(10000)]);
     if (srv.server) srv.server.close();
-    fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    // Warn-and-continue is right here: a leftover temp dir (Windows EPERM while the browser
+    // releases files) is not a test failure, and the test body has already passed.
+    try {
+      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (e) { console.warn(`cdp-browser: could not remove profile dir ${userDir}: ${e.message}`); }
   };
 
   try {

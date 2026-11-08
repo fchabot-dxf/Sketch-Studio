@@ -11,14 +11,20 @@ import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 
 
 const DOC_VERSION = 1;
 
+/** The cut-plan part: ONE capture used by the persisted document AND by the shared undo snapshots (TASK 463). */
+export const captureCutPlan = () => [...CUT_PLAN.entries()].map(([key, rec]) => [key, { ...rec }]);
+export function applyCutPlan(entries) {
+  CUT_PLAN.clear();
+  for (const [key, rec] of (Array.isArray(entries) ? entries : [])) CUT_PLAN.set(key, { ...rec });
+}
+
 /** The persisted Shaper document (what createDocumentBuffer's getHostData returns). */
 export function captureShaperDoc() {
-  return { version: DOC_VERSION, cutPlan: [...CUT_PLAN.entries()].map(([key, rec]) => [key, { ...rec }]), stock: getStock() };
+  return { version: DOC_VERSION, cutPlan: captureCutPlan(), stock: getStock() };
 }
 
 /** Restore a persisted Shaper document. Missing parts keep their defaults (an old buffer carries none of this). */
 export function applyShaperDoc(d) {
-  CUT_PLAN.clear();
-  for (const [key, rec] of (d && Array.isArray(d.cutPlan) ? d.cutPlan : [])) CUT_PLAN.set(key, { ...rec });
+  applyCutPlan(d && d.cutPlan);
   setStock(d && d.stock);
 }

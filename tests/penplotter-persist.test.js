@@ -5,123 +5,22 @@
 
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
+import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
   + '<path d="M10 10 L40 10 L40 30 Z" stroke="#ff0000" fill="none"/>'
   + '<circle cx="70" cy="25" r="12" stroke="#0000ff" fill="#00ff00"/></svg>';
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9910 + Math.floor((Date.now() % 80));
-  const userDir = path.join(os.tmpdir(), 'sk-test-451-' + process.pid);
-  fs.mkdirSync(userDir + '-files', { recursive: true });
-  const svgPath = path.join(userDir + '-files', 'persist.svg');
+  const cdp = await launchBrowser({ tag: '451' });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, once, evalJs, waitFor, navigate, userDir } = cdp;
+  const svgPath = path.join(userDir, 'persist.svg');
   fs.writeFileSync(svgPath, SVG);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
     await send('DOM.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(30);
@@ -132,22 +31,19 @@ await (async () => {
       assert(c, sel + ' not found');
       await click(c.x, c.y);
     };
+    const appReady = `!!window.__sketch && !!document.querySelector('.stage-btn.active')`;
+    const restored = `${appReady} && window.__sketch.controller.state.shapes.length > 0`;
     const load = async () => {
-      const loaded = once('Page.loadEventFired');
-      await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });
-      await Promise.race([loaded, sleep(8000)]);
-      await sleep(1800);
+      await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
+      await waitFor(appReady, 'penplotter app ready');
     };
     const reload = async () => {
       const loaded = once('Page.loadEventFired');
       await send('Page.reload');
       await Promise.race([loaded, sleep(8000)]);
-      await sleep(2500); // mount + the async IndexedDB restore + the post-restore repaint
+      await waitFor(restored, 'the saved document restored after reload');
     };
-    const waitSaved = async () => {
-      for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) return; await sleep(250); }
-      throw new Error('autosave never reported Saved');
-    };
+    const waitSaved = () => waitFor(`document.getElementById('save-status').textContent === 'Saved'`, 'autosave to report Saved', 10000);
     const observe = () => evalJs(`(async () => {
       const { capturePlotterDoc } = await import('/apps/penplotter/src/plotter-doc.js');
       const { buildGcodeEntries } = await import('/apps/penplotter/src/export.js');
@@ -167,10 +63,12 @@ await (async () => {
     const root = await send('DOM.getDocument');
     const q = await send('DOM.querySelector', { nodeId: root.nodeId !== undefined ? root.nodeId : root.root.nodeId, selector: '#importSvgFile' });
     await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
-    await sleep(2500);
+    await waitFor(`window.__sketch.controller.state.shapes.length > 0`, 'SVG import produced geometry');
     // Build the plotter state: a real click on + Pen, then toolpaths/settings/styles (test setup, not the gesture under test).
-    await clickEl('.stage-btn[data-stage="toolpath"]'); await sleep(600);
+    await clickEl('.stage-btn[data-stage="toolpath"]');
+    await waitFor(`document.querySelector('.stage-btn[data-stage="toolpath"]').classList.contains('active') && !!document.getElementById('addPlotColor')?.getClientRects().length`, 'toolpath stage shown');
     await clickEl('#addPlotColor');
+    await waitFor(`document.querySelectorAll('#plotColors .pc-row').length >= 1`, 'pen row added');
     await evalJs(`(async () => {
       const { state, makeToolpath } = await import('/apps/penplotter/src/state.js');
       const shapes = window.__sketch.controller.state.shapes;
@@ -184,9 +82,16 @@ await (async () => {
       state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2 };
       state.plotColors[0].name = 'Fine red'; state.plotColors[0].width = 0.3;
     })()`);
-    await sleep(1800); // a poll tick passes, so the sidecar written AFTER the setup is the one saved
-    await waitSaved();
-    await sleep(1800);
+    // the sidecar written AFTER the setup is the one saved: wait until the stored buffer carries the setup
+    await waitFor(`new Promise((res, rej) => {
+      const open = indexedDB.open('sketch-studio-documents', 1);
+      open.onsuccess = () => {
+        const g = open.result.transaction('kv', 'readonly').objectStore('kv').get('current');
+        g.onsuccess = () => { const p = g.result && g.result.hosts && g.result.hosts.penplotter; res(!!p && p.toolpaths.length === 2 && p.settings.draw_feed === 1234 && p.plotColors[0].name === 'Fine red'); };
+        g.onerror = () => rej(g.error);
+      };
+      open.onerror = () => rej(open.error);
+    })`, 'the setup to be persisted', 10000);
     await waitSaved();
     const before = await observe();
     assert(before.plotter.toolpaths.length === 2 && before.plotter.plotColors.length >= 2, 'setup built the plotter state');
@@ -228,10 +133,7 @@ await (async () => {
     assert.strictEqual(old.plotter.toolpaths.length, 1, 'old document: the single default toolpath');
     assert.strictEqual(old.plotter.settings.draw_feed, 2000, 'old document: default feed');
     console.log('penplotter-persist: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); fs.rmSync(userDir + '-files', { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

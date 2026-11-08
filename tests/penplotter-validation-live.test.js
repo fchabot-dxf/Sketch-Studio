@@ -3,117 +3,14 @@
 // box SHOWS the value actually kept; the exported G-code never holds F0 / NaN.
 
 import assert from 'node:assert';
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
+import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9610 + Math.floor((Date.now() % 80));
-  const userDir = path.join(os.tmpdir(), 'sk-test-453-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '453' });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { send, evalJs, waitFor, navigate, port } = cdp;
 
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-    await send('DOM.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(30);
@@ -142,12 +39,12 @@ await (async () => {
     const frame = () => send('Page.captureScreenshot', { format: 'png' });
     const spacingSel = async () => { await evalJs(`(() => { const f = [...document.querySelectorAll('#activeLayerContent .field')].find(f => f.textContent.includes('Spacing')); f.querySelector('input').setAttribute('data-t', 'sp'); })()`); return '[data-t="sp"]'; };
 
-    await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });
-    await Promise.race([once('Page.loadEventFired'), sleep(8000)]);
-    await sleep(1800);
+    await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
+    await waitFor(`!!document.querySelector('#designDocBtn') && !!document.querySelector('.stage-btn[data-stage="toolpath"]')`, 'penplotter app ready');
 
     // ---- Document dialog (Design tab): the box shows the KEPT value
-    await clickEl('#designDocBtn'); await sleep(300);
+    await clickEl('#designDocBtn');
+    await waitFor(`(() => { const e = document.querySelector('#docW'); return !!e && e.getBoundingClientRect().width > 0; })()`, 'document dialog open');
     const doc = [];
     for (const [typed, want, why] of [['-5', 10, 'negative clamps to the minimum'], ['99999', 2000, 'huge clamps to the maximum'], ['', 2000, 'empty keeps the previous'], ['0', 10, 'zero clamps to the minimum'], ['150', 150, 'a valid size is kept']]) {
       await typeInto('#docW', typed);
@@ -160,7 +57,8 @@ await (async () => {
     await clickEl('#docDone');
 
     // ---- Toolpath tab: machine settings
-    await clickEl('.stage-btn[data-stage="toolpath"]'); await sleep(700);
+    await clickEl('.stage-btn[data-stage="toolpath"]');
+    await waitFor(`document.querySelector('.stage-btn[data-stage="toolpath"]').classList.contains('active') && !!document.querySelector('#drawFeed') && !!document.querySelector('#addFillTp')`, 'toolpath stage ready');
     const set = [];
     for (const [id, typed, key_, want] of [
       ['drawFeed', '', 'draw_feed', 2000], ['drawFeed', '-5', 'draw_feed', 1], ['drawFeed', '1234', 'draw_feed', 1234],
@@ -177,7 +75,8 @@ await (async () => {
     assert(/must differ/.test(await evalJs(`document.getElementById('toast').textContent`)), 'the refusal is explained in the toast');
 
     // ---- a fill toolpath: spacing and angle
-    await clickEl('#addFillTp'); await sleep(500);
+    await clickEl('#addFillTp');
+    await waitFor(`[...document.querySelectorAll('#activeLayerContent .field')].some(f => f.textContent.includes('Spacing'))`, 'fill toolpath Spacing field');
     const sp = await spacingSel();
     const fills = [];
     for (const [typed, want] of [['0', 0.1], ['-1', 0.1], ['', 0.1], ['500', 100], ['3', 3]]) {
@@ -192,6 +91,7 @@ await (async () => {
     // ---- outline passes (the default Outline toolpath)
     await evalJs(`(() => { const r = [...document.querySelectorAll('#toolpathLayers .tp-layer-row')].find(r => /Outline/.test(r.textContent)); r.scrollIntoView({ block: 'center' }); const q = r.querySelector('.tp-layer-name').getBoundingClientRect(); window.__pt = { x: Math.round(q.left + q.width / 2), y: Math.round(q.top + q.height / 2) }; })()`);
     const pt = await evalJs('window.__pt'); await click(pt.x, pt.y);
+    await waitFor(`[...document.querySelectorAll('#activeLayerContent .field')].some(f => f.textContent.includes('Passes'))`, 'outline toolpath Passes field');
     await evalJs(`(() => { const f = [...document.querySelectorAll('#activeLayerContent .field')].find(f => f.textContent.includes('Passes')); f.querySelector('input').setAttribute('data-t', 'passes'); })()`);
     const passes = [];
     for (const [typed, want] of [['0', 1], ['-2', 1], ['2.5', 3], ['99', 10]]) {
@@ -204,7 +104,8 @@ await (async () => {
     console.log('passes  :', passes.join(' | '));
 
     // ---- pen width: add a pen, type widths
-    await clickEl('#addPlotColor'); await sleep(300);
+    await clickEl('#addPlotColor');
+    await waitFor(`!!document.querySelector('.pc-row:last-child .pc-width')`, 'new pen width box');
     const widths = [];
     for (const [typed, want] of [['-3', 0.05], ['99', 5], ['', 5], ['0.3', 0.3]]) {
       await typeInto('.pc-row:last-child .pc-width', typed);
@@ -219,10 +120,7 @@ await (async () => {
     const gcode = await evalJs(`import('/apps/penplotter/src/export.js').then(m => JSON.stringify(m.buildGcodeEntries().map(e => e.content)))`).then(JSON.parse);
     assert(gcode.length >= 0 && gcode.every((g) => !/F0\b|NaN/.test(g)), 'no F0 / NaN in the exported G-code');
     console.log('penplotter-validation-live: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

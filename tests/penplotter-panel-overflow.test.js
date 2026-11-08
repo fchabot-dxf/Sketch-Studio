@@ -5,145 +5,15 @@
 
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..');
-
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForPort(userDir) {
-  for (let i = 0; i < 150; i++) {
-    try { const n = parseInt(fs.readFileSync(path.join(userDir, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0], 10); if (n) return n; } catch (_) {}
-    await sleep(200);
-  }
-  return 0;
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 150; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
-
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
-
-async function sendRealKey(send, key, code, vk, modifiers = 0, text = '') {
-  const down = { type: text ? 'keyDown' : 'rawKeyDown', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
-  if (text) down.text = text;
-  await send('Input.dispatchKeyEvent', down);
-  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers });
-}
+import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const userDir = path.join(os.tmpdir(), 'sk-test-446-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    '--remote-debugging-port=0', `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '446' });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, evalJs, waitFor, navigate } = cdp;
 
-  let dbgPort = 0;
   try {
-    dbgPort = await waitForPort(userDir);
-    assert(dbgPort && await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
-    const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable');
-    await send('Page.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
-    const waitFor = async (expression, what, timeoutMs = 20000) => {
-      const end = Date.now() + timeoutMs;
-      let lastErr = null;
-      for (;;) {
-        let v; try { v = await evalJs(expression); } catch (e) { v = false; lastErr = e; }
-        if (v) return v;
-        if (Date.now() > end) throw new Error('timed out waiting for ' + what + (lastErr ? ' (last error: ' + lastErr.message + ')' : ''));
-        await sleep(50);
-      }
-    };
     const penCount = () => evalJs('window.__draw.state.plotColors.length');
     const addPen = async () => { const n = await penCount(); await clickEl('#addPlotColor'); await waitFor('window.__draw.state.plotColors.length === ' + (n + 1), 'pen added'); };
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
@@ -160,9 +30,7 @@ await (async () => {
     };
     const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
     const clickAt = click;
-    const loaded = once('Page.loadEventFired');
-    await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });
-    await Promise.race([loaded, sleep(20000)]);
+    await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`);
     await waitFor('!!(window.__draw && window.__draw.state && window.__draw.state.plotColors)', 'penplotter app ready');
     await stageTab('toolpath');
     await waitFor("!!document.getElementById('toolpathPanel') && document.getElementById('toolpathPanel').getClientRects().length > 0", 'toolpath panel visible');
@@ -209,10 +77,7 @@ await (async () => {
       await addPen(); // restore the pen count for the next width
     }
     console.log('penplotter-panel-overflow: ok');
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

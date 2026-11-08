@@ -106,6 +106,12 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - on line, closed and open chains: the band = the path dilated by r, with round corners and round end caps;
         - V-carve: each contour's real surface width (2 * depth * tan(half-angle));
         - guide: not a cut, so no footprint (stays dashed).
+      - Owner style rule: leftover corner material is NOT highlighted (normal style).
+      - DISPATCHED to CC-A after the 437 plan merged (edf52fb).
+    - 437 plan (WORK-LOG "TURN 437"):
+      - S1 = extract deriveCutSequence (export byte-identical) + toggle, arrows, Play;
+      - S2-S5 later;
+      - owner Q1-Q5 open.
       - One derivation; export unchanged.
     - Noticed: an unlabeled grey pen-group row in Toolpath Operations (cosmetic; batch it with the audit's cosmetics).
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.

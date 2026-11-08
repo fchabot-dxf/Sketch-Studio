@@ -119,6 +119,9 @@ export const defaultRenderCtx = {
   },
 };
 
+// TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).
+let lastLoggedConstraints = { total: -1, visible: -1 };
+
 export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget, ctx=defaultRenderCtx){ 
   // Update cursor based on tool
   if (svg) {
@@ -2606,8 +2609,13 @@ switch(c.type){
 
   }
 
-  // Debug: constraint visibility summary (use: ug.debug.enable('renderer'))
-  dbg.log('renderer', 'constraints', { total: (constraints || []).length, visible: (constraints || []).filter(c => c && (c.__isPreview || c.__visible !== false)).length });
+  // Debug: constraint visibility summary (use: ug.debug.enable('renderer')). Logged only when {total, visible} CHANGES —
+  // draw() runs every frame, and a per-frame line flooded the Diagnostic Log buffer (TASK 429).
+  const constraintSummary = { total: (constraints || []).length, visible: (constraints || []).filter(c => c && (c.__isPreview || c.__visible !== false)).length };
+  if (constraintSummary.total !== lastLoggedConstraints.total || constraintSummary.visible !== lastLoggedConstraints.visible) {
+    lastLoggedConstraints = constraintSummary;
+    dbg.log('renderer', 'constraints', constraintSummary);
+  }
 
   // Apply accumulated SVG markup in a single DOM update to avoid partial-frame painting.
   // Ensure overlays that must be on top are appended last (guarantees highest stacking within this SVG)

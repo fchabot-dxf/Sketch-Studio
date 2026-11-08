@@ -90,7 +90,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Owner opened 2 Claude Code worker sessions (Sonnet). Seat table:
   - CC-A = sketch-studio-77, worktree Sketch-Studio-agy2, branch agy2.
     - 435 merged a3bf12b: shared Undo/Redo in every ribbon, Ctrl+Y and Ctrl+Shift+Z.
-    - Now on 444: remove Pen Plotter's legacy history.js (a second Ctrl+Z listener).
+    - 444 correctly STOPPED: history.js is the LIVE undo for Pen Plotter toolpaths/pens/doc (snapshot() calls across
+      the toolpath panels, svg-import, interaction).
+    - Now on 444b: one keystroke = one history, scoped by active stage (history.js keys only on Toolpath/Export),
+      and the dead #undoBtn wiring deleted.
+    - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.
   - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
   - Both report to the advisor (sketch-studio-e1) by SendMessage.
   - The AGY seats are parked until their quota resets; their worktrees are now the CC seats'.

@@ -11,7 +11,6 @@ import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
-import { startNewDocument } from '#ui/new-document.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
@@ -162,8 +161,6 @@ function initApp(){
       actions: [
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
         { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
-        { divider: true },
-        { id: 'new', label: 'New', icon: SIDEBAR_ICONS.new, confirm: 'Start a new document? The current one is discarded.', confirmLabel: 'New', onClick: () => startNewDocument() },
       ],
     }).el,
     tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],

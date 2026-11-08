@@ -142,10 +142,10 @@ await (async () => {
 
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['download', 'new'] },
-      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['download', 'new'] },
-      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['download-svg', 'download-dxf', 'new'] },
-      { id: 'trace', path: '/apps/trace/index.html', actions: ['download-svg', 'download-dxf', 'new'] },
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['download'] },
+      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['download'] },
+      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['download-svg', 'download-dxf'] },
+      { id: 'trace', path: '/apps/trace/index.html', actions: ['download-svg', 'download-dxf'] },
     ];
     // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──
     assert.deepStrictEqual(APPS.map((a) => a.name), ['Sketch', 'Shaper', 'Pen Plotter', 'Trace']);
@@ -190,11 +190,6 @@ await (async () => {
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').contains(document.activeElement)`), true, `${host.id}: focus stays trapped inside the open drawer`);
       await key2('Tab', 'Tab', 9, 8); // shift+Tab
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').contains(document.activeElement)`), true);
-      // New asks first (inline confirm), Cancel returns to the list
-      await clickEl('[data-action="new"]'); await sleep(200);
-      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar .sk-sidebar-confirm')`), true, `${host.id}: New asks before discarding`);
-      await clickEl('.sk-sidebar-confirm .cancel'); await sleep(200);
-      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-action="new"]')`), true);
       // Esc closes
       await key2('Escape', 'Escape', 27);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: Esc closes`);
@@ -212,14 +207,20 @@ await (async () => {
       await Promise.race([l, sleep(10000)]); await sleep(1500);
       await evalJs(`(async () => {
         const { createAppSidebar } = await import('/packages/ui/app-sidebar.js');
-        const sb = createAppSidebar({ current: 'shaper', docName: 'T', actions: [{ id: 'projects', label: 'Projects', onClick: () => {} }],
+        const sb = createAppSidebar({ current: 'shaper', docName: 'T', actions: [{ id: 'projects', label: 'Projects', onClick: () => {} }, { id: 'danger', label: 'Danger', confirm: 'Sure?', onClick: () => { window.__ran = (window.__ran || 0) + 1; } }],
           views: { projects: { title: 'Projects', render: (box, { go }) => {
             const list = (title, rows, next) => { box.innerHTML = '<div class="lvl" data-lvl="' + title + '"></div>'; for (const r of rows) { const b = document.createElement('button'); b.className = 'sk-sidebar-item row'; b.textContent = r; b.addEventListener('click', () => next(r)); box.appendChild(b); } };
             list('projects', ['Kitchen', 'Shed'], (p) => list('designs of ' + p, [p + ' A', p + ' B'], () => {}));
           } } } });
-        document.body.appendChild(sb.el); window.__sb2 = sb; sb.open(); sb.showView('projects');
+        document.body.appendChild(sb.el); window.__sb2 = sb; sb.open();
       })()`);
       await sleep(300);
+      // an action with `confirm` asks inline first; Cancel returns to the list without running it
+      await clickEl('.sk-sidebar [data-action="danger"]'); await sleep(200);
+      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar .sk-sidebar-confirm')`), true, 'a confirm action asks before running');
+      await clickEl('.sk-sidebar-confirm .cancel'); await sleep(200);
+      assert.strictEqual(await evalJs(`(window.__ran || 0) === 0 && !!document.querySelector('.sk-sidebar [data-action="danger"]')`), true, 'Cancel runs nothing and restores the row');
+      await evalJs(`window.__sb2.showView('projects')`); await sleep(300);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view').dataset.view`), 'projects', 'the extra view replaced the main body');
       assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sidebar [data-section="goto"]')`), false, 'the main list is not shown while the view is');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-view .lvl').dataset.lvl`), 'projects');

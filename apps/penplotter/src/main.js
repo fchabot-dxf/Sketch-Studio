@@ -3,7 +3,6 @@
 // #core/#ui sketcher); shell = Design -> Fill -> Toolpath -> Export (4 tabs). The plotter #canvasWrap is re-homed to
 // a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
-import { startNewDocument } from '#ui/new-document.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('penplotter');
 import { onExportClick } from './export.js';
@@ -38,8 +37,6 @@ if (swHost) {
     current: 'penplotter', docName: 'Untitled',
     actions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the G-code (.zip)', onClick: () => onExportClick() },
-      { divider: true },
-      { id: 'new', label: 'New', icon: SIDEBAR_ICONS.new, confirm: 'Start a new document? The current one is discarded.', confirmLabel: 'New', onClick: () => startNewDocument() },
     ],
   }).el);
 }

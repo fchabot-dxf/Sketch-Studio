@@ -27,7 +27,6 @@ import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } 
 import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
-import { startNewDocument } from '#ui/new-document.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
@@ -52,8 +51,6 @@ if (_swHost) {
         if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
         download('shaper-export.svg', payload.svg);
       } },
-      { divider: true },
-      { id: 'new', label: 'New', icon: SIDEBAR_ICONS.new, confirm: 'Start a new document? The current one is discarded.', confirmLabel: 'New', onClick: () => startNewDocument() },
     ],
   }).el);
 }

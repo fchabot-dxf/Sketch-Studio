@@ -86,6 +86,14 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - (c) The sketch tree prints raw mm (design-info-panel.js:115) while the canvas label uses the document unit. Task 439.
   - Works: pre-selected line + Dim creates a placing dimension that follows the mouse; Enter opens the input; the typed
     value drives the line (the inch value is converted correctly).
+- PEN PLOTTER AUDIT (advisor, 2026-11-08, headless, real clicks; probe in the scratchpad, probe/pp1-3.cjs):
+  - 440 MAJOR: what you draw in Design does NOT export. export.js:87-105 collectToolpathShapes reads only art layers;
+    Design draws into the #core sketch, so the toast says "Nothing to plot".
+  - 441: the Toolpath "editing target" mode (banner + dashed border) leaks into the Export stage.
+  - Ctrl+Y redo does nothing (the Redo BUTTON works). Covered by 435.
+  - Cosmetic, not ticketed yet:
+    - the Toolpath and Export stages show an empty ribbon band with only a label;
+    - the Pens panel says "click + to add a pen" while a pen group is already listed (unnamed grey swatch).
 - Next, in this order:
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);

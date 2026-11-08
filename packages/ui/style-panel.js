@@ -14,25 +14,33 @@ import { STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleT
 // number + paired range slider. Declared control TYPES: 'checkbox' (boolean), 'select' (an `options: [{value,label}]`
 // enum — generic, e.g. GRID_MODE), and the default number+slider (needs min/max/step).
 const CONTROLS = [
-  { key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
-  { key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
+  { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
+  { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
-  { key: 'SNAP_MAGNETISM',          label: 'Snap Magnetism',       min: 2,   max: 40,  step: 1 },
-  { key: 'GRID_MAGNETISM',          label: 'Grid Magnetism',       min: 2,   max: 40,  step: 1 },
-  { key: 'GRID_SIZE',               label: 'Grid Size',            min: 0.5, max: 20,  step: 0.5 },
-  { key: 'GRID_MAJOR_STEP',         label: 'Grid Major Step',      min: 1,   max: 50,  step: 1 },
-  { key: 'LINE_STROKE',             label: 'Line Stroke',          min: 0.1, max: 5,   step: 0.1 },
-  { key: 'JOINT_RADIUS',            label: 'Joint Radius',         min: 0.1, max: 12,  step: 0.1 },
-  { key: 'JOINT_STROKE_MULT',       label: 'Joint Stroke Mult',    min: 0.1, max: 5,   step: 0.1 },
-  { key: 'SELECTION_FEEDBACK_MULT', label: 'Selection Stroke Mult', min: 0.1, max: 6,  step: 0.1 },
-  { key: 'HOVER_FEEDBACK_MULT',     label: 'Hover Stroke Mult',    min: 0.1, max: 6,   step: 0.1 },
-  { key: 'GLYPH_SYMBOL_SIZE_PX',    label: 'Glyph Icon Size',      min: 8,   max: 48,  step: 1 },
-  { key: 'GLYPH_INFERENCE_SIZE_PX', label: 'Glyph Inference Size', min: 8,   max: 64,  step: 1 },
-  { key: 'GLYPH_OFFSET_PX',         label: 'Glyph Offset',         min: 0,   max: 200, step: 1 },
-  { key: 'GLOW_WIDTH_PX',           label: 'Glow Width',           min: 0,   max: 80,  step: 1 },
-  { key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
-  { key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },
+  { tab: 'grid', key: 'SNAP_MAGNETISM',          label: 'Snap Magnetism',       min: 2,   max: 40,  step: 1 },
+  { tab: 'grid', key: 'GRID_MAGNETISM',          label: 'Grid Magnetism',       min: 2,   max: 40,  step: 1 },
+  { tab: 'grid', key: 'GRID_SIZE',               label: 'Grid Size',            min: 0.5, max: 20,  step: 0.5 },
+  { tab: 'grid', key: 'GRID_MAJOR_STEP',         label: 'Grid Major Step',      min: 1,   max: 50,  step: 1 },
+  { tab: 'lines', key: 'LINE_STROKE',             label: 'Line Stroke',          min: 0.1, max: 5,   step: 0.1 },
+  { tab: 'lines', key: 'JOINT_RADIUS',            label: 'Joint Radius',         min: 0.1, max: 12,  step: 0.1 },
+  { tab: 'lines', key: 'JOINT_STROKE_MULT',       label: 'Joint Stroke Mult',    min: 0.1, max: 5,   step: 0.1 },
+  { tab: 'lines', key: 'SELECTION_FEEDBACK_MULT', label: 'Selection Stroke Mult', min: 0.1, max: 6,  step: 0.1 },
+  { tab: 'lines', key: 'HOVER_FEEDBACK_MULT',     label: 'Hover Stroke Mult',    min: 0.1, max: 6,   step: 0.1 },
+  { tab: 'glyphs', key: 'GLYPH_SYMBOL_SIZE_PX',    label: 'Glyph Icon Size',      min: 8,   max: 48,  step: 1 },
+  { tab: 'glyphs', key: 'GLYPH_INFERENCE_SIZE_PX', label: 'Glyph Inference Size', min: 8,   max: 64,  step: 1 },
+  { tab: 'glyphs', key: 'GLYPH_OFFSET_PX',         label: 'Glyph Offset',         min: 0,   max: 200, step: 1 },
+  { tab: 'lines', key: 'GLOW_WIDTH_PX',           label: 'Glow Width',           min: 0,   max: 80,  step: 1 },
+  { tab: 'lines', key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
+  { tab: 'lines', key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },
 ];
+
+const TABS = [
+  { id: 'lines', label: 'Lines & Joints' },
+  { id: 'grid', label: 'Grid & Snap' },
+  { id: 'glyphs', label: 'Glyphs' },
+  { id: 'units', label: 'Units' },
+];
+const UNIT_LABELS = { mm: 'Millimetres', cm: 'Centimetres', in: 'Inches' };
 
 let stylesInjected = false;
 function injectStyles() {
@@ -54,6 +62,11 @@ function injectStyles() {
   color: var(--sk-style-muted, #64748b); }
 .sk-style-body { display: flex; flex-direction: column; gap: 8px; }
 .sk-style-row, .sk-style-tpl { display: flex; flex-direction: column; gap: 4px; }
+.sk-style-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--sk-style-sep, #cbd5e1); }
+.sk-style-tab { padding: 4px 8px; border: 0; border-bottom: 2px solid transparent; background: none; color: inherit; cursor: pointer; font: inherit; }
+.sk-style-tab.sk-active { color: var(--sk-selection, #3B82F6); border-bottom-color: var(--sk-selection, #3B82F6); }
+.sk-style-tabpanel { display: flex; flex-direction: column; gap: 8px; }
+.sk-style-tabpanel[hidden] { display: none; }
 .sk-style-rowtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .sk-style-input { width: 80px; text-align: right; padding: 2px 4px; border-radius: 4px; background: transparent;
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
@@ -76,8 +89,9 @@ function injectStyles() {
  *     → no Save button (Shaper).
  *   onNotify(msg): optional toast hook (no Tailwind dependency here).
  *   title: header text (default 'Style').
+ *   hostId: names the host so each remembers its own last-open tab (localStorage).
  */
-export function createStylePanel({ settings = SettingsManager, onSaveProject = null, onNotify = null, title = 'Style', showDocUnit = false } = {}) {
+export function createStylePanel({ settings = SettingsManager, onSaveProject = null, onNotify = null, title = 'Style', hostId = 'default' } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
   let isOpen = false, escHandler = null, outsideHandler = null;
@@ -107,21 +121,49 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
   tplSelect.addEventListener('change', () => { if (tplSelect.value !== CUSTOM_TEMPLATE_ID) applyStyleTemplate(tplSelect.value, settings); });
   tplTop.append(tplLab, tplSelect); tplRow.appendChild(tplTop); body.appendChild(tplRow);
 
-  for (const spec of CONTROLS) body.appendChild(buildControl(spec));
-
-  // HOST-OPT-IN: document-unit selector (U3b). Rendered ONLY when showDocUnit:true (Shaper) — SketchStudio omits it,
-  // so its panel stays exactly the 17 CONTROLS / byte-identical. Writes DOC_UNIT; units-aware fields (cut params,
-  // dimension edit) re-read it on change.
-  let docUnitSelect = null;
-  if (showDocUnit) {
-    const row = document.createElement('div'); row.className = 'sk-style-row';
-    const top = document.createElement('div'); top.className = 'sk-style-rowtop';
-    const lab = document.createElement('span'); lab.className = 'sk-style-label'; lab.textContent = 'Document Unit';
-    docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
-    for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = u; docUnitSelect.appendChild(o); }
-    docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
-    top.append(lab, docUnitSelect); row.appendChild(top); body.appendChild(row);
+  // Tabs: the control->tab mapping is the declared `tab` of each CONTROLS entry; the Units tab holds the document unit.
+  const tabBar = document.createElement('div'); tabBar.className = 'sk-style-tabs'; tabBar.setAttribute('role', 'tablist');
+  const tabBtns = {}, tabPanels = {};
+  for (const t of TABS) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'sk-style-tab'; btn.textContent = t.label;
+    btn.id = 'sk-style-tab-' + t.id; btn.dataset.tab = t.id; btn.setAttribute('role', 'tab');
+    btn.addEventListener('click', () => selectTab(t.id));
+    btn.addEventListener('keydown', (e) => {
+      const i = TABS.findIndex((x) => x.id === t.id);
+      const n = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
+      if (n === null) return;
+      e.preventDefault(); const to = TABS[(n + TABS.length) % TABS.length].id; selectTab(to); tabBtns[to].focus();
+    });
+    const panel = document.createElement('div'); panel.className = 'sk-style-tabpanel'; panel.setAttribute('role', 'tabpanel');
+    panel.setAttribute('aria-labelledby', btn.id); panel.dataset.tab = t.id;
+    tabBar.appendChild(btn); tabBtns[t.id] = btn; tabPanels[t.id] = panel;
   }
+  body.appendChild(tabBar);
+  for (const spec of CONTROLS) tabPanels[spec.tab].appendChild(buildControl(spec));
+  for (const t of TABS) body.appendChild(tabPanels[t.id]);
+
+  // ONE document-unit control for every host (writes DOC_UNIT; cut params, dimension edit etc. re-read it on change).
+  const unitRow = document.createElement('div'); unitRow.className = 'sk-style-tpl';
+  const unitTop = document.createElement('div'); unitTop.className = 'sk-style-rowtop';
+  const unitLab = document.createElement('span'); unitLab.className = 'sk-style-label'; unitLab.textContent = 'Document Unit';
+  const docUnitSelect = document.createElement('select'); docUnitSelect.className = 'sk-style-input'; docUnitSelect.dataset.key = 'DOC_UNIT';
+  for (const u of UNITS) { const o = document.createElement('option'); o.value = u; o.textContent = UNIT_LABELS[u] || u; docUnitSelect.appendChild(o); }
+  docUnitSelect.addEventListener('change', () => settings.set('DOC_UNIT', docUnitSelect.value, { persist: 'local' }));
+  unitTop.append(unitLab, docUnitSelect); unitRow.appendChild(unitTop); tabPanels.units.appendChild(unitRow);
+
+  const tabStoreKey = 'sketch-studio-style-tab:' + hostId;
+  function selectTab(id) {
+    if (!tabPanels[id]) id = TABS[0].id;
+    for (const t of TABS) {
+      const on = t.id === id;
+      tabPanels[t.id].hidden = !on; tabBtns[t.id].setAttribute('aria-selected', on ? 'true' : 'false'); tabBtns[t.id].tabIndex = on ? 0 : -1;
+      tabBtns[t.id].classList.toggle('sk-active', on);
+    }
+    try { localStorage.setItem(tabStoreKey, id); } catch (_) { /* storage unavailable: the tab just is not remembered */ }
+  }
+  let savedTab = null;
+  try { savedTab = localStorage.getItem(tabStoreKey); } catch (_) { /* storage unavailable */ }
+  selectTab(savedTab);
 
   // Footer (Reset + Close, + optional Save)
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
@@ -178,7 +220,7 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
       else if (spec.type === 'select') { c.input.value = spec.options.some((o) => o.value === v) ? v : spec.options[0].value; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
-    if (docUnitSelect) docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
+    docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
     tplSelect.value = activeStyleTemplateId(all);
   }
 

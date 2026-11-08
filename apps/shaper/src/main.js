@@ -484,9 +484,8 @@ try {
   if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
 } catch (_) { /* localStorage blocked */ }
 
-// U3b: the shared style-panel as a header-opened MODAL, with the host-opt-in doc-unit toggle. SketchStudio does NOT
-// pass showDocUnit → its panel stays the 16 controls / byte-identical.
-const stylePanel = createStylePanel({ showDocUnit: true });
+// U3b: the shared style-panel as a header-opened MODAL; its Units tab holds the one document-unit control.
+const stylePanel = createStylePanel({ hostId: 'shaper' });
 stylePanel.render(document.body);
 const settingsBtn = document.getElementById('btn-settings');
 if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());

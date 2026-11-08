@@ -10,7 +10,9 @@ import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
-import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { startNewDocument } from '#ui/new-document.js';
+import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
@@ -54,6 +56,11 @@ setConstraintNotifier(showNotification);
 
 // shared app state passed to input and ui modules
 const state = createSketchState(engine, view);
+// TASK 473: the sidebar's Download uses the same exporter as the Export view, with its default options.
+function sidebarExport(type) {
+  const res = exportToFile(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' });
+  try { showNotification(res && res.ok ? 'Export started' : 'Export failed: ' + (res && res.reason ? res.reason : 'unknown'), res && res.ok ? 'success' : 'error'); } catch (_) {}
+}
 
 // initialize
 function initApp(){
@@ -147,7 +154,16 @@ function initApp(){
   // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
   const header = createAppHeader({
-    leading: createAppSwitcher({ current: 'sketchstudio' }).el, // SWITCH-1: the shared two-way app-switcher
+    // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
+    leading: createAppSidebar({
+      current: 'sketchstudio', docName: 'Untitled',
+      actions: [
+        { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
+        { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
+        { divider: true },
+        { id: 'new', label: 'New', icon: SIDEBAR_ICONS.new, confirm: 'Start a new document? The current one is discarded.', confirmLabel: 'New', onClick: () => startNewDocument() },
+      ],
+    }).el,
     tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
     actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
     activeTab: 'design',

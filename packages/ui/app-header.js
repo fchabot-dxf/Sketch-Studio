@@ -51,7 +51,7 @@ export function createAppHeader({ tabs = [], actions = [], onTabChange = null, a
   const tabsEl = document.createElement('nav'); tabsEl.className = 'sk-header-tabs';
   const spacer = document.createElement('span'); spacer.className = 'sk-header-spacer';
   const actionsEl = document.createElement('div'); actionsEl.className = 'sk-header-actions';
-  if (leading) el.appendChild(leading); // SWITCH-1: an optional brand/app-switcher slot, before the tabs
+  if (leading) el.appendChild(leading); // an optional leading slot (the app sidebar button), before the tabs
   el.append(tabsEl, spacer, actionsEl);
 
   let activeId = activeTab != null ? activeTab : (tabs[0] && tabs[0].id);

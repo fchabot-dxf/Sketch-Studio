@@ -82,8 +82,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
     existing duplicate got stamped (Escape deletes it). Sent 438c.
     DONE: 438b/438c merged fb8bb23. DONE: 439/439b merged 842c557 (tree values in the document unit).
-    AGY-2 now on 442: radius/angle constraints are missing from the sketch tree (sketch-model.js constraintSketch
-    reads joints only).
+    DONE: 442 merged a067383 (shape-based constraints now listed in the tree). AGY-2 now on 435 (shared Undo/Redo
+    + the redo shortcut).
+    Noticed: the tree labels a radius dimension "Distance" (cosmetic, not ticketed).
     OWNER QUESTION: Escape in the value box of a NEW click-made dimension now DELETES it (it used to keep it at the
     measured value); this matches the pre-selection path.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
@@ -106,7 +107,6 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;
-  - 435: shared Undo/Redo;
   - 433: cut semantics on profiles.
 
 **Open, in priority order:**

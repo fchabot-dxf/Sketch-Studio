@@ -88,7 +88,7 @@ await (async () => {
       const v = await mountReviewView({ host, info: document.createElement('div'), getInputs: () => ({ stock: { thickness: 18, width: 500, height: 200 }, bounds: { minX: 0, maxX: 100, minY: 0, maxY: 50 }, items: [] }) });
       v.refresh('wood');
       const first = v.inspect();
-      for (let i = 0; i < 100 && !v.inspect().mapLoaded; i++) await new Promise((r) => setTimeout(r, 100));
+      for (let i = 0; i < 100 && !(v.inspect().mapLoaded && v.inspect().edgeLoaded); i++) await new Promise((r) => setTimeout(r, 100));
       const on = v.inspect(); v.setWood(false); const off = v.inspect(); v.setWood(true); const back = v.inspect();
       v.destroy(); host.remove();
       return { first, on, off, back };
@@ -99,7 +99,7 @@ await (async () => {
     assert.strictEqual(wood.back.mapOn, true, 'Wood back on');
     assert.strictEqual(wood.on.edgeMapOn, true, 'Wood on: the edge ply texture is set');
     assert.strictEqual(wood.off.edgeMapOn, false, 'Wood off: the edge is flat too');
-    assert.strictEqual(wood.on.plies, 12, 'an 18 mm board = 12 plies: got ' + wood.on.plies);
+    assert.strictEqual(wood.on.edgeLoaded, true, 'the edge texture loads');
     assert.ok(Math.abs(wood.on.top.v - wood.on.top.x / 400) < 1e-4 && Math.abs(wood.on.top.u - wood.on.top.z / 400) < 1e-4, 'top uv = x/TILE, z/TILE (swapped for a long-X board): ' + JSON.stringify(wood.on.top));
 
     await evalJs(`localStorage.setItem('shaper-mode', 'simexport')`); // the stored tab name migrates

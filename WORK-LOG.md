@@ -13219,3 +13219,6 @@ Birch plywood look for the Shaper Review board. Asset apps/shaper/assets/birch-p
 TURN 497 change: side and wall faces now show a PROCEDURAL plywood edge (CanvasTexture, alternating light/dark tan strips with faint fibre streaks), one ply per PLY_MM=1.5 mm (min 3; 19.05 mm = 13, 12.7 mm = 8), v = -y/thickness from world height so plies line up across the board edge and every cut wall; the Wood toggle switches face and edge together. The earlier flat-tan edge is replaced. Evidence .evidence/497/wall-plies-crop.png.
 
 TURN 497 edge detail: the procedural edge now has seeded uneven ply thickness (count still plyCount(T), same constants), a random cream/grey-beige/tan tone per ply, 1-3 finer sub-layers, wobbly layer edges, fibre streaks, occasional thin red-brown lines and per-row noise; deterministic (mulberry32 seeded by ply count). Evidence .evidence/497/wall-plies-crop.png.
+
+## TURN 497 (final change)
+Real plywood edge texture apps/shaper/assets/birch-plywood-edge.jpg (736px, 142,045 B) on side/wall faces; v = y/EDGE_TILE_MM (25), u along the wall (x or z by normal). Procedural ply generator, constants and tests removed. Face texture on top/floor/bottom; Wood toggle switches both. Gate green (222/222, SMOKE 12/12). Evidence .evidence/497/.

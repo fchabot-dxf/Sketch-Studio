@@ -6,7 +6,7 @@
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
-import { deriveVcarveContours } from '#core/vcarve.js';
+import { deriveVcarveContours, deriveVcarveFootprint } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
@@ -110,7 +110,7 @@ export function mountVcarveView(state) {
       .map((l) => loopPolys[l.id])
       .filter((p) => p && p.length >= 3);
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
-    render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged, otherPolys);
+    render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged, otherPolys, deriveVcarveFootprint(contours, r));
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
     els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;
   }
@@ -201,12 +201,20 @@ function renderUnpicked(canvas, loopPolys, vcarveViewState) {
 // Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + hole boundaries (dark)
 // + the nested contours DEPTH-SHADED (deeper = darker). Auto-fits the viewBox to the region bbox.
 // Non-scaling strokes keep line weight constant.
-function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveViewState = null, regionChanged = false, otherPolys = []) {
+function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveViewState = null, regionChanged = false, otherPolys = [], footprints = []) {
   fitVcarveViewToPoints(canvas, [...boundary, ...holePolys.flat()], vcarveViewState, regionChanged);
   const poly = (pts, attrs) => `<polygon points="${pts.map((p) => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join(' ')}" ${attrs}/>`;
   let s = '';
   for (const op of otherPolys) {
     s += poly(op, 'fill="none" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"');
+  }
+  // TASK 447: each ring's REAL surface width (swept band, from the core derivation), deeper = darker; drawn under the lines.
+  for (let i = 0; i < footprints.length; i++) {
+    const f = footprints[i];
+    if (!f.rings.length) continue;
+    const t = maxDepth > 0 ? Math.min(1, f.depth / maxDepth) : 0;
+    const L = Math.round(66 - 44 * t);
+    s += `<path d="${f.rings.map((ring) => 'M ' + ring.map((p) => p.x.toFixed(3) + ' ' + p.y.toFixed(3)).join(' L ') + ' Z').join(' ')}" fill-rule="${f.fillRule}" fill="hsl(28,50%,${L}%)" fill-opacity="0.12" stroke="none"/>`;
   }
   s += poly(boundary, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
   for (const hp of holePolys) {

@@ -95,7 +95,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - 444b merged 00248c7: one keystroke = one history by active stage; dead #undoBtn wiring gone. It confirmed
       that Design Ctrl+Z used to undo a toolpath too.
     - 445 merged 27f9fc8: pens are undoable.
-    - Now on 446: the pen row overflows, so the delete x sits under the canvas and is unclickable.
+    - 446 merged fea3874: pen rows had no CSS; now they fit and the x is clickable.
+    - Now on 429: diagnostic log flood + JSON counts.
+    - Noticed: an unlabeled grey pen-group row in Toolpath Operations (cosmetic; batch it with the audit's cosmetics).
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.
   - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
   - Both report to the advisor (sketch-studio-e1) by SendMessage.
@@ -131,7 +133,6 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Next, in this order:
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
-  - 429: log flood + JSON;
   - 433: cut semantics on profiles.
 
 **Open, in priority order:**

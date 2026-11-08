@@ -274,6 +274,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
+  - Amended with the owner's 4 card close-ups:
+    - left popovers with a blue #2C65FF border; selected/active #182E6D;
+    - offset presets .001/.005/.01/1/32/1/16/1/8;
+    - a NEW "cutter shape" row below bit diameter (endmill/ballnose/vbit reusing VBIT_PRESETS), persisted, never
+      exported, used by the 457 3D Review.
 - Owner: "no parametric shape"; the compass export check was only to confirm no other encoding exists (none: plain
   paths with C curves).
 - OWNER REFERENCE (screenshot): Shaper Studio's REVIEW tab is a rendered result of the cuts on a wood-grain

@@ -209,6 +209,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     depth chip.
   - A second screenshot: geometry = thin near-white lines on #3F4145, TWO geometry states (owner): unselected = thin white, selected = bold mint #1BE09E;
     nothing depends on being inside a pocket.
+    Mint = selected only (hover = thin mint); cuts = the teal family with white details; types differ by shape.
+    Owner: the travel path (449 dashes) shows on the hovered cut as well as the selected one.
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

@@ -110,12 +110,15 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
   // SKETCH-3: `linkTo` (the other sketch name(s)) marks a CROSS-SKETCH link — a `⇄ Sketch N` reference + a .sk-link-row.
   function buildRow(c, sel, linkTo) {
     const m = typeMeta(c.type);
+    const label = c.isRadius || c.type === 'radius' ? 'Radius'
+      : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter'
+        : c.type === 'angle' ? 'Angle' : m.label;
     const row = document.createElement('button'); row.type = 'button'; row.className = 'sk-info-row' + (linkTo ? ' sk-link-row' : '');
     if (sel && sel.has(c)) row.classList.add('sel');
     const driven = (c.isDriven || c.driven) ? ' <span class="sk-info-val">(ref)</span>' : '';
     const val = (typeof c.value === 'number') ? ` <span class="sk-info-val">${formatConstraintValue(c)}</span>` : '';
     const link = linkTo ? ` <span class="sk-link-to" title="Cross-sketch link">⇄ ${linkTo}</span>` : '';
-    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${m.label}</span>${val}${driven}${link}`;
+    row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${label}</span>${val}${driven}${link}`;
     row.addEventListener('click', () => {
       if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
       if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);

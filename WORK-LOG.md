@@ -12948,3 +12948,7 @@ Why the app never froze in the audit: `fills/index.js resolveParams` already flo
 **Removed ad-hoc checks (grep after):** `|| 0.1` tolerance fallback in export.js / preview.js, `Math.max(0.01, +width.value || DEFAULT)` in plot-colors-panel, `Math.max(0.1, spacing)` in concentric, `!(w > 0)` in setDocSize, `parseFloat ... > 0` for the style width, the two private `resolveParams` copies in the fills/outlines registries, the hardcoded `min/max` strings of `#docW/#docH` and the pen width input. Last non-test callers removed: none (no function removed).
 
 **Gate:** `GATE files=187 pass=187 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+## TURN 461
+- Updated the design-info row label to show Radius or Diameter for those dimension variants and Angle for angle constraints; all other labels continue using their existing metadata.
+- Extended `tests/design-info-panel-units.test.js` to assert that a circle radius row says "Radius" and a plain distance row remains "Distance".
+- Validation: focused test passed; `npm.cmd run gate` printed `GATE files=181 pass=181 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

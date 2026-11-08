@@ -219,9 +219,6 @@ function onUp() {
         state.interaction = null;
         removePreview(); // BURN-DOWN-3: drop the selection box now the drag is done
         render();
-        if (it.scope === "toolpath") {
-            import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
-        }
         return;
     }
     // polyline waits for Enter / dblclick
@@ -251,7 +248,6 @@ function startSelect(e, p) {
             }
             state.activeToolpathId = tpid;
             render();
-            import("./active-layer-panel.js").then(m => m.renderActiveLayerPanel());
             return;
         }
         // In the gap between strokes → select the geometry underneath. WORKFLOW-FIX: the geometry now lives in the

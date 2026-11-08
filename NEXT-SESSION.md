@@ -278,10 +278,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   hosts); 457 plan merged 87d0615.
 - Owner: stock thickness 3/4 in OK. Wood look: he sent a light BIRCH PLYWOOD texture image (not saved as a file;
   asked for the file).
+- DONE:
+  - 454 merged e0de9b1 (the PP active panel follows; no active = no silent edits);
+  - 459 merged df8be3f (3D Review S1: Review tab replaces Simulate/Export; three@0.170.0 vendored, loaded on demand;
+    apps/shaper/src/stock.js = THE stock declaration).
 - NOW:
-  - CC-A on 460 (Shaper persists the cut plan + stock, slice S0);
-  - CC-B on 454 (PP active panel), then 453;
-  - CC-C on 459 (3D Review S1).
+  - CC-A on 460 (persist the cut plan + stock.js);
+  - CC-B on 453 (PP validation schema);
+  - CC-C on 462 (one derivation composition + S2 On Line grooves / unset mark);
+  - Copilot trial 461 is ready in Sketch-Studio-agy4 (waiting for the owner to open that window).
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

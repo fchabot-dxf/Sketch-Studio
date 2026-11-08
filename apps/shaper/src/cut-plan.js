@@ -6,7 +6,10 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord } from './shaper.js';
+import { deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
+import { findLoops } from '#core/loop-finder.js';
+import { loopPolygon } from '#core/loop-geometry.js';
 
 export const keyOf = (kind, id) => kind + ':' + id;
 export const parseKey = (key) => { const i = key.indexOf(':'); return { kind: key.slice(0, i), id: key.slice(i + 1) }; };
@@ -93,4 +96,25 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
   }
 
   return { dropped, moved, vcarveUpdated };
+}
+
+/**
+ * planReliefItems(state, plan = CUT_PLAN) — TASK 459: the cut plan as the 3D Review's input, one item per derived footprint:
+ * [{ key, cutType, cutDepth, footprints:[fp] }]. It only COMPOSES the three existing derivations (effectiveCutRecord ->
+ * deriveProfileCuts -> deriveCutFootprint, exactly the chain Prepare's preview runs); no cut geometry is computed here.
+ * Stale keys (a loop that no longer exists) derive to nothing, as in the exporter.
+ */
+export function planReliefItems(state, plan = CUT_PLAN) {
+  const shapeById = new Map((state.shapes || []).map((sh) => [sh.id, sh]));
+  const loops = findLoops(state).map((l) => ({ ...l, polygon: loopPolygon(l, state, shapeById) })); // the same host-side polygons Prepare and the exporter use
+  const loopPolys = Object.fromEntries(loops.map((l) => [l.id, l.polygon]));
+  const items = [];
+  for (const [key, stored] of plan) {
+    if (!stored || !stored.cutType) continue;
+    const rec = effectiveCutRecord(stored);
+    const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
+    if (!cuts || !cuts.length) continue;
+    for (const fp of deriveCutFootprint(cuts, rec, state)) items.push({ key, cutType: fp.cutType, cutDepth: rec.cutDepth, footprints: [fp] });
+  }
+  return items;
 }

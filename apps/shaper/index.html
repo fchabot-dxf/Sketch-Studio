@@ -13,7 +13,9 @@
   {
     "imports": {
       "#core/": "../../packages/core/",
-      "#ui/": "../../packages/ui/"
+      "#ui/": "../../packages/ui/",
+      "three": "../../packages/ui/vendor/three/three.module.js",
+      "three/addons/": "../../packages/ui/vendor/three/addons/"
     }
   }
   </script>
@@ -50,8 +52,8 @@
       --sk-ribbon-grouplabel: #6b7280;
       --sk-ribbon-menu-bg: #1b2030;
     }
-    #design-view, #view-vcarve, #view-prepare, #view-simexport { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
-    #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-simexport[hidden] { display: none; }
+    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
     #view-vcarve { flex-direction: row; }
     #vcarve-panel { flex: 0 0 244px; overflow: auto; min-height: 0; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; padding: 10px; font: 13px system-ui, sans-serif; }
@@ -103,10 +105,20 @@
       --sk-error: #ef4444;
     }
     #design-canvas.snapping { background-color: #F1E9D6; }
-    /* Prepare / Simulate-Export stub views (S6a): centered placeholder text. */
-    #view-simexport { flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    /* Review (TASK 459): a 3D canvas + a side card (stock, export). */
+    #view-review { flex-direction: row; color: #9aa0a6; font: 15px system-ui, sans-serif; }
+    #review-stage { position: relative; flex: 1; min-width: 0; background: #14161a; }
+    #review-canvas-host, #review-canvas-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #review-toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
+    #review-toolbar button { background: #1b2030; color: #cbd5e1; border: 1px solid #2f3646; border-radius: 6px; padding: 6px 12px; font: 13px system-ui, sans-serif; cursor: pointer; }
+    #review-toolbar button:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
+    #review-info { position: absolute; left: 10px; bottom: 10px; z-index: 2; font: 12px system-ui, sans-serif; color: #9aa0a6; max-width: 70%; line-height: 1.5; }
+    #review-side { width: 300px; flex: none; overflow: auto; padding: 16px; background: #0f1320; border-left: 1px solid #1f2535; display: flex; flex-direction: column; gap: 14px; }
+    .review-stock { display: flex; flex-direction: column; gap: 6px; color: #cbd5e1; font-size: 13px; }
+    .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .review-stock input { width: 90px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
     /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
-    #simexport-panel { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
     .simexport-title { color: #e6e6e6; font-size: 20px; margin: 0; font-weight: 600; }
     .simexport-sub { color: #9aa0a6; margin: 0; max-width: 360px; text-align: center; line-height: 1.4; }
     .simexport-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -281,7 +293,7 @@
       <button class="mode-btn" data-mode="design">Design</button>
       <button class="mode-btn" data-mode="vcarve">Vcarve</button>
       <button class="mode-btn" data-mode="prepare">Prepare</button>
-      <button class="mode-btn" data-mode="simexport">Simulate/Export</button>
+      <button class="mode-btn" data-mode="review">Review</button>
     </nav>
     <span class="spacer"></span>
     <!-- Explore-mode actions (SVG editor file ops) — shown only while Explore is active (router toggles). -->
@@ -346,7 +358,15 @@
     <div id="prepare-panel"></div>
     <div id="prepare-dir-legend" hidden>direction: conventional (Shaper Origin)</div>
   </section>
-  <section id="view-simexport" hidden>
+  <section id="view-review" hidden>
+    <div id="review-stage">
+      <div id="review-canvas-host"></div>
+      <div id="review-toolbar"><button id="review-reset" type="button">Reset</button><button id="review-top" type="button">Top</button><button id="review-fit" type="button">Fit</button></div>
+      <div id="review-info"></div>
+    </div>
+    <aside id="review-side">
+    <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
+      <label>Thickness <input id="review-stock-thickness" type="text" inputmode="decimal"></label></div>
     <div id="simexport-panel">
       <h2 class="simexport-title">Export</h2>
       <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>
@@ -357,6 +377,7 @@
       </div>
       <p id="simexport-status" class="simexport-status"></p>
     </div>
+    </aside>
   </section>
 
   <!-- ShaperHub Direct Sync Dialog -->

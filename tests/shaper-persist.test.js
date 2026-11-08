@@ -144,7 +144,7 @@ await (async () => {
     const nav = async (u) => { const l = once('Page.loadEventFired'); await send('Page.navigate', { url: u }); await Promise.race([l, sleep(8000)]); await sleep(1500); };
     const reload = async () => { const l = once('Page.loadEventFired'); await send('Page.reload'); await Promise.race([l, sleep(8000)]); await sleep(2000); };
     const planJson = () => evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...CUT_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)); })()`);
-    const stockJson = () => evalJs(`(async () => { const m = await import('/apps/shaper/src/shaper-doc.js'); return JSON.stringify(m.getStock()); })()`);
+    const stockJson = () => evalJs(`(async () => { const m = await import('/apps/shaper/src/stock.js'); return JSON.stringify(m.getStock()); })()`);
     const exportStr = () => evalJs(`(async () => {
       const { exportShaperSVG } = await import('/packages/core/shaper-export.js'); const { CUT_TYPES } = await import('/apps/shaper/src/shaper.js');
       const { cutPlanEntries } = await import('/apps/shaper/src/cut-plan.js'); const { findLoops } = await import('/packages/core/loop-finder.js');
@@ -161,7 +161,7 @@ await (async () => {
     await evalJs(`(async () => {
       const { findLoops, findOpenChains } = await import('/packages/core/loop-finder.js');
       const { CUT_PLAN, keyOf } = await import('/apps/shaper/src/cut-plan.js');
-      const { setStock } = await import('/apps/shaper/src/shaper-doc.js');
+      const { setStockField } = await import('/apps/shaper/src/stock.js');
       const st = window.__designController.state;
       for (const k of [...st.joints.keys()]) st.joints.delete(k);
       st.shapes.length = 0; st.constraints.length = 0; CUT_PLAN.clear();
@@ -177,12 +177,12 @@ await (async () => {
       CUT_PLAN.set(keyOf('loop', L[2].id), { cutType: 'interior', cutDepth: 'unset', cutOffset: -2, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 });
       CUT_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
       CUT_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
-      setStock({ thickness: 25.4, margin: 6 });
+      setStockField('thickness', 25.4); setStockField('margin', 6);
     })()`);
     await clickEl('[data-mode="prepare"]'); await sleep(900);
     const planBefore = await planJson(), stockBefore = await stockJson(), exportBefore = await exportStr();
     assert.strictEqual(JSON.parse(planBefore).length, 5, 'five cut records assigned');
-    assert.deepStrictEqual(JSON.parse(stockBefore), { thickness: 25.4, margin: 6 });
+    assert.deepStrictEqual(JSON.parse(stockBefore), { thickness: 25.4, width: null, height: null, margin: 6 });
     await shot('before-reload');
     await sleep(3200); // the buffer polls every 1.5 s
 
@@ -195,6 +195,26 @@ await (async () => {
     assert.strictEqual(await stockJson(), stockBefore, 'the stock round-trips');
     assert.strictEqual(await exportStr(), exportBefore, 'the export is byte-identical before vs after the reload');
     assert.ok(await evalJs(`document.querySelectorAll('#prepare-canvas .sk-edge').length`) >= 14, 'Prepare shows the restored geometry');
+
+    // ── 2b. the Review card's stock-thickness field round-trips through the sidecar (real typing, real reload) ──
+    await clickEl('[data-mode="review"]'); await sleep(1200);
+    assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').value`), '1.000', 'the card shows the restored 25.4 mm = 1.000 in');
+    await clickEl('#review-stock-thickness');
+    await key('a', 'KeyA', 65, 2);
+    for (const ch of '1.25') await key(ch, ch === '.' ? 'Period' : 'Digit' + ch, ch === '.' ? 190 : ch.charCodeAt(0), 0, ch);
+    await key('Enter', 'Enter', 13);
+    await evalJs(`document.getElementById('review-stock-thickness').dispatchEvent(new Event('change', { bubbles: true }))`);
+    await sleep(300);
+    const typedStock = JSON.parse(await stockJson());
+    assert.ok(Math.abs(typedStock.thickness - 31.75) < 1e-9, 'typing 1.25 in sets the stock thickness to 31.75 mm');
+    await sleep(3200);
+    await reload();
+    await clickEl('[data-mode="review"]'); await sleep(1200);
+    assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').value`), '1.250', 'after a real reload the card shows 1.250 in');
+    assert.ok(Math.abs(JSON.parse(await stockJson()).thickness - 31.75) < 1e-9, 'and the stock is 31.75 mm');
+    // restore the original stock for the remaining steps (planBefore/stockBefore comparisons)
+    await evalJs(`(async () => { const m = await import('/apps/shaper/src/stock.js'); m.setStockField('thickness', 25.4); })()`);
+    await sleep(3200);
 
     // ── 3. a SketchStudio save in between does NOT drop the Shaper sidecar (TASK 458): draw a line there, let it save, come back ──
     await nav(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`);
@@ -215,7 +235,7 @@ await (async () => {
     await reload();
     await clickEl('[data-mode="prepare"]'); await sleep(900);
     assert.strictEqual(await planJson(), '[]', 'an old document (no sidecar) has an empty cut plan');
-    assert.deepStrictEqual(JSON.parse(await stockJson()), { thickness: 19.05, margin: 12.7 }, 'and the owner-confirmed stock defaults: 3/4 in thick, 1/2 in margin');
+    assert.deepStrictEqual(JSON.parse(await stockJson()), { thickness: 19.05, width: null, height: null, margin: 12.7 }, 'and the owner-confirmed stock defaults: 3/4 in thick, 1/2 in margin');
     assert.ok(await evalJs(`document.querySelectorAll('#prepare-canvas .sk-edge').length`) >= 14, 'the geometry still loads');
     console.log('shaper-persist: ok');
     ws.close();

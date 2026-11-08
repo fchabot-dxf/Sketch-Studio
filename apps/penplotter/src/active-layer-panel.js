@@ -14,17 +14,33 @@ import { snapshot } from "./history.js";
 let triggerRerender = () => {};
 export function installActiveLayerPanel(onChange) { triggerRerender = onChange || (() => {}); }
 
-export function renderActiveLayerPanel() {
+// TASK 454: the panel follows state.activeToolpathId by ONE refresh point (syncActiveLayerPanel, called from every
+// renderArt). `shownSig` is what the panel last drew: the active id, the toolpath list, and the active toolpath's params.
+// Whatever changed the active toolpath (+ Outline/+ Fill, a row click, a delete, undo/redo, a restore) changes the
+// signature, so the panel is rebuilt; an edit made THROUGH the panel records its own signature first (rememberShown) so
+// typing never rebuilds the input under the cursor.
+let shownSig = null;
+function panelSig() {
+  const tp = activeToolpath();
+  return JSON.stringify([state.activeToolpathId, state.toolpaths.map(t => [t.id, t.name, t.type]), tp && [tp.fill, tp.outline, tp.drawOutline]]);
+}
+function rememberShown() { shownSig = panelSig(); }
+export function syncActiveLayerPanel() {
+  if (panelSig() !== shownSig) renderActiveLayerPanel();
+}
+
+function renderActiveLayerPanel() {
   const root = $("#activeLayerContent");
   if (!root) return;
+  rememberShown();
   root.innerHTML = "";
   const head = $("#activeLayerHead");
   const tps = state.toolpaths || [];
   if (!tps.length) { if (head) head.textContent = "Active Toolpath"; root.appendChild(msg("No toolpaths — create one above.")); return; }
 
   root.appendChild(toolpathSelect(tps));      // pick which toolpath (shared state.activeToolpathId)
-  const tp = activeToolpath() || tps[0];
-  if (!tp) return;
+  const tp = activeToolpath();                // TASK 454: no fallback to the first toolpath: the panel edits ONLY the active one
+  if (!tp) { if (head) head.textContent = "Active Toolpath"; root.appendChild(msg("No active toolpath — pick one above or click a row.")); return; }
   // EDITOR-TIDY: STATIC header "Active Toolpath" (like the legacy <h2>) — the op name+type already show in the
   // toolpathSelect dropdown ("Outline (outline)"), so a dynamic op-name h2 just duplicated the (now-removed) subhead.
   if (head) head.textContent = "Active Toolpath";
@@ -34,7 +50,7 @@ export function renderActiveLayerPanel() {
   // versa). Matches the original's type gate.
   if (tp.type === "outline") {
     // S2 (2): the 'Draw outline' toggle — tp.drawOutline is read downstream (preview/export) but had no control.
-    root.appendChild(checkboxField("Draw outline", tp.drawOutline !== false, (v) => { snapshot(); tp.drawOutline = v; triggerRerender(); }));
+    root.appendChild(checkboxField("Draw outline", tp.drawOutline !== false, (v) => { snapshot(); tp.drawOutline = v; rememberShown(); triggerRerender(); }));
     root.appendChild(registrySelect("Style", tp.outline.style, OUTLINE_STYLES, false, (v) => { snapshot(); tp.outline.style = v; restructure(); }));
     const os = outlineStyle(tp.outline.style);
     if (os) for (const p of os.params) root.appendChild(paramField(p, tp.outline)); // includes Passes (declared param)
@@ -51,6 +67,7 @@ function restructure() { renderActiveLayerPanel(); triggerRerender(); }
 function toolpathSelect(tps) {
   const wrap = field(); const label = document.createElement("label"); label.textContent = "Toolpath";
   const sel = document.createElement("select");
+  if (!activeToolpath()) { const o = document.createElement("option"); o.value = ""; o.textContent = "—"; o.selected = true; sel.appendChild(o); }
   for (const tp of tps) {
     const o = document.createElement("option"); o.value = tp.id; o.textContent = tp.name + " (" + tp.type + ")";
     if (tp.id === state.activeToolpathId) o.selected = true;
@@ -91,6 +108,7 @@ function paramField(p, obj) {
     if (!Number.isFinite(val)) return;
     snapshot();
     obj[p.key] = val;
+    rememberShown();
     triggerRerender();      // recompute + redraw the overlay (fill strokes update live)
   };
   input.oninput = commit; input.onchange = commit;

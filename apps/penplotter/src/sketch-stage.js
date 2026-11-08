@@ -24,7 +24,6 @@ import { installDocModal, syncDocFields, loadDefaults } from './settings.js';   
 import { capturePlotterDoc, applyPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
 import { renderArt } from './render-art.js';
 import { recalcPreview } from './preview.js';
-import { renderActiveLayerPanel } from './active-layer-panel.js';
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
 import SettingsManager from '#core/settings-manager.js';               // BURN-DOWN-6: plotter-side joint-size override (runtime only)
 
@@ -160,7 +159,6 @@ export function mountSketchStage(view, ctx = {}) {
     if (!fitDesignView()) fitViewport();
     if (state.preview.showToolpath) recalcPreview();
     renderArt();
-    renderActiveLayerPanel();
   };
   // STYLE-3: rebuild the underlay paths — each #core shape flattened (coreShapeToPolyline), then painted from its
   // STYLE record: the stroke colour at the style's DISPLAY width, and, for a CLOSED shape carrying a fill colour, a

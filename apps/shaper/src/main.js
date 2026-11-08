@@ -26,7 +26,8 @@ import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
-import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
+import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
@@ -43,9 +44,9 @@ inspector.init(document.getElementById('inspector'));
 // Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
 const _swHost = document.getElementById('app-sidebar-host');
 if (_swHost) {
-  _swHost.appendChild(createAppSidebar({
-    current: 'shaper', docName: 'Untitled',
-    actions: [
+  _swHost.appendChild(mountProjectSidebar({
+    appId: 'shaper', getBuffer: () => { ensureSketch(); return docBuffer; }, // the buffer is created with the sketch (lazily)
+    hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
         const payload = generateShaperSvgPayload();
         if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }

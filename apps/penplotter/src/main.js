@@ -2,14 +2,15 @@
 // STAGES, plus the shared app sidebar. UNIFY-4a: Draw + Sketch MERGED into ONE 'Design' tab (the shared
 // #core/#ui sketcher); shell = Design -> Fill -> Toolpath -> Export (4 tabs). The plotter #canvasWrap is re-homed to
 // a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
-import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
+import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('penplotter');
 import { onExportClick } from './export.js';
 import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
-import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
+import { mountSketchStage, getDocBuffer } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
@@ -33,9 +34,9 @@ let currentStageId = null; // the showing stage; drives the isActive gate + whic
 // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the G-code zip export, New = a fresh document.
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
-  swHost.appendChild(createAppSidebar({
-    current: 'penplotter', docName: 'Untitled',
-    actions: [
+  swHost.appendChild(mountProjectSidebar({
+    appId: 'penplotter', getBuffer: () => getDocBuffer(),
+    hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the G-code (.zip)', onClick: () => onExportClick() },
     ],
   }).el);

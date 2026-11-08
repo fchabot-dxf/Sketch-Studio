@@ -12,6 +12,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
@@ -521,16 +522,44 @@ function ensureSketch() {
   const statusEl = document.getElementById('save-status');
   const docBuffer = createDocumentBuffer({
     state: designController.state,
+    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(() => {
+  docBuffer.restore().then(({ hosts }) => {
     try {
       designController.engine.solve(500);
       if (infoPanel) infoPanel.refresh();
       if (vcarveView) vcarveView.refresh();
     } catch (_) {}
+    // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable), then
+    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. An old buffer has no sidecar: defaults.
+    if (hosts && hosts.shaper) applyShaperDoc(hosts.shaper);
+    if (currentMode === 'prepare') mountPrepare();
+    else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
   });
   docBuffer.start();
+}
+
+// SP1a/SP1c: (re)mount the Prepare view on the shared Design sketch (no 2nd engine/RAF). TASK 460: also called after a document
+// restore so Prepare shows the restored geometry and cut plan.
+function mountPrepare() {
+    ensureSketch();
+    try { designController.engine.solve(500); } catch (_) {}
+    if (prepareView) prepareView.destroy();
+    const st = designController.state;
+    const loops = findLoops(st);
+    const chains = findOpenChains(st, loops);
+    const { dropped, moved, vcarveUpdated } = migrateEdgeRecords(loops, chains, CUT_PLAN, st.vcarves);
+    if (dropped + moved + (vcarveUpdated || 0) > 0) {
+      const parts = [];
+      if (moved > 0) parts.push(`${moved} edge cut${moved === 1 ? '' : 's'} moved to chain`);
+      if (dropped > 0) parts.push(`${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
+      if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
+      groupStatus(`Cut plan updated: ${parts.join(', ')}`);
+    }
+    prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    window.__prepareView = prepareView;
+    refreshCutPanel(); // no selection yet → the card stays hidden
 }
 
 // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the
@@ -561,25 +590,7 @@ function showMode(mode) {
   // SP1a/SP1c: Prepare REUSES the shared Design sketch (no 2nd engine/RAF). Ensure it's mounted + solved, then mount
   // a Prepare-local view: edges (no joints) + topological-loop hover-highlight. Render-on-demand — geometry is
   // static in Prepare, so loops are found once on (re)mount; the highlight redraws only on hover-change (no RAF).
-  if (mode === 'prepare' && (enteringMode || !prepareView)) {
-    ensureSketch();
-    try { designController.engine.solve(500); } catch (_) {}
-    if (prepareView) prepareView.destroy();
-    const st = designController.state;
-    const loops = findLoops(st);
-    const chains = findOpenChains(st, loops);
-    const { dropped, moved, vcarveUpdated } = migrateEdgeRecords(loops, chains, CUT_PLAN, st.vcarves);
-    if (dropped + moved + (vcarveUpdated || 0) > 0) {
-      const parts = [];
-      if (moved > 0) parts.push(`${moved} edge cut${moved === 1 ? '' : 's'} moved to chain`);
-      if (dropped > 0) parts.push(`${dropped} dropped from closed loop${dropped === 1 ? '' : 's'}`);
-      if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
-      groupStatus(`Cut plan updated: ${parts.join(', ')}`);
-    }
-    prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
-    window.__prepareView = prepareView;
-    refreshCutPanel(); // no selection yet → the card stays hidden
-  }
+  if (mode === 'prepare' && (enteringMode || !prepareView)) mountPrepare();
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
 }
 

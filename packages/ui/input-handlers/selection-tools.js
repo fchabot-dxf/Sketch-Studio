@@ -187,16 +187,17 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     
     // Track double-clicks for dimension editing
     const now = Date.now();
-    // Defensive dataset access: some tests pass events without DOM targets
-    const _targetConstraintIdx = (e && e.target && e.target.dataset) ? e.target.dataset.constraintIdx : undefined;
-    const isDoubleClick = (now - selectionState.lastClickTime < 500) && (selectionState.lastClickedIndex === _targetConstraintIdx);
-    selectionState.lastClickTime = now;
-    selectionState.lastClickedIndex = _targetConstraintIdx;
-
-    // 1. Check for Dimension Label Interaction
     // Test environments may pass synthetic pointer events whose target lacks
     // .closest(); fall back to null so the dim-label branch is skipped.
     const dimLabel = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-label') : null;
+    // A double click is two clicks on the SAME dimension label. Any other target (geometry, empty space,
+    // or a label child element without its own dataset) has no key, so it can never pair with another click.
+    const _labelKey = dimLabel ? dimLabel.dataset.constraintIdx : null;
+    const isDoubleClick = _labelKey != null && (now - selectionState.lastClickTime < 500) && (selectionState.lastClickedIndex === _labelKey);
+    selectionState.lastClickTime = now;
+    selectionState.lastClickedIndex = _labelKey;
+
+    // 1. Check for Dimension Label Interaction
     if (dimLabel) {
         const cIdx = parseInt(dimLabel.dataset.constraintIdx);
         const constraint = state.constraints[cIdx];

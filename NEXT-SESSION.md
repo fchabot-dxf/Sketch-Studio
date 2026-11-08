@@ -71,7 +71,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - Inside = duality;
     - On line / Guide = one path per loop, holes first;
     - a hole's own record is an ADDITIONAL path, never an override.
-  - DONE: 433b merged b27101f. AGY-1 now on 440 (Pen Plotter: Design geometry doesn't export).
+  - DONE: 433b merged b27101f.
+  - DONE: 440 merged 016654f (Pen Plotter exports Design geometry; one collectToolpathShapes). Its art-layer
+    fallback serves only OLD saved files, a named legacy branch until UNIFY-7.
+  - AGY-1 now on 441 (target-edit mode leak).
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

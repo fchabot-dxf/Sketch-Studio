@@ -78,7 +78,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2's 438b (0fb391b) is NOT merged. The
     angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
     existing duplicate got stamped (Escape deletes it). Sent 438c.
-    DONE: 438b/438c merged fb8bb23. AGY-2 now on 439 (tree units).
+    DONE: 438b/438c merged fb8bb23. DONE: 439/439b merged 842c557 (tree values in the document unit).
+    AGY-2 now on 442: radius/angle constraints are missing from the sketch tree (sketch-model.js constraintSketch
+    reads joints only).
     OWNER QUESTION: Escape in the value box of a NEW click-made dimension now DELETES it (it used to keep it at the
     measured value); this matches the pre-selection path.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.

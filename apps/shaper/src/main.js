@@ -508,7 +508,7 @@ function panelTick() {
 }
 
 // Build the Design UI ONCE (S7b): a full-width SketchStudio-style tool ribbon on TOP (#design-ribbon), and a
-// COLLAPSIBLE left side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
+// COLLAPSIBLE right side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
 // untouched canvas. Reuses the shared #ui factories; dark via --sk-* (Shaper's :root). The canvas is not touched —
 // collapsing the panel just reflows it wider.
 const PANEL_COLLAPSED_KEY = 'shaper-design-panel-collapsed';
@@ -528,7 +528,7 @@ function buildDesignUI() {
   const toggle = document.getElementById('design-panel-toggle');
   const setCollapsed = (c) => {
     panel.classList.toggle('collapsed', c);
-    toggle.textContent = c ? '▶' : '◀';
+    toggle.textContent = c ? '◀' : '▶';
     toggle.title = c ? 'Expand panel' : 'Collapse panel';
     try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
   };
@@ -539,7 +539,7 @@ function buildDesignUI() {
 
   // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
   // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
   const header = document.querySelector('header.toolbar');
   if (header) header.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)

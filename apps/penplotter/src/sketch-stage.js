@@ -49,8 +49,17 @@ const SCAFFOLD = `
   <div id="design-view">
     <div id="design-ribbon"></div>
     <div id="design-body">
+      <div id="design-canvas-wrap">
+        <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
+             but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
+             CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
+        <div id="dropOverlay">Drop an SVG to import</div>
+      </div>
       <aside id="design-panel">
-        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
+        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9654;</button>
         <div id="design-panel-actions">
           <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
@@ -84,15 +93,6 @@ const SCAFFOLD = `
         </div>
         <div id="design-panel-info"></div>
       </aside>
-      <div id="design-canvas-wrap">
-        <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
-             but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
-             CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
-        <div id="dropOverlay">Drop an SVG to import</div>
-      </div>
     </div>
   </div>`;
 
@@ -307,7 +307,7 @@ export function mountSketchStage(view, ctx = {}) {
   const toggle = view.querySelector('#design-panel-toggle');
   const setCollapsed = (c) => {
     panel.classList.toggle('collapsed', c);
-    toggle.textContent = c ? '▶' : '◀';
+    toggle.textContent = c ? '◀' : '▶';
     toggle.title = c ? 'Expand panel' : 'Collapse panel';
     try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
   };
@@ -318,7 +318,7 @@ export function mountSketchStage(view, ctx = {}) {
 
   // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
   // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
   const header = document.querySelector('header.toolbar');
   if (header) header.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)

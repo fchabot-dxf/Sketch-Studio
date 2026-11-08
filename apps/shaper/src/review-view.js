@@ -34,14 +34,18 @@ export async function mountReviewView({ host, info, getInputs }) {
   const render = () => renderer.render(scene, camera);
   controls.addEventListener('change', render);
 
-  function geometryOf(mesh, T) {
+  // Shade by DEPTH (height is the position's Y): a cut floor reads clearly darker than the top (even a shallow groove, seen from
+  // above), deeper = darker still; walls a little darker than the floor they meet. `base` = the group's own tone.
+  const SHADE = { top: [1, 0], side: [1, 0.45], bottom: [0.7, 0], floor: [0.78, 0.4], wall: [0.7, 0.4] }; // [tone, extra darkening over the full thickness]
+  function geometryOf(mesh, T, name) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
     // shade by DEPTH (height is the position's Y): deeper = darker, like Studio's depth shading
     const col = new Float32Array(mesh.positions.length);
     for (let i = 0; i < mesh.positions.length; i += 3) {
-      const k = 1 - 0.45 * Math.min(1, Math.max(0, -mesh.positions[i + 1] / T));
+      const [tone, gain] = SHADE[name];
+      const k = tone * (1 - gain * Math.min(1, Math.max(0, -mesh.positions[i + 1] / T)));
       col[i] = BOARD[0] * k; col[i + 1] = BOARD[1] * k; col[i + 2] = BOARD[2] * k;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -107,9 +111,9 @@ export async function mountReviewView({ host, info, getInputs }) {
     const T = rel.stockBox.thickness;
     disposeGroup();
     group = new THREE.Group();
-    for (const m of Object.values(rel.meshes)) {
+    for (const [name, m] of Object.entries(rel.meshes)) {
       if (!m.indices.length) continue;
-      group.add(new THREE.Mesh(geometryOf(m, T), material));
+      group.add(new THREE.Mesh(geometryOf(m, T, name), material));
     }
     for (const mk of rel.marks) group.add(markSprite(mk));
     scene.add(group);

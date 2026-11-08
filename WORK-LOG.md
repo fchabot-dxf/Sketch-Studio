@@ -12775,3 +12775,18 @@ Seat CC-B. Fixes audit finding #1 of TURN 443: after a reload the geometry and a
 **Removal sweep:** nothing removed. Callers of the changed `history.serialize/restore`: internal to history.js only (`grep serialize apps/penplotter/src`).
 
 **Gate:** `GATE files=176 pass=176 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+
+## TURN 458 (shared document buffer keeps other apps' host sidecars)
+Seat CC-B. From TURN 443/451: the buffer key is shared by every app and a save wrote only its own host, so SketchStudio/Shaper (no host) wrote `hosts: {}` and wiped `hosts.penplotter`.
+
+**Reproduced live first** (headless, real UI, `tests/document-buffer-hosts.test.js` part A on the unfixed code): Pen Plotter saved pens/toolpaths (stored hosts include penplotter); SketchStudio opened on the same origin, real click on Line + two canvas clicks, autosaved; stored buffer then read straight from IndexedDB: `after SketchStudio save: shapes 4 -> 5 | hosts []` and `AssertionError: SketchStudio's save dropped the Pen Plotter sidecar (hosts: [])`. Same keys in all apps (one IndexedDB `sketch-studio-documents` / `current`), so it is real.
+
+**Fix (one place):** `packages/ui/document-buffer.js` `writeBuffer` now does a read-modify-write of `hosts` inside ONE readwrite transaction: `put({ ...doc, hosts: { ...stored.hosts, ...doc.hosts } })`. The buffer replaces only the hosts it owns (its hostName entry); every other host passes through; a host-less buffer owns none, so it deletes none. The change signature (`sig`) still covers only the buffer's own doc, so no extra writes.
+
+**Step 3, every writer of the document:** `grep serializeDocument|createDocumentBuffer` over apps/packages/functions: `serializeDocument` callers = `document-buffer.js` (the only store writer, fixed) and `packages/ui/diagnostic-log.js:110` (builds a Copy-Report blob; it writes no stored document, so nothing to drop). `createDocumentBuffer` callers = penplotter (hostName), shaper and sketchstudio (no host): all go through the fixed `writeBuffer`. No cloud-save or document-file export/import exists in apps/ or functions/ (trace/app.js:25 only mentions omitting it). Nothing else to fix.
+
+**Test** `tests/document-buffer-hosts.test.js` (live headless, in the gate): A = the real repro above (Pen Plotter doc deep-equal after Studio saved and the plotter reloaded); B = in-page buffers with a 40 ms poll: A saves; B saves and A survives; A changes its own sidecar and B stays; B changes and A stays; a host-less buffer saves and deletes nothing. Fails 1/1 on the unfixed code (output above); passes after. Evidence `.evidence/458/before-after.txt`.
+
+**Behaviour changes for existing users:** (1) sidecars of other apps now survive a save (the point); (2) a stored buffer keeps a host's entry for as long as the key lives (no pruning of a host that stops writing); (3) each write is now a get+put in one transaction (still one write per change). A save from a stale tab can still overwrite the OTHER fields (geometry) of a newer one, as before.
+
+**Gate:** `GATE files=180 pass=180 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.

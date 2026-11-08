@@ -794,20 +794,23 @@ export function deriveCutFootprint(cuts, rec, state) {
       out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters });
     } else if (cut.kind === 'chain') {
       const rings = [];
+      let anchor = null; // TASK 455: where the depth chip sits (the middle vertex of the first member)
       if (!isGuide && r > 0) {
         for (const sh of (cut.chain && cut.chain.shapes) || []) {
           let line = null;
           if (sh.type === 'line') line = (sh.joints || []).slice(0, 2).map((id) => state.joints.get(id));
           else if (sh.type === 'arc') line = sampleArc(sh, state, 24);
-          if (line && line.length >= 2 && line.every(Boolean)) rings.push(...sweptPath(line, r));
+          if (line && line.length >= 2 && line.every(Boolean)) { rings.push(...sweptPath(line, r)); if (!anchor) anchor = { ...line[Math.floor(line.length / 2)] }; }
         }
       }
-      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain });
+      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain, anchor });
     } else if (cut.polygon && cut.polygon.length >= 3) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null });
+      // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
+      const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor });
     }
   }
   return out;

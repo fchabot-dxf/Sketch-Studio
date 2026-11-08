@@ -9,14 +9,15 @@ import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior'];
-const swatch = (t) => { const c = (t.previewStroke && t.previewStroke !== 'none') ? t.previewStroke : t.previewFill; return (c && c !== 'none') ? c : 'var(--sk-muted, #9aa0a6)'; };
+// TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 16x16 inner markup in currentColor); colours are CSS tokens.
+const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 16 16" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
 
 // DECLARED data: quick bit-diameter presets. VALUES are BASE mm (U3a); LABELS stay imperial bit sizes (× 25.4 mm/in).
 const BIT_PRESETS = [
   { label: '.02', value: 0.508 },   // .02 in
-  { label: '1/8', value: 3.175 },   // 1/8 in
-  { label: '1/4', value: 6.35 },    // 1/4 in
-  { label: '1/2', value: 12.7 },    // 1/2 in
+  { label: '⅛', value: 3.175 },   // 1/8 in
+  { label: '¼', value: 6.35 },    // 1/4 in
+  { label: '½', value: 12.7 },    // 1/2 in
 ];
 const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/down from 'unset'
 const DEPTH_STEP = 0.05;   // step increment, in the DOC unit
@@ -42,7 +43,7 @@ export function createCutPanel(hostEl, opts = {}) {
       <label class="cut-field-label">Cut type</label>
       <div class="cut-type-dd">
         <button type="button" class="cut-type-trigger" aria-haspopup="listbox" aria-expanded="false">
-          <span class="cut-sw"></span><span class="cut-type-cur">Select type</span><span class="cut-caret">&#9662;</span>
+          <span class="cut-ic-slot"></span><span class="cut-type-cur">Select type</span><span class="cut-caret">&#9662;</span>
         </button>
         <div class="cut-type-menu" role="listbox" hidden></div>
       </div>
@@ -68,6 +69,7 @@ export function createCutPanel(hostEl, opts = {}) {
       <div class="cut-row" data-param="toolDia">
         <label class="cut-field-label">Bit diameter</label>
         <div class="cut-inline">
+          <span class="cut-dia-prefix">D</span>
           <input type="text" class="cut-num cut-bit" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
@@ -77,7 +79,7 @@ export function createCutPanel(hostEl, opts = {}) {
   hostEl.appendChild(card);
 
   const $ = (sel) => card.querySelector(sel);
-  const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), curLabel = $('.cut-type-cur'), curSw = $('.cut-sw');
+  const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
@@ -95,7 +97,7 @@ export function createCutPanel(hostEl, opts = {}) {
       opt.type = 'button';
       opt.className = 'cut-type-opt' + (id === current.cutType ? ' is-current' : '') + (enabled ? '' : ' is-disabled');
       opt.setAttribute('role', 'option'); opt.dataset.id = id; opt.disabled = !enabled;
-      opt.innerHTML = `<span class="cut-sw" style="background:${swatch(t)}"></span><span>${t.menuLabel}</span>`;
+      opt.innerHTML = `${iconSvg(t)}<span>${t.menuLabel}</span>`;
       if (enabled) opt.addEventListener('click', () => { closeMenu(); onPickType(id); });
       menu.appendChild(opt);
     }
@@ -147,7 +149,7 @@ export function createCutPanel(hostEl, opts = {}) {
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';
-    curSw.style.background = t ? swatch(t) : 'transparent';
+    curSw.innerHTML = t ? iconSvg(t) : '';
     if (!menu.hidden) buildMenu();
     renderFields();
   };

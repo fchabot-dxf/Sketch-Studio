@@ -57,7 +57,15 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   #core. SketchStudio Recenter now ignores the origin and arc centers and includes arc bulges.
 - OWNER QUESTION: export boundsOf (shaper-export.js:104) still counts every joint (origin, arc centers), ignores arc
   bulge and bezier extrema, and adds the datum. Unify it with geometry-bounds? That changes export bytes.
-- In flight: 434 (AGY-2), stray #dimInput box + stuck focus.
+- DONE: 434 merged 5d84d1f. Numeric inputs own their CSS. Also fixed: the live-dim inputs (the owner's "°" box) and the
+  fillet input. Small leftovers: the input is hidden two ways (class + inline display) and has `typeof document` guards.
+  Clean them up when that file is next touched.
+- 20:12 BOTH seats out of Gemini 4 Argon (resets in ~159 h). Flash returns ~22:40, Claude/GPT ~22:07.
+  - AGY-1: 432 is half-done, UNCOMMITTED in D:\APPS\Sketch-Studio-agy1 (10 files modified); it resumes there.
+  - AGY-2: hadn't started 438.
+- ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
+  - AGY-1 resumed 432, with the full-loop amendment.
+  - AGY-2 started 438.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;
@@ -67,7 +75,6 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Works: pre-selected line + Dim creates a placing dimension that follows the mouse; Enter opens the input; the typed
     value drives the line (the inch value is converted correctly).
 - Next, in this order:
-  - 438: dimension = one undo step;
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;
@@ -1966,6 +1973,15 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
     only; TOOLPATHS are a separate declared layer (profiles + per-profile cut params) over that geometry; the Shaper SVG
     is DERIVED at export from both. Never make the user edit geometry (merge, recolour, duplicate shapes) just to
     express a toolpath intent.
+- OWNER RULING (2026-11-07, screenshot of a lone fillet arc picked "On line"): "in Prepare, selection must be a full
+  loop, it can't be a single segment".
+  - Today, prepare-view.js:173-177 resolveTarget picks the nearest EDGE first.
+  - Advisor reading, to confirm with the owner:
+    - clicking a loop's ink picks that loop's profile;
+    - a segment of a closed loop is never a target;
+    - an OPEN chain (no loop) is picked as the whole chain, never one of its segments;
+    - old `edge:` cut records whose edge sits in a closed loop are dropped on load, with one status line.
+  - This amends 432 (its "edge picking keeps working" line is withdrawn).
 - Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
   profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
   433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).

@@ -11843,3 +11843,30 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `.evidence/431c/delete-hole-invalid.png` (MD5: `6A2227B49E00242341494D2B108D3AC2`): Same combined frame after deleting the 4 inner hole lines via `Delete`; red warning fill + crisp `#ef4444` red dashed outline around the surviving filleted outer boundary; `state.profiles` unchanged.
   - `npm run gate`: `GATE files=158 pass=158 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
 
+
+
+## TURN 434 — Shared `#ui` numeric inputs own their CSS & hiding (fix stray top-left text box + stuck focus in Pen Plotter & Shaper) — branch agy2
+
+- **Root Cause & `packages/ui` Audit:**
+  - `packages/ui/numeric-input-manager.js` (`#dimInput`, `#dualInput`) AND `packages/ui/input-handlers/live-dimension-input.js` (`#live-dim-width`, `#live-dim-height`, `#live-dim-length`, `#live-dim-angle`, `#dimInput`) created `<input class="dim-input hidden">` elements appended to `document.body` while relying on host CSS (`.dim-input`, `.dim-input.hidden { display: none; }`) that existed only in `apps/sketchstudio/index.html` (and `overrides.css`).
+  - In Pen Plotter, `#live-dim-width/height/length/angle` (`position: absolute` at `(0,0)`) rendered a visible empty box with `°` placeholder right over the top-left `Pen Plotter` switcher button, while `#dimInput` stretched across `(0, 779, 1280x21)`.
+  - In Shaper, `#dimInput` lacked `position: absolute` and `.hidden { display: none }`, so opening/committing a dimension placed `#dimInput` at `(-88, 34)` poking over the top-left header and kept `document.activeElement === INPUT#dimInput` after `Enter`, swallowing `Ctrl+Z`, `Escape`, and all keyboard shortcuts (`input-manager.js:1057`).
+  - `packages/ui/input-handlers/fillet-tool.js` (`openInput`) also created `<input id="fillet-radius-input" class="dim-input">` relying on `.dim-input` styling. All other `packages/ui` runtime elements (`app-header.js`, `app-switcher.js`, `canvas-grid.js`, `cursor-manager.js`, `design-info-panel.js`, `diagnostic-log.js`, `mobile-drawer.js`, `notification-manager.js`, `style-panel.js`, `svg-renderer.js`, `tabbed-dock-panel.js`, `tool-ribbon.js`) inject their own `<style>` or inline styles and are self-contained.
+
+- **Shared `#ui` Fix (Single CSS Source, Self-Hiding, Zero `.blur()` Workarounds):**
+  - `packages/ui/numeric-input-manager.js`: Added idempotent `ensureNumericInputStyles()` injecting `<style id="sk-numeric-input-styles">` once into `document.head` (`.dim-input` with `var(--fusion-orange, #EA580C)` fallback, mobile `@media (max-width: 640px)` rules, `.dim-input.hidden { display: none; }`, and `.sk-dual-input` / `.sk-dual-input.hidden { display: none; }` replacing `#dualInput`'s inline `style.cssText`), plus `hideNumericInputEl` / `showNumericInputEl` updating both `.hidden` class and `el.style.display` across setup/show/hide paths.
+  - `packages/ui/input-handlers/live-dimension-input.js` & `packages/ui/input-handlers/fillet-tool.js`: Wired `ensureNumericInputStyles()` and `hideNumericInputEl` / `showNumericInputEl` across `#live-dim-width/height/length/angle`, `#dimInput`, and `#fillet-radius-input`.
+  - `apps/sketchstudio/index.html` & `apps/sketchstudio/overrides.css`: Removed SketchStudio's duplicate `.dim-input` / `@media` / `.dim-input.hidden` CSS blocks (single source in `#ui`; SketchStudio `dim-edit` screenshot MD5 `3f586b7a1655cd7a6ac8211675080a70` and `topleft` MD5 `20af68c6504ae639e2d3c3d643137959` stay byte-identical before and after).
+
+- **Verification & Evidence:**
+  - Added `tests/numeric-input-self-hiding.test.js` (live headless CDP test in Shaper & Pen Plotter with real `Input.dispatchKeyEvent` `Enter` + `Ctrl+Z`, plus unit style-injection & single-source assertions). Verified it fails red without the fix (`AssertionError: Shaper: #dimInput must be display:none when idle, got inline-block`, exit 1) and passes green with the fix (exit 0).
+  - Live headless captures in `.evidence/434/` (untracked):
+    - Pen Plotter top-left: `before-penplotter-topleft.png` (`md5=d3c1a5d6158d9717d65ac8ffcaad8425`) -> `after-penplotter-topleft.png` (`md5=1b88937961c4607348a9c7adce5bc70e`), and dimension edit `before-penplotter-dim-edit.png` (`md5=7c5b62ead5f0f56aec1da2aad09bfc49`) -> `after-penplotter-dim-edit.png` (`md5=253cf98e6126d20d21cce84fc0be9605`).
+    - Shaper post-commit top-left: `before-shaper-postcommit-topleft.png` (`md5=f4096164710739d353330f81e172b92a`) -> `after-shaper-postcommit-topleft.png` (`md5=f86a5881072dbd567953a8d66c2ec3e3`), and dimension edit `before-shaper-dim-edit.png` (`md5=b460d7436252bbfb31ea432df92bdf13`) -> `after-shaper-dim-edit.png` (`md5=118dd6e6be5e67d154aaab39cb813acf`).
+    - SketchStudio top-left (`after-sketchstudio-topleft.png`, `md5=20af68c6504ae639e2d3c3d643137959`) & dimension edit (`after-sketchstudio-dim-edit.png`, `md5=3f586b7a1655cd7a6ac8211675080a70`).
+  - Gate (`npm run gate`):
+    - `GATE files=160 pass=160 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

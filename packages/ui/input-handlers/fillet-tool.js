@@ -15,6 +15,7 @@ import { SNAP } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 
 const OVERLAY_ID = 'fillet-tool-overlay';
 const INPUT_ID = 'fillet-radius-input';
@@ -176,6 +177,7 @@ export function handleFilletKeyDown(e, svg, state) {
 // ---- radius input (input BEFORE apply) ------------------------------------------------------------------------
 
 function openInput(svg, state, viewState, corner) {
+  ensureNumericInputStyles();
   cancelInput();
   _pick = null;
   hoverCorner = null;

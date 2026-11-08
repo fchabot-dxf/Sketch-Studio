@@ -389,7 +389,8 @@ export class NewtonSolver {
             if (s.joints.length >= 2) { jointList.push(s.joints[0], s.joints[1]); }
             else if (s.joints.length === 1) { jointList.push(s.joints[0]); }
           }
-          const uniq = [...new Set(jointList)];
+          // equal's row is positional [a,b,c,d] (len(ab) - len(cd)); deduping a shared joint would leave 3 and turn it into a no-op
+          const uniq = c.type === 'equal' ? jointList : [...new Set(jointList)];
           params.joints = uniq.map(id => jointIndexMap.get(id)).filter(idx => typeof idx === 'number');
         }
       }

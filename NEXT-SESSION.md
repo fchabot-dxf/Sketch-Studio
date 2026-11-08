@@ -132,7 +132,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450
           (CC-A), amended by the owner ("cut params for guide lines don't make sense"):
           - one `params` declaration per CUT_TYPES record;
-          - Guide = no params at all; On Line = depth + bit, no offset.
+          - CORRECTED (owner: "Studio allows it"): Guide KEEPS depth/offset/bit, since the cut type can be changed on
+            the tool later;
+          - On Line = depth + bit, no offset (Shaper docs). Owner Q: does Studio show an offset for On Line?
         - POCKET OFFSET, ANSWERED (support 360005473253 "Pocketing procedure" + owner):
           - the Origin adds an automatic pocket offset = 1/4 of the bit diameter (since the "Napa" software; 1/6
             before), set by the machine;

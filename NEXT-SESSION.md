@@ -282,6 +282,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - OWNER: "what would be great is a review tab with 3D... this is what's missing in Shaper Studio".
   - TASK 457 = 3D REVIEW PLAN (queued, first free seat): stock declaration, terraces (Clipper union per depth +
     extrude) vs heightfield, three.js pinned and loaded on demand, slices.
+  - Owner: Studio has no cutter type (ballnose, V-bit, endmill). 457 also plans ONE declared cutter-type field (reusing
+    VBIT_PRESETS) that shapes the 3D groove profile; not exported (no Shaper attribute exists).
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

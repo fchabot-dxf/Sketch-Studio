@@ -14,11 +14,14 @@ import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
+import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
+import { getStock, setStockField } from './stock.js';
+import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
-import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
@@ -410,7 +413,7 @@ const VIEWS = {
   design:    document.getElementById('design-view'),  // the shared sketcher (absolute overlay)
   vcarve:    document.getElementById('view-vcarve'),   // VCARVE-3a: the Vcarve space (skeleton)
   prepare:   document.getElementById('view-prepare'),
-  simexport: document.getElementById('view-simexport'),
+  review:    document.getElementById('view-review'),
 };
 const modeBtns = [...document.querySelectorAll('.mode-btn')];
 const exploreActions = document.getElementById('explore-actions');
@@ -418,6 +421,7 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
+let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
 let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
 // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
@@ -543,7 +547,7 @@ function showMode(mode) {
   VIEWS.design.hidden    = (mode !== 'design');   // make the canvas visible BEFORE start() so frame 1 sees a laid-out svg
   VIEWS.vcarve.hidden    = (mode !== 'vcarve');   // VCARVE-3a: static skeleton — no mount needed yet (live view = 3b)
   VIEWS.prepare.hidden   = (mode !== 'prepare');
-  VIEWS.simexport.hidden = (mode !== 'simexport');
+  VIEWS.review.hidden    = (mode !== 'review');
   if (exploreActions) exploreActions.style.display = (mode === 'explore') ? '' : 'none';
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
@@ -580,7 +584,45 @@ function showMode(mode) {
     window.__prepareView = prepareView;
     refreshCutPanel(); // no selection yet → the card stays hidden
   }
+  if (mode === 'review') {
+    ensureSketch();
+    try { designController.engine.solve(500); } catch (_) {}
+    enterReview(designController.state);
+  }
   try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
+}
+
+// TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
+const reviewInputs = (st) => {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
+  return { stock: getStock(), items: planReliefItems(st), bounds: Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null };
+};
+const reviewSig = (st) => JSON.stringify([[...CUT_PLAN], getStock(), [...st.joints.values()].map((j) => [j.x, j.y])]);
+async function enterReview(st) {
+  const info = document.getElementById('review-info');
+  try {
+    if (!reviewView) {
+      info.textContent = 'Loading 3D…';
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state) });
+    }
+    reviewView.refresh(reviewSig(st));
+  } catch (e) { info.textContent = 'Review failed: ' + e.message; throw e; }
+}
+{
+  const thick = document.getElementById('review-stock-thickness');
+  const unit = () => SettingsManager.get('DOC_UNIT') || 'mm';
+  const showThick = () => { thick.value = formatUnit(getStock().thickness, unit(), { decimals: 3 }); };
+  showThick();
+  thick.addEventListener('change', () => {
+    const v = parseUnit(thick.value, unit());
+    if (v != null && v > 0) setStockField('thickness', v);
+    showThick();
+    if (reviewView) reviewView.refresh(reviewSig(designController.state));
+  });
+  document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
+  document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
+  document.getElementById('review-fit').addEventListener('click', () => reviewView && reviewView.fit());
 }
 
 modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mode)));
@@ -588,4 +630,5 @@ modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mod
 // Restore the last active mode (default Explore).
 let initMode = 'explore';
 try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (_) { /* storage blocked */ }
+if (initMode === 'simexport') initMode = 'review'; // TASK 459: the tab was renamed Simulate/Export -> Review
 showMode(initMode);

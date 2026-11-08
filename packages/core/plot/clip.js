@@ -90,3 +90,69 @@ export function offsetRings(polygon, spacing, offset = 0, maxRings = 500) {
     }
     return rings;
 }
+
+// ── REGIONS (TASK 459): a region is { outer, holes } — outer ring + the holes inside it, rings as [[x,y],...] explicitly
+// closed (the fromClipper form). unionPolygons above is a FLAT nonzero union with no nesting, which cannot say "this ring
+// is a hole" and would FILL the islands of an evenodd footprint (a pocket with an island). These helpers resolve a
+// footprint's own fillRule ONCE into regions, then do the booleans on canonically oriented regions (outer positive, holes
+// negative, so NonZero is exact for every later operation). Used by #core/relief-model (the 3D Review terraces).
+
+function _regionsFromTree(tree) {
+    const out = [];
+    const walk = (node) => {                       // node = a non-hole contour; its children are its holes
+        const holes = node.Childs().map(h => fromClipper(h.Contour()));
+        out.push({ outer: fromClipper(node.Contour()), holes });
+        for (const h of node.Childs()) for (const inner of h.Childs()) walk(inner); // islands inside holes
+    };
+    for (const top of tree.Childs()) walk(top);
+    return out.filter(r => r.outer.length >= 4);
+}
+
+function _execTree(type, subjPaths, clipPaths, subjFill, clipFill) {
+    const clipper = new ClipperLib.Clipper();
+    if (subjPaths.length) clipper.AddPaths(subjPaths, ClipperLib.PolyType.ptSubject, true);
+    if (clipPaths.length) clipper.AddPaths(clipPaths, ClipperLib.PolyType.ptClip, true);
+    const tree = new ClipperLib.PolyTree();
+    clipper.Execute(type, tree, subjFill, clipFill);
+    return _regionsFromTree(tree);
+}
+
+/** rings ([[x,y],...][]) + a fill rule ('evenodd' | 'nonzero') -> regions. evenodd: nested rings alternate solid/hole. */
+export function regionsFromRings(rings, fillRule = 'nonzero') {
+    const paths = rings.map(toClipper).filter(p => p.length >= 3);
+    if (!paths.length) return [];
+    const fill = fillRule === 'evenodd' ? ClipperLib.PolyFillType.pftEvenOdd : ClipperLib.PolyFillType.pftNonZero;
+    return _execTree(ClipperLib.ClipType.ctUnion, paths, [], fill, fill);
+}
+
+function _regionPaths(regions) {
+    const paths = [];
+    for (const r of regions) {
+        const o = toClipper(r.outer); if (o.length < 3) continue;
+        if (!ClipperLib.Clipper.Orientation(o)) o.reverse();
+        paths.push(o);
+        for (const h of r.holes) {
+            const hp = toClipper(h); if (hp.length < 3) continue;
+            if (ClipperLib.Clipper.Orientation(hp)) hp.reverse();
+            paths.push(hp);
+        }
+    }
+    return paths;
+}
+
+const _NZ = () => ClipperLib.PolyFillType.pftNonZero;
+/** Union of any number of region lists -> regions. */
+export function unionRegions(...lists) {
+    const paths = lists.flatMap(_regionPaths);
+    return paths.length ? _execTree(ClipperLib.ClipType.ctUnion, paths, [], _NZ(), _NZ()) : [];
+}
+/** a minus b -> regions. */
+export function diffRegions(a, b) {
+    const pa = _regionPaths(a);
+    return pa.length ? _execTree(ClipperLib.ClipType.ctDifference, pa, _regionPaths(b), _NZ(), _NZ()) : [];
+}
+/** a intersect b -> regions. */
+export function intersectRegions(a, b) {
+    const pa = _regionPaths(a), pb = _regionPaths(b);
+    return pa.length && pb.length ? _execTree(ClipperLib.ClipType.ctIntersection, pa, pb, _NZ(), _NZ()) : [];
+}

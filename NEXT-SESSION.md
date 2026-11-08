@@ -209,7 +209,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - Noticed: an unlabeled grey pen-group row in Toolpath Operations (cosmetic; batch it with the audit's cosmetics).
     - LATER (UNIFY-7, owner): fold toolpath history into the shared history and ribbon.
   - CC-B = sketch-studio-2a, worktree Sketch-Studio-agy1, branch agy1, on 443 (Pen Plotter audit, find only).
-  - Both report to the advisor (sketch-studio-e1) by SendMessage.
+  - CC-C = sketch-studio-e7, worktree Sketch-Studio-agy3, branch agy3, on 457 (3D Review plan).
+  - All report to the advisor (sketch-studio-e1) by SendMessage.
   - The AGY seats are parked until their quota resets; their worktrees are now the CC seats'.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.

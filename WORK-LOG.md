@@ -12645,3 +12645,64 @@ Outside square -> CCW, Inside -> CW (also with reversed input winding: same); Ou
 - Reduced motion (CDP Emulation.setEmulatedMedia prefers-reduced-motion: reduce): computed animation-name none, arrows display inline.
 - .evidence/449/ (local): prepare-full e44b48a36a4099b568a9adb4fda6f00a; frame-0 e7ac670768e16c0f98d62f676170c1a2; frame-1 1128d06a4b382cb81b8f0b269bf5a22f; frame-2 4bc1f07681ee984a22139bf2b850e688; reduced-motion 28d8fe53dbbab423776fadc6d0b07e66; reduced-motion-zoom c730328c2c1a6c7829bdd57c2dcd1f65.
 - Behaviour change: Prepare Outside/Inside/Pocket cuts lose the static dashed centreline in favour of the marching dashes; a legend line appears; pocket cuts now draw the finish-pass wall and island paths.
+## TURN 443 (PEN PLOTTER AUDIT)
+Seat CC-B (Claude Code). FIND ONLY, no product code changed. Driven headless (Edge, CDP, real mouse and keys; app served from the repo root, `/apps/penplotter/index.html`). Evidence in `.evidence/443/` (local, untracked): `h.cjs` harness, `a1..a6.cjs` Design probes, `tp.cjs <scenario>` Toolpath/Export/persist probes, `t.svg` test file, `gcode/`, `bad.zip`, `bad.gcode`, screenshots.
+Not re-reported: 440, 441, Ctrl+Y (435), the empty ribbon band, the Pens "click +" text.
+Test doc: a 100x80 mm SVG (path triangle, circle with stroke+fill, transformed group = rect + bezier).
+
+### Findings, most severe first
+
+1. **MAJOR: reload loses most of the document.** After reload the geometry (24 shapes) and the active stage come back, but NOT: document size (100x80 -> 200x200, so paper, grid and export bounds change), pens (6 -> 0), toolpaths (6 -> the single empty default "Outline"), plotter settings (draw feed 1234 -> 2000), per-shape styles (24 -> 0, Design then draws plain black), static flags (24 -> 0). Only the unit and auto-recalc persist (localStorage).
+   Repro: Design, Import SVG t.svg; Toolpath, + Pen, + Outline, + Fill, set Draw feed 1234; wait 4 s; reload.
+   Cause: `apps/penplotter/src/sketch-stage.js:255` `createDocumentBuffer({ state, onStatusChange })` has no `hostName`/`getHostData`, so the host sidecar (`doc.hosts`, supported by `packages/ui/document-buffer.js`) is never written; `state.doc`, `plotColors`, `toolpaths`, `settings`, `shapeStyles` have no other persistence.
+   Shots: `tp-persist-before.png`, `tp-persist-after.png` (shows "200 x 200 mm", empty Pens, one Outline row), `tp-persist-design.png`.
+
+2. **MAJOR: Ctrl+Z on the Design tab silently undoes Toolpath-tab work.** Repro: Toolpath, + Outline, + Fill (6 toolpaths); switch to Design; press Ctrl+Z without editing. Back on Toolpath the "fill 6" toolpath is gone (5 left).
+   Cause: `apps/penplotter/src/history.js:23` registers a window-level keydown (`onKey`, line 81) that is not gated by the active stage; installed from the hidden Draw host `draw-stage.js:64`. It runs next to the sketcher's own undo. (On the Toolpath tab itself add Fill -> Ctrl+Z -> Ctrl+Shift+Z works.) Shot: `tp-x1-design.png`.
+
+3. **MAJOR: Active Toolpath panel is stale after + Outline / + Fill from a selection.** state.activeToolpathId becomes the new toolpath but the panel keeps showing "Outline (outline)" with its Passes/Style fields, and its dropdown lists only the old toolpaths, so edits go to the old toolpath. Repro: Design, marquee-select all; Toolpath, + Fill; read the Active Toolpath section.
+   Cause: `toolpath-layers-panel.js:506` `render()` at the end of `createToolpathsFromSelection` does not refresh the active panel (the row click and `enterTargetEditing` do, via `renderActiveLayerPanel`). Shot: `tp-activepanel.png`.
+
+4. **MAJOR: Document dialog accepts invalid sizes.** `#docW`/`#docH` take -5, 0 (empty and text both become 0), 5 and 99999 despite min=10 max=2000; `state.doc` becomes {w:-5}, {w:0}, {w:99999} and the paper/grid/export follow. Repro: Design, Document, type -5 (or clear the field), Tab.
+   Cause: `settings.js:140-145` change handlers only do `Math.round(fromDisplay(+value)*100)/100`; the guard `!(w > 0)` exists only in `setDocSize`, which the dialog does not use.
+   Valid case works: 300x150 moved the paper, the button label and the Toolpath readout (`a5-doc-300x150.png`). One earlier run showed the label/paper still at 100x80 six seconds after the change (`a6.cjs`): not reproduced since, listed as uncertain.
+
+5. **MAJOR: plotter settings accept values that make unusable G-code.** Empty or text in Draw feed / Z feed becomes 0, so every move reads `F0`; negative feed accepted; Pen up Z = Pen down Z (-1/-1) accepted (the pen never lifts); Simplify tol 0 and -1 accepted. The box keeps the typed text while state holds 0. Exported file `.evidence/443/bad.gcode`: `G1 Z-1.000 F0 (pen up to safe Z)` ... `G1 X40.000 Y70.000 F0`.
+   Cause: `settings.js:168-171` `state.settings[key] = +e.target.value`, no validation.
+
+6. **MAJOR (latent): hatch/dots with Spacing <= 0 loop forever in code.** The Spacing field accepts 0, -1 and 0.001 into `tp.fill.spacing`: `active-layer-panel.js:88-95` (`commit` only checks finite; the registry `min: 0.1` is an input attribute only). `packages/core/plot/fills/hatch.js:20` `for (y = minY + spacing*0.5; y < maxY; y += spacing)` never ends for spacing <= 0 (dots.js:17-18 the same). I did NOT see the page freeze: spacing 0, then Recalculate, then Export only ended with the misleading message of finding 12, so the live path is guarded elsewhere or never reached for a circle. UNCONFIRMED in the app; needs a unit probe on `scanlineHatch(poly, 45, 0)`.
+
+7. **MINOR: Pen-mix does nothing visible with an empty pen palette.** Select a filled shape, tick Pen-mix: status stays empty, no toolpaths, no message. `mix-toolpaths.js:36` `mixForShape` returns null when `plotColors` is empty. Pen-mix off took 2.5 s in one run. Shots `a3-mix_on.png`, `a3-mix_off.png`.
+
+8. **MINOR: Width fields show rejected values.** Style Width -3, '' and 'abc' stay in the box while the stored width stays 0.5; 99 is accepted although max=10. Pen width box in Toolpath: -3 stored as 0.01, 99 stored (max attr 5), the box keeps "-3". (`plot-colors-panel.js:172-186`.)
+
+9. **MINOR: pen discovery uses fill, outline bucketing uses stroke.** The circle (stroke #0000ff, fill #00ff00) seeds only green in the palette; "+ Outline" then creates a blue pen on the fly (6 pens, order differs from import). Cause: `svg-import.js:292-296` `penColorFor` returns fill first, used by `core-import.js:83`; `createToolpathsFromSelection` buckets outlines by stroke. Shot `tp-basic-after-add.png`.
+
+10. **MINOR: export is one file per TOOLPATH, not per pen.** A pen with an outline and a fill gets two files (`1_outline_2.gcode`, `5_fill_6.gcode`), named after the toolpath. Cause: `export.js:46-66`. "One file per pen" holds only when each pen has one toolpath.
+
+11. **MINOR: SVG console errors when an Arc is drawn after clicking every ribbon tool.** 11 errors in one frame from `packages/ui/svg-renderer.js`: `<path> attribute d: Expected number, "M NaN,NaN A 30,30 ..."`, `<circle> cx/cy "undefined"/"NaN"`, `<line> x1/y1/x2/y2 undefined/NaN`. Repro: Design, click each ribbon button once (Escape after each), then Line, Rect, Circle, then Arc with 3 clicks (`a2d.cjs`). Not reproduced without the ribbon pass (`a2.cjs`). Cause unlocated (a tool preview built from a half-initialised pick state).
+
+12. **MINOR: misleading export message.** With nothing to plot: "Nothing to plot — add vectors to your art layers first." (`export.js:27`); art layers are retired (UNIFY-7), the geometry is on Design.
+
+13. **MINOR: Passes unclamped.** Passes 0, -2, 2.5 and 999 are stored in `outline.passes` (same `active-layer-panel.js:88` cause as 6); export treats 0 and -2 as one pass; 2.5 gives a longer file than 1. The Pen delete dialog: my probe did not find its "Delete & reassign" button, UNCONFIRMED.
+
+14. **COSMETIC: Pens panel rows overflow** (horizontal scrollbar, the width box, badge and x are clipped at 244 px); the Operations list also has its own inner scroll. Shot `tp-activepanel.png`.
+
+15. **COSMETIC: the default empty "Outline" toolpath stays** (0 targets, "(no pen)" group) after import and + Outline; it exports nothing but clutters the list.
+
+### Verified OK (no finding)
+- All 19 ribbon buttons (incl. Freehand) set their tool; Freehand, Line, Rect (4 lines), Circle, Arc, Bezier draw with real clicks/drags.
+- Import SVG (real file chooser): path, circle and the transformed group land correctly (rotated rect corner at (54.773, 30.683) after the Y flip = 20+36cos15, 80-(40+36sin15)); curves become many line shapes (24 shapes); paper set to 100x80.
+- Style panel: stroke and fill colour and Fill: None write the style record.
+- Toolpath: + Pen, + Outline (one per stroke colour), + Fill (23 non-filled shapes skipped with a toast), the six fill patterns each show their own params (hatch/crosshatch/zigzag: angle, spacing, offset; concentric/stipple/dots: spacing, offset), Select all / Deselect all, undo and redo on the tab, drag reorder (synthetic DnD events, not an OS drag) re-pens the dragged row.
+- Export: valid zip, one `.gcode` per exportable toolpath. G-code read: header G21/G90/G17/G94; per stroke rapid, pen down Z-2, draw at F1234, pen up Z7; Z moves at F567 (the set values); Y flipped (triangle y 10 -> 70, y 30 -> 50 on an 80 high doc); X 10-82 and Y 2.8-70 inside the 100x80 doc; the closed triangle returns to its start. Cosmetic: the file ends with a duplicate "final pen up".
+- Console otherwise clean except the `favicon.ico` 404.
+
+### Method notes
+- Headless Edge draws frames only when forced. The Design selection mirror (`sketch-stage.js:196`, in the RAF) lags until a frame exists, so switching tab right after a marquee can show an empty selection; the harness now screenshots first. This also explains several `captureScreenshot` timeouts. Treated as a harness effect, NOT a finding.
+- Not covered: an OS-level HTML5 drag, the pen-delete dialog, Design undo after Delete (a2: Delete 8 -> 7, Ctrl+Z 7, Ctrl+Shift+Z 8; probably finding 2's double handler, left to 435).
+
+### Stop condition
+No product code changed: checked with `git diff --stat origin/main..HEAD` after the commit (WORK-LOG.md only).
+
+- Addendum (TURN 443): finding 2 was measured on the branch base ad0472f; origin/main has since merged 3ccc8eb (TASK 444b: history.js keys scoped to Toolpath/Export), which probably fixes it. NOT re-measured on main.

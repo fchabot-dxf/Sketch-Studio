@@ -81,6 +81,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   should be available; switching family is the owner's call.
   - AGY-1: 443 had just started (only an untracked scratch/).
   - AGY-2: 435 is half-done and UNCOMMITTED in Sketch-Studio-agy2 (7 modified files + tests/undo-redo-ribbon.test.js).
+- 2026-11-08 morning: the owner said "do it". Both seats are switched to Claude Sonnet 5.5 (High).
+  - AGY-2 resumed 435.
+  - AGY-1 restarted 443.
   - Third seat: worktree D:\APPS\Sketch-Studio-agy3 (branch agy3, gate green) ready for the owner's new seat; not
     visible in the panel yet. Next for it: 441, then 435.
   - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.

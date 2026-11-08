@@ -37,6 +37,7 @@ import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import SettingsManager from '#core/settings-manager.js';
 import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { doCombine, doUncombine } from '#ui/profile-actions.js';
 
 // Apply some visual settings to CSS variables at startup and when changed
 function applyVisualSettings(settings) {
@@ -291,7 +292,7 @@ export function setupInput(svg, state, opts = {}) {
     }
 
     setupEventListeners(svg, state);
-    setupKeyboardShortcuts(state);
+    setupKeyboardShortcuts(state, opts);
 
     // GRIEVANCE-1: keep the viewBox aspect synced to the canvas ELEMENT on ANY size change. updateViewBox
     // only ran at init/zoom/pan; SketchStudio also had a window-resize handler but Shaper had NONE, and
@@ -1050,11 +1051,27 @@ export function updateViewBox(svg, view) {
     inputCtx.setViewportSize?.(`VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`);
 }
 
-function setupKeyboardShortcuts(state) {
+function setupKeyboardShortcuts(state, opts = {}) {
+    const profilesEnabled = !!(opts && opts.profiles);
+    const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : (msg) => { try { showNotification(msg); } catch (_) {} };
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
         // CRITICAL: If the target is an INPUT, the dimension input, or a TEXTAREA, do not process global shortcuts
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.id === 'dimInput')) return;
+
+        // Profile actions (Ctrl+Shift+C / Ctrl+Shift+U) opt-in
+        if (profilesEnabled && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+            if (e.key === 'c' || e.key === 'C') {
+                e.preventDefault();
+                doCombine(state, notifyFn);
+                return;
+            }
+            if (e.key === 'u' || e.key === 'U') {
+                e.preventDefault();
+                doUncombine(state, notifyFn);
+                return;
+            }
+        }
         // Route to focused tool handlers first
         // Dimension tool placing: Enter or click anchors & opens edit; digits open quick edit
         if (state.currentTool === TOOL_MODES.DIMENSION && isDimensionPlacing(state)) {

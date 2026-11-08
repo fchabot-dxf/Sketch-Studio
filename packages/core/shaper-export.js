@@ -17,6 +17,8 @@ import { findLoops } from './loop-finder.js';
 import { format } from './units.js';
 import { holesOfLoop } from './group-model.js';       // SKETCH-4e / VCARVE-5b: shared hole derivation
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
+import { loopToPathD, polyToPathD } from './loop-geometry.js';
+export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
@@ -63,41 +65,6 @@ function arcPathFull(shape, state) {
   return `M ${num(start.x)} ${num(start.y)} A ${num(r)} ${num(r)} 0 ${largeArc} ${sweep} ${num(end.x)} ${num(end.y)}`;
 }
 
-// loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Lines →
-// `L x y`; arcs → a direction-aware `A …` segment. A line CLOSING edge is left to Z (so a pure-line loop is identical
-// to SP1j-1); an arc closing edge is drawn explicitly. Returns '' on a missing loop / joint position.
-export function loopToPathD(loop, state) {
-  if (!loop || !Array.isArray(loop.joints) || loop.joints.length < 2 || !state || !state.joints) return '';
-  const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
-  const pos = (nid) => state.joints.get(nid);
-  const edges = Array.isArray(loop.edges) ? loop.edges : [];
-  const n = loop.joints.length;
-  const p0 = pos(loop.joints[0]);
-  if (!p0) return '';
-  let d = `M ${num(p0.x)} ${num(p0.y)}`;
-  for (let i = 1; i < n; i++) {
-    const fromP = pos(loop.joints[i - 1]), toP = pos(loop.joints[i]);
-    if (!fromP || !toP) return '';
-    const s = shapeById.get(edges[i - 1]);
-    d += ' ' + (s && s.type === 'arc' ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`);
-  }
-  const closing = shapeById.get(edges[n - 1]);
-  if (closing && closing.type === 'arc') {
-    const fromP = pos(loop.joints[n - 1]);
-    if (fromP) d += ' ' + arcSeg(closing, fromP, p0, state);
-  }
-  return d + ' Z';
-}
-
-// polyToPathD(pts) → a CLOSED SVG path "d" from an ordered array of polygon points [{x, y}, ...].
-export function polyToPathD(pts) {
-  if (!Array.isArray(pts) || pts.length < 2) return '';
-  let d = `M ${num(pts[0].x)} ${num(pts[0].y)}`;
-  for (let i = 1; i < pts.length; i++) {
-    d += ` L ${num(pts[i].x)} ${num(pts[i].y)}`;
-  }
-  return d + ' Z';
-}
 
 // Bounding box over the design: joint positions + circle extents (center ± r) + (when present) the datum triangle
 // at the origin. Empty → 0,0,0,0. (Arc bulge beyond its endpoints is approximated by the endpoints — deferred.)

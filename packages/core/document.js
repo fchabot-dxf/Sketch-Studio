@@ -16,6 +16,7 @@
 
 import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
+import { cloneProfiles } from '#core/profile-model.js';
 
 export const DOCUMENT_VERSION = 1;
 
@@ -42,6 +43,7 @@ export function serializeDocument(state, { hosts } = {}) {
       sketches: Array.isArray(state.sketches) ? state.sketches.map((s) => ({ ...s })) : undefined,
       activeSketchId: state.activeSketchId,
       groups: Array.isArray(state.groups) ? state.groups.map((g) => ({ ...g })) : undefined,
+      profiles: Array.isArray(state.profiles) ? cloneProfiles(state.profiles) : undefined,
       vcarves: Array.isArray(state.vcarves)
         ? state.vcarves.map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined }))
         : undefined,
@@ -93,6 +95,10 @@ export function deserializeDocument(doc, state) {
   if (Array.isArray(state.groups)) {
     state.groups.length = 0;
     state.groups.push(...(g.groups || []).map((x) => ({ ...x })));
+  }
+  if (Array.isArray(state.profiles)) {
+    state.profiles.length = 0;
+    state.profiles.push(...cloneProfiles(g.profiles || []));
   }
   if (Array.isArray(state.vcarves)) {
     state.vcarves.length = 0;

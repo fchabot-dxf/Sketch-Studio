@@ -9,6 +9,7 @@ import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
 import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
+import { cloneProfiles } from '#core/profile-model.js';
 
 export function createSketchState(engine, view) {
   const state = {
@@ -41,6 +42,9 @@ export function createSketchState(engine, view) {
     hoveredConstraint: null,     // Track hovered constraint for visual feedback
     // Construction mode: when true new shapes are created as construction geometry (dashed/faded)
     isConstructionMode: false,
+    groups: [],
+    profiles: [],
+    vcarves: [],
     history: [],  // Store last 5 states for undo
     maxHistory: 5,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
@@ -58,6 +62,8 @@ export function createSketchState(engine, view) {
         activeSketchId: this.activeSketchId,
         // SKETCH-4c: the user-GROUP list (the userGroupId stamps ride the shape snapshot above)
         groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined,
+        // COMBINE slice 1: combined profiles
+        profiles: Array.isArray(this.profiles) ? cloneProfiles(this.profiles) : undefined,
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
         vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined
       };
@@ -81,6 +87,12 @@ export function createSketchState(engine, view) {
       if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
       if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
       if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
+      if(snapshot.profiles && Array.isArray(this.profiles)){
+        this.profiles.length = 0;
+        this.profiles.push(...cloneProfiles(snapshot.profiles));
+      } else if (Array.isArray(this.profiles)) {
+        this.profiles.length = 0;
+      }
       if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       // Clear selections and active tool state
       this.selectedJoints.clear();
@@ -93,7 +105,7 @@ export function createSketchState(engine, view) {
       this.history.push(this._captureSnapshot());
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
-      const undoBtn = document.getElementById('btn-undo');
+      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
       if(undoBtn) undoBtn.disabled = false;
     },
     // Normal save - during an active undo group we still create segment snapshots (they will be compressed on commit)
@@ -158,6 +170,10 @@ export function createSketchState(engine, view) {
         if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }
         if(snapshot.activeSketchId) this.activeSketchId = snapshot.activeSketchId;
         if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
+        if(snapshot.profiles && Array.isArray(this.profiles)){
+          this.profiles.length = 0;
+          this.profiles.push(...cloneProfiles(snapshot.profiles));
+        }
         if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       } else {
         // No prior snapshot - clear store
@@ -177,7 +193,7 @@ export function createSketchState(engine, view) {
       const snapshot = this.history.pop();
       this._restoreSnapshot(snapshot); // cleanup after undo is disabled; trust the snapshot as saved
       // Update undo button state
-      const undoBtn = document.getElementById('btn-undo');
+      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
       if(undoBtn && this.history.length === 0) undoBtn.disabled = true;
     },
     // BURN-DOWN-2: re-apply the most recently undone state (symmetric with undo()). No-op when nothing was undone.
@@ -188,7 +204,7 @@ export function createSketchState(engine, view) {
       if(this.history.length > this.maxHistory) this.history.shift();
       const snapshot = this.redoStack.pop();
       this._restoreSnapshot(snapshot);
-      const undoBtn = document.getElementById('btn-undo');
+      const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
       if(undoBtn) undoBtn.disabled = this.history.length === 0;
     }
   };

@@ -466,7 +466,11 @@ function buildDesignUI() {
   const { state, engine } = designController;
   infoPanel = createDesignInfoPanel({ state, engine, showSketchTree: true }); // SKETCH-1b: Shaper opts into the tree
   infoPanel.render(document.getElementById('design-panel-info'));
-  ribbon = createToolRibbon({ state });
+  ribbon = createToolRibbon({
+    state,
+    profiles: true,
+    notify: groupStatus,
+  });
   ribbon.render(document.getElementById('design-ribbon'));
 
   // Collapsible side panel: chevron toggles a thin strip ↔ full panel (canvas reflows); persisted.
@@ -502,6 +506,8 @@ function ensureSketch() {
     onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
     seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
     grid: true,      // GRID-1: the shared GRID_MODE-driven canvas grid (Grid / None / Draft points in the settings modal)
+    profiles: true,
+    notify: groupStatus,
   });
   window.__designController = designController; // for test/evidence inspection
   buildDesignUI();

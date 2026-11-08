@@ -23,6 +23,7 @@ import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
+import { resolveProfileViews } from '#core/profile-model.js';
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -42,6 +43,7 @@ const SK_VAR = {
   '#9CA3AF': '--sk-muted',
   '#0891b2': '--sk-perpendicular-stroke',
   'white': '--sk-joint-fill',
+  '#7aa7e0': '--sk-profile-fill',
 };
 export function skv(color) {
   if (typeof color !== 'string') return color;
@@ -377,6 +379,28 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
   } catch (_){ }
+
+  // Combined profile background tints (evenodd, holes open; warning fill if invalid, dashed stroke drawn above shapes)
+  const invalidProfileDs = [];
+  try {
+    const st = ctx?.getState ? ctx.getState() : null;
+    if (st && Array.isArray(st.profiles) && st.profiles.length > 0) {
+      const views = resolveProfileViews(st);
+      for (const p of st.profiles) {
+        const view = views.get(p.id);
+        if (view && view.d) {
+          if (view.invalid) {
+            out.push(`<path d="${view.d}" fill="rgba(239, 68, 68, 0.18)" stroke="none" fill-rule="evenodd" pointer-events="none"/>`);
+            invalidProfileDs.push(view.d);
+          } else {
+            out.push(`<path d="${view.d}" style="fill:${skv('#7aa7e0')}" fill-opacity="0.18" stroke="none" fill-rule="evenodd" pointer-events="none"/>`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    dbg.error('renderer', '[svg-renderer] profile tint render error', err);
+  }
   
   // Draw origin axes with zoom-scaled stroke
   const originStroke = scale(1.5);
@@ -973,6 +997,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           }
         }
       }
+    }
+  }
+  if (invalidProfileDs.length > 0) {
+    const invStrokeW = scale(Math.max(3.5, BASE_LINE_STROKE + 0.5));
+    for (const invD of invalidProfileDs) {
+      out.push(`<path d="${invD}" fill="none" stroke="#ef4444" stroke-width="${invStrokeW}" stroke-dasharray="${scale(10)} ${scale(8)}" fill-rule="evenodd" pointer-events="none"/>`);
     }
   }
   

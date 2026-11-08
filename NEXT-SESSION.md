@@ -53,10 +53,20 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - per-frame resolve that mutates state, behind a window fallback.
 - DONE: 428b, the lying DOF colours, merged c7c4e89 (root-cause only: tangent double-count removed).
 - In flight: 436 (AGY-2), Prepare/Vcarve pan+zoom via the shared pan-zoom.js (owner-reported).
+- Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
+  The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
+  - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;
+    added to 434 as a stop condition.
+  - (b) A dimension made from a pre-selected line is not its own undo step: 5bffb68 dropped beginDimUndo. Task 438.
+  - (c) The sketch tree prints raw mm (design-info-panel.js:115) while the canvas label uses the document unit. Task 439.
+  - Works: pre-selected line + Dim creates a placing dimension that follows the mouse; Enter opens the input; the typed
+    value drives the line (the inch value is converted correctly).
 - Next, in this order:
+  - 434: stray #dimInput box AND the stuck keyboard focus (promoted: the keyboard is dead in Shaper/Pen Plotter);
+  - 438: dimension = one undo step;
+  - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;
-  - 434: stray #dimInput box;
   - 435: shared Undo/Redo;
   - 432: Select picks profiles, after 431b merges;
   - 433: cut semantics on profiles.

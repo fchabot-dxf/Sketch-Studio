@@ -7,7 +7,9 @@
  * Export tab: SVG (Shaper Origin) + DXF (Fusion 360)
  */
 
-import { createAppSwitcher }              from '#ui/app-switcher.js';
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('trace');
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload }                     from './upload.js';
 import { initControls }                   from './controls.js';
@@ -17,9 +19,18 @@ import { trace }                          from './tracer.js';
 import { downloadSVG, downloadDXF, copySVG } from './export.js';
 import { ensureEditMount, importSvgToEdit }  from './edit-view.js';
 
-// ── App switcher ──────────────────────────────────────────────────────────────
-const swHost = document.getElementById('app-switcher-host');
-if (swHost) swHost.appendChild(createAppSwitcher({ current: 'trace' }).el);
+// ── App sidebar (TASK 473) ────────────────────────────────────────────────────
+// This host declares ITS actions: Download = the traced SVG / DXF (enabled once there is a trace), New = a fresh document.
+const swHost = document.getElementById('app-sidebar-host');
+if (swHost) {
+  swHost.appendChild(createAppSidebar({
+    current: 'trace', docName: 'Untitled',
+    actions: [
+      { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
+      { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
+    ],
+  }).el);
+}
 
 // DIAG-OVERLAY: log/error/viewport/touch capture works the same as every other app. The document
 // (serializeDocument) section is deliberately omitted here rather than reaching into the Edit tab's

@@ -26,7 +26,9 @@ import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
-import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
@@ -37,9 +39,21 @@ canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
 inspector.init(document.getElementById('inspector'));
 
-// SWITCH-1: mount the shared two-way app-switcher into the header brand slot.
-const _swHost = document.getElementById('app-switcher-host');
-if (_swHost) _swHost.appendChild(createAppSwitcher({ current: 'shaper' }).el);
+// TASK 473: the shared app sidebar (hamburger, document actions, GO TO) in the header brand slot. This host declares ITS actions:
+// Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
+const _swHost = document.getElementById('app-sidebar-host');
+if (_swHost) {
+  _swHost.appendChild(createAppSidebar({
+    current: 'shaper', docName: 'Untitled',
+    actions: [
+      { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
+        const payload = generateShaperSvgPayload();
+        if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
+        download('shaper-export.svg', payload.svg);
+      } },
+    ],
+  }).el);
+}
 
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Explore/Vcarve/Prepare — designController may not exist yet, so its state is read lazily.
@@ -423,6 +437,7 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
+let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); a sidebar reads it lazily
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thickness field after a document restore (assigned below)
 let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
@@ -493,7 +508,7 @@ function panelTick() {
 }
 
 // Build the Design UI ONCE (S7b): a full-width SketchStudio-style tool ribbon on TOP (#design-ribbon), and a
-// COLLAPSIBLE left side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
+// COLLAPSIBLE right side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
 // untouched canvas. Reuses the shared #ui factories; dark via --sk-* (Shaper's :root). The canvas is not touched —
 // collapsing the panel just reflows it wider.
 const PANEL_COLLAPSED_KEY = 'shaper-design-panel-collapsed';
@@ -513,7 +528,7 @@ function buildDesignUI() {
   const toggle = document.getElementById('design-panel-toggle');
   const setCollapsed = (c) => {
     panel.classList.toggle('collapsed', c);
-    toggle.textContent = c ? '▶' : '◀';
+    toggle.textContent = c ? '◀' : '▶';
     toggle.title = c ? 'Expand panel' : 'Collapse panel';
     try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
   };
@@ -524,7 +539,7 @@ function buildDesignUI() {
 
   // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
   // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
   const header = document.querySelector('header.toolbar');
   if (header) header.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
@@ -551,25 +566,29 @@ function ensureSketch() {
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
   // keep autosaving. statusEl is optional-safe (older cached HTML without #save-status just no-ops).
   const statusEl = document.getElementById('save-status');
-  const docBuffer = createDocumentBuffer({
-    state: designController.state,
-    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
-    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
-  });
-  docBuffer.restore().then(({ hosts }) => {
+  // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored), and a design
+  // without a Shaper sidecar resets the cut plan and stock to their defaults instead of inheriting the previous design's.
+  const applyRestored = ({ hosts }) => {
     try {
       designController.engine.solve(500);
       if (infoPanel) infoPanel.refresh();
       if (vcarveView) vcarveView.refresh();
     } catch (_) {}
     // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable), then
-    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. An old buffer has no sidecar: defaults.
-    if (hosts && hosts.shaper) applyShaperDoc(hosts.shaper);
+    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. No sidecar (an old buffer): defaults.
+    applyShaperDoc(hosts && hosts.shaper);
     if (currentMode === 'prepare') mountPrepare();
     else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     showStockThickness();
     if (currentMode === 'review') enterReview(designController.state);
+  };
+  docBuffer = createDocumentBuffer({
+    state: designController.state,
+    app: 'shaper', onRestored: applyRestored,
+    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
+    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
+  docBuffer.restore();
   docBuffer.start();
 }
 

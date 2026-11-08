@@ -32,7 +32,7 @@ await (async () => {
     const nav = async (u) => { await navigate(u, 8000); await waitFor(`!!document.querySelector('[data-mode], #svgCanvas')`, 'the app to load'); };
     const reload = async () => { const l = once('Page.loadEventFired'); await send('Page.reload'); await Promise.race([l, sleep(8000)]); await waitFor(`!!document.querySelector('[data-mode]')`, 'the app to load after the reload'); };
     // the shared document buffer's stored doc (IndexedDB), polled until `pred` holds: the real "autosave has run" signal
-    const idbDoc = `new Promise((res) => { const r = indexedDB.open('sketch-studio-documents', 1); r.onsuccess = () => { const db = r.result; const g = db.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => { db.close(); res(g.result || null); }; }; })`;
+    const idbDoc = `new Promise((res, rej) => { const r = indexedDB.open('sketch-studio-projects', 1); r.onerror = () => rej(r.error); r.onsuccess = () => { try { const db = r.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign'); m.onsuccess = () => { try { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { db.close(); res(g.result ? g.result.document : null); }; } catch (e) { rej(e); } }; } catch (e) { rej(e); } }; })`;
     const saved = (pred, what) => waitFor(`${idbDoc}.then((d) => !!d && (${pred}))`, what);
     const restored = () => waitFor(`!!window.__designController && window.__designController.state.shapes.length > 0`, 'the document to be restored');
     const planJson = () => evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...CUT_PLAN.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)); })()`);
@@ -129,7 +129,16 @@ await (async () => {
     assert.strictEqual(await stockJson(), stockBefore, 'and so does the stock');
 
     // ── 4. an OLD document (no shaper sidecar) loads with the defaults ──
-    await evalJs(`new Promise((res) => { const r = indexedDB.open('sketch-studio-documents', 1); r.onsuccess = () => { const db = r.result; const tx = db.transaction('kv', 'readwrite'); const st = tx.objectStore('kv'); const g = st.get('current'); g.onsuccess = () => { const d = g.result; if (d && d.hosts) delete d.hosts.shaper; st.put(d, 'current'); }; tx.oncomplete = () => { db.close(); res(true); }; }; })`);
+    await evalJs(`new Promise((res, rej) => {
+      const open = indexedDB.open('sketch-studio-projects', 1);
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction(['meta', 'designs'], 'readwrite');
+        const m = tx.objectStore('meta').get('currentDesign');
+        m.onsuccess = () => { const g = tx.objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result; delete d.document.hosts.shaper; tx.objectStore('designs').put(d); }; };
+        tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error);
+      };
+      open.onerror = () => rej(open.error);
+    })`);
     await evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); CUT_PLAN.clear(); })()`); // so the autosave cannot re-add it before the reload
     await sleep(100);
     await reload();

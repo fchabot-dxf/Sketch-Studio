@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SVG Editor — Shaper Origin</title>
+  <title>Shaper · Sketch Studio</title>
   <link rel="stylesheet" href="styles/main.css">
   <!-- Shared sketcher theme contract (P1). Linked AFTER main.css so Shaper's own :root override (below) wins. -->
   <link rel="stylesheet" href="../../packages/ui/sketcher.css">
@@ -46,6 +46,8 @@
       --sk-error: #f87171;
       /* S7b: dark chrome for the shared tool ribbon (light defaults live in the component; this :root retints). */
       --sk-ribbon-bg: #111827;
+      /* TASK 473: the app sidebar in the Studio dark look */
+      --sk-sidebar-bg: #1C1D20; --sk-sidebar-fg: #ECEDEF; --sk-sidebar-goto-bg: #101113; --sk-sidebar-hover: #2A2B2E; --sk-sidebar-sep: #303134; --sk-sidebar-accent: #2C65FF;
       --sk-ribbon-sep: #1f2937;
       --sk-ribbon-hover: rgba(255,255,255,0.08);
       --sk-ribbon-fg: #cbd5e1;
@@ -65,11 +67,11 @@
     .vcarve-btn { width: 100%; background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; margin-top: 6px; }
     .vcarve-btn:disabled, .vcarve-row select:disabled, .vcarve-row input:disabled { opacity: 0.5; cursor: default; }
     .vcarve-hint { color: #6b7280; font-size: 12px; margin: 6px 0 0; }
-    /* S7b: Design = a full-width tool ribbon on TOP, then a row of [collapsible info panel | canvas]. */
+    /* S7b: Design = a full-width tool ribbon on TOP, then a row of [canvas | collapsible info panel on the RIGHT; the left edge is reserved for the app sidebar]. */
     #design-view { flex-direction: column; }
     #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #1f2937; }
     #design-body { flex: 1 1 auto; display: flex; min-height: 0; }
-    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #111827; border-right: 1px solid #1f2937; color: #cbd5e1; transition: flex-basis 0.15s ease; }
+    #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: #111827; border-left: 1px solid #1f2937; color: #cbd5e1; transition: flex-basis 0.15s ease; }
     #design-panel.collapsed { flex-basis: 30px; }
     #design-panel.collapsed #design-panel-info { display: none; }
     #design-panel-toggle { align-self: flex-end; background: transparent; border: 0; color: #9aa0a6; cursor: pointer; font: 13px system-ui, sans-serif; padding: 6px 8px; line-height: 1; }
@@ -289,8 +291,8 @@
 </head>
 <body>
   <header class="toolbar">
-    <!-- SWITCH-1: the shared two-way app-switcher (replaces the static brand + the DEPLOY-1 one-way back-link). -->
-    <span id="app-switcher-host"></span>
+    <!-- TASK 473: the shared app sidebar button (mounted in main.js). -->
+    <span id="app-sidebar-host"></span>
     <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
     <span id="save-status" class="save-status"></span>
     <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->
@@ -326,11 +328,11 @@
     <!-- S7b: full-width tool ribbon on top; below, a row of [collapsible info panel | canvas]. Populated by main.js. -->
     <div id="design-ribbon"></div>
     <div id="design-body">
+      <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
       <aside id="design-panel">
-        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">◀</button>
+        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">▶</button>
         <div id="design-panel-info"></div>
       </aside>
-      <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
   </section>
 

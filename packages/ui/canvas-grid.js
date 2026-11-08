@@ -11,8 +11,11 @@
 // (dbg.warn, returns null) if those ids already exist outside the svg it was handed. Every lookup is scoped to that
 // svg (svgEl.querySelector) — nothing here uses document.getElementById.
 //
-// 'lines' markup is deliberately IDENTICAL to the <defs>/<rect> that used to live in apps/sketchstudio/index.html
-// (same ids, attribute order, values, and the same per-zoom stroke-width retune). Colours: the stroke/fill ATTRIBUTES
+// 'lines' markup at the base level (fully opaque minors) is IDENTICAL to the <defs>/<rect> that used to live in apps/sketchstudio/index.html
+// (same ids, attribute order, values, and the same per-zoom stroke-width retune). Zoomed OUT the grid has levels of
+// detail (see gridLevel): the displayed minor spacing becomes GRID_SIZE × ratio^k (ratio = GRID_MAJOR_STEP/GRID_SIZE) so it
+// never packs tighter than MIN_MINOR_PX on screen, and the minor lines fade in so level changes don't pop. Zoomed in
+// it never subdivides. Snapping keeps using GRID_SIZE (input-manager.js), not the displayed level. Colours: the stroke/fill ATTRIBUTES
 // keep SketchStudio's literal colours, and a tiny injected stylesheet re-routes them through --sk-grid-minor /
 // --sk-grid-major (var() is not valid in SVG presentation attributes, but CSS beats them), falling back to the very
 // same literals — so SketchStudio resolves to exactly its old colours while a host (Shaper's cream palette) retints.
@@ -24,6 +27,11 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export const GRID_MODES = ['lines', 'off', 'points'];
 export const normalizeGridMode = (m) => (GRID_MODES.includes(m) ? m : 'lines');
+
+// Level of detail: the displayed minor spacing is GRID_SIZE × (GRID_MAJOR_STEP/GRID_SIZE)^k, the smallest k whose
+// on-screen spacing is >= MIN_MINOR_PX. Minor lines fade 0 -> 1 as that spacing grows MIN_MINOR_PX -> (1+MINOR_FADE_SPAN)×.
+export const MIN_MINOR_PX = 8;
+const MINOR_FADE_SPAN = 1;
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
@@ -37,23 +45,43 @@ export function gridRectMarkup(mode) {
   return `<rect ${attrs}${normalizeGridMode(mode) === 'off' ? ' display="none"' : ''}/>`;
 }
 
+/** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */
+export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
+  const ratio = GRID_MAJOR_STEP / GRID_SIZE;
+  const pxPerUnit = 1 / scale(1);
+  let factor = 1;
+  // ratio <= 1 cannot subdivide into levels; keep the base grid.
+  if (ratio > 1 && Number.isFinite(pxPerUnit) && pxPerUnit > 0) {
+    while (GRID_SIZE * factor * pxPerUnit < MIN_MINOR_PX && factor < 1e12) factor *= ratio;
+  }
+  const minor = GRID_SIZE * factor;
+  const minorPx = minor * pxPerUnit;
+  const fade = Math.min(1, Math.max(0, (minorPx - MIN_MINOR_PX) / (MINOR_FADE_SPAN * MIN_MINOR_PX)));
+  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : minor * ratio, minorPx, fade };
+}
+
 /**
  * The inner markup of the grid <defs> for the given spacing/zoom/mode. PURE (no DOM) so it can be snapshot-tested.
+ * Zoomed out, the grid coarsens (old majors become the minors) and the minors fade in smoothly; zoomed in it never
+ * subdivides below GRID_SIZE. Where the base level is shown fully opaque the markup is byte-identical to the original.
+ * Snapping is NOT affected (it keeps using GRID_SIZE).
  *   GRID_SIZE / GRID_MAJOR_STEP: minor / major spacing in world units (the settings' GRID_SIZE / GRID_MAJOR_STEP).
  *   scale(px): screen px → world units at the current zoom (the renderer's own `scale`).
- * 'lines' (and 'off', which only hides the rect) = today's pattern grid. 'points' = a dot at every grid intersection,
- * same spacing, heavier every GRID_MAJOR_STEP.
+ * 'lines' (and 'off', which only hides the rect) = the pattern grid. 'points' = a dot at every grid intersection,
+ * same levels, heavier at every major.
  */
 export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) {
-  const G = GRID_SIZE, M = GRID_MAJOR_STEP;
+  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale });
+  // Fully opaque adds no attribute, so the base level stays byte-identical to the original markup.
+  const op = (attr) => (fade < 1 ? ` ${attr}="${fade}"` : '');
   if (normalizeGridMode(gridMode) === 'points') {
     // Dots stay a roughly constant on-screen size (clamped in world units so they don't balloon when zoomed in).
-    const rMinor = Math.min(scale(1.25), 0.25, G / 2);
-    const rMajor = Math.min(scale(2), 0.5, M / 2);
+    const rMinor = Math.min(scale(1.25), 0.25 * factor, G / 2);
+    const rMajor = Math.min(scale(2), 0.5 * factor, M / 2);
     // Minor pattern is offset by half a tile so its (cx,cy)=(G/2,G/2) dot lands exactly on (k·G, m·G).
     // Major dots sit on the heavy tile's four corners (each tile draws a quarter; neighbours complete the dot).
     return `<pattern id="grid" x="${-G / 2}" y="${-G / 2}" width="${G}" height="${G}" patternUnits="userSpaceOnUse">`
-      + `<circle cx="${G / 2}" cy="${G / 2}" r="${rMinor}" fill="${MINOR_COLOR}"/></pattern>`
+      + `<circle cx="${G / 2}" cy="${G / 2}" r="${rMinor}" fill="${MINOR_COLOR}"${op('fill-opacity')}/></pattern>`
       + `<pattern id="grid-heavy" width="${M}" height="${M}" patternUnits="userSpaceOnUse">`
       + `<rect width="${M}" height="${M}" fill="url(#grid)"/>`
       + `<circle cx="0" cy="0" r="${rMajor}" fill="${MAJOR_COLOR}"/><circle cx="${M}" cy="0" r="${rMajor}" fill="${MAJOR_COLOR}"/>`
@@ -61,10 +89,10 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) 
       + `</pattern>`;
   }
   // Clamp stroke widths so the lines don't saturate when zooming out (same numbers the old updateGrid used).
-  const minorStroke = Math.min(scale(1), 0.2);  // max 0.2 units (10% of 2)
-  const majorStroke = Math.min(scale(2), 1.0);  // max 1.0 units (10% of 10)
+  const minorStroke = Math.min(scale(1), 0.2 * factor);  // max 0.2 units (10% of 2) at the base level
+  const majorStroke = Math.min(scale(2), 1.0 * factor);  // max 1.0 units (10% of 10) at the base level
   return `<pattern id="grid" width="${G}" height="${G}" patternUnits="userSpaceOnUse">`
-    + `<path d="M ${G} 0 L 0 0 0 ${G}" fill="none" stroke="${MINOR_COLOR}" stroke-width="${minorStroke}"/></pattern>`
+    + `<path d="M ${G} 0 L 0 0 0 ${G}" fill="none" stroke="${MINOR_COLOR}" stroke-width="${minorStroke}"${op('stroke-opacity')}/></pattern>`
     + `<pattern id="grid-heavy" width="${M}" height="${M}" patternUnits="userSpaceOnUse">`
     + `<rect width="${M}" height="${M}" fill="url(#grid)"/>`
     + `<path d="M ${M} 0 L 0 0 0 ${M}" fill="none" stroke="${MAJOR_COLOR}" stroke-width="${majorStroke}"/></pattern>`;

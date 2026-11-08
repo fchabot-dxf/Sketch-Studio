@@ -22,7 +22,7 @@ import { importSvgToCore } from './core-import.js';                     // UNIFY
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { STYLE_WIDTH, keepNumber } from './fields.js';                  // TASK 453: declared width range
-import { capturePlotterDoc, applyPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
+import { capturePlotterDoc, applyPlotterDoc, resetPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
 import { renderArt } from './render-art.js';
 import { recalcPreview } from './preview.js';
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
@@ -38,6 +38,9 @@ const PLOTTER_JOINT_RADIUS = 2;
 const FILL_PREVIEW_OPACITY = 0.35;
 
 const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
+let docBuffer = null; // TASK 474: the autosave buffer / project actions (created on mount); read it through getDocBuffer()
+/** The Pen Plotter's document buffer (openDesign / newDesign / saveAs / saveFile / openFile / store), or null before the Design stage mounted. */
+export const getDocBuffer = () => docBuffer;
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
 
 // The Design-tab DOM: the shared ribbon on top, a collapsible panel (Freehand lives in the ribbon; Bake + the
@@ -46,8 +49,17 @@ const SCAFFOLD = `
   <div id="design-view">
     <div id="design-ribbon"></div>
     <div id="design-body">
+      <div id="design-canvas-wrap">
+        <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
+        <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
+             but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
+             CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
+        <div id="dropOverlay">Drop an SVG to import</div>
+      </div>
       <aside id="design-panel">
-        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9664;</button>
+        <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9654;</button>
         <div id="design-panel-actions">
           <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
           <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG as constrainable #core geometry">Import SVG</button>
@@ -81,15 +93,6 @@ const SCAFFOLD = `
         </div>
         <div id="design-panel-info"></div>
       </aside>
-      <div id="design-canvas-wrap">
-        <svg id="design-paper" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <svg id="pen-underlay" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <svg id="design-canvas" viewBox="-60 -45 120 90" preserveAspectRatio="xMidYMid meet"></svg>
-        <!-- IMPORT-2B-4: the drop target's overlay, RE-HOMED here from the hidden Draw panel (where it was rendered
-             but its listeners were stranded in the never-called installSvgImport). Keeps the existing #dropOverlay
-             CSS; #design-canvas-wrap is already position:relative and the overlay is pointer-events:none. -->
-        <div id="dropOverlay">Drop an SVG to import</div>
-      </div>
     </div>
   </div>`;
 
@@ -263,15 +266,20 @@ export function mountSketchStage(view, ctx = {}) {
 
   // PERSIST-2: restore the shared cross-app document (if any), then keep autosaving.
   const saveStatusEl = document.getElementById('save-status');
-  const docBuffer = createDocumentBuffer({
+  // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored); a design with no
+  // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
+  docBuffer = createDocumentBuffer({
     state: controller.state,
+    app: 'penplotter',
+    onRestored: ({ hosts }) => {
+      try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {}
+      if (hosts && hosts.penplotter) applyPlotterDoc(hosts.penplotter); else resetPlotterDoc();
+      refreshAfterPlotterRestore();
+    },
     hostName: 'penplotter', getHostData: capturePlotterDoc, // TASK 451: doc size, pens, toolpaths, settings, styles ride in doc.hosts.penplotter
     onStatusChange: (s) => { if (saveStatusEl) saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(({ hosts }) => {
-    try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {}
-    if (hosts && hosts.penplotter) { applyPlotterDoc(hosts.penplotter); refreshAfterPlotterRestore(); } // an old buffer has no sidecar: defaults stay
-  });
+  docBuffer.restore();
   docBuffer.start();
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
@@ -299,7 +307,7 @@ export function mountSketchStage(view, ctx = {}) {
   const toggle = view.querySelector('#design-panel-toggle');
   const setCollapsed = (c) => {
     panel.classList.toggle('collapsed', c);
-    toggle.textContent = c ? '▶' : '◀';
+    toggle.textContent = c ? '◀' : '▶';
     toggle.title = c ? 'Expand panel' : 'Collapse panel';
     try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
   };
@@ -310,7 +318,7 @@ export function mountSketchStage(view, ctx = {}) {
 
   // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
   // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle] });
+  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
   const header = document.querySelector('header.toolbar');
   if (header) header.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)

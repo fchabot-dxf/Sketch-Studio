@@ -59,6 +59,7 @@ import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
+import { constraintTargets } from '#ui/geometry-labels.js';
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -836,30 +837,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Determine which joints and shapes are part of the selected constraint (for highlighting)
   let constraintJoints = new Set();
   let constraintShapes = new Set();
-  if(selectedConstraints && selectedConstraints.size){
-    for(const selectedConstraint of selectedConstraints){
-      if(selectedConstraint.type === CONSTRAINT_TYPES.COINCIDENT && selectedConstraint.joints){
-        for(const jid of selectedConstraint.joints) constraintJoints.add(jid);
-        for(const s of shapes){ if(s.joints && s.joints.some(jid => constraintJoints.has(jid))){ constraintShapes.add(s.id); } }
-      } else if((selectedConstraint.type === CONSTRAINT_TYPES.HORIZONTAL || selectedConstraint.type === CONSTRAINT_TYPES.VERTICAL) && selectedConstraint.joints){
-        for(const jid of selectedConstraint.joints) constraintJoints.add(jid);
-        for(const s of shapes){ if(s.joints && s.joints.some(jid => constraintJoints.has(jid))){ constraintShapes.add(s.id); } }
-      } else if((selectedConstraint.type === CONSTRAINT_TYPES.PARALLEL || selectedConstraint.type === CONSTRAINT_TYPES.PERPENDICULAR) && selectedConstraint.shapes){
-        for(const sid of selectedConstraint.shapes) constraintShapes.add(sid);
-      } else if(selectedConstraint.type === CONSTRAINT_TYPES.COLLINEAR && selectedConstraint.joints){
-        for(const jid of selectedConstraint.joints) constraintJoints.add(jid);
-        for(const s of shapes){ if(s.joints && s.joints.some(jid => constraintJoints.has(jid))){ constraintShapes.add(s.id); } }
-      } else if(selectedConstraint.type === CONSTRAINT_TYPES.TANGENT){
-        if(selectedConstraint.line) constraintShapes.add(selectedConstraint.line);
-        if(selectedConstraint.circle) constraintShapes.add(selectedConstraint.circle);
-      } else if(selectedConstraint.type === CONSTRAINT_TYPES.POINT_ON_LINE){
-        if(selectedConstraint.joint) constraintJoints.add(selectedConstraint.joint);
-        if(selectedConstraint.shape) constraintShapes.add(selectedConstraint.shape);
-      } else if(selectedConstraint.type === CONSTRAINT_TYPES.DISTANCE && selectedConstraint.joints){
-        for(const jid of selectedConstraint.joints) constraintJoints.add(jid);
-        for(const s of shapes){ if(s.joints && s.joints.some(jid => constraintJoints.has(jid))){ constraintShapes.add(s.id); } }
-      }
-    }
+  // The selected constraints AND the hovered one (the Design panel sets state.hoveredConstraint on row hover) light up
+  // the geometry they bind; one shared resolver (geometry-labels.js) names what a constraint binds.
+  for(const hc of [...(selectedConstraints || []), ...(hoveredConstraint ? [hoveredConstraint] : [])]){
+    const bound = constraintTargets(hc, shapes);
+    bound.joints.forEach(jid => constraintJoints.add(jid));
+    bound.shapes.forEach(sid => constraintShapes.add(sid));
   }
   
   // draw shapes (clickable for selection)

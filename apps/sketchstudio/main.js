@@ -10,7 +10,10 @@ import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
-import { createAppSwitcher } from '#ui/app-switcher.js'; // SWITCH-1: shared two-way app-switcher
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('sketchstudio');
+import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
@@ -20,6 +23,7 @@ import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spr
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;
 let view = { ...DEFAULT_VIEW };
+let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app; a sidebar reads it lazily
 let toolRibbon = null; // S7c-2d: the shared tool ribbon (from setupUI); the render loop refreshes its active highlight
 
 function updateView(){ 
@@ -54,6 +58,11 @@ setConstraintNotifier(showNotification);
 
 // shared app state passed to input and ui modules
 const state = createSketchState(engine, view);
+// TASK 473: the sidebar's Download uses the same exporter as the Export view, with its default options.
+function sidebarExport(type) {
+  const res = exportToFile(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' });
+  try { showNotification(res && res.ok ? 'Export started' : 'Export failed: ' + (res && res.reason ? res.reason : 'unknown'), res && res.ok ? 'success' : 'error'); } catch (_) {}
+}
 
 // initialize
 function initApp(){
@@ -147,7 +156,14 @@ function initApp(){
   // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
   const header = createAppHeader({
-    leading: createAppSwitcher({ current: 'sketchstudio' }).el, // SWITCH-1: the shared two-way app-switcher
+    // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
+    leading: createAppSidebar({
+      current: 'sketchstudio', docName: 'Untitled',
+      actions: [
+        { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
+        { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
+      ],
+    }).el,
     tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
     actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
     activeTab: 'design',
@@ -163,11 +179,13 @@ function initApp(){
   saveStatusEl.id = 'save-status';
   saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;';
   header.el.appendChild(saveStatusEl);
-  const docBuffer = createDocumentBuffer({
+  docBuffer = createDocumentBuffer({
     state,
+    app: 'sketchstudio', // TASK 474: the design records who saved it last
+    onRestored: () => { try { engine.solve(500); } catch (_) {} }, // after the initial restore AND after Open / New / Open from file
     onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(() => { try { engine.solve(500); } catch (_) {} });
+  docBuffer.restore();
   docBuffer.start();
 
   // DIAG-OVERLAY: reachable from the header, next to the save-status indicator.

@@ -37,11 +37,13 @@ export function findBrowser() {
   return null;
 }
 
-export function startServer(root = REPO_ROOT) {
+// fixtures: { '/path.html': '<html string>' } served as text/html instead of a repo file.
+export function startServer(root = REPO_ROOT, fixtures = {}) {
   return new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
       try {
         let url = (req.url || '/').split('?')[0];
+        if (Object.hasOwn(fixtures, url)) { res.writeHead(200, { 'content-type': 'text/html' }); res.end(fixtures[url]); return; }
         if (url.endsWith('/')) url += 'index.html';
         const file = path.normalize(path.join(root, decodeURIComponent(url)));
         if (!file.startsWith(root)) { res.writeHead(403); res.end('forbidden'); return; }
@@ -75,12 +77,12 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 }
 
 // Returns null when no Edge/Chrome is installed (the caller prints its "skipped" line).
-// opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server).
+// opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer).
 export async function launchBrowser(opts = {}) {
-  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true } = opts;
+  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {} } = opts;
   const browser = findBrowser();
   if (!browser) return null;
-  const srv = withServer ? await startServer() : { server: null, port: 0 };
+  const srv = withServer ? await startServer(REPO_ROOT, fixtures) : { server: null, port: 0 };
   const userDir = fs.mkdtempSync(path.join(os.tmpdir(), `sk-test-${tag}-`));
   const proc = spawn(browser, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',

@@ -1,8 +1,11 @@
 // apps/penplotter/src/main.js — Pen Plotter shell. A DECLARED stage-pipeline router built ENTIRELY by iterating
-// STAGES, plus the shared two-way app-switcher. UNIFY-4a: Draw + Sketch MERGED into ONE 'Design' tab (the shared
+// STAGES, plus the shared app sidebar. UNIFY-4a: Draw + Sketch MERGED into ONE 'Design' tab (the shared
 // #core/#ui sketcher); shell = Design -> Fill -> Toolpath -> Export (4 tabs). The plotter #canvasWrap is re-homed to
 // a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
-import { createAppSwitcher } from '#ui/app-switcher.js';
+import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('penplotter');
+import { onExportClick } from './export.js';
 import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
@@ -27,9 +30,16 @@ const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, ex
 const mounted = {};
 let currentStageId = null; // the showing stage; drives the isActive gate + which stage gets onLeave on a switch
 
-// Mount the shared app-switcher (marks Pen Plotter current; navigates to Sketch Studio / Shaper).
-const swHost = document.getElementById('app-switcher-host');
-if (swHost) swHost.appendChild(createAppSwitcher({ current: 'penplotter' }).el);
+// TASK 473: the shared app sidebar; this host declares ITS actions: Download = the G-code zip export, New = a fresh document.
+const swHost = document.getElementById('app-sidebar-host');
+if (swHost) {
+  swHost.appendChild(createAppSidebar({
+    current: 'penplotter', docName: 'Untitled',
+    actions: [
+      { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the G-code (.zip)', onClick: () => onExportClick() },
+    ],
+  }).el);
+}
 
 // DIAG-OVERLAY: reuses the existing window.__sketch dev/test seam (sketch-stage.js) rather than
 // threading a new export through the stage-mount API.

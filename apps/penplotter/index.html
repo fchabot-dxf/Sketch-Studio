@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pen Plotter — Sketch Studio</title>
+  <title>Pen Plotter · Sketch Studio</title>
   <!-- Shared sketcher theme contract (mirrors Shaper). The :root override BELOW is after the link, so the
        plotter's own look wins. Placeholder-level theming for PP-1 — the real canvas theming lands in PP-3+. -->
   <link rel="stylesheet" href="../../packages/ui/sketcher.css">
@@ -37,7 +37,7 @@
       the canvas already owns its own gestures (packages/ui/sketch-canvas.js); the page must not compete */
     header.toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 12px;
       background: var(--sk-header-bg); border-bottom: 1px solid var(--sk-header-sep); color: var(--sk-header-fg); }
-    #app-switcher-host { display: inline-flex; }
+    #app-sidebar-host { display: inline-flex; }
     .save-status { font: 11px system-ui, sans-serif; color: #8a8272; opacity: 0.8; margin-left: 10px; } /* PERSIST-2 */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .stage-btn { background: transparent; color: #6b6353; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer;
@@ -186,7 +186,7 @@
     #design-ribbon { flex: 0 0 auto; width: 100%; overflow-x: auto; border-bottom: 1px solid #d7dce6; background: #f7f9fc; }
     #design-body { flex: 1 1 auto; display: flex; min-height: 0; }
     #design-panel { flex: 0 0 244px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-      background: #f2f4f9; border-right: 1px solid #d7dce6; color: #2b3244; transition: flex-basis 0.15s ease; }
+      background: #f2f4f9; border-left: 1px solid #d7dce6; color: #2b3244; transition: flex-basis 0.15s ease; }
     #design-panel.collapsed { flex-basis: 30px; }
     #design-panel.collapsed #design-panel-info,
     #design-panel.collapsed #design-panel-actions { display: none; }
@@ -246,8 +246,8 @@
 </head>
 <body>
   <header class="toolbar">
-    <!-- The shared two-way app-switcher (mounted in main.js): marks Pen Plotter current, navigates to the siblings. -->
-    <span id="app-switcher-host"></span>
+    <!-- TASK 473: the shared app sidebar button (mounted in main.js): document actions + GO TO the other apps. -->
+    <span id="app-sidebar-host"></span>
     <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
     <span id="save-status" class="save-status"></span>
     <!-- The 5-stage pipeline nav — built by ITERATING the STAGES registry in main.js (never hardcoded). -->

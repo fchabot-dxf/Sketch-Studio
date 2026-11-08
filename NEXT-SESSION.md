@@ -279,6 +279,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     - offset presets .001/.005/.01/1/32/1/16/1/8;
     - a NEW "cutter shape" row below bit diameter (endmill/ballnose/vbit reusing VBIT_PRESETS), persisted, never
       exported, used by the 457 3D Review.
+  - OWNER-APPROVED cut-panel mock-up ("amazing, go"): https://claude.ai/artifact/PprrQiUm7SYPEAVquSFqNH (4 states, icons,
+    cutter shape). It is CC-A's visual reference for the 455 card.
   - Another reference (hovered Inside, offset 0.125): hover boundary bold #F6F7F9 ~3px; the band pushed inward by the
     offset (a gap shows); the depth chip rides the tool path at the point nearest the cursor.
 - Owner: "no parametric shape"; the compass export check was only to confirm no other encoding exists (none: plain

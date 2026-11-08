@@ -217,6 +217,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     mint = a selected cut. Fifth screenshot: selected cuts also have hover feedback. The third screenshot was the HOVER of an unselected cut.
     Final state model in task_455.txt (idle / hover / selected / selected+hover), the same for ALL cut types
     (owner); only the cut's shape differs per type.
+    Idle unselected = ONLY the SVG line, thin white; the cut visuals appear on hover/selection (owner).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

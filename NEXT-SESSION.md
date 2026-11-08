@@ -278,7 +278,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   paths with C curves).
 - OWNER REFERENCE (screenshot): Shaper Studio's REVIEW tab is a rendered result of the cuts on a wood-grain
   (topographic-line) background: through-cuts open, pockets and grooves recessed with inner shadow by depth, idle
-  geometry faint. Candidate for our Simulate tab (one derivation: 447 footprints + depth). Owner to confirm it's wanted.
+  geometry faint.
+  - OWNER: "what would be great is a review tab with 3D... this is what's missing in Shaper Studio".
+  - TASK 457 = 3D REVIEW PLAN (queued, first free seat): stock declaration, terraces (Clipper union per depth +
+    extrude) vs heightfield, three.js pinned and loaded on demand, slices.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

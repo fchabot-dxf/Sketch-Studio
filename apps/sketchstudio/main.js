@@ -18,6 +18,7 @@ import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title +
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
+import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import SettingsManager from '#core/settings-manager.js';
@@ -143,6 +144,7 @@ function initApp(){
     onNotify: showNotification,
   });
   stylePanel.render(document.body);
+  bindTemplateTokens(document.getElementById('svgCanvas'));
 
   const ribbonEl = document.getElementById('toolsRibbon');
   const mainEl = document.querySelector('main');

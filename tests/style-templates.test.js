@@ -13,7 +13,7 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 
 const { default: SettingsManager } = await import('../packages/core/settings-manager.js');
 const { draw } = await import('../packages/ui/svg-renderer.js');
-const { STYLE_TEMPLATES, STYLE_SETTING_KEYS, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate, getStyleTemplate } =
+const { STYLE_TEMPLATES, STYLE_SETTING_KEYS, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate, getStyleTemplate, bindTemplateTokens } =
   await import('../packages/ui/style-templates.js');
 
 // The fixed sketch: rectangle with a fillet, hexagon, a construction diagonal (dimensions are constraints).
@@ -43,9 +43,9 @@ const strokeWidths = (m) => [...m.matchAll(/stroke-width="([\d.]+)"/g)].map((x) 
 const before = render();
 assert(before.length > 200, 'the fixed sketch renders markup');
 
-// 1. declaration: settings only, every template covers the same keys, no tokens
+// 1. declaration: every template covers the same keys; only Fusion declares colour tokens (--sk-*)
 for (const t of STYLE_TEMPLATES) {
-  assert(!('tokens' in t), t.id + ' declares no tokens');
+  assert(t.id === 'fusion' ? Object.keys(t.tokens || {}).length > 5 : !t.tokens, t.id + ' tokens declaration');
   assert.deepStrictEqual(Object.keys(t.settings).sort(), [...STYLE_SETTING_KEYS].sort(), t.id + ' covers every template key');
 }
 assert.deepStrictEqual(STYLE_TEMPLATES.map((t) => t.id), ['default', 'fusion', 'compact', 'presentation']);
@@ -89,5 +89,48 @@ const hosts = ['../apps/sketchstudio/main.js', '../apps/shaper/src/main.js'];
 for (const h of hosts) {
   assert(/createStylePanel\(/.test(fs.readFileSync(new URL(h, import.meta.url), 'utf8')), h + ' mounts the shared Style panel');
 }
+
+// 6. TASK 489: Fusion colours + glyph style (tokens on the canvas host only; Default unchanged)
+const sketch2 = { joints: new Map(), shapes: [] };
+sketch2.joints.set('p', { x: 50, y: 400, fixed: true }); sketch2.joints.set('q', { x: 250, y: 400, fixed: true });
+sketch2.joints.set('u', { x: 50, y: 500 }); sketch2.joints.set('v', { x: 250, y: 520 });
+sketch2.shapes.push({ id: 'fixedLine', type: 'line', joints: ['p', 'q'] }, { id: 'freeLine', type: 'line', joints: ['u', 'v'] },
+  { id: 'cons', type: 'line', joints: ['p', 'v'], isConstruction: true });
+const glyphConstraints = [{ id: 'g1', type: 'horizontal', joints: ['u', 'v'] }, { id: 'g2', type: 'parallel', shapes: ['fixedLine', 'freeLine'] }];
+const render2 = (hov = null) => {
+  const svg = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } }, getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }), innerHTML: '' };
+  draw(sketch2.joints, sketch2.shapes, svg, null, null, glyphConstraints, new Set(), new Set(), null, null, new Set(), hov, null, null, null, null, false, null);
+  return svg.innerHTML;
+};
+applyStyleTemplate('default');
+const d2 = render2();
+assert(!/fusion-glyph/.test(d2), 'Default glyphs are badges');
+assert(/var\(--sk-geo-fixed, #202020\)/.test(d2), 'Default: fixed line uses the geo-fixed token');
+assert(/var\(--sk-construction, #f97316\)/.test(d2), 'Default: construction line uses the construction token');
+applyStyleTemplate('fusion');
+const f2 = render2();
+assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
+assert(!/<circle[^>]*class="glyph-badge/.test(f2), 'Fusion glyphs have no badge circle');
+assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
+assert(/#5B6CF0/i.test(render2('freeLine')), 'Fusion hover colour is blue-violet');
+assert(!/#5B6CF0/i.test(render2('freeLine') && d2), 'Default never uses the Fusion hover colour');
+applyStyleTemplate('default');
+assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round trip');
+
+// tokens go on the host element only and Default clears them
+const mkHost = () => { const props = {}; return { props, style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } } }; };
+const host = mkHost(), chrome = mkHost();
+const unbind = bindTemplateTokens(host);
+assert.strictEqual(Object.keys(host.props).length, 0, 'Default sets no tokens');
+applyStyleTemplate('fusion');
+assert.strictEqual(host.props['--sk-geo-fixed'], '#000000', 'Fusion: fully constrained lines are black');
+assert.strictEqual(host.props['--sk-constraint-fill'], '#2B9BD6', 'Fusion: free lines are sketch blue');
+assert.strictEqual(host.props['--sk-construction'], '#A9744F', 'Fusion: brown construction');
+assert.strictEqual(Object.keys(chrome.props).length, 0, 'tokens never touch another element');
+applyStyleTemplate('compact');
+assert.strictEqual(Object.keys(host.props).length, 0, 'Compact clears the tokens');
+applyStyleTemplate('fusion'); SettingsManager.resetToDefaults();
+assert.strictEqual(Object.keys(host.props).length, 0, 'reset to defaults clears the tokens');
+unbind();
 
 console.log('style-templates.test.js passed');

@@ -32,8 +32,8 @@ body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; -
 .tool-btn.active:active { background-color: #2563eb; }
 .tool-btn.active span, .tool-btn.active i, .tool-btn.active svg { color: white; }
 
-#svgCanvas { width: 100%; height: 100%; touch-action: none; background-color: #ffffff; transition: background-color 0.15s ease; }
-#svgCanvas.snapping { background-color: #fff7ed; }
+#svgCanvas { width: 100%; height: 100%; touch-action: none; background-color: var(--sk-canvas-bg, #ffffff); transition: background-color 0.15s ease; }
+#svgCanvas.snapping { background-color: var(--sk-canvas-bg-snapping, #fff7ed); }
 @supports (touch-action: pan-x pan-y) { #svgCanvas { touch-action: pan-x pan-y; } }
 
 #toolsRibbon { touch-action: pan-x; -webkit-overflow-scrolling: touch; cursor: grab; scroll-behavior: smooth; }

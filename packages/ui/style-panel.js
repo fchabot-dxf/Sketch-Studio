@@ -32,6 +32,13 @@ const CONTROLS = [
   { tab: 'lines', key: 'GLOW_WIDTH_PX',           label: 'Glow Width',           min: 0,   max: 80,  step: 1 },
   { tab: 'lines', key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
   { tab: 'lines', key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },
+  { tab: 'lines', key: 'HOVER_COLOR',             label: 'Hover Colour',         type: 'select',
+    options: [{ value: '#1e40af', label: 'Selection blue' }, { value: '#5B6CF0', label: 'Blue-violet' }] },
+  { tab: 'lines', key: 'FIXED_JOINT_FILL',        label: 'Fixed Joint Fill',     type: 'select',
+    options: [{ value: 'white', label: 'Hollow' }, { value: '#202020', label: 'Solid dark' }] },
+  { tab: 'glyphs', key: 'GLYPH_STYLE',            label: 'Glyph Style',          type: 'select',
+    options: [{ value: 'badge', label: 'Badge' }, { value: 'fusion', label: 'Fusion (outlined)' }] },
+  { tab: 'glyphs', key: 'DIM_LABEL_BOX',          label: 'Dimension Label Box',  type: 'checkbox' },
 ];
 
 const TABS = [

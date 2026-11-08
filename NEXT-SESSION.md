@@ -214,7 +214,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     Third screenshot (Outside): dark charcoal band, white dashed tool path, bold white cut boundary. So cut types
     differ by colour (pocket teal, outside dark); follow Shaper Studio per type.
     Fourth screenshot (the same Outside, SELECTED): teal band + bold mint boundary. So dark = an unselected cut, teal +
-    mint = a selected cut. Owner Q: was the third screenshot (dark band, bold white boundary) hover or idle?
+    mint = a selected cut. Fifth screenshot: selected cuts also have hover feedback. The third screenshot was the HOVER of an unselected cut.
+    Final state model in task_455.txt (idle / hover / selected / selected+hover).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

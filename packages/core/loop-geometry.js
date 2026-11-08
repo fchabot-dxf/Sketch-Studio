@@ -7,6 +7,7 @@
 // HOST can precompute loop polygons in the browser and pass them in to keep `shaper-export` pure.
 
 import { calculateArcPath } from './geometry.js';
+import { buildNodeMap } from './loop-finder.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EPS = 1e-9;
@@ -151,6 +152,102 @@ export function loopToPathD(loop, state) {
   }
   return d + ' Z';
 }
+
+// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines/arcs).
+// Orders the chain's shapes end to end, emitting `M x y` then `L x y` for lines and direction-aware `arcSeg`
+// for arcs. No Z. Reuses arcSeg directly.
+export function chainToPathD(chain, state) {
+  if (!chain || !state || !state.joints) return '';
+  const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
+  const shapes = Array.isArray(chain.shapes)
+    ? chain.shapes
+    : (Array.isArray(chain.edges) ? chain.edges.map((id) => shapeById.get(id)).filter(Boolean) : []);
+  if (!shapes.length) return '';
+
+  const node = buildNodeMap(state);
+  const pos = (jid) => state.joints.get(jid);
+  const endsOf = (s) => {
+    if (!s || !Array.isArray(s.joints)) return null;
+    if (s.type === 'line' && s.joints.length >= 2) return { a: s.joints[0], b: s.joints[1], na: node(s.joints[0]), nb: node(s.joints[1]) };
+    if (s.type === 'arc' && s.joints.length >= 3) return { a: s.joints[1], b: s.joints[2], na: node(s.joints[1]), nb: node(s.joints[2]) };
+    return null;
+  };
+
+  if (shapes.length === 1) {
+    const s = shapes[0];
+    const e = endsOf(s);
+    if (!e) return '';
+    const pa = pos(e.a), pb = pos(e.b);
+    if (!pa || !pb) return '';
+    const seg = (s.type === 'arc') ? arcSeg(s, pa, pb, state) : `L ${num(pb.x)} ${num(pb.y)}`;
+    return `M ${num(pa.x)} ${num(pa.y)} ${seg}`;
+  }
+
+  // Multi-shape chain: build adjacency graph
+  const nodeDegrees = new Map();
+  const nodeToShapes = new Map();
+  for (const s of shapes) {
+    const e = endsOf(s);
+    if (!e) continue;
+    nodeDegrees.set(e.na, (nodeDegrees.get(e.na) || 0) + 1);
+    nodeDegrees.set(e.nb, (nodeDegrees.get(e.nb) || 0) + 1);
+    if (!nodeToShapes.has(e.na)) nodeToShapes.set(e.na, []);
+    nodeToShapes.get(e.na).push(s);
+    if (!nodeToShapes.has(e.nb)) nodeToShapes.set(e.nb, []);
+    nodeToShapes.get(e.nb).push(s);
+  }
+
+  // Pick start node: prefer degree-1 nodes (the endpoints of an open chain)
+  const deg1 = [];
+  for (const [nid, deg] of nodeDegrees) {
+    if (deg === 1) deg1.push(nid);
+  }
+  deg1.sort();
+  const allNodes = [...nodeDegrees.keys()].sort();
+
+  const visitedShapes = new Set();
+  let d = '';
+
+  while (visitedShapes.size < shapes.length) {
+    // Find next unvisited shape to start or continue a walk
+    let startNode = deg1.find((nid) => (nodeToShapes.get(nid) || []).some((s) => !visitedShapes.has(s.id)));
+    if (!startNode) {
+      startNode = allNodes.find((nid) => (nodeToShapes.get(nid) || []).some((s) => !visitedShapes.has(s.id)));
+    }
+    if (!startNode) break;
+
+    let curNode = startNode;
+    let subpathStarted = false;
+
+    while (true) {
+      const candidates = (nodeToShapes.get(curNode) || []).filter((s) => !visitedShapes.has(s.id));
+      if (!candidates.length) break;
+      const s = candidates[0];
+      visitedShapes.add(s.id);
+      const e = endsOf(s);
+      if (!e) break;
+
+      const forward = (curNode === e.na);
+      const fromJid = forward ? e.a : e.b;
+      const toJid = forward ? e.b : e.a;
+      const nextNode = forward ? e.nb : e.na;
+
+      const fromP = pos(fromJid), toP = pos(toJid);
+      if (!fromP || !toP) break;
+
+      if (!subpathStarted) {
+        d += (d ? ' ' : '') + `M ${num(fromP.x)} ${num(fromP.y)}`;
+        subpathStarted = true;
+      }
+      const seg = (s.type === 'arc') ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`;
+      d += ' ' + seg;
+      curNode = nextNode;
+    }
+  }
+
+  return d;
+}
+
 
 // polyToPathD(pts) → a CLOSED SVG path "d" from an ordered array of polygon points [{x, y}, ...].
 export function polyToPathD(pts) {

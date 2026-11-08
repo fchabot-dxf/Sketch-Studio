@@ -3,7 +3,7 @@
 // typed arrays in three.js BufferGeometry, lights it, and runs the orbit camera. three is imported DYNAMICALLY here, so it
 // downloads only when the Review tab first opens (it is vendored under packages/ui/vendor/three, pinned 0.170.0).
 // Render ON DEMAND (controls 'change' / rebuild / resize): no idle animation loop.
-import { buildRelief } from '#core/relief-model.js';
+import { buildRelief, createReliefCache } from '#core/relief-model.js';
 
 const BOARD = [0.85, 0.70, 0.50]; // plain warm board colour (the wood look is a later slice)
 
@@ -31,6 +31,7 @@ export async function mountReviewView({ host, info, getInputs }) {
 
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
   let group = null, box = null, lastBuild = null, lastSig = null;
+  const reliefCache = createReliefCache();
   const render = () => renderer.render(scene, camera);
   controls.addEventListener('change', render);
 
@@ -107,7 +108,7 @@ export async function mountReviewView({ host, info, getInputs }) {
   function refresh(sig) {
     if (sig !== undefined && sig === lastSig) { size(); render(); return lastBuild; }
     const t0 = performance.now();
-    const rel = buildRelief(getInputs());
+    const rel = buildRelief({ ...getInputs(), cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
     const T = rel.stockBox.thickness;
     disposeGroup();
     group = new THREE.Group();
@@ -123,7 +124,7 @@ export async function mountReviewView({ host, info, getInputs }) {
     if (firstBuild) reset(); else render();
     const ms = performance.now() - t0;
     lastSig = sig;
-    lastBuild = { ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length };
+    lastBuild = { ms, stages: rel.stats.ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length };
     const notShown = rel.stats.skipped.filter((s) => s.reason === 'no-depth').length;
     const lines = [`${rel.stats.triangles} triangles · ${rel.stats.levels} level${rel.stats.levels === 1 ? '' : 's'} · built in ${ms.toFixed(0)} ms`];
     if (rel.stats.unsetThrough.length) lines.push(`${rel.stats.unsetThrough.length} Outside/Inside cut${rel.stats.unsetThrough.length === 1 ? '' : 's'} with depth unset shown cut through (amber label)`);

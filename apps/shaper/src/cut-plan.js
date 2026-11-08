@@ -120,6 +120,16 @@ export function loopsWithPolygons(state) {
   return { loops, loopPolys: Object.fromEntries(loops.map((l) => [l.id, l.polygon])) };
 }
 
+// A content SIGNATURE for the Review's build cache (FNV-1a of the JSON text): equal signature = equal footprints, so the model can
+// reuse the work of an earlier build. Covers the effective record and the cut GEOMETRY (polygons, chain joints), never object identity.
+function sigHash(value) {
+  const str = JSON.stringify(value); let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(36) + '.' + str.length.toString(36);
+}
+const cutsSig = (cuts, state) => cuts.map((c) => [c.kind, c.cutType, c.offsetSide, c.isCompound, c.polygon || null, c.outerPoly || null, c.holePolys || null,
+  c.chain ? (c.chain.shapes || []).map((sh) => [sh, (sh.joints || []).map((id) => { const j = state.joints.get(id); return j ? [j.x, j.y] : null; })]) : null]);
+
 // Terraces per V-carve ring: each contour ring is one V-bit pass (exactly what the exporter emits as an On Line cut at the ring's
 // depth); 3 slices read as the V, and a big stack (many rings) drops to 1 to stay inside the triangle budget.
 const VCARVE_SLICES = 3, VCARVE_BIG_STACK = 40;
@@ -150,7 +160,7 @@ export function planReliefItems(state, plan = CUT_PLAN) {
     for (const c of contours) {
       const rec = { cutType: 'online', cutDepth: c.depth, cutOffset: 0, toolDia: 2 * c.depth * tan, cutterShape: 'vbit', cutterAngle: angle, autoOffset: 0 };
       const cuts = [{ kind: 'loop', polygon: c.polygon, cutType: 'online', offsetSide: 0, isCompound: false }];
-      items.push({ key: 'vcarve:' + (vc.id || ''), cutType: 'online', cutDepth: c.depth, footprints: deriveCutFootprint(cuts, rec, state),
+      items.push({ key: 'vcarve:' + (vc.id || ''), sig: sigHash(['vc', rec, slices, cutsSig(cuts, state)]), cutType: 'online', cutDepth: c.depth, footprints: deriveCutFootprint(cuts, rec, state),
         shape: { cutterShape: 'vbit', cutterAngle: angle, toolDia: rec.toolDia }, slices, footprintsAt: (w) => deriveCutFootprintAt(cuts, rec, state, w) });
     }
   }
@@ -162,7 +172,8 @@ export function planReliefItems(state, plan = CUT_PLAN) {
     const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
     const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
     const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
-    d.footprints.forEach((fp, i) => items.push({ key, cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) }));
+    const geo = cutsSig(d.cuts, state);
+    d.footprints.forEach((fp, i) => items.push({ key, sig: sigHash([i, d.rec, geo]), cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) }));
   }
   return items;
 }

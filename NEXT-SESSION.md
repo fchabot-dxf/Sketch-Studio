@@ -129,9 +129,19 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - On Line: the cutter centre on the path; "offsets are not an option".
         - Guide: "uncuttable".
         - Cut type can be assigned in the file OR on the tool.
-        - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450:
-          On Line and Guide have no offset (UI hidden, never exported).
-        - OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
+        - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450
+          (CC-A), amended by the owner ("cut params for guide lines don't make sense"):
+          - one `params` declaration per CUT_TYPES record;
+          - Guide = no params at all; On Line = depth + bit, no offset.
+        - POCKET OFFSET, ANSWERED (support 360005473253 "Pocketing procedure" + owner):
+          - the Origin adds an automatic pocket offset = 1/4 of the bit diameter (since the "Napa" software; 1/6
+            before), set by the machine;
+          - owner: "0 is always a 1/4 offset", and a manual offset adds on top;
+          - finish = change the cut type to Inside, same depth, no offset.
+          - TASK 452 (queued, CC-A): the pocket preview shows the clearing boundary at r + D/4 + offset (declare
+            D/4 on the pocket cut-type record) AND the Inside finish pass to the wall (its direction already from
+            449).
+        - (was) OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
           RESULT after the finish pass; the clearing pass itself stops at that offset.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on
         the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449, dispatched to CC-A. Owner: "pocket cuts offset by default allowing a finish pass", so
@@ -187,6 +197,35 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Cause: svg-renderer.js ~:2257 angle = j2 ? ... : 0; radius dims have no j2, so it's always horizontal-right.
   - Arc extension outside the sweep (Fusion).
   - DONE: 448 merged a0c6a43 (labelAngle; one writer, placeRadiusLabel; Fusion parity unchecked).
+- PEN PLOTTER AUDIT 443 merged efb3601 (WORK-LOG "TURN 443"). Ticketing:
+  - 451 persistence (CC-B, dispatched).
+  - Queued:
+    - 453 validation batch (doc dialog -5/0/empty/text; feeds F0, pen-up = pen-down Z, tolerance <= 0; fill spacing
+      <= 0 possibly looping forever in hatch.js:20 / dots.js:17);
+    - 454: the Active Toolpath panel stays on the old toolpath after + Outline/+ Fill (edits go to the wrong
+      toolpath);
+    - minors 7-13 and the lingering empty default Outline toolpath, as one batch.
+  - Already fixed: #2 by 444b, #14 by 446.
+- QUEUED 455 (owner ask, screenshot): Prepare canvas in Shaper Studio colours.
+  - Sampled: bg #3F4145, pocket fill #35695B, outline #1BE09E, white \ / mark-grid hatch, black
+    depth chip.
+  - A second screenshot: geometry = thin near-white lines on #3F4145, TWO geometry states (owner): unselected = thin white, selected = bold mint #1BE09E;
+    nothing depends on being inside a pocket.
+    Mint = selected only (hover = thin mint); cuts = the teal family with white details; types differ by shape.
+    Owner: the travel path (449 dashes) shows on the hovered cut as well as the selected one.
+    Third screenshot (Outside): dark charcoal band, white dashed tool path, bold white cut boundary. So cut types
+    differ by colour (pocket teal, outside dark); follow Shaper Studio per type.
+    Fourth screenshot (the same Outside, SELECTED): teal band + bold mint boundary. So dark = an unselected cut, teal +
+    mint = a selected cut. Fifth screenshot: selected cuts also have hover feedback. The third screenshot was the HOVER of an unselected cut.
+    Final state model in task_455.txt (idle / hover / selected / selected+hover), the same for ALL cut types
+    (owner); only the cut's shape differs per type.
+    Idle unselected = ONLY the SVG line, thin white; the cut visuals appear on hover/selection (owner).
+    Sixth screenshot, sampled: idle line #DFE1E7 ~1px; selected band #34715F (one token); mint #1BE09E ~2px;
+    dashes ~#CBDAD6.
+    Seventh screenshot: a selected Guide = mint line only; hover band #27282B; chip "↓ unset"; the cut panel
+    restyle (black card #0A0A0B, fields #2A2B2D, lowercase labels, D-prefixed bit, preset row).
+  - Theme tokens declared once; export colours unchanged.
+  - CC-A after 450 and 452.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

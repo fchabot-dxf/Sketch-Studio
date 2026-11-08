@@ -56,8 +56,16 @@ function startServer() {
   });
 }
 
+async function waitForPort(userDir) {
+  for (let i = 0; i < 150; i++) {
+    try { const n = parseInt(fs.readFileSync(path.join(userDir, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0], 10); if (n) return n; } catch (_) {}
+    await sleep(200);
+  }
+  return 0;
+}
+
 async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 150; i++) {
     try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
     await sleep(200);
   }
@@ -93,15 +101,16 @@ await (async () => {
   const browser = findBrowser();
   if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { server, port } = await startServer();
-  const dbgPort = 9510 + Math.floor((Date.now() % 400));
   const userDir = path.join(os.tmpdir(), 'sk-test-446-' + process.pid);
   const proc = spawn(browser, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
+    '--remote-debugging-port=0', `--user-data-dir=${userDir}`, 'about:blank',
   ], { stdio: 'ignore' });
 
+  let dbgPort = 0;
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
+    dbgPort = await waitForPort(userDir);
+    assert(dbgPort && await waitForJson(dbgPort), 'headless browser did not expose CDP port');
     const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
     const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
     assert(page, 'no CDP page target');
@@ -125,6 +134,17 @@ await (async () => {
       if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
       return r && r.result ? r.result.value : undefined;
     };
+    const waitFor = async (expression, what, timeoutMs = 20000) => {
+      const end = Date.now() + timeoutMs;
+      for (;;) {
+        let v; try { v = await evalJs(expression); } catch (_) { v = false; }
+        if (v) return v;
+        if (Date.now() > end) throw new Error('timed out waiting for ' + what);
+        await sleep(50);
+      }
+    };
+    const penCount = () => evalJs('window.__draw.state.plotColors.length');
+    const addPen = async () => { const n = await penCount(); await clickEl('#addPlotColor'); await waitFor('window.__draw.state.plotColors.length === ' + (n + 1), 'pen added'); };
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
     const click = async (x, y) => {
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none', clickCount: 0 }); await sleep(30);
@@ -132,6 +152,7 @@ await (async () => {
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(150);
     };
     const clickEl = async (sel) => {
+      await waitFor(`(() => { const e = document.querySelector('${sel}'); return !!e && e.getClientRects().length > 0; })()`, sel + ' visible');
       const c = await evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; })()`);
       assert(c, sel + ' not found');
       await click(c.x, c.y);
@@ -140,19 +161,21 @@ await (async () => {
     const clickAt = click;
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });
-    await Promise.race([loaded, sleep(8000)]);
-    await sleep(1200);
-    await stageTab('toolpath'); await sleep(500);
-    await clickEl('#addPlotColor');
-    await clickEl('#addPlotColor');
-    await clickEl('#addFillTp'); await sleep(200); // more operation rows (fill + outline) so their rows are measured too
+    await Promise.race([loaded, sleep(20000)]);
+    await waitFor('!!(window.__draw && window.__draw.state && window.__draw.state.plotColors)', 'penplotter app ready');
+    await stageTab('toolpath');
+    await waitFor("!!document.getElementById('toolpathPanel') && document.getElementById('toolpathPanel').getClientRects().length > 0", 'toolpath panel visible');
+    await addPen();
+    await addPen();
+    await clickEl('#addFillTp'); // more operation rows (fill + outline) so their rows are measured too
     await key('Escape', 'Escape', 27);
     // a long pen name must not widen the row either (test setup through the state, then the shared panel render)
     await evalJs(`(async () => { window.__draw.state.plotColors[1].name = 'A very long pen name that should be truncated not overflow'; (await import('/apps/penplotter/src/plot-colors-panel.js')).renderPlotColorsPanel(); })()`);
 
     for (const width of [1280, 1600, 1920]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
-      await sleep(400);
+      await waitFor(`window.innerWidth === ${width}`, 'viewport resized');
+      await waitFor(`new Promise((res) => { const p = document.getElementById('toolpathPanel'); const s = () => { const r = p.getBoundingClientRect(); return r.left + ',' + r.right + ',' + r.height; }; let last = s(), n = 0; const tick = () => { const c = s(); n = c === last ? n + 1 : 0; last = c; if (n >= 5) res(true); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`, 'stable panel layout');
       const m = await evalJs(`(() => {
         const panel = document.getElementById('toolpathPanel');
         const pr = panel.getBoundingClientRect();
@@ -179,9 +202,10 @@ await (async () => {
       assert.deepStrictEqual(m.over, [], `${width}px: nothing in the panel may extend past its right edge`);
       assert.strictEqual(m.topIsDel, true, `${width}px: elementFromPoint at the x centre must be the x itself, got ${m.top}`);
       await clickAt(m.cx, m.cy);
-      const after = await evalJs(`window.__draw.state.plotColors.length`);
+      await waitFor(`window.__draw.state.plotColors.length === ${m.pens - 1}`, 'pen deleted');
+      const after = await penCount();
       assert.strictEqual(after, m.pens - 1, `${width}px: a real click on the x deletes the pen`);
-      await clickEl('#addPlotColor'); // restore the pen count for the next width
+      await addPen(); // restore the pen count for the next width
     }
     console.log('penplotter-panel-overflow: ok');
     ws.close();

@@ -13194,3 +13194,6 @@ Style templates (settings only). New `packages/ui/style-templates.js`: ONE decla
 
 ## TURN 481 (addendum: tabs + units)
 Style panel now has TABS from a declared `tab` per CONTROLS entry (Lines & Joints | Grid & Snap | Glyphs | Units); Template select stays above the tabs; tablist/tab/tabpanel roles, Arrow/Home/End keys; last tab persisted per host (localStorage `sketch-studio-style-tab:<hostId>`, hosts pass `hostId`). The Units tab holds ONE Document Unit select (Inches/Millimetres/Centimetres) bound to DOC_UNIT in EVERY host: `showDocUnit` option removed (only caller was Shaper, now always on); Pen Plotter has its own separate localStorage toggle and does not mount this panel. Shaper's cut panel already re-labels on DOC_UNIT; its stale "no toggle yet" comment updated. Test: tests/style-panel-tabs.test.js (live Shaper + SketchStudio, real reload).
+
+## TURN 490
+Added static privacy page privacy.html (served by Cloudflare Pages at /privacy; EN + FR; drive.file, contact). No /terms. _redirects unchanged: only exact / redirects to Studio, so /privacy is not caught. Test: tests/privacy-page.test.js.

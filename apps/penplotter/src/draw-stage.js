@@ -50,7 +50,7 @@ const SCAFFOLD = `
 let _ro = null;
 
 // Called ONCE by the router on first Draw-stage entry. Returns { onEnter } for re-fit on subsequent entries.
-export function mountDrawStage(view) {
+export function mountDrawStage(view, ctx) {
   view.innerHTML = SCAFFOLD;
   initDom(view);                          // resolve #canvas / #canvasWrap / #layers / #plotColors / HUD
   state.preview.showToolpath = false;     // Draw is ART-ONLY (the toolpath overlay is the Toolpath stage)
@@ -61,7 +61,7 @@ export function mountDrawStage(view) {
   installCanvasHandlers();
   installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas
   installKeyboard();
-  installHistory(() => renderArt());
+  installHistory(() => renderArt(), ctx.isActive); // keys act only on the stages history.js owns (router closure, main.js)
   // S3: the Pens palette is installed by toolpath-stage now (it was hidden in this drawHost).
 
   initLayers();                           // UNIFY-7: now seeds ONLY the default toolpath (no art layer)

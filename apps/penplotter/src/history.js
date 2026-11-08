@@ -8,18 +8,19 @@
 // state). Selection is reset on restore to avoid dangling shape ids.
 
 import { state } from "./state.js";
-import { $ } from "./dom.js";
 
 const MAX_HISTORY = 100;
 const undoStack = [];
 const redoStack = [];
 
 let _onRestore = null;
+let _isActive = () => false;
 
-export function installHistory(onRestore) {
+// `isActive` gates the Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z listener to the stages this history owns (Toolpath, Export), so one
+// keystroke drives ONE history: the Design stage's shared sketch history owns the keys while Design shows (TASK 444b).
+export function installHistory(onRestore, isActive) {
     _onRestore = onRestore;
-    wireButtons();
-    updateButtons();
+    _isActive = isActive;
     window.addEventListener("keydown", onKey);
 }
 
@@ -28,7 +29,6 @@ export function snapshot() {
     undoStack.push(serialize());
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack.length = 0; // any new action invalidates the redo branch
-    updateButtons();
 }
 
 export function undo() {
@@ -62,23 +62,11 @@ function restore(snap) {
     state.doc = s.doc;
     state.selectedShapeIds = new Set();
     state.interaction = null;
-    updateButtons();
     if (_onRestore) _onRestore();
 }
 
-function wireButtons() {
-    const u = $("#undoBtn"), r = $("#redoBtn");
-    if (u) u.onclick = undo;
-    if (r) r.onclick = redo;
-}
-
-function updateButtons() {
-    const u = $("#undoBtn"), r = $("#redoBtn");
-    if (u) u.disabled = !undoStack.length;
-    if (r) r.disabled = !redoStack.length;
-}
-
 function onKey(e) {
+    if (!_isActive()) return;
     // Skip when typing in inputs (let standard text undo work).
     if (e.target.tagName === "INPUT") return;
     const isCtrl = e.ctrlKey || e.metaKey;

@@ -39,8 +39,19 @@ function safeArg(a) {
   return a;
 }
 
+// TASK 429: CONSECUTIVE identical entries (same kind, category, level and args) collapse into ONE entry that carries a
+// structured repeat count — {t: first, tLast: last, count} — so a per-frame log can never flood the buffer and evict the
+// errors/events around it. A different entry in between breaks the run. The count is DATA (the copied report stays pure
+// JSON with a numeric "count"); the on-screen "×N" is display only (render()).
+let lastKey = null; // identity of the newest entry, kept out of the entry so the report has no private fields
 function pushLog(kind, category, level, args) {
-  logBuffer.push({ t: Date.now(), kind, category, level, args: args.map(safeArg) });
+  const safe = args.map(safeArg);
+  const now = Date.now();
+  const key = JSON.stringify([kind, category, level, safe]);
+  const last = logBuffer[logBuffer.length - 1];
+  if (last && key === lastKey) { last.count++; last.tLast = now; return; }
+  lastKey = key;
+  logBuffer.push({ t: now, tLast: now, count: 1, kind, category, level, args: safe });
   if (logBuffer.length > MAX_LOG_ENTRIES) logBuffer.shift();
 }
 
@@ -91,7 +102,7 @@ function rectOf(sel) {
   return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
-function buildReport({ appId, getState }) {
+export function buildReport({ appId, getState }) {
   const vv = window.visualViewport;
   let doc = null;
   try {
@@ -178,13 +189,14 @@ export function createDiagnosticLog({ appId, state } = {}) {
       row.className = 'sk-diag-entry' + (e.level === 'error' ? ' err' : '');
       const time = new Date(e.t).toLocaleTimeString();
       const argsStr = e.args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-      row.textContent = `${time} [${e.kind}/${e.category}] ${argsStr}`;
+      const runLabel = e.count > 1 ? ` ×${e.count} (to ${new Date(e.tLast).toLocaleTimeString()})` : ''; // display only; the data is e.count
+      row.textContent = `${time}${runLabel} [${e.kind}/${e.category}] ${argsStr}`;
       body.appendChild(row);
     }
     status.textContent = `${logBuffer.length} entries · ${touchBuffer.length} touch events`;
   }
 
-  clearBtn.addEventListener('click', () => { logBuffer.length = 0; touchBuffer.length = 0; render(); });
+  clearBtn.addEventListener('click', () => { logBuffer.length = 0; lastKey = null; touchBuffer.length = 0; render(); });
 
   async function copyReport() {
     const report = buildReport({ appId, getState: state });

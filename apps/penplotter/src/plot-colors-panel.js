@@ -6,6 +6,7 @@
 import { state, makePlotColor, DEFAULT_PEN_WIDTH } from "./state.js";
 import { $, toast } from "./dom.js";
 import { snapshot } from "./history.js";
+import { PEN_WIDTH, keepNumber } from "./fields.js"; // TASK 453
 import { renderArt as render } from "./render-art.js"; // PP-3c: Draw's trimmed renderer
 // PP-3c STUB: cloud palette save/load is a CLOUD-stage feature. The Draw scaffold omits the load/save-palette
 // buttons, so these are never invoked; the local stubs keep this panel free of cloud.js / dom.API_BASE deps (the
@@ -171,12 +172,12 @@ function plotColorRow(pc) {
     const width = document.createElement("input");
     width.className = "pc-width";
     width.type = "number";
-    width.min = "0.05"; width.max = "5"; width.step = "0.05";
+    width.min = PEN_WIDTH.min; width.max = PEN_WIDTH.max; width.step = "0.05"; // TASK 453: the declared range
     width.value = pc.width != null ? pc.width : DEFAULT_PEN_WIDTH;
     width.title = "Pen width (mm) — applies to every toolpath using this pen";
     width.onchange = () => {
         snapshot();
-        pc.width = Math.max(0.01, +width.value || DEFAULT_PEN_WIDTH);
+        pc.width = keepNumber(PEN_WIDTH, width.value, pc.width != null ? pc.width : DEFAULT_PEN_WIDTH); // clamp / reject; render() redraws the kept value
         render();
     };
 

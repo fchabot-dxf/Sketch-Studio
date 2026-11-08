@@ -21,6 +21,7 @@ import { installFreehandTool } from './freehand-tool.js';               // UNIFY
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
+import { STYLE_WIDTH, keepNumber } from './fields.js';                  // TASK 453: declared width range
 import { capturePlotterDoc, applyPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
 import { renderArt } from './render-art.js';
 import { recalcPreview } from './preview.js';
@@ -322,8 +323,8 @@ export function mountSketchStage(view, ctx = {}) {
   };
   if (colorInput) colorInput.addEventListener('input', () => applyStyle({ stroke: colorInput.value }));
   if (widthInput) widthInput.addEventListener('change', () => {
-    const w = parseFloat(widthInput.value);
-    if (isFinite(w) && w > 0) applyStyle({ width: w });
+    // TASK 453: clamp to the declared range; empty / text changes nothing. panelTick redraws the box with the kept width.
+    if (widthInput.value !== '' && Number.isFinite(+widthInput.value)) applyStyle({ width: keepNumber(STYLE_WIDTH, widthInput.value, 0.5) });
   });
   // Picking a fill colour IMPLIES a fill — otherwise the swatch would visibly change while None kept it off.
   if (fillInput) fillInput.addEventListener('input', () => {

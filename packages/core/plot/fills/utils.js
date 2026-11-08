@@ -2,7 +2,14 @@
 // shapes) which needs the browser SVG engine — guarded so #core/plot stays Node-safe (returns null with no DOM;
 // the pure #core/svg-import parsePathSubpaths is the eventual reconciliation, tracked with fromPath from PP-2a).
 
+import { coerceParam } from "../params.js";
+export { coerceParam };
+
 export const ELLIPSE_SEGMENTS = 96;
+
+// TASK 453: the ONE declaration of the fill spacing field (registry UI + every generator entry guard read THIS).
+// A spacing <= 0 makes the scanline / grid loops (y += spacing) never end, so every generator coerces it at its entry.
+export const SPACING = { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1, max: 100, step: 0.1 };
 
 let _fillCounter = 0;
 export function fillId() { return "fill_" + (++_fillCounter); }

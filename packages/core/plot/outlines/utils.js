@@ -6,6 +6,12 @@
 const ELLIPSE_SEGMENTS = 96;
 
 let _id = 0;
+// TASK 453: the declared dash fields. dashed.apply walks the outline in steps of at most (dash_length + dash_gap) and
+// would never advance for 0 + 0, so apply() coerces both at its entry with these.
+export const DASH_LENGTH = { key: "dash_length", label: "Dash length", type: "number", default: 2, unit: "mm", min: 0.1, max: 100, step: 0.1 };
+export const DASH_GAP    = { key: "dash_gap",    label: "Dash gap",    type: "number", default: 1, unit: "mm", min: 0,   max: 100, step: 0.1 };
+export { coerceParam } from "../params.js";
+
 export const outlineId = () => "out_" + (++_id);
 
 // Flatten any shape to a polyline (list of [x, y]). Ellipses are sampled; paths use the guarded off-screen sampler.

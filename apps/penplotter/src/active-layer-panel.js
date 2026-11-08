@@ -10,6 +10,7 @@ import { $ } from "./dom.js";
 import { FILL_PATTERNS, fillPattern } from "#core/plot/fills/index.js";
 import { OUTLINE_STYLES, outlineStyle } from "#core/plot/outlines/index.js";
 import { snapshot } from "./history.js";
+import { keepNumber } from "./fields.js"; // TASK 453: the one validate helper (declared min/max/integer from the registry param)
 
 let triggerRerender = () => {};
 export function installActiveLayerPanel(onChange) { triggerRerender = onChange || (() => {}); }
@@ -102,16 +103,18 @@ function paramField(p, obj) {
   input.step = (p.step !== undefined) ? p.step : "any"; // S2 (4): min/max/step from the registry schema
   if (p.min !== undefined) input.min = p.min;
   if (p.max !== undefined) input.max = p.max;
-  const commit = () => {
-    if (input.value === "") return;
-    const val = +input.value;
-    if (!Number.isFinite(val)) return;
+  // TASK 453: the kept value comes from the declared param (min/max/integer). While typing the box is left alone (a
+  // transient "0." must not be rewritten); on commit (change) it shows the value actually kept. Empty/text keeps the old one.
+  const commit = (showKept) => {
+    const val = keepNumber(p, input.value, (obj[p.key] !== undefined && obj[p.key] !== null) ? obj[p.key] : p.default);
+    if (showKept) input.value = val;
+    if (val === obj[p.key]) return;
     snapshot();
     obj[p.key] = val;
     rememberShown();
     triggerRerender();      // recompute + redraw the overlay (fill strokes update live)
   };
-  input.oninput = commit; input.onchange = commit;
+  input.oninput = () => commit(false); input.onchange = () => commit(true);
   wrap.append(label, input); return wrap;
 }
 

@@ -4,11 +4,12 @@
 // Unlike stipple (rows staggered into a 60° honeycomb lattice), the rows
 // here line up into a plain square grid. Spacing controls density.
 
-import { closedPolygonFor, polygonBounds, pointInPolygon, makeLineShape } from "./utils.js";
+import { closedPolygonFor, polygonBounds, pointInPolygon, makeLineShape, SPACING, coerceParam } from "./utils.js";
 
 const DOT_LENGTH = 0.1;
 
 export function generate(shape, { spacing = 2 } = {}) {
+    spacing = coerceParam(SPACING, spacing); // TASK 453: spacing <= 0 / NaN would never advance the grid
     const poly = closedPolygonFor(shape);
     if (!poly) return [];
     const { minX, minY, maxX, maxY } = polygonBounds(poly);

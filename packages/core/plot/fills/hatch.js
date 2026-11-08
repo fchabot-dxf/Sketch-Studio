@@ -1,5 +1,5 @@
 // Parallel lines at a given angle, `spacing` mm apart. Returns line shapes. Ported (PP-2b-2), pure.
-import { closedPolygonFor, rotateForHatch, edgeCrossings, makeLineShape } from "./utils.js";
+import { closedPolygonFor, rotateForHatch, edgeCrossings, makeLineShape, SPACING, coerceParam } from "./utils.js";
 
 export function generate(shape, { angle = 45, spacing = 2 } = {}) {
     const poly = closedPolygonFor(shape);
@@ -10,6 +10,7 @@ export function generate(shape, { angle = 45, spacing = 2 } = {}) {
 
 // Parallel-line segments inside the polygon. Exported so zigzag (PP-2b-3) can reuse the scanline data.
 export function scanlineHatch(polygon, angleDeg, spacing) {
+    spacing = coerceParam(SPACING, spacing); // TASK 453: spacing <= 0 / NaN would never advance y
     const { rotated, unrot } = rotateForHatch(polygon, angleDeg);
     let minY = Infinity, maxY = -Infinity;
     for (const p of rotated) {

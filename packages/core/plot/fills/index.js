@@ -11,7 +11,8 @@ import * as crosshatch from "./crosshatch.js"; // PP-2b-3
 import * as zigzag from "./zigzag.js";         // PP-2b-3
 import * as stipple from "./stipple.js";       // PP-2b-3
 import * as dots from "./dots.js";             // PP-2b-3
-import { closedPolygonFor, makePolylineShape } from "./utils.js";
+import { closedPolygonFor, makePolylineShape, SPACING } from "./utils.js";
+import { resolveParams as resolveDeclared } from "../params.js";
 import { insetPolygon } from "../clip.js";
 
 // Each entry: { id, label, params:[{ key, label, type, default, unit, min? }], generate(shape, params) }.
@@ -21,9 +22,9 @@ export const FILL_PATTERNS = [
     id: "hatch",
     label: "Hatch",
     params: [
-      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", step: 1 },
-      { key: "spacing", label: "Spacing", type: "number", default: 2,  unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", step: 0.1 },
+      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", min: -360, max: 360, step: 1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: hatch.generate,
   },
@@ -31,8 +32,8 @@ export const FILL_PATTERNS = [
     id: "concentric",
     label: "Concentric",
     params: [
-      { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", step: 0.1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: concentric.generate,
   },
@@ -41,9 +42,9 @@ export const FILL_PATTERNS = [
     id: "crosshatch",
     label: "Crosshatch",
     params: [
-      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", step: 1 },
-      { key: "spacing", label: "Spacing", type: "number", default: 2,  unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", step: 0.1 },
+      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", min: -360, max: 360, step: 1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: crosshatch.generate,
   },
@@ -51,9 +52,9 @@ export const FILL_PATTERNS = [
     id: "zigzag",
     label: "Zigzag",
     params: [
-      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", step: 1 },
-      { key: "spacing", label: "Spacing", type: "number", default: 2,  unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", step: 0.1 },
+      { key: "angle",   label: "Angle",   type: "number", default: 45, unit: "deg", min: -360, max: 360, step: 1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0,  unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: zigzag.generate,
   },
@@ -61,8 +62,8 @@ export const FILL_PATTERNS = [
     id: "stipple",
     label: "Stipple",
     params: [
-      { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", step: 0.1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: stipple.generate,
   },
@@ -70,8 +71,8 @@ export const FILL_PATTERNS = [
     id: "dots",
     label: "Dots",
     params: [
-      { key: "spacing", label: "Spacing", type: "number", default: 2, unit: "mm", min: 0.1, step: 0.1 },
-      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", step: 0.1 },
+      SPACING,
+      { key: "offset",  label: "Offset",  type: "number", default: 0, unit: "mm", min: -100, max: 100, step: 0.1 },
     ],
     generate: dots.generate,
   },
@@ -80,21 +81,8 @@ export const FILL_PATTERNS = [
 const BY_ID = new Map(FILL_PATTERNS.map((p) => [p.id, p]));
 export function fillPattern(id) { return BY_ID.get(id) || null; }
 
-// Merge the entry's declared param DEFAULTS with the layer's fill values (numeric-coerced; a param's min floors it).
-function resolveParams(entry, fill) {
-  const params = {};
-  for (const p of entry.params) {
-    let v = p.default;
-    const raw = fill ? fill[p.key] : undefined;
-    if (raw !== undefined && raw !== null && raw !== "") {
-      const n = +raw;
-      if (Number.isFinite(n)) v = n;
-    }
-    if (p.min !== undefined) v = Math.max(p.min, v);
-    params[p.key] = v;
-  }
-  return params;
-}
+// The entry's declared params resolved against the layer's fill values (TASK 453: defaults, min/max, integer: ../params.js).
+const resolveParams = (entry, fill) => resolveDeclared(entry.params, fill);
 
 // The export-time shape list for `layer`: the user's drawn shapes + generated fill geometry.
 export function expandLayerWithFill(layer) {

@@ -2,9 +2,11 @@
 // is walked at constant speed; alternating segments are emitted as dashes
 // while gap segments are skipped.
 
-import { shapeToPolyline, polylineShape } from "./utils.js";
+import { shapeToPolyline, polylineShape, DASH_LENGTH, DASH_GAP, coerceParam } from "./utils.js";
 
 export function apply(shape, { dash_length = 2, dash_gap = 1 } = {}) {
+    dash_length = coerceParam(DASH_LENGTH, dash_length); // TASK 453: a zero period would never advance
+    dash_gap = coerceParam(DASH_GAP, dash_gap);
     const poly = shapeToPolyline(shape);
     if (!poly || poly.length < 2) return [shape];
 

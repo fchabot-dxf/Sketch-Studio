@@ -59,7 +59,7 @@ export function buildGcodeEntries() {
             drawFeed:  state.settings.draw_feed,
             zFeed:     state.settings.z_feed,
             mergeTol:  0.05,
-            simplifyTol: state.settings.tolerance_mm || 0.1,
+            simplifyTol: state.settings.tolerance_mm,
             docH:      state.doc.h,
             flipY:     true,
             label:     tp.name,

@@ -381,9 +381,16 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 // If we found the original line and it's different from the new one
                 if (s1 && s1.id !== s2.id) {
                     logDim('upgrade-line-dim', { pendingId: pending.id || '(pending)', s1: s1.id, s2: s2.id });
-                    // Remove the temporary length constraint
+                    // Remove the temporary length constraint and discard its birth snapshot
+                    if (pending.__newlyPlaced && typeof pending.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) {
+                        state.discardSnapshotAt(pending.__birthHistoryLength);
+                    }
                     const idx = state.constraints.indexOf(pending);
                     if (idx !== -1) state.constraints.splice(idx, 1);
+                    pending.__placing = false;
+                    pending.__newlyPlaced = false;
+                    if (state && state.placingConstraint === pending) state.placingConstraint = null;
+                    dimensionState.placingConstraint = null;
 
                     // Check Parallelism
                     const j1a = state.joints.get(s1.joints[0]);
@@ -401,6 +408,24 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                     const isParallel = diff < 0.01 || Math.abs(diff - Math.PI) < 0.01;
                     logDim('parallel-check', { ang1, ang2, diff, isParallel });
 
+                    const type = isParallel ? CONSTRAINT_TYPES.DISTANCE : CONSTRAINT_TYPES.ANGLE;
+
+                    // Clear the preview active state now that we are creating or recovering the real constraint
+                    state.active = null;
+
+                    // Check if an existing constraint already exists between these two lines
+                    let existing = state.constraints.find(c => c && c.type === type && c.shapes && 
+                        ((c.shapes[0] === s1.id && c.shapes[1] === s2.id) || (c.shapes[0] === s2.id && c.shapes[1] === s1.id))
+                    );
+
+                    if (existing) {
+                        logDim('recover-existing-constraint', { type, s1: s1.id, s2: s2.id });
+                        startPlacing(svg, state, existing, e, w);
+                        // An existing constraint must never get the birth stamp, and must never open or close a birth
+                        return true;
+                    }
+
+                    beginDimUndo(state);
                     let success = false;
                     if (isParallel) {
                         logDim('create-line-line-distance', { s1: s1.id, s2: s2.id });
@@ -423,26 +448,27 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                         success = !!res;
                     }
                     
-                    // Clear the preview active state now that we are creating the real constraint
-                    state.active = null;
-
                     logDim('upgrade-constraint-result', { success });
 
-                    // If added successfully, use the new constraint. If duplicate (success=false), find the existing one.
                     let targetConstraint = success ? state.constraints[state.constraints.length - 1] : null;
                     if (!targetConstraint) {
-                        const type = isParallel ? CONSTRAINT_TYPES.DISTANCE : CONSTRAINT_TYPES.ANGLE;
-                        logDim('recover-existing-constraint', { type, s1: s1.id, s2: s2.id });
-                        targetConstraint = state.constraints.find(c => c.type === type && c.shapes && 
+                        endDimUndo(state);
+                        if (state.history && state.history.length > 0 && state.discardSnapshotAt) {
+                            state.discardSnapshotAt(state.history.length);
+                        }
+                        // Fallback: if it was a duplicate rejected by createConstraint, recover without birth stamp
+                        existing = state.constraints.find(c => c && c.type === type && c.shapes && 
                             ((c.shapes[0] === s1.id && c.shapes[1] === s2.id) || (c.shapes[0] === s2.id && c.shapes[1] === s1.id))
                         );
-                        logDim('recover-existing-constraint-result', { found: !!targetConstraint });
+                        if (existing) {
+                            startPlacing(svg, state, existing, e, w);
+                            return true;
+                        }
+                        return false;
                     }
 
-                    if (targetConstraint) {
-                        startPlacing(svg, state, targetConstraint, e, w);
-                        finalizeDimBirth(targetConstraint, state);
-                    }
+                    startPlacing(svg, state, targetConstraint, e, w);
+                    finalizeDimBirth(targetConstraint, state);
                     return true;
                 }
  else {

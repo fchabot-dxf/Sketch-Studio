@@ -9,6 +9,7 @@
   const { createEngine } = await import('#core/constraint-solver.js');
   const { createSketchState } = await import('#ui/sketch-state.js');
   const { CONSTRAINT_TYPES, TOOL_MODES } = await import('#core/constants.js');
+  const { ConstraintManager } = await import('#core/constraint-manager.js');
   const {
     startDimensionFromSelection,
     anchorPlacingDimension,
@@ -459,6 +460,181 @@
     assert(state.history.length === historyBefore, `History length must be unchanged after Escape while placing 2-point dim, had ${historyBefore}, got ${state.history.length}`);
     assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No distance constraint after resetDimensionState');
     console.log('C3-Esc passed ✅');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // C4: Click Two Non-Parallel Lines -> Angle -> value -> ONE undo removes it,
+  //     and prior action (draw a line first) is still undoable afterwards.
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    console.log('Running C4: click two non-parallel lines single-undo...');
+    const engine = createEngine(null);
+    engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
+    setupNumericInput(svg, state);
+
+    // Initial state before prior action
+    const historyInitial = state.history.length;
+
+    // Prior action: draw base line 0
+    const j0a = engine.genJ(); engine.addJoint(j0a, -50, -50, true);
+    const j0b = engine.genJ(); engine.addJoint(j0b, -10, -50, false);
+    const line0 = { id: 's_line0', type: 'line', joints: [j0a, j0b] };
+    state.shapes.push(line0);
+    state.saveState();
+
+    // Draw two non-parallel lines (Line 1 horizontal, Line 2 vertical)
+    const j1a = engine.genJ(); engine.addJoint(j1a, 0, 0, true);
+    const j1b = engine.genJ(); engine.addJoint(j1b, 100, 0, false);
+    const line1 = { id: 's_line1', type: 'line', joints: [j1a, j1b] };
+    state.shapes.push(line1);
+
+    const j2a = engine.genJ(); engine.addJoint(j2a, 0, 0, true);
+    const j2b = engine.genJ(); engine.addJoint(j2b, 0, 100, false);
+    const line2 = { id: 's_line2', type: 'line', joints: [j2a, j2b] };
+    state.shapes.push(line2);
+    const historyBeforeDim = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt1 = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const pt2 = { clientX: 0, clientY: 50, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+
+    // Click line 1 (starts pending length dim)
+    handleDimensionPointerDown(pt1, svg, state, null, { shape: line1 }, null);
+    // Click line 2 (upgrades to angle dim)
+    handleDimensionPointerDown(pt2, svg, state, null, { shape: line2 }, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+    dimInput.value = '45';
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Enter', stopPropagation: () => {} });
+
+    const ang = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.ANGLE);
+    assert(ang, 'Angle constraint must exist');
+    assert(ang.value === 45, `Angle value should be 45, got ${ang.value}`);
+    assert(state.history.length === historyBeforeDim + 1, `History should grow by 1, had ${historyBeforeDim}, now ${state.history.length}`);
+
+    // Undo 1: angle dimension is removed, Line 1 & Line 2 remain
+    state.undo();
+    const angAfter = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.ANGLE);
+    assert(!angAfter, `One undo() must leave NO angle constraint, but found: ${JSON.stringify(angAfter)}`);
+    assert(state.history.length === historyBeforeDim, `History length must be restored to ${historyBeforeDim}, got ${state.history.length}`);
+    assert(state.shapes.some(s => s.id === line1.id), 'Line 1 must still exist after undoing angle');
+    assert(state.shapes.some(s => s.id === line2.id), 'Line 2 must still exist after undoing angle');
+
+    // Undo 2: prior action (lines 1 & 2) is undone, returning to line 0
+    state.undo();
+    assert(state.history.length === historyInitial, `Second undo must restore history to ${historyInitial}, got ${state.history.length}`);
+    assert(!state.shapes.some(s => s.id === line1.id), 'Line 1 undone');
+    assert(!state.shapes.some(s => s.id === line2.id), 'Line 2 undone');
+    assert(state.shapes.some(s => s.id === line0.id), 'Line 0 still exists');
+    console.log('C4 passed ✅');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // C4-Esc: Escape in the angle value box leaves history EXACTLY as before
+  //         (length and top snapshot).
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    console.log('Running C4-Esc: Escape in angle value box leaves history unchanged...');
+    const engine = createEngine(null);
+    engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
+    setupNumericInput(svg, state);
+
+    // Prior action: line 0
+    const j0a = engine.genJ(); engine.addJoint(j0a, -50, -50, true);
+    const j0b = engine.genJ(); engine.addJoint(j0b, -10, -50, false);
+    state.shapes.push({ id: 's_line0', type: 'line', joints: [j0a, j0b] });
+    state.saveState();
+
+    // Lines 1 and 2
+    const j1a = engine.genJ(); engine.addJoint(j1a, 0, 0, true);
+    const j1b = engine.genJ(); engine.addJoint(j1b, 100, 0, false);
+    const line1 = { id: 's_line1', type: 'line', joints: [j1a, j1b] };
+    state.shapes.push(line1);
+
+    const j2a = engine.genJ(); engine.addJoint(j2a, 0, 0, true);
+    const j2b = engine.genJ(); engine.addJoint(j2b, 0, 100, false);
+    const line2 = { id: 's_line2', type: 'line', joints: [j2a, j2b] };
+    state.shapes.push(line2);
+    state.saveState();
+
+    const historyBeforeDim = state.history.length;
+    const topSnapshotBefore = state.history[state.history.length - 1];
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt1 = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const pt2 = { clientX: 0, clientY: 50, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+
+    handleDimensionPointerDown(pt1, svg, state, null, { shape: line1 }, null);
+    handleDimensionPointerDown(pt2, svg, state, null, { shape: line2 }, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation: () => {} });
+
+    assert(!isInputActive(), 'Input must be closed');
+    assert(state.history.length === historyBeforeDim, `History length must be unchanged after Escape, had ${historyBeforeDim}, got ${state.history.length}`);
+    assert(state.history[state.history.length - 1] === topSnapshotBefore, 'Top snapshot must be identical reference before and after Escape');
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.ANGLE), 'No angle constraint after Escape');
+    assert(!state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE), 'No distance constraint after Escape');
+    console.log('C4-Esc passed ✅');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // C5: Dimension two lines that already have an angle dimension -> Escape
+  //     in the box -> the existing dimension is STILL there.
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    console.log('Running C5: dimension existing angle dimension -> Escape leaves it intact...');
+    const engine = createEngine(null);
+    engine.init();
+    const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
+    setupNumericInput(svg, state);
+
+    const j1a = engine.genJ(); engine.addJoint(j1a, 0, 0, true);
+    const j1b = engine.genJ(); engine.addJoint(j1b, 100, 0, false);
+    const line1 = { id: 's_line1', type: 'line', joints: [j1a, j1b] };
+    state.shapes.push(line1);
+
+    const j2a = engine.genJ(); engine.addJoint(j2a, 0, 0, true);
+    const j2b = engine.genJ(); engine.addJoint(j2b, 0, 100, false);
+    const line2 = { id: 's_line2', type: 'line', joints: [j2a, j2b] };
+    state.shapes.push(line2);
+
+    // Create existing angle constraint
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.ANGLE, {
+      shapes: [line1.id, line2.id],
+      value: 90
+    });
+    const existingAngle = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.ANGLE);
+    assert(existingAngle, 'Existing angle constraint created');
+    existingAngle.__newlyPlaced = false;
+    existingAngle.__placing = false;
+    state.saveState();
+
+    const historyBefore = state.history.length;
+
+    state.currentTool = TOOL_MODES.DIMENSION;
+    const pt1 = { clientX: 50, clientY: 0, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+    const pt2 = { clientX: 0, clientY: 50, pointerId: 1, pointerType: 'mouse', target: { closest: () => null } };
+
+    // Click line 1 then line 2 (recovers existing angle constraint)
+    handleDimensionPointerDown(pt1, svg, state, null, { shape: line1 }, null);
+    handleDimensionPointerDown(pt2, svg, state, null, { shape: line2 }, null);
+
+    anchorPlacingDimension(svg, state);
+    assert(isInputActive(), 'Input active');
+
+    dimInput.dispatchEvent({ type: 'keydown', key: 'Escape', stopPropagation: () => {} });
+
+    assert(!isInputActive(), 'Input must be closed');
+    const angleAfter = state.constraints.find(c => c && c.type === CONSTRAINT_TYPES.ANGLE);
+    assert(angleAfter === existingAngle, 'The existing angle dimension must STILL be present after Escape');
+    assert(state.history.length === historyBefore, `History length must be unchanged, had ${historyBefore}, got ${state.history.length}`);
+    console.log('C5 passed ✅');
   }
 
   // ─────────────────────────────────────────────────────────────────────────

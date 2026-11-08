@@ -141,3 +141,26 @@ export function openPolygon(points, radius, offset = 0) {
   if (eroded.length < 3) return [];
   return offsetPolygon(eroded, r, { join: 'round' });
 }
+
+// sweptPath(points, halfWidth, { closed }) → polygon[] : the SWEPT FOOTPRINT of a round bit of radius `halfWidth` whose
+// centre follows the polyline `points` — one CAPSULE (rectangle + two round caps) per segment. The union is the exact
+// Minkowski sum: round joins at every corner, round end caps on an open path. The capsules overlap, so draw them in ONE
+// path with fill-rule nonzero (a point is cut iff it lies in any capsule); no boolean engine, no second offset
+// implementation. closed=true also sweeps the closing segment. halfWidth <= 0 or < 2 points → [] (nothing cut).
+export function sweptPath(points, halfWidth, { closed = false } = {}) {
+  const h = Number(halfWidth);
+  const pts = dedupe(points, 1e-9);
+  if (!(h > 0) || pts.length < 2) return [];
+  const out = [];
+  const segs = closed ? pts.length : pts.length - 1;
+  const STEPS = 8; // half-circle sampled every 22.5 degrees, as pushArc does
+  for (let i = 0; i < segs; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const th = Math.atan2(b.y - a.y, b.x - a.x);
+    const cap = [];
+    for (let k = 0; k <= STEPS; k++) { const t = th + Math.PI / 2 + Math.PI * (k / STEPS); cap.push({ x: a.x + h * Math.cos(t), y: a.y + h * Math.sin(t) }); }
+    for (let k = 0; k <= STEPS; k++) { const t = th - Math.PI / 2 + Math.PI * (k / STEPS); cap.push({ x: b.x + h * Math.cos(t), y: b.y + h * Math.sin(t) }); }
+    out.push(cap);
+  }
+  return out;
+}

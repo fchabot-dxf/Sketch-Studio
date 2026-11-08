@@ -14,6 +14,7 @@
 // VCARVE-4: deriveVcarveContours is the SINGLE canonical derivation shared between UI preview and machine SVG export.
 
 import { ClipperLib, CLIP_SCALE } from './plot/clip.js';
+import { sweptPath } from './polygon-offset.js';
 
 export function vbitHalfAngleTan(angle) {
   const halfAngle = (Number(angle) || 90) / 2;
@@ -80,4 +81,14 @@ export function deriveVcarveContours(boundary, record, { maxContours = 200, hole
   const maxDepth = Number(record.maxDepth) > 0 ? Number(record.maxDepth) : 6;
   const maxIters = Math.max(1, Math.min(maxContours, Math.floor((maxDepth * tan) / dStep + 1e-6)));
   return vcarveContours(boundary, { dStep, halfAngleTan: tan, maxIters, holes });
+}
+
+// TASK 447: the REAL footprint of each contour ring — a V-bit cutting at depth z has surface half-width z * tan(halfAngle),
+// which for the contour at inset d (z = d/tan) is exactly d. One swept band (capsules, nonzero) per ring, in contour order.
+export function deriveVcarveFootprint(contours, record) {
+  const tan = vbitHalfAngleTan(record && record.vbit ? record.vbit.angle : 90);
+  return (contours || []).map((c) => {
+    const halfWidth = c.depth * tan;
+    return { depth: c.depth, halfWidth, fillRule: 'nonzero', rings: sweptPath(c.polygon, halfWidth, { closed: true }) };
+  });
 }

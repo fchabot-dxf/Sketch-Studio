@@ -9,11 +9,10 @@ import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
-import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
-import { sampleArc, loopPolygon, polyArea, pointInPolygon, polygonContains, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts } from '#core/profile-model.js';
+import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
@@ -293,65 +292,31 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
     if (!ct) return { region: '', path: '' };
     const color = ct.previewStroke;
-    const toolDia = Number(rec.toolDia) || 0;
-    const offsetBase = Number(rec.cutOffset) || 0;
-    const rBase = (toolDia / 2) + offsetBase;
-
-    // shared cutter-path look: a semi-transparent BAND (world-unit kerf) + a dashed CENTERLINE (zoom-stable).
-    const bandStyle = `fill:none; stroke:${color}; stroke-width:${toolDia}; stroke-opacity:0.28; stroke-linejoin:round; stroke-linecap:round;`;
+    // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
+    // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
+    // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
+    const footprintFill = `fill:${color}; fill-opacity:0.28; stroke:none;`;
+    const pocketFill = `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
     const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
     const dashStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
-    const bandAndCenter = (poly) => (toolDia > 0 ? polyMarkup(poly, bandStyle) : '') + polyMarkup(poly, centerStyle);
 
-    if (cuts[0].isCompound) {
-      const cut = cuts[0];
-      const cleared = offsetPolygon(cut.outerPoly, cut.outerOffsetSide * rBase);
-      if (cleared.length < 3) return { region: '', path: '' };
-      const clearedHoles = [];
-      for (const hp of (cut.holePolys || [])) {
-        const outHole = offsetPolygon(hp, cut.holeOffsetSide * rBase);
-        const validHole = outHole.length >= 3 ? outHole : hp;
-        if (polygonContains(cleared, validHole)) clearedHoles.push(validHole);
-      }
-      const region = profilePathMarkup(
-        cleared,
-        clearedHoles,
-        `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`
-      );
-      let path = '';
-      const label = pocketDepthLabel(rec.cutDepth);
-      if (label) {
-        const c = pocketLabelPoint(cleared, clearedHoles);
-        path = `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
-      }
-      return { region, path };
-    }
-
-    let path = '';
-    for (const cut of cuts) {
-      if (cut.kind === 'chain') {
-        const strokeStyle = (ct.id === 'guide') ? dashStyle : centerStyle;
-        const bStyle = (ct.id === 'guide') ? '' : bandStyle;
-        if (toolDia > 0 && bStyle) {
-          path += (cut.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, bStyle)).join('');
+    let region = '', path = '';
+    for (const fp of deriveCutFootprint(cuts, rec, state)) {
+      const rings = fp.rings.filter((ring) => ring.length >= 3);
+      if (rings.length) region += `<path d="${rings.map(polyRingD).join(' ')}" fill-rule="${fp.fillRule}" style="${fp.kind === 'pocket' ? pocketFill : footprintFill}"/>`;
+      if (fp.kind === 'pocket') {
+        const label = rings.length ? pocketDepthLabel(rec.cutDepth) : '';
+        if (label) {
+          const c = pocketLabelPoint(rings[0], rings.slice(1));
+          path += `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
         }
-        path += (cut.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, strokeStyle)).join('');
-      } else if (cut.polygon && cut.polygon.length >= 3) {
-        if (cut.offsetSide === 0) {
-          if (ct.id === 'guide') {
-            path += polyMarkup(cut.polygon, dashStyle);
-          } else {
-            path += bandAndCenter(cut.polygon);
-          }
-        } else {
-          const off = offsetPolygon(cut.polygon, cut.offsetSide * rBase);
-          if (off.length >= 3) {
-            path += bandAndCenter(off);
-          }
-        }
+      } else if (fp.chain) {
+        path += (fp.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, fp.kind === 'guide' ? dashStyle : centerStyle)).join('');
+      } else if (fp.center) {
+        path += polyMarkup(fp.center, fp.kind === 'guide' ? dashStyle : centerStyle);
       }
     }
-    return { region: '', path };
+    return { region, path };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 

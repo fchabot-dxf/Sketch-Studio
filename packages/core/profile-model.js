@@ -2,7 +2,8 @@
 // Supports COMBINE tool (compound profiles with holes) and the DERIVED face resolver (Fusion 360 profile picking).
 
 import { findLoops, findOpenChains } from './loop-finder.js';
-import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD } from './loop-geometry.js';
+import { loopPolygon, polyArea, polygonContains, pointInPolygon, loopToPathD, sampleArc } from './loop-geometry.js';
+import { offsetPolygon, openPolygon, sweptPath } from './polygon-offset.js';
 
 const EPS = 1e-9;
 const cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -752,4 +753,60 @@ export function deriveProfileCuts(target, rec, state, loops, loopPolys) {
   });
 
   return cuts;
+}
+
+/**
+ * deriveCutFootprint(cuts, rec, state) — what a ROUND bit of radius r = toolDia/2 ACTUALLY removes for each cut that
+ * deriveProfileCuts returned (the ONE derivation behind the Prepare preview; the exported SVG is unchanged — the Origin
+ * computes its own offsets). Returns [{ kind, fillRule, rings, center, chain }]:
+ *   rings    — polygons to draw in ONE path with `fillRule` (empty = nothing cut: bit too big, or no tool)
+ *   center   — the bit-centre path (polygon) for the dashed centreline, or null (open chain: draw `chain` itself)
+ * Per type (cutOffset `off` = the declared margin; r the bit radius):
+ *   pocket          the morphological OPENING of the region (outer minus holes) by the bit: outer = openPolygon(outer, r,
+ *                   off); each hole = closing of the hole grown by (r+off) (the bit cannot enter it) -> walls reached,
+ *                   convex corners rounded by r. A hole whose footprint is not inside the opened outer is dropped.
+ *   inside/outside  the swept band of the centre path (offset by r+off, ROUND joins): capsules, full width 2r.
+ *   on line         closed loop: the loop swept by r; open chain: the polyline swept by r with round end caps.
+ *   guide           not a cut -> no footprint (rings [], centre kept so the view stays dashed).
+ * Uncut material (corners the bit cannot reach) is simply the area the footprint does not cover.
+ */
+export function deriveCutFootprint(cuts, rec, state) {
+  const out = [];
+  if (!Array.isArray(cuts) || !rec) return out;
+  const r = (Number(rec.toolDia) || 0) / 2;
+  const off = Number(rec.cutOffset) || 0;
+  const isGuide = rec.cutType === 'guide';
+  for (const cut of cuts) {
+    if (cut.isCompound) {
+      const opened = (r > 0) ? openPolygon(cut.outerPoly, r, off) : [];
+      const rings = [];
+      if (opened.length >= 3) {
+        rings.push(opened);
+        for (const hp of (cut.holePolys || [])) {
+          const grown = offsetPolygon(hp, r + off, { join: 'round' });
+          const closed = grown.length >= 3 ? offsetPolygon(grown, -r) : [];
+          const ring = closed.length >= 3 ? closed : hp;
+          if (polygonContains(opened, ring)) rings.push(ring);
+        }
+      }
+      out.push({ kind: 'pocket', fillRule: 'evenodd', rings, center: null, chain: null });
+    } else if (cut.kind === 'chain') {
+      const rings = [];
+      if (!isGuide && r > 0) {
+        for (const sh of (cut.chain && cut.chain.shapes) || []) {
+          let line = null;
+          if (sh.type === 'line') line = (sh.joints || []).slice(0, 2).map((id) => state.joints.get(id));
+          else if (sh.type === 'arc') line = sampleArc(sh, state, 24);
+          if (line && line.length >= 2 && line.every(Boolean)) rings.push(...sweptPath(line, r));
+        }
+      }
+      out.push({ kind: isGuide ? 'guide' : 'chain', fillRule: 'nonzero', rings, center: null, chain: cut.chain });
+    } else if (cut.polygon && cut.polygon.length >= 3) {
+      const side = cut.offsetSide || 0;
+      const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
+      const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
+      out.push({ kind: isGuide ? 'guide' : 'band', fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null });
+    }
+  }
+  return out;
 }

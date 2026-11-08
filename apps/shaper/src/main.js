@@ -28,6 +28,8 @@ import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // 
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { startNewDocument } from '#ui/new-document.js';
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure

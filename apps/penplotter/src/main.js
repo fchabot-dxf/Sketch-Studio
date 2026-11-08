@@ -4,6 +4,8 @@
 // a HIDDEN host so Fill/Toolpath/Export can borrow it (they render #core geometry via UNIFY-2). Design: INTEGRATION.md.
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { startNewDocument } from '#ui/new-document.js';
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('penplotter');
 import { onExportClick } from './export.js';
 import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).

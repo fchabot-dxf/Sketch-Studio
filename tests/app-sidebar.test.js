@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { APPS, appTitle, appIconDataUri } from '../packages/ui/app-registry.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
 import { CUT_TYPES, effectiveCutRecord } from '../apps/shaper/src/shaper.js';
 import { findLoops } from '#core/loop-finder.js';
@@ -146,6 +147,21 @@ await (async () => {
       { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['download-svg', 'download-dxf', 'new'] },
       { id: 'trace', path: '/apps/trace/index.html', actions: ['download-svg', 'download-dxf', 'new'] },
     ];
+    // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──
+    assert.deepStrictEqual(APPS.map((a) => a.name), ['Sketch', 'Shaper', 'Pen Plotter', 'Trace']);
+    assert.strictEqual(new Set(APPS.map((a) => a.icon)).size, 4, 'the four icons are distinct');
+    assert.strictEqual(new Set(APPS.map((a) => a.accent)).size, 4, 'each app has its own accent');
+    assert.strictEqual(appTitle('shaper'), 'Shaper · Sketch Studio');
+    assert.strictEqual(appTitle('shaper', 'Kitchen door'), 'Kitchen door — Shaper', 'a design name turns the title into "<design> — <app>"');
+    for (const a of APPS) {
+      const html = fs.readFileSync(path.join(REPO_ROOT, 'apps', a.id, 'index.html'), 'utf8');
+      assert.ok(html.includes(`<title>${appTitle(a.id)}</title>`), `${a.id}: the static <title> fallback equals the registry's`);
+      assert.ok(!/<link rel="icon"/.test(html), `${a.id}: no favicon hard-coded in index.html`);
+    }
+    if (process.env.EVIDENCE_DIR) { // the four favicons at 16px and 64px side by side (evidence)
+      const row = (px) => `<div style="display:flex;gap:18px;margin:14px">${APPS.map((a) => `<img src="${appIconDataUri(a.id)}" width="${px}" height="${px}">`).join('')}</div>`;
+      fs.writeFileSync(path.join(REPO_ROOT, '.evidence', '473', '_icons.html'), `<body style="background:#3F4145;margin:0;font:14px system-ui;color:#fff">${row(16)}${row(64)}<div style="margin:14px;display:flex;gap:30px">${APPS.map((a) => `<span>${a.name}</span>`).join('')}</div></body>`);
+    }
     const key2 = async (k, code, vk, mods = 0) => { await sendRealKey(send, k, code, vk, mods); await sleep(150); };
     for (const host of hosts) {
       const l = once('Page.loadEventFired');
@@ -153,6 +169,8 @@ await (async () => {
       await Promise.race([l, sleep(10000)]);
       await sleep(1800);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-appsw').length`), 0, `${host.id}: the app-switcher dropdown is gone`);
+      assert.strictEqual(await evalJs(`document.title`), appTitle(host.id), `${host.id}: document.title comes from the registry`);
+      assert.strictEqual(await evalJs(`document.querySelector('link[rel="icon"]').getAttribute('href')`), appIconDataUri(host.id), `${host.id}: the favicon comes from the registry`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar-btn').length`), 1, `${host.id}: one sidebar button`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: closed at start`);
       // open with a real click on the header button
@@ -164,6 +182,7 @@ await (async () => {
       assert.deepStrictEqual(goto.map((g) => g[0]), ['sketchstudio', 'shaper', 'penplotter', 'trace'], `${host.id}: GO TO lists the 4 apps`);
       assert.deepStrictEqual(goto.filter((g) => g[1]).map((g) => g[0]), [host.id], `${host.id}: GO TO marks the current app`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Untitled', `${host.id}: the document name is shown`);
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar [data-section="goto"] svg').length`), 4, `${host.id}: GO TO shows the four app icons`);
       if (host.id === 'trace') assert.strictEqual(await evalJs(`document.querySelector('[data-action="download-svg"]').disabled`), true, 'trace: Download is disabled until there is a trace');
       if (process.env.EVIDENCE_DIR) { const s = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 700, height: 800, scale: 1.4 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `${host.id}-sidebar-open.png`), Buffer.from(s.data, 'base64')); }
       // focus is trapped: Tab many times, the focus never leaves the drawer

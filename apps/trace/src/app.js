@@ -9,6 +9,8 @@
 
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { startNewDocument }                from '#ui/new-document.js';
+import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('trace');
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload }                     from './upload.js';
 import { initControls }                   from './controls.js';

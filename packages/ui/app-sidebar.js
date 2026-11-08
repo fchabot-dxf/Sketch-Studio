@@ -18,14 +18,9 @@
 // Themed through --sk-sidebar-* tokens that fall back to each host's own --sk-header-* palette (Shaper sets the dark Studio
 // tokens in its index.html). Below 768px the drawer is 85vw wide — the same slide-over pattern as #ui/mobile-drawer.js.
 
-// The roster (moved here from app-switcher.js). RELATIVE sibling paths: every app lives at apps/<id>/, so ../<other>/
-// resolves from any server root. Adding a host is one entry.
-export const APPS = [
-  { id: 'sketchstudio', name: 'Sketch Studio', href: '../sketchstudio/' },
-  { id: 'shaper', name: 'Shaper', href: '../shaper/' },
-  { id: 'penplotter', name: 'Pen Plotter', href: '../penplotter/' },
-  { id: 'trace',      name: 'Image Trace', href: '../trace/'      },
-];
+// The app roster, names and icons come from THE registry (#ui/app-registry.js): one source for GO TO, the tab title and the favicon.
+import { APPS } from './app-registry.js';
+export { APPS };
 
 // Icons for the common actions (inline SVG, currentColor) so hosts reference them by key instead of drawing their own.
 export const SIDEBAR_ICONS = {
@@ -56,6 +51,9 @@ function injectStyles() {
   padding: 9px 10px; cursor: pointer; font: inherit; }
 .sk-sidebar-item:hover:not(:disabled) { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 .sk-sidebar-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.sk-sidebar-appic svg { width: 24px; height: 24px; display: block; }
+.sk-sidebar-appic { width: 24px !important; height: 24px !important; }
+.sk-sidebar-check { margin-left: auto; opacity: 0.8; }
 .sk-sidebar-ic { width: 18px; height: 18px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
 .sk-sidebar-sep { height: 1px; margin: 6px 10px; background: var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
 .sk-sidebar-confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); font-size: 13px; }
@@ -129,7 +127,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     for (const app of list) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item' + (app.id === (cur && cur.id) ? ' current' : ''); b.dataset.app = app.id;
       if (app.id === (cur && cur.id)) b.setAttribute('aria-current', 'true');
-      b.innerHTML = `<span class="sk-sidebar-ic" aria-hidden="true">${app.id === (cur && cur.id) ? '&#10003;' : ''}</span><span>${app.name}</span>`;
+      b.innerHTML = `<span class="sk-sidebar-ic sk-sidebar-appic" aria-hidden="true">${app.icon}</span><span>${app.name}</span>${app.id === (cur && cur.id) ? '<span class="sk-sidebar-check" aria-hidden="true">&#10003;</span>' : ''}`;
       b.addEventListener('click', () => { close(); if (app.id !== (cur && cur.id)) location.href = app.href; });
       go.appendChild(b);
     }

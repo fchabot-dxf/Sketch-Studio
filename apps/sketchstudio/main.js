@@ -12,6 +12,8 @@ import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { startNewDocument } from '#ui/new-document.js';
+import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
+applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry

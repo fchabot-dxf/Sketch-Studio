@@ -127,6 +127,33 @@ export function createSketchState(engine, view) {
       this.redoStack.length = 0;
       this._notifyHistory();
     },
+    // Clear All: reset EVERY document store + session UI to a freshly-constructed state, then drop history (NOT undoable).
+    clearDocument: function() {
+      this.joints.clear();
+      this.shapes.length = 0;
+      this.constraints.length = 0;
+      const fresh = createSketches();
+      this.sketches.length = 0;
+      this.sketches.push(...fresh.sketches);
+      this.activeSketchId = fresh.activeSketchId;
+      this.groups.length = 0;
+      this.profiles.length = 0;
+      this.vcarves.length = 0;
+      this.selectedJoints.clear();
+      this.selectedConstraints.clear();
+      this.selectedShapes.clear();
+      this.active = null;
+      this.drag = null;
+      this.snapTarget = null;
+      this.inference = null;
+      this.lastMouse = null;
+      this.pendingConstraint = null;
+      this.hoveredShape = null;
+      this.hoveredJoint = null;
+      this.hoveredConstraint = null;
+      this.clearHistory();
+      this.initStore(); // re-creates the origin joint
+    },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     saveStateForce: function(){
       this.history.push(this._captureSnapshot());

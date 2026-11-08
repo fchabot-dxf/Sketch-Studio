@@ -10,8 +10,6 @@ import { setupTrimTool, resetTrimState } from '#ui/input-handlers/trim-tool.js';
 import { setupBreakTool, resetBreakState } from '#ui/input-handlers/break-tool.js';
 import { setupFilletTool, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
-import { deleteSelection } from '#core/delete-manager.js';
-import { draw } from '#ui/svg-renderer.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 export function setupUI(state){
   // S7c-2d: the shared tool ribbon (mounted below). setTool syncs its active highlight via refresh().
@@ -279,44 +277,9 @@ export function setupUI(state){
   const clearBtn = document.getElementById('btn-clear');
   if(clearBtn){
     clearBtn.addEventListener('click', ()=>{
-      // 1. If selection exists, delete selection (Undoable)
-      const hasSelection = (state.selectedShapes && state.selectedShapes.size > 0) || 
-                           (state.selectedJoints && state.selectedJoints.size > 0) || 
-                           (state.selectedConstraints && state.selectedConstraints.size > 0);
-      
-      if (hasSelection) {
-          deleteSelection(state);
-          // Clear selection sets explicitly to remove highlights
-          state.selectedShapes.clear();
-          state.selectedJoints.clear();
-          state.selectedConstraints.clear();
-
-          // Force immediate redraw to reflect deletion
-          const svg = document.getElementById('svgCanvas');
-          const worldGroup = document.getElementById('world-group');
-          if(svg && worldGroup) {
-             draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, !!state.drag, worldGroup);
-          }
-          return;
-      }
-
-      // 2. Else, Clear All (Destructive, Not Undoable)
-      // Proceed to clear all immediately (no confirmation)
-
+      // Clear All always clears the whole document (Destructive, Not Undoable); deleting a selection is the Delete key's job.
       try{
-        // Clear model
-        if(state && state.joints && typeof state.joints.clear === 'function') state.joints.clear();
-        if(state && Array.isArray(state.shapes)) state.shapes.length = 0;
-        if(state && Array.isArray(state.constraints)) state.constraints.length = 0;
-
-        // Clear selections and history
-        if(state && state.selectedJoints && typeof state.selectedJoints.clear === 'function') state.selectedJoints.clear();
-        if(state && state.selectedShapes && typeof state.selectedShapes.clear === 'function') state.selectedShapes.clear();
-        if(state && state.selectedConstraints && typeof state.selectedConstraints.clear === 'function') state.selectedConstraints.clear();
-        if(state && typeof state.clearHistory === 'function') state.clearHistory(); // undo AND redo; ribbon buttons follow
-
-        // Re-init engine store (creates origin joint, etc.)
-        if(typeof state.initStore === 'function') state.initStore();
+        state.clearDocument();
 
         // Reset UI mode
         setTool(TOOL_MODES.SELECT);

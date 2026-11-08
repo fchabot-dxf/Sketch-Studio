@@ -82,7 +82,7 @@ assert.strictEqual(effectiveCutRecord({ cutType: 'exterior', toolDia: D, cutOffs
   const exp = (rec) => exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec }], encoding: CUT_TYPES, docUnit: 'mm' });
   const plain = exp({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: D });
   assert.strictEqual(exp({ cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: D, autoOffset: 99 }), plain, 'autoOffset never reaches the export');
-  assert.ok(!/autoOffset/i.test(plain) && !plain.includes('cutOffset'), 'no offset attribute for a pocket with offset 0 (the Origin adds its own)');
-  assert.ok(exp({ cutType: 'pocket', cutDepth: 6, cutOffset: 2, toolDia: D }).includes('shaper:cutOffset="2mm"'), 'a manual offset is still written, as before');
+  assert.ok(!/autoOffset/i.test(plain) && plain.includes('shaper:cutOffset="0mm"'), 'a pocket with offset 0 writes "0mm" (never the Origin own D/4)');
+  assert.ok(exp({ cutType: 'pocket', cutDepth: 6, cutOffset: 2, toolDia: D }).includes('shaper:cutOffset="2.000 mm"'), 'a manual offset is still written, as before');
 }
 console.log('pocket-two-stage: ok');

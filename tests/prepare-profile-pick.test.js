@@ -511,7 +511,7 @@ const ENC5 = [
     assert.strictEqual(afterList[0].isCombined, true, 'P10: isCombined is true');
   }
 
-  // E1: export a frame with Pocket on the outer: one evenodd path, 2 subpaths, no group anywhere.
+  // E1: export a frame with Pocket on the outer: one compound path (no fill-rule), 2 subpaths, no group anywhere.
   {
     const state = makeFrameState();
     const loops = findLoops(state);
@@ -525,7 +525,7 @@ const ENC5 = [
     });
 
     assert(!svg.includes('<g '), 'E1: no <g> group in export');
-    assert(svg.includes('fill-rule="evenodd"'), 'E1: compound path has fill-rule="evenodd"');
+    assert(!svg.includes('fill-rule'), 'E1: compound path has NO fill-rule (holes wound opposite, Studio parity)');
     assert(svg.includes('shaper:cutType="pocket"'), 'E1: shaper:cutType is pocket');
     const pathMatch = svg.match(/<path d="([^"]+)"/);
     assert(pathMatch, 'E1: path element emitted');
@@ -561,8 +561,8 @@ const ENC5 = [
       docUnit: 'mm',
     });
 
-    // Outer pocket path has fill-rule="evenodd" and outer + ring hole
-    assert(svg.includes('fill-rule="evenodd"'), 'E2: outer pocket has fill-rule="evenodd"');
+    // Outer pocket path: outer + ring hole (hole wound opposite, no fill-rule)
+    assert(!svg.includes('fill-rule'), 'E2: outer pocket has NO fill-rule');
     assert(svg.includes('shaper:cutType="pocket"'), 'E2: pocket cut attr present');
     assert(svg.includes('shaper:cutType="online"'), 'E2: dot online cut attr present');
 

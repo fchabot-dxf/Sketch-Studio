@@ -24,17 +24,22 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //                 allowing you finish up the edge with an Inside cut", "equal to 1/4th of the specified cutter diameter" since the
 //                 Napa software). The user's own cutOffset ADDS to it. Declared ONCE here; effectiveCutRecord() turns it into
 //                 rec.autoOffset (mm) for the preview. The Origin's own offset is never written to the export.
-//   params      — TASK 450/450b: WHICH cut params the type has, ONE declaration (subset of SHAPER_FIELDS): outside/inside/pocket
-//                 = cutDepth+cutOffset+toolDia; On line = cutDepth+toolDia (Shaper: "offsets are not an option"); Guide keeps all
-//                 three (Shaper Studio allows it: the type can be changed ON THE TOOL later and the params travel with the path). The cut card shows only those rows, the export writes only those attributes, the preview ignores
-//                 the rest. A value stored for a param the type does not have is left untouched and ignored everywhere.
+//   params      — TASK 450/450b/456: WHICH cut params the type has, ONE declaration (subset of SHAPER_FIELDS). Today every type has
+//                 all three (cutDepth, cutOffset, toolDia): Shaper Studio shows and writes an offset on On Line too (owner's
+//                 screenshot + a real Studio export with shaper:cutOffset="0in" on an On Line path), and a Guide keeps them (its
+//                 type can be changed ON THE TOOL later and the params travel with the path). The declaration stays so a type
+//                 that really lacks a param is a one-line change: the cut card shows only those rows, the export writes only
+//                 those attributes, the preview ignores the rest (a value stored for a missing param is never migrated).
+//   offsetMovesCut — TASK 456: `false` = a stored offset does NOT move the cut: Studio still draws an On Line band CENTRED on the
+//                 line with an offset typed in (Shaper: "offsets are not an option" for On Line). The card still shows the field and
+//                 the export still writes it (Studio parity); only the PREVIEW (effectiveCutRecord) ignores it.
 //   previewFill / previewStroke — a DARK-canvas-legible palette (green family) for the Prepare cut-plan preview;
 //                 the export colors (e.g. exterior=#000) are invisible/illegible on the dark Prepare canvas.
 export const CUT_TYPES = [
   { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a', params: ['cutDepth', 'cutOffset', 'toolDia'] },
   { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e', params: ['cutDepth', 'cutOffset', 'toolDia'] },
   { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80', params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399', params: ['cutDepth', 'toolDia'] },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399', params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
   { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635', params: ['cutDepth', 'cutOffset', 'toolDia'] },
 ];
 
@@ -69,6 +74,7 @@ export function effectiveCutRecord(rec) {
   const out = { ...rec };
   if (!cutTypeHasParam(rec.cutType, 'cutDepth')) out.cutDepth = 'unset';
   if (!cutTypeHasParam(rec.cutType, 'cutOffset')) out.cutOffset = 0;
+  if (cutTypeById(rec.cutType) && cutTypeById(rec.cutType).offsetMovesCut === false) out.cutOffset = 0; // preview only: the cut stays centred
   if (!cutTypeHasParam(rec.cutType, 'toolDia')) out.toolDia = 0;
   const t = cutTypeById(rec.cutType);
   out.autoOffset = (t && t.autoOffsetFraction) ? (Number(out.toolDia) || 0) * t.autoOffsetFraction : 0; // TASK 452: the Origin's automatic pocket offset

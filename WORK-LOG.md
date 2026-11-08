@@ -12536,3 +12536,5 @@ Test doc: a 100x80 mm SVG (path triangle, circle with stroke+fill, transformed g
 
 ### Stop condition
 No product code changed: checked with `git diff --stat origin/main..HEAD` after the commit (WORK-LOG.md only).
+
+- Addendum (TURN 443): finding 2 was measured on the branch base ad0472f; origin/main has since merged 3ccc8eb (TASK 444b: history.js keys scoped to Toolpath/Export), which probably fixes it. NOT re-measured on main.

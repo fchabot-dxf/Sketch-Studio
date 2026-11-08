@@ -146,6 +146,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Cosmetic, not ticketed yet:
     - the Toolpath and Export stages show an empty ribbon band with only a label;
     - the Pens panel says "click + to add a pen" while a pen group is already listed (unnamed grey swatch).
+- QUEUED 448 (owner, screenshot): radius dims placeable anywhere along the arc.
+  - Cause: svg-renderer.js ~:2257 angle = j2 ? ... : 0; radius dims have no j2, so it's always horizontal-right.
+  - Arc extension outside the sweep (Fusion).
+  - Goes to the first free seat.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

@@ -66,6 +66,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
   - AGY-1: 432 reviewed (61755c7), not merged: two region-key resolvers with 4 key forms, profile-list logic in
     vcarve-view, a copied clientToWorld with an empty catch, and the oracle list it owed. Sent 432b.
+  - DONE: 432/432b merged 64ff78d (gate 163/163). AGY-1 now on 433 PLAN (cut types on profiles with holes; order = owner question).
   - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2's 438b (0fb391b) is NOT merged. The
     angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
     existing duplicate got stamped (Escape deletes it). Sent 438c.

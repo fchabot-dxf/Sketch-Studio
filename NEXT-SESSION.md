@@ -207,8 +207,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - QUEUED 455 (owner ask, screenshot): Prepare canvas in Shaper Studio colours.
   - Sampled: bg #3F4145, pocket fill #35695B, outline #1BE09E, white \ / mark-grid hatch, black
     depth chip.
-  - A second screenshot: geometry = thin near-white lines on #3F4145, ONE geometry colour (owner: "geometry
-    inside a pocket isn't a thing").
+  - A second screenshot: geometry = thin near-white lines on #3F4145, TWO geometry states (owner): unselected near-white, selected #9ACEC1;
+    nothing depends on being inside a pocket.
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
 - Next, in this order:

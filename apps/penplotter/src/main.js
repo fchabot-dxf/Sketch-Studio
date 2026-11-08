@@ -94,11 +94,13 @@ if (STAGE_MOUNT.design && !mounted.design) mounted.design = STAGE_MOUNT.design(v
 // a HIDDEN host at startup so #canvasWrap always exists (+ initDom + initLayers' default toolpath). Fill/Toolpath/
 // Export borrow it by re-parenting on entry; they render #core geometry via UNIFY-2. The art store + art tools +
 // the transform HUD (the '°' field) live in this hidden host = DORMANT, never shown, until UNIFY-7 retires them.
+// Its isActive gates history.js's Ctrl+Z/Y keys to Toolpath + Export (the toolpath/doc history); Design's keys belong to
+// the shared sketch history (isActive 'design' above) — TASK 444b: one keystroke, one history.
 const drawHost = document.createElement('section');
 drawHost.id = 'stage-draw';
 drawHost.hidden = true;
 stagesHost.appendChild(drawHost);
-mounted.draw = mountDrawStage(drawHost, { isActive: () => currentStageId === 'draw', navigate: (to) => showStage(to) }) || {};
+mounted.draw = mountDrawStage(drawHost, { isActive: () => currentStageId === 'toolpath' || currentStageId === 'export', navigate: (to) => showStage(to) }) || {};
 
 // Initial stage: the persisted one if still valid, else the first.
 let initial = STAGES[0].id;

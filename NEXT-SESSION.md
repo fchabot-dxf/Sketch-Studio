@@ -304,6 +304,26 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     `wait <chat>`, `say <chat> <file>`. VS Code makes `<repo>.worktrees/<name>` on branch agents/<name>, autopilot;
   - merge agents/<name> as usual; clean worktrees via the Agents window;
   - do NOT use `code chat` any more.
+- DONE (2026-11-08, all via merge.sh, gate green): 464 2d1001d; 466 f9b3bbc (HISTORY_DEPTH 100); 465 d49c348;
+  469 60bcb90 (Copilot: equal on lines sharing a joint held, engine.js joint list positional for equal);
+  468 d25128a (Copilot: numeric inputs hidden by .hidden class only); 470 54ccb4e (previews carry resolved points; an
+  invalid arc preview is cleared); 471 27f1eb3 (Review build cache: cached ~5-25 ms; cold ~185-200 ms, still over
+  150 ms: the remaining cost is Clipper itself; a WASM Clipper2 is the owner's option, not queued);
+  467 9d1e2af (Copilot: penplotter-panel-overflow waits on conditions).
+  - Gate FLAKES under parallel load: cut-offset-types + prepare-look failed once in a merge gate, both passed alone
+    and on the rerun. Candidate task: the same condition-wait treatment for the Shaper browser tests.
+  - Copilot worktrees have NO node_modules: every Copilot task must say "npm install first".
+  - Seat quality comparison is tracked (owner asked): advisor memory seat-quality-by-agent.
+- NOW (owner requests 2026-11-08):
+  - CC-C 472 STOCK as a cut type: any closed loop drawn in Design, marked Stock in Prepare with a THICKNESS; Review
+    extrudes that (irregular) profile; no Stock loop = the old bbox+margin. EXPORT = a GUIDE (owner: "ok guide then";
+    Shaper: guides are "uncuttable") with the thickness in cutDepth.
+  - CC-A 473 shared APP SIDEBAR (#ui, all 4 apps), modelled on Shaper Studio's drawer (doc name, Download/New/...,
+    GO TO apps; replaces the app-switcher dropdown); must allow a 2nd view: a Fusion-style Projects browser.
+  - CC-B 474 PROJECTS store: Fusion Data Panel model (owner screenshot): PROJECTS (folders, pinned) contain DESIGNS;
+    recent; save/open .sketch.json; the old autosave slot migrates to "Untitled"; a storage-adapter seam for Drive.
+  - NEXT: Google Drive adapter. The owner's OAuth client already exists (see the PERSISTENCE epic, client
+    983232817866-...; origins sketch-studio.pages.dev + localhost:8000; drive.file). Then wire the sidebar to 474.
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

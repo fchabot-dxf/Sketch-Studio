@@ -40,7 +40,13 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Owner commit 5bffb68: Dim with a pre-selected line, plus filleted-rect rigidity status. Gated but NOT advisor-reviewed in depth.
 
 **▶ LIVE QUEUE (turn 431, 2026-11-07).** Task texts are in the advisor's scratchpad (task_<id>.txt).
-- In flight: 431b (AGY-1). The Combine slice review found 4 problems:
+- 19:24 BOTH seats hit the Gemini Flash quota (429, resets ~22:40). 431b pushed as f31e66f with no REPORT:
+  - items 1-3 are good;
+  - item 4 correctly BLOCKED (no change signal), but resolveProfiles then lost its only live caller.
+  - Next for AGY-1: 431c (advisor decision: a PURE resolveProfileViews called in draw; delete the mutating resolve and
+    the stored invalid/d).
+  - AGY-2 was mid-436.
+- (history) 431 (AGY-1): the Combine slice review found 4 problems:
   - dead Combine buttons in non-Shaper apps;
   - the action lives in the Shaper host;
   - five copies of the profile clone;

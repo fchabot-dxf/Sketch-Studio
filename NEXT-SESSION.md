@@ -179,7 +179,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
           - COMBINED shape = ONE path with outer + hole subpaths, NO fill-rule (nonzero), the hole wound OPPOSITE.
             Ours uses evenodd with same-winding holes, so the holes would fill if the Origin ignores fill-rule. 456
             switches to Studio's form.
-          - DISPATCHED 456 to CC-A after 452 merged (1c9b0fa).
+          - DISPATCHED 456 to CC-A after 452 merged (1c9b0fa). Amended: On Line offset is shown and exported but never
+            moves the preview (Studio draws it centred even at 1.000 in), via a declared offsetMovesCut:false.
           Origin parses both. 456 uses "X.XXX in" for every non-zero value and "0in" for a zero offset. Still no On
           Line sample. Studio also groups several paths in one <g> (structure; out of scope).
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would

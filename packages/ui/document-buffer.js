@@ -11,6 +11,7 @@
 //     and teach people to click through real ones. A passive status callback is the only truth-teller.
 //   - All storage is best-effort: a write/read failure just means "not saved this time," never a thrown
 //     error the host has to handle.
+//   - Hosts you don't own pass through: a save replaces only its own doc.hosts entry (TASK 458).
 //   - Opening a document REPLACES the whole state (see #core/document.js's deserializeDocument) — never
 //     a blend of old + restored.
 //
@@ -45,12 +46,21 @@ async function readBuffer() {
   } catch (_) { return null; } // best-effort: no buffer readable = boot with an empty sketch, same as today
 }
 
+// The buffer key is shared by EVERY app, and `doc.hosts` holds one sidecar per host app. A write therefore replaces only
+// the sidecars this buffer OWNS (`doc.hosts`, built from its own hostName) and passes every other host's entry through untouched: read the stored
+// document and write the merged one inside ONE readwrite transaction (so two tabs can't interleave between the read and
+// the write). A buffer with no host owns nothing, so it never deletes anyone's sidecar.
 async function writeBuffer(doc) {
   try {
     const db = await openDB();
     return await new Promise((resolve) => {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(doc, KEY);
+      const store = tx.objectStore(STORE);
+      const got = store.get(KEY);
+      got.onsuccess = () => {
+        const kept = (got.result && got.result.hosts) || {};
+        store.put({ ...doc, hosts: { ...kept, ...doc.hosts } }, KEY);
+      };
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
     });

@@ -217,7 +217,7 @@ export function createCutPanel(hostEl, opts = {}) {
     renderFields();
   };
 
-  // U3a: re-label the cut params live when the document unit changes (no toggle yet — verify by setting DOC_UNIT).
+  // U3a: re-label the cut params live when the document unit changes (the Style panel's Units tab sets DOC_UNIT).
   const unsub = (typeof SettingsManager.subscribe === 'function')
     ? SettingsManager.subscribe((key) => { if (key === 'DOC_UNIT' && !card.hidden) renderFields(); })
     : () => {};

@@ -136,6 +136,7 @@ function initApp(){
   // Design↔Export view router. The tool ribbon + canvas + footer stay AS-IS in the Design view (the shared-ribbon
   // swap is S7c-2d; the faithful Export popup→tab cleanup is S7c-2e).
   const stylePanel = createStylePanel({
+    hostId: 'sketchstudio',
     onSaveProject: (all) => SettingsManager.saveProjectFile(all),
     onNotify: showNotification,
   });

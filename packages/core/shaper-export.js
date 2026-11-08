@@ -17,7 +17,7 @@ import { findLoops, findOpenChains } from './loop-finder.js';
 import { format } from './units.js';
 import { deriveVcarveContours } from './vcarve.js';   // VCARVE-4: canonical vcarve derivation
 import { loopPolygon, loopToPathD, polyToPathD, chainToPathD } from './loop-geometry.js';
-import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey } from './profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveTargetKey, deriveProfileCuts } from './profile-model.js';
 export { loopToPathD, polyToPathD };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -197,37 +197,27 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     if (!e || !e.target || !e.rec || !e.rec.cutType) continue;
     if (e.target.kind === 'loop' && vcarveExcludedLoops.has(e.target.id)) continue;
     if (e.target.kind === 'profile' && vcarveExcludedProfiles.has(e.target.id)) continue;
-    const c = encOf(e.rec.cutType);
-    if (!c) continue;
-    let geom = null;
-    if (e.target.kind === 'loop') {
-      const loop = loopById.get(e.target.id);
-      if (loop && c.cutType === 'pocket' && (loops.length >= 2 || hasProfiles)) {
-        const prof = resolveTargetKey({ kind: 'loop', id: loop.id }, state, loops, ensurePolys());
-        if (prof && !prof.invalid && prof.outer) {
-          geom = compoundOrLoopGeom(loopById.get(prof.outer), prof.inners);
-        }
-      } else if (loop) {
-        geom = loopGeom(loop, state, shapeById);
-      }
-    } else if (e.target.kind === 'profile') {
-      const prof = resolveTargetKey({ kind: 'profile', id: e.target.id }, state, loops, ensurePolys());
-      if (prof && !prof.invalid && prof.outer) {
-        if (c.cutType === 'pocket') {
-          geom = prof.d ? { tag: 'path', a: `d="${prof.d}" fill-rule="evenodd"` } : compoundOrLoopGeom(loopById.get(prof.outer), prof.inners);
+    const cuts = deriveProfileCuts(e.target, e.rec, state, loops, ensurePolys());
+    for (const cut of cuts) {
+      const c = encOf(cut.rec.cutType);
+      if (!c) continue;
+      let geom = null;
+      if (cut.isCompound) {
+        if (cut.d) {
+          geom = { tag: 'path', a: `d="${cut.d}" fill-rule="evenodd"` };
+        } else if (cut.holeLoops && cut.holeLoops.length > 0) {
+          geom = compoundOrLoopGeom(cut.outerLoop, cut.holeLoops.map((h) => h.id));
         } else {
-          const outerLoop = loopById.get(prof.outer);
-          if (outerLoop) geom = loopGeom(outerLoop, state, shapeById);
+          geom = loopGeom(cut.outerLoop, state, shapeById);
         }
-      }
-    } else if (e.target.kind === 'chain') {
-      const chain = chainById.get(e.target.id);
-      if (chain) {
-        const d = chainToPathD(chain, state);
+      } else if (cut.kind === 'chain') {
+        const d = chainToPathD(cut.chain, state);
         if (d) geom = { tag: 'path', a: `d="${d}"` };
+      } else if (cut.loop) {
+        geom = loopGeom(cut.loop, state, shapeById);
       }
+      if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(cut.rec, c, docUnit), tag: geom.tag, a: geom.a });
     }
-    if (geom) items.push({ common: colorAttrs(c) + shaperAttrs(e.rec, c, docUnit), tag: geom.tag, a: geom.a });
   }
 
   // VCARVE-4 + profile holes: derive and emit contour stack from state.vcarves + profile holes

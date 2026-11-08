@@ -611,5 +611,148 @@ import { format } from '#core/units.js';
     }
   }
 
+  // ── TASK 433b: Profile Cut Semantics on Profiles with Holes ──
+  {
+    const frameState = {
+      joints: new Map([
+        ['O0', { x: 0, y: 0 }], ['O1', { x: 60, y: 0 }], ['O2', { x: 60, y: 60 }], ['O3', { x: 0, y: 60 }],
+        ['H0', { x: 20, y: 20 }], ['H1', { x: 40, y: 20 }], ['H2', { x: 40, y: 40 }], ['H3', { x: 20, y: 40 }],
+      ]),
+      shapes: [
+        { id: 'so1', type: 'line', joints: ['O0', 'O1'] },
+        { id: 'so2', type: 'line', joints: ['O1', 'O2'] },
+        { id: 'so3', type: 'line', joints: ['O2', 'O3'] },
+        { id: 'so4', type: 'line', joints: ['O3', 'O0'] },
+        { id: 'sh1', type: 'line', joints: ['H0', 'H1'] },
+        { id: 'sh2', type: 'line', joints: ['H1', 'H2'] },
+        { id: 'sh3', type: 'line', joints: ['H2', 'H3'] },
+        { id: 'sh4', type: 'line', joints: ['H3', 'H0'] },
+      ],
+      groups: [],
+      profiles: [],
+      constraints: [],
+    };
+    const outerPoly = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 60 }, { x: 0, y: 60 }];
+    const holePoly = [{ x: 20, y: 20 }, { x: 40, y: 20 }, { x: 40, y: 40 }, { x: 20, y: 40 }];
+    const loops = findLoops(frameState);
+    const outerLoop = loops.find((l) => l.edges.includes('so1'));
+    const holeLoop = loops.find((l) => l.edges.includes('sh1'));
+    const loopPolys = {
+      [outerLoop.id]: outerPoly,
+      [holeLoop.id]: holePoly,
+    };
+
+    // 23. Test 1: Exterior (Outside) cut on profile with hole → hole as inside first, outer as outside last
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'exterior' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 1: exterior cut on profile with hole');
+    }
+
+    // 24. Test 2: Interior (Inside) cut on profile with hole → duality: hole as outside first, outer as inside last
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'interior' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#000000" shaper:cutType="outside"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 2: interior cut on profile with hole');
+    }
+
+    // 25. Test 3: Pocket cut on profile with hole → compound evenodd path
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'pocket' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z M 20 20 L 40 20 L 40 40 L 20 40 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 3: pocket cut on profile with hole');
+    }
+
+    // 26. Test 4: On line cut on profile with hole → separate paths, hole first, then outer
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'online' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 4: online cut on profile with hole');
+    }
+
+    // 27. Test 5: Guide on profile with hole → separate paths, hole first, then outer
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [{ target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'guide' } }],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 5: guide on profile with hole');
+    }
+
+    // 28. Test 6 (Q4 decision): Outer profile Outside + hole\'s own loop record On line → 3 paths emitted
+    {
+      const svg = exportShaperSVG({
+        state: frameState,
+        entries: [
+          { target: { kind: 'loop', id: outerLoop.id }, rec: { cutType: 'exterior' } },
+          { target: { kind: 'loop', id: holeLoop.id }, rec: { cutType: 'online' } },
+        ],
+        encoding: ENC5,
+        docUnit: 'mm',
+        loopPolys,
+      });
+      const want = [
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="60mm" height="60mm" viewBox="0 0 60 60">',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"/>',
+        '  <path d="M 0 0 L 60 0 L 60 60 L 0 60 Z" fill="#000000" shaper:cutType="outside"/>',
+        '  <path d="M 20 20 L 40 20 L 40 40 L 20 40 Z" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>',
+        '</svg>',
+      ].join('\n');
+      eq(svg, want, 'TASK 433b test 6: Q4 outer outside + hole own online = 3 paths');
+    }
+  }
+
   console.log('shaper-export tests passed ✅');
 })().catch((e) => { console.error('shaper-export tests failed ❌', e); process.exit(1); });

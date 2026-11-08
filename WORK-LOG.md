@@ -12200,3 +12200,54 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 433b — Built Profile Cut Semantics on Profiles with Holes — branch agy1
+
+### 1. Unified Cut Derivation Architecture
+- **Single Source of Truth (`packages/core/profile-model.js`):**
+  - Added and exported `deriveProfileCuts(target, rec, state, loops, loopPolys)`.
+  - Resolves target through `resolveTargetKey(target, state, allLoops, loopPolys)`.
+  - For open chains: emits chain cut descriptor with `offsetSide: 0`.
+  - For compound/pocket profiles: emits single compound cut with `outerPoly` (outerOffsetSide: -1) and `holePolys` (holeOffsetSide: +1), preserving holes in `evenodd` preview hatch and export.
+  - For discrete profile cuts:
+    - `exterior` (Outside): hole loops emitted FIRST as `interior` (`offsetSide: -1`), outer loop emitted LAST as `exterior` (`offsetSide: 1`).
+    - `interior` (Inside duality): hole loops emitted FIRST as `exterior` (`offsetSide: 1`), outer loop emitted LAST as `interior` (`offsetSide: -1`), keeping cutter strictly inside face material.
+    - `online` (On line): hole loops emitted FIRST as `online` (`offsetSide: 0`), outer loop emitted LAST as `online` (`offsetSide: 0`).
+    - `guide` (Guide): hole loops emitted FIRST as `guide` (`offsetSide: 0`), outer loop emitted LAST as `guide` (`offsetSide: 0`).
+  - Parameter inheritance: all hole cuts inherit cut parameters (`toolDia`, `cutOffset`, `cutDepth`) from the parent record.
+  - Sketches without holes: `spec.inners` is empty, so only outer loop is emitted with `rec.cutType`, guaranteeing 100% byte-identical export for simple loops.
+
+### 2. Export & Prepare Preview Parity
+- **Shaper Export (`packages/core/shaper-export.js`):**
+  - Replaced manual per-kind branching with `deriveProfileCuts(e.target, e.rec, state, loops, ensurePolys())`.
+  - Iterates over derived cuts in order (holes first, outer last) and maps each to Shaper SVG elements with respective colors and `shaper:*` attributes.
+  - Retained `compoundOrLoopGeom` for compound pocket export (`fill-rule="evenodd"`).
+- **Prepare Preview (`apps/shaper/src/prepare-view.js`):**
+  - Updated `computeLook` to consume `deriveProfileCuts(t, rec, state, loops, loopPolys)`.
+  - For pocket: insets outer polygon and outsets hole polygons for the pocket hatch.
+  - For outside/inside: renders semi-transparent kerf band + dashed centerline on BOTH outer and hole boundaries at their respective offset sides.
+  - For online/guide: renders centerline/guide dashes on both boundaries.
+  - **Zero Duplicate Logic**: neither export nor preview contains a second hole or offset loop; both delegate exclusively to `deriveProfileCuts`.
+
+### 3. Verification & Evidence
+- **Exact-String Export Tests (`tests/shaper-export.test.js`):**
+  - Test 23: Frame with Outside (`exterior`) cut → hole as inside first, outer as outside last.
+  - Test 24: Frame with Inside (`interior`) cut → hole as outside first, outer as inside last.
+  - Test 25: Frame with Pocket (`pocket`) cut → compound evenodd path.
+  - Test 26: Frame with On line (`online`) cut → discrete paths, hole first then outer.
+  - Test 27: Frame with Guide (`guide`) cut → discrete paths, hole first then outer.
+  - Test 28 (Q4 decision): Outer profile Outside + hole's own loop record On line → 3 paths emitted.
+  - All 28 tests pass byte-for-byte; existing tests 1-22 are byte-identical.
+- **Prepare View Unit Tests (`tests/prepare-profile-pick.test.js`):**
+  - Added tests P9 and P10 verifying that both Outside and Inside cuts produce kerf toolpaths on BOTH outer and hole boundaries with correct offset coordinates. All 12 tests pass.
+- **Live Headless Edge Captures (`.evidence/433b/`, untracked):**
+  - `.evidence/433b/prepare-frame-outside.png` (MD5: `10CCFE1F647374CF113977DF31A50842`): shows outer kerf band at $+r$ and hole kerf band at $-r$.
+  - `.evidence/433b/prepare-frame-inside.png` (MD5: `6D38F6FEBD533FE77C602F5BE38CC4BB`): shows outer kerf band at $-r$ and hole kerf band at $+r$.
+  - MD5 hashes are distinct; exported SVGs quoted verbatim in report.
+- **Headless process hygiene:** 0 msedge instances left.
+- **Repo Gate (`npm run gate` / `node scripts/gate.cjs`):**
+  - `GATE files=163 pass=163 fail=0`
+  - `SMOKE 12/12`
+  - `HEADLESS-LEFT 0`
+  - `HEADLESS-OTHER 0`

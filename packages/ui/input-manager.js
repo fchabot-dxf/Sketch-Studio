@@ -17,7 +17,7 @@ import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointer
 import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
-import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState } from '#ui/input-handlers/pan-zoom.js';
+import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
@@ -1020,43 +1020,7 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
 }
 
 function handleWheel(e, svg, state) {
-    e.preventDefault();
-
-    // Zoom towards cursor: Calculate world point under cursor
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-
-    const rx = (e.clientX - rect.left) / rect.width;
-    const ry = (e.clientY - rect.top) / rect.height;
-    const wx = state.view.x + (rx - 0.5) * state.view.w;
-    const wy = state.view.y + (ry - 0.5) * state.view.h;
-
-    // Use an exponential scale so larger deltaY produces proportional zoom.
-    // Positive deltaY (wheel down) should zoom out; negative zooms in.
-    const zoomFactorPerDelta = 1.0015; // tuned for smooth feel
-    const factor = Math.pow(zoomFactorPerDelta, e.deltaY);
-
-    // Clamp resulting width to avoid runaway zoom
-    const MIN_W = 1e-3;
-    const MAX_W = 1e6;
-    let newW = state.view.w * factor;
-    newW = Math.max(MIN_W, Math.min(MAX_W, newW));
-    const newH = newW * (state.view.h / state.view.w);
-
-    state.view.w = newW;
-    state.view.h = newH;
-
-    // Adjust view center so the world point remains under the cursor
-    state.view.x = wx - (rx - 0.5) * state.view.w;
-    state.view.y = wy - (ry - 0.5) * state.view.h;
-
-    // Apply to SVG immediately and notify listeners
-    try {
-        updateViewBox(svg, state.view);
-        state.lastMouse = { x: e.clientX, y: e.clientY };
-        const ev = new CustomEvent('panzoom:viewportChanged', { detail: { screenX: e.clientX, screenY: e.clientY } });
-        document.dispatchEvent(ev);
-    } catch (_) { }
+    handlePanZoomWheel(e, svg, state);
 
     // After zooming, refresh snap/preview at last mouse position so active tools update live
     try {

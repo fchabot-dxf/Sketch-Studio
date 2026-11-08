@@ -11451,3 +11451,30 @@ Built VCARVE-5b per the TURN 426 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 436 — Shaper Prepare & Vcarve shared pan/zoom + fit-to-extents — branch agy2
+
+- **Shared Pan/Zoom & Fit-to-Extents (`packages/ui/input-handlers/pan-zoom.js` & `packages/ui/input-manager.js`):**
+  - Extracted `handlePanZoomWheel(e, svg, state)` from `packages/ui/input-manager.js` (`handleWheel`) into `packages/ui/input-handlers/pan-zoom.js` (same `1.0015` exponential zoom factor, `[1e-3, 1e6]` width limits, stationary cursor anchor, and `updateViewBox`), and updated `input-manager.js` `handleWheel` to delegate directly to `handlePanZoomWheel` before updating active tool snap/previews (zero behavior change for Design).
+  - Exported `updateViewBox(svg, view)`, added per-state `_panZoom` isolation (`getPanZoomState(state)`), added opt-in `state.allowEmptyPan` for left-drag empty-canvas panning outside `TOOL_MODES.PAN`, and added `{ attachListeners: true }` support to `setupPanZoom`.
+  - Lifted `computeGeometryBounds(state)` and `fitViewToExtents(svg, view, state, options)` into `packages/ui/input-handlers/pan-zoom.js`, reusing the extents pattern from `apps/sketchstudio/ui/ui-manager.js:283-337` and `packages/core/shaper-export.js:104-119` (`boundsOf`), plus true arc sweep bounds (`sampleArc` in DOM; analytical endpoints + cardinal sweep extrema in Node, excluding unrendered center joint).
+
+- **Shaper Prepare & Vcarve Wiring (`apps/shaper/src/prepare-view.js`, `apps/shaper/src/vcarve-view.js`, `apps/shaper/src/main.js`):**
+  - `prepare-view.js`: Initialized local `view` + `viewState` (`allowEmptyPan: true`, isolated `_panZoom`), called `fitViewToExtents(svgEl, view, state)` on mount, and wired `handlePanZoomWheel` + `handlePanZoomPointerDown/Move/Up` (middle-drag anywhere, two-finger touch pinch, empty-canvas left-drag; loop/edge click-selection via live `svgEl.getScreenCTM()` in `clientToWorld` and `worldTolerance`).
+  - `vcarve-view.js` (confirmed affected — previously had only static viewBox auto-fit on render): Wired `setupPanZoom(els.canvas, vcarveViewState, { attachListeners: true })`, auto-fitting `vcarveViewState.view` on initial render or region change while preserving user pan/zoom across parameter edits (`vbit`, `dStep`, `maxDepth`).
+  - `main.js`: Guarded Prepare mount with `enteringMode || !prepareView` so the zoomed/panned view is kept while staying in Prepare; exposed `window.__prepareView` and `window.__vcarveView`.
+  - Shared grid (`packages/ui/canvas-grid.js`): Left off Prepare per item 4 — `ensureCanvasGrid` enforces one `#grid` per document (`canvas-grid.js:99-105`), which `#design-canvas` already owns in `apps/shaper/index.html`.
+
+- **Verification & Evidence:**
+  - Unit tests (`tests/shaper-prepare-pan-zoom.test.js`): 9/9 checks passed (bounds, arc sweep bounds, Prepare auto-fit on mount, cursor-stationary wheel zoom, empty-canvas left-drag pan, middle-drag pan, loop click-selection after zoom+pan, view preservation across cut-plan edits, and Vcarve wheel zoom + drag pan).
+  - Live headless Edge captures (`.evidence/436/`, untracked):
+    - `.evidence/436/before-prepare-autofit.png` (MD5 `d485a743153730ba2e6d702b01f84e18`): `80x50` rectangle with `r=12` hole auto-fitted and centered on entering Prepare (`viewBox="-11.0749... 5.0 122.1498... 60.0"`), unselected.
+    - `.evidence/436/after-prepare-zoomed-panned-selected.png` (MD5 `ed411a78a62e9f21b0dfc0bc809e8f48`): zoomed in on top-left corner + panned (`viewBox="-8.0418... 5.2402... 72.2868... 35.5072..."`), outer loop selected via click (`loop_s_bottom-s_left-s_right-s_top`) with blue selection highlight and Cut card open.
+    - `.evidence/436/vcarve-before-autofit.png` (MD5 `ef88cc502680804e5ac6e7ab93ce24be`) & `.evidence/436/vcarve-after-zoomed-panned.png` (MD5 `699269ab157537c28dfe2f4385d9dc8b`): Vcarve auto-fitted then zoomed + panned into top-left corner contours.
+  - Gate (`npm run gate`):
+    - `GATE files=158 pass=158 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

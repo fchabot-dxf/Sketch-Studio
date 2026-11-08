@@ -13,14 +13,18 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
-import { needsFit, markFitted, fitRectForDoc } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
+import { needsFit, markFitted, fitRectForDoc, fitViewport } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
 import { closedPolygonFor } from '#core/plot/fills/utils.js';          // STYLE-3: the pipeline's OWN closed-shape test
 import { state, shapeStyle, setShapeStyle, makeShapeStyle, docSizeLabel } from './state.js'; // UNIFY-4c/STYLE-1: the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
 import { importSvgToCore } from './core-import.js';                     // UNIFY-5: import SVG -> #core sketch + colors
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
-import { installDocModal } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
+import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
+import { capturePlotterDoc, applyPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
+import { renderArt } from './render-art.js';
+import { recalcPreview } from './preview.js';
+import { renderActiveLayerPanel } from './active-layer-panel.js';
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
 import SettingsManager from '#core/settings-manager.js';               // BURN-DOWN-6: plotter-side joint-size override (runtime only)
 
@@ -146,6 +150,18 @@ export function mountSketchStage(view, ctx = {}) {
     try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
     return true;
   };
+  // TASK 451: after the saved plotter state is applied, repaint everything that was built from the defaults at mount.
+  // The stage that is showing may be Design OR a pen tab (the active stage is restored too), so fit whichever canvas has
+  // a size; the Toolpath settings inputs exist only once that stage has mounted (it hydrates them itself on mount).
+  const refreshAfterPlotterRestore = () => {
+    underlayDirty = true;
+    syncDocFields();
+    if (document.getElementById('penUpZ')) loadDefaults();
+    if (!fitDesignView()) fitViewport();
+    if (state.preview.showToolpath) recalcPreview();
+    renderArt();
+    renderActiveLayerPanel();
+  };
   // STYLE-3: rebuild the underlay paths — each #core shape flattened (coreShapeToPolyline), then painted from its
   // STYLE record: the stroke colour at the style's DISPLAY width, and, for a CLOSED shape carrying a fill colour, a
   // translucent fill so fills are visible while designing (as the legacy did).
@@ -245,9 +261,13 @@ export function mountSketchStage(view, ctx = {}) {
   const saveStatusEl = document.getElementById('save-status');
   const docBuffer = createDocumentBuffer({
     state: controller.state,
+    hostName: 'penplotter', getHostData: capturePlotterDoc, // TASK 451: doc size, pens, toolpaths, settings, styles ride in doc.hosts.penplotter
     onStatusChange: (s) => { if (saveStatusEl) saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(() => { try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {} });
+  docBuffer.restore().then(({ hosts }) => {
+    try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {}
+    if (hosts && hosts.penplotter) { applyPlotterDoc(hosts.penplotter); refreshAfterPlotterRestore(); } // an old buffer has no sidecar: defaults stay
+  });
   docBuffer.start();
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui

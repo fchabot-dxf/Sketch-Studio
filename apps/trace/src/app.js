@@ -8,6 +8,8 @@
  */
 
 import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { getGoogleAccount }               from '#ui/cloud/google-account.js'; // TASK 488: the shared account row
+getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
@@ -24,7 +26,7 @@ import { ensureEditMount, importSvgToEdit }  from './edit-view.js';
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
   swHost.appendChild(createAppSidebar({
-    current: 'trace', docName: 'Untitled',
+    current: 'trace', docName: 'Untitled', account: getGoogleAccount(),
     actions: [
       { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
       { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },

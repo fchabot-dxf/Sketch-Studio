@@ -13,6 +13,7 @@
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
 import { applyAppIdentity, appById } from './app-registry.js';
+import { getGoogleAccount } from './cloud/google-account.js';
 
 /** "just now" / "5 min ago" / "3 h ago" / "2 d ago" / a date. */
 export function relativeTime(ts, now = Date.now()) {
@@ -27,7 +28,7 @@ export function relativeTime(ts, now = Date.now()) {
 
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store = getProjectStore() } = {}) {
+export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
@@ -132,11 +133,17 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
       box.appendChild(nb);
       for (const p of projects) {
         const wrap = document.createElement('div'); wrap.className = 'sk-row-wrap';
-        const b = rowBtn('sk-project', `<span class="sk-sidebar-ic" aria-hidden="true">${p.pinned ? '&#9733;' : SIDEBAR_ICONS.folder}</span><span class="sk-row-main"><span class="sk-row-name">${esc(p.name)}</span><span class="sk-row-sub">${esc(relativeTime(p.updatedAt))}</span></span>`);
+        const b = rowBtn('sk-project', `<span class="sk-sidebar-ic" aria-hidden="true">${p.pinned ? '&#9733;' : SIDEBAR_ICONS.folder}</span><span class="sk-row-main"><span class="sk-row-name">${esc(p.name)}${p.location === 'drive' ? '<span class="sk-cloud-mark" data-cloud="drive" title="        on Google Drive" aria-label="On Google Drive">&#9729;</span>' : ''}</span><span class="sk-row-sub">${esc(relativeTime(p.updatedAt))}</span></span>`);
         b.dataset.project = p.id;
         b.addEventListener('click', () => { state.project = p; again(); });
         wrap.appendChild(b);
+        const cloudItems = [];
+        if (account && account.state().signedIn && store.cloud) {
+          if (p.location === 'drive') cloudItems.push({ id: 'make-local', label: 'Make local', run: () => confirmInline(wrap, `Make "${p.name}" local? It will be copied from Google Drive to this device and checked, and only then is the Drive copy removed.`, 'Make local', async () => { try { await store.cloud.makeProjectLocal(p.id); } catch (e) { fail(e); again(); } }, again) });
+          else cloudItems.push({ id: 'use-drive', label: 'Use Google Drive', run: () => confirmInline(wrap, `Use Google Drive for "${p.name}"? It will be copied to your Google Drive and checked, and only then is the copy on this device removed.`, 'Use Google Drive', async () => { try { await store.cloud.moveProjectToDrive(p.id); } catch (e) { fail(e); again(); } }, again) });
+        }
         withMenu(wrap, [
+          ...cloudItems,
           { id: 'rename', label: 'Rename', run: () => editInline(wrap, p.name, async (n) => { await store.renameProject(p.id, n); }, again) },
           { id: 'pin', label: p.pinned ? 'Unpin' : 'Pin', run: () => store.pinProject(p.id, !p.pinned).catch(fail) },
           { id: 'delete', label: 'Delete', run: () => confirmInline(wrap, `Delete project "${p.name}"?`, 'Delete', async () => { try { await store.removeProject(p.id); } catch (e) { fail(e); again(); } }, again) },
@@ -180,7 +187,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
   }
 
   sidebar = createAppSidebar({
-    current: appId, docName: currentName, actions,
+    current: appId, docName: currentName, actions, account,
     onRenameDoc: (name) => act(async () => {
       const id = await currentId();
       if (!id) throw new Error('Nothing to rename yet — draw something first.');
@@ -188,7 +195,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     }, { close: false })(),
     views: {
       recent: { title: 'Open recent', render: (box) => { renderRecent(box); liveRefresh(box, () => renderRecent(box)); } },
-      projects: { title: 'Projects', render: (box) => { const st = { project: null }; renderProjects(box, st); liveRefresh(box, () => renderProjects(box, st)); } },
+      projects: { title: 'Projects', render: (box) => { const st = { project: null }; renderProjects(box, st); liveRefresh(box, () => renderProjects(box, st)); if (account && account.subscribe) { const off = account.subscribe(() => { if (!box.isConnected) { off(); return; } renderProjects(box, st); }); } } },
     },
   });
   store.subscribe(refreshName);

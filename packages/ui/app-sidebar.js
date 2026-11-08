@@ -11,6 +11,7 @@
 //              or { divider: true }.  `confirm` asks inline (Cancel / OK) before onClick; `prompt` asks for a text inline and calls
 //              onClick(text); `keepOpen` leaves the drawer open after the click (an action that opens a view).
 //     onRenameDoc(name)  OPTIONAL: when given, clicking the document name edits it inline (Enter commits, Esc cancels).
+//     account  OPTIONAL Google account controller (#ui/cloud/google-account.js getGoogleAccount()): adds the account row under GO TO.
 //     notify(text, kind) shows a message line in the drawer ('error' | 'info') — e.g. the reason a store refused something.
 //   views    OPTIONAL extra VIEWS the drawer can show instead of the main list (e.g. a Projects browser that drills down from
 //            projects to designs and back): { [id]: { title, render(container, { go, back, close }) } }. The main view (document
@@ -88,12 +89,18 @@ function injectStyles() {
 .sk-sidebar-view { flex: 1; overflow: auto; padding: 4px 8px 12px; }
 .sk-sidebar-goto { margin-top: auto; padding: 14px 8px 18px; background: var(--sk-sidebar-goto-bg, rgba(127,127,127,0.12)); }
 .sk-sidebar-goto-title { font-size: 11px; letter-spacing: 0.08em; opacity: 0.6; padding: 0 10px 8px; }
+.sk-sidebar-account { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
+.sk-account-line { display: flex; align-items: center; gap: 10px; padding: 4px 10px; }
+.sk-account-out { width: auto; padding: 5px 10px; font-size: 13px; }
+.sk-avatar { width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; background: var(--sk-sidebar-accent, #2c65ff); color: #fff; font-size: 13px; font-weight: 700; }
+.sk-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sk-cloud-mark { margin-left: 6px; opacity: 0.8; }
 .sk-sidebar-item.current { font-weight: 700; background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 `;
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null } = {}) {
   injectStyles();
   const list = Array.isArray(apps) && apps.length ? apps : APPS;
   const cur = list.find((a) => a.id === current) || list[0];
@@ -173,8 +180,56 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       b.addEventListener('click', () => { close(); if (app.id !== (cur && cur.id)) location.href = app.href; });
       go.appendChild(b);
     }
+    if (account) go.appendChild(renderAccount());
     drawer.appendChild(go);
   }
+
+  // The Google account row (the ONE sign-in door). signIn() runs synchronously inside the click so the popup is not blocked.
+  function renderAccount() {
+    const st = account.state();
+    const row = document.createElement('div'); row.className = 'sk-sidebar-account'; row.dataset.section = 'account';
+    const fail = (e) => notify((e && e.message) || String(e), 'error');
+    const run = (fn) => () => { try { const r = fn(); if (r && r.catch) r.catch(fail); } catch (e) { fail(e); } };
+    if (!st.signedIn && !st.lapsed) {
+      row.dataset.state = 'signed-out';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item'; b.dataset.account = 'sign-in';
+      b.innerHTML = '<span class="sk-sidebar-ic" aria-hidden="true">G</span><span>Sign in with Google</span>';
+      b.addEventListener('click', run(() => account.signIn()));
+      row.appendChild(b);
+      return row;
+    }
+    if (st.lapsed) {
+      row.dataset.state = 'lapsed';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item'; b.dataset.account = 'reconnect';
+      b.innerHTML = '<span class="sk-sidebar-ic" aria-hidden="true">G</span><span>Reconnect</span>';
+      b.addEventListener('click', run(() => account.signIn()));
+      row.appendChild(b);
+      return row;
+    }
+    row.dataset.state = 'signed-in';
+    const av = document.createElement('span'); av.className = 'sk-avatar'; av.dataset.account = 'avatar'; av.textContent = '…';
+    const who = document.createElement('span'); who.className = 'sk-row-main'; who.dataset.account = 'who';
+    who.innerHTML = '<span class="sk-row-name">Google account</span><span class="sk-row-sub"></span>';
+    const out = document.createElement('button'); out.type = 'button'; out.className = 'sk-sidebar-item sk-account-out'; out.dataset.account = 'sign-out'; out.textContent = 'Sign out';
+    out.addEventListener('click', run(() => account.signOut()));
+    const line = document.createElement('div'); line.className = 'sk-account-line'; line.append(av, who, out);
+    row.appendChild(line);
+    Promise.resolve(account.userInfo ? account.userInfo() : null).then((u) => {
+      if (!u || !row.isConnected) return;
+      const initials = u.initials || '?';
+      av.textContent = initials;
+      if (u.picture) {
+        const img = document.createElement('img'); img.alt = ''; img.referrerPolicy = 'no-referrer';
+        img.addEventListener('load', () => { av.textContent = ''; av.appendChild(img); });
+        img.addEventListener('error', () => { img.remove(); av.textContent = initials; });
+        img.src = u.picture;
+      }
+      who.querySelector('.sk-row-name').textContent = u.name || u.email || 'Google account';
+      who.querySelector('.sk-row-sub').textContent = u.name ? (u.email || '') : '';
+    }).catch(() => { av.textContent = '?'; });
+    return row;
+  }
+  if (account && account.subscribe) account.subscribe(() => { if (isOpenFlag && viewId === 'main') render(); });
 
   // an inline "are you sure" row (no window.confirm: it is unsupported in some embedded webviews)
   function askConfirm(btn, a) {

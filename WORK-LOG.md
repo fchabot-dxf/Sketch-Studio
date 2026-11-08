@@ -11478,3 +11478,28 @@ Built VCARVE-5b per the TURN 426 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 436b — Unify geometry bounds in `#core` + single fit-to-extents across Shaper & SketchStudio — branch agy2
+
+- **Single `#core` Geometry Bounds (`packages/core/geometry-bounds.js`):**
+  - Moved `computeGeometryBounds(state)` out of `#ui` into `packages/core/geometry-bounds.js` (pure `#core`, zero DOM).
+  - Replaced the dual `sampleArc` / fallback arc branches with ONE analytical W3C SVG circular-arc sweep extrema path (`M p2 A r0 r0 0 la sw p3` endpoint-to-center conversion + cardinal angles `0, π/2, π, -π/2` crossed along the sweep, excluding the unrendered center joint `p1`), plus analytical cubic bezier derivative extrema. Live app and Node tests now execute the exact same code.
+  - Updated `packages/ui/input-handlers/pan-zoom.js` `fitViewToExtents` to import `computeGeometryBounds` from `#core/geometry-bounds.js` and corrected its doc comment to accurately state what the code does.
+
+- **SketchStudio Recenter Unified (`apps/sketchstudio/ui/ui-manager.js`):**
+  - Replaced the 56-line hand-rolled `#btn-recenter-view` bounds/fit loop (`ui-manager.js:283-337`) with `fitViewToExtents(svg, state.view, state)` imported from `#ui/input-handlers/pan-zoom.js`.
+  - Measured before/after `#svgCanvas` `viewBox` on an off-origin D-shaped sketch (`j_origin=(0,0)`, chord `j_s=(40,20)..j_e=(100,20)`, `CENTER` arc `j_c=(70,-20)` with radius `50` bulging to `(70,30)`):
+    - **Before (`ui-manager.js` hand-rolled loop):** `viewBox="-10 -22.845394736842106 120 45.69078947368421"` (`view={x:50, y:0, w:120}`) — included `j_origin` (`x=0`) and unrendered arc center `j_c` (`y=-20`), while ignoring the arc bulge at `y=30` (clipping the bottom of the arc off-canvas at `y=22.85`).
+    - **After (shared `fitViewToExtents`):** `viewBox="34 12.299342105263158 72 25.401315789473685"` (`view={x:70, y:25, w:72}`) — excluded `j_origin` and `j_c`, included the true arc bulge apex `(70,30)`, and centered `[40..100] x [20..30]` symmetrically with 20% padding.
+  - Left `packages/core/shaper-export.js` `boundsOf` untouched per instruction (0 diff lines; SP1j exact-string export tests green) and documented its 5 exact differences in REPORT 436b.
+
+- **Verification & Gate:**
+  - Added pure `#core` unit suite `packages/core/tests/geometry-bounds.test.js` (7 cases, `typeof document === 'undefined'` asserted) and Check 10 in `tests/shaper-prepare-pan-zoom.test.js` (`setupUI` `#btn-recenter-view` delegation).
+  - Live headless SketchStudio captures in `.evidence/436b/` (`before-sketchstudio-recenter.png` MD5 `3024d18f0e56176f220ced295387dfe2`, `after-sketchstudio-recenter.png` MD5 `74d9173c6de35dc3c77b644b9c127d50`).
+  - Gate (`npm run gate`):
+    - `GATE files=159 pass=159 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

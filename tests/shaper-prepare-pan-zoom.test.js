@@ -139,6 +139,10 @@ function setupMockDom() {
       elements.set(id, el);
     },
     dispatchEvent(event) {},
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
   };
   global.CustomEvent = class CustomEvent {
     constructor(type, init = {}) {
@@ -155,7 +159,8 @@ function setupMockDom() {
 
   const { mountPrepareView } = await import('../apps/shaper/src/prepare-view.js');
   const { mountVcarveView } = await import('../apps/shaper/src/vcarve-view.js');
-  const { computeGeometryBounds, fitViewToExtents } = await import('#ui/input-handlers/pan-zoom.js');
+  const { computeGeometryBounds } = await import('#core/geometry-bounds.js');
+  const { fitViewToExtents } = await import('#ui/input-handlers/pan-zoom.js');
 
   console.log('Testing TASK 436: Shaper Prepare & Vcarve pan/zoom...');
 
@@ -405,7 +410,51 @@ function setupMockDom() {
   assert(Math.abs(arcBounds.maxX - 60) < 1e-6, 'arc maxX must be 60');
   assert(Math.abs(arcBounds.minY - (-20)) < 1e-6, 'arc minY must be -20 (center y=-100 excluded)');
   assert(Math.abs(arcBounds.maxY - 0) < 1e-6, 'arc maxY must be 0 (cardinal bulge apex included)');
-  console.log('Check 9 passed: computeGeometryBounds uses true arc sweep bounds (excludes unrendered center) ✅');
+
+  // Also check explicit largeArc: true (270° arc around (0,0) from (10,0) to (0,10) with sweep=false crosses -pi/2 and pi)
+  const largeArcBounds = computeGeometryBounds({
+    joints: new Map([
+      ['jc', { x: 0, y: 0 }],
+      ['js', { x: 10, y: 0 }],
+      ['je', { x: 0, y: 10 }],
+    ]),
+    shapes: [{ id: 'a2', type: 'arc', subType: 'CENTER', joints: ['jc', 'js', 'je'], largeArc: true, sweep: false }],
+  });
+  assert(Math.abs(largeArcBounds.minX - (-10)) < 1e-6, '270° arc minX must be -10');
+  assert(Math.abs(largeArcBounds.maxX - 10) < 1e-6, '270° arc maxX must be 10');
+  assert(Math.abs(largeArcBounds.minY - (-10)) < 1e-6, '270° arc minY must be -10');
+  assert(Math.abs(largeArcBounds.maxY - 10) < 1e-6, '270° arc maxY must be 10');
+  console.log('Check 9 passed: #core/geometry-bounds computeGeometryBounds uses analytical arc sweep extrema ✅');
+
+  // --- Check 10: SketchStudio setupUI #btn-recenter-view delegates to shared fitViewToExtents ---
+  const { setupUI } = await import('../apps/sketchstudio/ui/ui-manager.js');
+  const ssSvg = dom.makeElement('svg');
+  dom.register('svgCanvas', ssSvg);
+  const recenterBtn = dom.makeElement('button');
+  dom.register('btn-recenter-view', recenterBtn);
+  const ssState = {
+    view: { x: 0, y: 0, w: 20, h: 15 },
+    joints: new Map([
+      ['j_origin', { x: 0, y: 0, fixed: true }],
+      ['j_c', { x: 70, y: -20 }],
+      ['j_s', { x: 40, y: 20 }],
+      ['j_e', { x: 100, y: 20 }],
+    ]),
+    shapes: [
+      { id: 's_chord', type: 'line', joints: ['j_s', 'j_e'] },
+      { id: 's_arc', type: 'arc', subType: 'CENTER', joints: ['j_c', 'j_s', 'j_e'], largeArc: false, sweep: false },
+    ],
+    constraints: [],
+    selectedJoints: new Set(),
+    selectedShapes: new Set(),
+    selectedConstraints: new Set(),
+  };
+  setupUI(ssState);
+  recenterBtn.dispatchEvent({ type: 'click' });
+  assert.strictEqual(ssState.view.x, 70, 'SketchStudio recenter centers X on rendered [40..100] (ignoring j_origin)');
+  assert.strictEqual(ssState.view.y, 25, 'SketchStudio recenter centers Y on rendered [20..30] (ignoring arc center -20, including bulge +30)');
+  assert.strictEqual(ssState.view.w, 72, 'SketchStudio recenter sets view.w = 60 * 1.2 = 72');
+  console.log('Check 10 passed: SketchStudio #btn-recenter-view delegates to shared fitViewToExtents ✅');
 
   // Clean up
   prepare.destroy();

@@ -4,7 +4,7 @@
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DEFAULT_VIEW } from '#core/constants.js';
-import { sampleArc } from '#core/loop-geometry.js';
+import { computeGeometryBounds } from '#core/geometry-bounds.js';
 
 // Local state for pan-zoom
 let panZoomState = {
@@ -31,99 +31,9 @@ export function updateViewBox(svg, view) {
 }
 
 /**
- * Axis-aligned bounding box over sketch geometry (lines, circles, arcs).
- * Reuses the canonical geometry bounds calculation from #core/shaper-export.js (boundsOf)
- * and apps/sketchstudio/ui/ui-manager.js:283-329.
- */
-export function computeGeometryBounds(state) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let hasGeometry = false;
-    const ext = (x, y) => {
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-        hasGeometry = true;
-    };
-
-    const J = state && state.joints;
-    const shapes = (state && state.shapes) || [];
-
-    if (shapes.length > 0 && J) {
-        for (const s of shapes) {
-            if (!s) continue;
-            if (s.type === 'line' && Array.isArray(s.joints)) {
-                const a = J.get(s.joints[0]), b = J.get(s.joints[1]);
-                if (a) ext(a.x, a.y);
-                if (b) ext(b.x, b.y);
-            } else if (s.type === 'circle' && Array.isArray(s.joints)) {
-                const c = J.get(s.joints[0]);
-                const r = Number(s.radius) || 0;
-                if (c && r > 0) {
-                    ext(c.x - r, c.y - r);
-                    ext(c.x + r, c.y + r);
-                } else if (c) {
-                    ext(c.x, c.y);
-                }
-            } else if (s.type === 'arc' && Array.isArray(s.joints)) {
-                const [p1, p2, p3] = s.joints.map((id) => J.get(id));
-                if (p1 && p2 && p3) {
-                    const samples = sampleArc(s, state, 32);
-                    if (samples.length > 2) {
-                        for (const pt of samples) ext(pt.x, pt.y);
-                    } else {
-                        // Analytical arc sweep bounds when DOM getTotalLength is unavailable (Node unit tests):
-                        // include start/end (never unrendered center p1) + cardinal extrema crossed by the sweep.
-                        ext(p2.x, p2.y);
-                        ext(p3.x, p3.y);
-                        const r = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-                        if (r > 0) {
-                            const a1 = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-                            const a2 = Math.atan2(p3.y - p1.y, p3.x - p1.x);
-                            let sweepPositive;
-                            if (typeof s.sweep === 'boolean') {
-                                sweepPositive = s.sweep;
-                            } else {
-                                let diff = a2 - a1;
-                                while (diff <= -Math.PI) diff += Math.PI * 2;
-                                while (diff > Math.PI) diff -= Math.PI * 2;
-                                sweepPositive = diff > 0;
-                            }
-                            const tau = Math.PI * 2;
-                            const norm = (a) => ((a % tau) + tau) % tau;
-                            const span = sweepPositive ? norm(a2 - a1) : norm(a1 - a2);
-                            for (const cAng of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
-                                const d = sweepPositive ? norm(cAng - a1) : norm(a1 - cAng);
-                                if (d > 0 && d < span) {
-                                    ext(p1.x + r * Math.cos(cAng), p1.y + r * Math.sin(cAng));
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (Array.isArray(s.joints)) {
-                for (const jid of s.joints) {
-                    const p = J.get(jid);
-                    if (p) ext(p.x, p.y);
-                }
-            }
-        }
-    } else if (J && typeof J.values === 'function') {
-        for (const [id, j] of J.entries()) {
-            if (j && id !== 'j_origin' && Number.isFinite(j.x) && Number.isFinite(j.y)) {
-                ext(j.x, j.y);
-            }
-        }
-    }
-
-    if (!hasGeometry) return null;
-    return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
-}
-
-/**
- * Fits view to sketch geometry extents, matching apps/sketchstudio/ui/ui-manager.js:283-329
- * with margin padding and aspect-ratio preservation.
+ * Fits `view` and `svg`'s viewBox to the sketch geometry bounds (`computeGeometryBounds` in `#core/geometry-bounds.js`)
+ * with margin padding (default 1.2x, minimum width 10) and container aspect-ratio preservation; falls back to
+ * `DEFAULT_VIEW` when the sketch has no geometry.
  */
 export function fitViewToExtents(svg, view, state, options = {}) {
     if (!svg || !view) return;
@@ -143,7 +53,9 @@ export function fitViewToExtents(svg, view, state, options = {}) {
         const h = Math.max(1e-3, bounds.h);
 
         const rect = (svg.getBoundingClientRect && svg.getBoundingClientRect()) || null;
-        const aspect = (rect && rect.width && rect.height) ? (rect.width / rect.height) : (4 / 3);
+        const aspect = (rect && rect.width > 0 && rect.height > 0)
+            ? (rect.width / rect.height)
+            : (DEFAULT_VIEW.w / DEFAULT_VIEW.h);
 
         view.x = cx;
         view.y = cy;

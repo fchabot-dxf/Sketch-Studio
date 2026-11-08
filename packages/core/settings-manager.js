@@ -47,6 +47,11 @@ const DEFAULT_SETTINGS = {
     GLOW_WIDTH_PX: 20,
     DASH_LENGTH_PX: 8,
     DASH_GAP_PX: 8,
+    // Look knobs a style template owns (#ui/style-templates.js). Defaults = today's look.
+    GLYPH_STYLE: 'badge',           // constraint glyphs: 'badge' (coloured disc + white icon) | 'fusion' (white icon, thick black outline)
+    DIM_LABEL_BOX: true,            // dimension value drawn on a filled label box; false = plain text on the dimension line
+    HOVER_COLOR: '#1e40af',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
+    FIXED_JOINT_FILL: 'white',      // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

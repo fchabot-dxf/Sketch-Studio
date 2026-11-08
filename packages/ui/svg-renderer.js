@@ -11,6 +11,7 @@ import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
+import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -158,6 +159,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
   const GRID_SIZE = getNum('GRID_SIZE', 2);
   const GRID_MAJOR_STEP = getNum('GRID_MAJOR_STEP', 10);
+  const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
+  const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
+  const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
+  const HOVER_COLOR = getStr('HOVER_COLOR', '#1e40af');
+  const FIXED_JOINT_FILL = getStr('FIXED_JOINT_FILL', 'white');
 
   // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
   function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
@@ -177,6 +183,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const GLYPH_BG_DIAMETER_PX = Math.round(SYMBOL_SIZE_PX * 1.6); // derived background circle size (was 32 when symbol=20) 
   const INFERENCE_SIZE_PX = getNum('GLYPH_INFERENCE_SIZE_PX', 24);    // Inference hint icon size
   const GLYPH_OFFSET_PX = getNum('GLYPH_OFFSET_PX', 40);      // Offset from joints/shapes (increased to avoid overlap)
+
+  // Dimension value label: a filled box with white bold text (default), or — DIM_LABEL_BOX off — plain text in the
+  // dimension colour straight on the dimension line.
+  const dimLabelRect = (cx, cy, w, h, rx, strokeColor, strokeW) => (DIM_LABEL_BOX
+    ? `<rect x="${cx - w/2}" y="${cy - h/2 - zoom}" width="${w}" height="${h}" style="fill:${skv('#9ca3af')}; stroke:${skv(strokeColor)}" fill-opacity="0.9" rx="${rx}" stroke-width="${strokeW}"/>`
+    : '');
+  const DIM_TEXT_ATTRS = DIM_LABEL_BOX ? `style="fill:${skv('white')}" font-weight="bold"` : `style="fill:${skv('#2563eb')}"`;
   const GLOW_WIDTH_PX = getNum('GLOW_WIDTH_PX', 20);        // Width of hover/select highlights
 
   // Scale function to convert screen-space sizes to world-space
@@ -320,7 +333,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     // A: Bottom layer — selection/hover solid disc
     // Selected glyphs get stronger, larger feedback (disc + subtle outline). Hovered glyphs get slightly stronger disc.
-    if(!isPreview && (isHovered || isSelected)){
+    if(!FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
       if (isSelected) {
         out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv('#1e40af')}" fill-opacity="0.28" stroke="none"/>`);
         // Outer subtle stroked ring to emphasize selection — use 4px screen stroke and nudge radius outward so stroke appears mostly outside
@@ -330,16 +343,22 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
 
-    // B: Middle layer — background circle
+    // B: Middle layer — background circle. 'fusion' glyphs have no badge: an invisible disc keeps the hit area and the
+    // white icon carries a dark outline that turns the selection colour when hovered/selected.
     // NOTE: Increased stroke width for better visibility (doubled from 1.5 -> 3)
-    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(3)}"/>`;
+    const bgCircle = FUSION_GLYPHS_ON
+      ? `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="none" stroke="none"/>`
+      : `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(3)}"/>`;
 
     // C: Top layer — icon (optional)
     const iconStyleStr = 'style="color: white !important; --icon-accent: white !important; stroke: white !important;"';
-    const icon = iconId ? `<use href="#${iconId}" x="${-ICON_PX/2}" y="${-ICON_PX/2}" width="${ICON_PX}" height="${ICON_PX}" ${iconStyleStr}/>` : '';
+    const fusionIconId = (opts && opts.fusionIcon) || iconId;
+    const icon = FUSION_GLYPHS_ON
+      ? fusionGlyphMarkup(fusionIconId, ICON_PX, SYMBOL_SIZE_PX, (isHovered || isSelected) ? skv('#1e40af') : '#111111')
+      : (iconId ? `<use href="#${iconId}" x="${-ICON_PX/2}" y="${-ICON_PX/2}" width="${ICON_PX}" height="${ICON_PX}" ${iconStyleStr}/>` : '');
 
     // Append any extra custom markup (for collinear dots, tangent mark, equal lines, etc.)
-    const extra = opts.extra || '';
+    const extra = FUSION_GLYPHS_ON ? '' : (opts.extra || '');
 
     // Data attrs and interaction styling
     const dataAttrs = (typeof buildDataAttrs === 'function' && c) ? buildDataAttrs(c) : '';
@@ -871,7 +890,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       strokeColor = '#3B82F6'; // Fusion Blue
     } else if(isHovered){
       strokeWidth = scale(BASE_LINE_STROKE_HOVERED);
-      strokeColor = '#1e40af'; // darker blue
+      strokeColor = HOVER_COLOR; // darker blue
     } else if(isSelected){
       strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
       strokeColor = '#1e40af'; // darker blue
@@ -1128,7 +1147,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
       let strokeW = scale(BASE_JOINT_STROKE);
       if (isConstraintPartOrigin) { stroke = '#3B82F6'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
-      else if (isHoverOrigin) { stroke = '#1e40af'; strokeW = scale(BASE_JOINT_STROKE_HOVERED); }
+      else if (isHoverOrigin) { stroke = HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_HOVERED); }
       else if (isSelectedOrigin) { stroke = '#1e40af'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
 
       // Use the standard joint fill (no red disc) so origin behaves visually like other joints
@@ -1184,10 +1203,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     let stroke = '#60A5FA'; // base blue (paler)
 
     if (fixedJoints.has(id)) {
-        fill = 'white';
+        fill = FIXED_JOINT_FILL;
         stroke = '#202020';
     } else if (constrainedJoints.has(id)) {
-        fill = 'white';
+        fill = FIXED_JOINT_FILL;
         stroke = '#202020';
     } else {
         fill = 'white';
@@ -1202,7 +1221,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       stroke = '#3B82F6'; // Fusion Blue
       strokeW = scale(BASE_JOINT_STROKE_SELECTED);
     } else if(isHovered){
-      stroke = '#1e40af'; // darker blue
+      stroke = HOVER_COLOR; // darker blue
       strokeW = scale(BASE_JOINT_STROKE_HOVERED);
     } else if(isSelected){
       stroke = '#1e40af'; // darker blue
@@ -1919,12 +1938,12 @@ switch(c.type){
         const bgRadiusE = (isHoveredE || isSelectedE) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacityE = (isHoveredE || isSelectedE) ? '0.95' : '0.85';
         const bgColorE = CONSTRAINT_COLORS[CONSTRAINT_TYPES.EQUAL].fill;
-        if(!preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv('#1e40af')}" fill-opacity="0.2" stroke="none"/>`);
+        if(!FUSION_GLYPHS_ON && !preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv('#1e40af')}" fill-opacity="0.2" stroke="none"/>`);
         const symSize = glyphSize * 0.6;
         const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" fill-opacity="${bgOpacityE}" stroke-width="${scale(3.5)}"/>` +
                            `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>` +
                            `<line x1="-${symSize}" y1="${symSize/3}" x2="${symSize}" y2="${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>`;
-        drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual });
+        drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual, fusionIcon: 'icon-equal' });
         break;
       }
 
@@ -2298,8 +2317,8 @@ switch(c.type){
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
-            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
+            ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
+            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
             <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
@@ -2415,8 +2434,8 @@ switch(c.type){
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-            <rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
-            <text x="${annotX}" y="${annotY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
+            ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
+            <text x="${annotX}" y="${annotY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
             <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
@@ -2533,8 +2552,8 @@ switch(c.type){
             
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-                <rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" style="fill:${skv('#9ca3af')}; stroke:${skv(labelStrokeColor)}" fill-opacity="0.9" rx="${labelRx}" stroke-width="${labelStrokeWidth}"/>
-                <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" style="fill:${skv('white')}" font-weight="bold">${displayVal}</text>
+                ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
+                <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
                 <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
             </g>`;
             

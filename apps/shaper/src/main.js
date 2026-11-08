@@ -22,6 +22,7 @@ import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
+import { bindTemplateTokens } from '#ui/style-templates.js';
 import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems, assignImportedCuts } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
@@ -474,6 +475,7 @@ try {
 // U3b: the shared style-panel as a header-opened MODAL; its Units tab holds the one document-unit control.
 const stylePanel = createStylePanel({ hostId: 'shaper' });
 stylePanel.render(document.body);
+bindTemplateTokens(document.getElementById('design-canvas'));
 const settingsBtn = document.getElementById('btn-settings');
 if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());
 

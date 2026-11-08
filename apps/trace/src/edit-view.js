@@ -39,7 +39,7 @@ export function ensureEditMount() {
 
   // Mount the shared tool ribbon (shared CREATE + INSPECT + CONSTRAIN groups)
   if (ribbonEl && !ribbonMounted) {
-    const ribbon = createToolRibbon({ extraGroups: [] });
+    const ribbon = createToolRibbon({ state: designController.state, extraGroups: [] });
     ribbonEl.appendChild(ribbon.el);
     ribbonMounted = true;
   }

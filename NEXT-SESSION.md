@@ -282,11 +282,20 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - 454 merged e0de9b1 (the PP active panel follows; no active = no silent edits);
   - 459 merged df8be3f (3D Review S1: Review tab replaces Simulate/Export; three@0.170.0 vendored, loaded on demand;
     apps/shaper/src/stock.js = THE stock declaration).
+- DONE:
+  - 460 0b69dde (Shaper persists the cut plan + stock);
+  - 462 94183e0 (one composer; 3D On Line + unset marks);
+  - 453 6899134 (PP validation);
+  - 461 43b4729: the FIRST COPILOT SEAT task. The first send landed in the testbed window (`code chat -r` = the
+    last-clicked window) and BLOCKED on an ask_user; the retry, with the worktree path + "no workspace switch" in the
+    prompt line, worked: 1 premium request, GPT-6 Luna, clean.
+- PROCESS FIX: the 460 merge was pushed with a flaky gate red (penplotter-panel-overflow passed 2x alone; full gate
+  re-run green). Merges now go through scratchpad/merge.sh, which pushes ONLY on gate exit 0.
 - NOW:
-  - CC-A on 460 (persist the cut plan + stock.js);
-  - CC-B on 453 (PP validation schema);
-  - CC-C on 462 (one derivation composition + S2 On Line grooves / unset mark);
-  - Copilot trial 461 is ready in Sketch-Studio-agy4 (waiting for the owner to open that window).
+  - CC-A on 463 (Shaper cut-plan undo);
+  - CC-B on 465 (PP minors batch);
+  - CC-C on 464 (3D V-carve + cutter shapes).
+  - Copilot: paused while the test repo sets it up.
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

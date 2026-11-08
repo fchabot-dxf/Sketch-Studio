@@ -98,8 +98,9 @@ assert.strictEqual(status.fixedJoints.has(arcCenter), false, 'Arc center must no
 assert.strictEqual(status.fixedJoints.has(topRim), false, 'Top rim must not be fixed');
 assert.strictEqual(status.fixedJoints.has(rightRim), false, 'Right rim must not be fixed');
 if (vSharp) {
-  // Virtual sharp V carries two pointOnLine constraints and correctly reads d0 per Task 416
-  assert.strictEqual(status.fixedJoints.has(vSharp), true, 'Virtual sharp correctly reads d0 per Task 416');
+  // TASK 496: the virtual sharp slides along the (movable) top line while the width is free, so it is NOT immovable
+  // (the old "reads d0 per Task 416" expectation encoded the heuristic bug; DOF now comes from the Jacobian nullspace)
+  assert.strictEqual(status.fixedJoints.has(vSharp), false, 'Virtual sharp can still move while the width is free');
 }
 
 // 2. Movability check: verify that free items actually move when dragged,

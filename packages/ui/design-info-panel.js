@@ -132,8 +132,8 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
 
   function totalDOF() {
     try {
-      const { jointDOFs } = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: state.constraints || [] });
-      let sum = 0; for (const v of jointDOFs.values()) sum += v; return sum;
+      const { dof } = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: state.constraints || [] });
+      return dof;
     } catch (_) { return null; }
   }
 

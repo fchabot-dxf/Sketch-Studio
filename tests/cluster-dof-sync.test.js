@@ -38,11 +38,11 @@
   {
     const joints = new Map();
     joints.set('a', { x: 0, y: 0, fixed: true });
-    joints.set('b', { x: 0, y: 0, fixed: false });
-    joints.set('c', { x: 0, y: 0, fixed: false });
+    joints.set('b', { x: 3, y: 0, fixed: false });
+    joints.set('c', { x: 3, y: 0, fixed: false });
     const constraints = [
       { type: CONSTRAINT_TYPES.COINCIDENT, joints: ['b','c'] },
-      { type: CONSTRAINT_TYPES.DISTANCE, joints: ['a','b'], value: 0 }
+      { type: CONSTRAINT_TYPES.DISTANCE, joints: ['a','b'], value: 3 }
     ];
     const status = analyzeConstraintStatus({ joints, shapes: [], constraints });
     // Distance to fixed a reduces b to d1, cluster sync should set c to same

@@ -1,7 +1,21 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
 import { NewtonSolver } from './solver/engine.js';
-import { Algebra } from './solver/algebra.js';
+
+// The nullspace only changes when the geometry, constraints or joint positions change, so the last result is
+// reused while that signature is identical (the renderer calls analyzeConstraintStatus every frame).
+let lastFreedom = { key: null, value: null };
+function cachedFreedom(joints, shapes, constraints) {
+  const parts = [];
+  for (const [id, j] of joints) parts.push(id, j.x, j.y, j.fixed ? 1 : 0);
+  const key = JSON.stringify([parts, constraints.filter(c => !c.isDriven && !c.driven),
+    shapes.map(s => [s.id, s.type, s.joints, s.radius])]);
+  if (lastFreedom.key !== key) {
+    lastFreedom = { key, value: new NewtonSolver(joints, constraints, shapes).jointFreedom() };
+  }
+  return lastFreedom.value;
+}
+
 
 function getHVBetweenJoints(j1, j2, constraints) {
     if (!constraints || !Array.isArray(constraints)) return null;
@@ -861,114 +875,17 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
     }
 
     // 5. Solver-backed Rigidity Check (Numerical Rigidity Verification)
-    try {
-        const activeConstraints = (constraints || []).filter(c => !c.isDriven && !c.driven);
-        if (activeConstraints.length > 0 && joints && joints.size > 0) {
-            const solver = new NewtonSolver(joints, activeConstraints, shapes || []);
-            const x = solver._pack();
-            const n = x.length;
-            if (n === 0) {
-                for (const [id] of joints) {
-                    jointDOFs.set(id, 0);
-                    fixedJoints.add(id);
-                    constrainedJoints.add(id);
-                    lockedAxisX.add(id);
-                    lockedAxisY.add(id);
-                }
-            } else {
-                const { J, r, m } = solver._assemble(x);
-                let resSq = 0;
-                for (let i = 0; i < m; i++) resSq += r[i] * r[i];
-                if (Math.sqrt(resSq) < 1e-2) {
-                    const A = Algebra.allocMatrix(n, n);
-                    Algebra.gram(J, m, n, A);
-                    const Acopy = new Float64Array(A);
-                    const dx = new Float64Array(n);
-                    const fullRank = Algebra.choleskySolve(Acopy, n, dx);
-
-                    if (fullRank) {
-                        for (const [id] of joints) {
-                            jointDOFs.set(id, 0);
-                            fixedJoints.add(id);
-                            constrainedJoints.add(id);
-                            lockedAxisX.add(id);
-                            lockedAxisY.add(id);
-                        }
-                    } else {
-                        const AtA = new Float64Array(A);
-                        const V = new Float64Array(n * n);
-                        for (let i = 0; i < n; i++) V[i * n + i] = 1;
-                        for (let iter = 0; iter < 50; iter++) {
-                            let maxOff = 0;
-                            for (let p = 0; p < n - 1; p++) {
-                                for (let q = p + 1; q < n; q++) {
-                                    const apq = AtA[p * n + q];
-                                    maxOff = Math.max(maxOff, Math.abs(apq));
-                                    if (Math.abs(apq) > 1e-12) {
-                                        const app = AtA[p * n + p];
-                                        const aqq = AtA[q * n + q];
-                                        const theta = 0.5 * Math.atan2(2 * apq, aqq - app);
-                                        const c = Math.cos(theta), s = Math.sin(theta);
-                                        for (let i = 0; i < n; i++) {
-                                            const aip = AtA[i * n + p], aiq = AtA[i * n + q];
-                                            AtA[i * n + p] = c * aip - s * aiq;
-                                            AtA[i * n + q] = s * aip + c * aiq;
-                                        }
-                                        for (let i = 0; i < n; i++) {
-                                            const api = AtA[p * n + i], aqi = AtA[q * n + i];
-                                            AtA[p * n + i] = c * api - s * aqi;
-                                            AtA[q * n + i] = s * api + c * aqi;
-                                            const vip = V[i * n + p], viq = V[i * n + q];
-                                            V[i * n + p] = c * vip - s * viq;
-                                            V[i * n + q] = s * vip + c * viq;
-                                        }
-                                    }
-                                }
-                            }
-                            if (maxOff < 1e-12) break;
-                        }
-
-                        const nullVectors = [];
-                        for (let i = 0; i < n; i++) {
-                            if (AtA[i * n + i] < 1e-6) {
-                                const v = new Float64Array(n);
-                                for (let j = 0; j < n; j++) v[j] = V[j * n + i];
-                                nullVectors.push(v);
-                            }
-                        }
-
-                        const hasGrounded = [...joints.values()].some(j => j.fixed) || joints.has('j_origin');
-                        if (hasGrounded && nullVectors.length > 0) {
-                            for (let vi = 0; vi < solver._freeIds.length; vi++) {
-                                const repId = solver._freeIds[vi];
-                                const members = (solver._clusterMembers && solver._clusterMembers.get(repId)) || [repId];
-                                const colX = vi * 2;
-                                const colY = vi * 2 + 1;
-                                let xFree = false;
-                                let yFree = false;
-                                for (const nv of nullVectors) {
-                                    if (Math.abs(nv[colX]) > 1e-5) xFree = true;
-                                    if (Math.abs(nv[colY]) > 1e-5) yFree = true;
-                                }
-                                for (const mid of members) {
-                                    if (!xFree) lockedAxisX.add(mid);
-                                    if (!yFree) lockedAxisY.add(mid);
-                                    if (!xFree && !yFree) {
-                                        jointDOFs.set(mid, 0);
-                                        fixedJoints.add(mid);
-                                        constrainedJoints.add(mid);
-                                    } else if (!xFree || !yFree) {
-                                        if (jointDOFs.get(mid) > 1) jointDOFs.set(mid, 1);
-                                        constrainedJoints.add(mid);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (_) {}
+    // The heuristic propagation above only records PROVENANCE (dofSources) and legacy radial locks. The DOF itself,
+    // and every set derived from it, is the nullspace of the global constraint Jacobian (NewtonSolver.jointFreedom).
+    const truth = cachedFreedom(joints, shapes || [], constraints || []);
+    fixedJoints.clear(); constrainedJoints.clear(); lockedAxisX.clear(); lockedAxisY.clear();
+    for (const [id] of joints) {
+        const f = truth.freedom.get(id) ?? 2;
+        jointDOFs.set(id, f);
+        if (f === 0) { fixedJoints.add(id); constrainedJoints.add(id); }
+        if (!truth.freeX.has(id) && f !== 2) lockedAxisX.add(id);
+        if (!truth.freeY.has(id) && f !== 2) lockedAxisY.add(id);
+    }
 
     // Shape Logic — all shape types (lines, circles, arcs)
     for (const s of shapes) {
@@ -993,6 +910,8 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
         // radial/arc-based 1DOF reductions (distance/radius)
         radialLocked: (typeof radialLocked !== 'undefined') ? radialLocked : new Set(),
         radialConstraints: radialConstraints,
-        dofSources: dofSources
+        dofSources: dofSources,
+        // Global DOF of the sketch = nullity of the constraint Jacobian (NOT the sum of per-joint freedoms)
+        dof: truth.nullity
     };
 }

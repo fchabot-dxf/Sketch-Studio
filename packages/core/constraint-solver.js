@@ -110,5 +110,7 @@ export function createEngine(options = {}){
     return (solver && typeof solver.rankRowRedundant === 'function') ? solver.rankRowRedundant(candidate) : false;
   }
 
-  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant };
+  function jointFreedom() { return solver.jointFreedom(); }
+
+  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant, jointFreedom };
 }

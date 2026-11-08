@@ -4,7 +4,7 @@
 
 import { findLoops } from './loop-finder.js';
 import { loopPolygon, polyArea, polygonContains, pointInPolygon } from './loop-geometry.js';
-import { loopToPathD } from './shaper-export.js';
+import { loopToPathD } from './loop-geometry.js';
 
 const EPS = 1e-9;
 const cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -83,6 +83,19 @@ function singleLoopToPathD(loop, state, shapeById) {
     }
   }
   return loopToPathD(loop, state);
+}
+
+/**
+ * Deep clone an array of profile records.
+ */
+export function cloneProfiles(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((p) => ({
+    ...p,
+    inners: p.inners ? [...p.inners] : [],
+    outerShapes: p.outerShapes ? [...p.outerShapes] : [],
+    innerShapes: p.innerShapes ? p.innerShapes.map((arr) => [...arr]) : [],
+  }));
 }
 
 /**

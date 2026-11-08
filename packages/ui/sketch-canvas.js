@@ -108,7 +108,7 @@ export function mountSketch(svgEl, opts = {}) {
     getWorldGroup: () => worldGroup,
     getInputHost: () => (typeof document !== 'undefined' ? document.body : null),
   };
-  try { setupInput(svgEl, state, { inputCtx: hostInputCtx, isActive: opts.isActive }); } catch (_) { /* non-fatal */ }
+  try { setupInput(svgEl, state, { inputCtx: hostInputCtx, isActive: opts.isActive, profiles: opts.profiles, notify: opts.notify }); } catch (_) { /* non-fatal */ }
 
   // Render ctx: omits getSolverStats/injectDebugStyle (no-op-safe, P3). updateGrid is only supplied when the host opts
   // in with opts.grid (Shaper) → the shared canvas grid (#ui/canvas-grid.js, GRID_MODE-driven) is mounted into svgEl;

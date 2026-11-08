@@ -9,6 +9,7 @@ import { addConstraintObject } from '#core/constraints.js';
 import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
 import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
+import { cloneProfiles } from '#core/profile-model.js';
 
 export function createSketchState(engine, view) {
   const state = {
@@ -62,12 +63,7 @@ export function createSketchState(engine, view) {
         // SKETCH-4c: the user-GROUP list (the userGroupId stamps ride the shape snapshot above)
         groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined,
         // COMBINE slice 1: combined profiles
-        profiles: Array.isArray(this.profiles) ? this.profiles.map(p => ({
-          ...p,
-          inners: p.inners ? [...p.inners] : [],
-          outerShapes: p.outerShapes ? [...p.outerShapes] : [],
-          innerShapes: p.innerShapes ? p.innerShapes.map(arr => [...arr]) : []
-        })) : undefined,
+        profiles: Array.isArray(this.profiles) ? cloneProfiles(this.profiles) : undefined,
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
         vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined
       };
@@ -93,12 +89,7 @@ export function createSketchState(engine, view) {
       if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
       if(snapshot.profiles && Array.isArray(this.profiles)){
         this.profiles.length = 0;
-        this.profiles.push(...snapshot.profiles.map(p => ({
-          ...p,
-          inners: p.inners ? [...p.inners] : [],
-          outerShapes: p.outerShapes ? [...p.outerShapes] : [],
-          innerShapes: p.innerShapes ? p.innerShapes.map(arr => [...arr]) : []
-        })));
+        this.profiles.push(...cloneProfiles(snapshot.profiles));
       } else if (Array.isArray(this.profiles)) {
         this.profiles.length = 0;
       }
@@ -181,12 +172,7 @@ export function createSketchState(engine, view) {
         if(snapshot.groups && Array.isArray(this.groups)){ this.groups.length = 0; this.groups.push(...snapshot.groups.map(g => ({...g}))); } // SKETCH-4c
         if(snapshot.profiles && Array.isArray(this.profiles)){
           this.profiles.length = 0;
-          this.profiles.push(...snapshot.profiles.map(p => ({
-            ...p,
-            inners: p.inners ? [...p.inners] : [],
-            outerShapes: p.outerShapes ? [...p.outerShapes] : [],
-            innerShapes: p.innerShapes ? p.innerShapes.map(arr => [...arr]) : []
-          })));
+          this.profiles.push(...cloneProfiles(snapshot.profiles));
         }
         if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       } else {

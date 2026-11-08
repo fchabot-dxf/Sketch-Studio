@@ -1,4 +1,5 @@
-import { makeProfile, uncombineProfile, validateCombine, profileForLoop, profileForShape, profilesOf, resolveProfiles, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, directlyContainedLoops } from '#core/profile-model.js';
+import { makeProfile, uncombineProfile, validateCombine, profileForLoop, profileForShape, profilesOf, resolveProfiles, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, directlyContainedLoops, cloneProfiles } from '#core/profile-model.js';
+import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon, polyArea } from '#core/loop-geometry.js';
 import { createEngine } from '#core/constraint-solver.js';
@@ -347,6 +348,62 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
     uncombineProfile(cFrameState, combinedProf.id);
     const resolvedAfterUncombine = resolveProfileForLoop(cOuterL.id, cFrameState, cLoops, cPolys);
     assert(resolvedAfterUncombine.isDerived && resolvedAfterUncombine.inners.length === 1, 'uncombine restores derived face');
+  }
+
+  // 9. cloneProfiles deep copy verification
+  {
+    const orig = [
+      {
+        id: 'p1',
+        name: 'Profile 1',
+        outer: 'l1',
+        inners: ['l2', 'l3'],
+        outerShapes: ['s1', 's2'],
+        innerShapes: [['s3', 's4'], ['s5', 's6']],
+      },
+    ];
+    const cloned = cloneProfiles(orig);
+    assert(cloned.length === 1, 'clones array');
+    assert(cloned[0].id === 'p1', 'clones id');
+    // Mutate clone
+    cloned[0].inners.push('l4');
+    cloned[0].outerShapes.push('s99');
+    cloned[0].innerShapes[0].push('s99');
+    assert(orig[0].inners.length === 2, 'orig inners not mutated');
+    assert(orig[0].outerShapes.length === 2, 'orig outerShapes not mutated');
+    assert(orig[0].innerShapes[0].length === 2, 'orig innerShapes not mutated');
+  }
+
+  // 10. doCombine and doUncombine UI action helpers
+  {
+    let lastToast = '';
+    const notify = (msg) => { lastToast = msg; };
+
+    const state = createFrameState();
+    state.selectedShapes = new Set(['so1']); // only 1 shape
+    const r1 = doCombine(state, notify);
+    assert(r1 === null, 'doCombine fails on < 2 shapes');
+    assert(lastToast.includes('Select shapes forming at least 2 closed loops'), 'toast explains failure');
+
+    // Select all 8 shapes of the frame
+    state.selectedShapes = new Set(state.shapes.map(s => s.id));
+    const r2 = doCombine(state, notify);
+    assert(r2 && r2.id === 'profile-1', 'doCombine creates profile');
+    assert(state.profiles.length === 1, 'state has 1 profile');
+    assert(lastToast.includes('Combined into Profile 1 (1 hole)'), 'toast announces success');
+
+    // Select shape not in any profile to uncombine
+    state.selectedShapes = new Set(['unrelated-shape']);
+    const u1 = doUncombine(state, notify);
+    assert(u1 === 0, 'uncombine returns 0 for unrelated shape');
+    assert(lastToast.includes('No combined profile'), 'toast explains no profile');
+
+    // Select shape in the profile to uncombine
+    state.selectedShapes = new Set(['so1']);
+    const u2 = doUncombine(state, notify);
+    assert(u2 === 1, 'uncombine returns 1 profile removed');
+    assert(state.profiles.length === 0, 'state has 0 profiles after uncombine');
+    assert(lastToast.includes('Uncombined 1 profile'), 'toast announces uncombine count');
   }
 
   console.log('profile-model tests passed ✅');

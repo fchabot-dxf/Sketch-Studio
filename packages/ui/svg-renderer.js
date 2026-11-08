@@ -23,9 +23,7 @@ import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
-import { resolveProfiles, profileToPathD } from '#core/profile-model.js';
-import { findLoops } from '#core/loop-finder.js';
-import { loopPolygon } from '#core/loop-geometry.js';
+import { profileToPathD } from '#core/profile-model.js';
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -384,14 +382,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Combined profile background tints (evenodd, holes open; warning style if invalid)
   try {
-    const st = ctx?.getState ? ctx.getState() : (typeof window !== 'undefined' && window.__sketchState ? window.__sketchState : null);
+    const st = ctx?.getState ? ctx.getState() : null;
     if (st && Array.isArray(st.profiles) && st.profiles.length > 0) {
-      const loops = findLoops(st);
-      const sb = new Map((st.shapes || []).map(s => [s.id, s]));
-      const loopPolys = Object.fromEntries(loops.map(l => [l.id, loopPolygon(l, st, sb)]));
-      resolveProfiles(st, loops, loopPolys);
       for (const p of st.profiles) {
-        const d = profileToPathD(p, st, loops);
+        const d = p.d || profileToPathD(p, st);
         if (d) {
           if (p.invalid) {
             out.push(`<path d="${d}" fill="rgba(239, 68, 68, 0.18)" stroke="#ef4444" stroke-width="${scale(1.5)}" stroke-dasharray="${scale(4)} ${scale(4)}" fill-rule="evenodd" pointer-events="none"/>`);
@@ -401,7 +395,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         }
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    dbg.error('renderer', '[svg-renderer] profile tint render error', err);
+  }
   
   // Draw origin axes with zoom-scaled stroke
   const originStroke = scale(1.5);

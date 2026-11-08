@@ -23,7 +23,6 @@ import { CUT_TYPES, extractCutRecord } from './shaper.js';                   // 
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { createAppSwitcher } from '#ui/app-switcher.js';   // SWITCH-1: shared two-way app-switcher
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: the Group/Ungroup action
-import { validateCombine, makeProfile, uncombineProfile, profileForShape } from '#core/profile-model.js'; // COMBINE slice 1
 import { findLoops } from '#core/loop-finder.js';        // SKETCH-4e: enumerate loops for island polys
 import { loopPolygon } from '#core/loop-geometry.js';     // SKETCH-4e: HOST computes loop polys (DOM) → serializer stays pure
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
@@ -242,52 +241,11 @@ function doUngroup() {
   for (const gid of gids) ungroup(st, gid);
   groupStatus(`Ungrouped ${gids.size} group${gids.size === 1 ? '' : 's'}`);
 }
-function doCombine() {
-  if (!designController) return;
-  const st = designController.state;
-  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
-  if (sel.length < 2) { groupStatus('Select shapes forming at least 2 closed loops to combine'); return; }
-  const loops = findLoops(st);
-  const sb = new Map((st.shapes || []).map((s) => [s.id, s]));
-  const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, st, sb)]));
-  const val = validateCombine(sel, loops, loopPolys);
-  if (!val.ok) {
-    groupStatus(val.reason || 'Cannot combine selection');
-    return;
-  }
-  try { st.saveState && st.saveState(); } catch (_) {}
-  const prof = makeProfile(st, val.outerLoop, val.innerLoops);
-  groupStatus(`Combined into ${prof.name || prof.id} (${val.innerLoops.length} hole${val.innerLoops.length === 1 ? '' : 's'})`);
-}
-function doUncombine() {
-  if (!designController) return;
-  const st = designController.state;
-  const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
-  if (!sel.length) { groupStatus('Select a combined profile to uncombine'); return; }
-  const toRemove = new Set();
-  for (const s of sel) {
-    const p = profileForShape(s, st);
-    if (p) toRemove.add(p.id);
-  }
-  if (!toRemove.size) {
-    groupStatus('No combined profile on the selection');
-    return;
-  }
-  try { st.saveState && st.saveState(); } catch (_) {}
-  for (const pid of toRemove) uncombineProfile(st, pid);
-  groupStatus(`Uncombined ${toRemove.size} profile${toRemove.size === 1 ? '' : 's'}`);
-}
 document.addEventListener('keydown', (e) => {
   if (currentMode !== 'design') return;
   if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
     e.preventDefault();
     if (e.shiftKey) doUngroup(); else doGroup();
-  } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
-    e.preventDefault();
-    doCombine();
-  } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'u' || e.key === 'U')) {
-    e.preventDefault();
-    doUncombine();
   }
 });
 
@@ -510,12 +468,8 @@ function buildDesignUI() {
   infoPanel.render(document.getElementById('design-panel-info'));
   ribbon = createToolRibbon({
     state,
-    on: (name, detail) => {
-      if (name === 'action' && detail) {
-        if (detail.action === 'combine') doCombine();
-        else if (detail.action === 'uncombine') doUncombine();
-      }
-    },
+    profiles: true,
+    notify: groupStatus,
   });
   ribbon.render(document.getElementById('design-ribbon'));
 
@@ -552,6 +506,8 @@ function ensureSketch() {
     onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
     seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
     grid: true,      // GRID-1: the shared GRID_MODE-driven canvas grid (Grid / None / Draft points in the settings modal)
+    profiles: true,
+    notify: groupStatus,
   });
   window.__designController = designController; // for test/evidence inspection
   buildDesignUI();

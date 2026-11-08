@@ -87,3 +87,65 @@ export function polygonContains(outer, inner) {
   }
   return true;
 }
+
+function num(n) {
+  let r = Math.round(Number(n) * 1e4) / 1e4;
+  if (Object.is(r, -0)) r = 0;
+  return String(r);
+}
+
+function angleSweep(center, start, end) {
+  let d = Math.atan2(end.y - center.y, end.x - center.x) - Math.atan2(start.y - center.y, start.x - center.x);
+  while (d <= -Math.PI) d += 2 * Math.PI;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  return d > 0 ? 1 : 0;
+}
+
+function arcSeg(shape, fromPos, toPos, state) {
+  const center = state.joints.get(shape.joints[0]);
+  const start = state.joints.get(shape.joints[1]);
+  const end = state.joints.get(shape.joints[2]);
+  if (!center || !start || !end) return `L ${num(toPos.x)} ${num(toPos.y)}`;
+  const r = Math.hypot(start.x - center.x, start.y - center.y);
+  const stored = (typeof shape.sweep === 'boolean') ? (shape.sweep ? 1 : 0) : angleSweep(center, start, end);
+  const forward = Math.hypot(fromPos.x - start.x, fromPos.y - start.y) <= Math.hypot(fromPos.x - end.x, fromPos.y - end.y);
+  const sweep = forward ? stored : (stored ? 0 : 1);
+  const largeArc = shape.largeArc ? 1 : 0;
+  return `A ${num(r)} ${num(r)} 0 ${largeArc} ${sweep} ${num(toPos.x)} ${num(toPos.y)}`;
+}
+
+// loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Lines →
+// `L x y`; arcs → a direction-aware `A …` segment. A line CLOSING edge is left to Z (so a pure-line loop is identical
+// to SP1j-1); an arc closing edge is drawn explicitly. Returns '' on a missing loop / joint position.
+export function loopToPathD(loop, state) {
+  if (!loop || !Array.isArray(loop.joints) || loop.joints.length < 2 || !state || !state.joints) return '';
+  const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
+  const pos = (nid) => state.joints.get(nid);
+  const edges = Array.isArray(loop.edges) ? loop.edges : [];
+  const n = loop.joints.length;
+  const p0 = pos(loop.joints[0]);
+  if (!p0) return '';
+  let d = `M ${num(p0.x)} ${num(p0.y)}`;
+  for (let i = 1; i < n; i++) {
+    const fromP = pos(loop.joints[i - 1]), toP = pos(loop.joints[i]);
+    if (!fromP || !toP) return '';
+    const s = shapeById.get(edges[i - 1]);
+    d += ' ' + (s && s.type === 'arc' ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`);
+  }
+  const closing = shapeById.get(edges[n - 1]);
+  if (closing && closing.type === 'arc') {
+    const fromP = pos(loop.joints[n - 1]);
+    if (fromP) d += ' ' + arcSeg(closing, fromP, p0, state);
+  }
+  return d + ' Z';
+}
+
+// polyToPathD(pts) → a CLOSED SVG path "d" from an ordered array of polygon points [{x, y}, ...].
+export function polyToPathD(pts) {
+  if (!Array.isArray(pts) || pts.length < 2) return '';
+  let d = `M ${num(pts[0].x)} ${num(pts[0].y)}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += ` L ${num(pts[i].x)} ${num(pts[i].y)}`;
+  }
+  return d + ' Z';
+}

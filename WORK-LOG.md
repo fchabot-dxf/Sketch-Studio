@@ -11624,3 +11624,46 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
   - `.evidence/431/combine-frame-tint.png`: 77,535 bytes, shows combined frame with blue tint and open hole.
   - `.evidence/431/combine-fillet-preserved.png`: 86,362 bytes, shows filleted corner at R=5 with profile intact (5 outer shapes, 4 hole shapes).
   - `.evidence/431/combine-invalid-warning.png`: 79,730 bytes, shows broken hole with dashed red invalid warning outline on canvas.
+
+---
+
+## TURN 431b · refactor(profile): address review fixes, opt-in actions, shared clone & renderer cleanup (TASK 431b)
+
+- **did:**
+  - Addressed advisor review items for TASK 431:
+    1. **Dead buttons opt-in (`packages/ui/tool-ribbon.js`)**:
+       - `createToolRibbon` now accepts `profiles: false` by default, plus `notify: null`.
+       - Combine and Uncomb buttons render only when `profiles: true`.
+       - SketchStudio smoke assertions remain 100% green (12/12 passed) with unchanged ribbon groups (`Create,Modify,Inspect,Constrain,Edit`).
+    2. **One place for the action (`packages/ui/profile-actions.js`, `packages/ui/input-manager.js`, `apps/shaper/src/main.js`)**:
+       - Created shared `#ui/profile-actions.js` exporting `doCombine(state, notify)` and `doUncombine(state, notify)`.
+       - `packages/ui/tool-ribbon.js` invokes `doCombine`/`doUncombine` on button click when `profiles: true`.
+       - `packages/ui/input-manager.js` accepts `opts.profiles` and `opts.notify`; wires `Ctrl+Shift+C` and `Ctrl+Shift+U` to `doCombine` and `doUncombine`.
+       - `packages/ui/sketch-canvas.js` passes `profiles: opts.profiles` and `notify: opts.notify` from `mountSketch` to `setupInput`.
+       - `apps/shaper/src/main.js`: removed local `doCombine`/`doUncombine` implementations, removed keydown branches, passed `profiles: true` and `notify: groupStatus` to `mountSketch` and `createToolRibbon`.
+    3. **Single profile clone (`packages/core/profile-model.js`)**:
+       - Added and exported `cloneProfiles(list)` in `packages/core/profile-model.js`.
+       - Used in `packages/core/document.js` (x2) and `packages/ui/sketch-state.js` (x3).
+       - Grep check verified: `innerShapes.map(` appears strictly in `packages/core/profile-model.js:97` and nowhere else.
+    4. **Renderer cleanup (`packages/ui/svg-renderer.js`)**:
+       - Removed `window.__sketchState` fallback; uses `ctx?.getState ? ctx.getState() : null`.
+       - Replaced silent `catch (_) {}` with `dbg.error('renderer', '[svg-renderer] profile tint render error', err)`.
+       - Removed `resolveProfiles`, `findLoops`, and `loopPolygon` calls from `draw()`, restoring render purity (no mutation of `p.invalid` during draw frames).
+       - Moved `loopToPathD` and `polyToPathD` to `packages/core/loop-geometry.js` (re-exported by `packages/core/shaper-export.js`), breaking transitive dependency chain on `vcarve.js` -> `plot/clip.js` -> `clipper.js`. Fixed `distance-hv-dims.test.js` and `fillet-virtual-sharp.test.js`.
+       - Benchmarked render time with 1 profile on a 200-shape sketch over 100 frames:
+         - Before: 38.44ms total (0.384ms/frame).
+         - After: 27.49ms total (0.275ms/frame). Speedup: ~28% per frame.
+  - Investigated existing state geometry change signals:
+    - Confirmed NO existing change signal exists on `state`:
+      - `packages/ui/document-buffer.js:66-69`: explicitly documents polling to avoid needing hooks across scattered state mutations.
+      - `apps/shaper/src/main.js:488-500`: `panelTick` runs signature checks on every frame because no change signal exists.
+      - `packages/ui/sketch-state.js:14-224`: `createSketchState` has no change callback, event emitter, or listener system.
+    - Per advisor instruction, stopped and reported `BLOCKED` on geometry change resolution hook.
+- **evidence:**
+  - `git grep -n "innerShapes.map("`: only `packages/core/profile-model.js:97`.
+  - `node tests/profile-model.test.js`: `profile-model tests passed ✅` (including `cloneProfiles`, `doCombine`, `doUncombine`).
+  - `node scripts/shell-smoke.cjs`: `shell-smoke: 12/12 passed ✅`.
+  - `npm run gate`: `GATE files=157 pass=157 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+  - `.evidence/431b/sketchstudio-ribbon.png` (MD5: `C5C3D5F4F48BE933C0F3CD887FFEEDA6`): SketchStudio Modify ribbon without dead Combine/Uncomb buttons.
+  - `.evidence/431b/shaper-combine.png` (MD5: `FCA98804BF85E8B574E84CD460AC898E`): Shaper Modify ribbon with Combine and Uncomb buttons present.
+

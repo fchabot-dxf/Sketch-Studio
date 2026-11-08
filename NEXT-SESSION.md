@@ -57,7 +57,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   #core. SketchStudio Recenter now ignores the origin and arc centers and includes arc bulges.
 - OWNER QUESTION: export boundsOf (shaper-export.js:104) still counts every joint (origin, arc centers), ignores arc
   bulge and bezier extrema, and adds the datum. Unify it with geometry-bounds? That changes export bytes.
-- In flight: 434 (AGY-2), stray #dimInput box + stuck focus.
+- DONE: 434 merged 5d84d1f. Numeric inputs own their CSS. Also fixed: the live-dim inputs (the owner's "°" box) and the
+  fillet input. Small leftovers: the input is hidden two ways (class + inline display) and has `typeof document` guards.
+  Clean them up when that file is next touched.
+- In flight: 438 (AGY-2), dimension = one undo step.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;
@@ -67,7 +70,6 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - Works: pre-selected line + Dim creates a placing dimension that follows the mouse; Enter opens the input; the typed
     value drives the line (the inch value is converted correctly).
 - Next, in this order:
-  - 438: dimension = one undo step;
   - 439: tree values in the document unit;
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;

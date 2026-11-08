@@ -274,6 +274,14 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     Eighth screenshot: an idle Guide = thin BLUE #2C9AFF (the only idle exception).
   - Theme tokens declared once; export colours unchanged.
   - CC-A after 450 and 452.
+- DONE: 455 merged d83fb54 (Studio look + card + cutter shape); 458 merged d0c5ca7 (the shared buffer keeps other
+  hosts); 457 plan merged 87d0615.
+- Owner: stock thickness 3/4 in OK. Wood look: he sent a light BIRCH PLYWOOD texture image (not saved as a file;
+  asked for the file).
+- NOW:
+  - CC-A on 460 (Shaper persists the cut plan + stock, slice S0);
+  - CC-B on 454 (PP active panel), then 453;
+  - CC-C on 459 (3D Review S1).
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

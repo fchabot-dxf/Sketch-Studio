@@ -818,6 +818,20 @@ export function deriveCutFootprint(cuts, rec, state) {
   return out;
 }
 
+/**
+ * deriveCutFootprintAt(cuts, rec, state, halfWidth) — TASK 464: the footprint of the SAME cut as deriveCutFootprint, but for a
+ * cutter whose half-width at one depth level is `halfWidth` (a ball-nose or V-bit is narrower than its nominal radius below the
+ * surface). It REUSES the one derivation through a modified record, no copy: toolDia = 2w and cutOffset += (r - w), so the
+ * bit-CENTRE path (offset r + cutOffset from the wall) stays exactly where the nominal bit puts it, and only the swept/opened
+ * width changes (pocket: the centre region = the outline eroded by r + margin, opened back out by w; `autoOffset` is kept as
+ * derived for the nominal bit). Returns deriveCutFootprint's array (same order, same entries).
+ */
+export function deriveCutFootprintAt(cuts, rec, state, halfWidth) {
+  const r = (Number(rec && rec.toolDia) || 0) / 2;
+  const w = Math.max(0, Number(halfWidth) || 0);
+  return deriveCutFootprint(cuts, { ...rec, toolDia: 2 * w, cutOffset: (Number(rec && rec.cutOffset) || 0) + (r - w) }, state);
+}
+
 // ── TASK 449: TRAVEL DIRECTION — Shaper Origin always cuts CONVENTIONALLY (owner rule: no climb mode, no switch). ─────────
 // First principles (screen = viewed from above, y DOWN in sketch/SVG coordinates; the rotation is stated as seen ON SCREEN):
 //  * The Origin's cutter rotates CLOCKWISE viewed from above (support article "Climb cutting and conventional cutting").

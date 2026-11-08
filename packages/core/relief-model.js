@@ -16,10 +16,13 @@
 // Every face is flat-shaded with its true outward normal, wound counter-clockwise seen from outside.
 import { regionsFromRings, unionRegions, diffRegions, intersectRegions } from './plot/clip.js';
 import earcut from './plot/vendor/earcut.js';
+import { cutterTerraces, isShapedCutter, SHAPE_SLICES } from './cutter-profile.js';
 
 // Declared stock (all BASE mm, like cutDepth). width/height null = derived from the design bounds + margin on every side.
 export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 12.7 });
 
+// Unset-depth labels closer than this share one label (the labels are screen-sized, so nearer cuts would overprint).
+const MARK_MERGE_MM = 10;
 const finite = (v) => Number.isFinite(Number(v)) && v !== null && v !== '' && v !== true;
 
 /** How one cut item enters the model: { kind: 'cut', depth, through, depthUnset } or { kind: 'skip', reason }. */
@@ -72,30 +75,62 @@ function flatFace(m, regions, h, s) {
   }
 }
 
-// A vertical wall strip along every ring of `regions`, from height hTop down to hBot, facing INTO the removed region.
-function wallStrips(m, regions, hTop, hBot) {
+// The regions of `list` whose bounding box overlaps the bounding box of `of` (a pure pre-filter: it never changes a boolean's result).
+function near(list, of) {
+  const bb = (rs) => { const b = [Infinity, Infinity, -Infinity, -Infinity]; for (const r of rs) for (const p of r.outer) { if (p[0] < b[0]) b[0] = p[0]; if (p[1] < b[1]) b[1] = p[1]; if (p[0] > b[2]) b[2] = p[0]; if (p[1] > b[3]) b[3] = p[1]; } return b; };
+  const t = bb(of);
+  return list.filter((r) => { const b = bb([r]); return b[0] <= t[2] && b[2] >= t[0] && b[1] <= t[3] && b[3] >= t[1]; });
+}
+
+// The directed boundary edges of `regions`, oriented so the removed region is on the LEFT (outer CCW, holes CW): [[x1,y1,x2,y2],...].
+function boundaryEdges(regions) {
+  const out = [];
   for (const r of regions) {
     const rings = [r.outer, ...r.holes].map((g, k) => {
       const ccw = area2(g) > 0;
-      return (k === 0 ? ccw : !ccw) ? g : g.slice().reverse(); // outer CCW, holes CW => the removed region is on the LEFT
+      return (k === 0 ? ccw : !ccw) ? g : g.slice().reverse();
     });
-    for (const g of rings) {
-      for (let i = 0; i < g.length - 1; i++) {
-        const p = g[i], q = g[i + 1], dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy);
-        if (len < 1e-9) continue;
-        const nrm = [-dy / len, 0, dx / len];
-        const a = [p[0], hTop, p[1]], b = [q[0], hTop, q[1]], c = [q[0], hBot, q[1]], d = [p[0], hBot, p[1]];
-        tri(m, a, b, c, nrm); tri(m, a, c, d, nrm);
-      }
+    for (const g of rings) for (let i = 0; i < g.length - 1; i++) {
+      const p = g[i], q = g[i + 1];
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) >= 1e-9) out.push([p[0], p[1], q[0], q[1]]);
     }
   }
+  return out;
+}
+const edgeKey = (e) => e.map((v) => Math.round(v * 1000)).join(',');
+
+// Vertical WALLS, facing INTO the removed region, for every level's boundary from the previous level's depth down to its own.
+// An edge that is the SAME on consecutive levels (a through-cut kerf is on the boundary of every level) is ONE tall quad, not a
+// stack of one strip per level: without this a 29-level file spent 100k triangles re-drawing the same kerf walls.
+function levelWalls(m, levelRegions, depths) {
+  let open = new Map(); // edgeKey -> { e, top, bot } still growing downward
+  const flush = (q) => {
+    const [x1, y1, x2, y2] = q.e, dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), nrm = [-dy / len, 0, dx / len];
+    const a = [x1, q.top, y1], b = [x2, q.top, y2], c = [x2, q.bot, y2], d = [x1, q.bot, y1];
+    tri(m, a, b, c, nrm); tri(m, a, c, d, nrm);
+  };
+  let prev = 0;
+  levelRegions.forEach((regions, k) => {
+    const next = new Map();
+    for (const e of boundaryEdges(regions)) {
+      const key = edgeKey(e), hit = open.get(key);
+      if (hit) { hit.bot = -depths[k]; next.set(key, hit); open.delete(key); }
+      else next.set(key, { e, top: -prev, bot: -depths[k] });
+    }
+    for (const q of open.values()) flush(q); // edges that stop here
+    open = next;
+    prev = depths[k];
+  });
+  for (const q of open.values()) flush(q);
 }
 
 /**
  * buildRelief({ stock, items, bounds }) -> { stockBox, levels, meshes:{top,floor,wall,bottom,side}, marks, stats }
- *   marks   [{ key, kind:'depth-unset', point:[x,y] }] — an Outside/Inside cut shown THROUGH only because its depth is unset (the view draws a label there)
+ *   marks   [{ key, keys, kind:'depth-unset', point:[x,y] }] (one per SPOT; `keys` = every cut sharing it) — an Outside/Inside cut shown THROUGH only because its depth is unset (the view draws a label there)
  *   stock   {thickness,width,height,margin} (defaults DEFAULT_STOCK); all base mm
- *   items   [{ key, cutType:'outside'|'inside'|'pocket'|..., cutDepth: mm | 'unset', footprints:[{ rings:[[{x,y}]], fillRule }] }]
+ *   items   [{ key, cutType:'outside'|'inside'|'pocket'|'online'|..., cutDepth: mm | 'unset', footprints:[{ rings:[[{x,y}]], fillRule }],
+ *              shape?: { cutterShape, cutterAngle, toolDia }, footprintsAt?: (halfWidth) => footprints, slices? }]
+ *              (shape + footprintsAt make a ball-nose / V-bit groove: terraces over its profile, see cutter-profile.js)
  *   bounds  optional {minX,maxX,minY,maxY} of the design (joints); merged with the footprint rings for the derived size
  * Each mesh = { positions, normals, indices } (typed arrays). stats: triangles, per-group areas, skipped, unsetThrough.
  */
@@ -116,10 +151,25 @@ export function buildRelief({ stock, items = [], bounds = null } = {}) {
       regions.push(...regionsFromRings(rings, fp.fillRule));
     }
     if (!regions.length) { skipped.push({ key: it.key, cutType: it.cutType, reason: 'nothing-cut' }); continue; }
+    // TASK 464: a ball-nose / V-bit groove (not a through cut, which the bit clears at full width) = TERRACES over its profile; the
+    // footprint at each half-width comes from the caller's `footprintsAt` (profile-model.deriveCutFootprintAt: the same derivation).
+    const shape = it.shape && it.shape.cutterShape;
+    if (!rule.through && isShapedCutter(shape) && typeof it.footprintsAt === 'function') {
+      const n = Number(it.slices) > 0 ? Number(it.slices) : SHAPE_SLICES[shape];
+      let any = false;
+      for (const t of cutterTerraces(shape, it.shape.toolDia, it.shape.cutterAngle, rule.depth, n)) {
+        const rs = [];
+        for (const fp of it.footprintsAt(t.halfWidth) || []) rs.push(...regionsFromRings((fp.rings || []).filter((g) => g.length >= 3).map(toRing), fp.fillRule));
+        if (rs.length) { pending.push({ depth: t.depth, regions: rs }); any = true; }
+      }
+      if (any) continue;
+    }
     if (rule.depthUnset && !unsetThrough.includes(it.key)) { // one mark per cut (a profile's holes share its key), ON the cut: a vertex of its largest outer ring
       unsetThrough.push(it.key);
       const big = regions.reduce((m, r) => (Math.abs(area2(r.outer)) > Math.abs(area2(m.outer)) ? r : m), regions[0]);
-      marks.push({ key: it.key, kind: 'depth-unset', point: [big.outer[0][0], big.outer[0][1]] });
+      const pt = [big.outer[0][0], big.outer[0][1]];
+      const near = marks.find((m) => Math.hypot(m.point[0] - pt[0], m.point[1] - pt[1]) < MARK_MERGE_MM); // one label per SPOT (an Outside + an Inside on one hole)
+      if (near) near.keys.push(it.key); else marks.push({ key: it.key, keys: [it.key], kind: 'depth-unset', point: pt });
     }
     pending.push({ depth: rule.depth, regions });
   }
@@ -140,20 +190,24 @@ export function buildRelief({ stock, items = [], bounds = null } = {}) {
 
   // Level sets, deepest first so each R_k = (its own entries) union R_{k+1}.
   const depths = [...new Set(entries.map((e) => e.depth))].sort((x, y) => x - y);
-  const R = new Array(depths.length);
+  const R = new Array(depths.length), E = new Array(depths.length); // E_k = the cuts of exactly this depth
   for (let k = depths.length - 1; k >= 0; k--) {
-    R[k] = unionRegions(...entries.filter((e) => e.depth === depths[k]).map((e) => e.regions), k + 1 < depths.length ? R[k + 1] : []);
+    E[k] = unionRegions(...entries.filter((e) => e.depth === depths[k]).map((e) => e.regions));
+    if (k + 1 < depths.length) { // only the deeper regions near E_k can merge with it; the others are disjoint from it and carry over unchanged
+      const nearSet = near(R[k + 1], E[k]);
+      R[k] = [...unionRegions(E[k], nearSet), ...R[k + 1].filter((r) => !nearSet.includes(r))];
+    } else R[k] = E[k];
   }
 
   const top = newMesh(), floor = newMesh(), wall = newMesh(), bottom = newMesh(), side = newMesh();
   flatFace(top, depths.length ? diffRegions(rect, R[0]) : rect, 0, 1);
-  let prev = 0;
   depths.forEach((d, k) => {
     const through = d >= T - 1e-9;
-    if (!through) flatFace(floor, k + 1 < depths.length ? diffRegions(R[k], R[k + 1]) : R[k], -d, 1);
-    wallStrips(wall, R[k], -prev, -d);
-    prev = d;
+    // floor_k = R_k minus R_k+1 = E_k minus R_k+1; only the deeper regions near E_k can matter (a bbox pre-filter keeps each Clipper
+    // call small: a through-cut kerf far away is in every level and would otherwise be re-processed 29 times).
+    if (!through) flatFace(floor, k + 1 < depths.length ? diffRegions(E[k], near(R[k + 1], E[k])) : E[k], -d, 1);
   });
+  levelWalls(wall, R, depths);
   const throughR = depths.length && depths[depths.length - 1] >= T - 1e-9 ? R[depths.length - 1] : [];
   flatFace(bottom, throughR.length ? diffRegions(rect, throughR) : rect, -T, -1);
   const corners = [[box.minX, box.minY], [box.maxX, box.minY], [box.maxX, box.maxY], [box.minX, box.maxY]];

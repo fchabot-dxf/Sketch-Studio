@@ -7,7 +7,8 @@
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
 import { defaultCutRecord, effectiveCutRecord } from './shaper.js';
-import { deriveProfileCuts, deriveCutFootprint } from '#core/profile-model.js';
+import { deriveProfileCuts, deriveCutFootprint, deriveCutFootprintAt, resolveTargetKey } from '#core/profile-model.js';
+import { deriveVcarveContours, vbitHalfAngleTan } from '#core/vcarve.js';
 import { findLoops } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';
 
@@ -100,7 +101,7 @@ export function migrateEdgeRecords(loops, chains, plan = CUT_PLAN, vcarves = nul
 
 /**
  * deriveKeyFootprints(key, storedRec, state, loops, loopPolys) — THE ONE composition of the cut derivations for one plan
- * target: effectiveCutRecord -> deriveProfileCuts -> deriveCutFootprint. Returns { rec, footprints } (rec = the effective
+ * target: effectiveCutRecord -> deriveProfileCuts -> deriveCutFootprint. Returns { rec, cuts, footprints } (rec = the effective
  * record the footprints were derived with), or null when the target derives to nothing (stale key). Both Prepare's preview
  * (computeLook) and the 3D Review (planReliefItems) call this; no cut geometry is computed here.
  * `loops` must carry the host-side `polygon` (see loopsWithPolygons); `loopPolys` = { [loop id]: polygon }.
@@ -109,7 +110,7 @@ export function deriveKeyFootprints(key, storedRec, state, loops, loopPolys) {
   const rec = effectiveCutRecord(storedRec); // TASK 450: On line / Guide take no offset: a stored one is ignored
   const cuts = deriveProfileCuts(parseKey(key), rec, state, loops, loopPolys);
   if (!cuts || !cuts.length) return null;
-  return { rec, footprints: deriveCutFootprint(cuts, rec, state) };
+  return { rec, cuts, footprints: deriveCutFootprint(cuts, rec, state) };
 }
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. */
@@ -119,18 +120,49 @@ export function loopsWithPolygons(state) {
   return { loops, loopPolys: Object.fromEntries(loops.map((l) => [l.id, l.polygon])) };
 }
 
+// Terraces per V-carve ring: each contour ring is one V-bit pass (exactly what the exporter emits as an On Line cut at the ring's
+// depth); 3 slices read as the V, and a big stack (many rings) drops to 1 to stay inside the triangle budget.
+const VCARVE_SLICES = 3, VCARVE_BIG_STACK = 40;
+
 /**
- * planReliefItems(state, plan = CUT_PLAN) — TASK 459: the cut plan as the 3D Review's input, one item per derived footprint:
- * [{ key, cutType, cutDepth, footprints:[fp] }], via deriveKeyFootprints. Stale keys derive to nothing, as in the exporter.
+ * planReliefItems(state, plan = CUT_PLAN) — the cut plan + the V-carves as the 3D Review's input, one item per derived
+ * footprint: [{ key, cutType, cutDepth, footprints:[fp], shape, footprintsAt }], via deriveKeyFootprints / deriveCutFootprintAt
+ * (the same derivation at another cutter half-width). Stale keys derive to nothing, as in the exporter. A region that has a
+ * V-carve is NOT also cut by its plan entry (the exporter drops it the same way).
  */
 export function planReliefItems(state, plan = CUT_PLAN) {
   const { loops, loopPolys } = loopsWithPolygons(state);
   const items = [];
+
+  // V-carve: every contour ring = a V-bit On Line pass at the ring's own depth (deriveVcarveContours is the ONE derivation).
+  const carved = new Set();
+  for (const vc of (state.vcarves || [])) {
+    if (!vc || !vc.region) continue;
+    const spec = resolveTargetKey(vc.region, state, loops, loopPolys);
+    if (!spec || spec.invalid || !spec.outer) continue;
+    carved.add(keyOf('loop', spec.outer)); if (spec.profileId) carved.add(keyOf('profile', spec.profileId));
+    const boundary = loopPolys[spec.outer];
+    if (!boundary || boundary.length < 3) continue;
+    const holes = (spec.inners || []).map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+    const contours = deriveVcarveContours(boundary, vc, { holes });
+    const angle = (vc.vbit && vc.vbit.angle) || 90, tan = vbitHalfAngleTan(angle);
+    const slices = contours.length > VCARVE_BIG_STACK ? 1 : VCARVE_SLICES;
+    for (const c of contours) {
+      const rec = { cutType: 'online', cutDepth: c.depth, cutOffset: 0, toolDia: 2 * c.depth * tan, cutterShape: 'vbit', cutterAngle: angle, autoOffset: 0 };
+      const cuts = [{ kind: 'loop', polygon: c.polygon, cutType: 'online', offsetSide: 0, isCompound: false }];
+      items.push({ key: 'vcarve:' + (vc.id || ''), cutType: 'online', cutDepth: c.depth, footprints: deriveCutFootprint(cuts, rec, state),
+        shape: { cutterShape: 'vbit', cutterAngle: angle, toolDia: rec.toolDia }, slices, footprintsAt: (w) => deriveCutFootprintAt(cuts, rec, state, w) });
+    }
+  }
+
   for (const [key, stored] of plan) {
-    if (!stored || !stored.cutType) continue;
+    if (!stored || !stored.cutType || carved.has(key)) continue;
     const d = deriveKeyFootprints(key, stored, state, loops, loopPolys);
     if (!d) continue;
-    for (const fp of d.footprints) items.push({ key, cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp] });
+    const shape = { cutterShape: stored.cutterShape || 'endmill', cutterAngle: stored.cutterAngle, toolDia: d.rec.toolDia };
+    const at = new Map(); // halfWidth -> footprints (one derivation per width, shared by this key's footprints)
+    const atW = (w) => { if (!at.has(w)) at.set(w, deriveCutFootprintAt(d.cuts, d.rec, state, w)); return at.get(w); };
+    d.footprints.forEach((fp, i) => items.push({ key, cutType: fp.cutType, cutDepth: d.rec.cutDepth, footprints: [fp], shape, footprintsAt: (w) => [atW(w)[i]].filter(Boolean) }));
   }
   return items;
 }

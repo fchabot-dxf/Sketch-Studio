@@ -48,6 +48,7 @@ function serialize() {
         artLayers: state.artLayers,
         activeArtLayerId: state.activeArtLayerId,
         toolpaths: state.toolpaths,
+        plotColors: state.plotColors, // TASK 445: the pens (toolpaths/art layers reference them by id, so they restore together)
         activeToolpathId: state.activeToolpathId,
         doc: { ...state.doc },
     });
@@ -58,6 +59,7 @@ function restore(snap) {
     state.artLayers = s.artLayers;
     state.activeArtLayerId = s.activeArtLayerId;
     state.toolpaths = s.toolpaths || [];
+    state.plotColors = s.plotColors || [];
     state.activeToolpathId = s.activeToolpathId || null;
     state.doc = s.doc;
     state.selectedShapeIds = new Set();

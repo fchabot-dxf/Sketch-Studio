@@ -130,6 +130,16 @@
     #toolpathPanel .btn:hover { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
     #toolpathPanel .btn.primary { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
     #toolpathPanel #plotColors { max-height: 22vh; overflow-y: auto; padding: 4px 6px; }
+    /* TASK 446: the pen row (plot-colors-panel.js plotColorRow) had NO css — its inputs sat at their default widths and pushed
+       the width box, badge and delete x past the 244px panel, under the canvas. One flex row: the name takes what is left
+       (min-width:0 so a long name truncates), everything else is fixed-size and stays inside the panel. */
+    #toolpathPanel .pc-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; min-width: 0; }
+    #toolpathPanel .pc-swatch { position: relative; flex: 0 0 18px; width: 18px; height: 18px; padding: 0; border: 1px solid #d8cbb2; border-radius: 3px; cursor: pointer; }
+    #toolpathPanel .pc-name { flex: 1 1 0; min-width: 0; box-sizing: border-box; font: inherit; border: 1px solid #d8cbb2; border-radius: 4px; padding: 1px 4px; background: #fbf6ec; color: #3a352b; text-overflow: ellipsis; }
+    #toolpathPanel .pc-width { flex: 0 0 44px; width: 44px; box-sizing: border-box; font: inherit; border: 1px solid #d8cbb2; border-radius: 4px; padding: 1px 2px; background: #fbf6ec; color: #3a352b; }
+    #toolpathPanel .pc-badge { flex: 0 0 auto; min-width: 12px; text-align: center; color: #8a8067; font-size: 11px; }
+    #toolpathPanel .pc-del { flex: 0 0 auto; padding: 0 4px; cursor: pointer; color: #8a8067; font-size: 16px; line-height: 1; }
+    #toolpathPanel .pc-del:hover { color: #d64545; }
     #toolpathPanel #toolpathLayers { max-height: 30vh; overflow-y: auto; padding: 4px 6px; }
     #recalcBtn.stale { background: var(--sk-selection); color: #fff; border-color: var(--sk-selection); }
     /* PP-4b — target-editing cue (double-click a toolpath row -> pick its target shapes; Esc exits). */

@@ -185,9 +185,7 @@ await (async () => {
     await evalJs(`(async () => { window.__draw.state.toolpaths[0].plotColorId = ${JSON.stringify(penId)}; (await import('/apps/penplotter/src/plot-colors-panel.js')).renderPlotColorsPanel(); })()`);
     const seeded = await observe();
     assert.strictEqual(seeded.tpPens[0], penId, 'seeded: toolpath uses the pen to delete');
-    // The x overflows its 216px row and sits UNDER the canvas at this width (a real layout bug, reported separately), so a
-    // real mouse click can't reach it: invoke it with el.click(). The gesture under test here is the real Ctrl+Z after it.
-    await evalJs(`document.querySelector('.pc-row:last-child .pc-del').click()`);
+    await clickEl('.pc-row:last-child .pc-del'); // real click (the x is reachable since TASK 446)
     await sleep(200);
     await clickEl('.ui-dialog-ok');
     await sleep(200);

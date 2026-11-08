@@ -1,7 +1,7 @@
 // tests/penplotter-persist.test.js — TASK 451: the Pen Plotter's own document survives a REAL page reload.
 // Live headless CDP: import an SVG, build pens/toolpaths/settings/styles + a non-default doc size, wait for the autosave,
 // reload the page, and compare the persisted plotter document, the exported G-code (byte-identical) and the panels.
-// Then strip the host sidecar from the saved buffer (an OLD document) and reload: defaults, geometry kept.
+// Then strip the host sidecar from the saved design (an OLD document) and reload: defaults, geometry kept.
 
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -210,11 +210,11 @@ await (async () => {
 
     // OLD document: strip the host sidecar from the saved buffer, reload -> plotter defaults, geometry kept.
     await evalJs(`new Promise((res, rej) => {
-      const open = indexedDB.open('sketch-studio-documents', 1);
+      const open = indexedDB.open('sketch-studio-projects', 1);
       open.onsuccess = () => {
-        const tx = open.result.transaction('kv', 'readwrite'); const st = tx.objectStore('kv');
-        const g = st.get('current');
-        g.onsuccess = () => { const d = g.result; delete d.hosts.penplotter; st.put(d, 'current'); };
+        const db = open.result; const tx = db.transaction(['meta', 'designs'], 'readwrite');
+        const m = tx.objectStore('meta').get('currentDesign');
+        m.onsuccess = () => { const g = tx.objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result; delete d.document.hosts.penplotter; tx.objectStore('designs').put(d); }; };
         tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error);
       };
       open.onerror = () => rej(open.error);

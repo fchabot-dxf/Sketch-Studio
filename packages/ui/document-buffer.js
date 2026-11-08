@@ -1,94 +1,47 @@
-// packages/ui/document-buffer.js — the shared AUTOSAVE BUFFER (PERSIST-2).
-// Persists the current document (packages/core/document.js's serializeDocument) into IndexedDB under
-// ONE well-known key, polled/coalesced rather than written every frame. Because every Sketch-Studio app
-// is same-origin, this key IS the cross-app carry: draw in one editor, switch to another via the shared
-// app-switcher, the geometry (with constraints) is right there — no export/import round trip.
+// packages/ui/document-buffer.js — the shared AUTOSAVE LOOP of an app (PERSIST-2, reworked in TASK 474).
+// Polls the app state, and when it changed writes the document (packages/core/document.js serializeDocument + this host's
+// sidecar) into the app's CURRENT DESIGN through the project store (project-store.js: projects and designs on IndexedDB). It
+// also loads a design into the app (the initial restore, Open, New, Open from file) and offers the design actions a
+// sidebar needs. Because every Sketch-Studio app is same-origin and the store's "current" pointer is global, switching apps
+// via the shared app-switcher still carries the drawing: the next app restores the same current design.
 //
 // DDCS Studio lessons this steals (already paid for there, not rediscovered — see web/data/fsHandles.js,
 // web/ui/fileSaveState.js:164):
-//   - Buffer != file. This is NOT a named save; slice 3 adds that as a separate, explicit artifact.
+//   - Autosave != a named save. Naming/saving-as/opening are explicit design actions (below); the loop never prompts.
 //   - NO beforeunload warning. The buffer survives reload, so a warning would cry wolf on every refresh
 //     and teach people to click through real ones. A passive status callback is the only truth-teller.
 //   - All storage is best-effort: a write/read failure just means "not saved this time," never a thrown
-//     error the host has to handle.
-//   - Hosts you don't own pass through: a save replaces only its own doc.hosts entry (TASK 458).
+//     error the host has to handle (the explicit actions DO throw readable errors: the user asked for them).
+//   - Hosts you don't own pass through: a save replaces only its own doc.hosts entry (TASK 458, kept per design in the store).
 //   - Opening a document REPLACES the whole state (see #core/document.js's deserializeDocument) — never
 //     a blend of old + restored.
+//   - A buffer is BOUND to the design it loaded / created and keeps writing into THAT design, not into whatever the global
+//     "current" pointer says later: a second tab that opens another design must not get this tab's drawing written into it.
 //
-// This module is UI-layer (DOM/IndexedDB), not #core — #core stays pure/testable; a browser-only storage
-// concern belongs beside the other #ui host-facing modules (style-panel.js, etc.), matching this repo's
-// existing #core/#ui split.
+// This module is UI-layer (DOM/IndexedDB), not #core — #core stays pure/testable.
 
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-
-const DB_NAME = 'sketch-studio-documents';
-const STORE = 'kv';
-const KEY = 'current'; // ONE well-known key -- the whole point of the cross-app carry
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') { reject(new Error('indexedDB unavailable')); return; }
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { try { req.result.createObjectStore(STORE); } catch (_) {} };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function readBuffer() {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const g = db.transaction(STORE).objectStore(STORE).get(KEY);
-      g.onsuccess = () => resolve(g.result || null);
-      g.onerror = () => resolve(null);
-    });
-  } catch (_) { return null; } // best-effort: no buffer readable = boot with an empty sketch, same as today
-}
-
-// The buffer key is shared by EVERY app, and `doc.hosts` holds one sidecar per host app. A write therefore replaces only
-// the sidecars this buffer OWNS (`doc.hosts`, built from its own hostName) and passes every other host's entry through untouched: read the stored
-// document and write the merged one inside ONE readwrite transaction (so two tabs can't interleave between the read and
-// the write). A buffer with no host owns nothing, so it never deletes anyone's sidecar.
-async function writeBuffer(doc) {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      const store = tx.objectStore(STORE);
-      const got = store.get(KEY);
-      got.onsuccess = () => {
-        const kept = (got.result && got.result.hosts) || {};
-        store.put({ ...doc, hosts: { ...kept, ...doc.hosts } }, KEY);
-      };
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
-    });
-  } catch (_) { return false; } // best-effort (lesson 7): a failed write just means "try again next change"
-}
+import { getProjectStore } from '#ui/project-store.js';
+import { browserFileSeam } from '#ui/project-file.js';
 
 /**
- * createDocumentBuffer({ state, hostName, getHostData, pollMs, onStatusChange })
+ * createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store, pollMs, onStatusChange })
  *   state: the live sketch state to persist/restore (same shape #core/document.js expects).
+ *   app: the app id ('sketchstudio' | 'shaper' | 'penplotter'), stored on the design (who saved it last).
  *   hostName / getHostData: OPTIONAL — if given, getHostData() is called at save time and embedded
- *     under doc.hosts[hostName] (e.g. penplotter's per-shape pen colors). Omit for a host with no
- *     side-car data of its own; #core/document.js's hosts sidecar stays empty and untouched.
- *   pollMs: how often to check for changes (default 1500ms — matches the DDCS reference's own
- *     "live-ish poll, cheap" cadence). A fixed-interval "did anything change" check rather than a
- *     classic reset-on-every-keystroke debounce: coalesces rapid edits into one write either way, and
- *     avoids needing a hook at every one of this codebase's many scattered state-mutation call sites.
- *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive dirty/saved
- *     indicator. Never a blocking prompt (lesson 2).
+ *     under doc.hosts[hostName] (e.g. penplotter's pens/toolpaths). Omit for a host with no side-car data of its own.
+ *   onRestored({ restored, hosts, name }): OPTIONAL — called after the state was replaced by a stored design (initial restore,
+ *     openDesign, newDesign, openFile). The host re-solves / repaints and applies ITS sidecar from `hosts` (or resets its
+ *     own state to defaults when `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one).
+ *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
+ *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive indicator.
  *
- * Returns { restore, start, stop }.
- *   restore(): reads the buffer (if any) and applies it via deserializeDocument. Returns
- *     { restored: boolean, hosts } — restored:false means "nothing to restore" (best-effort: any read/
- *     parse failure also resolves this way, never throws).
- *   start()/stop(): begin/end the poll-and-save loop.
+ * Returns { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, designId, store }.
  */
-export function createDocumentBuffer({ state, hostName, getHostData, pollMs = 1500, onStatusChange } = {}) {
+export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange } = {}) {
   let lastSig = null;
   let intervalId = null;
+  let boundId = null; // the design this buffer reads from / writes to
   const notify = (s) => { try { onStatusChange && onStatusChange(s); } catch (_) {} };
 
   function currentDoc() {
@@ -101,23 +54,46 @@ export function createDocumentBuffer({ state, hostName, getHostData, pollMs = 15
     try { sig = JSON.stringify(currentDoc()); } catch (_) { return; } // a transient bad state -- skip this tick
     if (sig === lastSig) return;
     notify('saving');
-    const ok = await writeBuffer(JSON.parse(sig));
+    let ok = false;
+    try { const r = await store.save(JSON.parse(sig), { app, id: boundId || undefined }); boundId = r.id; ok = true; } catch (_) { ok = false; }
     if (sig === lastSig) return; // a newer change landed while this write was in flight -- let the NEXT tick handle it
     lastSig = sig;
     notify(ok ? 'saved' : 'error');
   }
 
-  async function restore() {
-    const doc = await readBuffer();
-    if (!doc) return { restored: false, hosts: {} };
-    const result = deserializeDocument(doc, state);
-    if (!result.ok) return { restored: false, hosts: {} }; // e.g. a newer-version document -- flagged, not half-read
+  /** Replace the app state with a stored design and tell the host. */
+  function load(design) {
+    const result = deserializeDocument(design.document, state);
+    if (!result.ok) return { restored: false, hosts: {}, name: design.name, reason: result.reason }; // e.g. a newer-version document
+    boundId = design.id;
     lastSig = JSON.stringify(currentDoc()); // the just-restored state IS the baseline -- don't immediately re-save it as "new"
-    return { restored: true, hosts: result.hosts };
+    const out = { restored: true, hosts: result.hosts, name: design.name };
+    try { onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); }
+    return out;
+  }
+
+  async function restore() {
+    let design = null;
+    try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch
+    if (!design) return { restored: false, hosts: {} };
+    return load(design);
   }
 
   function start() { if (intervalId == null) intervalId = setInterval(poll, pollMs); }
   function stop() { if (intervalId != null) { clearInterval(intervalId); intervalId = null; } }
+  /** Save pending changes NOW (before an action that copies / exports the stored design). */
+  async function flush() { await poll(); }
 
-  return { restore, start, stop };
+  // ---- explicit design actions (they throw readable errors: the user asked for them) -------------------------------
+  async function openDesign(id) { await flush(); return load(await store.open(id)); }
+  async function newDesign(name) { await flush(); return load(await store.newDesign(name || 'Untitled', { app })); }
+  async function saveAs(name) { await flush(); const p = await store.saveAs(name, { app, fromId: boundId || undefined }); boundId = p.id; return p; }
+  async function saveFile(seam = browserFileSeam) { await flush(); return store.exportFile(boundId || undefined, seam); }
+  async function openFile(seam = browserFileSeam) {
+    await flush();
+    const p = await store.importFile(seam, { app });
+    return p ? load(p) : null;
+  }
+
+  return { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, designId: () => boundId, store };
 }

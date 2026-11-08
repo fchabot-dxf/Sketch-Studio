@@ -6,7 +6,7 @@
 //     snapshot(), so an undo that restored them would silently revert edits made since the last snapshot.
 // Plain data only (JSON-safe); Map/Set become arrays. #core stays pure — this file is plotter-side.
 
-import { state, reseedUid } from "./state.js";
+import { state, reseedUid, initLayers } from "./state.js";
 import { sanitizeSettings, sanitizeDoc, sanitizePens, sanitizeToolpaths } from "./fields.js"; // TASK 453: declared ranges
 
 const DOC_VERSION = 1;
@@ -42,6 +42,17 @@ export function capturePlotterDoc() {
         shapeStyles: Array.from(state.shapeStyles.entries()),
         staticShapeIds: Array.from(state.staticShapeIds),
     };
+}
+
+/** The plotter state of a design that carries NO plotter sidecar (a new / other-app design): the same defaults a fresh page has.
+ *  Without it, opening such a design would keep the previous design's pens and toolpaths and autosave them into it. */
+export function resetPlotterDoc() {
+    state.doc = sanitizeDoc(undefined);
+    state.plotColors = [];
+    state.settings = sanitizeSettings(undefined);
+    state.shapeStyles = new Map();
+    state.staticShapeIds = new Set();
+    initLayers(); // the starter toolpath, as on a fresh page
 }
 
 /** Restore a persisted plotter document. Missing parts keep their defaults (an old buffer carries none of this). */

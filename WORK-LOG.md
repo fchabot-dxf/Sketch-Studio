@@ -11215,3 +11215,51 @@ Built VCARVE-5a per the TURN 424 plan and advisor decisions:
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 428b — Remove symptom floor & re-capture verified before/after evidence — branch agy2
+
+- **Removal of Floor Override (`packages/core/constraint-status.js`):**
+  - Removed the `hasOnlyLinear -> computed = 1` floor in both places (`provisionalDOFFromLocks` at line 171 and Phase 3 at line 769).
+  - Retained strictly the pure root-cause fix:
+    1. Removal of redundant `applyDecIfNeeded` calls in `CONSTRAINT_TYPES.TANGENT` at lines 533–534.
+    2. Addition of `'tangent'` to the skip list in `provisionalDOFFromLocks` (line 169) and Phase 3 (line 763).
+  - Virtual-sharp joint $V$ with two `pointOnLine` constraints correctly reads $d0$ per Task 416. Updated assertion in `tests/filleted-underconstrained-movability.test.js` to assert `status.fixedJoints.has(vSharp) === true`.
+
+- **Corpus & DOF Verification (origin/main vs agy2 branch):**
+  - Compared `analyzeConstraintStatus` across `origin/main` vs `agy2`:
+    - Case 1 (Point on fixed line): 100% identical (0 diffs).
+    - Case 2 (Point on free line): 100% identical (0 diffs).
+    - Case 3 (Point on line with fixed ends + dim): 100% identical (0 diffs).
+    - Case 4 (Rect with midpoint on line): 100% identical (0 diffs).
+    - Case 5 (Fillet Virtual Sharp V case from `tests/fillet-virtual-sharp.test.js`): 100% identical (0 diffs).
+    - Case 6 (Owner's repro sketch): exactly the intended corrections:
+      - `j_fillet_1`, `j_fillet_2`, `j_fillet_3`: main(`dof=0, fixed=true`) $\to$ branch(`dof=1, fixed=false`).
+      - Top line shape: main(`fixed=true`) $\to$ branch(`fixed=false`).
+      - Arc shape: main(`fixed=true`) $\to$ branch(`fixed=false`).
+    - Zero other differences across the entire corpus.
+
+- **Re-captured Live Evidence (Headless Edge in SketchStudio):**
+  - Set viewBox to `'-120 -20 290 140'` so the entire sketch geometry (including top line and arc at $Y=0..20$) is fully framed in the center of the viewport (previously clipped off-screen by a narrow default viewBox).
+  - **BEFORE (`.evidence/428/before-bug-top-and-arc-black.png`):**
+    - Captured synchronously on `origin/main` code.
+    - Size: 157,482 bytes; MD5: `e9faf89984c7a5f2b3ea86fd476ff70b`.
+    - Shows: Top line and fillet arc rendered black (`stroke: var(--sk-geo-fixed, #202020)` / computed `rgb(32, 32, 32)`).
+  - **AFTER (`.evidence/428/after-fixed-correct-colors.png`):**
+    - Captured synchronously on patched branch code.
+    - Size: 182,668 bytes; MD5: `75ad5e56d82d3f4a86343b9fad7910dd`.
+    - Shows: Left line black (`rgb(32, 32, 32)`); top line, arc, right line, and bottom line all rendered blue (`stroke: var(--sk-constraint-fill, #60A5FA)` / computed `rgb(96, 165, 250)`).
+  - **DRAGGED (`.evidence/428/after-dragged-width-stayed-blue.png`):**
+    - Captured after dragging width from 50 to 80.
+    - Size: 141,353 bytes; MD5: `c8cea02928dce578570f6adcc1735865`.
+    - Shows: Geometry expanded horizontally, top line and arc moved and stayed blue.
+  - **MD5 Comparison:**
+    - `before` MD5 `e9faf89984c7a5f2b3ea86fd476ff70b` $\neq$ `after` MD5 `75ad5e56d82d3f4a86343b9fad7910dd`.
+
+- **Gate:**
+  - `npm run gate` (`scripts/gate.cjs`):
+    - `GATE files=157 pass=157 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

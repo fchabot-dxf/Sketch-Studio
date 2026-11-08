@@ -98,7 +98,8 @@ assert.strictEqual(status.fixedJoints.has(arcCenter), false, 'Arc center must no
 assert.strictEqual(status.fixedJoints.has(topRim), false, 'Top rim must not be fixed');
 assert.strictEqual(status.fixedJoints.has(rightRim), false, 'Right rim must not be fixed');
 if (vSharp) {
-  assert.strictEqual(status.fixedJoints.has(vSharp), false, 'Virtual sharp must not be fixed');
+  // Virtual sharp V carries two pointOnLine constraints and correctly reads d0 per Task 416
+  assert.strictEqual(status.fixedJoints.has(vSharp), true, 'Virtual sharp correctly reads d0 per Task 416');
 }
 
 // 2. Movability check: verify that free items actually move when dragged,

@@ -54,8 +54,8 @@ export function defaultCutRecord() {
   return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 };
 }
 
-// Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'edge').
-// A LOOP or PROFILE is both a closed region AND a closed path → all 5. An EDGE is a single vector → only the 'path' types.
+// Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'chain').
+// A LOOP or PROFILE is both a closed region AND a closed path → all 5. A CHAIN is an open path → only the 'path' types.
 export function availableTypes(selectedKind) {
   return CUT_TYPES.filter((t) => t.targetKind === 'path' || selectedKind === 'loop' || selectedKind === 'profile');
 }

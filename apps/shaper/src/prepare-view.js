@@ -6,14 +6,14 @@
 // renderer stays byte-identical.
 
 import { calculateArcPath } from '#core/geometry.js';
-import { findLoops } from '#core/loop-finder.js';
+import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
-import { sampleArc, loopPolygon, polyArea, pointInPolygon, polygonContains } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint } from '#core/profile-model.js';
+import { sampleArc, loopPolygon, polyArea, pointInPolygon, polygonContains, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -190,12 +190,18 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const loopById = new Map(loops.map((l) => [l.id, l]));
   const loopPolys = Object.fromEntries(loops.map((l) => [l.id, l.polygon]));
   const profileViews = resolveProfileViews(state, loops, loopPolys);
+  const chains = findOpenChains(state, loops);
+  const chainById = new Map(chains.map((c) => [c.id, c]));
+  const chainByShapeId = new Map();
+  for (const c of chains) {
+    for (const s of (c.shapes || [])) chainByShapeId.set(s.id, c);
+  }
 
-  // Selection model: a target is { kind: 'loop' | 'profile' | 'edge', id } keyed by `${kind}:${id}`:
+  // Selection model: a target is { kind: 'loop' | 'profile' | 'chain', id } keyed by `${kind}:${id}`:
   //   • derived profile → `loop:<outerLoopId>` (preserves saved cut plans)
   //   • combined profile → `profile:<profileId>`
-  //   • open/single vector → `edge:<shapeId>`
-  // Shift+click toggles targets in `selection`; plain click selects one (or clears on empty space).
+  //   • open chain → `chain:<chainId>`
+  // Shift+click (e.shiftKey) toggles targets in `selection`; plain click selects one (or clears on empty space).
   const selection = new Map(); // key -> { kind, id }
   const targetKey = (t) => keyOf(t.kind, t.id);
 
@@ -232,32 +238,69 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return null;
   }).filter(Boolean);
 
-  // KIND-AWARE dispatcher: cursor → target. ON the ink → the EDGE (vector);
-  // in the open interior → the PROFILE via resolveProfileAtPoint (combined wins over derived; holes stay open).
+  // STEP 3: Picking.
+  // (a) INK: nearest shape within tol.
+  //     - If in some loop's edges: smallest-area loop, return its profile via resolveProfileForLoop.
+  //     - If in an open chain: return { kind: 'chain', id: chain.id }.
+  // (b) INTERIOR: resolveProfileAtPoint.
+  // Map profile: derived -> { kind: 'loop', id: profile.outer }; combined -> { kind: 'profile', id: profile.id }.
+  // NEVER return kind 'edge'.
   function resolveTarget(worldPt) {
-    // EDGE first: the nearest shape stroke within tolerance WINS over the profile (makes OPEN paths selectable too).
-    const tol = worldTolerance(svgEl, EDGE_TOL_PX);
-    let bestEdge = null, bestDist = tol;
-    for (const h of edgeHits) { const d = edgeDistAt(h, worldPt); if (d <= bestDist) { bestDist = d; bestEdge = h; } }
-    if (bestEdge) return { kind: 'edge', id: bestEdge.id };
-    const prof = resolveProfileAtPoint(worldPt, state, loops, loopPolys);
-    if (!prof || !prof.outer) return null;
-    if (!prof.isDerived) {
+    const mapProfileToTarget = (prof) => {
+      if (!prof || !prof.outer) return null;
+      if (prof.isDerived) return { kind: 'loop', id: prof.outer };
       const v = profileViews.get(prof.id);
       if (!v || v.invalid) return null;
       return { kind: 'profile', id: prof.id };
+    };
+
+    // (a) INK
+    const tol = worldTolerance(svgEl, EDGE_TOL_PX);
+    let bestEdge = null, bestDist = tol;
+    for (const h of edgeHits) { const d = edgeDistAt(h, worldPt); if (d <= bestDist) { bestDist = d; bestEdge = h; } }
+    if (bestEdge) {
+      const inLoops = loops.filter((l) => (l.edges || []).includes(bestEdge.id));
+      if (inLoops.length > 0) {
+        inLoops.sort((a, b) => a.area - b.area);
+        const smallestLoop = inLoops[0];
+        const prof = resolveProfileForLoop(smallestLoop.id, state, loops, loopPolys);
+        const tgt = mapProfileToTarget(prof);
+        if (tgt) return tgt;
+      }
+      const chain = chainByShapeId.get(bestEdge.id);
+      if (chain) {
+        return { kind: 'chain', id: chain.id };
+      }
     }
-    return { kind: 'loop', id: prof.outer };
+
+    // (b) INTERIOR
+    const prof = resolveProfileAtPoint(worldPt, state, loops, loopPolys);
+    return mapProfileToTarget(prof);
   }
 
-  // ONE render path, branched by kind: profile (derived loop or combined) → evenodd region with holes open; edge → stroke.
-  const targetMarkup = (t, loopStyle, edgeStyle) => {
+  // STEP 4: Highlight markup.
+  //   - kind 'loop' -> ONE <path fill-rule="evenodd"> = outer loop polygon + DIRECT holes open;
+  //   - kind 'profile' -> resolveProfileViews.get(id).d, evenodd style;
+  //   - kind 'chain' -> edgeStrokeMarkup for each member shape.
+  const targetMarkup = (t, loopStyle, chainStyle) => {
     if (!t) return '';
-    if (t.kind === 'loop' || t.kind === 'profile') {
-      const pl = profileLoopsForTarget(t);
-      return pl ? profilePathMarkup(pl.outer.polygon, pl.holes.map((h) => h.polygon), loopStyle) : '';
+    if (t.kind === 'loop') {
+      const outerLoop = loopById.get(t.id);
+      if (!outerLoop) return '';
+      const prof = derivedProfileForLoop(t.id, loops, loopPolys, state);
+      const holePolys = (prof && prof.inners ? prof.inners : []).map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+      return profilePathMarkup(outerLoop.polygon, holePolys, loopStyle);
     }
-    if (t.kind === 'edge') { const s = shapeById.get(t.id); return s ? edgeStrokeMarkup(s, state, edgeStyle) : ''; }
+    if (t.kind === 'profile') {
+      const v = profileViews.get(t.id);
+      if (!v || !v.d) return '';
+      return `<path d="${v.d}" fill-rule="evenodd" style="${loopStyle}"/>`;
+    }
+    if (t.kind === 'chain') {
+      const chain = chainById.get(t.id);
+      if (!chain) return '';
+      return (chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, chainStyle)).join('');
+    }
     return '';
   };
 
@@ -268,7 +311,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const { kind, id } = parseKey(key);
     const t = { kind, id };
     const pl = (kind === 'loop' || kind === 'profile') ? profileLoopsForTarget(t) : null;
-    if (kind === 'edge' ? !shapeById.has(id) : !pl) return { region: '', path: '' };
+    if (kind === 'chain' ? !chainById.has(id) : !pl) return { region: '', path: '' };
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
     if (!ct) return { region: '', path: '' };
     const color = ct.previewStroke;
@@ -378,7 +421,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
     }
     renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected profile drops its hover)
-    onSelectionChange(selectedTarget());     // notify the cut panel (active target | null)
+    onSelectionChange(t || selectedTarget()); // notify the cut panel (last clicked target, or selected target | null)
   };
   const onUp = (e) => {
     handlePanZoomPointerUp(e, svgEl, viewState);
@@ -409,7 +452,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       const ct = cutTypeById(cutType);
       let lastRec = null;
       for (const t of selection.values()) {
-        if (t.kind === 'edge' && ct && ct.targetKind !== 'path') continue;
+        if (t.kind === 'chain' && ct && ct.targetKind !== 'path') continue;
         lastRec = setFieldFor(targetKey(t), 'cutType', cutType);
       }
       refreshLook();

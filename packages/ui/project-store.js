@@ -34,8 +34,11 @@
 
 import { DOCUMENT_VERSION } from '#core/document.js';
 import { serializeProjectFile, parseProjectFile, projectFileName, browserFileSeam } from '#ui/project-file.js';
+import { createRouterAdapter, CURRENT_DESIGN_KEY } from '#ui/cloud/router-adapter.js';
+import { createDriveAdapter } from '#ui/cloud/drive-adapter.js';
+import { getGoogleAccount } from '#ui/cloud/google-account.js';
 
-const CURRENT = 'currentDesign';
+const CURRENT = CURRENT_DESIGN_KEY;
 const LEGACY_MIGRATED = 'legacyMigrated';
 // Fixed ids: a second tab migrating at the same moment is a no-op (putIfAbsent), never a second copy.
 export const DEFAULT_PROJECT_ID = 'my-designs';
@@ -370,9 +373,28 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     /** fn() runs after any change to the projects, designs or the current pointer, in this tab and (BroadcastChannel) in other tabs. */
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   };
+  // The explicit CLOUD actions of an adapter that has them (the router): signing in never calls these; the user's choice does.
+  if (adapter.cloud) {
+    const c = adapter.cloud;
+    store.cloud = {
+      isEnabled: () => c.isEnabled(),
+      enable: async () => { await c.enable(); changed(); },
+      disable: async () => { await c.disable(); changed(); },
+      lastError: () => c.lastError(),
+      refresh: async () => { const moved = await c.refresh(); if (moved) changed(); return moved; },
+      moveProjectToDrive: async (id) => { const r = await c.moveProjectToDrive(id); changed(); return r; },
+      makeProjectLocal: async (id) => { const r = await c.makeProjectLocal(id); changed(); return r; },
+    };
+  }
   return store;
 }
 
 let shared = null;
 /** The one shared store of this page (IndexedDB adapter). */
-export function getProjectStore() { return shared || (shared = createProjectStore()); }
+export function getProjectStore() {
+  if (shared) return shared;
+  const local = createIdbAdapter();
+  let remote = null; // built on first use: a page that never touches Drive never constructs it
+  const router = createRouterAdapter({ local, getRemote: () => remote || (remote = createDriveAdapter({ account: getGoogleAccount(), meta: local })) });
+  return (shared = createProjectStore({ adapter: router }));
+}

@@ -16,7 +16,6 @@ import { installExportButton, buildGcodeEntries } from "./export.js";
 // LAYOUT-UNIFY: same column template as Design/Toolpath — reserved top strip + body ROW (panel LEFT, canvas RIGHT).
 const SCAFFOLD = `
   <div id="exportRoot">
-    <div class="tp-strip">Export</div>
     <div class="tp-body">
       <aside id="exportPanel">
         <div class="dp-head">Export</div>

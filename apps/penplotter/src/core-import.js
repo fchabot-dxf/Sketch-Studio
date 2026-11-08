@@ -80,7 +80,9 @@ export function importSvgToCore(svgText, fileName, controller) {
     const style = makeShapeStyle(d.stroke || (d.fill ? null : d.color), d.fill || null, DEFAULT_STROKE_WIDTH);
     for (const s of shapes) { st.shapes.push(s); importedIds.push(s.id); state.shapeStyles.set(s.id, { ...style }); }
     for (const r of (stats.skipped || [])) bumpInto(skipped, r.tag + ' ' + r.reason, r.count);
-    if (d.color) findOrCreatePlotColor(d.color); // seed the physical pen palette (digital -> owned pen)
+    // ONE rule (TASK 465): every colour an element paints with gets a pen: its STROKE colour (outline pen) and its FILL
+    // colour (fill pen), the same two roles + Outline / + Fill bucket by. (It used to seed from the fill-first colour only.)
+    for (const c of [style.stroke, style.fill]) if (c) findOrCreatePlotColor(c);
   }
 
   // UNIFY-6 (decided): mark ALL imports STATIC so imported art DISPLAYS in its PEN colors (via the underlay) by

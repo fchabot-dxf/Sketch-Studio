@@ -8,7 +8,7 @@
 // Pen swatch on every row reflects the linked plot color, so renames in
 // the Plot Colors panel cascade here automatically.
 
-import { state, makeToolpath, toolpathColor, findOrCreatePlotColor, shapeStyle, makeShapeStyle } from "./state.js";
+import { state, makeToolpath, toolpathColor, findOrCreatePlotColor, shapeStyle, makeShapeStyle, isPristinePlaceholder } from "./state.js";
 import { $, toast } from "./dom.js";
 import { renderArt as render } from "./render-art.js"; // PP-4b: Draw's trimmed renderer (art + toolpath overlay)
 import { snapshot } from "./history.js";
@@ -137,7 +137,9 @@ function penHeader(pc, total, buckets) {
     row.style.gridTemplateColumns = "12px 12px 14px 16px 1fr auto";
     row.style.gap = "4px";
     // Empty filler so the count stays right-aligned in the last column.
-    row.append(handle, chev, exp, sw, document.createElement("span"), count);
+    // TASK 465: the pen-less group had only a grey swatch; name it (a real pen stays swatch-only, its name is the tooltip).
+    const groupName = el("span", "group-name", pc.id === "__none__" ? "(no pen)" : "");
+    row.append(handle, chev, exp, sw, groupName, count);
     return row;
 }
 
@@ -483,6 +485,8 @@ function createToolpathsFromSelection(type) {
     }
 
     snapshot();
+    // TASK 465: real toolpaths are being made from geometry, so the empty starter "Outline" is no longer needed.
+    state.toolpaths = state.toolpaths.filter(t => !isPristinePlaceholder(t));
     let firstTp = null;
     for (const [color, shapeIds] of byColor) {
         const pc = findOrCreatePlotColor(color, color);

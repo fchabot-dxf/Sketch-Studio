@@ -21,7 +21,6 @@ import { installSettingsPanel, loadDefaults } from "./settings.js";             
 // Active Toolpath / Plotter Settings. (Part B relocates doc-size + auto-recalc into modals.)
 const SCAFFOLD = `
   <div id="toolpathRoot">
-    <div class="tp-strip">Toolpath</div>
     <div class="tp-body">
     <aside id="toolpathPanel">
       <section>
@@ -80,7 +79,7 @@ function onEnter() {
   const wrap = canvasWrap;
   if (!wrap) return;
   // LAYOUT-UNIFY: adopt the shared canvas into the body ROW AFTER the panel -> panel LEFT, canvas RIGHT (matches the
-  // Design template; the reserved .tp-strip above keeps the canvas top aligned, so it never jumps between tabs).
+  // Design template). TASK 465: the empty 80px label band that used to sit on top is gone.
   const body = document.querySelector("#toolpathRoot .tp-body");
   if (body && wrap.parentNode !== body) body.appendChild(wrap);
   state.preview.showToolpath = true;

@@ -117,7 +117,7 @@ export function renderPlotColorsPanel() {
     root.innerHTML = "";
 
     if (state.plotColors.length === 0) {
-        root.innerHTML = `<div class="empty">Import an SVG or click + to add a pen.</div>`;
+        root.innerHTML = `<div class="empty">No pens yet. Click + Pen below, or import an SVG (its colours become pens).</div>`;
         return;
     }
 

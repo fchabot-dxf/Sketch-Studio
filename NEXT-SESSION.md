@@ -63,7 +63,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - 20:12 BOTH seats out of Gemini 4 Argon (resets in ~159 h). Flash returns ~22:40, Claude/GPT ~22:07.
   - AGY-1: 432 is half-done, UNCOMMITTED in D:\APPS\Sketch-Studio-agy1 (10 files modified); it resumes there.
   - AGY-2: hadn't started 438.
-- Queued for AGY-2: 438 (dimension = one undo step).
+- ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
+  - AGY-1 resumed 432, with the full-loop amendment.
+  - AGY-2 started 438.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;

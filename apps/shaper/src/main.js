@@ -27,6 +27,8 @@ import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems, a
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
+import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
+getGoogleAccount().init();
 import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');

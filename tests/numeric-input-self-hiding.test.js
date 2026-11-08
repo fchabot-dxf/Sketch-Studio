@@ -166,11 +166,12 @@ await (async () => {
       const displays = await evalJs(`(() => {
         return ['dimInput', 'dualInput', 'live-dim-width', 'live-dim-height', 'live-dim-length', 'live-dim-angle'].map(id => {
           const el = document.getElementById(id);
-          return { id, display: el ? getComputedStyle(el).display : 'missing' };
+          return { id, display: el ? getComputedStyle(el).display : 'missing', inline: el ? el.style.display : 'missing' };
         });
       })()`);
       for (const d of displays) {
         assert.strictEqual(d.display, 'none', `${host.name}: #${d.id} must be display:none when idle, got ${d.display}`);
+        assert.strictEqual(d.inline, '', `${host.name}: #${d.id} must carry no inline display style`);
       }
 
       // 2. Seed a 50mm line + distance dimension, open showEditInput, commit "80mm" via real Enter key
@@ -352,21 +353,21 @@ await (async () => {
     const el = byId.get(id);
     assert(el, `expected #${id} to be created`);
     assert(el.classList.contains('hidden'), `#${id} must carry .hidden when idle`);
-    assert.strictEqual(el.style.display, 'none', `#${id} must carry style.display='none' when idle`);
+    assert.strictEqual(el.style.display, undefined, `#${id} must carry no inline display style when idle`);
   }
 
   showSingleInput(120, 140, 42, 'length');
   assert(!byId.get('dimInput').classList.contains('hidden'), '#dimInput .hidden removed when shown');
-  assert.strictEqual(byId.get('dimInput').style.display, '', '#dimInput style.display cleared when shown');
+  assert.strictEqual(byId.get('dimInput').style.display, undefined, '#dimInput must carry no inline display style when shown');
 
   showDualInput(200, 220, 50, 30);
   assert(!byId.get('dualInput').classList.contains('hidden'), '#dualInput .hidden removed when shown');
-  assert.strictEqual(byId.get('dualInput').style.display, 'flex', '#dualInput style.display=flex when shown');
+  assert.strictEqual(byId.get('dualInput').style.display, undefined, '#dualInput must carry no inline display style when shown');
 
   hideInput();
   hideLiveInputs();
-  assert(byId.get('dimInput').classList.contains('hidden') && byId.get('dimInput').style.display === 'none');
-  assert(byId.get('dualInput').classList.contains('hidden') && byId.get('dualInput').style.display === 'none');
+  assert(byId.get('dimInput').classList.contains('hidden') && byId.get('dimInput').style.display === undefined);
+  assert(byId.get('dualInput').classList.contains('hidden') && byId.get('dualInput').style.display === undefined);
 
   const ssHtml = fs.readFileSync(path.join(REPO_ROOT, 'apps/sketchstudio/index.html'), 'utf8');
   const ssOverrides = fs.readFileSync(path.join(REPO_ROOT, 'apps/sketchstudio/overrides.css'), 'utf8');

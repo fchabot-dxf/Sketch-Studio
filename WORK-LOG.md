@@ -13000,3 +13000,6 @@ Note for the advisor: other seats' headless Edge processes were left running (pr
 
 ## TURN 469
 Fixed latent solver bug: packages/core/solver/engine.js (equal/shapes branch) deduped the joint list, so two lines sharing a joint gave 3 joints and definitions.js equal (needs >=4) returned 0 = silent no-op. Now equal keeps the positional 4-joint list. New test tests/equal-shared-joint.test.js: before L1=100.000 L2=40.000 (fail), after 100.000/100.000. Gate: files=190 pass=190 fail=0, SMOKE 12/12.
+
+## TURN 468
+numeric-input-manager.js: hide/show now use ONLY the .hidden class (injected CSS is the single source); removed inline style.display writes (dual input shown via .sk-dual-input display:flex). apps/sketchstudio/index.html: static #dimInput inline style removed (class only). ensureNumericInputStyles guards KEPT: Node tests (constraint-edit-driven, dimension-inline-edit, live-dimension-race) import/setup with partial document shims and fail without them. live-dimension-race shim gained classList. numeric-input-self-hiding asserts no inline display (browser + unit). Gate: 188/189; only tests/harness/differential-planegcs.test.js fails (ERR_MODULE_NOT_FOUND, same on base).

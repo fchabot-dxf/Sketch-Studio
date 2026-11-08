@@ -108,6 +108,20 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - guide: not a cut, so no footprint (stays dashed).
       - Owner style rule: leftover corner material is NOT highlighted (normal style).
       - DONE: 447 merged f2de291 (deriveCutFootprint + sweptPath in #core; export untouched).
+    - OWNER ANSWERS on the Shaper Origin (2026-11-08), the ground truth for every Shaper feature:
+      - Q1 path ORDER: the operator picks the order, so our SVG order does not matter;
+      - Q2 PASSES: the Shaper divides deep cuts into passes automatically;
+      - Q3 DIRECTION: the Shaper decides climb/conventional from the cut type (inside vs outside), so SVG winding
+        does not matter;
+      - Q4 PLUNGE/RETRACT: wherever the user decides;
+      - Q5 V-carve ring order: not answered directly. By Q1 the operator picks it too.
+      - So the SVG controls only geometry + cut type + depth + offset + bit. The Shaper and the operator own all
+        motion.
+      - CONSEQUENCE: a Shaper "spindle motion" playback (437 S1-S4) would show an order and direction the machine
+        doesn't follow. That would be the codebase lying, so it's PARKED.
+      - What's true and already built: the bit footprint (447) and the depth per path.
+      - A motion preview IS true for the Pen Plotter, whose G-code fixes order, direction and pen-up travel.
+      - 433's "holes first" is harmless, but not required by the machine.
     - 437 plan (WORK-LOG "TURN 437"):
       - S1 = extract deriveCutSequence (export byte-identical) + toggle, arrows, Play;
       - S2-S5 later;

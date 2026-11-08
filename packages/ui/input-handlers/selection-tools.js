@@ -202,7 +202,10 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
         const constraint = state.constraints[cIdx];
         if (constraint) {
             if(!state.selectedConstraints) state.selectedConstraints = new Set();
-            if(!e.shiftKey) state.selectedConstraints.clear();
+            // TASK 485: selecting a dimension selects ONLY the dimension (unless Shift extends the selection), exactly like every other
+            // route to a constraint (handleConstraintSelection, the empty-space clear above). This branch used to clear only the
+            // constraints, so a line / joint selected a moment before stayed selected, and Delete then removed the dimension AND that geometry.
+            if(!e.shiftKey) { state.selectedConstraints.clear(); if(state.selectedShapes) state.selectedShapes.clear(); if(state.selectedJoints) state.selectedJoints.clear(); }
             state.selectedConstraints.add(constraint);
             
             if (isDoubleClick) {

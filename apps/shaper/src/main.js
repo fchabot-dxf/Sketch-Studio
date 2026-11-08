@@ -23,7 +23,7 @@ import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vca
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import SettingsManager from '#core/settings-manager.js';
-import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
+import { cutPlanEntries, CUT_PLAN, keyOf, migrateEdgeRecords, planReliefItems, assignImportedCuts } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, extractCutRecord, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
@@ -33,6 +33,7 @@ applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
+import { importDxf, looksLikeDxf } from '#core/dxf-import.js'; // TASK 478: a Fusion sketch DXF -> #core shapes (true lines / arcs / circles)
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
 
@@ -303,6 +304,34 @@ function svgImportDescriptors(svg) {
   walk(svg, IDENTITY_MATRIX);
   return { descs, skippedEls };
 }
+// A finished import (joints + shapes) becomes one NEW named, active sketch: shared by the SVG and the DXF parsers (TASK 478).
+function landImport(st, fileName, joints, shapes) {
+  try { st.saveState && st.saveState(); } catch (_) {}
+  const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
+  activateSketch(st, sk.id);
+  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
+  for (const s of shapes) st.shapes.push(s);
+  return sk;
+}
+// DXF import (Fusion: right-click the sketch > Save As DXF): true lines / arcs / circles / beziers, static, units from $INSUNITS,
+// DASHED lines = construction geometry. A malformed file is a readable status, never a throw into the UI.
+function importDxfToSketch(text, fileName) {
+  ensureSketch();
+  const st = designController.state;
+  const res = importDxf(text, { genJ: () => st.genJ(), idPrefix: 'dxf' + (importSeq++) });
+  if (res.error) { groupStatus('Import failed: ' + res.error); return; }
+  const { joints, shapes, stats } = res;
+  const skipN = (stats.skipped || []).reduce((n, s) => n + s.count, 0);
+  if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
+  const sk = landImport(st, fileName, joints, shapes);
+  if (infoPanel) infoPanel.refresh();
+  const detail = (stats.skipped || []).map((s) => `${s.tag} ${s.reason} ×${s.count}`).join('; ');
+  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${stats.label}${stats.assumed ? ' (assumed)' : ''}${stats.construction ? ` · ${stats.construction} construction` : ''}${skipN ? ` · ${skipN} skipped/degraded: ${detail}` : ''}`);
+}
+// ONE import entry: the parser is picked by the file extension, else by the sniffed content.
+function importFileToSketch(text, fileName) {
+  if (looksLikeDxf(fileName, text)) importDxfToSketch(text, fileName); else importSvgToSketch(text, fileName);
+}
 function importSvgToSketch(svgText, fileName) {
   ensureSketch();
   const st = designController.state;
@@ -312,59 +341,16 @@ function importSvgToSketch(svgText, fileName) {
   const { joints, shapes, stats } = importSvgGeometry(descs, { genJ: () => st.genJ(), scale, idPrefix: 'svg' + (importSeq++) });
   const skipN = skippedEls.length + (stats.skipped || []).reduce((n, s) => n + s.count, 0);
   if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
-  try { st.saveState && st.saveState(); } catch (_) {}
-  const sk = addSketch(st, (fileName || 'Imported').replace(/\.svg$/i, '') || 'Imported');
-  activateSketch(st, sk.id);
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  for (const s of shapes) st.shapes.push(s);
+  const sk = landImport(st, fileName, joints, shapes);
 
-  // Connect imported cut metadata to in-memory CUT_PLAN:
+  // Connect imported cut metadata to the in-memory CUT_PLAN (a compound <path> becomes ONE pocket-with-hole profile): see assignImportedCuts.
   const cutRecordByDesc = new Map();
   for (const d of descs) {
     if (d.descId && d.cutRecord && (d.cutRecord.cutType || (d.cutRecord.cutDepth != null && d.cutRecord.cutDepth !== 'unset'))) {
       cutRecordByDesc.set(d.descId, d.cutRecord);
     }
   }
-
-  let cutsAssigned = 0;
-  if (cutRecordByDesc.size > 0) {
-    const shapeById = new Map((st.shapes || []).map((s) => [s.id, s]));
-    const loops = findLoops(st);
-    const assignedShapeIds = new Set();
-
-    for (const loop of loops) {
-      const loopDescIds = new Set();
-      for (const edgeId of (loop.edges || [])) {
-        const shape = shapeById.get(edgeId);
-        if (shape && shape.descId) loopDescIds.add(shape.descId);
-      }
-      if (loopDescIds.size === 1) {
-        const descId = [...loopDescIds][0];
-        if (cutRecordByDesc.has(descId)) {
-          const rec = cutRecordByDesc.get(descId);
-          CUT_PLAN.set(keyOf('loop', loop.id), { ...rec });
-          for (const edgeId of (loop.edges || [])) assignedShapeIds.add(edgeId);
-          cutsAssigned++;
-        }
-      }
-    }
-
-    const chains = findOpenChains(st, loops);
-    for (const c of chains) {
-      for (const s of (c.shapes || [])) {
-        if (s.descId && cutRecordByDesc.has(s.descId)) {
-          const rec = cutRecordByDesc.get(s.descId);
-          if (rec.cutType === 'online' || rec.cutType === 'guide' || (rec.cutDepth != null && rec.cutDepth !== 'unset')) {
-            const chainKey = keyOf('chain', c.id);
-            if (!CUT_PLAN.has(chainKey)) {
-              CUT_PLAN.set(chainKey, { ...rec, cutType: rec.cutType || 'online' });
-              cutsAssigned++;
-            }
-          }
-        }
-      }
-    }
-  }
+  const cutsAssigned = assignImportedCuts(st, cutRecordByDesc, CUT_PLAN);
 
   if (infoPanel) infoPanel.refresh();
   const cutsMsg = cutsAssigned ? ` · ${cutsAssigned} cut${cutsAssigned === 1 ? '' : 's'} kept` : '';
@@ -378,16 +364,16 @@ function wireSvgImport() {
   const panel = document.getElementById('design-panel-info');
   if (!dropHost || !panel || panel.querySelector('#svg-import-btn')) return;
   const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.svg,image/svg+xml'; input.style.display = 'none';
-  input.addEventListener('change', async () => { const f = input.files && input.files[0]; if (f) { importSvgToSketch(await f.text(), f.name); input.value = ''; } });
+  input.type = 'file'; input.accept = '.svg,image/svg+xml,.dxf'; input.style.display = 'none';
+  input.addEventListener('change', async () => { const f = input.files && input.files[0]; if (f) { importFileToSketch(await f.text(), f.name); input.value = ''; } });
   const btn = document.createElement('button');
-  btn.id = 'svg-import-btn'; btn.textContent = '⬇ Import SVG'; btn.title = 'Import an SVG into a new sketch';
+  btn.id = 'svg-import-btn'; btn.textContent = '⬇ Import SVG / DXF'; btn.title = 'Import an SVG (e.g. the Shaper Fusion add-in) or a Fusion sketch DXF into a new sketch';
   btn.style.cssText = 'display:block; width:calc(100% - 16px); box-sizing:border-box; margin:8px 8px 6px; padding:7px 10px; background:#1b2030; color:#cbd5e1; border:1px solid #2a2d31; border-radius:7px; font:13px system-ui,sans-serif; cursor:pointer; text-align:left;';
   btn.addEventListener('click', () => input.click());
   panel.insertBefore(btn, panel.firstChild); // top of the sidebar, above the SKETCHES tree
   panel.appendChild(input);
   dropHost.addEventListener('dragover', (e) => { e.preventDefault(); });
-  dropHost.addEventListener('drop', async (e) => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) importSvgToSketch(await f.text(), f.name); });
+  dropHost.addEventListener('drop', async (e) => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) importFileToSketch(await f.text(), f.name); });
 }
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());

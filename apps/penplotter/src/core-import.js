@@ -7,6 +7,7 @@
 // COUNTED + surfaced (IMPORT-3), never silently dropped.
 
 import { importSvgGeometry, computeImportScale, computeImportSize, parseTransform, multiplyMatrix, IDENTITY_MATRIX } from '#core/svg-import.js';
+import { importDxf, looksLikeDxf } from '#core/dxf-import.js';  // TASK 478: a Fusion sketch DXF -> #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { state, findOrCreatePlotColor, makeShapeStyle, DEFAULT_STROKE_WIDTH } from './state.js';
 import { inheritPaint, penColorFor } from './svg-import.js'; // reuse the plotter's paint resolver (UNIFY-7 relocates)
@@ -96,3 +97,27 @@ export function importSvgToCore(svgText, fileName, controller) {
 }
 
 function bumpInto(obj, k, n) { obj[k] = (obj[k] || 0) + n; }
+
+
+// TASK 478: import a DXF (Fusion: Save As DXF of a sketch) into the controller's #core sketch: the same result shape as importSvgToCore.
+// Geometry is static; a DXF carries no paint, so every shape gets the default black pen style (like an unpainted SVG element).
+export function importDxfToCore(dxfText, fileName, controller) {
+  const st = controller.state, engine = controller.engine;
+  const res = importDxf(dxfText, { genJ: () => engine.genJ(), idPrefix: 'imp' + Date.now().toString(36) + '_' });
+  if (res.error) return { error: res.error };
+  const { joints, shapes, stats } = res;
+  const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
+  activateSketch(st, sk.id);
+  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
+  const style = makeShapeStyle('#000000', null, DEFAULT_STROKE_WIDTH);
+  for (const sh of shapes) { st.shapes.push(sh); state.staticShapeIds.add(sh.id); state.shapeStyles.set(sh.id, { ...style }); }
+  if (shapes.length) findOrCreatePlotColor(style.stroke);
+  const skippedSummary = (stats.skipped || []).map((x) => `${x.tag} ${x.reason} x${x.count}`).join(', ');
+  return { imported: shapes.length, sketchName: sk.name, scaleLabel: stats.label + (stats.assumed ? ' (assumed)' : ''), static: shapes.length > 0, dense: false, skippedSummary,
+           docSet: false, docW: state.doc.w, docH: state.doc.h };
+}
+
+// ONE import entry: the parser is picked by the file extension, else by the sniffed content.
+export function importFileToCore(text, fileName, controller) {
+  return looksLikeDxf(fileName, text) ? importDxfToCore(text, fileName, controller) : importSvgToCore(text, fileName, controller);
+}

@@ -155,7 +155,10 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     row.innerHTML = `<span class="sk-info-ic">${m.icon}</span><span class="sk-info-lbl">${label}</span><span class="sk-info-geo">${geo}</span>${val}${driven}${link}`;
     row.addEventListener('mouseenter', () => { hoveredByPanel = c; state.hoveredConstraint = c; });
     row.addEventListener('mouseleave', () => { if (state.hoveredConstraint === c) state.hoveredConstraint = null; if (hoveredByPanel === c) hoveredByPanel = null; });
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (ev) => {
+      // TASK 485: picking a dimension / constraint in the list selects the CONSTRAINT, not the geometry that was selected before (Shift extends):
+      // otherwise Delete removed the constraint AND that geometry.
+      if (!(ev && ev.shiftKey)) { if (state.selectedShapes instanceof Set) state.selectedShapes.clear(); if (state.selectedJoints instanceof Set) state.selectedJoints.clear(); }
       if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
       if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
       else state.selectedConstraints.add(c);

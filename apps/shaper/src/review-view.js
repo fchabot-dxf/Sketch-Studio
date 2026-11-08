@@ -5,15 +5,30 @@
 // Render ON DEMAND (controls 'change' / rebuild / resize): no idle animation loop.
 import { buildRelief, createReliefCache } from '#core/relief-model.js';
 
-const BOARD = [0.85, 0.70, 0.50]; // plain warm board colour (the wood look is a later slice)
+const BOARD = [0.85, 0.70, 0.50]; // warm board colour: the flat look (Wood off), and the plywood EDGE on the side / wall faces
+export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
+export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
+const FACE_MESHES = new Set(['top', 'floor', 'bottom']); // show the face grain; side / wall show the flat plywood edge
+
+// TASK 497: planar UVs from WORLD x,z (the mesh plane is x/z, height is y). The image's grain runs along its v axis, so when the
+// board's long side is X the axes swap (u = z, v = x) to keep the grain along the long side.
+export function planarUVs(positions, tile = TILE_MM, grainAlongX = false) {
+  const uv = new Float32Array((positions.length / 3) * 2);
+  for (let i = 0, j = 0; i < positions.length; i += 3, j += 2) {
+    const a = positions[i] / tile, b = positions[i + 2] / tile;
+    uv[j] = grainAlongX ? b : a; uv[j + 1] = grainAlongX ? a : b;
+  }
+  return uv;
+}
 
 /**
- * mountReviewView({ host, info, getInputs }) -> Promise<{ refresh, reset, top, fit, destroy, lastBuild }>
+ * mountReviewView({ host, info, getInputs, wood }) -> Promise<{ refresh, reset, top, fit, setWood, destroy, lastBuild, wood }>
  *   host       the element the canvas is appended to
  *   info       element receiving the one-line build summary (and the "not shown" notes)
  *   getInputs  () => { stock, items, bounds }  (see buildRelief)
+ *   wood       initial state of the Wood texture (default true); setWood(bool) switches the face texture on / off
  */
-export async function mountReviewView({ host, info, getInputs }) {
+export async function mountReviewView({ host, info, getInputs, wood = true }) {
   const THREE = await import('three');
   const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
 
@@ -29,7 +44,24 @@ export async function mountReviewView({ host, info, getInputs }) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = false; // on-demand rendering: no animation loop to drive damping
 
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+  // vertex colours are the grey DEPTH multiplier; material.color is the tint (BOARD flat, white under the wood map)
+  const edgeMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, color: new THREE.Color(...BOARD) });
+  const faceMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, color: new THREE.Color(...BOARD) });
+  let woodTexture = null, woodOn = !!wood;
+  const applyWood = () => {
+    const textured = woodOn && !!woodTexture;
+    faceMaterial.map = textured ? woodTexture : null;
+    faceMaterial.color.set(textured ? 0xffffff : new THREE.Color(...BOARD));
+    faceMaterial.needsUpdate = true;
+  };
+  function setWood(on) { woodOn = !!on; applyWood(); render(); }
+  // lazy + async: the board renders flat first, then picks up the texture when it arrives (same geometry, no layout change)
+  new THREE.TextureLoader().load(WOOD_URL, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    woodTexture = tex; applyWood(); render();
+  });
   let group = null, box = null, lastBuild = null, lastSig = null;
   const reliefCache = createReliefCache();
   const render = () => renderer.render(scene, camera);
@@ -38,16 +70,17 @@ export async function mountReviewView({ host, info, getInputs }) {
   // Shade by DEPTH (height is the position's Y): a cut floor reads clearly darker than the top (even a shallow groove, seen from
   // above), deeper = darker still; walls a little darker than the floor they meet. `base` = the group's own tone.
   const SHADE = { top: [1, 0], side: [1, 0.45], bottom: [0.7, 0], floor: [0.78, 0.4], wall: [0.7, 0.4] }; // [tone, extra darkening over the full thickness]
-  function geometryOf(mesh, T, name) {
+  function geometryOf(mesh, T, name, grainAlongX) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
+    if (FACE_MESHES.has(name)) g.setAttribute('uv', new THREE.BufferAttribute(planarUVs(mesh.positions, TILE_MM, grainAlongX), 2));
     // shade by DEPTH (height is the position's Y): deeper = darker, like Studio's depth shading
     const col = new Float32Array(mesh.positions.length);
     for (let i = 0; i < mesh.positions.length; i += 3) {
       const [tone, gain] = SHADE[name];
       const k = tone * (1 - gain * Math.min(1, Math.max(0, -mesh.positions[i + 1] / T)));
-      col[i] = BOARD[0] * k; col[i + 1] = BOARD[1] * k; col[i + 2] = BOARD[2] * k;
+      col[i] = col[i + 1] = col[i + 2] = k;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
@@ -112,9 +145,12 @@ export async function mountReviewView({ host, info, getInputs }) {
     const T = rel.stockBox.thickness;
     disposeGroup();
     group = new THREE.Group();
+    const grainAlongX = rel.stockBox.maxX - rel.stockBox.minX >= rel.stockBox.maxY - rel.stockBox.minY;
     for (const [name, m] of Object.entries(rel.meshes)) {
       if (!m.indices.length) continue;
-      group.add(new THREE.Mesh(geometryOf(m, T, name), material));
+      const mesh = new THREE.Mesh(geometryOf(m, T, name, grainAlongX), FACE_MESHES.has(name) ? faceMaterial : edgeMaterial);
+      mesh.name = name;
+      group.add(mesh);
     }
     for (const mk of rel.marks) group.add(markSprite(mk));
     scene.add(group);
@@ -142,9 +178,16 @@ export async function mountReviewView({ host, info, getInputs }) {
   renderer.domElement.addEventListener('dblclick', fit);
 
   function destroy() {
-    ro.disconnect(); controls.dispose(); disposeGroup(); material.dispose();
+    ro.disconnect(); controls.dispose();     disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
     if (labelTexture) labelTexture.dispose();
+        if (woodTexture) woodTexture.dispose();
     renderer.dispose(); renderer.domElement.remove();
   }
-  return { refresh, reset, top, fit, destroy, get lastBuild() { return lastBuild; } };
+  // inspect(): the Wood state and the top mesh's first vertex with its uv (read by the tests)
+  const inspect = () => {
+    const t = group && group.children.find((o) => o.name === 'top');
+    const p = t && t.geometry.getAttribute('position'), u = t && t.geometry.getAttribute('uv');
+    return { wood: woodOn, mapLoaded: !!woodTexture, mapOn: !!faceMaterial.map, edgeMap: !!edgeMaterial.map, top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null };
+  };
+  return { refresh, reset, top, fit, setWood, inspect, destroy, get wood() { return woodOn; }, get lastBuild() { return lastBuild; } };
 }

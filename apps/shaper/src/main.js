@@ -654,7 +654,7 @@ async function enterReview(st) {
   try {
     if (!reviewView) {
       info.textContent = 'Loading 3D…';
-      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state) });
+      reviewView = await mountReviewView({ host: document.getElementById('review-canvas-host'), info, getInputs: () => reviewInputs(designController.state), wood: document.getElementById('review-wood').checked });
     }
     showStockThickness();
     reviewView.refresh(reviewSig(st));
@@ -681,6 +681,7 @@ async function enterReview(st) {
   document.getElementById('review-reset').addEventListener('click', () => reviewView && reviewView.reset());
   document.getElementById('review-top').addEventListener('click', () => reviewView && reviewView.top());
   document.getElementById('review-fit').addEventListener('click', () => reviewView && reviewView.fit());
+  document.getElementById('review-wood').addEventListener('change', (e) => reviewView && reviewView.setWood(e.target.checked)); // per session
 }
 
 // TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)

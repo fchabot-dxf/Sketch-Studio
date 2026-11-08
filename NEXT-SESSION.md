@@ -123,7 +123,8 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - the spindle turns CLOCKWISE seen from above;
         - the tool shows direction by animating the path with dotted lines.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on
-        the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449 (queued for CC-A after 448). Outside = CCW on screen, inside = CW; on line /
+        the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449, dispatched to CC-A. Owner: "pocket cuts offset by default allowing a finish pass", so
+        the pocket finish pass shows a direction (wall CW, islands CCW). Outside = CCW on screen, inside = CW; on line /
         pocket / guide show no direction until the owner confirms;
       - Q5 V-carve ring order: not answered directly. By Q1 the operator picks it too.
       - So the SVG controls only geometry + cut type + depth + offset + bit. The Shaper and the operator own all
@@ -174,7 +175,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - QUEUED 448 (owner, screenshot): radius dims placeable anywhere along the arc.
   - Cause: svg-renderer.js ~:2257 angle = j2 ? ... : 0; radius dims have no j2, so it's always horizontal-right.
   - Arc extension outside the sweep (Fusion).
-  - Dispatched to CC-A.
+  - DONE: 448 merged a0c6a43 (labelAngle; one writer, placeRadiusLabel; Fusion parity unchecked).
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

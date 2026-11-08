@@ -45,9 +45,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - the action lives in the Shaper host;
   - five copies of the profile clone;
   - per-frame resolve that mutates state, behind a window fallback.
-- In flight: 428b (AGY-2), the lying DOF colours: root-cause only, no floor.
+- DONE: 428b, the lying DOF colours, merged c7c4e89 (root-cause only: tangent double-count removed).
+- In flight: 436 (AGY-2), Prepare/Vcarve pan+zoom via the shared pan-zoom.js (owner-reported).
 - Next, in this order:
-  - 436: Prepare/Vcarve pan+zoom via the shared pan-zoom.js (owner-reported);
   - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
   - 429: log flood + JSON;
   - 434: stray #dimInput box;

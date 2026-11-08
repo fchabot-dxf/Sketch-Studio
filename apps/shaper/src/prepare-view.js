@@ -12,7 +12,7 @@ import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan
 import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
@@ -176,6 +176,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const hoverG = mkGroup('prepare-hover-group');       svgEl.appendChild(hoverG);
   // TASK 455: the tool path + depth chip sit ABOVE the highlighted boundary (an On Line's black dashes ride on its bold mint line)
   const toolpathG = mkGroup('prepare-toolpath-group'); svgEl.appendChild(toolpathG);
+  const chipG = mkGroup('prepare-chip-group');         svgEl.appendChild(chipG); // the depth chip rides on the tool path
 
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loops = findLoops(state).map((l) => { const polygon = loopPolygon(l, state, shapeById); return { ...l, polygon, area: polyArea(polygon) }; });
@@ -289,18 +290,19 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const { kind, id } = parseKey(key);
     const t = { kind, id };
     const cuts = deriveProfileCuts(t, rec, state, loops, loopPolys);
-    if (!cuts || !cuts.length) return { region: '', path: '' };
+    if (!cuts || !cuts.length) return { region: '', path: '', toolPaths: [] };
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
-    if (!ct) return { region: '', path: '' };
+    if (!ct) return { region: '', path: '', toolPaths: [] };
     // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
     // type uses the same state model; only the SHAPE differs. A Guide is a line only (no band, dashes or chip).
-    if (ct.id === 'guide') return { region: '', path: '', hasTravel: false };
+    if (ct.id === 'guide') return { region: '', path: '', hasTravel: false, toolPaths: [] };
     // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
     const isOnline = ct.id === 'online';
     const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
     let region = '', path = '', hasTravel = false, chip = null;
+    const toolPaths = [];
     for (const fp of deriveCutFootprint(cuts, rec, state)) {
       const rings = fp.rings.filter((ring) => ring.length >= 3);
       // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing area
@@ -313,6 +315,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
       // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
       // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line has none.
+      toolPaths.push(...(fp.toolPaths || []));
       const travel = deriveCutTravel([fp]);
       for (const t of travel) {
         path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
@@ -329,8 +332,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
       if (!chip && fp.anchor) chip = fp.anchor;
     }
-    if (chip) path += depthChip(chip.x, chip.y, rec.cutDepth);
-    return { region, path, hasTravel };
+    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
@@ -352,6 +354,26 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     for (const [key, rec] of CUT_PLAN) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
     toolpathG.innerHTML = out;
   };
+  // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
+  // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable
+  // default anchor the footprint derivation provides).
+  let hoverPt = null;
+  const lastChip = new Map();
+  const renderChips = () => {
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) {
+      if (!(rec && rec.cutType && stateOf(key))) continue;
+      const look = getLook(key, rec);
+      if (!look.anchor && !(look.toolPaths && look.toolPaths.length)) continue;
+      const hov = hovered && targetKey(hovered) === key && hoverPt;
+      const near = hov ? nearestPointOnPaths(look.toolPaths, hoverPt) : null;
+      const pos = near || lastChip.get(key) || look.anchor;
+      if (!pos) continue;
+      lastChip.set(key, pos);
+      out += depthChip(pos.x, pos.y, look.depth);
+    }
+    chipG.innerHTML = out;
+  };
   // idle guide lines are the one coloured exception: thin blue
   const guideShapeIds = () => {
     const ids = new Set();
@@ -372,7 +394,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // ONE reactive refresh: repaint the look layers (getLook recomputes only the changed target — its sig changed). Wired
   // to every cut-field change AND to hover / selection changes so the look follows the state.
   const refreshLook = () => {
-    renderCuts(); renderToolpaths(); refreshEdgeClasses();
+    renderCuts(); renderToolpaths(); renderChips(); refreshEdgeClasses();
     // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
     if (legend) { let any = false; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
@@ -402,9 +424,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
+    hoverPt = wp;
     setHover(resolveTarget(wp));
+    if (hovered) renderChips(); // the chip follows the cursor along the path
   };
-  const onLeave = () => setHover(null);
+  const onLeave = () => { hoverPt = null; setHover(null); };
   const onDown = (e) => {
     // Two-finger touch pinch or middle-button drag: always pan/zoom
     if (e.pointerType === 'touch' && handlePanZoomPointerDown(e, svgEl, viewState)) {

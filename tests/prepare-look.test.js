@@ -233,7 +233,7 @@ await (async () => {
 
     // ── 3. the cut card look + its type list ──
     await click(targets.outside.x, targets.outside.y);
-    const card = await evalJs(`(() => { const c = getComputedStyle(document.querySelector('.cut-card')); const f = getComputedStyle(document.querySelector('.cut-num')); const l = document.querySelector('.cut-field-label');
+    const card = await evalJs(`(() => { const c = getComputedStyle(document.querySelector('.cut-card')); const f = getComputedStyle(document.querySelector('.cut-box')); const l = document.querySelector('.cut-field-label');
       return { bg: c.backgroundColor, radius: c.borderRadius, field: f.backgroundColor, labelCase: getComputedStyle(l).textTransform, dPrefix: !!document.querySelector('.cut-dia-prefix'), presets: [...document.querySelectorAll('.cut-preset')].map((b) => b.textContent) }; })()`);
     assert.strictEqual(card.bg, 'rgb(10, 10, 11)'); assert.strictEqual(card.field, 'rgb(42, 43, 45)'); assert.strictEqual(card.labelCase, 'lowercase'); assert.ok(card.dPrefix);
     assert.deepStrictEqual(card.presets, ['.02', '⅛', '¼', '½']);
@@ -241,6 +241,83 @@ await (async () => {
     const typeRows = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => ({ id: o.dataset.id, icon: !!o.querySelector('svg.cut-ic'), current: o.classList.contains('is-current'), disabled: o.classList.contains('is-disabled') }))`);
     assert.ok(typeRows.every((o) => o.icon), 'every type row has an icon');
     assert.deepStrictEqual(typeRows.filter((o) => o.current).map((o) => o.id), ['exterior'], 'the current type is highlighted');
+    // ── 4. TASK 455 amendments: hover boundary, chip rides the path, popovers to the LEFT, offset presets, cutter shape ──
+    const rectOf = (sel) => evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2 }; })()`);
+    const planRec = (kind, idx) => evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); return JSON.stringify([...CUT_PLAN.entries()]); })()`).then((j) => JSON.parse(j));
+    await click(away.x, away.y);
+    // hover boundary: bold white #F6F7F9, 3px
+    await move(targets.outside.x, targets.outside.y);
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('#prepare-canvas .sk-hl-hover-cut')).stroke`), 'rgb(246, 247, 249)', 'hover boundary is #F6F7F9');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('#prepare-canvas .sk-hl-hover-cut')).strokeWidth`), '3px', 'hover boundary ~3px');
+    // the depth chip rides the tool path nearest the cursor and FOLLOWS it
+    const topPt = await world(20, 3), botPt = await world(20, 37);
+    await move(topPt.x, topPt.y); const chipTop = await rectOf('#prepare-canvas .sk-chip-bg');
+    await move(botPt.x, botPt.y); const chipBot = await rectOf('#prepare-canvas .sk-chip-bg');
+    assert.ok(chipBot.cy - chipTop.cy > 60, `the chip follows the cursor along the path (y ${chipTop.cy} -> ${chipBot.cy})`);
+    // selected, not hovered: the chip STAYS at its last spot
+    await click(botPt.x, botPt.y); await move(away.x, away.y);
+    const chipStay = await rectOf('#prepare-canvas .sk-chip-bg');
+    assert.ok(Math.abs(chipStay.cy - chipBot.cy) < 2, 'selected but not hovered: the chip stays at its last spot');
+
+    // the selected target is the outside rect: open the cut card popovers
+    const cardR = await rectOf('.cut-card');
+    await clickEl('.cut-type-trigger'); await sleep(150);
+    const pm = await rectOf('.cut-type-menu');
+    assert.ok(pm.right <= cardR.left, 'the cut-type popover opens to the LEFT of the card');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-menu')).borderTopColor`), 'rgb(44, 101, 255)', 'blue popover border');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-trigger .cut-caret')).transform`), 'matrix(-1, 0, 0, -1, 0, 0)', 'the chevron flips while open');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-opt.is-current')).backgroundColor`), 'rgb(24, 46, 109)', 'the current type row is filled #182E6D');
+    await clickEl('.cut-type-trigger'); await sleep(150);
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').hidden`), true, 'clicking again closes it');
+
+    // offset: focus selects the value and opens the 3x2 presets popover to the left
+    await clickEl('.cut-offset'); await sleep(200);
+    const op = await rectOf('.cut-offset-pop');
+    assert.ok(op && op.right <= cardR.left, 'offset presets open to the LEFT');
+    const labels = await evalJs(`[...document.querySelectorAll('.cut-offset-pop .cut-preset')].map((b) => b.textContent)`);
+    assert.deepStrictEqual(labels, ['.001', '.005', '.01', '1/32', '1/16', '1/8'], 'offset presets (inches)');
+    assert.strictEqual(await evalJs(`(() => { const i = document.querySelector('.cut-offset'); return i.selectionStart === 0 && i.selectionEnd === i.value.length && i.value.length > 0; })()`), true, 'the offset value is selected on focus');
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-offset-pop')).display`) !== 'none', true);
+    const eighth = await rectOf('.cut-offset-pop .cut-preset:nth-child(6)');
+    await click(Math.round(eighth.cx), Math.round(eighth.cy)); await sleep(200);
+    let plan = await planRec();
+    const outsideRec = plan.map(([, r]) => r).find((r) => r.cutType === 'exterior');
+    assert.ok(Math.abs(outsideRec.cutOffset - 3.175) < 1e-9, 'picking 1/8 stores 3.175 mm as the offset');
+
+    // bit diameter: the preset matching the value is filled
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-presets .cut-preset.is-active')).backgroundColor`), 'rgb(24, 46, 109)', 'the active bit preset is #182E6D');
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-presets .cut-preset.is-active').textContent`), '¼', '0.250 in -> the 1/4 preset');
+
+    // cutter shape: the row sits below bit diameter; popover to the left with flat / ball / V-bit (+ the V-bit angle presets)
+    const order = await evalJs(`[...document.querySelectorAll('.cut-rows .cut-row')].map((r) => r.dataset.param || r.dataset.row)`);
+    assert.deepStrictEqual(order, ['cutDepth', 'cutOffset', 'toolDia', 'cutterShape'], 'cutter shape is directly below bit diameter');
+    await clickEl('.cut-shape-trigger'); await sleep(200);
+    const sp = await rectOf('.cut-shape-pop');
+    assert.ok(sp && sp.right <= cardR.left, 'cutter shape popover opens to the LEFT');
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.cut-shape-pop .cut-type-opt')].map((o) => o.dataset.shape)`), ['endmill', 'ballnose', 'vbit']);
+    assert.strictEqual(await evalJs(`document.querySelectorAll('.cut-shape-pop .cut-shape-angles').length`), 0, 'V-bit angles appear only when V-bit is chosen');
+    await clickEl('.cut-shape-pop .cut-type-opt[data-shape="ballnose"]'); await sleep(200);
+    plan = await planRec();
+    assert.strictEqual(plan.map(([, r]) => r).find((r) => r.cutType === 'exterior').cutterShape, 'ballnose', 'cutterShape is stored on the cut record');
+    await clickEl('.cut-shape-trigger'); await sleep(200);
+    await clickEl('.cut-shape-pop .cut-type-opt[data-shape="vbit"]'); await sleep(200); // stays open and now shows its angles
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.cut-shape-pop .cut-shape-angles .cut-preset')].map((b) => b.textContent)`), ['90°', '60°', '45°', '30°', '20°'], 'the V-bit angles are the existing VBIT_PRESETS');
+    await clickEl('.cut-shape-pop .cut-shape-angles .cut-preset[data-angle="60"]'); await sleep(200);
+    plan = await planRec();
+    const rec = plan.map(([, r]) => r).find((r) => r.cutType === 'exterior');
+    assert.deepStrictEqual([rec.cutterShape, rec.cutterAngle], ['vbit', 60], 'a V-bit angle comes from VBIT_PRESETS');
+    assert.strictEqual(await evalJs(`document.querySelector('.cut-shape-cur').textContent`), 'V-bit 60°');
+
+    // the cutter shape is NEVER exported: the Shaper SVG has no attribute for it (byte-identical export)
+    {
+      const { exportShaperSVG } = await import('#core/shaper-export.js');
+      const { findLoops } = await import('#core/loop-finder.js');
+      const st = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 40, y: 0 }], ['c', { x: 40, y: 20 }], ['d', { x: 0, y: 20 }]]), shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })), constraints: [] };
+      const loop = findLoops(st)[0];
+      const exp = (extra) => exportShaperSVG({ state: st, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType: 'exterior', cutDepth: 5, cutOffset: 0, toolDia: 3.175, ...extra } }], encoding: CUT_TYPES, docUnit: 'in' });
+      assert.strictEqual(exp({ cutterShape: 'vbit', cutterAngle: 60 }), exp({}), 'cutterShape/cutterAngle never reach the export');
+      assert.ok(!/cutter|vbit|ballnose/i.test(exp({ cutterShape: 'vbit', cutterAngle: 60 })));
+    }
     console.log('prepare-look: ok');
     ws.close();
   } finally {

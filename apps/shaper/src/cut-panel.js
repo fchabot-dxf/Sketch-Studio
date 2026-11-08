@@ -3,14 +3,14 @@
 // callbacks. Cut params parse/format through #core/units.js per the document unit, and RE-LABEL when DOC_UNIT changes.
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
-import { availableTypes, cutTypeById, cutTypeHasParam } from './shaper.js';
+import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
 import SettingsManager from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior'];
-// TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 16x16 inner markup in currentColor); colours are CSS tokens.
-const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 16 16" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
+// TASK 455: each cut type carries its own icon (CUT_TYPES.icon, 18x18 inner markup in currentColor); colours are CSS tokens.
+const iconSvg = (t) => `<svg class="cut-ic" viewBox="0 0 18 18" aria-hidden="true">${(t && t.icon) || ''}</svg>`;
 
 // DECLARED data: quick bit-diameter presets. VALUES are BASE mm (U3a); LABELS stay imperial bit sizes (× 25.4 mm/in).
 const BIT_PRESETS = [
@@ -43,50 +43,66 @@ export function createCutPanel(hostEl, opts = {}) {
       <label class="cut-field-label">Cut type</label>
       <div class="cut-type-dd">
         <button type="button" class="cut-type-trigger" aria-haspopup="listbox" aria-expanded="false">
-          <span class="cut-ic-slot"></span><span class="cut-type-cur">Select type</span><span class="cut-caret">&#9662;</span>
+          <span class="cut-ic-slot"></span><span class="cut-type-cur">Select type</span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <div class="cut-type-menu" role="listbox" hidden></div>
       </div>
     </div>
     <div class="cut-rows">
       <div class="cut-row" data-param="cutDepth">
         <label class="cut-field-label">Depth</label>
-        <div class="cut-stepper">
+        <div class="cut-stepper cut-box">
           <button type="button" class="cut-step" data-d="-1" aria-label="Decrease depth">&#8722;</button>
-          <input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset">
+          <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
           <button type="button" class="cut-step" data-d="1" aria-label="Increase depth">+</button>
-          <span class="cut-unit">mm</span>
         </div>
       </div>
       <div class="cut-row" data-param="cutOffset">
         <label class="cut-field-label">Offset</label>
-        <div class="cut-inline">
-          <button type="button" class="cut-flip" title="Flip offset direction" aria-pressed="false">&#8644;</button>
+        <div class="cut-inline cut-box cut-offset-box">
+          <button type="button" class="cut-flip" title="Flip offset direction" aria-label="Flip offset" aria-pressed="false"><svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true"><path d="M2 4h9l-2.5-2.5M12 8H3l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <input type="text" class="cut-num cut-offset" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
       </div>
       <div class="cut-row" data-param="toolDia">
         <label class="cut-field-label">Bit diameter</label>
-        <div class="cut-inline">
+        <div class="cut-inline cut-box">
           <span class="cut-dia-prefix">D</span>
           <input type="text" class="cut-num cut-bit" inputmode="decimal">
           <span class="cut-unit">mm</span>
         </div>
         <div class="cut-presets"></div>
       </div>
-    </div>`;
+      <div class="cut-row" data-row="cutterShape">
+        <label class="cut-field-label">Cutter shape</label>
+        <button type="button" class="cut-shape-trigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="cut-shape-ic"></span><span class="cut-shape-cur">Flat</span><svg class="cut-caret" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="cut-pop cut-type-menu" role="listbox" hidden></div>
+    <div class="cut-pop cut-offset-pop" hidden></div>
+    <div class="cut-pop cut-shape-pop" role="listbox" hidden></div>`;
   hostEl.appendChild(card);
 
   const $ = (sel) => card.querySelector(sel);
-  const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
+  const trigger = $('.cut-type-trigger'), menu = $('.cut-type-menu'), offsetPop = $('.cut-offset-pop'), shapePop = $('.cut-shape-pop'), shapeTrigger = $('.cut-shape-trigger'), shapeIc = $('.cut-shape-ic'), shapeCur = $('.cut-shape-cur'), curLabel = $('.cut-type-cur'), curSw = $('.cut-ic-slot');
   const depthInput = $('.cut-depth'), offsetInput = $('.cut-offset'), flipBtn = $('.cut-flip'), bitInput = $('.cut-bit'), presetsWrap = $('.cut-presets');
   const unitEls = card.querySelectorAll('.cut-unit'); // the unit suffix labels — re-labeled to the doc unit
 
-  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM };
+  let current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90 };
+
+  // TASK 455: popovers open to the LEFT of the card, aligned with the row that opened them (the card is their positioned parent)
+  const pops = [menu, offsetPop, shapePop];
+  const syncOpenState = () => {
+    trigger.setAttribute('aria-expanded', String(!menu.hidden)); trigger.classList.toggle('is-open', !menu.hidden);
+    shapeTrigger.setAttribute('aria-expanded', String(!shapePop.hidden)); shapeTrigger.classList.toggle('is-open', !shapePop.hidden);
+  };
+  const closePops = (except) => { for (const p of pops) if (p !== except) p.hidden = true; syncOpenState(); };
+  const openPop = (pop, anchor) => { closePops(pop); pop.style.top = (anchor.closest('.cut-row, .cut-field') || anchor).offsetTop + 'px'; pop.hidden = false; syncOpenState(); };
 
   // ── cut-type dropdown (SP1f) ──
-  const closeMenu = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
+  const closeMenu = () => { menu.hidden = true; syncOpenState(); };
   function buildMenu() {
     const avail = new Set(availableTypes(current.kind).map((t) => t.id));
     menu.innerHTML = '';
@@ -102,8 +118,8 @@ export function createCutPanel(hostEl, opts = {}) {
       menu.appendChild(opt);
     }
   }
-  trigger.addEventListener('click', (e) => { e.stopPropagation(); const opening = menu.hidden; if (opening) buildMenu(); menu.hidden = !opening; trigger.setAttribute('aria-expanded', String(opening)); });
-  const onDocClick = (e) => { if (!card.contains(e.target)) closeMenu(); };
+  trigger.addEventListener('click', (e) => { e.stopPropagation(); if (menu.hidden) { buildMenu(); openPop(menu, trigger); } else closeMenu(); });
+  const onDocClick = (e) => { if (!e.composedPath().includes(card)) closePops(null); }; // composedPath: a clicked row may already be re-rendered away
   document.addEventListener('click', onDocClick);
 
   // ── param rows (SP1g + U3a units) — values stored/emitted in BASE mm ──
@@ -121,9 +137,48 @@ export function createCutPanel(hostEl, opts = {}) {
     onSetField('cutDepth', parseUnit(String(nextDoc), getDocUnit())); // → base mm
   }));
   depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, getDocUnit()) ?? 'unset')); });
+  // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
+  const buildOffsetPop = () => {
+    offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
+    const grid = offsetPop.querySelector('.cut-pop-grid');
+    for (const p of OFFSET_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'cut-preset'; b.dataset.mm = String(p.mm);
+      b.textContent = getDocUnit() === 'in' ? p.label : fmt(p.mm); // mm/cm docs show the converted values (UNVERIFIED vs Studio)
+      if (Math.abs(Math.abs(Number(current.cutOffset) || 0) - p.mm) < 1e-6) b.classList.add('is-active');
+      b.addEventListener('click', () => { onSetField('cutOffset', p.mm); closePops(null); });
+      grid.appendChild(b);
+    }
+  };
+  offsetPop.addEventListener('mousedown', (e) => e.preventDefault()); // keep the field focused while picking
+  offsetInput.addEventListener('focus', () => { buildOffsetPop(); openPop(offsetPop, offsetInput); offsetInput.select(); });
+  offsetInput.addEventListener('blur', () => { offsetPop.hidden = true; syncOpenState(); });
   offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, getDocUnit()) ?? 0));
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
   bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, getDocUnit()); if (n != null) onSetField('toolDia', n); });
+
+  // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
+  const buildShapePop = () => {
+    shapePop.innerHTML = '';
+    for (const sh of CUTTER_SHAPES) {
+      const opt = document.createElement('button');
+      opt.type = 'button'; opt.className = 'cut-type-opt' + (sh.id === current.cutterShape ? ' is-current' : ''); opt.dataset.shape = sh.id;
+      opt.innerHTML = `${iconSvg(sh)}<span>${sh.label}</span>`;
+      opt.addEventListener('click', () => { onSetField('cutterShape', sh.id); if (sh.id === 'vbit') { current.cutterShape = 'vbit'; buildShapePop(); } else closePops(null); }); // a V-bit pick stays open to show its angles
+      shapePop.appendChild(opt);
+      if (sh.id === 'vbit' && current.cutterShape === 'vbit') {
+        const row = document.createElement('div'); row.className = 'cut-shape-angles';
+        for (const v of VBIT_PRESETS) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'cut-preset' + (current.cutterShape === 'vbit' && Number(current.cutterAngle) === v.angle ? ' is-active' : ''); b.dataset.angle = String(v.angle); b.textContent = v.angle + '\u00b0';
+          b.addEventListener('click', () => { onSetField('cutterShape', 'vbit'); onSetField('cutterAngle', v.angle); closePops(null); });
+          row.appendChild(b);
+        }
+        shapePop.appendChild(row);
+      }
+    }
+  };
+  shapeTrigger.addEventListener('click', (e) => { e.stopPropagation(); if (shapePop.hidden) { buildShapePop(); openPop(shapePop, shapeTrigger); } else closePops(null); });
 
   // Re-format the displayed values (BASE mm → doc unit). Called on selection change AND on DOC_UNIT change (re-label).
   const renderFields = () => {
@@ -137,20 +192,23 @@ export function createCutPanel(hostEl, opts = {}) {
     const dia = Number(current.toolDia) || 0;
     bitInput.value = fmt(dia);
     presetsWrap.querySelectorAll('.cut-preset').forEach((b) => b.classList.toggle('is-active', Math.abs(Number(b.dataset.value) - dia) < 1e-6));
+    const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
+    shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shape.label} ${Number(current.cutterAngle) || 90}\u00b0` : shape.label;
     const u = getDocUnit();
     unitEls.forEach((el) => { el.textContent = u; });
   };
 
   // update(model | null): null → hide the card; else show + reflect the selected target's record (values in BASE mm).
   const update = (model) => {
-    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM }; return; }
+    if (!model) { card.hidden = true; closeMenu(); current = { kind: null, cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: TOOLDIA_DEFAULT_MM, cutterShape: 'endmill', cutterAngle: 90 }; return; }
     const rec = model.record || {};
-    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia };
+    current = { kind: model.kind, cutType: rec.cutType || null, cutDepth: rec.cutDepth, cutOffset: rec.cutOffset, toolDia: rec.toolDia, cutterShape: rec.cutterShape || 'endmill', cutterAngle: rec.cutterAngle || 90 };
     card.hidden = false;
     const t = current.cutType ? cutTypeById(current.cutType) : null;
     curLabel.textContent = t ? t.menuLabel : 'Select type';
     curSw.innerHTML = t ? iconSvg(t) : '';
     if (!menu.hidden) buildMenu();
+    if (!shapePop.hidden) buildShapePop();
     renderFields();
   };
 

@@ -36,11 +36,11 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //   icon        — TASK 455: the inline SVG inner markup (16x16, currentColor) shown in the cut card dropdown. The Prepare preview colours
 //                 are CSS tokens in apps/shaper/index.html (--sk-prep-*), not hex fields on the record (the export fill/stroke stay).
 export const CUT_TYPES = [
-  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='5' y='5' width='6' height='6' fill='currentColor' stroke='none'/><rect x='1.5' y='1.5' width='13' height='13' fill='none' stroke='currentColor' stroke-dasharray='2 1.5'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
-  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='1.5' y='1.5' width='13' height='13' fill='none' stroke='currentColor'/><rect x='4.5' y='4.5' width='7' height='7' fill='none' stroke='currentColor' stroke-dasharray='2 1.5'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='1.5' y='1.5' width='13' height='13' fill='none' stroke='currentColor'/><path d='M4 6 L6 4 M4 10 L10 4 M6 12 L12 6 M10 12 L12 10' stroke='currentColor' fill='none'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<path d='M1.5 8 H14.5' stroke='currentColor' fill='none' stroke-width='1.5'/><path d='M1.5 5 H14.5 M1.5 11 H14.5' stroke='currentColor' fill='none' stroke-dasharray='2 1.5'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
-  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M1.5 8 H14.5' stroke='currentColor' fill='none' stroke-dasharray='3 2'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', icon: "<rect x='1.5' y='1.5' width='15' height='15' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.8 1.6'/><rect x='5' y='5' width='8' height='8' fill='none' stroke='currentColor' stroke-width='1.5'/><circle cx='16.5' cy='11' r='1.5' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><rect x='5.5' y='5.5' width='7' height='7' fill='none' stroke='currentColor' stroke-width='1.3' stroke-dasharray='1.6 1.4'/><circle cx='12.5' cy='9' r='1.4' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 4.5l9 9M13.5 4.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.2' stroke-dasharray='1.5 1.5'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], autoOffsetFraction: 0.25 },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.4' stroke-dasharray='1.8 1.6'/><circle cx='16' cy='11' r='1.6' fill='currentColor'/>", params: ['cutDepth', 'cutOffset', 'toolDia'], offsetMovesCut: false },
+  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide', icon: "<path d='M8 2h8v8M2 8v8h8' fill='none' stroke='currentColor' stroke-width='1.6'/>", params: ['cutDepth', 'cutOffset', 'toolDia'] },
 ];
 
 // VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
@@ -84,8 +84,23 @@ export function effectiveCutRecord(rec) {
 // A fresh per-target cut record. Numeric fields are in BASE mm (U3a; 1 world unit = 1 mm) — the cut panel
 // displays/parses them through the document unit. toolDia default 3.175 mm = 1/8 in.
 export function defaultCutRecord() {
-  return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 3.175 };
+  return { cutType: null, cutDepth: 'unset', cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 };
 }
+
+// TASK 455: the CUTTER SHAPE (a cut-record field, NEVER exported: the Shaper SVG has no attribute for it; the 3D Review of task
+// 457 will read it): 'endmill' (flat, default) | 'ballnose' | 'vbit'. A V-bit's angle (`cutterAngle`) comes from the EXISTING
+// VBIT_PRESETS above (vbitHalfAngleTan stays the one V-bit helper). `icon` = 16x16 inner markup in currentColor.
+export const CUTTER_SHAPES = [
+  { id: 'endmill', label: 'end mill', icon: "<path d='M6 1v12h6V1' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M5 13h8' fill='none' stroke='currentColor' stroke-width='1.8'/>" },
+  { id: 'ballnose', label: 'ball nose', icon: "<path d='M6 1v10a3 3 0 0 0 6 0V1' fill='none' stroke='currentColor' stroke-width='1.5'/>" },
+  { id: 'vbit', label: 'V-bit', icon: "<path d='M5 1v8l4 7 4-7V1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>" },
+];
+// TASK 455: the offset field's preset popover (3x2): .001 .005 .01 / 1/32 1/16 1/8 inch, in BASE mm. The mm values are the exact
+// conversions of those inch presets — UNVERIFIED against Studio's own mm presets.
+export const OFFSET_PRESETS = [
+  { label: '.001', mm: 0.001 * 25.4 }, { label: '.005', mm: 0.005 * 25.4 }, { label: '.01', mm: 0.01 * 25.4 },
+  { label: '1/32', mm: 25.4 / 32 }, { label: '1/16', mm: 25.4 / 16 }, { label: '1/8', mm: 25.4 / 8 },
+];
 
 // Gating: which cut types may be assigned to a target of this selection kind ('loop' | 'profile' | 'chain').
 // A LOOP or PROFILE is both a closed region AND a closed path → all 5. A CHAIN is an open path → only the 'path' types.

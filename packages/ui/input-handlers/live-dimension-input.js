@@ -11,6 +11,7 @@ import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geomet
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
 
 let inputState = {
     active: false,
@@ -39,6 +40,7 @@ export function setupLiveDimensionInput() {
     // anything useful. Treat missing getElementById as "no existing element"
     // (just create fresh) so test stubs that only provide createElement work.
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    ensureNumericInputStyles();
     const findById = typeof document.getElementById === 'function' ? (id) => document.getElementById(id) : () => null;
 
     // --- Current (refactored) inputs ---
@@ -49,7 +51,7 @@ export function setupLiveDimensionInput() {
         widthInput.type = 'text';
         widthInput.className = 'dim-input hidden';
         widthInput.placeholder = 'W';
-        widthInput.style.position = 'absolute';
+        hideNumericInputEl(widthInput);
         document.body.appendChild(widthInput);
         inputState.inputs.width = widthInput;
 
@@ -58,7 +60,7 @@ export function setupLiveDimensionInput() {
         heightInput.type = 'text';
         heightInput.className = 'dim-input hidden';
         heightInput.placeholder = 'H';
-        heightInput.style.position = 'absolute';
+        hideNumericInputEl(heightInput);
         document.body.appendChild(heightInput);
         inputState.inputs.height = heightInput;
 
@@ -67,7 +69,7 @@ export function setupLiveDimensionInput() {
         lengthInput.type = 'text';
         lengthInput.className = 'dim-input hidden';
         lengthInput.placeholder = 'L';
-        lengthInput.style.position = 'absolute';
+        hideNumericInputEl(lengthInput);
         document.body.appendChild(lengthInput);
         inputState.inputs.length = lengthInput;
 
@@ -76,7 +78,7 @@ export function setupLiveDimensionInput() {
         angleInput.type = 'text';
         angleInput.className = 'dim-input hidden';
         angleInput.placeholder = '°';
-        angleInput.style.position = 'absolute';
+        hideNumericInputEl(angleInput);
         document.body.appendChild(angleInput);
         inputState.inputs.angle = angleInput;
 
@@ -86,6 +88,7 @@ export function setupLiveDimensionInput() {
             singleInput = document.createElement('input');
             singleInput.id = 'dimInput';
             singleInput.className = 'dim-input hidden';
+            hideNumericInputEl(singleInput);
             document.body.appendChild(singleInput);
         }
         inputState.inputs.single = singleInput;
@@ -355,7 +358,7 @@ function handleInputKey(e, input) {
         } else {
             next = input.id === 'live-dim-length' ? inputState.inputs.angle : inputState.inputs.length;
         }
-        next.classList.remove('hidden');
+        showNumericInputEl(next);
         next.focus();
         setTimeout(() => next.select(), 0);
         
@@ -434,7 +437,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     input.style.left = `${pos.x}px`;
     input.style.top = `${pos.y}px`;
     input.style.transform = 'translate(-50%, -50%)';
-    input.classList.remove('hidden');
+    showNumericInputEl(input);
 
     let prefillValue = constraint.value;
     // Calculate current projected value for H/V dimensions
@@ -466,7 +469,7 @@ function activateLiveInput(key, state, primaryField, secondaryField, updateCallb
         
         const primaryInput = inputState.inputs[primaryField];
         if (primaryInput) {
-            primaryInput.classList.remove('hidden');
+            showNumericInputEl(primaryInput);
             primaryInput.focus();
             primaryInput.value = key;
             inputState.locked[primaryField] = parseFloat(key);
@@ -474,7 +477,7 @@ function activateLiveInput(key, state, primaryField, secondaryField, updateCallb
         
         const secondaryInput = inputState.inputs[secondaryField];
         if (secondaryInput) {
-            secondaryInput.classList.remove('hidden');
+            showNumericInputEl(secondaryInput);
         }
         
         if (updateCallback) updateCallback();
@@ -604,7 +607,7 @@ function update3PointPreview(svg, state, c1, mousePt) {
             if (document.activeElement !== el && inputState.locked.width === null) {
                 el.value = len.toFixed(1);
             }
-            if (inputState.inputs.height) inputState.inputs.height.classList.add('hidden');
+            if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
         }
     } else {
         const c2 = state.joints.get(state.active.secondPt);
@@ -633,7 +636,7 @@ function update3PointPreview(svg, state, c1, mousePt) {
             if (document.activeElement !== el && inputState.locked.height === null) {
                 el.value = Math.abs(h).toFixed(1);
             }
-            if (inputState.inputs.width) inputState.inputs.width.classList.add('hidden');
+            if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
         }
     }
 }
@@ -693,10 +696,10 @@ export function getLiveLockedPoint(state) {
 
 function dismissLiveInputUI() {
     inputState.active = false;
-    if (inputState.inputs.width) inputState.inputs.width.classList.add('hidden');
-    if (inputState.inputs.height) inputState.inputs.height.classList.add('hidden');
-    if (inputState.inputs.length) inputState.inputs.length.classList.add('hidden');
-    if (inputState.inputs.angle) inputState.inputs.angle.classList.add('hidden');
+    if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
+    if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
+    if (inputState.inputs.length) hideNumericInputEl(inputState.inputs.length);
+    if (inputState.inputs.angle) hideNumericInputEl(inputState.inputs.angle);
     const svg = document.querySelector('svg');
     if (svg) svg.focus();
 }
@@ -708,11 +711,11 @@ export function hideLiveInputs() {
     inputState.locked.height = null;
     inputState.locked.length = null;
     inputState.locked.angle = null;
-    if (inputState.inputs.width) inputState.inputs.width.classList.add('hidden');
-    if (inputState.inputs.height) inputState.inputs.height.classList.add('hidden');
-    if (inputState.inputs.length) inputState.inputs.length.classList.add('hidden');
-    if (inputState.inputs.angle) inputState.inputs.angle.classList.add('hidden');
-    if (inputState.inputs.single) inputState.inputs.single.classList.add('hidden');
+    if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
+    if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
+    if (inputState.inputs.length) hideNumericInputEl(inputState.inputs.length);
+    if (inputState.inputs.angle) hideNumericInputEl(inputState.inputs.angle);
+    if (inputState.inputs.single) hideNumericInputEl(inputState.inputs.single);
     const svg = document.querySelector('svg');
     if (svg) svg.focus();
 }

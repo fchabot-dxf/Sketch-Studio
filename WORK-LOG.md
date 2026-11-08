@@ -13201,3 +13201,6 @@ Style panel now has TABS from a declared `tab` per CONTROLS entry (Lines & Joint
 - Test `tests/sidebar-account.test.js` (headless, fakes only): states, avatar fallback, sync signIn, sign out, lapsed, REAL controller with /auth/google/token 404 (GIS popup path, no server popup) and with routes present (server popup), Drive entries hidden when signed out, confirm text, cancel moves nothing, failure message.
 - Behaviour change for existing users: every host now has an account row under GO TO (signed-out by default); nothing else changes.
 - Gate: GATE files=213 pass=213 fail=0, SMOKE 12/12, HEADLESS-LEFT 0.
+
+## TURN 490
+Added static privacy page privacy.html (served by Cloudflare Pages at /privacy; EN + FR; drive.file, contact). No /terms. _redirects unchanged: only exact / redirects to Studio, so /privacy is not caught. Test: tests/privacy-page.test.js.

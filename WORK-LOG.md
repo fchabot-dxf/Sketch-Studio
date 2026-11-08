@@ -13038,3 +13038,6 @@ Evidence (.evidence/471/, local): profile-after.txt (all runs with stage breakdo
 
 ## TURN 467
 penplotter-panel-overflow.test.js flaky under load. Cause: fixed sleeps (1200/500/400/200 ms) before measuring/clicking, a time-derived CDP port (9510+Date.now()%400, collision-prone), short 8s CDP/load waits. Fix (test only, assertions unchanged): CDP port=0 discovered via DevToolsActivePort; waitFor() polls conditions (app ready, element visible, pen count change, viewport width, 5 consecutive rAF frames of stable panel rect) with 20s bound. Proof: 10/10 passes while `npm run gate` ran in parallel; could not reproduce a failure before the change. Gate alone: GATE files=189 pass=189 fail=0, SMOKE 12/12 (worktree needed `npm install` for planegcs).
+
+## TURN 476
+Dynamic grid LOD in packages/ui/canvas-grid.js: gridLevel() picks displayed minor = GRID_SIZE x ratio^k (smallest k with >= MIN_MINOR_PX=8 px), minors fade 0->1 over 8..16 px (stroke-opacity / fill-opacity, only emitted when <1, so base level is byte-identical). Snapping untouched (input-manager.js uses GRID_SIZE). New tests/canvas-grid-lod.test.js. Evidence .evidence/476. Gate green (194/194, smoke 12/12).

@@ -10,7 +10,8 @@ import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
-import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
+import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
@@ -157,9 +158,9 @@ function initApp(){
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
-    leading: createAppSidebar({
-      current: 'sketchstudio', docName: 'Untitled',
-      actions: [
+    leading: mountProjectSidebar({
+      appId: 'sketchstudio', getBuffer: () => docBuffer,
+      hostActions: [
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
         { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
       ],

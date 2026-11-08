@@ -132,8 +132,8 @@ export function setupUI(state){
 
   // ── S7c-2d: mount the shared tool ribbon into the (now-empty) #toolsRibbon container. Tool clicks route to the
   // rich handleToolActivate/setTool via onToolClick (a rect-variant select sets state.rectMode then calls
-  // onToolClick(RECT)); the ribbon owns the rect dropdown; Edit (Clear/Undo) come via extraGroups and KEEP their
-  // ids so the existing clear/undo handlers below bind them (R-BIND-ORDER: mounted before those run).
+  // onToolClick(RECT)); the ribbon owns the rect dropdown and built-in Edit group (Undo/Redo); Actions (Clear All)
+  // comes via extraGroups and KEEPS its id so the clear handler below binds it (R-BIND-ORDER: mounted before it runs).
   // (S7c-2d-cleanup: the inline button markup + the dead rect-dropdown machinery have been statically removed.)
   try {
     const trEl = document.getElementById('toolsRibbon');
@@ -142,7 +142,7 @@ export function setupUI(state){
       toolRibbon = createToolRibbon({
         state,
         onToolClick: (t) => handleToolActivate(t), // S7c-2d-pre: the rich activation (pre-selection workflows)
-        extraGroups: [{ label: 'Edit', buttons: [{ id: 'btn-clear', label: 'Clear All' }, { id: 'btn-undo', label: 'Undo' }] }],
+        extraGroups: [{ label: 'Actions', buttons: [{ id: 'btn-clear', label: 'Clear All' }] }],
       });
       toolRibbon.render(trEl);
     }
@@ -206,14 +206,6 @@ export function setupUI(state){
     document.querySelectorAll('.ui-overlay').forEach(el => el.style.pointerEvents = 'none');
   }catch(_){ }
   
-  // Undo button
-  const undoBtn = document.getElementById('btn-undo');
-  if(undoBtn){
-    undoBtn.addEventListener('click',()=>{
-      state.undo();
-    });
-    undoBtn.disabled = state.history.length === 0;
-  }
 
   // Construction toggle (floating switch)
   const constructToggle = document.getElementById('btn-construct-toggle');

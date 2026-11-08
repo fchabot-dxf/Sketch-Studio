@@ -18,7 +18,7 @@
 
 // Build a joint→canonical-node map (coincident joints merged; canonical = the min joint id in the cluster — stable).
 // Equivalent to repeated getCoincidentJoints(), via one union-find pass.
-function buildNodeMap(state) {
+export function buildNodeMap(state) {
   const parent = new Map();
   const find = (x) => {
     if (!parent.has(x)) { parent.set(x, x); return x; }
@@ -129,3 +129,78 @@ export function findLoops(state) {
   loops.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)); // deterministic order
   return loops;
 }
+
+/**
+ * findOpenChains(state, loops) → Chain[]
+ * Returns [{ id, shapes, edges }] for each connected group (connected through shared/coincident joints)
+ * of shapes that are in NO loop's `edges`.
+ * id = 'chain_' + member shape ids sorted and joined with '-'.
+ */
+export function findOpenChains(state, loops) {
+  if (!state || !state.joints || typeof state.joints.get !== 'function') return [];
+  const allLoops = loops || findLoops(state);
+  const loopEdgeIds = new Set();
+  for (const l of allLoops) {
+    if (Array.isArray(l.edges)) {
+      for (const eid of l.edges) loopEdgeIds.add(eid);
+    }
+  }
+
+  const shapes = state.shapes || [];
+  const candidateShapes = shapes.filter((s) => s && s.id && !loopEdgeIds.has(s.id));
+  if (!candidateShapes.length) return [];
+
+  const node = buildNodeMap(state);
+  const endpointsOf = (s) => {
+    if (!s || !Array.isArray(s.joints)) return [];
+    if (s.type === 'line' && s.joints.length >= 2) return [node(s.joints[0]), node(s.joints[1])];
+    if (s.type === 'arc' && s.joints.length >= 3) return [node(s.joints[1]), node(s.joints[2])];
+    if (s.type === 'bezier' && s.joints.length >= 2) return [node(s.joints[0]), node(s.joints[s.joints.length - 1])];
+    return s.joints.map((j) => node(j));
+  };
+
+  const nodeToShapes = new Map();
+  for (const s of candidateShapes) {
+    const ends = endpointsOf(s);
+    for (const nid of ends) {
+      if (!nid) continue;
+      if (!nodeToShapes.has(nid)) nodeToShapes.set(nid, []);
+      nodeToShapes.get(nid).push(s);
+    }
+  }
+
+  const visited = new Set();
+  const chains = [];
+
+  for (const s of candidateShapes) {
+    if (visited.has(s.id)) continue;
+    const comp = [];
+    const queue = [s];
+    visited.add(s.id);
+
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      comp.push(cur);
+      const ends = endpointsOf(cur);
+      for (const nid of ends) {
+        if (!nid) continue;
+        const neighbors = nodeToShapes.get(nid) || [];
+        for (const nxt of neighbors) {
+          if (!visited.has(nxt.id)) {
+            visited.add(nxt.id);
+            queue.push(nxt);
+          }
+        }
+      }
+    }
+
+    comp.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const shapeIds = comp.map((x) => x.id);
+    const id = 'chain_' + shapeIds.join('-');
+    chains.push({ id, shapes: comp, edges: shapeIds });
+  }
+
+  chains.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return chains;
+}
+

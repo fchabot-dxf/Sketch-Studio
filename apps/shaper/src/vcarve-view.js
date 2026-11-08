@@ -1,15 +1,15 @@
-// apps/shaper/src/vcarve-view.js — the LIVE Vcarve workspace (VCARVE-3b). Wires the VCARVE-3a skeleton: a region
-// picker (a closed loop) + the V-bit / depth-step / max-depth controls writing ONE declared `state.vcarves` record, and
-// a LIVE depth-shaded contour-stack PREVIEW. The HOST computes the boundary polygon (`loopPolygon`, DOM — the S-4a/4e
-// purity split); #core/vcarve `vcarveContours` DERIVES the stack (never materialized). Shaper-only.
+// apps/shaper/src/vcarve-view.js — the LIVE Vcarve workspace (VCARVE-3b + TASK 432 profile picking). Wires a profile
+// region picker (dropdown + direct canvas click via #core/profile-model resolveProfileAtPoint) + V-bit / depth-step /
+// max-depth controls writing ONE declared `state.vcarves` record, and a LIVE depth-shaded contour-stack PREVIEW.
+// Holes come from the picked profile (combined profile if one covers it, else derived direct holes). Shaper-only.
 
 import { findLoops } from '#core/loop-finder.js';
-import { loopPolygon, polyArea } from '#core/loop-geometry.js';
-import { holesOfLoop } from '#core/group-model.js';
+import { loopPolygon } from '#core/loop-geometry.js';
+import { resolveProfileAtPoint, resolveTargetKey, listSketchProfiles } from '#core/profile-model.js';
 import { deriveVcarveContours } from '#core/vcarve.js';
 import { VBIT_PRESETS } from './shaper.js';
 import { setupPanZoom, updateViewBox } from '#ui/input-handlers/pan-zoom.js';
-
+import { screenToWorld } from '#ui/coords.js';
 
 export function mountVcarveView(state) {
   const els = {
@@ -50,49 +50,27 @@ export function mountVcarveView(state) {
   const numFrom = (v, d) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : d; };
 
   function populateRegions() {
-    const sb = shapeById();
-    const loops = findLoops(state);
-    const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
-    const items = loops
-      .map((l) => ({ id: l.id, loop: l, area: Math.abs(polyArea(loopPolys[l.id] || [])) }))
-      .sort((a, b) => b.area - a.area);
+    const entries = listSketchProfiles(state);
 
-    items.forEach((it, idx) => { it.num = idx + 1; });
-    const itemById = new Map(items.map((it) => [it.id, it]));
-
-    const absorbedBy = new Map(); // holeId -> parentItem
-    const holesMap = new Map();   // parentId -> [holeItem, ...]
-    for (const it of items) {
-      const hids = holesOfLoop(it.loop, loops, state, loopPolys, { excludeNested: true });
-      if (hids.length) {
-        const holeItems = hids.map((hid) => itemById.get(hid)).filter(Boolean);
-        holesMap.set(it.id, holeItems);
-        for (const hit of holeItems) absorbedBy.set(hit.id, it);
-      }
-    }
-
-    if (!items.length) {
-      els.region.innerHTML = '<option value="">(no closed loops)</option>';
+    if (!entries.length) {
+      els.region.innerHTML = '<option value="">(no closed profiles)</option>';
       return;
     }
 
-    let html = '<option value="">— pick a loop —</option>';
-    for (const it of items) {
-      if (absorbedBy.has(it.id)) {
-        const parent = absorbedBy.get(it.id);
-        html += `<option value="${it.id}" disabled>Loop ${it.num} (hole in Loop ${parent.num})</option>`;
-      } else {
-        const holes = holesMap.get(it.id) || [];
-        const holeSuffix = holes.length ? ` · ${holes.length} hole${holes.length === 1 ? '' : 's'}` : '';
-        html += `<option value="${it.id}">Loop ${it.num} (${it.area.toFixed(0)} mm²${holeSuffix})</option>`;
-      }
+    let html = '<option value="">— pick a profile —</option>';
+    for (const it of entries) {
+      const holeSuffix = it.holePolys.length ? ` · ${it.holePolys.length} hole${it.holePolys.length === 1 ? '' : 's'}` : '';
+      html += `<option value="${it.key}">${it.title} (${it.netArea.toFixed(0)} mm²${holeSuffix})</option>`;
     }
     els.region.innerHTML = html;
 
     const current = rec().region;
-    if (current && itemById.has(current) && !absorbedBy.has(current)) {
-      els.region.value = current;
-    } else if (current && absorbedBy.has(current)) {
+    const matched = resolveTargetKey(current, state);
+    if (matched && !matched.invalid && matched.outer) {
+      const key = matched.profileId ? `profile:${matched.profileId}` : `loop:${matched.outer}`;
+      rec().region = key;
+      els.region.value = key;
+    } else if (current) {
       rec().region = null;
       els.region.value = '';
     }
@@ -108,22 +86,65 @@ export function mountVcarveView(state) {
   let lastRegion = null;
   function recompute() {
     const r = rec();
-    const regionChanged = (lastRegion !== r.region);
-    lastRegion = r.region;
-    const loops = findLoops(state);
-    const loop = loops.find((l) => l.id === r.region);
-    if (!loop) { els.canvas.innerHTML = ''; els.readout.textContent = 'Pick a region to preview.'; return; }
     const sb = shapeById();
-    const boundary = loopPolygon(loop, state, sb);
-    if (!boundary || boundary.length < 3) { els.canvas.innerHTML = ''; els.readout.textContent = 'Region has no boundary.'; return; }
+    const loops = findLoops(state);
     const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
-    const holeIds = holesOfLoop(loop, loops, state, loopPolys, { excludeNested: true });
-    const holePolys = holeIds.map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+    const matched = resolveTargetKey(r.region, state, loops, loopPolys);
+    const activeKey = (matched && !matched.invalid && matched.outer)
+      ? (matched.profileId ? `profile:${matched.profileId}` : `loop:${matched.outer}`)
+      : null;
+    const regionChanged = (lastRegion !== activeKey);
+    lastRegion = activeKey;
+
+    if (!matched || matched.invalid || !matched.outer) {
+      const allPolys = loops.map((l) => loopPolys[l.id]).filter((p) => p && p.length >= 3);
+      renderUnpicked(els.canvas, allPolys, vcarveViewState);
+      els.readout.textContent = 'Pick a region to preview.';
+      return;
+    }
+
+    const boundary = loopPolys[matched.outer] || [];
+    const holePolys = (matched.inners || []).map((hid) => loopPolys[hid]).filter((hp) => hp && hp.length >= 3);
+    const otherPolys = loops
+      .filter((l) => l.id !== matched.outer && !(matched.inners || []).includes(l.id))
+      .map((l) => loopPolys[l.id])
+      .filter((p) => p && p.length >= 3);
     const contours = deriveVcarveContours(boundary, r, { holes: holePolys });
-    render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged);
+    render(els.canvas, boundary, contours, r.maxDepth, holePolys, vcarveViewState, regionChanged, otherPolys);
     const maxD = contours.length ? contours[contours.length - 1].depth : 0;
     els.readout.textContent = `${contours.length} contours · max ${maxD.toFixed(2)} mm`;
   }
+
+  function pickAtWorldPoint(wp) {
+    if (!wp) return null;
+    const prof = resolveProfileAtPoint(wp, state);
+    if (!prof || !prof.outer) return null;
+    const nextKey = prof.isDerived ? `loop:${prof.outer}` : `profile:${prof.id}`;
+    const matched = resolveTargetKey(nextKey, state);
+    if (!matched || matched.invalid) return null;
+    try { state.saveState && state.saveState(); } catch (_) {}
+    rec().region = nextKey;
+    populateRegions();
+    recompute();
+    return prof;
+  }
+
+  let downPt = null;
+  const onCanvasDown = (e) => {
+    if (e.button != null && e.button !== 0) { downPt = null; return; }
+    downPt = { x: e.clientX || 0, y: e.clientY || 0 };
+  };
+  const onCanvasUp = (e) => {
+    if (!downPt) return;
+    const dx = (e.clientX || 0) - downPt.x;
+    const dy = (e.clientY || 0) - downPt.y;
+    downPt = null;
+    if (Math.hypot(dx, dy) >= 4) return; // pan drag, not a click
+    const wp = screenToWorld(els.canvas, e.clientX || 0, e.clientY || 0);
+    if (wp) pickAtWorldPoint(wp);
+  };
+  els.canvas.addEventListener('pointerdown', onCanvasDown);
+  els.canvas.addEventListener('pointerup', onCanvasUp);
 
   els.region.addEventListener('change', () => { try { state.saveState && state.saveState(); } catch (_) {} rec().region = els.region.value || null; recompute(); });
   els.vbit.addEventListener('change', () => { rec().vbit = { angle: Number(els.vbit.value) || 90 }; recompute(); });
@@ -135,23 +156,23 @@ export function mountVcarveView(state) {
   refresh();
   return {
     refresh,
+    pickAtWorldPoint,
     viewState: vcarveViewState,
     destroy() {
+      els.canvas.removeEventListener('pointerdown', onCanvasDown);
+      els.canvas.removeEventListener('pointerup', onCanvasUp);
       if (panZoomCleanup && typeof panZoomCleanup.destroy === 'function') panZoomCleanup.destroy();
     },
   };
 }
 
-// Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + hole boundaries (dark)
-// + the nested contours DEPTH-SHADED (deeper = darker). Auto-fits the viewBox to the region bbox.
-// Non-scaling strokes keep line weight constant.
-function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveViewState = null, regionChanged = false) {
-  const allPts = [...boundary, ...holePolys.flat()];
+function fitVcarveViewToPoints(canvas, allPts, vcarveViewState, forceFit) {
+  if (!allPts.length) return;
   const xs = allPts.map((p) => p.x), ys = allPts.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const w = Math.max(1e-3, maxX - minX), h = Math.max(1e-3, maxY - minY), m = Math.max(w, h) * 0.12 + 1;
   if (vcarveViewState) {
-    if (regionChanged || !vcarveViewState.view) {
+    if (forceFit || !vcarveViewState.view) {
       const cx = (minX + maxX) / 2;
       const cy = (minY + maxY) / 2;
       const rect = (canvas.getBoundingClientRect && canvas.getBoundingClientRect()) || null;
@@ -163,8 +184,31 @@ function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveView
   } else {
     canvas.setAttribute('viewBox', `${minX - m} ${minY - m} ${w + 2 * m} ${h + 2 * m}`);
   }
+}
+
+function renderUnpicked(canvas, loopPolys, vcarveViewState) {
+  if (!loopPolys || !loopPolys.length) {
+    canvas.innerHTML = '';
+    return;
+  }
+  fitVcarveViewToPoints(canvas, loopPolys.flat(), vcarveViewState, false);
   const poly = (pts, attrs) => `<polygon points="${pts.map((p) => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join(' ')}" ${attrs}/>`;
-  let s = poly(boundary, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
+  canvas.innerHTML = loopPolys
+    .map((pts) => poly(pts, 'fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"'))
+    .join('');
+}
+
+// Light poly render on the (cream) Vcarve canvas: the region boundary (dark) + hole boundaries (dark)
+// + the nested contours DEPTH-SHADED (deeper = darker). Auto-fits the viewBox to the region bbox.
+// Non-scaling strokes keep line weight constant.
+function render(canvas, boundary, contours, maxDepth, holePolys = [], vcarveViewState = null, regionChanged = false, otherPolys = []) {
+  fitVcarveViewToPoints(canvas, [...boundary, ...holePolys.flat()], vcarveViewState, regionChanged);
+  const poly = (pts, attrs) => `<polygon points="${pts.map((p) => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join(' ')}" ${attrs}/>`;
+  let s = '';
+  for (const op of otherPolys) {
+    s += poly(op, 'fill="none" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"');
+  }
+  s += poly(boundary, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
   for (const hp of holePolys) {
     s += poly(hp, 'fill="none" stroke="#202020" stroke-width="1.6" vector-effect="non-scaling-stroke"');
   }

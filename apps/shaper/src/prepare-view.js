@@ -6,14 +6,16 @@
 // renderer stays byte-identical.
 
 import { calculateArcPath } from '#core/geometry.js';
-import { findLoops } from '#core/loop-finder.js';
+import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
 import { offsetPolygon } from '#core/polygon-offset.js'; // SP1h2/h5/h6: offset toolpaths + tool-center pocket inset
 import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
-import { sampleArc, loopPolygon, polyArea, pointInPolygon } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { sampleArc, loopPolygon, polyArea, pointInPolygon, polygonContains, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
+import { screenToWorld } from '#ui/coords.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
@@ -46,17 +48,14 @@ export function renderPrepareGeometry(state, svgEl) {
 
 // ── Loop boundary polygons + hit-test — LIFTED to #core/loop-geometry.js (SKETCH-4a); re-imported above. ──
 
-function clientToWorld(svgEl, cx, cy) {
-  try {
-    const ctm = svgEl.getScreenCTM && svgEl.getScreenCTM();
-    if (ctm && svgEl.createSVGPoint) { const pt = svgEl.createSVGPoint(); pt.x = cx; pt.y = cy; const w = pt.matrixTransform(ctm.inverse()); return { x: w.x, y: w.y }; }
-  } catch (_) {}
-  return null;
-}
-
 const SVG_NS_G = SVG_NS;
 const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
 const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',' + p.y).join(' ')}" style="${style}"/>`;
+const polyRingD = (poly) => (poly && poly.length >= 3) ? ('M ' + poly.map((p) => p.x + ' ' + p.y).join(' L ') + ' Z') : '';
+const profilePathMarkup = (outerPoly, holePolys, style) => {
+  const parts = [polyRingD(outerPoly), ...(holePolys || []).map(polyRingD)].filter(Boolean);
+  return parts.length ? `<path d="${parts.join(' ')}" fill-rule="evenodd" style="${style}"/>` : '';
+};
 // SP1h4 (pocket): area-weighted centroid for label placement (vertex-average fallback for a near-degenerate ring).
 function polyCentroid(poly) {
   let a = 0, cx = 0, cy = 0;
@@ -66,6 +65,36 @@ function polyCentroid(poly) {
   }
   if (Math.abs(a) < 1e-9) return poly.reduce((s, p) => ({ x: s.x + p.x / poly.length, y: s.y + p.y / poly.length }), { x: 0, y: 0 });
   return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+// Keep pocket depth label inside the cleared material when holes open the centroid (e.g. concentric ring/frame).
+function pocketLabelPoint(clearedOuter, clearedHoles) {
+  const c = polyCentroid(clearedOuter);
+  const inRing = (pt) => pointInPolygon(clearedOuter, pt) && !(clearedHoles || []).some((hp) => pointInPolygon(hp, pt));
+  if (!clearedHoles || !clearedHoles.length || inRing(c)) return c;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of clearedOuter) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  const N = 64;
+  // Probe vertical line through c.x (top band first), then horizontal line through c.y
+  for (const probe of [
+    (k) => ({ x: c.x, y: minY + (k / N) * (maxY - minY) }),
+    (k) => ({ x: minX + (k / N) * (maxX - minX), y: c.y }),
+  ]) {
+    let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+    for (let k = 0; k <= N; k++) {
+      if (inRing(probe(k))) {
+        if (curStart < 0) curStart = k;
+        curLen++;
+        if (curLen > bestLen) { bestLen = curLen; bestStart = curStart; }
+      } else {
+        curStart = -1; curLen = 0;
+      }
+    }
+    if (bestLen > 0) return probe(bestStart + (bestLen - 1) / 2);
+  }
+  return c;
 }
 // SP1h4: pocket depth → a ↓-prefixed label in the document unit (export form, e.g. '↓ 0.500in'). 'unset' → no label.
 const pocketDepthLabel = (cutDepth) => {
@@ -152,12 +181,32 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loops = findLoops(state).map((l) => { const polygon = loopPolygon(l, state, shapeById); return { ...l, polygon, area: polyArea(polygon) }; });
   const loopById = new Map(loops.map((l) => [l.id, l]));
+  const loopPolys = Object.fromEntries(loops.map((l) => [l.id, l.polygon]));
+  const profileViews = resolveProfileViews(state, loops, loopPolys);
+  const chains = findOpenChains(state, loops);
+  const chainById = new Map(chains.map((c) => [c.id, c]));
+  const chainByShapeId = new Map();
+  for (const c of chains) {
+    for (const s of (c.shapes || [])) chainByShapeId.set(s.id, c);
+  }
 
-  // SP1d — DECLARED selection model. A target is { kind: 'loop' | 'edge', id }. The selection is a COLLECTION keyed
-  // by `${kind}:${id}` — single-select BEHAVIOR this slice, but the Map shape is forward-safe for multi-select
-  // (shift-click) and for the 'edge' kind (SP1e). 'edge' is declared in the union but not yet resolvable.
+  // Selection model: a target is { kind: 'loop' | 'profile' | 'chain', id } keyed by `${kind}:${id}`:
+  //   • derived profile → `loop:<outerLoopId>` (preserves saved cut plans)
+  //   • combined profile → `profile:<profileId>`
+  //   • open chain → `chain:<chainId>`
+  // Shift+click (e.shiftKey) toggles targets in `selection`; plain click selects one (or clears on empty space).
   const selection = new Map(); // key -> { kind, id }
   const targetKey = (t) => keyOf(t.kind, t.id);
+
+  const profileLoopsForTarget = (t) => {
+    if (!t) return null;
+    const spec = resolveTargetKey(t, state, loops, loopPolys);
+    if (!spec || spec.invalid || !spec.outer) return null;
+    const outer = loopById.get(spec.outer);
+    if (!outer || outer.polygon.length < 3) return null;
+    const holes = (spec.inners || []).map((hid) => loopById.get(hid)).filter((hl) => hl && hl.polygon.length >= 3);
+    return { outer, holes, isDerived: Boolean(spec.isDerived), profileId: spec.profileId };
+  };
 
   // Precompute per-edge hit geometry once (Prepare geometry is static) — lines/circles analytic, arcs sampled.
   const edgeHits = (state.shapes || []).map((s) => {
@@ -167,41 +216,82 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return null;
   }).filter(Boolean);
 
-  // KIND-AWARE dispatcher: cursor → target. The user's PROXIMITY rule — ON the ink → the EDGE (vector);
-  // in the open interior → the LOOP.
+  // STEP 3: Picking.
+  // (a) INK: nearest shape within tol.
+  //     - If in some loop's edges: smallest-area loop, return its profile via resolveProfileForLoop.
+  //     - If in an open chain: return { kind: 'chain', id: chain.id }.
+  // (b) INTERIOR: resolveProfileAtPoint.
+  // Map profile: derived -> { kind: 'loop', id: profile.outer }; combined -> { kind: 'profile', id: profile.id }.
+  // NEVER return kind 'edge'.
   function resolveTarget(worldPt) {
-    // EDGE first: the nearest shape stroke within tolerance WINS over the loop (makes OPEN paths selectable too).
+    const mapProfileToTarget = (prof) => {
+      if (!prof || !prof.outer) return null;
+      if (prof.isDerived) return { kind: 'loop', id: prof.outer };
+      const v = profileViews.get(prof.id);
+      if (!v || v.invalid) return null;
+      return { kind: 'profile', id: prof.id };
+    };
+
+    // (a) INK
     const tol = worldTolerance(svgEl, EDGE_TOL_PX);
     let bestEdge = null, bestDist = tol;
     for (const h of edgeHits) { const d = edgeDistAt(h, worldPt); if (d <= bestDist) { bestDist = d; bestEdge = h; } }
-    if (bestEdge) return { kind: 'edge', id: bestEdge.id };
-    // else LOOP: the innermost (smallest-area) loop whose boundary polygon contains the point.
-    let best = null;
-    for (const l of loops) if (l.polygon.length >= 3 && pointInPolygon(l.polygon, worldPt) && (!best || l.area < best.area)) best = l;
-    return best ? { kind: 'loop', id: best.id } : null;
+    if (bestEdge) {
+      const inLoops = loops.filter((l) => (l.edges || []).includes(bestEdge.id));
+      if (inLoops.length > 0) {
+        inLoops.sort((a, b) => a.area - b.area);
+        const smallestLoop = inLoops[0];
+        const prof = resolveProfileForLoop(smallestLoop.id, state, loops, loopPolys);
+        const tgt = mapProfileToTarget(prof);
+        if (tgt) return tgt;
+      }
+      const chain = chainByShapeId.get(bestEdge.id);
+      if (chain) {
+        return { kind: 'chain', id: chain.id };
+      }
+    }
+
+    // (b) INTERIOR
+    const prof = resolveProfileAtPoint(worldPt, state, loops, loopPolys);
+    return mapProfileToTarget(prof);
   }
 
-  // ONE render path, branched by kind: loop → filled region; edge → glowing stroke overlay (true geometry).
-  const targetMarkup = (t, loopStyle, edgeStyle) => {
+  // STEP 4: Highlight markup.
+  //   - kind 'loop' -> ONE <path fill-rule="evenodd"> = outer loop polygon + DIRECT holes open;
+  //   - kind 'profile' -> resolveProfileViews.get(id).d, evenodd style;
+  //   - kind 'chain' -> edgeStrokeMarkup for each member shape.
+  const targetMarkup = (t, loopStyle, chainStyle) => {
     if (!t) return '';
-    if (t.kind === 'loop') { const l = loopById.get(t.id); return (l && l.polygon.length >= 3) ? polyMarkup(l.polygon, loopStyle) : ''; }
-    if (t.kind === 'edge') { const s = shapeById.get(t.id); return s ? edgeStrokeMarkup(s, state, edgeStyle) : ''; }
+    if (t.kind === 'loop') {
+      const outerLoop = loopById.get(t.id);
+      if (!outerLoop) return '';
+      const prof = derivedProfileForLoop(t.id, loops, loopPolys, state);
+      const holePolys = (prof && prof.inners ? prof.inners : []).map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
+      return profilePathMarkup(outerLoop.polygon, holePolys, loopStyle);
+    }
+    if (t.kind === 'profile') {
+      const v = profileViews.get(t.id);
+      if (!v || !v.d) return '';
+      return `<path d="${v.d}" fill-rule="evenodd" style="${loopStyle}"/>`;
+    }
+    if (t.kind === 'chain') {
+      const chain = chainById.get(t.id);
+      if (!chain) return '';
+      return (chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, chainStyle)).join('');
+    }
     return '';
   };
 
-  // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit). Every CUTTING
-  // type renders a tool-WIDTH BAND (the kerf — stroke-width = toolDia in WORLD units) + a dashed CENTERLINE (the
-  // tool-center path) in the type's preview colour: ON-LINE on the path; OUTSIDE/INSIDE on the boundary offset by
-  // toolDia/2 ± cutOffset (the band straddles the boundary). GUIDE = a dashed reference (NO band — not a cut). POCKET =
-  // a hatch-filled cleared region (the ONLY fill, in the cut layer) + a depth label. NO flat region tint anymore.
+  // SP1h5: per-target cut LOOK = the CUTTER PATH, cached by (cutType,toolDia,cutOffset,cutDepth,docUnit).
   const lookCache = new Map(); // targetKey → { sig, region, path }
   const sigOf = (rec) => `${rec.cutType}|${rec.toolDia}|${rec.cutOffset}|${rec.cutDepth}|${SettingsManager.get('DOC_UNIT')}`;
   const computeLook = (key, rec) => {
     const { kind, id } = parseKey(key);
-    if (kind === 'loop' ? !loopById.has(id) : !shapeById.has(id)) return { region: '', path: '' }; // only THIS view's targets
+    const t = { kind, id };
+    const pl = (kind === 'loop' || kind === 'profile') ? profileLoopsForTarget(t) : null;
+    if (kind === 'chain' ? !chainById.has(id) : !pl) return { region: '', path: '' };
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
     if (!ct) return { region: '', path: '' };
-    const t = { kind, id };
     const color = ct.previewStroke;
     const toolDia = Number(rec.toolDia) || 0;
     // shared cutter-path look: a semi-transparent BAND (world-unit kerf) + a dashed CENTERLINE (zoom-stable).
@@ -209,29 +299,39 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
     const bandAndCenter = (poly) => (toolDia > 0 ? polyMarkup(poly, bandStyle) : '') + polyMarkup(poly, centerStyle);
 
-    if (ct.targetKind === 'region') { // loop-only (gating) — OUTSIDE / INSIDE / POCKET
-      const l = (kind === 'loop') ? loopById.get(id) : null;
-      if (!l || l.polygon.length < 3) return { region: '', path: '' };
+    if (ct.targetKind === 'region') { // profile-only (gating) — OUTSIDE / INSIDE / POCKET
+      if (!pl) return { region: '', path: '' };
       if (ct.id === 'pocket') {
-        // POCKET (SP1h6) = the TOOL-CENTER reachable region = the loop INSET by toolDia/2 (+ cutOffset). The hatch
-        // fills only UP TO the tool centre, leaving a toolDia/2 margin to the wall (the bit centre can't get closer).
-        // The ONLY fill — a hatch in the CUT layer — + a depth label. toolDia/2 ≥ half-width → empty (no garbage).
-        // (Inset corners are miter/sharp — correct at CONVEX corners; a CONCAVE pocket's reflex corners would ideally
-        // round by the tool radius — a one-word follow-up: pass {join:'round'} to round the reflex gaps.)
-        const cleared = offsetPolygon(l.polygon, -((toolDia / 2) + (Number(rec.cutOffset) || 0)));
+        // POCKET = tool-center reachable region: outer INSET by toolDia/2 (+ cutOffset), holes OUTSET by toolDia/2 (+ cutOffset),
+        // rendered with fill-rule="evenodd" so every profile hole stays open in the hatch preview.
+        const insetDist = (toolDia / 2) + (Number(rec.cutOffset) || 0);
+        const cleared = offsetPolygon(pl.outer.polygon, -insetDist);
         if (cleared.length < 3) return { region: '', path: '' };
-        const region = polyMarkup(cleared, `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`);
+        const clearedHoles = [];
+        for (const hl of pl.holes) {
+          const outHole = offsetPolygon(hl.polygon, insetDist);
+          const hp = outHole.length >= 3 ? outHole : hl.polygon;
+          if (polygonContains(cleared, hp)) clearedHoles.push(hp);
+        }
+        const region = profilePathMarkup(
+          cleared,
+          clearedHoles,
+          `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`
+        );
         let path = '';
         const label = pocketDepthLabel(rec.cutDepth);
-        if (label) { const c = polyCentroid(cleared); path = `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`; }
+        if (label) {
+          const c = pocketLabelPoint(cleared, clearedHoles);
+          path = `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
+        }
         return { region, path };
       }
       // OUTSIDE / INSIDE — the CENTERLINE = the boundary offset by toolDia/2 ± cutOffset; the band straddles it (kerf).
       const r = toolDia / 2 + (Number(rec.cutOffset) || 0);
-      const off = offsetPolygon(l.polygon, ct.id === 'exterior' ? r : -r);
+      const off = offsetPolygon(pl.outer.polygon, ct.id === 'exterior' ? r : -r);
       return { region: '', path: off.length >= 3 ? bandAndCenter(off) : '' };
     }
-    // PATH types (loop or edge) — GUIDE / ON-LINE
+    // PATH types (profile or edge) — GUIDE / ON-LINE
     if (ct.id === 'guide') {
       const dash = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
       return { region: '', path: targetMarkup(t, dash, dash) }; // dashed reference — NO band (not a cut)
@@ -267,7 +367,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   };
   const onMove = (e) => {
     if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
     setHover(resolveTarget(wp));
   };
@@ -281,17 +381,25 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       handlePanZoomPointerDown(e, svgEl, viewState);
       return;
     }
-    const wp = clientToWorld(svgEl, e.clientX, e.clientY);
+    const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     const t = wp ? resolveTarget(wp) : null;
-    selection.clear();                       // single-select BEHAVIOR (shift-click multi-select is a later slice)
-    if (t) {
-      selection.set(targetKey(t), t);        // select target
+    if (e.shiftKey) {
+      if (t) {
+        const k = targetKey(t);
+        if (selection.has(k)) selection.delete(k);
+        else selection.set(k, t);
+      }
     } else {
-      // Click empty canvas: cleared selection and initiate empty-canvas pan drag
-      handlePanZoomPointerDown(e, svgEl, viewState);
+      selection.clear();
+      if (t) {
+        selection.set(targetKey(t), t);
+      } else {
+        // Click empty canvas: cleared selection and initiate empty-canvas pan drag
+        handlePanZoomPointerDown(e, svgEl, viewState);
+      }
     }
-    renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected loop drops its hover)
-    onSelectionChange(t || null);            // notify the cut panel (selected target | null)
+    renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected profile drops its hover)
+    onSelectionChange(t || selectedTarget()); // notify the cut panel (last clicked target, or selected target | null)
   };
   const onUp = (e) => {
     handlePanZoomPointerUp(e, svgEl, viewState);
@@ -302,19 +410,42 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   svgEl.addEventListener('pointerdown', onDown);
   svgEl.addEventListener('pointerup', onUp);
 
+  const selectedTarget = () => {
+    let last = null;
+    for (const v of selection.values()) last = v;
+    return last;
+  };
+  const selectedTargets = () => [...selection.values()];
+
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
 
-  const selectedTarget = () => [...selection.values()][0] || null;
   return {
-    loops, selection, resolveTarget, selectedTarget,
+    loops, selection, resolveTarget, selectedTarget, selectedTargets, profileLoopsForTarget,
     view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
-    // Write the cut type onto the current single selection + refresh the tool-aware look (panel calls this).
-    applyCutTypeToSelected(cutType) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), 'cutType', cutType); refreshLook(); return rec; },
-    // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) on the selection + refresh the look LIVE — the
-    // on-line band re-widths on a toolDia change; offset/depth feed h2–h4.
-    setFieldOnSelected(field, value) { const t = selectedTarget(); if (!t) return null; const rec = setFieldFor(targetKey(t), field, value); refreshLook(); return rec; },
+    // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
+    applyCutTypeToSelected(cutType) {
+      if (selection.size === 0) return null;
+      const ct = cutTypeById(cutType);
+      let lastRec = null;
+      for (const t of selection.values()) {
+        if (t.kind === 'chain' && ct && ct.targetKind !== 'path') continue;
+        lastRec = setFieldFor(targetKey(t), 'cutType', cutType);
+      }
+      refreshLook();
+      return lastRec;
+    },
+    // SP1h1: persist a numeric field (cutDepth / cutOffset / toolDia) onto every selected target + refresh LIVE.
+    setFieldOnSelected(field, value) {
+      if (selection.size === 0) return null;
+      let lastRec = null;
+      for (const t of selection.values()) {
+        lastRec = setFieldFor(targetKey(t), field, value);
+      }
+      refreshLook();
+      return lastRec;
+    },
     destroy() {
       svgEl.removeEventListener('wheel', onWheel);
       svgEl.removeEventListener('pointermove', onMove);

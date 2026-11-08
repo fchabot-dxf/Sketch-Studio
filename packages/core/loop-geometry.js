@@ -1,12 +1,13 @@
 // packages/core/loop-geometry.js — loop boundary polygons + point-in-polygon CONTAINMENT. Lifted from
-// apps/shaper/src/prepare-view.js (SKETCH-4a) so ISLANDS (S-4d) / vcarve / joints can reuse the geometry.
+// apps/shaper/src/prepare-view.js (SKETCH-4a) so profile resolution / vcarve / joints can reuse the geometry.
 //
 // PURITY NOTE: `sampleArc` samples the TRUE rendered curve via the browser SVG path API (getPointAtLength), so
 // `loopPolygon` for an ARC loop needs the DOM (degrades to the endpoints in Node). `loopPolygon` for LINE/CIRCLE
-// loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. (S-4d keeps
-// `shaper-export` pure by having the export HOST compute the loop polygons and pass them in.)
+// loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. The export
+// HOST can precompute loop polygons in the browser and pass them in to keep `shaper-export` pure.
 
 import { calculateArcPath } from './geometry.js';
+import { buildNodeMap } from './loop-finder.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const EPS = 1e-9;
@@ -75,8 +76,8 @@ function segsCross(p1, p2, p3, p4) {
 }
 
 // SKETCH-4a: does `outer` STRICTLY contain `inner` (non-touching nesting)? A representative inner point inside outer
-// AND polyArea(inner) < polyArea(outer) AND no edge of inner crosses any edge of outer. Used by the island detector
-// (a loop-with-a-hole → an evenodd compound path).
+// AND polyArea(inner) < polyArea(outer) AND no edge of inner crosses any edge of outer. Used by profile hole
+// resolution (a profile with holes → an evenodd compound path).
 export function polygonContains(outer, inner) {
   if (!Array.isArray(outer) || !Array.isArray(inner) || outer.length < 3 || inner.length < 3) return false;
   if (polyArea(inner) >= polyArea(outer)) return false;     // equal or larger → not strictly contained
@@ -115,13 +116,25 @@ function arcSeg(shape, fromPos, toPos, state) {
 }
 
 // loopToPathD(loop, state) → a CLOSED SVG path "d" from the loop's ordered boundary (joints[] + edges[]). Lines →
-// `L x y`; arcs → a direction-aware `A …` segment. A line CLOSING edge is left to Z (so a pure-line loop is identical
-// to SP1j-1); an arc closing edge is drawn explicitly. Returns '' on a missing loop / joint position.
+// `L x y`; arcs → a direction-aware `A …` segment; single-circle loops → two `A r r` half-arcs + `Z`. A line CLOSING
+// edge is left to Z (so a pure-line loop is identical to SP1j-1); an arc closing edge is drawn explicitly. Returns ''
+// on a missing loop / joint position.
 export function loopToPathD(loop, state) {
-  if (!loop || !Array.isArray(loop.joints) || loop.joints.length < 2 || !state || !state.joints) return '';
+  if (!loop || !Array.isArray(loop.joints) || !state || !state.joints) return '';
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
-  const pos = (nid) => state.joints.get(nid);
   const edges = Array.isArray(loop.edges) ? loop.edges : [];
+  if (edges.length === 1) {
+    const s = shapeById.get(edges[0]);
+    if (s && s.type === 'circle') {
+      const cid = (Array.isArray(s.joints) && s.joints[0]) || loop.joints[0];
+      const c = cid ? state.joints.get(cid) : null;
+      const r = Number(s.radius) || 0;
+      if (!c || !(r > 0)) return '';
+      return `M ${num(c.x - r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x + r)} ${num(c.y)} A ${num(r)} ${num(r)} 0 1 0 ${num(c.x - r)} ${num(c.y)} Z`;
+    }
+  }
+  if (loop.joints.length < 2) return '';
+  const pos = (nid) => state.joints.get(nid);
   const n = loop.joints.length;
   const p0 = pos(loop.joints[0]);
   if (!p0) return '';
@@ -139,6 +152,102 @@ export function loopToPathD(loop, state) {
   }
   return d + ' Z';
 }
+
+// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines/arcs).
+// Orders the chain's shapes end to end, emitting `M x y` then `L x y` for lines and direction-aware `arcSeg`
+// for arcs. No Z. Reuses arcSeg directly.
+export function chainToPathD(chain, state) {
+  if (!chain || !state || !state.joints) return '';
+  const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
+  const shapes = Array.isArray(chain.shapes)
+    ? chain.shapes
+    : (Array.isArray(chain.edges) ? chain.edges.map((id) => shapeById.get(id)).filter(Boolean) : []);
+  if (!shapes.length) return '';
+
+  const node = buildNodeMap(state);
+  const pos = (jid) => state.joints.get(jid);
+  const endsOf = (s) => {
+    if (!s || !Array.isArray(s.joints)) return null;
+    if (s.type === 'line' && s.joints.length >= 2) return { a: s.joints[0], b: s.joints[1], na: node(s.joints[0]), nb: node(s.joints[1]) };
+    if (s.type === 'arc' && s.joints.length >= 3) return { a: s.joints[1], b: s.joints[2], na: node(s.joints[1]), nb: node(s.joints[2]) };
+    return null;
+  };
+
+  if (shapes.length === 1) {
+    const s = shapes[0];
+    const e = endsOf(s);
+    if (!e) return '';
+    const pa = pos(e.a), pb = pos(e.b);
+    if (!pa || !pb) return '';
+    const seg = (s.type === 'arc') ? arcSeg(s, pa, pb, state) : `L ${num(pb.x)} ${num(pb.y)}`;
+    return `M ${num(pa.x)} ${num(pa.y)} ${seg}`;
+  }
+
+  // Multi-shape chain: build adjacency graph
+  const nodeDegrees = new Map();
+  const nodeToShapes = new Map();
+  for (const s of shapes) {
+    const e = endsOf(s);
+    if (!e) continue;
+    nodeDegrees.set(e.na, (nodeDegrees.get(e.na) || 0) + 1);
+    nodeDegrees.set(e.nb, (nodeDegrees.get(e.nb) || 0) + 1);
+    if (!nodeToShapes.has(e.na)) nodeToShapes.set(e.na, []);
+    nodeToShapes.get(e.na).push(s);
+    if (!nodeToShapes.has(e.nb)) nodeToShapes.set(e.nb, []);
+    nodeToShapes.get(e.nb).push(s);
+  }
+
+  // Pick start node: prefer degree-1 nodes (the endpoints of an open chain)
+  const deg1 = [];
+  for (const [nid, deg] of nodeDegrees) {
+    if (deg === 1) deg1.push(nid);
+  }
+  deg1.sort();
+  const allNodes = [...nodeDegrees.keys()].sort();
+
+  const visitedShapes = new Set();
+  let d = '';
+
+  while (visitedShapes.size < shapes.length) {
+    // Find next unvisited shape to start or continue a walk
+    let startNode = deg1.find((nid) => (nodeToShapes.get(nid) || []).some((s) => !visitedShapes.has(s.id)));
+    if (!startNode) {
+      startNode = allNodes.find((nid) => (nodeToShapes.get(nid) || []).some((s) => !visitedShapes.has(s.id)));
+    }
+    if (!startNode) break;
+
+    let curNode = startNode;
+    let subpathStarted = false;
+
+    while (true) {
+      const candidates = (nodeToShapes.get(curNode) || []).filter((s) => !visitedShapes.has(s.id));
+      if (!candidates.length) break;
+      const s = candidates[0];
+      visitedShapes.add(s.id);
+      const e = endsOf(s);
+      if (!e) break;
+
+      const forward = (curNode === e.na);
+      const fromJid = forward ? e.a : e.b;
+      const toJid = forward ? e.b : e.a;
+      const nextNode = forward ? e.nb : e.na;
+
+      const fromP = pos(fromJid), toP = pos(toJid);
+      if (!fromP || !toP) break;
+
+      if (!subpathStarted) {
+        d += (d ? ' ' : '') + `M ${num(fromP.x)} ${num(fromP.y)}`;
+        subpathStarted = true;
+      }
+      const seg = (s.type === 'arc') ? arcSeg(s, fromP, toP, state) : `L ${num(toP.x)} ${num(toP.y)}`;
+      d += ' ' + seg;
+      curNode = nextNode;
+    }
+  }
+
+  return d;
+}
+
 
 // polyToPathD(pts) → a CLOSED SVG path "d" from an ordered array of polygon points [{x, y}, ...].
 export function polyToPathD(pts) {

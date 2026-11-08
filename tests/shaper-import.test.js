@@ -127,23 +127,27 @@ import { exportShaperSVG } from '#core/shaper-export.js';
     const rec = cutRecordByDesc.get('desc_pock');
     CUT_PLAN.set(keyOf('loop', loop.id), { ...rec });
 
-    // Register open edge in CUT_PLAN
+    // Register open chain in CUT_PLAN (TASK 432 replaces kind: 'edge' with kind: 'chain')
+    const { findOpenChains } = await import('#core/loop-finder.js');
+    const chains = findOpenChains(st, loops);
     const lineShape = st.shapes.find((s) => s.descId === 'desc_guide');
     assert(lineShape, 'lineShape exists');
-    CUT_PLAN.set(keyOf('edge', lineShape.id), { ...cutRecordByDesc.get('desc_guide') });
+    const chain = chains.find((c) => c.edges.includes(lineShape.id));
+    assert(chain, 'chain exists for lineShape');
+    CUT_PLAN.set(keyOf('chain', chain.id), { ...cutRecordByDesc.get('desc_guide') });
 
     // Verify CUT_PLAN entries
     const loopRec = CUT_PLAN.get(keyOf('loop', loop.id));
     assert(loopRec.cutType === 'pocket', 'loop cutType is pocket');
     assert(loopRec.cutDepth === 6.35, 'loop cutDepth is 6.35mm');
 
-    const edgeRec = CUT_PLAN.get(keyOf('edge', lineShape.id));
-    assert(edgeRec.cutType === 'guide', 'edge cutType is guide');
+    const chainRec = CUT_PLAN.get(keyOf('chain', chain.id));
+    assert(chainRec.cutType === 'guide', 'chain cutType is guide');
 
     // Verify re-export generates proper shaper attributes
     const exportEntries = [
       { target: { kind: 'loop', id: loop.id }, rec: loopRec },
-      { target: { kind: 'edge', id: lineShape.id }, rec: edgeRec },
+      { target: { kind: 'chain', id: chain.id }, rec: chainRec },
     ];
     const exportedSvg = exportShaperSVG({
       state: st,

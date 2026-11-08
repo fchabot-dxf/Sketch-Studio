@@ -27,8 +27,8 @@ import { createSketches } from '#core/sketch-model.js';
   // 2. makeGroup — mints 'group-1', stamps the shapes, appends { id, name, sketchId }; the factory groupId UNTOUCHED
   {
     const state = fresh();
-    const g = makeGroup(state, ['AB', 'circ'], 'Island A');
-    assert(g.id === 'group-1' && g.name === 'Island A' && g.sketchId === 'sketch-1', 'group entry { id, name, sketchId }');
+    const g = makeGroup(state, ['AB', 'circ'], 'Cluster A');
+    assert(g.id === 'group-1' && g.name === 'Cluster A' && g.sketchId === 'sketch-1', 'group entry { id, name, sketchId }');
     assert(state.groups.length === 1, 'appended to state.groups');
     assert(groupOf(state.shapes.find((s) => s.id === 'AB')) === 'group-1' && groupOf(state.shapes.find((s) => s.id === 'circ')) === 'group-1', 'members stamped userGroupId');
     assert(groupOf(state.shapes.find((s) => s.id === 'BC')) === null, 'non-member not stamped');

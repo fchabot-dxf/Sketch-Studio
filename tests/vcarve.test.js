@@ -1,6 +1,6 @@
 import { vcarveContours } from '#core/vcarve.js';
 import { polyArea } from '#core/loop-geometry.js';
-import { holesOfLoop } from '#core/group-model.js';
+import { makeProfile, resolveProfileForLoop } from '#core/profile-model.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -130,13 +130,14 @@ import { holesOfLoop } from '#core/group-model.js';
     assert(atD1.length === 3, `depth 1 has 3 contours (outer + 2 holes), got ${atD1.length}`);
   }
 
-  // 11. VCARVE-5b: Bullseye — dot inside a hole is an uncut island (depth-2 nested island)
+  // 11. TASK 432: Bullseye profile holes (NO group) — dot inside a hole is its own profile (uncut when carving outer)
   {
     const state = {
       shapes: [
-        { id: 's1', userGroupId: 'g1' }, { id: 's2', userGroupId: 'g1' }, { id: 's3', userGroupId: 'g1' },
+        { id: 's1' }, { id: 's2' }, { id: 's3' },
       ],
-      groups: [{ id: 'g1', name: 'Group 1' }],
+      groups: [],
+      profiles: [],
     };
     const loops = [
       { id: 'loop-outer', edges: ['s1'] },
@@ -148,23 +149,22 @@ import { holesOfLoop } from '#core/group-model.js';
       'loop-hole': [{ x: 15, y: 15 }, { x: 45, y: 15 }, { x: 45, y: 45 }, { x: 15, y: 45 }],
       'loop-dot': [{ x: 25, y: 25 }, { x: 35, y: 25 }, { x: 35, y: 35 }, { x: 25, y: 35 }],
     };
-    // Default excludeNested=false (pockets): all contained loops returned
-    const allContained = holesOfLoop('loop-outer', loops, state, loopPolys);
-    assert(allContained.length === 2 && allContained.includes('loop-hole') && allContained.includes('loop-dot'), 'pocket semantics return all contained loops');
-    // excludeNested=true (vcarve): nested island inside hole is excluded
-    const holes = holesOfLoop('loop-outer', loops, state, loopPolys, { excludeNested: true });
-    assert(holes.length === 1 && holes[0] === 'loop-hole', `outer loop hole must be loop-hole only, got ${JSON.stringify(holes)}`);
-    // Carve loop-outer with its derived holes: loop-dot stays uncut
-    const stack = vcarveContours(loopPolys['loop-outer'], { dStep: 1, halfAngleTan: 1, holes: holes.map((h) => loopPolys[h]) });
+    // Derived profile for outer: direct hole ONLY (loop-hole), with NO user group
+    const outerProf = resolveProfileForLoop('loop-outer', state, loops, loopPolys);
+    assert(outerProf.isDerived && outerProf.inners.length === 1 && outerProf.inners[0] === 'loop-hole', `outer derived profile hole must be loop-hole only, got ${JSON.stringify(outerProf.inners)}`);
+    // Carve loop-outer with its profile holes: loop-dot stays uncut
+    const stack = vcarveContours(loopPolys['loop-outer'], { dStep: 1, halfAngleTan: 1, holes: outerProf.inners.map((h) => loopPolys[h]) });
     assert(stack.length > 0, 'outer vcarve produced contours');
-    // None of the contours touch inside the 20..40 inner area of the hole (dot is untouched)
     for (const c of stack) {
       for (const p of c.polygon) {
-        // Point must NOT be strictly inside the dot (25 < x < 35, 25 < y < 35)
         const insideDot = p.x > 25.01 && p.x < 34.99 && p.y > 25.01 && p.y < 34.99;
         assert(!insideDot, `contour point (${p.x}, ${p.y}) encroached on uncut bullseye dot!`);
       }
     }
+    // Combined profile wins over derived when explicitly combined (e.g. outer + dot)
+    makeProfile(state, loops[0], [loops[2]]);
+    const combinedProf = resolveProfileForLoop('loop-outer', state, loops, loopPolys);
+    assert(!combinedProf.isDerived && combinedProf.inners.length === 1 && combinedProf.inners[0] === 'loop-dot', 'combined profile overrides derived holes');
   }
 
   console.log('vcarve tests passed ✅');

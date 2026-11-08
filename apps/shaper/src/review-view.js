@@ -8,7 +8,22 @@ import { buildRelief, createReliefCache } from '#core/relief-model.js';
 const BOARD = [0.85, 0.70, 0.50]; // warm board colour: the flat look (Wood off), and the plywood EDGE on the side / wall faces
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
-const FACE_MESHES = new Set(['top', 'floor', 'bottom']); // show the face grain; side / wall show the flat plywood edge
+const FACE_MESHES = new Set(['top', 'floor', 'bottom']); // show the birch face grain; side / wall show the procedural ply layers
+export const PLY_MM = 1.5;                  // one ply per ~1.5 mm of thickness (19.05 mm -> 13 plies)
+export const MIN_PLIES = 3;
+export const PLY_TONES = [[226, 190, 140], [186, 146, 96]]; // light / dark tan strips (near BOARD), alternating
+
+export const plyCount = (thickness) => Math.max(MIN_PLIES, Math.round(thickness / PLY_MM));
+
+// Edge UVs from WORLD height: v = -y / T (top face y = 0, bottom y = -T), so the plies line up across the board edge and every cut wall;
+// u runs along x + z so the fibre streaks do not repeat in lockstep.
+export function edgeUVs(positions, thickness) {
+  const uv = new Float32Array((positions.length / 3) * 2);
+  for (let i = 0, j = 0; i < positions.length; i += 3, j += 2) {
+    uv[j] = (positions[i] + positions[i + 2]) / TILE_MM; uv[j + 1] = -positions[i + 1] / thickness;
+  }
+  return uv;
+}
 
 // TASK 497: planar UVs from WORLD x,z (the mesh plane is x/z, height is y). The image's grain runs along its v axis, so when the
 // board's long side is X the axes swap (u = z, v = x) to keep the grain along the long side.
@@ -47,14 +62,40 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
   // vertex colours are the grey DEPTH multiplier; material.color is the tint (BOARD flat, white under the wood map)
   const edgeMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, color: new THREE.Color(...BOARD) });
   const faceMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, color: new THREE.Color(...BOARD) });
-  let woodTexture = null, woodOn = !!wood;
+  let woodTexture = null, edgeTexture = null, edgePlies = 0, woodOn = !!wood;
   const applyWood = () => {
     const textured = woodOn && !!woodTexture;
     faceMaterial.map = textured ? woodTexture : null;
     faceMaterial.color.set(textured ? 0xffffff : new THREE.Color(...BOARD));
     faceMaterial.needsUpdate = true;
+    const edged = woodOn && !!edgeTexture;
+    edgeMaterial.map = edged ? edgeTexture : null;
+    edgeMaterial.color.set(edged ? 0xffffff : new THREE.Color(...BOARD));
+    edgeMaterial.needsUpdate = true;
   };
   function setWood(on) { woodOn = !!on; applyWood(); render(); }
+  // The edge texture spans the full stock thickness (v: 0 = top .. 1 = bottom), one strip per ply; rebuilt only when the ply count changes.
+  function ensureEdgeTexture(T) {
+    const n = plyCount(T);
+    if (n === edgePlies && edgeTexture) return;
+    if (edgeTexture) edgeTexture.dispose();
+    const PX = 16, W = 128, c = document.createElement('canvas'); c.width = W; c.height = n * PX;
+    const g = c.getContext('2d');
+    for (let i = 0; i < n; i++) {
+      const tone = PLY_TONES[i % 2];
+      g.fillStyle = `rgb(${tone[0]},${tone[1]},${tone[2]})`; g.fillRect(0, i * PX, W, PX);
+      for (let s = 0; s < 14; s++) { // a hint of fibre: faint short horizontal streaks inside the ply
+        const y = i * PX + 1 + ((s * 7919) % (PX - 2)), x = (s * 104729) % W, len = 12 + ((s * 31) % 40);
+        g.fillStyle = s % 2 ? 'rgba(90,60,30,0.12)' : 'rgba(255,240,210,0.14)';
+        g.fillRect(x, y, len, 1); g.fillRect(x - W, y, len, 1);
+      }
+    }
+    edgeTexture = new THREE.CanvasTexture(c);
+    edgeTexture.colorSpace = THREE.SRGBColorSpace;
+    edgeTexture.wrapS = THREE.RepeatWrapping; edgeTexture.wrapT = THREE.ClampToEdgeWrapping;
+    edgePlies = n;
+    applyWood();
+  }
   // lazy + async: the board renders flat first, then picks up the texture when it arrives (same geometry, no layout change)
   new THREE.TextureLoader().load(WOOD_URL, (tex) => {
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -75,6 +116,7 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
     g.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
     if (FACE_MESHES.has(name)) g.setAttribute('uv', new THREE.BufferAttribute(planarUVs(mesh.positions, TILE_MM, grainAlongX), 2));
+    else g.setAttribute('uv', new THREE.BufferAttribute(edgeUVs(mesh.positions, T), 2));
     // shade by DEPTH (height is the position's Y): deeper = darker, like Studio's depth shading
     const col = new Float32Array(mesh.positions.length);
     for (let i = 0; i < mesh.positions.length; i += 3) {
@@ -143,6 +185,7 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
     const t0 = performance.now();
     const rel = buildRelief({ ...getInputs(), cache: reliefCache }); // the cache reuses the work of unchanged cuts / levels
     const T = rel.stockBox.thickness;
+    ensureEdgeTexture(T);
     disposeGroup();
     group = new THREE.Group();
     const grainAlongX = rel.stockBox.maxX - rel.stockBox.minX >= rel.stockBox.maxY - rel.stockBox.minY;
@@ -178,16 +221,17 @@ export async function mountReviewView({ host, info, getInputs, wood = true }) {
   renderer.domElement.addEventListener('dblclick', fit);
 
   function destroy() {
-    ro.disconnect(); controls.dispose();     disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
+    ro.disconnect(); controls.dispose(); disposeGroup(); faceMaterial.dispose(); edgeMaterial.dispose();
     if (labelTexture) labelTexture.dispose();
-        if (woodTexture) woodTexture.dispose();
+    if (woodTexture) woodTexture.dispose();
+    if (edgeTexture) edgeTexture.dispose();
     renderer.dispose(); renderer.domElement.remove();
   }
-  // inspect(): the Wood state and the top mesh's first vertex with its uv (read by the tests)
+  // inspect(): the Wood state, the top mesh's first vertex with its uv, and the edge plies (read by the tests)
   const inspect = () => {
     const t = group && group.children.find((o) => o.name === 'top');
     const p = t && t.geometry.getAttribute('position'), u = t && t.geometry.getAttribute('uv');
-    return { wood: woodOn, mapLoaded: !!woodTexture, mapOn: !!faceMaterial.map, edgeMap: !!edgeMaterial.map, top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null };
+    return { wood: woodOn, mapLoaded: !!woodTexture, mapOn: !!faceMaterial.map, edgeMapOn: !!edgeMaterial.map, plies: edgePlies, top: p && u ? { x: p.getX(0), z: p.getZ(0), u: u.getX(0), v: u.getY(0) } : null };
   };
   return { refresh, reset, top, fit, setWood, inspect, destroy, get wood() { return woodOn; }, get lastBuild() { return lastBuild; } };
 }

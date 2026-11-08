@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { planarUVs, TILE_MM, WOOD_URL } from '../apps/shaper/src/review-view.js';
+import { planarUVs, TILE_MM, WOOD_URL, plyCount, edgeUVs, MIN_PLIES, PLY_TONES } from '../apps/shaper/src/review-view.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const jpg = path.join(root, 'apps/shaper/assets/birch-plywood.jpg');
@@ -20,4 +20,16 @@ const uv = planarUVs(pos);
 assert.deepStrictEqual([...uv], [100 / TILE_MM, 40 / TILE_MM, 600 / TILE_MM, 250 / TILE_MM].map(Math.fround), 'u = x / TILE, v = z / TILE');
 const swapped = planarUVs(pos, TILE_MM, true);
 assert.deepStrictEqual([...swapped], [40 / TILE_MM, 100 / TILE_MM, 250 / TILE_MM, 600 / TILE_MM].map(Math.fround), 'a long-X board swaps the axes so the grain follows X');
+// the procedural plywood edge: ply count from the thickness, v from world height (monotone in y)
+assert.strictEqual(plyCount(19.05), 13, '19.05 mm = 13 plies');
+assert.strictEqual(plyCount(12.7), 8, '12.7 mm = 8 plies');
+assert.strictEqual(plyCount(2), MIN_PLIES, 'a thin board still gets the minimum');
+assert.strictEqual(PLY_TONES.length, 2);
+const ys = [0, -2, -5, -9, -12.7, -19.05];
+const ev = edgeUVs(new Float32Array(ys.flatMap((y) => [10, y, 20])), 19.05);
+const vs = ys.map((_, i) => ev[i * 2 + 1]);
+assert.ok(vs.every((v, i) => i === 0 || v > vs[i - 1]), 'edge v increases monotonically as y falls: ' + vs);
+assert.ok(Math.abs(vs[0]) < 1e-6 && Math.abs(vs[5] - 1) < 1e-6, 'v spans 0 (top face) .. 1 (bottom)');
+const a = edgeUVs(new Float32Array([0, -4, 0]), 19.05), b = edgeUVs(new Float32Array([300, -4, 50]), 19.05);
+assert.strictEqual(a[1], b[1], 'the same height maps to the same v anywhere on the board, so the plies line up across walls');
 console.log('review-wood: ok');

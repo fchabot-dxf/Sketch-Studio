@@ -97,7 +97,9 @@ await (async () => {
     assert.strictEqual(wood.on.mapOn, true, 'Wood on: the face map is set');
     assert.strictEqual(wood.off.mapOn, false, 'Wood off: flat colour');
     assert.strictEqual(wood.back.mapOn, true, 'Wood back on');
-    assert.strictEqual(wood.on.edgeMap, false, 'the side / wall edge never carries the face grain');
+    assert.strictEqual(wood.on.edgeMapOn, true, 'Wood on: the edge ply texture is set');
+    assert.strictEqual(wood.off.edgeMapOn, false, 'Wood off: the edge is flat too');
+    assert.strictEqual(wood.on.plies, 12, 'an 18 mm board = 12 plies: got ' + wood.on.plies);
     assert.ok(Math.abs(wood.on.top.v - wood.on.top.x / 400) < 1e-4 && Math.abs(wood.on.top.u - wood.on.top.z / 400) < 1e-4, 'top uv = x/TILE, z/TILE (swapped for a long-X board): ' + JSON.stringify(wood.on.top));
 
     await evalJs(`localStorage.setItem('shaper-mode', 'simexport')`); // the stored tab name migrates

@@ -68,9 +68,6 @@ body * { z-index: auto; }
 .tool-dropdown-item.active { background:#3B82F6; color:white; }
 .tool-btn .dropdown-indicator { position:absolute; bottom:2px; right:2px; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:4px solid #94a3b8; }
 .tool-btn.active .dropdown-indicator { border-top-color:white; }
-.dim-input { position:absolute; background:white; border:2px solid var(--fusion-orange); border-radius:4px; padding:2px 4px; font-weight:bold; font-size:11px; outline:none; text-align:center; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
-@media (max-width:640px){ .dim-input { padding:4px 6px; font-size:14px; min-width:70px; min-height:36px; -webkit-appearance:none; appearance:none; } .dim-input::-webkit-outer-spin-button, .dim-input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; } .dim-input[type=number] { -moz-appearance:textfield; appearance:textfield; } }
-.dim-input.hidden { display:none; }
 
 .tool-dropdown { position:relative; z-index:inherit; }
 .tool-dropdown .tool-dropdown-item { padding:8px 12px; display:flex; align-items:center; }

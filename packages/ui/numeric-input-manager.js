@@ -13,6 +13,103 @@ import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 // so a bare number round-trips byte-identically to the old parseFloat/toFixed(1) until the U3 toggle changes it.
 const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
+export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
+
+const NUMERIC_INPUT_CSS = `
+.dim-input {
+    position: absolute;
+    box-sizing: border-box;
+    background: white;
+    color: #000000;
+    border: 2px solid var(--fusion-orange, #EA580C);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-weight: bold;
+    font-size: 11px;
+    outline: none;
+    text-align: center;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+@media (max-width: 640px) {
+    .dim-input {
+        padding: 4px 6px;
+        font-size: 14px;
+        min-width: 70px;
+        min-height: 36px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    .dim-input::-webkit-outer-spin-button,
+    .dim-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .dim-input[type=number] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+}
+.dim-input.hidden { display: none; }
+.sk-dual-input {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    background: white;
+    color: #000000;
+    border: 2px solid #3B82F6;
+    border-radius: 6px;
+    padding: 6px;
+    gap: 6px;
+    align-items: center;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.sk-dual-input.hidden { display: none; }
+.sk-dual-input input {
+    width: 60px;
+    box-sizing: border-box;
+    background: white;
+    color: #000000;
+    text-align: center;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px;
+    font-size: 12px;
+}
+.sk-dual-input-sep {
+    color: #888;
+    font-weight: bold;
+}
+`;
+
+export function ensureNumericInputStyles() {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    if (!document.head || typeof document.head.appendChild !== 'function') return;
+    if (typeof document.getElementById === 'function' && document.getElementById(NUMERIC_INPUT_STYLE_ID)) return;
+    if (typeof document.head.querySelector === 'function' && document.head.querySelector(`#${NUMERIC_INPUT_STYLE_ID}`)) return;
+    const s = document.createElement('style');
+    s.id = NUMERIC_INPUT_STYLE_ID;
+    s.textContent = NUMERIC_INPUT_CSS;
+    document.head.appendChild(s);
+}
+
+export function hideNumericInputEl(el) {
+    if (!el) return;
+    if (el.classList && typeof el.classList.add === 'function') el.classList.add('hidden');
+    if (el.style) el.style.display = 'none';
+}
+
+export function showNumericInputEl(el, display = '') {
+    if (!el) return;
+    if (el.classList && typeof el.classList.remove === 'function') el.classList.remove('hidden');
+    if (el.style) el.style.display = display;
+}
+
+// Inject shared numeric input styles immediately in browser environments so static/created .dim-input.hidden
+// elements are hidden by #ui itself on first paint without relying on host CSS.
+ensureNumericInputStyles();
+
 let uiState = {
     active: false,
     mode: null, // 'live-single', 'live-dual', 'edit'
@@ -41,6 +138,7 @@ export function setupNumericInput(svg, state) {
     }
 
     if (uiState.container) return; // Already setup
+    ensureNumericInputStyles();
     uiState.svg = svg;
     uiState.appState = state;
 
@@ -51,11 +149,14 @@ export function setupNumericInput(svg, state) {
             existingSingle = document.createElement('input');
             existingSingle.id = 'dimInput';
             existingSingle.className = 'dim-input hidden';
+            hideNumericInputEl(existingSingle);
             document.body.appendChild(existingSingle);
         } else {
             // Fallback fake element for non-DOM test shims
-            existingSingle = { id: 'dimInput', classList: { add: () => {}, remove: () => {}, contains: () => false }, style: {}, value: '', focus: () => {}, select: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+            existingSingle = { id: 'dimInput', classList: { add: () => {}, remove: () => {}, contains: () => false }, style: { display: 'none' }, value: '', focus: () => {}, select: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
         }
+    } else {
+        hideNumericInputEl(existingSingle);
     }
     uiState.singleInput = existingSingle;
 
@@ -64,24 +165,18 @@ export function setupNumericInput(svg, state) {
     if (typeof document.createElement === 'function') {
         dualDiv = document.createElement('div');
         dualDiv.id = 'dualInput';
-        dualDiv.style.cssText = `
-            position: absolute; display: none; background: white; 
-            border: 2px solid #3B82F6; border-radius: 6px; padding: 6px; 
-            gap: 6px; align-items: center; z-index: 10000; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        `;
+        dualDiv.className = 'sk-dual-input hidden';
+        hideNumericInputEl(dualDiv);
         
         inputW = document.createElement('input');
         inputW.placeholder = 'W';
-        inputW.style.cssText = 'width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px; padding: 4px; font-size: 12px;';
         
         sep = document.createElement('span');
         sep.innerText = '×';
-        sep.style.cssText = 'color: #888; font-weight: bold;';
+        sep.className = 'sk-dual-input-sep';
         
         inputH = document.createElement('input');
         inputH.placeholder = 'H';
-        inputH.style.cssText = 'width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 4px; padding: 4px; font-size: 12px;';
 
         dualDiv.appendChild(inputW);
         dualDiv.appendChild(sep);
@@ -89,7 +184,7 @@ export function setupNumericInput(svg, state) {
         document.body.appendChild(dualDiv);
     } else {
         // Fallback fake elements
-        dualDiv = { id: 'dualInput', style: { display: 'none', left: 0, top: 0 }, appendChild: () => {} };
+        dualDiv = { id: 'dualInput', classList: { add: () => {}, remove: () => {}, contains: () => false }, style: { display: 'none', left: 0, top: 0 }, appendChild: () => {} };
         inputW = { placeholder: 'W', value: '', style: {}, focus: () => {}, select: () => {}, addEventListener: () => {} };
         sep = { innerText: '×', style: {} };
         inputH = { placeholder: 'H', value: '', style: {}, focus: () => {}, select: () => {}, addEventListener: () => {} };
@@ -145,7 +240,7 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     uiState.singleInput.style.left = `${x}px`;
     uiState.singleInput.style.top = `${y}px`;
     uiState.singleInput.style.transform = '';
-    uiState.singleInput.classList.remove('hidden');
+    showNumericInputEl(uiState.singleInput);
     
     // Value
     uiState.singleInput.value = initialKey || (typeof value === 'number' ? value.toFixed(1) : '');
@@ -160,7 +255,7 @@ export function showDualInput(x, y, w, h) {
 
     uiState.dualContainer.style.left = `${x}px`;
     uiState.dualContainer.style.top = `${y}px`;
-    uiState.dualContainer.style.display = 'flex';
+    showNumericInputEl(uiState.dualContainer, 'flex');
 
     uiState.dualInputW.value = w.toFixed(1);
     uiState.dualInputH.value = h.toFixed(1);
@@ -230,7 +325,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.singleInput.style.left = `${pos.x}px`;
     uiState.singleInput.style.top = `${pos.y}px`;
     uiState.singleInput.style.transform = 'translate(-50%, -50%)';
-    uiState.singleInput.classList.remove('hidden');
+    showNumericInputEl(uiState.singleInput);
 
     let prefillValue = constraint.value;
     if (constraint.dimMode === 'horizontal' && constraint.joints && constraint.joints.length >= 2) {
@@ -364,8 +459,11 @@ function resetState() {
     uiState.target = null;
     uiState.field = null;
     
-    if (uiState.singleInput) uiState.singleInput.classList.add('hidden');
-    if (uiState.dualContainer) uiState.dualContainer.style.display = 'none';
+    if (uiState.singleInput) {
+        if (uiState.singleInput.style) uiState.singleInput.style.transform = '';
+        hideNumericInputEl(uiState.singleInput);
+    }
+    if (uiState.dualContainer) hideNumericInputEl(uiState.dualContainer);
     if (uiState.rafId) { cancelAnimationFrame(uiState.rafId); uiState.rafId = null; }
 }
 

@@ -259,32 +259,6 @@
         .tool-btn.active .dropdown-indicator {
             border-top-color: white;
         }
-        
-        .dim-input { 
-            position: absolute; background: white; border: 2px solid var(--fusion-orange);
-            border-radius: 4px; padding: 2px 4px; font-weight: bold; font-size: 11px;
-            outline: none; text-align: center; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        @media (max-width: 640px) {
-            .dim-input {
-                padding: 4px 6px;
-                font-size: 14px;
-                min-width: 70px;
-                min-height: 36px;
-                -webkit-appearance: none;
-                appearance: none;
-            }
-            .dim-input::-webkit-outer-spin-button,
-            .dim-input::-webkit-inner-spin-button {
-                -webkit-appearance: none;
-                margin: 0;
-            }
-            .dim-input[type=number] {
-                -moz-appearance: textfield;
-                appearance: textfield;
-            }
-        }
-        .dim-input.hidden { display: none; }
 
         /* Arc/Dropdown z-index fixes */
         /* Standard dropdown container */
@@ -414,7 +388,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
                     <g id="mag-content" mask="url(#mag-mask)"></g>
                 </g>
             </svg>
-            <input type="number" id="dimInput" class="dim-input hidden" step="0.1" inputmode="decimal" autocomplete="off" />
+            <input type="number" id="dimInput" class="dim-input hidden" style="display:none" step="0.1" inputmode="decimal" autocomplete="off" />
 
             <!-- Floating Construct toggle (moved from footer): positioned over canvas for quick access -->
             <div class="absolute right-4 top-4 z-40 flex gap-2">

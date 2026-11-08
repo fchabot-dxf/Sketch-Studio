@@ -171,6 +171,9 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - OWNER DECISION: "follow each except shape structure for now". TASK 456 (queued, first free seat): attribute
           formats exactly as Studio (depth "0.100 in"; offset always, "0in" / "0.063 in"; toolDia always, "0.125in";
           attribute order cutType, depth, offset, bit). Keep our flat elements and <circle>. mm format unverified.
+          Third Studio file: toolDia "0.060 in" (space) next to "0.125in", so the spacing follows typed-vs-preset and the
+          Origin parses both. 456 uses "X.XXX in" for every non-zero value and "0in" for a zero offset. Still no On
+          Line sample. Studio also groups several paths in one <g> (structure; out of scope).
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would
           settle the pocket/on-line encoding and the On Line offset question.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on

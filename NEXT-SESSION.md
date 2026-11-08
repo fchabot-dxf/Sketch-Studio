@@ -296,6 +296,14 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - CC-B on 465 (PP minors batch);
   - CC-C on 464 (3D V-carve + cutter shapes).
   - Copilot: paused while the test repo sets it up.
+- DONE: 463 6165bc2 (Shaper cut-plan undo via the generic hostSnapshot hook). CC-A now on 466 (history depth was 5).
+- COPILOT SEATS, NATIVE (testbed fred-skills 888853d, copilot/README.md, owner-approved):
+  - the owner opens a seat in VS Code's AGENTS WINDOW (Ctrl+Shift+P > Open Agents Window > New Session in
+    Sketch-Studio > type `worker`);
+  - the advisor uses copilot_seat.py: `seats D:/APPS/Sketch-Studio`, `task <session> <file> --base main`,
+    `wait <chat>`, `say <chat> <file>`. VS Code makes `<repo>.worktrees/<name>` on branch agents/<name>, autopilot;
+  - merge agents/<name> as usual; clean worktrees via the Agents window;
+  - do NOT use `code chat` any more.
 - DONE 456 merged af87f9b (Studio encoding). 455 (Studio look, consolidated spec) DISPATCHED to CC-A.
   - Amended with the owner's 4 card close-ups:
     - left popovers with a blue #2C65FF border; selected/active #182E6D;

@@ -85,6 +85,7 @@ export function setupDimensionTool(svg, appState) {
 export function resetDimensionState(state) {
     const pc = (state && state.placingConstraint) || dimensionState.placingConstraint;
     if (pc && pc.__placing) {
+        if (pc.__newlyPlaced === true && typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
         if (state && Array.isArray(state.constraints)) {
             const idx = state.constraints.indexOf(pc);
             if (idx !== -1) state.constraints.splice(idx, 1);
@@ -141,6 +142,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
                 return true;
             }
 
+            beginDimUndo(state);
             const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
                 joints: [shape.joints[0], shape.joints[1]],
                 value: getDist(j1, j2),
@@ -148,7 +150,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
                 isDriven: false
             }, { autoSolve: false });
             const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-            if (!c) return false;
+            if (!c) { endDimUndo(state); return false; }
 
             const w = placePos || { x: (j1.x + j2.x) / 2, y: (j1.y + j2.y) / 2 };
 
@@ -171,6 +173,8 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             if (state.selectedShapes) state.selectedShapes.clear();
             if (state.selectedJoints) state.selectedJoints.clear();
             if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
+            endDimUndo(state);
+            c.__birthHistoryLength = state.history ? state.history.length : null;
             return true;
         }
     }
@@ -189,6 +193,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             return true;
         }
 
+        beginDimUndo(state);
         const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
             joints: [selectedJoints[0], selectedJoints[1]],
             value: getDist(j1, j2),
@@ -196,7 +201,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
             isDriven: false
         }, { autoSolve: false });
         const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-        if (!c) return false;
+        if (!c) { endDimUndo(state); return false; }
 
         const w = placePos || { x: (j1.x + j2.x) / 2, y: (j1.y + j2.y) / 2 };
 
@@ -219,6 +224,8 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         if (state.selectedShapes) state.selectedShapes.clear();
         if (state.selectedJoints) state.selectedJoints.clear();
         if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
+        endDimUndo(state);
+        c.__birthHistoryLength = state.history ? state.history.length : null;
         return true;
     }
 

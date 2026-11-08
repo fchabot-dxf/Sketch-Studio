@@ -219,6 +219,8 @@
     // Fix j1 at origin so j2 moves when dimension changes
     state.joints.get(j1).fixed = true;
 
+    const historyBefore = state.history.length;
+
     state.selectedShapes.add(lineShape.id);
     startDimensionFromSelection(svg, state);
     const c = getPlacingConstraint(state);
@@ -228,8 +230,6 @@
 
     // Change input value to 150
     dimInput.value = '150';
-
-    const historyBefore = state.history.length;
 
     // Simulate Enter key on dimInput
     dimInput.dispatchEvent({ type: 'keydown', key: 'Enter', stopPropagation: () => {} });
@@ -249,6 +249,7 @@
     // Undo should restore previous state cleanly
     state.undo();
     assert(state.history.length === historyBefore, 'Undo restored history length');
+    assert(!state.constraints.some(cn => cn && cn.type === CONSTRAINT_TYPES.DISTANCE), 'Undo removed dimension');
   }
 
   // ─────────────────────────────────────────────────────────────────────────

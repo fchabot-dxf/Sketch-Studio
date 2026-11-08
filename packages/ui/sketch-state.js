@@ -108,6 +108,7 @@ export function createSketchState(engine, view) {
       const undoBtn = (typeof document !== 'undefined') ? document.getElementById('btn-undo') : null;
       if(undoBtn) undoBtn.disabled = false;
     },
+    discardSnapshotAt(len) { if (this.history.length !== len) return false; this.history.pop(); return true; },
     // Normal save - during an active undo group we still create segment snapshots (they will be compressed on commit)
     saveState: function() {
       if(this._undoGroupActive){

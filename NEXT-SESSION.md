@@ -1971,6 +1971,15 @@ Append a WORK-LOG entry (the `coreShapeToPolyline` adapter + oracle + the "Bake 
     only; TOOLPATHS are a separate declared layer (profiles + per-profile cut params) over that geometry; the Shaper SVG
     is DERIVED at export from both. Never make the user edit geometry (merge, recolour, duplicate shapes) just to
     express a toolpath intent.
+- OWNER RULING (2026-11-07, screenshot of a lone fillet arc picked "On line"): "in Prepare, selection must be a full
+  loop, it can't be a single segment".
+  - Today, prepare-view.js:173-177 resolveTarget picks the nearest EDGE first.
+  - Advisor reading, to confirm with the owner:
+    - clicking a loop's ink picks that loop's profile;
+    - a segment of a closed loop is never a target;
+    - an OPEN chain (no loop) is picked as the whole chain, never one of its segments;
+    - old `edge:` cut records whose edge sits in a closed loop are dropped on load, with one status line.
+  - This amends 432 (its "edge picking keeps working" line is withdrawn).
 - Slices: 431 = profile model + resolver + Combine/Uncombine + persistence + canvas tint (additive); 432 = Select picks
   profiles in Prepare/Vcarve, and pockets/vcarve switch off group-as-holes, which is deleted in the same commit;
   433 = cut-type semantics on profiles (an exterior cut = holes as interior first, then the outer).

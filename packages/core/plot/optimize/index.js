@@ -9,12 +9,14 @@
 import { linemerge } from "./linemerge.js";
 import { linesort } from "./linesort.js";
 import { linesimplify } from "./linesimplify.js";
+import { TOLERANCE_FIELD } from "../gcode/params.js";
+import { coerceParam } from "../params.js";
 
 export { linemerge, linesort, linesimplify };
 
 export function optimize(polylines, { mergeTol = 0.05, simplifyTol = 0.1 } = {}) {
     const merged = linemerge(polylines, mergeTol);
     const sorted = linesort(merged);
-    const simplified = linesimplify(sorted, simplifyTol);
+    const simplified = linesimplify(sorted, coerceParam(TOLERANCE_FIELD, simplifyTol)); // TASK 453: 0 / negative / NaN tolerance never reaches the simplifier
     return simplified;
 }

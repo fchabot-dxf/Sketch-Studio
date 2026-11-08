@@ -94,7 +94,7 @@ async function fetchPreview(hashAtRequestTime) {
         const layers = [];
         const opts = {
             mergeTol: 0.05,
-            simplifyTol: state.settings.tolerance_mm || 0.1,
+            simplifyTol: state.settings.tolerance_mm,
         };
         // Built in draw order (panel top→bottom) so overlays append earlier
         // ops first (underneath) and later ops last (on top) — the sim then

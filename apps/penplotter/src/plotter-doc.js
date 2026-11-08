@@ -7,6 +7,7 @@
 // Plain data only (JSON-safe); Map/Set become arrays. #core stays pure — this file is plotter-side.
 
 import { state, reseedUid } from "./state.js";
+import { sanitizeSettings, sanitizeDoc, sanitizePens, sanitizeToolpaths } from "./fields.js"; // TASK 453: declared ranges
 
 const DOC_VERSION = 1;
 
@@ -46,7 +47,11 @@ export function capturePlotterDoc() {
 /** Restore a persisted plotter document. Missing parts keep their defaults (an old buffer carries none of this). */
 export function applyPlotterDoc(d) {
     applyHistoryState(d);
-    state.settings = { ...state.settings, ...(d.settings || {}) };
+    // TASK 453: an old saved document may hold anything (a 0 spacing, an empty feed, a 99999 mm paper): load it clamped.
+    state.doc = sanitizeDoc(state.doc);
+    state.plotColors = sanitizePens(state.plotColors);
+    state.toolpaths = sanitizeToolpaths(state.toolpaths);
+    state.settings = sanitizeSettings({ ...state.settings, ...(d.settings || {}) });
     state.shapeStyles = new Map(d.shapeStyles || []);
     state.staticShapeIds = new Set(d.staticShapeIds || []);
     // New ids come from a module counter that restarts at 1 on every page load: move it past every restored id.

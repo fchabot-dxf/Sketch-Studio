@@ -4,6 +4,8 @@
 export { shapeToPolyline } from "./polylines/index.js";
 export { linemerge, linesort, linesimplify, optimize } from "./optimize/index.js";
 export { renderGcode } from "./gcode/render.js";
+export { coerceParam, resolveParams, sanitizeParams } from "./params.js";   // TASK 453: the one validate helper
+export { MACHINE_FIELDS, TOLERANCE_FIELD } from "./gcode/params.js";        // TASK 453: declared machine fields
 export { DDCS } from "./gcode/profiles.js";   // PP-2a: the declared machine profile (injection-ready for PP-4)
 export { buildZip } from "./zip/index.js";
 export {

@@ -2,10 +2,11 @@
 // Defaults come from state.js — no server round-trip needed anymore.
 
 import { state } from "./state.js";
-import { $ } from "./dom.js";
+import { $, toast } from "./dom.js";
 import { fitViewport, applyViewport } from "./viewport.js";
 import { renderArt as render } from "./render-art.js"; // PP-6: Draw's trimmed renderer
 import { recalcPreview } from "./preview.js";
+import { DOC_FIELD, SETTINGS_FIELDS, keepNumber, keepSetting } from "./fields.js"; // TASK 453: declared ranges + the one validate helper
 
 const SETTINGS_MAP = {
     penUpZ:   "pen_up_z",
@@ -61,8 +62,8 @@ export function syncDocFields() {
     const inch = inInches();
     for (const el of [w, h]) {
         el.step = inch ? "0.05" : "1";
-        el.min  = inch ? "0.5"  : "10";
-        el.max  = inch ? "80"   : "2000";
+        el.min  = roundDisplay(toDisplay(DOC_FIELD.min)); // TASK 453: the declared mm range, shown in the current unit
+        el.max  = roundDisplay(toDisplay(DOC_FIELD.max));
     }
     w.value = roundDisplay(toDisplay(state.doc.w));
     h.value = roundDisplay(toDisplay(state.doc.h));
@@ -79,9 +80,9 @@ export function syncDocFields() {
  *  (The #docW/#docH handlers deliberately do NOT route through here — the input IS their source of truth, so
  *  syncDocFields would rewrite the value the user just typed.) */
 export function setDocSize(w, h) {
-    if (!(w > 0) || !(h > 0)) return false;
-    state.doc.w = Math.round(w * 100) / 100;
-    state.doc.h = Math.round(h * 100) / 100;
+    if (!Number.isFinite(+w) || !Number.isFinite(+h)) return false;
+    state.doc.w = Math.round(keepNumber(DOC_FIELD, w, state.doc.w) * 100) / 100; // TASK 453: clamped to the declared range
+    state.doc.h = Math.round(keepNumber(DOC_FIELD, h, state.doc.h) * 100) / 100;
     syncDocFields();   // the Document dialog's W/H fields
     fitViewport();     // shared view -> the new paper (+ the #docInfo readout, via applyViewport)
     render();
@@ -136,13 +137,15 @@ export function installDocModal() {
     wireOpener("designDocBtn", "docModal", openDoc);
     wireModalControls("docModal", { closeId: "docModalClose", doneId: "docDone", cancelId: "docCancel", revert: revertDoc });
 
+    // TASK 453: a typed size is clamped to DOC_FIELD (empty / text keeps the previous size) and the box shows the KEPT value.
+    const commitDoc = (key, el) => {
+        const typed = el.value === "" ? "" : fromDisplay(+el.value);
+        state.doc[key] = Math.round(keepNumber(DOC_FIELD, typed, state.doc[key]) * 100) / 100;
+        syncDocFields(); fitViewport(); render();
+    };
     const dw = $("#docW"), dh = $("#docH");
-    if (dw) dw.addEventListener("change", (e) => {
-        state.doc.w = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
-    });
-    if (dh) dh.addEventListener("change", (e) => {
-        state.doc.h = Math.round(fromDisplay(+e.target.value) * 100) / 100; fitViewport(); render();
-    });
+    if (dw) dw.addEventListener("change", (e) => commitDoc("w", e.target));
+    if (dh) dh.addEventListener("change", (e) => commitDoc("h", e.target));
     syncDocFields();
 }
 
@@ -167,7 +170,15 @@ export function installSettingsPanel() {
     }
     for (const [domId, key] of Object.entries(SETTINGS_MAP)) {
         const el = $("#" + domId);
-        if (el) el.addEventListener("change", (e) => { state.settings[key] = +e.target.value; });
+        if (el) {
+            el.min = SETTINGS_FIELDS[key].min; el.max = SETTINGS_FIELDS[key].max; // TASK 453: the declared range
+            el.addEventListener("change", (e) => {
+                const { value, note } = keepSetting(state.settings, key, e.target.value); // TASK 453: clamp / reject, keep a valid value
+                state.settings[key] = value;
+                e.target.value = value;                                                  // show what was actually kept
+                if (note) toast(note, true);
+            });
+        }
     }
 }
 

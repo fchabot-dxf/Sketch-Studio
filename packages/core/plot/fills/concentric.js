@@ -1,7 +1,7 @@
 // Nested copies of the shape, shrinking inward by `spacing` each step. rect + ellipse get exact closed-form
 // insets; polyline/path (possibly concave) delegate to Clipper offsetRings (#core/plot/clip.js) — clean mitred
 // rings that handle concavity and split when an arm pinches off. Ported (PP-2b-2), pure.
-import { ELLIPSE_SEGMENTS, makePolylineShape, closedPolygonFor } from "./utils.js";
+import { ELLIPSE_SEGMENTS, makePolylineShape, closedPolygonFor, SPACING, coerceParam } from "./utils.js";
 import { offsetRings } from "../clip.js";
 
 const MAX_ITERATIONS = 500;
@@ -9,7 +9,7 @@ const MAX_ITERATIONS = 500;
 // `offset` sets where the first ring sits: ring i is inset by offset + i*spacing, from i = 0. offset 0 = first ring
 // ON the outline; negative = start outside (bleed); positive = inset.
 export function generate(shape, { spacing = 2, offset = 0 } = {}) {
-    spacing = Math.max(0.1, spacing);
+    spacing = coerceParam(SPACING, spacing); // TASK 453: the one declared spacing rule (was an ad-hoc Math.max)
 
     if (shape.type === "rect") {
         const out = [];

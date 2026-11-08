@@ -6,10 +6,12 @@
 import * as normal from "./normal.js";
 import * as dashed from "./dashed.js";
 import * as jagged from "./jagged.js";
+import { DASH_LENGTH, DASH_GAP } from "./utils.js";
+import { resolveParams as resolveDeclared } from "../params.js";
 
 // UNIVERSAL param (like fills' offset): every style redraws its outline `passes` times. Only passes is clamped
 // (min/max) — matching the original expandLayerOutline, which clamped passes and left the style params unbounded.
-const PASSES = { key: "passes", label: "Passes", type: "number", default: 1, min: 1, max: 10, step: 1 };
+const PASSES = { key: "passes", label: "Passes", type: "number", default: 1, min: 1, max: 10, step: 1, integer: true };
 
 export const OUTLINE_STYLES = [
   { id: "normal", label: "Normal", params: [PASSES], apply: normal.apply },
@@ -18,8 +20,8 @@ export const OUTLINE_STYLES = [
     label: "Dashed",
     params: [
       PASSES,
-      { key: "dash_length", label: "Dash length", type: "number", default: 2, unit: "mm", step: 0.1 },
-      { key: "dash_gap",    label: "Dash gap",    type: "number", default: 1, unit: "mm", step: 0.1 },
+      DASH_LENGTH,
+      DASH_GAP,
     ],
     apply: dashed.apply,
   },
@@ -28,8 +30,8 @@ export const OUTLINE_STYLES = [
     label: "Jagged",
     params: [
       PASSES,
-      { key: "amplitude", label: "Amplitude", type: "number", default: 0.8, unit: "mm", step: 0.1 },
-      { key: "frequency", label: "Frequency", type: "number", default: 0.7, unit: "per mm", step: 0.1 },
+      { key: "amplitude", label: "Amplitude", type: "number", default: 0.8, unit: "mm", min: 0, max: 20, step: 0.1 },
+      { key: "frequency", label: "Frequency", type: "number", default: 0.7, unit: "per mm", min: 0.05, max: 20, step: 0.1 },
     ],
     apply: jagged.apply,
   },
@@ -38,23 +40,9 @@ export const OUTLINE_STYLES = [
 const BY_ID = new Map(OUTLINE_STYLES.map((s) => [s.id, s]));
 export function outlineStyle(id) { return BY_ID.get(id) || null; }
 
-// Declared defaults merged with the layer's outline values (numeric-coerced; a param's min/max floors/caps it).
-// Mirrors fills' resolveParams. Only passes carries min/max, so only it is clamped (as before).
-function resolveParams(entry, outline) {
-  const params = {};
-  for (const p of entry.params) {
-    let v = p.default;
-    const raw = outline ? outline[p.key] : undefined;
-    if (raw !== undefined && raw !== null && raw !== "") {
-      const n = +raw;
-      if (Number.isFinite(n)) v = n;
-    }
-    if (p.min !== undefined) v = Math.max(p.min, v);
-    if (p.max !== undefined) v = Math.min(p.max, v);
-    params[p.key] = v;
-  }
-  return params;
-}
+// The entry's declared params resolved against the layer's outline values (TASK 453: ../params.js; every declared param
+// carries its range, passes is also an integer).
+const resolveParams = (entry, outline) => resolveDeclared(entry.params, outline);
 
 // Apply the layer's outline style + multi-pass to its shapes. Returns the replacement list (does NOT mutate).
 export function expandLayerOutline(shapes, outline) {

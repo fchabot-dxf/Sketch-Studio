@@ -22,6 +22,22 @@ runs it. They apply when the advisor gives you a task; the task's own instructio
 - A screenshot must show the feature at a legible size (zoom in or crop).
 - Quote evidence verbatim from the file or command output, never from memory.
 - Re-verify EVERY claim in your REPORT with a command run AFTER the change, and quote its output next to the claim: a removal → `git ls-tree -r --name-only <branch>` at the pushed head; a screenshot → re-open it and describe what it actually shows. A claim you didn't re-check goes under `uncertain:`.
+- Before/after evidence = two DIFFERENT captures; put both files' md5 (`Get-FileHash -Algorithm MD5`) in the REPORT.
+
+## Fixing
+- Fix the cause in ONE place. No compensating overrides or symptom floors, and no copies of a fix in two places;
+  if you think one is needed, stop and ask.
+- No defensive extras the task didn't ask for: no hidden globals (`window.__x`), no silent `catch {}`, no
+  environment-dependent second code path (tests and the app must run the same code).
+- Shared files (`packages/core`, `packages/ui`): change only what the task names; a feature must not appear in hosts
+  (SketchStudio, Shaper, Pen Plotter, Trace) that don't use it.
+- After each removal, grep the callers of every function you touched; list in the REPORT any whose last non-test
+  caller you removed.
+- List every behaviour change for EXISTING users of the code. If there is any the task didn't ask for, STOP and ask.
+
+## Waiting
+- Never end a turn "waiting for" something. Run commands in the foreground; if nothing is running, carry on or
+  report.
 
 ## Committing
 - Commit BY PATH (`git commit <paths> -m ...`), never `git add -A` / `git add .`; files someone else staged stay out.

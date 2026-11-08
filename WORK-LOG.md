@@ -13176,3 +13176,14 @@ Uncovered: no real Google or browser run (by design); the keep-alive/popup code 
 
 ## TURN 477 (close fix)
 Helper close(): wait up to 10s for browser exit before rmSync; rmSync retried; a final failure is warned, not thrown (leftover temp dir is not a test failure). Merged latest origin/main; gate x2: files=205 pass=205 fail=0, SMOKE 12/12, HEADLESS-LEFT 0.
+## TURN 486
+- Bug 1 (fillet flip on 23.6 -> 17): NOT reproduced (trapezoid + 2 R0.8 fillets, ~60 variants, tests/fillet-distance-edit-no-flip.test.js passes; left untracked). Needs the owner's sketch.
+- Bug 2 (corner-to-corner distance forced Driven, ERR-DRIVEN-02): showEditInput decided from per-joint DOF/fixedJoints (fillet virtual sharps read DOF 0). Now decides by engine.isDistanceRedundant (solver rank test, constraint lifted out so it is not compared with itself). Test tests/fillet-corner-dimension-drives.test.js fails on old code ('must be DRIVING'), passes now. Gate 207/207, SMOKE 12/12.
+- Behaviour change: any 2-joint distance edit now follows the rank test instead of 'both joints DOF 0'; a determined pair is still driven (asserted).
+
+## TURN 486 (owner fixture)
+- Fixture tests/fixtures/owner-trapezoid.document.json; test tests/owner-trapezoid-fillet.test.js.
+- Driven bug root cause: engine.js _rowsRaiseRank built its basis with an ABSOLUTE 1e-9 tolerance, so solve-noise rows filled the basis (34 of n=34) and every candidate looked redundant (resid 8e-7). Basis now uses the same RELATIVE tolerance as the candidate. Creation path (ConstraintManager) now makes the top-width dim DRIVING (solves to 400).
+- Flip root cause: commitDimensionEdit solved one big jump (431.8 -> 300) and landed on the mirrored tangent branch. Now steps the value (<=10% of old per step, max 40) and solves at each; fillet radius edits keep the analytic seed.
+- The saved owner doc already has the bottom-right arc flipped (centre y=+20 below the bottom line); the test re-seeds fillets first.
+- Behaviour change: non-radius dimension edits solve in several steps; rank-redundancy now rarely false-positive (fewer auto-Driven). Gate 207/207, SMOKE 12/12.

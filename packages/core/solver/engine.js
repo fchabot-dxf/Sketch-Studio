@@ -476,9 +476,12 @@ export class NewtonSolver {
     const basis = [];
     for (const row of basisRows) {
       const v = Float64Array.from(row);
+      const n0 = Math.sqrt(dot(v, v));
       for (const b of basis) { const d = dot(v, b); for (let i = 0; i < n; ++i) v[i] -= d * b[i]; }
       const nrm = Math.sqrt(dot(v, v));
-      if (nrm > ABS) { for (let i = 0; i < n; ++i) v[i] /= nrm; basis.push(v); }
+      // Relative like the candidate test below: a row that is dependent up to solve-tolerance noise must NOT count as a
+      // new basis direction, or the basis spans all of R^n and every candidate looks redundant.
+      if (nrm > ABS && nrm > REL * n0) { for (let i = 0; i < n; ++i) v[i] /= nrm; basis.push(v); }
     }
     for (const row of candRows) {
       const v = Float64Array.from(row);
@@ -829,3 +832,4 @@ export class NewtonSolver {
 export function createNewtonSolver(joints, constraints, shapes, config) {
   return new NewtonSolver(joints, constraints, shapes, config);
 }
+

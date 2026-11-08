@@ -81,8 +81,8 @@ function colorAttrs(enc) {
   return s;
 }
 // attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0) / toolDia (if >0) unit-suffixed, and ONLY the
-// params the INJECTED encoding declares in `params` (TASK 450b: On line has no cutOffset; Guide has none of the three, so a
-// value stored on an old record is never written). An encoding without `params` (the stub encodings in tests) writes all.
+// params the INJECTED encoding declares in `params` (TASK 450b: On line has no cutOffset, so a value stored on an old On line
+// record is never written; Guide keeps all three). An encoding without `params` (the stub encodings in tests) writes all.
 function shaperAttrs(rec, enc, docUnit) {
   let s = ` shaper:cutType="${enc.cutType}"`;
   const has = (k) => !Array.isArray(enc.params) || enc.params.includes(k);

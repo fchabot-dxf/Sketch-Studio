@@ -11870,3 +11870,50 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+## TURN 432 — Profile selection in Prepare, holes from profile, group-as-holes deleted, open chain picking & export (TASK 432) — branch agy1
+
+- **did:**
+  1. **Open chain finding & path generation (`packages/core/loop-finder.js`, `packages/core/loop-geometry.js`)**:
+     - Added `export function findOpenChains(state, loops)` in `loop-finder.js`: groups connected shapes (via shared joints) not in any closed loop's `edges` into `{ id: 'chain_' + ids.sort().join('-'), shapes, edges }`.
+     - Added `export function chainToPathD(chain, state)` directly after `loopToPathD` in `loop-geometry.js`: walks connected chain shapes end-to-end, emits `M x y` then `L x y` for lines and re-uses existing `arcSeg` for arcs (no `Z`).
+  2. **Prepare picking & multi-select (`apps/shaper/src/prepare-view.js`, `apps/shaper/src/shaper.js`)**:
+     - INK picking finds nearest shape within tolerance: if in loop edges, selects smallest-area loop -> `resolveProfileForLoop`; if in open chain, selects `{ kind: 'chain', id: chain.id }`.
+     - INTERIOR picking resolves via `resolveProfileAtPoint(worldPt, state, loops, loopPolys)`.
+     - Profile target mapping: derived profile -> `{ kind: 'loop', id: profile.outer }`; combined profile -> `{ kind: 'profile', id: profile.id }`. Never returns `kind: 'edge'`.
+     - Highlight markup: loop -> `<path fill-rule="evenodd">` (outer + direct holes open); profile -> `resolveProfileViews.get(id).d`; chain -> `edgeStrokeMarkup` for member shapes.
+     - Plain click clears and selects single target; Shift+click (`e.shiftKey`) toggles target in selection without clearing.
+     - `applyCutTypeToSelected` and `setFieldOnSelected` apply across all selected targets.
+  3. **Cut plan migration (`apps/shaper/src/cut-plan.js`, `apps/shaper/src/main.js`)**:
+     - Added `migrateEdgeRecords(loops, chains, plan = CUT_PLAN)`: drops obsolete closed loop edge cuts, moves open chain edge cuts to `chain:<id>`.
+     - Prepare mount calls `migrateEdgeRecords` and surfaces a toast notice via `groupStatus` when `dropped + moved > 0`.
+  4. **Shaper export & group-as-holes elimination (`packages/core/shaper-export.js`, `packages/core/group-model.js`)**:
+     - Pocket islands & vcarve holes resolve from profile (`resolveProfileForLoop.inners`).
+     - Deleted `absorbed` set; nested loops only exported when assigned their own cuts.
+     - Export handles `kind: 'profile'` (evenodd `d` for pocket; outer loop only for other cut types) and `kind: 'chain'` (`chainToPathD`).
+     - Deleted `kind: 'edge'` branch, `edgeGeom`, and `arcPathFull`.
+     - Deleted `holesOfLoop`, `requireGroup`, and `excludeNested` from `group-model.js`.
+  5. **Unit tests (`tests/prepare-profile-pick.test.js`, `tests/shaper-export.test.js`, `tests/shaper-import.test.js`)**:
+     - Added unit tests P1-P8 and E1-E2 in `tests/prepare-profile-pick.test.js`.
+     - Updated `shaper-export.test.js` and `shaper-import.test.js` for chains and profile export contracts.
+- **evidence:**
+  - `git grep -n "holesOfLoop\|requireGroup\|excludeNested" -- packages apps tests` -> 0 matches.
+  - `git grep -n "kind: 'edge'\|kind === 'edge'\|'edge:'" -- packages apps` -> ONLY inside `migrateEdgeRecords` in `apps/shaper/src/cut-plan.js:54`.
+  - `git grep -n "findOpenChains\|chainToPathD" -- packages apps tests` -> lists each caller across `packages/core`, `apps/shaper`, and `tests/`.
+  - Live headless Shaper verification (`.evidence/432/`, untracked):
+    - `1-outer-ring-pocket.png` (MD5: `745D3F503544EC94C8AF44345AA64906`): Bullseye concentric circles in Prepare; outer ring picked, assigned Pocket cut with inner hole (radius 24) open and uncut center dot (radius 10) inside hole.
+    - `2-dot-own-cut.png` (MD5: `077A74941BF2411B0E0E868670FC45E9`): Center dot clicked and assigned its own Online cut.
+    - `3-fillet-arc-rect-picked.png` (MD5: `D1562E36DB60A39067D6F587696DEDCD`): Fillet arc ink clicked on filleted rectangle; entire filleted rectangle loop highlighted (`selected: { kind: 'loop', id: 'loop_bottom-fillet-left-right-top' }`).
+    - Verbatim exported SVG:
+      ```xml
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="80mm" height="80mm" viewBox="-40 -40 80 80">
+        <path d="M -40 0 A 40 40 0 1 0 40 0 A 40 40 0 1 0 -40 0 Z M -24 0 A 24 24 0 1 0 24 0 A 24 24 0 1 0 -24 0 Z" fill-rule="evenodd" fill="#7F7F7F" shaper:cutType="pocket"/>
+        <circle cx="0" cy="0" r="10" fill="none" stroke="#7F7F7F" shaper:cutType="online"/>
+      </svg>
+      ```
+  - Gate (`npm run gate`):
+    - `GATE files=162 pass=162 fail=0`
+    - `SMOKE 12/12`
+    - `HEADLESS-LEFT 0`
+    - `HEADLESS-OTHER 0`
+    - Exit code 0.

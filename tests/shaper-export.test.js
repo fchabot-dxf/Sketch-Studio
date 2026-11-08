@@ -105,11 +105,11 @@ import { format } from '#core/units.js';
     eq(svg, want, 'circle loop → <circle> + attrs');
   }
 
-  // 8. Open EDGE (online on a line) → <line> with the cut attrs (not a closed loop)
+  // 8. Open chain — exported as one <path d="..."> (TASK 432 replaces kind: 'edge' with kind: 'chain')
   {
     const state = { joints: new Map([['P', { x: 0, y: 0 }], ['Q', { x: 80, y: 0 }]]), constraints: [], shapes: [{ id: 'e1', type: 'line', joints: ['P', 'Q'] }] };
-    const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'edge', id: 'e1' }, rec: { cutType: 'online', toolDia: 3.175 } }], encoding: ENC5, docUnit: 'mm' });
-    assert(svg.includes('<line x1="0" y1="0" x2="80" y2="0" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:toolDia="3.175mm"/>'), 'open edge → <line> + online attrs');
+    const svg = exportShaperSVG({ state, entries: [{ target: { kind: 'chain', id: 'chain_e1' }, rec: { cutType: 'online', toolDia: 3.175 } }], encoding: ENC5, docUnit: 'mm' });
+    assert(svg.includes('<path d="M 0 0 L 80 0" fill="none" stroke="#7F7F7F" shaper:cutType="online" shaper:toolDia="3.175mm"/>'), 'open chain → <path> + online attrs');
   }
 
   // 9. Cut-param attrs — docUnit drives the SUFFIX (geometry stays mm); cutOffset 0 / cutDepth unset → omitted
@@ -136,9 +136,9 @@ import { format } from '#core/units.js';
     assert(region('interior').includes('fill="#FFFFFF" stroke="#000000" shaper:cutType="inside"'), 'interior → inside #fff+#000');
     assert(region('pocket').includes('fill="#7F7F7F" shaper:cutType="pocket"'), 'pocket → #7F7F7F');
     const estate = { joints: new Map([['P', { x: 0, y: 0 }], ['Q', { x: 80, y: 0 }]]), constraints: [], shapes: [{ id: 'e1', type: 'line', joints: ['P', 'Q'] }] };
-    const edge = (id) => exportShaperSVG({ state: estate, entries: [{ target: { kind: 'edge', id: 'e1' }, rec: { cutType: id } }], encoding: ENC5, docUnit: 'mm' });
-    assert(edge('online').includes('fill="none" stroke="#7F7F7F" shaper:cutType="online"'), 'online → none+#7F7F7F');
-    assert(edge('guide').includes('fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"'), 'guide → #0068FF');
+    const chain = (id) => exportShaperSVG({ state: estate, entries: [{ target: { kind: 'chain', id: 'chain_e1' }, rec: { cutType: id } }], encoding: ENC5, docUnit: 'mm' });
+    assert(chain('online').includes('fill="none" stroke="#7F7F7F" shaper:cutType="online"'), 'online → none+#7F7F7F');
+    assert(chain('guide').includes('fill="#0068FF" stroke="#0068FF" shaper:cutType="guide"'), 'guide → #0068FF');
   }
 
   // ── SP1j-3a: datum triangle + <g> group inheritance (DECLARED options, default OFF) ──

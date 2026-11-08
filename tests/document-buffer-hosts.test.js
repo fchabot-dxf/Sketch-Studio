@@ -1,4 +1,5 @@
-// tests/document-buffer-hosts.test.js — TASK 458: the shared autosave buffer keeps OTHER apps' host sidecars.
+// tests/document-buffer-hosts.test.js — TASK 458: the shared autosave buffer keeps OTHER apps' host sidecars (TASK 474: now per
+// design in the project store; the stored design is read straight from IndexedDB 'sketch-studio-projects').
 // Live headless CDP, same origin (the buffer key is shared by every app):
 //  A. the real repro: Pen Plotter saves pens/toolpaths -> SketchStudio (no host) edits and autosaves -> back in Pen Plotter
 //     after a reload the plotter state is unchanged (before the fix SketchStudio's save wrote hosts:{} and wiped it).
@@ -145,8 +146,9 @@ await (async () => {
     };
     // The stored buffer, read straight from IndexedDB: { shapes, hosts: [names] }.
     const stored = () => evalJs(`new Promise((res) => {
-      const open = indexedDB.open('sketch-studio-documents', 1);
-      open.onsuccess = () => { const g = open.result.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => { const d = g.result; res(d ? { shapes: d.geometry.shapes.length, hosts: Object.keys(d.hosts || {}).sort(), doc: d } : null); }; };
+      const open = indexedDB.open('sketch-studio-projects', 1);
+      open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
+        m.onsuccess = () => { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? { shapes: d.geometry.shapes.length, hosts: Object.keys(d.hosts || {}).sort(), doc: d } : null); }; }; };
     }).then(r => r && JSON.stringify({ shapes: r.shapes, hosts: r.hosts, penplotter: r.doc.hosts && r.doc.hosts.penplotter }))`).then((s) => s && JSON.parse(s));
     const plotterDoc = () => evalJs(`import('/apps/penplotter/src/plotter-doc.js').then(m => JSON.stringify(m.capturePlotterDoc()))`).then(JSON.parse);
 
@@ -193,7 +195,7 @@ await (async () => {
       const { createDocumentBuffer } = await import('/packages/ui/document-buffer.js');
       const mk = () => ({ joints: new Map(), shapes: [], constraints: [] });
       const wait = (ms) => new Promise(r => setTimeout(r, ms));
-      const read = () => new Promise((res) => { const o = indexedDB.open('sketch-studio-documents', 1); o.onsuccess = () => { const g = o.result.transaction('kv').objectStore('kv').get('current'); g.onsuccess = () => res(g.result.hosts); }; });
+      const read = () => new Promise((res) => { const o = indexedDB.open('sketch-studio-projects', 1); o.onsuccess = () => { const db = o.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign'); m.onsuccess = () => { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => res(g.result.document.hosts); }; }; });
       const a = { v: 1 }, b = { v: 1 };
       const sa = mk(), sb = mk(), sc = mk();
       const A = createDocumentBuffer({ state: sa, hostName: 'hostA', getHostData: () => a, pollMs: 40 });

@@ -20,6 +20,7 @@ import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spr
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;
 let view = { ...DEFAULT_VIEW };
+let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app; a sidebar reads it lazily
 let toolRibbon = null; // S7c-2d: the shared tool ribbon (from setupUI); the render loop refreshes its active highlight
 
 function updateView(){ 
@@ -163,11 +164,13 @@ function initApp(){
   saveStatusEl.id = 'save-status';
   saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;';
   header.el.appendChild(saveStatusEl);
-  const docBuffer = createDocumentBuffer({
+  docBuffer = createDocumentBuffer({
     state,
+    app: 'sketchstudio', // TASK 474: the design records who saved it last
+    onRestored: () => { try { engine.solve(500); } catch (_) {} }, // after the initial restore AND after Open / New / Open from file
     onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
-  docBuffer.restore().then(() => { try { engine.solve(500); } catch (_) {} });
+  docBuffer.restore();
   docBuffer.start();
 
   // DIAG-OVERLAY: reachable from the header, next to the save-status indicator.

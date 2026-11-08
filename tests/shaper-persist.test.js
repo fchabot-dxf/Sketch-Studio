@@ -229,7 +229,16 @@ await (async () => {
     assert.strictEqual(await stockJson(), stockBefore, 'and so does the stock');
 
     // ── 4. an OLD document (no shaper sidecar) loads with the defaults ──
-    await evalJs(`new Promise((res) => { const r = indexedDB.open('sketch-studio-documents', 1); r.onsuccess = () => { const db = r.result; const tx = db.transaction('kv', 'readwrite'); const st = tx.objectStore('kv'); const g = st.get('current'); g.onsuccess = () => { const d = g.result; if (d && d.hosts) delete d.hosts.shaper; st.put(d, 'current'); }; tx.oncomplete = () => { db.close(); res(true); }; }; })`);
+    await evalJs(`new Promise((res, rej) => {
+      const open = indexedDB.open('sketch-studio-projects', 1);
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction(['meta', 'designs'], 'readwrite');
+        const m = tx.objectStore('meta').get('currentDesign');
+        m.onsuccess = () => { const g = tx.objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result; delete d.document.hosts.shaper; tx.objectStore('designs').put(d); }; };
+        tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error);
+      };
+      open.onerror = () => rej(open.error);
+    })`);
     await evalJs(`(async () => { const { CUT_PLAN } = await import('/apps/shaper/src/cut-plan.js'); CUT_PLAN.clear(); })()`); // so the autosave cannot re-add it before the reload
     await sleep(100);
     await reload();

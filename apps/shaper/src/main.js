@@ -423,6 +423,7 @@ const MODE_KEY = 'shaper-mode';
 let currentMode = 'explore';
 
 let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
+let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); a sidebar reads it lazily
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thickness field after a document restore (assigned below)
 let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
@@ -551,25 +552,29 @@ function ensureSketch() {
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
   // keep autosaving. statusEl is optional-safe (older cached HTML without #save-status just no-ops).
   const statusEl = document.getElementById('save-status');
-  const docBuffer = createDocumentBuffer({
-    state: designController.state,
-    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
-    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
-  });
-  docBuffer.restore().then(({ hosts }) => {
+  // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored), and a design
+  // without a Shaper sidecar resets the cut plan and stock to their defaults instead of inheriting the previous design's.
+  const applyRestored = ({ hosts }) => {
     try {
       designController.engine.solve(500);
       if (infoPanel) infoPanel.refresh();
       if (vcarveView) vcarveView.refresh();
     } catch (_) {}
     // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable), then
-    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. An old buffer has no sidecar: defaults.
-    if (hosts && hosts.shaper) applyShaperDoc(hosts.shaper);
+    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. No sidecar (an old buffer): defaults.
+    applyShaperDoc(hosts && hosts.shaper);
     if (currentMode === 'prepare') mountPrepare();
     else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
     showStockThickness();
     if (currentMode === 'review') enterReview(designController.state);
+  };
+  docBuffer = createDocumentBuffer({
+    state: designController.state,
+    app: 'shaper', onRestored: applyRestored,
+    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
+    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
+  docBuffer.restore();
   docBuffer.start();
 }
 

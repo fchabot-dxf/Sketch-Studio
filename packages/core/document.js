@@ -53,6 +53,21 @@ export function serializeDocument(state, { hosts } = {}) {
 }
 
 /**
+ * validateDocument(doc) → { ok: true } | { ok: false, reason, newer? }
+ *   The ONE acceptance check for a stored document (a file, an IndexedDB project, the autosave): an object with a numeric
+ *   version this build understands. deserializeDocument runs it first; a file/project loader runs it BEFORE touching any
+ *   state so a bad file is refused up front. `newer: true` marks "made by a newer version" (callers word that for the user).
+ */
+export function validateDocument(doc) {
+  if (!doc || typeof doc !== 'object') return { ok: false, reason: 'not a document object' };
+  if (typeof doc.version !== 'number') return { ok: false, reason: 'missing version field' };
+  if (doc.version > DOCUMENT_VERSION) {
+    return { ok: false, newer: true, reason: `document version ${doc.version} is newer than this app understands (${DOCUMENT_VERSION})` };
+  }
+  return { ok: true };
+}
+
+/**
  * deserializeDocument(doc, state) → { ok: true, hosts } | { ok: false, reason }
  *   Replaces state's ENTIRE geometry with doc's (lesson: opening a document replaces the whole state,
  *   never blends with what was there — clear every store to default FIRST). Constraints are re-added via
@@ -63,11 +78,8 @@ export function serializeDocument(state, { hosts } = {}) {
  *   half-read — the caller decides what to tell the user.
  */
 export function deserializeDocument(doc, state) {
-  if (!doc || typeof doc !== 'object') return { ok: false, reason: 'not a document object' };
-  if (typeof doc.version !== 'number') return { ok: false, reason: 'missing version field' };
-  if (doc.version > DOCUMENT_VERSION) {
-    return { ok: false, reason: `document version ${doc.version} is newer than this app understands (${DOCUMENT_VERSION})` };
-  }
+  const valid = validateDocument(doc);
+  if (!valid.ok) return valid;
   const g = doc.geometry || {};
 
   state.joints.clear();

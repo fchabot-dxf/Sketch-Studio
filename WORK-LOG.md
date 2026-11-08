@@ -12997,3 +12997,6 @@ Seat CC-B. Re-checked each item on main (merged to origin/main at start) before 
 
 **Gate (foreground, exit code read):** `GATE files=189 pass=189 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`, exit 0. (The first gate run failed 1 file, `penplotter-active-panel`, because of item 6d; fixed above.)
 Note for the advisor: other seats' headless Edge processes were left running (profiles sk-ev455cmp-51216, sk-test-451-53664, sk-test-446-31084, sk-test-459-57928); I did not touch them.
+
+## TURN 469
+Fixed latent solver bug: packages/core/solver/engine.js (equal/shapes branch) deduped the joint list, so two lines sharing a joint gave 3 joints and definitions.js equal (needs >=4) returned 0 = silent no-op. Now equal keeps the positional 4-joint list. New test tests/equal-shared-joint.test.js: before L1=100.000 L2=40.000 (fail), after 100.000/100.000. Gate: files=190 pass=190 fail=0, SMOKE 12/12.

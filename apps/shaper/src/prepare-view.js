@@ -480,6 +480,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),
     // Write the cut type onto every selected target + refresh the tool-aware look (panel calls this).
+    refreshLook, // TASK 463: repaint after an undo/redo restored the cut plan
     applyCutTypeToSelected(cutType) {
       if (selection.size === 0) return null;
       const ct = cutTypeById(cutType);

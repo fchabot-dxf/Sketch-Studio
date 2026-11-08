@@ -1051,6 +1051,17 @@ export function updateViewBox(svg, view) {
     inputCtx.setViewportSize?.(`VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`);
 }
 
+// TASK 463: THE one mapping of the history keys (Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y redo), shared by this
+// handler and by a host stage that has no sketcher input layer (Shaper's Prepare).
+export function undoRedoKeyAction(e) {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return null;
+    const z = e.key === 'z' || e.key === 'Z';
+    if (z && !e.shiftKey) return 'undo';
+    if ((z && e.shiftKey) || e.key === 'y' || e.key === 'Y') return 'redo';
+    return null;
+}
+
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : (msg) => { try { showNotification(msg); } catch (_) {} };
@@ -1117,14 +1128,9 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
-        const mod = e.ctrlKey || e.metaKey;
-        if (mod && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-            state.undo();
-            e.preventDefault();
-        } else if (mod && ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y')) {
-            state.redo();
-            e.preventDefault();
-        }
+        const histAction = undoRedoKeyAction(e);
+        if (histAction === 'undo') { state.undo(); e.preventDefault(); }
+        else if (histAction === 'redo') { state.redo(); e.preventDefault(); }
 
         // Toggle fixed on selection
         if (e.key.toLowerCase() === 'f') {

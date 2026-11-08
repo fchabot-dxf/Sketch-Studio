@@ -43,6 +43,9 @@ export function createSketchState(engine, view) {
     groups: [],
     profiles: [],
     vcarves: [],
+    // TASK 463: OPTIONAL generic host hook so a host's own undoable data rides in the SAME snapshots (one history, no second
+    // stack): { capture() -> JSON-safe data, restore(data) }. Shaper uses it for its cut plan. null = nothing extra.
+    hostSnapshot: null,
     history: [],  // Store last 5 states for undo
     maxHistory: 5,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
@@ -65,7 +68,8 @@ export function createSketchState(engine, view) {
         // COMBINE slice 1: combined profiles
         profiles: Array.isArray(this.profiles) ? cloneProfiles(this.profiles) : undefined,
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
-        vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined
+        vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined,
+        host: this.hostSnapshot ? this.hostSnapshot.capture() : undefined // TASK 463: the host's own undoable data
       };
     },
     // BURN-DOWN-2: restore the live store from a snapshot (extracted verbatim from undo() so redo() reuses it).
@@ -94,6 +98,7 @@ export function createSketchState(engine, view) {
         this.profiles.length = 0;
       }
       if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
+      if (this.hostSnapshot && snapshot.host !== undefined) this.hostSnapshot.restore(snapshot.host); // TASK 463
       // Clear selections and active tool state
       this.selectedJoints.clear();
       this.selectedConstraints.clear();

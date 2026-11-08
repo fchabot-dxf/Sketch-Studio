@@ -12,7 +12,8 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
-import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
+import { undoRedoKeyAction } from '#ui/input-manager.js'; // TASK 463: the shared history key mapping
+import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
@@ -431,10 +432,34 @@ const refreshCutPanel = () => {
   const t = prepareView && prepareView.selectedTarget && prepareView.selectedTarget();
   cutPanel.update(t ? { kind: t.kind, record: prepareView.recordFor(t) } : null);
 };
+// TASK 463: every cut-plan edit is ONE step of the SHARED sketch history (the ribbon's Undo/Redo, Ctrl+Z / Ctrl+Y): the shared
+// state snapshots carry the cut plan through its generic `hostSnapshot` hook (ensureSketch below), so there is no second
+// history stack. A pre-edit snapshot is taken, and dropped again if the edit changed nothing (e.g. re-picking the same preset).
+function cutEdit(apply) {
+  const st = designController && designController.state;
+  const before = JSON.stringify(captureCutPlan());
+  if (st) st.saveState();
+  const n = st ? st.history.length : 0;
+  apply();
+  if (st && JSON.stringify(captureCutPlan()) === before) st.discardSnapshotAt(n);
+  refreshCutPanel();
+}
 const cutPanel = createCutPanel(document.getElementById('prepare-panel'), {
-  onPickType: (id) => { if (prepareView) prepareView.applyCutTypeToSelected(id); refreshCutPanel(); },
-  onSetField: (field, value) => { if (prepareView) prepareView.setFieldOnSelected(field, value); refreshCutPanel(); },
+  onPickType: (id) => cutEdit(() => { if (prepareView) prepareView.applyCutTypeToSelected(id); }),
+  onSetField: (field, value) => cutEdit(() => { if (prepareView) prepareView.setFieldOnSelected(field, value); }),
+  onSetFields: (o) => cutEdit(() => { if (prepareView) for (const [k, v] of Object.entries(o)) prepareView.setFieldOnSelected(k, v); }),
 });
+
+// The geometry signature the mounted Prepare view was built from: an undo that changed only the cut plan just repaints it
+// (keeps selection + card); one that changed the sketch (e.g. undoing an SVG import) re-mounts it from the restored state.
+let prepareSig = null;
+const geomSig = (st) => JSON.stringify([[...st.joints.entries()].map(([k, j]) => [k, j.x, j.y]), st.shapes.map((x) => [x.id, x.type, x.joints, x.radius])]);
+function restoreCutPlanFromHistory(entries) {
+  applyCutPlan(entries);
+  if (currentMode !== 'prepare' || !designController) return;
+  if (prepareView && geomSig(designController.state) === prepareSig) { prepareView.refreshLook(); refreshCutPanel(); }
+  else mountPrepare();
+}
 
 // U3b: Shaper defaults to INCH — but ONLY when the user hasn't persisted a doc-unit choice. persist:false keeps it
 // in-memory (the default never writes to the shared 'sketch-studio-settings' localStorage, so it can't leak to a
@@ -520,6 +545,7 @@ function ensureSketch() {
     notify: groupStatus,
   });
   window.__designController = designController; // for test/evidence inspection
+  designController.state.hostSnapshot = { capture: captureCutPlan, restore: restoreCutPlanFromHistory }; // TASK 463: the cut plan rides in the shared undo snapshots
   buildDesignUI();
 
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
@@ -565,6 +591,7 @@ function mountPrepare() {
       groupStatus(`Cut plan updated: ${parts.join(', ')}`);
     }
     prepareView = mountPrepareView(st, document.getElementById('prepare-canvas'), { onSelectionChange: refreshCutPanel });
+    prepareSig = geomSig(st);
     window.__prepareView = prepareView;
     refreshCutPanel(); // no selection yet → the card stays hidden
 }
@@ -641,6 +668,19 @@ async function enterReview(st) {
 }
 
 modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mode)));
+
+// TASK 463: Prepare has no sketcher input layer and the shared Ctrl+Z handler is gated to Design (isActive: currentMode === 'design'),
+// so Ctrl+Z / Ctrl+Y on Prepare would do nothing. This listener runs ONLY while Prepare is the mode (the two gates are mutually
+// exclusive, so a key never fires twice), uses the SAME key mapping as the shared handler (input-manager undoRedoKeyAction), and
+// drives the same state.undo()/redo().
+document.addEventListener('keydown', (e) => {
+  if (currentMode !== 'prepare' || !designController) return;
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // let a text field undo its own text
+  const action = undoRedoKeyAction(e);
+  if (!action) return;
+  designController.state[action]();
+  e.preventDefault();
+});
 
 // Restore the last active mode (default Explore).
 let initMode = 'explore';

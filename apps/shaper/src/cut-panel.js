@@ -32,6 +32,7 @@ export function createCutPanel(hostEl, opts = {}) {
   if (!hostEl) return { update() {}, destroy() {} };
   const onPickType = opts.onPickType || (() => {});
   const onSetField = opts.onSetField || (() => {});
+  const onSetFields = opts.onSetFields || ((o) => { for (const [k, v] of Object.entries(o)) onSetField(k, v); }); // TASK 463: several fields = ONE undo step
   hostEl.innerHTML = '';
 
   const card = document.createElement('div');
@@ -171,7 +172,7 @@ export function createCutPanel(hostEl, opts = {}) {
         for (const v of VBIT_PRESETS) {
           const b = document.createElement('button');
           b.type = 'button'; b.className = 'cut-preset' + (current.cutterShape === 'vbit' && Number(current.cutterAngle) === v.angle ? ' is-active' : ''); b.dataset.angle = String(v.angle); b.textContent = v.angle + '\u00b0';
-          b.addEventListener('click', () => { onSetField('cutterShape', 'vbit'); onSetField('cutterAngle', v.angle); closePops(null); });
+          b.addEventListener('click', () => { onSetFields({ cutterShape: 'vbit', cutterAngle: v.angle }); closePops(null); });
           row.appendChild(b);
         }
         shapePop.appendChild(row);

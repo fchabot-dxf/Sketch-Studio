@@ -122,6 +122,17 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
         - Origin cuts CONVENTIONAL by default ("explicitly prevents users climb cutting by default");
         - the spindle turns CLOCKWISE seen from above;
         - the tool shows direction by animating the path with dotted lines.
+      - CUT TYPES (Shaper support 115002894673):
+        - Outside: cutter outside the line. Inside: cutter inside the line.
+        - Pocket: "acts like a traditional router" (freehand clearing, no Auto Mode); "automatic negative offset"
+          (amount NOT stated); a finishing pass is recommended as a separate INSIDE cut with no offset.
+        - On Line: the cutter centre on the path; "offsets are not an option".
+        - Guide: "uncuttable".
+        - Cut type can be assigned in the file OR on the tool.
+        - BUG: our Prepare card shows an Offset field for On Line and exports shaper:cutOffset for it. TASK 450:
+          On Line and Guide have no offset (UI hidden, never exported).
+        - OWNER Q: how big is the pocket's automatic negative offset? The 447 pocket preview (walls reached) shows the
+          RESULT after the finish pass; the clearing pass itself stops at that offset.
       - OWNER ASK (2026-11-08): "for each cut I need to see if it's conventional or climb, with a dashed animation on
         the path". Owner: "actually it's always conventional": no climb mode, no switch. That's TASK 449, dispatched to CC-A. Owner: "pocket cuts offset by default allowing a finish pass", so
         the pocket finish pass shows a direction (wall CW, islands CCW). Outside = CCW on screen, inside = CW; on line /

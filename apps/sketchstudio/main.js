@@ -21,7 +21,6 @@ import { createStylePanel } from '#ui/style-panel.js';
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
-import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 
 let svg = document.getElementById('svgCanvas');
@@ -140,7 +139,6 @@ function initApp(){
   // swap is S7c-2d; the faithful Export popup→tab cleanup is S7c-2e).
   const stylePanel = createStylePanel({
     hostId: 'sketchstudio',
-    onSaveProject: (all) => SettingsManager.saveProjectFile(all),
     onNotify: showNotification,
   });
   stylePanel.render(document.body);

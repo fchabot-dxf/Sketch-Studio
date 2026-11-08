@@ -1,6 +1,5 @@
 // packages/ui/style-panel.js — the shared sketcher STYLE panel (S7c-2b).
-// DOM-ownership INVERSION vs apps/sketchstudio/ui/settings-panel.js: that file ADOPTS pre-existing #s-* HTML via
-// getElementById; this shared panel BUILDS its own DOM from a control SPEC (a bare host has no #s-* markup) and
+// The shared panel BUILDS its own DOM from a control SPEC (a bare host has no #s-* markup) and
 // owns its open/close. The 17 controls ARE the shared renderer knobs — they read/write the already-shared
 // SettingsManager (#core/settings-manager.js), so the shared renderer reacts live. App-agnostic chrome; themed via
 // --sk-* (light defaults → SketchStudio); self-contained <style>. Imports ONLY the settings store.
@@ -10,7 +9,7 @@ import { UNITS } from '#core/units.js';
 import { STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate } from './style-templates.js';
 
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
-// for the S7c-2c swap. min/max/step carried from settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
+// for the S7c-2c swap. min/max/step carried from the retired settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
 // number + paired range slider. Declared control TYPES: 'checkbox' (boolean), 'select' (an `options: [{value,label}]`
 // enum — generic, e.g. GRID_MODE), and the default number+slider (needs min/max/step).
 const CONTROLS = [
@@ -89,16 +88,14 @@ function injectStyles() {
 }
 
 /**
- * createStylePanel({ settings, onSaveProject, onNotify, title }) → { el, open, close, toggle, render, destroy }
+ * createStylePanel({ settings, onNotify, title }) → { el, open, close, toggle, render, destroy }
  *   settings: the SettingsManager-like store (get/set/getAll/subscribe→unsub/resetToDefaults). Defaults to the
  *     shared #core singleton; injectable so a smoke can pass a fresh manager.
- *   onSaveProject(): if given, a "Save (Project)" button is rendered (app-specific; e.g. saveProjectFile). Omitted
- *     → no Save button (Shaper).
  *   onNotify(msg): optional toast hook (no Tailwind dependency here).
  *   title: header text (default 'Style').
  *   hostId: names the host so each remembers its own last-open tab (localStorage).
  */
-export function createStylePanel({ settings = SettingsManager, onSaveProject = null, onNotify = null, title = 'Style', hostId = 'default' } = {}) {
+export function createStylePanel({ settings = SettingsManager, onNotify = null, title = 'Style', hostId = 'default' } = {}) {
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
   let isOpen = false, escHandler = null, outsideHandler = null;
@@ -172,13 +169,8 @@ export function createStylePanel({ settings = SettingsManager, onSaveProject = n
   try { savedTab = localStorage.getItem(tabStoreKey); } catch (_) { /* storage unavailable */ }
   selectTab(savedTab);
 
-  // Footer (Reset + Close, + optional Save)
+  // Footer (Reset + Close)
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
-  if (typeof onSaveProject === 'function') {
-    const save = document.createElement('button'); save.type = 'button'; save.className = 'sk-style-btn sk-style-btn-primary'; save.textContent = 'Save (Project)';
-    save.addEventListener('click', () => { try { onSaveProject(settings.getAll()); } catch (_) {} });
-    foot.appendChild(save);
-  }
   const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'sk-style-btn'; resetBtn.textContent = 'Reset';
   resetBtn.addEventListener('click', () => { settings.resetToDefaults(); populate(); notify('Reset to factory defaults.'); });
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-style-btn'; closeBtn.textContent = 'Close';

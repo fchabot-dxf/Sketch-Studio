@@ -100,6 +100,9 @@ await (async () => {
       assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_STYLE', 'DIM_LABEL_BOX'], host + ' glyphs tab');
       assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');
       assert(!f.lines.hidden && f.grid.hidden && f.glyphs.hidden && f.units.hidden, host + ': only the active tab shows its fields');
+      const footBtns = await evalJs(`[...document.querySelectorAll('.sk-style-panel button')].map((b) => b.textContent.trim())`);
+      assert(!footBtns.some((t) => /save/i.test(t)), host + ': the Style panel has no Save button: ' + footBtns);
+      assert(footBtns.includes('Reset') && footBtns.includes('Close'), host + ': Reset and Close remain: ' + footBtns);
 
       // keyboard: ArrowRight moves to the next tab and shows its fields
       await evalJs(`document.querySelector('.sk-style-tab[data-tab="lines"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))`);

@@ -19,6 +19,13 @@ export const SETTINGS_FIELDS = {
     tolerance_mm: TOLERANCE_FIELD,
 };
 
+// Export-tab choice: how the G-code zip is split. A declared two-value setting, kept in state.settings.export_files.
+export const EXPORT_FILES_FIELD = {
+    key: "export_files", label: "Files", type: "choice", default: "pen",
+    options: [{ value: "pen", label: "One per pen" }, { value: "toolpath", label: "One per toolpath" }],
+};
+export const keepChoice = (def, raw) => (def.options.some(o => o.value === raw) ? raw : def.default);
+
 // A pen tip (the plot uses it) and a shape's display stroke width.
 export const PEN_WIDTH   = { key: "width", label: "Pen width",    type: "number", default: 0.5, min: 0.05, max: 5,  unit: "mm" };
 export const STYLE_WIDTH = { key: "width", label: "Stroke width", type: "number", default: 0.5, min: 0.05, max: 10, unit: "mm" };
@@ -45,6 +52,7 @@ export function sanitizeSettings(settings) {
     const out = {};
     for (const [key, def] of Object.entries(SETTINGS_FIELDS)) out[key] = coerceParam(def, settings ? settings[key] : undefined);
     if (out.pen_up_z === out.pen_down_z) { out.pen_up_z = SETTINGS_FIELDS.pen_up_z.default; out.pen_down_z = SETTINGS_FIELDS.pen_down_z.default; }
+    out.export_files = keepChoice(EXPORT_FILES_FIELD, settings ? settings.export_files : undefined);
     return out;
 }
 

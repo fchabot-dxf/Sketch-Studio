@@ -62,7 +62,7 @@ await (async () => {
       const shapes = window.__sketch.controller.state.shapes;
       const a = makeToolpath('Tri', 'outline'); a.targetShapeIds = shapes.map(s => s.id); a.plotColorId = state.plotColors[0].id; a.outline.passes = 2;
       state.toolpaths = [a]; state.activeToolpathId = a.id;
-      state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2 };
+      state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2, export_files: 'pen' };
     })()`);
     await waitFor(`${STORED}.then(s => { const r = s && JSON.parse(s); return !!(r && r.penplotter && r.penplotter.toolpaths && r.penplotter.toolpaths.length === 1); })`, 'Pen Plotter to autosave its toolpath sidecar');
     await waitSaved();

@@ -13,4 +13,5 @@ export {
     optimizePolylines,
     toolpathToPolylines,
     toolpathToGcode,
+    toolpathToGcodeSections,
 } from "./pipeline.js";

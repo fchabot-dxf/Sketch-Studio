@@ -7,7 +7,7 @@
 
 import { shapeToPolyline } from "./polylines/index.js";
 import { optimize } from "./optimize/index.js";
-import { renderGcode } from "./gcode/render.js";
+import { renderGcodeSections } from "./gcode/render.js";
 
 /** Flatten one toolpath's shapes into a list of polylines. */
 export function flattenToolpath(shapes) {
@@ -31,9 +31,15 @@ export function toolpathToPolylines(shapes, opts = {}) {
 
 /** Convenience: shapes → G-code text. */
 export function toolpathToGcode(shapes, settings) {
+    const s = toolpathToGcodeSections(shapes, settings);
+    return s.header + s.body + s.footer;
+}
+
+/** shapes → { header, body, footer }: the same G-code, split so callers can join several bodies under one header. */
+export function toolpathToGcodeSections(shapes, settings) {
     const polylines = toolpathToPolylines(shapes, {
         mergeTol: settings.mergeTol ?? 0.05,
         simplifyTol: settings.simplifyTol ?? 0.1,
     });
-    return renderGcode(polylines, settings);
+    return renderGcodeSections(polylines, settings);
 }

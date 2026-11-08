@@ -8,6 +8,7 @@ import { canvasWrap } from "./dom.js";
 import { fitViewport, applyViewport, needsFit } from "./viewport.js"; // UNIFY-6: fit once, then apply the shared view
 import { renderArt } from "./render-art.js";
 import { recalcPreview } from "./preview.js";
+import { EXPORT_FILES_FIELD, keepChoice } from "./fields.js";
 import { installExportButton, buildGcodeEntries } from "./export.js";
 
 // S3-2: the machine SETTINGS block (doc size / unit / feeds / pen-heights / tolerance / auto-recalc) moved to the
@@ -20,6 +21,9 @@ const SCAFFOLD = `
       <aside id="exportPanel">
         <div class="dp-head">Export</div>
         <div class="tp-note">Machine settings (doc size, feeds, pen heights, tolerance) are in the <b>Toolpath</b> tab.</div>
+        <label class="tp-note">${EXPORT_FILES_FIELD.label}
+          <select id="exportFiles">${EXPORT_FILES_FIELD.options.map(o => `<option value="${o.value}">${o.label}</option>`).join("")}</select>
+        </label>
         <button id="exportBtn" class="dp-btn dp-primary">Export G-code (.zip)</button>
       </aside>
     </div>
@@ -27,12 +31,17 @@ const SCAFFOLD = `
 
 export function mountExportStage(view) {
   view.innerHTML = SCAFFOLD;
+  const sel = view.querySelector("#exportFiles");
+  sel.value = state.settings.export_files;
+  sel.onchange = () => { state.settings.export_files = keepChoice(EXPORT_FILES_FIELD, sel.value); };
   installExportButton();  // wires #exportBtn -> per-toolpath gcode -> zip -> download
   if (typeof window !== "undefined") window.__export = { buildGcodeEntries }; // dev/test seam: inspect the gcode
   return { onEnter };
 }
 
 function onEnter() {
+  const sel = document.querySelector("#exportFiles");
+  if (sel) sel.value = state.settings.export_files;
   const wrap = canvasWrap;
   if (!wrap) return;
   // LAYOUT-UNIFY: adopt the shared canvas into the body ROW AFTER the panel -> panel LEFT, canvas RIGHT.

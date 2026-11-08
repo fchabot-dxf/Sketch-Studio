@@ -2,11 +2,11 @@
 // render G-code per toolpath, package as a ZIP, and trigger a download.
 // No backend needed — everything happens client-side via app/js/vpype/.
 
-import { state } from "./state.js";
+import { state, toolpathPenId } from "./state.js";
 import { $, toast } from "./dom.js";
 import { expandLayerWithFill } from "#core/plot/fills/index.js";   // PP-6: shared fill registry
 import { expandLayerOutline } from "#core/plot/outlines/index.js"; // PP-6: shared outline registry
-import { toolpathToGcode, buildZip } from "#core/plot/index.js";   // PP-6: shared vpype gcode + zip
+import { toolpathToGcodeSections, buildZip } from "#core/plot/index.js";   // PP-6: shared vpype gcode + zip
 import { collectToolpathShapes } from "./core-geometry.js";         // TASK 440: unified shapes-of-a-toolpath
 
 export function installExportButton() {
@@ -27,7 +27,7 @@ export async function onExportClick() {
         }
         const zip = buildZip(entries);
         downloadBlob(zip, "plotter_gcode.zip");
-        toast(`Exported ${entries.length} G-code file${entries.length === 1 ? "" : "s"} → plotter_gcode.zip`);
+        toast(exportSummary(entries.length));
     } catch (e) {
         toast(e.message, true);
         console.error(e);
@@ -36,11 +36,11 @@ export async function onExportClick() {
     }
 }
 
-/** Build one G-code file per exportable toolpath. Returns ZIP entries
- *  ({ name, content }) ready to be passed to buildZip(). Exported (PP-6) so the live-verify can inspect the gcode. */
+/** Build the G-code ZIP entries ({ name, content }) for buildZip(): one file per pen (default) or one per exportable
+ *  toolpath, per state.settings.export_files. Exported (PP-6) so the live-verify can inspect the gcode. */
 export function buildGcodeEntries() {
-    const entries = [];
-    let idx = 0;
+    const perPen = state.settings.export_files !== "toolpath";
+    const items = [];
     for (const tp of state.toolpaths) {
         if (!tp.export) continue;
         const targetShapes = collectToolpathShapes(tp);
@@ -49,9 +49,7 @@ export function buildGcodeEntries() {
         const finalShapes = expandToolpathShapes(tp, targetShapes);
         if (finalShapes.length === 0) continue;
 
-        idx++;
-        const safeName = (tp.name || `toolpath_${idx}`).replace(/[^a-z0-9_-]/gi, "_");
-        const gcode = toolpathToGcode(finalShapes, {
+        items.push({ tp, sections: toolpathToGcodeSections(finalShapes, {
             penUpZ:    state.settings.pen_up_z,
             penDownZ:  state.settings.pen_down_z,
             drawFeed:  state.settings.draw_feed,
@@ -61,10 +59,38 @@ export function buildGcodeEntries() {
             docH:      state.doc.h,
             flipY:     true,
             label:     tp.name,
-        });
-        entries.push({ name: `${idx}_${safeName}.gcode`, content: gcode });
+        }) });
     }
-    return entries;
+
+    const slug = (s) => String(s).replace(/[^a-z0-9_-]/gi, "_");
+    if (!perPen) {
+        return items.map(({ tp, sections }, i) => ({
+            name: `${i + 1}_${slug(tp.name || `toolpath_${i + 1}`)}.gcode`,
+            content: sections.header + sections.body + sections.footer,
+        }));
+    }
+
+    // One file per pen, in the order each pen first appears in the panel; the preamble/postamble appear once.
+    const groups = new Map();
+    for (const it of items) {
+        const penId = toolpathPenId(it.tp);
+        if (!groups.has(penId)) groups.set(penId, []);
+        groups.get(penId).push(it);
+    }
+    return [...groups.entries()].map(([penId, list], i) => {
+        const pen = state.plotColors.find(p => p.id === penId);
+        const name = penId && pen ? slug(pen.name || pen.color || `pen_${i + 1}`) : "no-pen";
+        return {
+            name: `${i + 1}_${name}.gcode`,
+            content: list[0].sections.header + list.map(it => it.sections.body).join("") + list[0].sections.footer,
+        };
+    });
+}
+
+/** The export toast: how many files, and in which mode. */
+export function exportSummary(count) {
+    const mode = state.settings.export_files === "toolpath" ? "one per toolpath" : "one per pen";
+    return `Exported ${count} G-code file${count === 1 ? "" : "s"} (${mode}) → plotter_gcode.zip`;
 }
 
 /** Apply outline/fill expansion (the same logic Render uses) so the

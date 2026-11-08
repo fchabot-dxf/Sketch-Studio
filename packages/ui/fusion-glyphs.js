@@ -93,10 +93,8 @@ export const FUSION_GLYPHS = {
   'icon-midpoint': {
     cx: 0, cy: 0, size: 14,
     els: [
-      { d: rect(-6, -0.4, 12, 0.8) },
-      { d: rect(-6, -2.4, 0.8, 4.8) },
-      { d: rect(5.2, -2.4, 0.8, 4.8) },
-      { d: 'M0,-5.2L3.2,-0.6L-3.2,-0.6Z' },
+      { d: 'M0,-5.6L4.6,1.6L-4.6,1.6Z' },
+      { d: rect(-5.6, 3, 11.2, 1.2) },
     ],
   },
   // Not in the sprite (drawn to match, same stroke weight 0.8): a point sitting on a line.

@@ -1,4 +1,4 @@
-// tests/cut-offset-types.test.js — TASK 450: On line and Guide take NO offset (Shaper: offsets are not an option for On Line;
+// tests/cut-offset-types.test.js — TASK 450 + 450b (cut params per type): On line and Guide take NO offset (Shaper: offsets are not an option for On Line;
 // Guide is uncuttable). Declared on CUT_TYPES (offset:false); read by the cut card, the export and the preview. Not migrated.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { exportShaperSVG } from '#core/shaper-export.js';
-import { CUT_TYPES, cutTypeAllowsOffset, effectiveCutRecord } from '../apps/shaper/src/shaper.js';
+import { CUT_TYPES, cutTypeHasParam, effectiveCutRecord } from '../apps/shaper/src/shaper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -137,21 +137,26 @@ await (async () => {
     };
     const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
     // ── declaration + export + preview (pure) ──
-    assert.deepStrictEqual(CUT_TYPES.filter((t) => t.offset === false).map((t) => t.id).sort(), ['guide', 'online'], 'offset:false declared on exactly online + guide');
-    for (const id of ['exterior', 'interior', 'pocket']) assert.ok(cutTypeAllowsOffset(id), id + ' takes an offset');
-    assert.ok(!cutTypeAllowsOffset('online') && !cutTypeAllowsOffset('guide'));
-    assert.strictEqual(effectiveCutRecord({ cutType: 'online', cutOffset: 2 }).cutOffset, 0, 'preview record ignores the stored offset');
-    assert.strictEqual(effectiveCutRecord({ cutType: 'exterior', cutOffset: 2 }).cutOffset, 2, 'outside keeps its offset');
+    const ALL3 = ['cutDepth', 'cutOffset', 'toolDia'];
+    const decl = Object.fromEntries(CUT_TYPES.map((t) => [t.id, t.params]));
+    assert.deepStrictEqual(decl, { exterior: ALL3, interior: ALL3, pocket: ALL3, online: ['cutDepth', 'toolDia'], guide: ALL3 }, 'ONE params declaration per cut type');
+    assert.ok(cutTypeHasParam('exterior', 'cutOffset') && !cutTypeHasParam('online', 'cutOffset') && cutTypeHasParam('online', 'toolDia') && cutTypeHasParam('guide', 'cutDepth') && cutTypeHasParam('guide', 'cutOffset') && cutTypeHasParam('guide', 'toolDia'), 'guide keeps all three (Studio allows it)');
+    assert.ok(cutTypeHasParam(null, 'cutOffset'), 'no type chosen yet: nothing hidden');
+    assert.deepStrictEqual(effectiveCutRecord({ cutType: 'guide', cutDepth: 5, cutOffset: 2, toolDia: 6 }), { cutType: 'guide', cutDepth: 5, cutOffset: 2, toolDia: 6 }, 'a guide keeps its params');
+    assert.strictEqual(effectiveCutRecord({ cutType: 'online', cutOffset: 2, cutDepth: 5, toolDia: 6 }).cutOffset, 0, 'on line: stored offset ignored');
+    assert.strictEqual(effectiveCutRecord({ cutType: 'online', cutOffset: 2, cutDepth: 5, toolDia: 6 }).toolDia, 6, 'on line keeps the bit');
+    assert.strictEqual(effectiveCutRecord({ cutType: 'exterior', cutOffset: 2, cutDepth: 5, toolDia: 6 }).cutOffset, 2, 'outside keeps its offset');
     {
       const state = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 40, y: 0 }], ['c', { x: 40, y: 20 }], ['d', { x: 0, y: 20 }]]),
         shapes: [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].map(([id, p, q]) => ({ id, type: 'line', joints: [p, q] })), constraints: [] };
       const { findLoops } = await import('#core/loop-finder.js');
       const loop = findLoops(state)[0];
-      const exp = (cutType, cutOffset) => exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType, cutDepth: 5, cutOffset, toolDia: 3.175 } }], encoding: CUT_TYPES, docUnit: 'mm' });
-      assert.ok(!exp('online', 1.5).includes('cutOffset'), 'On line with a stored offset: no shaper:cutOffset');
-      assert.ok(!exp('guide', 1.5).includes('cutOffset'), 'Guide with a stored offset: no shaper:cutOffset');
-      assert.strictEqual(exp('online', 1.5), exp('online', 0), 'a stored offset does not change the On line export at all');
-      for (const t of ['exterior', 'interior', 'pocket']) assert.ok(exp(t, 1.5).includes('shaper:cutOffset="1.5mm"'), t + ' still exports its offset');
+      const exp = (cutType, extra = {}) => exportShaperSVG({ state, entries: [{ target: { kind: 'loop', id: loop.id }, rec: { cutType, cutDepth: 5, cutOffset: 1.5, toolDia: 3.175, ...extra } }], encoding: CUT_TYPES, docUnit: 'mm' });
+      const attrs = (svg) => ['cutDepth', 'cutOffset', 'toolDia'].filter((k) => svg.includes('shaper:' + k));
+      assert.deepStrictEqual(attrs(exp('guide')), ['cutDepth', 'cutOffset', 'toolDia'], 'Guide keeps and exports all three (the type may be changed on the tool later)');
+      assert.deepStrictEqual(attrs(exp('online')), ['cutDepth', 'toolDia'], 'On line: depth + bit, no offset');
+      assert.strictEqual(exp('online'), exp('online', { cutOffset: 0 }), 'a stored offset does not change the On line export');
+      for (const t of ['exterior', 'interior', 'pocket']) assert.deepStrictEqual(attrs(exp(t)), ['cutDepth', 'cutOffset', 'toolDia'], t + ' writes all three');
     }
 
     // ── the cut card in the real app (real clicks): Offset row hidden for On line / Guide, shown for Outside / Inside / Pocket ──
@@ -171,16 +176,16 @@ await (async () => {
     await clickEl('[data-mode="prepare"]'); await sleep(900);
     const inside = await evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = 30; p.y = 20; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
     await click(inside.x, inside.y); // select the loop
-    const rowDisplay = () => evalJs(`getComputedStyle(document.querySelector('.cut-row-offset')).display`);
+    const rowsShown = () => evalJs(`[...document.querySelectorAll('.cut-row[data-param]')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.param)`);
     const shown = {};
     for (const [typeId, label] of [['online', 'On line'], ['guide', 'Guide'], ['interior', 'Inside'], ['pocket', 'Pocket'], ['exterior', 'Outside']]) {
       await clickEl('.cut-type-trigger'); await sleep(150);
       await clickEl(`.cut-type-opt[data-id="${typeId}"]`); await sleep(250);
-      shown[typeId] = (await rowDisplay()) !== 'none';
-      console.log(`${label}: Offset row ${shown[typeId] ? 'shown' : 'hidden'}`);
+      shown[typeId] = await rowsShown();
+      console.log(`${label}: rows ${JSON.stringify(shown[typeId])}`);
       if (process.env.EVIDENCE_DIR) { const sh = await send('Page.captureScreenshot', { format: 'png', clip: { x: 1200, y: 50, width: 300, height: 380, scale: 1.5 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `card-${typeId}.png`), Buffer.from(sh.data, 'base64')); }
     }
-    assert.deepStrictEqual(shown, { online: false, guide: false, interior: true, pocket: true, exterior: true }, 'Offset row: hidden for On line / Guide, shown for Inside / Pocket / Outside');
+    assert.deepStrictEqual(shown, { online: ['cutDepth', 'toolDia'], guide: ALL3, interior: ALL3, pocket: ALL3, exterior: ALL3 }, 'card rows follow the params declaration (Guide shows all three)');
     console.log('cut-offset-types: ok');
     ws.close();
   } finally {

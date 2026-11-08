@@ -92,7 +92,7 @@ export const FUSION_GLYPHS = {
   // The toolbar/cursor midpoint triangle: path "M6.5,2 L11.5,11 L1.5,11 Z" (viewBox 0 0 13 13) copied from
   // 'icon-midpoint' in packages/ui/cursor-manager.js (the symbol the ribbon 'Mid' button uses).
   'icon-midpoint': {
-    cx: 6.5, cy: 6.5, size: 13,
+    cx: 6.5, cy: 6.5, size: 11.7, // 13 -> 11.7: the triangle's 10-unit width fills the same share of the glyph box as the other sprites (about 12 of 14)
     els: [
       { d: 'M6.5,2L11.5,11L1.5,11Z' },
     ],

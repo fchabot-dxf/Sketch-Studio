@@ -13222,3 +13222,6 @@ icon-midpoint redrawn as Fusion's: apex-up triangle over a short baseline bar, n
 
 ## TURN 491 (midpoint correction)
 Supersedes the hand-drawn midpoint: icon-midpoint is now the existing toolbar triangle, path 'M6.5,2 L11.5,11 L1.5,11 Z' (viewBox 13x13) copied from 'icon-midpoint' in packages/ui/cursor-manager.js; no ticks/baseline; same Fusion paint. Evidence .evidence/491/midpoint-before.png / midpoint-after.png.
+
+## TURN 491 (midpoint scale)
+Fusion midpoint triangle (cursor-manager.js 'icon-midpoint') scaled to the other glyphs' extent: size 13 -> 11.7. Evidence .evidence/491/midpoint-after.png.

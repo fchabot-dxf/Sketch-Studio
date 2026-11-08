@@ -17,7 +17,9 @@ function ring2(g) { let s = 0; for (let i = 0; i < g.length - 1; i++) s += g[i][
 // (0) depth rules, declared once
 assert.deepStrictEqual(reliefDepth('inside', 'unset', T), { kind: 'cut', depth: T, through: true, depthUnset: true });
 assert.strictEqual(reliefDepth('pocket', 'unset', T).kind, 'skip');
-assert.strictEqual(reliefDepth('online', 5, T).reason, 'unsupported');
+assert.strictEqual(reliefDepth('online', 5, T).kind, 'cut', 'On Line is a groove at its depth');
+assert.strictEqual(reliefDepth('online', 'unset', T).reason, 'no-depth', 'On Line with no depth: not shown, never guessed');
+assert.strictEqual(reliefDepth('guide', 5, T).reason, 'unsupported', 'a Guide is never cut');
 assert.strictEqual(reliefDepth('pocket', 30, T).through, true, 'pocket deeper than the board = through');
 assert.strictEqual(reliefDepth('interior', 'unset', T).through, true, 'CUT_TYPES id interior = inside');
 assert.strictEqual(reliefDepth('exterior', 4, T).depth, 4);
@@ -91,11 +93,20 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
 {
   const r = buildRelief({ stock, bounds, items: [
     { key: 'pk', cutType: 'pocket', cutDepth: 'unset', footprints: fp([rect(5, 5, 10, 10)]) },
-    { key: 'ol', cutType: 'online', cutDepth: 3, footprints: fp([rect(5, 5, 10, 10)]) },
+    { key: 'ol', cutType: 'online', cutDepth: 'unset', footprints: fp([rect(5, 5, 10, 10)]) },
+    { key: 'gd', cutType: 'guide', cutDepth: 3, footprints: fp([rect(5, 5, 10, 10)]) },
     { key: 'in', cutType: 'inside', cutDepth: 'unset', footprints: fp([rect(40, 40, 10, 10)]) },
   ] });
-  assert.deepStrictEqual(r.stats.skipped.map((s) => s.key + ':' + s.reason), ['pk:no-depth', 'ol:unsupported']);
+  assert.deepStrictEqual(r.stats.skipped.map((s) => s.key + ':' + s.reason), ['pk:no-depth', 'ol:no-depth', 'gd:unsupported']);
   assert.deepStrictEqual(r.stats.unsetThrough, ['in']);
+  // the unset mark is in the scene: ONE per cut, ON the cut (a vertex of the cut's own outer ring)
+  assert.strictEqual(r.marks.length, 1); assert.strictEqual(r.marks[0].kind, 'depth-unset'); assert.strictEqual(r.marks[0].key, 'in');
+  assert.ok(r.marks[0].point[0] >= 40 && r.marks[0].point[0] <= 50 && r.marks[0].point[1] >= 40 && r.marks[0].point[1] <= 50, 'mark sits on the cut: ' + r.marks[0].point);
+  // a profile's several footprints (outer + hole cuts share a key) give ONE mark
+  const twin = buildRelief({ stock, bounds, items: [0, 1].map((i) => ({ key: 'x', cutType: 'inside', cutDepth: 'unset', footprints: fp([rect(10 + i * 30, 10, 10, 10)]) })) });
+  assert.strictEqual(twin.marks.length, 1); assert.deepStrictEqual(twin.stats.unsetThrough, ['x']);
+  // a depth that IS set draws no mark
+  assert.strictEqual(buildRelief({ stock, bounds, items: [{ key: 'q', cutType: 'inside', cutDepth: 5, footprints: fp([rect(10, 10, 10, 10)]) }] }).marks.length, 0);
   near(r.stats.areas.bottom, 10000 - 100, 1e-3, 'unset Inside is open');
 }
 
@@ -117,6 +128,41 @@ function ptIn(g, x, y) { let c = false; for (let i = 0, j = g.length - 1; i < g.
   console.log(`relief budget: ${r.stats.triangles} triangles, ${r.stats.levels} levels, ${ms.toFixed(0)} ms`);
   assert.ok(r.stats.triangles <= 100000, `triangles ${r.stats.triangles}`);
   assert.ok(ms <= 1500, `build ${ms} ms (node, generous; the browser target is 150 ms)`);
+}
+
+// (S2) ON LINE grooves from the REAL deriveCutFootprint: a closed square loop and an OPEN chain, 6 mm bit, depth 4
+{
+  const D = 6, r = D / 2, depth = 4;
+  const rec = effectiveCutRecord({ cutType: 'online', toolDia: D, cutOffset: 0, cutDepth: depth });
+  // closed loop 40x40: the band is the loop swept by the bit (round corners), centred ON the line
+  const sq = rect(20, 20, 40, 40);
+  const [fc] = deriveCutFootprint([{ kind: 'loop', polygon: sq, cutType: 'online', offsetSide: 0, isCompound: false }], rec, null);
+  assert.strictEqual(fc.cutType, 'online');
+  const rc = buildRelief({ stock, bounds, items: [{ key: 'c', cutType: 'online', cutDepth: depth, footprints: [fc] }] });
+  const band = 4 * 40 * D + Math.PI * r * r - 4 * r * r;              // 4 straight bands + 4 outer quarter discs - 4 inner overlap squares
+  near(rc.stats.areas.floor, band, band * 0.01, 'closed groove floor = the swept band');
+  near(rc.stats.areas.top, 10000 - rc.stats.areas.floor, 1e-2, 'top loses the groove, keeps the plug inside');
+  assert.ok(rc.stats.areas.top > 10000 - band - 1, 'the plug (loop interior) stays at full height');
+  const ys = new Set(); for (let i = 1; i < rc.meshes.floor.positions.length; i += 3) ys.add(rc.meshes.floor.positions[i].toFixed(4));
+  assert.deepStrictEqual([...ys], ['-4.0000'], 'groove floor at the cut depth');
+  // width = the bit: across the top edge (y = 20) the groove spans y in [20 - r, 20 + r]
+  const inGroove = (x, y) => rc.levels[0].regions.some((g) => ptIn(g.outer, x, y) && !g.holes.some((h) => ptIn(h, x, y)));
+  assert.ok(inGroove(40, 20 - r + 0.05) && inGroove(40, 20 + r - 0.05), 'groove spans the bit width, centred on the line');
+  assert.ok(!inGroove(40, 20 - r - 0.1) && !inGroove(40, 20 + r + 0.1), 'and no wider');
+  assert.ok(!inGroove(40, 40), 'the plug is not cut');
+  // an open chain (one 40 mm line) -> a groove with ROUND ends, from deriveCutFootprint's chain branch
+  const st = { joints: new Map([['a', { x: 30, y: 70 }], ['b', { x: 70, y: 70 }]]), shapes: [{ id: 's', type: 'line', joints: ['a', 'b'] }], constraints: [] };
+  const [fo] = deriveCutFootprint([{ kind: 'chain', chain: { shapes: st.shapes }, cutType: 'online', offsetSide: 0, isCompound: false }], rec, st);
+  const ro = buildRelief({ stock, bounds, items: [{ key: 'o', cutType: 'online', cutDepth: depth, footprints: [fo] }] });
+  const groove = 40 * D + Math.PI * r * r;
+  near(ro.stats.areas.floor, groove, groove * 0.01, 'open groove = rectangle + two half discs');
+  const inO = (x, y) => ro.levels[0].regions.some((g) => ptIn(g.outer, x, y));
+  assert.ok(inO(30 - r + 0.2, 70), 'the end cap reaches r past the end point');
+  assert.ok(!inO(30 - r + 0.2, 70 + r - 0.2), 'but the end is ROUND (a square end would contain this corner point)');
+  assert.ok(!inO(30 - r - 0.2, 70), 'and stops at r');
+  // an On Line groove deeper than the board is a slot all the way through (no floor)
+  const rt = buildRelief({ stock, bounds, items: [{ key: 'o', cutType: 'online', cutDepth: T, footprints: [fo] }] });
+  assert.strictEqual(rt.meshes.floor.indices.length, 0); near(rt.stats.areas.bottom, 10000 - groove, groove * 0.01, 'through slot opens the bottom');
 }
 
 // (8) determinism

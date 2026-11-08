@@ -181,6 +181,10 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
             switches to Studio's form.
           - DISPATCHED 456 to CC-A after 452 merged (1c9b0fa). Amended: On Line offset is shown and exported but never
             moves the preview (Studio draws it centred even at 1.000 in), via a declared offsetMovesCut:false.
+            File (9) confirms: Studio writes cutOffset="1.000 in" on an On Line.
+            OWNER RATIONALE: storing every param on every cut type is useful, because the cut type can be changed on the
+            machine later and the params are already there. So ALL cut types carry and export all three params, and
+            switching type in our app never drops a stored value (already true since 450).
           Origin parses both. 456 uses "X.XXX in" for every non-zero value and "0in" for a zero offset. Still no On
           Line sample. Studio also groups several paths in one <g> (structure; out of scope).
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would

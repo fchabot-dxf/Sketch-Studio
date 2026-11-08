@@ -325,6 +325,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - MERGED 2026-11-08 (gated): 472 47388c6 (Stock), 476 41d394b (grid LOD; snapping still GRID_SIZE: owner Q open),
     473 3083832 (sidebar + app registry: names Sketch/Shaper/Pen Plotter/Trace, icons, titles), 474 c4f1628
     (projects store), 475 78ae8cb (Design panel well made, docked RIGHT; left = file sidebar).
+    - OWNER RULING 2026-11-08: snapping stays on the FINE grid (GRID_SIZE) when the displayed grid is coarser (476 question closed).
   - RUNNING: CC-A 479 (sidebar wired to projects + Projects browser); CC-B 480 (Drive + renewable server session);
     CC-C 478 TAKEOVER (DXF import + Shaper's Fusion add-in SVGs: greys = pockets, cm depths, holes, real arcs;
     fixtures = the owner's two files).

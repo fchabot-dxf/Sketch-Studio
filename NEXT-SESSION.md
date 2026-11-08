@@ -329,7 +329,7 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
       functions/auth/google/[action].js + web/ui/cloud/googleDrive.js mintFresh/silentRefresh): the Google REFRESH
       token held server-side in an AES-GCM sealed __Host- httpOnly cookie by Pages Functions on the app's OWN origin
       (/auth/google/start|callback|token|logout, PKCE, offline access); unconfigured = every route 404 and the client
-      falls back to the GIS token popup (localhost:8000 has no Functions). Owner steps when it lands: redirect URI
+      falls back to the GIS token popup (localhost:8000 has no Functions). Owner steps when it lands: redirect URI (DONE 2026-11-08, screenshot)
       https://sketch-studio.pages.dev/auth/google/callback; `wrangler pages secret put` GOOGLE_CLIENT_ID /
       GOOGLE_CLIENT_SECRET / SESSION_KEY; consent screen PUBLISHED to production (Testing = refresh tokens die after
       7 days; drive.file is non-sensitive, so no verification review).

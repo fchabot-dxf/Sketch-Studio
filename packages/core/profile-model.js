@@ -86,12 +86,14 @@ function singleLoopToPathD(loop, state, shapeById) {
 }
 
 /**
- * Deep clone an array of profile records.
+ * Deep clone an array of declared profile records.
  */
 export function cloneProfiles(list) {
   if (!Array.isArray(list)) return [];
   return list.map((p) => ({
-    ...p,
+    id: p.id,
+    name: p.name,
+    outer: p.outer,
     inners: p.inners ? [...p.inners] : [],
     outerShapes: p.outerShapes ? [...p.outerShapes] : [],
     innerShapes: p.innerShapes ? p.innerShapes.map((arr) => [...arr]) : [],
@@ -167,6 +169,7 @@ export function validateCombine(selectedShapeIds, loops, loopPolys, state) {
 
 /**
  * Create a new combined profile and store it on state.profiles.
+ * Stored record holds declared membership only (no transient view/invalid/path fields).
  */
 export function makeProfile(state, outerLoop, innerLoops = [], name = null) {
   if (!state) return null;
@@ -183,8 +186,6 @@ export function makeProfile(state, outerLoop, innerLoops = [], name = null) {
     inners: inners.map(l => l.id),
     outerShapes: [...outerLoop.edges],
     innerShapes: inners.map(l => [...l.edges]),
-    invalid: false,
-    invalidReason: null,
   };
   state.profiles.push(prof);
   return prof;
@@ -209,10 +210,136 @@ export function profilesOf(state) {
 }
 
 /**
- * Find combined profile covering a loop (outer or inner).
+ * Purely resolve all stored combined profiles against the current sketch geometry.
+ * Writes NOTHING into state or state.profiles.
+ *
+ * Matches each stored profile to today's closed loops from its surviving member shapes
+ * (survives fillets, breaks, and trims without rewriting the stored profile record).
+ *
+ * @param {object} state - Sketch state
+ * @param {Array} [loops] - Optional precomputed loops from findLoops(state)
+ * @param {object|Map} [loopPolys] - Optional precomputed loop polygons keyed by loop.id
+ * @returns {Map<string, { d: string, invalid: boolean, reason: string|null, outerLoopId: string|null, innerLoopIds: string[] }>}
  */
-export function profileForLoop(loopId, state) {
-  if (!state || !Array.isArray(state.profiles) || !loopId) return null;
+export function resolveProfileViews(state, loops, loopPolys) {
+  const views = new Map();
+  if (!state || !Array.isArray(state.profiles) || state.profiles.length === 0) return views;
+
+  const allLoops = loops || findLoops(state);
+  let availableLoops = [...allLoops];
+  const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
+  const polyCache = new Map();
+  const polyOf = (loop) => {
+    if (!loop) return [];
+    if (loopPolys) {
+      const p = (loopPolys instanceof Map) ? loopPolys.get(loop.id) : loopPolys[loop.id];
+      if (p && p.length) return p;
+    }
+    if (polyCache.has(loop.id)) return polyCache.get(loop.id);
+    const p = loop.edges ? loopPolygon(loop, state, shapeById) : [];
+    polyCache.set(loop.id, p);
+    return p;
+  };
+
+  for (const p of state.profiles) {
+    if (!p || !p.id) continue;
+
+    const matchedOuter = (Array.isArray(p.outerShapes) && p.outerShapes.length > 0)
+      ? matchLoop(p.outerShapes, availableLoops)
+      : (availableLoops.find((l) => l.id === p.outer) || null);
+    if (matchedOuter) {
+      availableLoops = availableLoops.filter((l) => l.id !== matchedOuter.id);
+    }
+
+    const expectedHoleCount = (Array.isArray(p.innerShapes) && p.innerShapes.length > 0)
+      ? p.innerShapes.length
+      : (Array.isArray(p.inners) ? p.inners.length : 0);
+
+    let holeMissing = false;
+    const matchedInners = [];
+    for (let i = 0; i < expectedHoleCount; i++) {
+      const targetShapes = p.innerShapes?.[i];
+      const matchedInner = (Array.isArray(targetShapes) && targetShapes.length > 0)
+        ? matchLoop(targetShapes, availableLoops)
+        : (availableLoops.find((l) => l.id === p.inners?.[i]) || null);
+      if (matchedInner) {
+        matchedInners.push(matchedInner);
+        availableLoops = availableLoops.filter((l) => l.id !== matchedInner.id);
+      } else {
+        holeMissing = true;
+      }
+    }
+
+    const outerD = matchedOuter ? singleLoopToPathD(matchedOuter, state, shapeById) : '';
+    const innerDs = [];
+    for (const hl of matchedInners) {
+      const hd = singleLoopToPathD(hl, state, shapeById);
+      if (hd) innerDs.push(hd);
+    }
+    const dParts = [];
+    if (outerD) dParts.push(outerD);
+    dParts.push(...innerDs);
+    const d = dParts.join(' ');
+
+    const outerLoopId = matchedOuter ? matchedOuter.id : null;
+    const innerLoopIds = matchedInners.map((l) => l.id);
+
+    if (!matchedOuter) {
+      views.set(p.id, { d, invalid: true, reason: 'Outer boundary loop missing or open', outerLoopId, innerLoopIds });
+      continue;
+    }
+
+    if (holeMissing || matchedInners.length !== expectedHoleCount) {
+      views.set(p.id, { d, invalid: true, reason: 'Hole loop missing or open', outerLoopId, innerLoopIds });
+      continue;
+    }
+
+    // Geometry containment & non-crossing checks
+    const outerPoly = polyOf(matchedOuter);
+    let reason = null;
+    for (let i = 0; i < matchedInners.length; i++) {
+      const innPoly = polyOf(matchedInners[i]);
+      if (!polygonContains(outerPoly, innPoly)) {
+        reason = 'Hole is not strictly contained in outer boundary';
+        break;
+      }
+      for (let j = i + 1; j < matchedInners.length; j++) {
+        const inn2Poly = polyOf(matchedInners[j]);
+        if (polygonContains(innPoly, inn2Poly) || polygonContains(inn2Poly, innPoly)) {
+          reason = 'Nested hole loops are not supported';
+          break;
+        }
+        if (polysCross(innPoly, inn2Poly)) {
+          reason = 'Hole loops intersect';
+          break;
+        }
+      }
+      if (reason) break;
+    }
+
+    if (reason) {
+      views.set(p.id, { d, invalid: true, reason, outerLoopId, innerLoopIds });
+    } else {
+      views.set(p.id, { d, invalid: false, reason: null, outerLoopId, innerLoopIds });
+    }
+  }
+
+  return views;
+}
+
+/**
+ * Find combined profile covering a loop (outer or inner), resolved against live geometry via resolveProfileViews.
+ */
+export function profileForLoop(loopId, state, loops, loopPolys) {
+  if (!state || !Array.isArray(state.profiles) || !loopId || state.profiles.length === 0) return null;
+  if (Array.isArray(loops) || (Array.isArray(state.shapes) && state.shapes.length > 0)) {
+    const views = resolveProfileViews(state, loops, loopPolys);
+    for (const p of state.profiles) {
+      const v = views.get(p.id);
+      if (v && (v.outerLoopId === loopId || v.innerLoopIds.includes(loopId))) return p;
+    }
+    return null;
+  }
   for (const p of state.profiles) {
     if (p.outer === loopId) return p;
     if (Array.isArray(p.inners) && p.inners.includes(loopId)) return p;
@@ -221,136 +348,28 @@ export function profileForLoop(loopId, state) {
 }
 
 /**
- * Find combined profile containing a shape ID.
+ * Find combined profile containing a shape ID (declared member shapes first, then live resolved loops).
  */
-export function profileForShape(shapeId, state) {
-  if (!state || !Array.isArray(state.profiles) || !shapeId) return null;
+export function profileForShape(shapeId, state, loops, loopPolys) {
+  if (!state || !Array.isArray(state.profiles) || !shapeId || state.profiles.length === 0) return null;
   for (const p of state.profiles) {
     if (Array.isArray(p.outerShapes) && p.outerShapes.includes(shapeId)) return p;
     if (Array.isArray(p.innerShapes) && p.innerShapes.some(arr => arr.includes(shapeId))) return p;
   }
+  if (Array.isArray(loops) || (Array.isArray(state.shapes) && state.shapes.length > 0)) {
+    const allLoops = loops || findLoops(state);
+    const loopById = new Map(allLoops.map(l => [l.id, l]));
+    const views = resolveProfileViews(state, allLoops, loopPolys);
+    for (const p of state.profiles) {
+      const v = views.get(p.id);
+      if (!v) continue;
+      if (v.outerLoopId && loopById.get(v.outerLoopId)?.edges?.includes(shapeId)) return p;
+      for (const hid of v.innerLoopIds) {
+        if (loopById.get(hid)?.edges?.includes(shapeId)) return p;
+      }
+    }
+  }
   return null;
-}
-
-/**
- * Re-resolve profile loops dynamically from shape membership.
- * Handles topology changes (fillets, chamfers, trims) and marks invalid if edges broken or containment lost.
- */
-export function resolveProfiles(state, loops, loopPolys) {
-  if (!state || !Array.isArray(state.profiles) || state.profiles.length === 0) return;
-  const allLoops = loops || findLoops(state);
-  let availableLoops = [...allLoops];
-
-  for (const p of state.profiles) {
-    const matchedOuter = matchLoop(p.outerShapes, availableLoops);
-    if (!matchedOuter) {
-      p.invalid = true;
-      p.invalidReason = 'Outer boundary loop missing or open';
-      continue;
-    }
-
-    availableLoops = availableLoops.filter(l => l.id !== matchedOuter.id);
-
-    let holeMissing = false;
-    const newInners = [];
-    const newInnerShapes = [];
-    const expectedHoleCount = Array.isArray(p.innerShapes) ? p.innerShapes.length : (Array.isArray(p.inners) ? p.inners.length : 0);
-
-    if (expectedHoleCount > 0) {
-      for (let i = 0; i < expectedHoleCount; i++) {
-        const targetShapes = p.innerShapes?.[i] || [];
-        const matchedInner = matchLoop(targetShapes, availableLoops);
-        if (matchedInner) {
-          newInners.push(matchedInner.id);
-          newInnerShapes.push([...matchedInner.edges]);
-          availableLoops = availableLoops.filter(l => l.id !== matchedInner.id);
-        } else {
-          holeMissing = true;
-          break;
-        }
-      }
-    }
-
-    if (holeMissing || newInners.length !== expectedHoleCount) {
-      p.invalid = true;
-      p.invalidReason = 'Hole loop missing or open';
-      continue;
-    }
-
-    // Geometry checks
-    const outerPoly = getPoly(matchedOuter, loopPolys, state);
-    let geomInvalid = false;
-    for (let i = 0; i < newInners.length; i++) {
-      const innLoop = allLoops.find(l => l.id === newInners[i]);
-      const innPoly = innLoop ? getPoly(innLoop, loopPolys, state) : [];
-      if (!polygonContains(outerPoly, innPoly)) {
-        p.invalid = true;
-        p.invalidReason = 'Hole is not strictly contained in outer boundary';
-        geomInvalid = true;
-        break;
-      }
-      for (let j = i + 1; j < newInners.length; j++) {
-        const inn2Loop = allLoops.find(l => l.id === newInners[j]);
-        const inn2Poly = inn2Loop ? getPoly(inn2Loop, loopPolys, state) : [];
-        if (polygonContains(innPoly, inn2Poly) || polygonContains(inn2Poly, innPoly)) {
-          p.invalid = true;
-          p.invalidReason = 'Nested hole loops are not supported';
-          geomInvalid = true;
-          break;
-        }
-        if (polysCross(innPoly, inn2Poly)) {
-          p.invalid = true;
-          p.invalidReason = 'Hole loops intersect';
-          geomInvalid = true;
-          break;
-        }
-      }
-      if (geomInvalid) break;
-    }
-
-    if (!geomInvalid) {
-      p.outer = matchedOuter.id;
-      p.outerShapes = [...matchedOuter.edges];
-      p.inners = newInners;
-      p.innerShapes = newInnerShapes;
-      p.invalid = false;
-      p.invalidReason = null;
-    }
-  }
-}
-
-/**
- * Generate compound SVG path 'd' for a profile (outer loop and all inner loops separated by space).
- */
-export function profileToPathD(profile, state, loops) {
-  if (!profile || !state || !state.joints) return '';
-  const allLoops = loops || findLoops(state);
-  const loopById = new Map(allLoops.map(l => [l.id, l]));
-  const shapeById = new Map((state.shapes || []).map(s => [s.id, s]));
-
-  let outerLoop = loopById.get(profile.outer);
-  if (!outerLoop && Array.isArray(profile.outerShapes)) {
-    outerLoop = matchLoop(profile.outerShapes, allLoops);
-  }
-  if (!outerLoop) return '';
-
-  const outerD = singleLoopToPathD(outerLoop, state, shapeById);
-  if (!outerD) return '';
-
-  const innerDs = [];
-  const inners = Array.isArray(profile.inners) ? profile.inners : [];
-  for (let i = 0; i < inners.length; i++) {
-    let hl = loopById.get(inners[i]);
-    if (!hl && Array.isArray(profile.innerShapes?.[i])) {
-      hl = matchLoop(profile.innerShapes[i], allLoops);
-    }
-    if (hl) {
-      const hd = singleLoopToPathD(hl, state, shapeById);
-      if (hd) innerDs.push(hd);
-    }
-  }
-
-  return [outerD, ...innerDs].join(' ');
 }
 
 // ── Derived Profile / Face Resolver (AMENDMENT 4, FINAL) ───────────────────────
@@ -414,21 +433,31 @@ export function derivedProfileForLoop(loopId, loops, loopPolys, state) {
     outerShapes: [...(loop.edges || [])],
     innerShapes: directHoles.map(h => [...(h.edges || [])]),
     isDerived: true,
-    invalid: false,
-    invalidReason: null,
   };
 }
 
 /**
  * ONE Unified Resolver for a loop:
- * Combined profile wins if one covers loopId; otherwise returns the derived face.
+ * Combined profile wins if one covers loopId (resolved via resolveProfileViews); otherwise returns the derived face.
  */
 export function resolveProfileForLoop(loopId, state, loops, loopPolys) {
-  const combined = profileForLoop(loopId, state);
-  if (combined) {
-    return combined;
+  const allLoops = loops || (state ? findLoops(state) : []);
+  if (state && Array.isArray(state.profiles) && state.profiles.length > 0) {
+    const views = resolveProfileViews(state, allLoops, loopPolys);
+    for (const p of state.profiles) {
+      const v = views.get(p.id);
+      if (v && (v.outerLoopId === loopId || v.innerLoopIds.includes(loopId))) {
+        return {
+          id: p.id,
+          name: p.name,
+          outer: v.outerLoopId,
+          inners: [...v.innerLoopIds],
+          isDerived: false,
+        };
+      }
+    }
   }
-  return derivedProfileForLoop(loopId, loops, loopPolys, state);
+  return derivedProfileForLoop(loopId, allLoops, loopPolys, state);
 }
 
 /**

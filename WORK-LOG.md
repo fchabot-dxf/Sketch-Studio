@@ -11760,3 +11760,36 @@ Why SketchStudio chose **EXPLICIT COMBINE** (and *"holes are not automatic"*):
     - `HEADLESS-LEFT 0`
     - `HEADLESS-OTHER 0`
     - Exit code 0.
+
+
+## TURN 431c · refactor(profile): pure resolveProfileViews in draw; remove stored invalid/d (TASK 431c) — branch agy1
+
+- **Branch sync:**
+  - `git fetch && git merge --ff-only origin/main` could not fast-forward (`agy1` had `3069ff3..f31e66f` while `origin/main` had `d75f409..95b217c`); merged `origin/main` cleanly into `agy1` before applying 431c changes.
+- **did:**
+  1. **Pure profile resolution (`packages/core/profile-model.js`)**:
+     - Added and exported `resolveProfileViews(state, loops, loopPolys)` returning a `Map<string, { d, invalid, reason, outerLoopId, innerLoopIds }>`. Writes NOTHING into `state` or `state.profiles`.
+     - Matches each stored profile to today's closed loops from its surviving member shapes (`matchLoop`), so filleting an outer or hole corner resolves the 5-edge loop and compound arc path `d` without mutating the stored profile record, and deleting hole edges marks the returned view `{ invalid: true, reason: 'Hole loop missing or open' }` while preserving `outerLoopId` and outer `d`.
+     - Routed `profileForLoop`, `profileForShape`, and `resolveProfileForLoop` through `resolveProfileViews` so all profile state queries share one pure source of truth.
+  2. **Renderer (`packages/ui/svg-renderer.js`)**:
+     - Replaced `profileToPathD` / `p.d` / `p.invalid` with `resolveProfileViews(st)` inside `draw`.
+     - Emits background fill beneath shapes and emits invalid profile warning dashed strokes (`stroke="#ef4444" stroke-dasharray=...`) right after the shape stroke pass (beneath joints, `pointer-events="none"`) so the red dashed warning outline is visibly rendered over the blue geometry lines rather than occluded beneath them.
+     - Re-measured per-frame render cost on a 200-shape (50-loop) sketch over 200 frames (after 30-frame warmup):
+       - WITH `resolveProfileViews` (1 profile): `140.97 ms total (0.705 ms/frame) hasTint=true`
+       - WITHOUT profiles (0 profiles): `64.78 ms total (0.324 ms/frame) hasTint=false`
+  3. **Sweep & deletion (`packages/core/profile-model.js`, `packages/ui/svg-renderer.js`, `tests/profile-model.test.js`)**:
+     - Deleted mutating `resolveProfiles` and `profileToPathD`.
+     - Removed `invalid`, `invalidReason`, and `d` from `makeProfile`, `derivedProfileForLoop`, and `cloneProfiles` (which now explicitly clones only the declared schema `{ id, name, outer, inners, outerShapes, innerShapes }`).
+  4. **No topology-edit record writes**:
+     - Added zero profile-record writes to `delete`, `fillet`, or `trim`; all topology tests pass purely via `resolveProfileViews`.
+  5. **Tests (`tests/profile-model.test.js`)**:
+     - Updated topology tests (outer corner fillet, hole corner fillet, single hole-edge delete, whole-hole delete) to assert `resolveProfileViews` outputs and `deepStrictEqual(state.profiles, beforeProfiles)`.
+     - Added test 11 (`Renderer draw() purity`) asserting `deepStrictEqual(state.profiles, before)` before and after `draw(...)` for both valid filleted and deleted-hole invalid cases, plus snapshot/serialize/deserialize/clone assertions that no `invalid`/`invalidReason`/`d` keys exist.
+- **evidence:**
+  - `git grep -n "resolveProfiles\|profileToPathD" packages/ apps/ tests/` -> 0 matches; `git grep -n "invalidReason" packages/ apps/` -> 0 matches.
+  - `node tests/profile-model.test.js` -> `profile-model tests passed ✅`.
+  - Live headless Shaper verification (`.evidence/431c/`, local untracked):
+    - `.evidence/431c/fillet-outer-tint.png` (MD5: `A964EA5B90DA37E00E8F8884877F1A8B`): Combined frame after filleting top-right outer corner (`R = 14mm` / `0.551in`); blue-grey `evenodd` tint fills outer ring including curved fillet arc while inner hole stays open; `state.profiles` unchanged.
+    - `.evidence/431c/delete-hole-invalid.png` (MD5: `6A2227B49E00242341494D2B108D3AC2`): Same combined frame after deleting the 4 inner hole lines via `Delete`; red warning fill + crisp `#ef4444` red dashed outline around the surviving filleted outer boundary; `state.profiles` unchanged.
+  - `npm run gate`: `GATE files=158 pass=158 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, `HEADLESS-OTHER 0`.
+

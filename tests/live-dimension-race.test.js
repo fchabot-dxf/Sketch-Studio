@@ -10,6 +10,7 @@
     const el = {
       tagName: tag.toUpperCase(),
       style: {},
+      classList: { _set: new Set(), add(s){ this._set.add(s); }, remove(s){ this._set.delete(s); }, contains(s){ return this._set.has(s); } },
       value: '',
       id: null,
       _children: [],

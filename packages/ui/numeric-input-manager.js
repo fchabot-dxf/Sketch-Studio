@@ -96,14 +96,12 @@ export function ensureNumericInputStyles() {
 
 export function hideNumericInputEl(el) {
     if (!el) return;
-    if (el.classList && typeof el.classList.add === 'function') el.classList.add('hidden');
-    if (el.style) el.style.display = 'none';
+    el.classList.add('hidden');
 }
 
-export function showNumericInputEl(el, display = '') {
+export function showNumericInputEl(el) {
     if (!el) return;
-    if (el.classList && typeof el.classList.remove === 'function') el.classList.remove('hidden');
-    if (el.style) el.style.display = display;
+    el.classList.remove('hidden');
 }
 
 // Inject shared numeric input styles immediately in browser environments so static/created .dim-input.hidden
@@ -255,7 +253,7 @@ export function showDualInput(x, y, w, h) {
 
     uiState.dualContainer.style.left = `${x}px`;
     uiState.dualContainer.style.top = `${y}px`;
-    showNumericInputEl(uiState.dualContainer, 'flex');
+    showNumericInputEl(uiState.dualContainer);
 
     uiState.dualInputW.value = w.toFixed(1);
     uiState.dualInputH.value = h.toFixed(1);

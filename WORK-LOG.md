@@ -12524,3 +12524,80 @@ Fixture: 60×60 outer square (`O`) with concentric 20×20 hole (`H`, from 20..40
 - Tests tests/diagnostic-log-collapse.test.js: (a) 1000 identical -> 1 entry count 1000, 2 older distinct entries kept; (b) A,A,B,A -> A x2, B, A, and same message with a different payload = different entries; (c) draw() x50 with an unchanged constraint set logs the summary once, adding a constraint logs again once (real draw() with the mock svg, as the other renderer tests do); (d) JSON.parse(report) succeeds, `count` is a number on every entry, no "×" in the data. Non-vacuous: against the old code (buildReport exported only so it can run) it fails at (a): "expected 3 entries ..., got 300".
 - Live (headless SketchStudio, real mouse: 3 lines drawn, pointer moved 4 s + wheel zoom, then opened the log): BEFORE `300 entries · 55 touch events`, top rows two identical `[dbg/renderer] constraints {"total":2,"visible":2}`; AFTER `73 entries · 56 touch events`, one renderer row per CHANGE (total 2, then total 3 visible 2), and a pointerMove run shown as one row `×121 (to 9:30:04 AM) [dbg/selection] ... pointerMove`. .evidence/429/before-diag-log.png md5 495cacbd19b8b79193125c3bcde98a62; after-diag-log.png md5 5927bb0024750580b53ad8b3a1460bff (local).
 - Behaviour change: existing Copy Report consumers see two new fields per log entry (tLast, count) and collapsed runs; pointerMove-style per-event logs collapse too (they were flooding as well).
+
+## TURN 437 (SPINDLE MOTION PLAN) -- CC-A. PLAN ONLY, no product code.
+Owner ask: "in Prepare, show the movement of the spindle in the toolpath". All file:line below re-verified on the current origin/main (after 432/433/446/429).
+
+### 0. What exists today (the facts the plan rests on)
+- ONE cut derivation: `deriveProfileCuts(target, rec, state, loops, loopPolys)` (packages/core/profile-model.js:659). It returns an ORDERED list of cut descriptors: pocket = ONE compound cut (outerPoly + holePolys, outerOffsetSide -1, holeOffsetSide +1; :699-716); outside/inside/online/guide = HOLES FIRST then the outer LAST (:726-752, offsetSide +-1/0); chain = one open chain, offsetSide 0 (:668-678).
+- Preview (apps/shaper/src/prepare-view.js) calls it at :291 and draws a STATIC cutter-centre outline: `offsetPolygon(poly, offsetSide * (toolDia/2 + cutOffset))` (:308, :312, :347), a tool-diameter band (stroke-width = toolDia), guide = dashed (:333-341), pocket = hatch + depth label (:322). There is no notion of order, direction or depth pass.
+- Export (packages/core/shaper-export.js `exportShaperSVG`) does NOT emit offset paths. For each cut-plan entry (in `cutPlanEntries()` order = CUT_PLAN Map insertion order, apps/shaper/src/cut-plan.js:23-29) it emits the DESIGN geometry as drawn (`loopToPathD`, loop-geometry.js:122; a circle = two arcs; compound pocket = one path, fill-rule evenodd) plus the attributes shaper:cutType / cutDepth (omitted when 'unset') / cutOffset (omitted when 0) / toolDia (shaper-export.js:84-95). The Origin computes the tool offset itself. V-carve contours are appended AFTER all entries (shaper-export.js:223-239), each as an `online` path with its own `shaper:cutDepth = d/tan(halfAngle)` (vcarve.js:70-83). groupByCut only regroups identical attribute sets (:241-252, first-seen order kept).
+- The Simulate/Export tab (#view-simexport, apps/shaper/index.html:266; main.js:56-90) is a Generate/Sync panel only.
+- The owner question is already open (NEXT-SESSION.md:108): does the Origin follow SVG path order?
+
+### 1. WHAT MOVES, per cut type  (D = derivable today, from where; N = needs a new declared field)
+Path ORDER
+- on line / inside / outside: D. Within a target: holes first, outer last (profile-model.js:726-752). Between targets: CUT_PLAN insertion order (cut-plan.js:23).
+- pocket: D. One compound path (holes are part of it); between targets as above.
+- guide: not cut (reference mark) -> no motion.
+- V-carve: D. Contours come after all entries, in generation order = inset step i ascending, rings of one step in Clipper order (vcarve.js:55-76).
+
+DIRECTION along a path
+- closed loops (on line / inside / outside): D. loop.joints order. loop-finder traces every bounded face counter-clockwise / positive area (loop-finder.js:9-10), holes included and NOT reversed; arcs flip their sweep flag per traversal (shaper-export.js:43-58).
+- chain: D. chain order from findOpenChains (loop-finder.js:139).
+- pocket: D. outer + holes as drawn in the compound path.
+- V-carve: Clipper output ring winding is UNVERIFIED (vcarve.js:50-52 normalises only the INPUT orientation).
+- SCREEN SENSE: "counter-clockwise" is in math coordinates; whether it looks CW on screen depends on the y-down world->screen map. UNVERIFIED -> must be checked before arrows are drawn (slice 1 test c).
+
+DEPTH PASSES
+- on line / inside / outside / pocket: N/A in data. There is a single `rec.cutDepth` (default 'unset', apps/shaper/src/shaper.js defaultCutRecord) -> one shaper:cutDepth attribute. No pass count or pass step exists.
+- V-carve: D. The depth ladder IS in the data: each contour has its own depth d/tan (vcarve.js:70); each ring is a separate `online` path at its own depth = one "pass" each, shallow to deep.
+
+PLUNGE / RETRACT points
+- all cut types: N. Not in our data. The start point of a closed loop = loop.joints[0] (D, arbitrary), of a V-carve ring = ring[0] (D, arbitrary). The real plunge/retract is the Origin's (section 2).
+
+TRAVEL between paths
+- N. Not in our data. A straight "air move" from the end of one path to the start of the next is the only honest drawable; the real travel is the operator moving the tool.
+
+NEW DECLARED FIELDS (only if we want to CONTROL the job, not just show it; none is needed for slice 1):
+- (a) `rec.passDepth` (mm, default 'unset' = single pass) in the cut record (apps/shaper/src/shaper.js defaultCutRecord + CUT_PLAN) - ONLY if Q2 says the Origin honours it from the SVG.
+- (b) `rec.direction` ('auto' | 'ccw' | 'cw', default 'auto') - ONLY if Q1/Q3 say direction is ours to set.
+- (c) an explicit cut ORDER list (`state.cutOrder: [targetKey, ...]`, default = CUT_PLAN order) - ONLY if Q1 is yes.
+
+### 2. What the ORIGIN decides vs what OUR SVG decides (no invented machine behaviour)
+- CONFIRMED from code: the SVG we emit carries geometry + shaper:cutType/cutDepth/cutOffset/toolDia only (shaper-export.js:84-95). There is no order hint, no pass depth and no direction attribute in our output.
+- CONFIRMED from code: the tool offset is applied by the Origin, not baked into our paths (our preview's offsetPolygon is a display approximation; shaper-export.js never calls it).
+- UNVERIFIED (not in code or the repo notes) = OWNER QUESTIONS:
+  - Q1: Does the Origin cut multiple elements in SVG document order, or does the operator/Origin choose the order?
+  - Q2: Does the Origin split depth into passes by itself (its own max pass depth), so cutDepth alone gives passes? Who sets the pass depth: the operator on the tool or the SVG?
+  - Q3: Is the direction around a closed path taken from the SVG path winding, or decided by the Origin/operator (climb vs conventional)? The Origin is handheld: the operator walks the router and the tool corrects XY only a little, so the "motion" shown on screen is really the operator's path guide, not a CNC toolpath.
+  - Q4: Where does a pass start / plunge and how does it retract between paths? (Z belongs to the tool; we have no field.)
+  - Q5: Do V-carve `online` contours at different depths get cut in document order shallow-to-deep, or in the Origin's own order?
+- Consequence: everything the view shows must be labelled by what it IS: "order and direction as exported" (certain, from our own data) vs "what the machine will do" (unknown until Q1-Q5 are answered). Slice 1 shows ONLY the first kind.
+
+### 3. THE VIEW (one design)
+- WHERE: PREPARE (the owner's words; it already owns the cutter-centre outline, the tool band and the per-target cut records). The Simulate tab is only the Generate/Sync panel and would need the canvas + derivation re-mounted; it stays export-only until an optional whole-job playback (slice 5).
+- WHAT: in Prepare, a "Motion" strip under the canvas: Play/Pause, scrub slider (0..total length), speed, and a "Show motion" toggle. With it on: (1) direction chevrons along each cutter-centre path, (2) a tool dot of TRUE tool diameter (world units, scales with zoom) moving along the paths in sequence order, (3) completed length solid / remaining dashed, (4) a depth chip next to the dot showing the current cut depth in the document unit (single cutDepth, or the V-carve contour's own depth), (5) the travel between paths as a thin straight "air move" line styled as NOT a cut.
+- ONE DERIVATION: new pure module `packages/core/cut-sequence.js` `deriveCutSequence({ state, entries, loops, loopPolys })` -> ordered [{ targetKey, cutType, kind (loop | compound | chain | vcarve-ring), polygon (design geometry, direction as exported), cutDepth, toolDia, cutOffset, offsetSide, isHole }]. exportShaperSVG's body loop (shaper-export.js:198-239) is refactored to CONSUME it (byte-identical output, proven by the existing export oracles) and the Prepare motion view consumes the SAME list, deriving only the display-side cutter-centre path from `polygon` with offsetPolygon (as prepare-view.js:308-347 does today). Order and direction therefore exist in exactly one place; the view and the export cannot disagree. The timeline (arc-length parametrisation, dot position at s) is a second pure function `packages/core/cut-motion.js` `motionAt(sequence, s)`.
+
+### 4. SLICES
+1. SLICE 1 (smallest that shows real motion): extract `deriveCutSequence` from exportShaperSVG with ZERO output change; in Prepare add the toggle, direction arrows and a Play button moving a tool dot (to-scale diameter) along the cutter-centre paths in sequence order. No depth, no scrub, no new fields. Labelled "order and direction as exported".
+2. SLICE 2: scrub slider + speed + pause/resume + completed/remaining styling + air-move lines between paths.
+3. SLICE 3: depth readout (chip) from cutDepth for pocket/online/inside/outside, and the V-carve contour ladder (each ring at its own depth, shallow to deep).
+4. SLICE 4 (only after the owner answers Q1-Q5): Q2 -> `rec.passDepth` + pass-by-pass replay; Q1/Q3 -> `rec.direction` and an explicit order control, with the export honouring them through the same sequence; Q4 -> plunge/retract markers.
+5. SLICE 5 (optional): a whole-job playback on the Simulate tab reusing `motionAt` (no new derivation).
+
+### 5. TESTS per slice (Node oracles unless noted; fail-first)
+- S1: (a) export oracle: exportShaperSVG output byte-identical before/after the extraction over the existing fixtures (rects, holes-first profile, pocket, chain, vcarve, groupByCut); (b) deriveCutSequence order: holes before outer, targets in CUT_PLAN insertion order, vcarve after the entries, vcarve-excluded loops absent; (c) direction: a CCW-authored square and a CW-authored square give the exported winding in `polygon` (documents the loop-finder CCW fact, including the screen-sense check of section 1); (d) real-event CDP test in Shaper Prepare: toggle on, press Play, the dot's position changes over time and its radius = toolDia/2 x zoom; arrow count > 0; Prepare with no cuts shows no motion UI and no error.
+- S2: `motionAt` pure: s=0 -> start, s=total -> end, monotone, continuous across path joins, air-move segments flagged; scrubbing to s puts the dot where playing to s does; pause holds position.
+- S3: depth per element: a pocket at cutDepth 6 -> chip 6; V-carve ring i -> d_i/tan, increasing with i; 'unset' -> chip "unset" (no invented depth).
+- S4: passDepth 2 on cutDepth 6 -> 3 passes in the replay and (if Q2 = yes) in the export attribute; direction 'cw' flips the exported winding AND the arrows together (one derivation); an order override changes export element order and replay order identically.
+- Always: the full gate; a legible screenshot per slice; no view-only code path (the view reads the sequence, never re-derives order).
+
+### 6. Risks / notes
+- offsetPolygon returns [] on a thin neck / split (polygon-offset.js header): the view must visibly skip such a cut ("path collapsed at this tool size"), never invent a path; V-carve already uses Clipper for splits.
+- The preview's cutter-centre path approximates what the Origin computes; label it so.
+- Performance: animate with requestAnimationFrame ONLY while playing (Prepare is render-on-demand today, prepare-view.js header); stop the RAF on leave/destroy.
+
+### Stop condition "no product code changed"
+Checked with `git diff --name-only origin/main` and `git status --short` before the commit: only WORK-LOG.md.

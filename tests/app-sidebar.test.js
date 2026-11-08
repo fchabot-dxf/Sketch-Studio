@@ -142,9 +142,9 @@ await (async () => {
 
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['download'] },
-      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['download'] },
-      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['download-svg', 'download-dxf'] },
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
+      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
+      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download-svg', 'download-dxf'] },
       { id: 'trace', path: '/apps/trace/index.html', actions: ['download-svg', 'download-dxf'] },
     ];
     // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──
@@ -169,7 +169,7 @@ await (async () => {
       await Promise.race([l, sleep(10000)]);
       await sleep(1800);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-appsw').length`), 0, `${host.id}: the app-switcher dropdown is gone`);
-      assert.strictEqual(await evalJs(`document.title`), appTitle(host.id), `${host.id}: document.title comes from the registry`);
+      assert.ok([appTitle(host.id), appTitle(host.id, 'Untitled')].includes(await evalJs(`document.title`)), `${host.id}: document.title comes from the registry (with the design name once a design exists)`);
       assert.strictEqual(await evalJs(`document.querySelector('link[rel="icon"]').getAttribute('href')`), appIconDataUri(host.id), `${host.id}: the favicon comes from the registry`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar-btn').length`), 1, `${host.id}: one sidebar button`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, `${host.id}: closed at start`);
@@ -181,7 +181,7 @@ await (async () => {
       const goto = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-section="goto"] [data-app]')].map((b) => [b.dataset.app, b.getAttribute('aria-current') === 'true'])`);
       assert.deepStrictEqual(goto.map((g) => g[0]), ['sketchstudio', 'shaper', 'penplotter', 'trace'], `${host.id}: GO TO lists the 4 apps`);
       assert.deepStrictEqual(goto.filter((g) => g[1]).map((g) => g[0]), [host.id], `${host.id}: GO TO marks the current app`);
-      assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Untitled', `${host.id}: the document name is shown`);
+      assert.ok(['Untitled', 'Image Trace'].includes(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`)), `${host.id}: the document name is shown`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-sidebar [data-section="goto"] svg').length`), 4, `${host.id}: GO TO shows the four app icons`);
       if (host.id === 'trace') assert.strictEqual(await evalJs(`document.querySelector('[data-action="download-svg"]').disabled`), true, 'trace: Download is disabled until there is a trace');
       if (process.env.EVIDENCE_DIR) { const s = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 700, height: 800, scale: 1.4 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, `${host.id}-sidebar-open.png`), Buffer.from(s.data, 'base64')); }

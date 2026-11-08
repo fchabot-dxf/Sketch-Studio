@@ -172,6 +172,14 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
           formats exactly as Studio (depth "0.100 in"; offset always, "0in" / "0.063 in"; toolDia always, "0.125in";
           attribute order cutType, depth, offset, bit). Keep our flat elements and <circle>. mm format unverified.
           Third Studio file: toolDia "0.060 in" (space) next to "0.125in", so the spacing follows typed-vs-preset and the
+          Origin parses both. Files (6) + owner screenshot:
+          - On Line: stroke #7F7F7F, fill none, cutOffset "0in" written, and Studio SHOWS an Offset field, so On Line
+            gets its offset back (one-line params change, in 456);
+          - open paths can only be on line / guide in Studio's menu (we already gate this);
+          - COMBINED shape = ONE path with outer + hole subpaths, NO fill-rule (nonzero), the hole wound OPPOSITE.
+            Ours uses evenodd with same-winding holes, so the holes would fill if the Origin ignores fill-rule. 456
+            switches to Studio's form.
+          - DISPATCHED 456 to CC-A after 452 merged (1c9b0fa).
           Origin parses both. 456 uses "X.XXX in" for every non-zero value and "0in" for a zero offset. Still no On
           Line sample. Studio also groups several paths in one <g> (structure; out of scope).
         - Owner Q: a Studio export with a POCKET and an ON LINE cut (ideally an On Line with an offset typed in) would

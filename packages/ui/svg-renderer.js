@@ -12,6 +12,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
+import { placeDimText, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -162,6 +163,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
+  const LABEL_FONT_FAMILY = getStr('LABEL_FONT_FAMILY', ''); // '' = no font-family attribute (inherits the host's font)
+  const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
   const HOVER_COLOR = getStr('HOVER_COLOR', '#1e40af');
   const FIXED_JOINT_FILL = getStr('FIXED_JOINT_FILL', 'white');
 
@@ -316,8 +319,168 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     };
   }
 
+  // --- Dimension geometry, shared by the dimension drawing below and the glyph/label overlap rule ---
+  const resolveDimEnds = (c) => {
+    let j1 = null, j2 = null;
+    if(c.isRadius && c.shape){
+      const shape = shapes.find(s => s.id === c.shape);
+      if(shape && shape.joints && shape.joints.length >= 1) j1 = joints.get(shape.joints[0]);
+    } else if(c.joints && c.joints.length >= 2){
+      j1 = joints.get(c.joints[0]); j2 = joints.get(c.joints[1]);
+    } else if(c.shapes && c.shapes.length === 2){
+      // Line-Line Distance (Parallel)
+      const s1 = shapes.find(s => s.id === c.shapes[0]);
+      const s2 = shapes.find(s => s.id === c.shapes[1]);
+      if(s1 && s2 && s1.joints && s2.joints){
+        const l1a = joints.get(s1.joints[0]), l1b = joints.get(s1.joints[1]);
+        const l2a = joints.get(s2.joints[0]), l2b = joints.get(s2.joints[1]);
+        if(l1a && l1b && l2a && l2b){
+          // Project midpoint of s1 onto s2 to get perpendicular distance points
+          const mx = (l1a.x + l1b.x)/2, my = (l1a.y + l1b.y)/2;
+          j1 = { x: mx, y: my };
+          const dx = l2b.x - l2a.x, dy = l2b.y - l2a.y;
+          const det = dx*dx + dy*dy;
+          if(det > 0.00001){
+             const t = ((j1.x - l2a.x)*dx + (j1.y - l2a.y)*dy) / det;
+             j2 = { x: l2a.x + t*dx, y: l2a.y + t*dy };
+          }
+        }
+      }
+    } else if(c.joint && c.shape){
+      // Point-Line Distance
+      j1 = joints.get(c.joint);
+      const s = shapes.find(s => s.id === c.shape);
+      if(j1 && s && s.joints){
+         const l1 = joints.get(s.joints[0]), l2 = joints.get(s.joints[1]);
+         if(l1 && l2){
+           const dx = l2.x - l1.x, dy = l2.y - l1.y;
+           const det = dx*dx + dy*dy;
+           if(det > 0.00001){
+              const t = ((j1.x - l1.x)*dx + (j1.y - l1.y)*dy) / det;
+              j2 = { x: l1.x + t*dx, y: l1.y + t*dy };
+           }
+         }
+      }
+    }
+    return { j1, j2 };
+  };
+
+  // A radius label: explicit placement (__pos), else `offset` along the declared labelAngle from the centre.
+  const radiusLabelPos = (c, center, offset) => {
+    if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
+    const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : 0;
+    return { x: center.x + Math.cos(angle) * offset, y: center.y + Math.sin(angle) * offset };
+  };
+
+  // A linear dimension: value text, extension lines, dimension line and arrow direction.
+  const linearDimGeom = (c, j1, j2, offset) => {
+    const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2;
+    const dx = j2.x - j1.x, dy = j2.y - j1.y;
+    const len = Math.hypot(dx, dy);
+    const isPlacing = !!c.__placing;
+    const isDrivenFlag = !!(c.isDriven || c.driven);
+    const hasValue = (typeof c.value === 'number');
+    const dimMode = c.dimMode || 'aligned';
+    let displayVal, nx, ny, annotX, annotY;
+    let ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd;
+    let adx, ady; // arrow direction
+
+    if (dimMode === 'horizontal') {
+      // Horizontal: measure X distance, dim line is horizontal, extensions are vertical
+      const projDist = Math.abs(j2.x - j1.x);
+      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
+      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+
+      const midY = (j1.y + j2.y) / 2;
+      const dimY = midY + offset;
+
+      nx = 0; ny = 1; // extensions go vertical
+      ext1Start = { x: j1.x, y: j1.y };
+      ext1End = { x: j1.x, y: dimY };
+      ext2Start = { x: j2.x, y: j2.y };
+      ext2End = { x: j2.x, y: dimY };
+      dimLineStart = { x: j1.x, y: dimY };
+      dimLineEnd = { x: j2.x, y: dimY };
+      annotX = (j1.x + j2.x) / 2;
+      annotY = dimY;
+      adx = j2.x > j1.x ? 1 : -1; ady = 0;
+
+    } else if (dimMode === 'vertical') {
+      // Vertical: measure Y distance, dim line is vertical, extensions are horizontal
+      const projDist = Math.abs(j2.y - j1.y);
+      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
+      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+
+      const midX = (j1.x + j2.x) / 2;
+      const dimX = midX + offset;
+
+      nx = 1; ny = 0; // extensions go horizontal
+      ext1Start = { x: j1.x, y: j1.y };
+      ext1End = { x: dimX, y: j1.y };
+      ext2Start = { x: j2.x, y: j2.y };
+      ext2End = { x: dimX, y: j2.y };
+      dimLineStart = { x: dimX, y: j1.y };
+      dimLineEnd = { x: dimX, y: j2.y };
+      annotX = dimX;
+      annotY = (j1.y + j2.y) / 2;
+      adx = 0; ady = j2.y > j1.y ? 1 : -1;
+
+    } else {
+      // Aligned (default — existing behavior)
+      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : len;
+      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+
+      nx = 0; ny = -1;
+      if (len > 0.01) { nx = -dy / len; ny = dx / len; }
+
+      if (c && c.__pos) { annotX = c.__pos.x; annotY = c.__pos.y; }
+      else { annotX = mx + nx * offset; annotY = my + ny * offset; }
+
+      ext1Start = { x: j1.x, y: j1.y };
+      ext1End = { x: j1.x + nx * offset, y: j1.y + ny * offset };
+      ext2Start = { x: j2.x, y: j2.y };
+      ext2End = { x: j2.x + nx * offset, y: j2.y + ny * offset };
+      dimLineStart = ext1End;
+      dimLineEnd = ext2End;
+      adx = dx / len; ady = dy / len;
+    }
+    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady };
+  };
+
+  // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
+  // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
+  // goes just above/beside the line, reading along it; a leader label (dirX null: radius/angle) stays centred on its point.
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40)) => {
+    const fontPx = scale(11);
+    const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${DIM_TEXT_ATTRS}`;
+    if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)) };
+    if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
+    const p = placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
+    const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
+    return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds };
+  };
+
+  // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
+  const dimLabelBounds = [];
+  if (FUSION_GLYPHS_ON) {
+    for (const c of constraints) {
+      if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
+      const { j1, j2 } = resolveDimEnds(c);
+      if (!j1) continue;
+      const offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30;
+      if (c.isRadius) {
+        const p = radiusLabelPos(c, j1, offset);
+        dimLabelBounds.push(placeDimLabel(p.x, p.y, null, null, formatConstraintValue(c, { value: typeof c.value === 'number' ? c.value : 0 }), scale(50)).bounds);
+      } else if (j2) {
+        const g = linearDimGeom(c, j1, j2, offset);
+        dimLabelBounds.push(placeDimLabel(g.annotX, g.annotY, g.adx, g.ady, g.displayVal).bounds);
+      }
+    }
+  }
+
   // Unified glyph drawing helper - background first, icon last (ensures consistent layering)
   const drawUnifiedGlyph = (c, x, y, iconId = null, rotateDeg = 0, opts = {}) => {
+    if (dimLabelBounds.length) ({ x, y } = freeGlyphSpot(x, y, ICON_PX, dimLabelBounds, ICON_PX / 2));
     // c may be null for non-constraint uses (inference previews)
     const isPreview = !!(opts.isPreview || (c && c.__isPreview));
     const isHovered = !isPreview && c && highlight.kind === 'constraint' && (highlight.id === c || (opts.parent && highlight.id === opts.parent));
@@ -1829,8 +1992,8 @@ switch(c.type){
         const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : (smartPos ? { x: smartPos.x, y: smartPos.y } : { x: pt.x, y: pt.y - scale(GLYPH_OFFSET_PX) });
         try{ c.glyphPos = { x: pos.x, y: pos.y }; }catch(_){ }
 
-        // Draw point-on-line using unified helper
-        drawUnifiedGlyph(c, pos.x, pos.y, 'icon-coincident');
+        // Draw point-on-line using unified helper (badge look keeps the coincident sprite; fusion has its own glyph)
+        drawUnifiedGlyph(c, pos.x, pos.y, 'icon-coincident', 0, { fusionIcon: 'icon-point-on-line' });
         break;
       }
 
@@ -2191,47 +2354,7 @@ switch(c.type){
         }
     } else if(c.type === CONSTRAINT_TYPES.DISTANCE){
       // Dimension annotation with leader lines
-      let j1 = null, j2 = null;
-      if(c.isRadius && c.shape){
-        const shape = shapes.find(s => s.id === c.shape);
-        if(shape && shape.joints && shape.joints.length >= 1) j1 = joints.get(shape.joints[0]);
-      } else if(c.joints && c.joints.length >= 2){
-        j1 = joints.get(c.joints[0]); j2 = joints.get(c.joints[1]);
-      } else if(c.shapes && c.shapes.length === 2){
-        // Line-Line Distance (Parallel)
-        const s1 = shapes.find(s => s.id === c.shapes[0]);
-        const s2 = shapes.find(s => s.id === c.shapes[1]);
-        if(s1 && s2 && s1.joints && s2.joints){
-          const l1a = joints.get(s1.joints[0]), l1b = joints.get(s1.joints[1]);
-          const l2a = joints.get(s2.joints[0]), l2b = joints.get(s2.joints[1]);
-          if(l1a && l1b && l2a && l2b){
-            // Project midpoint of s1 onto s2 to get perpendicular distance points
-            const mx = (l1a.x + l1b.x)/2, my = (l1a.y + l1b.y)/2;
-            j1 = { x: mx, y: my };
-            const dx = l2b.x - l2a.x, dy = l2b.y - l2a.y;
-            const det = dx*dx + dy*dy;
-            if(det > 0.00001){
-               const t = ((j1.x - l2a.x)*dx + (j1.y - l2a.y)*dy) / det;
-               j2 = { x: l2a.x + t*dx, y: l2a.y + t*dy };
-            }
-          }
-        }
-      } else if(c.joint && c.shape){
-        // Point-Line Distance
-        j1 = joints.get(c.joint);
-        const s = shapes.find(s => s.id === c.shape);
-        if(j1 && s && s.joints){
-           const l1 = joints.get(s.joints[0]), l2 = joints.get(s.joints[1]);
-           if(l1 && l2){
-             const dx = l2.x - l1.x, dy = l2.y - l1.y;
-             const det = dx*dx + dy*dy;
-             if(det > 0.00001){
-                const t = ((j1.x - l1.x)*dx + (j1.y - l1.y)*dy) / det;
-                j2 = { x: l1.x + t*dx, y: l1.y + t*dy };
-             }
-           }
-        }
-      }
+      const { j1, j2 } = resolveDimEnds(c);
       if(j1){
         const offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30;
         const cIdx = constraints.indexOf(c);
@@ -2260,9 +2383,7 @@ switch(c.type){
           // old horizontal-right leader, so saved dimensions without it look exactly as before).
           const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : (Number.isFinite(c.labelAngle) ? c.labelAngle : 0));
           // Prefer explicit placement from import/export: __pos (preferred), then glyphPos, else computed offset
-          let labelX, labelY;
-          if (c && c.__pos) { labelX = c.__pos.x; labelY = c.__pos.y; }
-          else { labelX = center.x + Math.cos(angle) * offset; labelY = center.y + Math.sin(angle) * offset; }
+          const { x: labelX, y: labelY } = radiusLabelPos(c, center, offset);
 
           // Leader line from circle edge to label (ghost appearance when placing)
           const visualOpacity = isPlacing ? 0.4 : 1.0;
@@ -2318,85 +2439,16 @@ switch(c.type){
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
+            <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
             <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
         } else if(j2){
           // Linear dimension (line or point-to-point)
-          const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2;
-          const dx = j2.x - j1.x, dy = j2.y - j1.y;
-          const len = Math.hypot(dx, dy);
           const isPlacing = !!c.__placing;
           const isDrivenFlag = !!(c.isDriven || c.driven);
-          const hasValue = (typeof c.value === 'number');
-          
-          const dimMode = c.dimMode || 'aligned';
-          
-          let displayVal, nx, ny, annotX, annotY;
-          let ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd;
-          let adx, ady; // arrow direction
-          
-          if (dimMode === 'horizontal') {
-            // Horizontal: measure X distance, dim line is horizontal, extensions are vertical
-            const projDist = Math.abs(j2.x - j1.x);
-            const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-            
-            const midY = (j1.y + j2.y) / 2;
-            const dimY = midY + offset;
-            
-            nx = 0; ny = 1; // extensions go vertical
-            ext1Start = { x: j1.x, y: j1.y };
-            ext1End = { x: j1.x, y: dimY };
-            ext2Start = { x: j2.x, y: j2.y };
-            ext2End = { x: j2.x, y: dimY };
-            dimLineStart = { x: j1.x, y: dimY };
-            dimLineEnd = { x: j2.x, y: dimY };
-            annotX = (j1.x + j2.x) / 2;
-            annotY = dimY;
-            adx = j2.x > j1.x ? 1 : -1; ady = 0;
-            
-          } else if (dimMode === 'vertical') {
-            // Vertical: measure Y distance, dim line is vertical, extensions are horizontal
-            const projDist = Math.abs(j2.y - j1.y);
-            const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-            
-            const midX = (j1.x + j2.x) / 2;
-            const dimX = midX + offset;
-            
-            nx = 1; ny = 0; // extensions go horizontal
-            ext1Start = { x: j1.x, y: j1.y };
-            ext1End = { x: dimX, y: j1.y };
-            ext2Start = { x: j2.x, y: j2.y };
-            ext2End = { x: dimX, y: j2.y };
-            dimLineStart = { x: dimX, y: j1.y };
-            dimLineEnd = { x: dimX, y: j2.y };
-            annotX = dimX;
-            annotY = (j1.y + j2.y) / 2;
-            adx = 0; ady = j2.y > j1.y ? 1 : -1;
-            
-          } else {
-            // Aligned (default — existing behavior)
-            const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : len;
-            displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-            
-            nx = 0; ny = -1;
-            if (len > 0.01) { nx = -dy / len; ny = dx / len; }
-            
-            if (c && c.__pos) { annotX = c.__pos.x; annotY = c.__pos.y; }
-            else { annotX = mx + nx * offset; annotY = my + ny * offset; }
-            
-            ext1Start = { x: j1.x, y: j1.y };
-            ext1End = { x: j1.x + nx * offset, y: j1.y + ny * offset };
-            ext2Start = { x: j2.x, y: j2.y };
-            ext2End = { x: j2.x + nx * offset, y: j2.y + ny * offset };
-            dimLineStart = ext1End;
-            dimLineEnd = ext2End;
-            adx = dx / len; ady = dy / len;
-          }
+          const { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady } = linearDimGeom(c, j1, j2, offset);
 
           // Visual ghosting when placing
           const visualOpacity = isPlacing ? 0.4 : 1.0;
@@ -2435,7 +2487,7 @@ switch(c.type){
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text x="${annotX}" y="${annotY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
+            <text ${placeDimLabel(annotX, annotY, adx, ady, displayVal).attrs}>${displayVal}</text>
             <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
@@ -2553,7 +2605,7 @@ switch(c.type){
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
                 ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-                <text x="${labelX}" y="${labelY + scale(4)}" text-anchor="middle" font-size="${scale(11)}" ${DIM_TEXT_ATTRS}>${displayVal}</text>
+                <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
                 <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
             </g>`;
             

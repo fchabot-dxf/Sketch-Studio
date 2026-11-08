@@ -39,6 +39,8 @@ const CONTROLS = [
   { tab: 'glyphs', key: 'GLYPH_STYLE',            label: 'Glyph Style',          type: 'select',
     options: [{ value: 'badge', label: 'Badge' }, { value: 'fusion', label: 'Fusion (outlined)' }] },
   { tab: 'glyphs', key: 'DIM_LABEL_BOX',          label: 'Dimension Label Box',  type: 'checkbox' },
+  { tab: 'glyphs', key: 'LABEL_FONT_FAMILY',      label: 'Dimension Font',       type: 'select',
+    options: [{ value: '', label: 'Inherited' }, { value: 'Segoe UI, Arial, Helvetica, sans-serif', label: 'Segoe UI / Arial (sans)' }] },
 ];
 
 const TABS = [

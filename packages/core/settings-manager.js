@@ -52,6 +52,7 @@ const DEFAULT_SETTINGS = {
     DIM_LABEL_BOX: true,            // dimension value drawn on a filled label box; false = plain text on the dimension line
     HOVER_COLOR: '#1e40af',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
     FIXED_JOINT_FILL: 'white',      // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
+    LABEL_FONT_FAMILY: '',          // font-family of dimension values/labels: '' = inherit from the host page (today's look) | a CSS font stack
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

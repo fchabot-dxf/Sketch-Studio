@@ -19,14 +19,18 @@ export const SHAPER_NS = 'http://www.shapertools.com/namespaces/shaper';
 //   targetKind  — 'region' (acts on a closed area) | 'path' (acts on a single vector). Drives the gating rule:
 //                 a LOOP target accepts all 5; an EDGE target accepts only the 'path' types (online/guide).
 //   menuLabel   — the cut-menu label (matches Shaper's wording).
+//   params      — TASK 450/450b: WHICH cut params the type has, ONE declaration (subset of SHAPER_FIELDS): outside/inside/pocket
+//                 = cutDepth+cutOffset+toolDia; On line = cutDepth+toolDia (Shaper: "offsets are not an option"); Guide keeps all
+//                 three (Shaper Studio allows it: the type can be changed ON THE TOOL later and the params travel with the path). The cut card shows only those rows, the export writes only those attributes, the preview ignores
+//                 the rest. A value stored for a param the type does not have is left untouched and ignored everywhere.
 //   previewFill / previewStroke — a DARK-canvas-legible palette (green family) for the Prepare cut-plan preview;
 //                 the export colors (e.g. exterior=#000) are invisible/illegible on the dark Prepare canvas.
 export const CUT_TYPES = [
-  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a' },
-  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e' },
-  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80' },
-  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399' },
-  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635' },
+  { id: 'exterior', label: 'Exterior', cutType: 'outside', fill: '#000000', stroke: 'none',    desc: 'Cut out a positive shape (closed paths)',  targetKind: 'region', menuLabel: 'Outside', previewFill: '#22c55e', previewStroke: '#16a34a', params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'interior', label: 'Interior', cutType: 'inside',  fill: '#FFFFFF', stroke: '#000000', desc: 'Cut a through-hole (closed paths)',         targetKind: 'region', menuLabel: 'Inside',  previewFill: '#86efac', previewStroke: '#22c55e', params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'pocket',   label: 'Pocket',   cutType: 'pocket',  fill: '#7F7F7F', stroke: 'none',    desc: 'Remove material inside to a depth (closed paths)', targetKind: 'region', menuLabel: 'Pocket', previewFill: '#15803d', previewStroke: '#4ade80', params: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'online',   label: 'On-line',  cutType: 'online',  fill: 'none',    stroke: '#7F7F7F', desc: 'Center the cut on the path',               targetKind: 'path',   menuLabel: 'On line', previewFill: 'none',    previewStroke: '#34d399', params: ['cutDepth', 'toolDia'] },
+  { id: 'guide',    label: 'Guide',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'Reference mark, not cut',                  targetKind: 'path',   menuLabel: 'Guide',   previewFill: 'none',    previewStroke: '#a3e635', params: ['cutDepth', 'cutOffset', 'toolDia'] },
 ];
 
 // VCARVE-3b: DECLARED V-bit presets — the INCLUDED angle (°). halfAngleTan = tan(angle/2) feeds #core/vcarve
@@ -46,6 +50,22 @@ export const SHAPER_FIELDS = ['cutDepth', 'cutOffset', 'toolDia'];
 
 export function cutTypeById(id) {
   return CUT_TYPES.find((t) => t.id === id) || null;
+}
+
+// TASK 450b: does this cut type have this param ('cutDepth' | 'cutOffset' | 'toolDia')? Declared on the CUT_TYPES record
+// (`params`); an unknown / unset type = yes (nothing to hide before a type is chosen).
+export function cutTypeHasParam(id, param) {
+  const t = id ? cutTypeById(id) : null;
+  return !(t && Array.isArray(t.params) && !t.params.includes(param));
+}
+// The record the PREVIEW should use: params the type does not have are ignored (never migrated or deleted from the plan).
+export function effectiveCutRecord(rec) {
+  if (!rec || !rec.cutType) return rec;
+  const out = { ...rec };
+  if (!cutTypeHasParam(rec.cutType, 'cutDepth')) out.cutDepth = 'unset';
+  if (!cutTypeHasParam(rec.cutType, 'cutOffset')) out.cutOffset = 0;
+  if (!cutTypeHasParam(rec.cutType, 'toolDia')) out.toolDia = 0;
+  return out;
 }
 
 // A fresh per-target cut record. Numeric fields are in BASE mm (U3a; 1 world unit = 1 mm) — the cut panel

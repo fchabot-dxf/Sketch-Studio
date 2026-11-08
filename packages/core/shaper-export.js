@@ -80,15 +80,18 @@ function colorAttrs(enc) {
   if (enc.stroke && enc.stroke !== 'none') s += ` stroke="${enc.stroke}"`;
   return s;
 }
-// attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0) / toolDia (if >0) unit-suffixed.
+// attribute-first shaper:* — cutType always; cutDepth (if set) / cutOffset (if ≠0) / toolDia (if >0) unit-suffixed, and ONLY the
+// params the INJECTED encoding declares in `params` (TASK 450b: On line has no cutOffset; Guide has none of the three, so a
+// value stored on an old record is never written). An encoding without `params` (the stub encodings in tests) writes all.
 function shaperAttrs(rec, enc, docUnit) {
   let s = ` shaper:cutType="${enc.cutType}"`;
+  const has = (k) => !Array.isArray(enc.params) || enc.params.includes(k);
   const dep = Number(rec.cutDepth);
-  if (rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${format(dep, docUnit, { unit: true })}"`;
+  if (has('cutDepth') && rec.cutDepth != null && rec.cutDepth !== 'unset' && Number.isFinite(dep)) s += ` shaper:cutDepth="${format(dep, docUnit, { unit: true })}"`;
   const off = Number(rec.cutOffset);
-  if (Number.isFinite(off) && off !== 0) s += ` shaper:cutOffset="${format(off, docUnit, { unit: true })}"`;
+  if (has('cutOffset') && Number.isFinite(off) && off !== 0) s += ` shaper:cutOffset="${format(off, docUnit, { unit: true })}"`;
   const tool = Number(rec.toolDia);
-  if (Number.isFinite(tool) && tool > 0) s += ` shaper:toolDia="${format(tool, docUnit, { unit: true })}"`;
+  if (has('toolDia') && Number.isFinite(tool) && tool > 0) s += ` shaper:toolDia="${format(tool, docUnit, { unit: true })}"`;
   return s;
 }
 

@@ -66,8 +66,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
   - AGY-1: 432 reviewed (61755c7), not merged: two region-key resolvers with 4 key forms, profile-list logic in
     vcarve-view, a copied clientToWorld with an empty catch, and the oracle list it owed. Sent 432b.
-  - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2 now on 438b, the same for the
-    click doors (measured 2 undos).
+  - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2's 438b (0fb391b) is NOT merged. The
+    angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
+    existing duplicate got stamped (Escape deletes it). Sent 438c.
+    OWNER QUESTION: Escape in the value box of a NEW click-made dimension now DELETES it (it used to keep it at the
+    measured value); this matches the pre-selection path.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.
   The probe script is in the advisor scratchpad, probe/probe.cjs. Findings:
   - (a) Shaper: after a value commit, focus stays in the hidden #dimInput, so every shortcut is dead. Same cause as 434;

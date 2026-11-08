@@ -204,6 +204,11 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
       toolpath);
     - minors 7-13 and the lingering empty default Outline toolpath, as one batch.
   - Already fixed: #2 by 444b, #14 by 446.
+- QUEUED 455 (owner ask, screenshot): Prepare canvas in Shaper Studio colours.
+  - Sampled: bg #3F4145, pocket fill #35695B, outline #1BE09E, white \ / mark-grid hatch, geometry #9ACEC1, black
+    depth chip.
+  - Theme tokens declared once; export colours unchanged.
+  - CC-A after 450 and 452.
 - Next, in this order:
   - 439: tree values in the document unit;
   - 433: cut semantics on profiles.

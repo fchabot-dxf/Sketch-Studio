@@ -66,10 +66,16 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - ~23:00 owner: "continue with flash". Both seats are on Gemini 3.8 Flash (High).
   - AGY-1: 432 reviewed (61755c7), not merged: two region-key resolvers with 4 key forms, profile-list logic in
     vcarve-view, a copied clientToWorld with an empty catch, and the oracle list it owed. Sent 432b.
-  - DONE: 432/432b merged 64ff78d (gate 163/163). AGY-1 now on 433 PLAN (cut types on profiles with holes; order = owner question).
+  - DONE: 432/432b merged 64ff78d (gate 163/163).
+  - 433 plan approved (7e44919, WORK-LOG "TURN 433"). AGY-1 now building 433b. Advisor decisions:
+    - Inside = duality;
+    - On line / Guide = one path per loop, holes first;
+    - a hole's own record is an ADDITIONAL path, never an override.
+  - OWNER Q: does the Shaper Origin follow SVG path order? Holes are emitted first regardless.
   - AGY-2: 438 merged 5ff58c4 (a pre-selection dimension is one undo step). AGY-2's 438b (0fb391b) is NOT merged. The
     angle/line-line path stamped a birth with no snapshot (undo skips the previous action; Escape pops it), and an
     existing duplicate got stamped (Escape deletes it). Sent 438c.
+    DONE: 438b/438c merged fb8bb23. AGY-2 now on 439 (tree units).
     OWNER QUESTION: Escape in the value box of a NEW click-made dimension now DELETES it (it used to keep it at the
     measured value); this matches the pre-selection path.
 - Advisor live test of the Dimension tool (owner commit 5bffb68), headless Shaper and SketchStudio, real input events.

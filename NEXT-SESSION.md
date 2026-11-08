@@ -39,6 +39,22 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
 - Delete: neighbours sharing a joint survive. shell-smoke closes its browser (no more leaked Edge). Frame Calc removed.
 - Owner commit 5bffb68: Dim with a pre-selected line, plus filleted-rect rigidity status. Gated but NOT advisor-reviewed in depth.
 
+**▶ LIVE QUEUE (turn 431, 2026-11-07).** Task texts are in the advisor's scratchpad (task_<id>.txt).
+- In flight: 431b (AGY-1). The Combine slice review found 4 problems:
+  - dead Combine buttons in non-Shaper apps;
+  - the action lives in the Shaper host;
+  - five copies of the profile clone;
+  - per-frame resolve that mutates state, behind a window fallback.
+- In flight: 428b (AGY-2), the lying DOF colours: root-cause only, no floor.
+- Next, in this order:
+  - 436: Prepare/Vcarve pan+zoom via the shared pan-zoom.js (owner-reported);
+  - 437: spindle-motion PLAN (owner ask: "show the movement of the spindle in the toolpath"; no order/direction model exists today);
+  - 429: log flood + JSON;
+  - 434: stray #dimInput box;
+  - 435: shared Undo/Redo;
+  - 432: Select picks profiles, after 431b merges;
+  - 433: cut semantics on profiles.
+
 **Open, in priority order:**
 1. **Solver stall honesty: ARC CLOSED (advisor decision 2026-11-07, turns 411–413, Antigravity seat AGY-1).**
    - Built: the engine now reports `stalled` / `stallError` / `structuralError` / `dragReached` (411, additive), plus a

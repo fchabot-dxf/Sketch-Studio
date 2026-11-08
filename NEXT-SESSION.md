@@ -337,6 +337,19 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
     our existing uploader (shaper-cloud.js via /api/shaper-upload); Shaper's add-in is compiled .pyc: never decompile.
     Colours in Style + Fusion colours (black fully / blue free, brown construction, blue profile fill, no glyph badge,
     no dim box) = a follow-up after 481 unless the owner says no.
+  - MERGED 2026-11-08 (later, gated, all via merge.sh): 480 5549627 (Drive: renewable server session + adapter + router),
+    479 404a698 (sidebar file actions + Projects browser), 478+485 4deac4c (Fusion DXF + Shaper Utilities SVG import;
+    clicking a dimension clears the geometry selection so Delete never removes a line), 483 d840803 (regular polygon
+    tool), 477 45047e1 (shared CDP test helper), 486 f4951fe (fillet keeps its side on a dimension edit: stepped
+    solve; driven check: relative rank tolerance), 482 5c040ed (PP export one file per pen default / per toolpath),
+    481 1ac05ff (Style templates Default/Fusion/Compact/Presentation, Style TABS, one DOC_UNIT control).
+  - OWNER RULING: NEW tasks go ONLY to Copilot (the Claude seats were stopped; their WIP is merged or re-sent).
+  - RUNNING (Copilot): 487 (origin-snap near-miss + double-click target bug), 488 (Google account row + per-project
+    Drive in the sidebar), 489 (Fusion colours: tokens per template, GLYPH_STYLE white-with-thick-black-outline glyphs
+    from assets/parametricmodelling_constraints.svg, plain dimension text with arrowheads, pale-blue profile fill).
+  - OPEN OWNER STEPS: Cloudflare secrets (GOOGLE_CLIENT_ID/SECRET, SESSION_KEY) + publish the consent screen (click-path
+    in WORK-LOG TURN 480 section 6); a real Fusion-add-in DXF with an arc+spline would help; Prepare turns a loop drawn
+    inside an Outside cut into a hole band (existing rule, owner to look); Pen Plotter files per pen is now the default.
   - NEXT: Google Drive adapter. The owner's OAuth client already exists (see the PERSISTENCE epic, client
     983232817866-...; origins sketch-studio.pages.dev + localhost:8000; drive.file). Then wire the sidebar to 474.
     - OWNER (2026-11-08): "allow to have reneweable token" = stay signed in across days, no hourly re-login. PORT

@@ -791,23 +791,28 @@ export function deriveCutFootprint(cuts, rec, state) {
       const finishRings = [];
       if (wall.length >= 3) finishRings.push(...sweptPath(wall, r, { closed: true }));
       for (const ic of islandCenters) finishRings.push(...sweptPath(ic, r, { closed: true }));
-      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters });
+      const toolPaths = [...(wall.length >= 3 ? [{ points: wall, closed: true }] : []), ...islandCenters.map((points) => ({ points, closed: true }))];
+      out.push({ kind: 'pocket', cutType: 'pocket', fillRule: 'evenodd', rings, finishRings, center: null, chain: null, wall: wall.length >= 3 ? wall : null, islandCenters, toolPaths });
     } else if (cut.kind === 'chain') {
       const rings = [];
+      let anchor = null; // TASK 455: where the depth chip sits (the middle vertex of the first member)
+      const toolPaths = []; // TASK 455: the polylines the chip may ride on
       if (!isGuide && r > 0) {
         for (const sh of (cut.chain && cut.chain.shapes) || []) {
           let line = null;
           if (sh.type === 'line') line = (sh.joints || []).slice(0, 2).map((id) => state.joints.get(id));
           else if (sh.type === 'arc') line = sampleArc(sh, state, 24);
-          if (line && line.length >= 2 && line.every(Boolean)) rings.push(...sweptPath(line, r));
+          if (line && line.length >= 2 && line.every(Boolean)) { rings.push(...sweptPath(line, r)); toolPaths.push({ points: line, closed: false }); if (!anchor) anchor = { ...line[Math.floor(line.length / 2)] }; }
         }
       }
-      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain });
+      out.push({ kind: isGuide ? 'guide' : 'chain', cutType: isGuide ? 'guide' : 'online', fillRule: 'nonzero', rings, center: null, chain: cut.chain, anchor, toolPaths: isGuide ? [] : toolPaths });
     } else if (cut.polygon && cut.polygon.length >= 3) {
       const side = cut.offsetSide || 0;
       const center = side === 0 ? cut.polygon : offsetPolygon(cut.polygon, side * (r + off), { join: 'round' });
       const rings = (!isGuide && r > 0 && center.length >= 3) ? sweptPath(center, r, { closed: true }) : [];
-      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null });
+      // TASK 455: the depth chip anchor = the top-most vertex of the bit-centre path
+      const anchor = center.length >= 3 ? { ...center.reduce((best, p) => (p.y < best.y ? p : best), center[0]) } : null;
+      out.push({ kind: isGuide ? 'guide' : 'band', cutType: isGuide ? 'guide' : String(cut.cutType || rec.cutType || ''), fillRule: 'nonzero', rings, center: center.length >= 3 ? center : null, chain: null, anchor, toolPaths: (!isGuide && center.length >= 3) ? [{ points: center, closed: true }] : [] });
     }
   }
   return out;
@@ -883,4 +888,23 @@ export function deriveCutTravel(footprints) {
     }
   }
   return out;
+}
+
+// nearestPointOnPaths(toolPaths, pt) — TASK 455: the point of the bit-centre path(s) NEAREST a cursor position (world coords),
+// where the Prepare depth chip rides. toolPaths = [{ points, closed }]; returns {x, y} or null when there are none.
+export function nearestPointOnPaths(toolPaths, pt) {
+  let best = null, bestD = Infinity;
+  for (const tp of toolPaths || []) {
+    const P = tp.points || [];
+    const n = tp.closed ? P.length : P.length - 1;
+    for (let i = 0; i < n; i++) {
+      const a = P[i], b = P[(i + 1) % P.length];
+      const vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / len2)) : 0;
+      const q = { x: a.x + t * vx, y: a.y + t * vy };
+      const d = Math.hypot(pt.x - q.x, pt.y - q.y);
+      if (d < bestD) { bestD = d; best = q; }
+    }
+  }
+  return best;
 }

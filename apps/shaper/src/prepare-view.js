@@ -9,15 +9,16 @@ import { calculateArcPath } from '#core/geometry.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { cutTypeById, availableTypes, effectiveCutRecord } from './shaper.js'; // SP1f: cut-type declarations + gating
 import { keyOf, parseKey, CUT_PLAN, getCutRecord, setFieldFor } from './cut-plan.js'; // SP1j-4: shared cut-plan store
-import { format as fmtUnit } from '#core/units.js'; // SP1h4: pocket depth label in the document unit
+import { formatShaperParam } from '#core/units.js'; // TASK 455: the depth chip text, same formatter as the export
 import SettingsManager from '#core/settings-manager.js'; // SP1h4: read DOC_UNIT for the depth label
 import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToPathD } from '#core/loop-geometry.js'; // SKETCH-4a: lifted to #core
-import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel } from '#core/profile-model.js';
+import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveProfileCuts, deriveCutFootprint, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const EDGE_STYLE = 'fill:none; stroke:var(--sk-geo-free, #7aa7e0); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round;';
+// TASK 455: every colour/width of the Prepare look is a CSS class + --sk-prep-* token in apps/shaper/index.html (no hex here).
+const EDGE_CLASS = 'sk-edge'; // idle: ONLY the thin white svg line (guide targets add sk-edge-guide)
 
 // ── Edge render (SP1a) ───────────────────────────────────────────────────────
 function edgesMarkup(state) {
@@ -25,13 +26,13 @@ function edgesMarkup(state) {
   for (const s of (state.shapes || [])) {
     if (s.type === 'line') {
       const a = s.joints && J.get(s.joints[0]); const b = s.joints && J.get(s.joints[1]);
-      if (a && b) out.push(`<line data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="${EDGE_STYLE}"/>`);
+      if (a && b) out.push(`<line data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${EDGE_CLASS}"/>`);
     } else if (s.type === 'circle') {
       const c = s.joints && J.get(s.joints[0]); const r = (typeof s.radius === 'number' && s.radius > 0) ? s.radius : 0;
-      if (c && r) out.push(`<circle data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" style="${EDGE_STYLE}"/>`);
+      if (c && r) out.push(`<circle data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" class="${EDGE_CLASS}"/>`);
     } else if (s.type === 'arc') {
       const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id));
-      if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" style="${EDGE_STYLE}"/>`);
+      if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" class="${EDGE_CLASS}"/>`);
     }
   }
   return out.join('');
@@ -51,9 +52,9 @@ const SVG_NS_G = SVG_NS;
 const mkGroup = (id) => { const g = document.createElementNS(SVG_NS_G, 'g'); g.id = id; return g; };
 const polyMarkup = (poly, style) => `<polygon points="${poly.map((p) => p.x + ',' + p.y).join(' ')}" style="${style}"/>`;
 const polyRingD = (poly) => (poly && poly.length >= 3) ? ('M ' + poly.map((p) => p.x + ' ' + p.y).join(' L ') + ' Z') : '';
-const profilePathMarkup = (outerPoly, holePolys, style) => {
+const profilePathMarkup = (outerPoly, holePolys, cls) => {
   const parts = [polyRingD(outerPoly), ...(holePolys || []).map(polyRingD)].filter(Boolean);
-  return parts.length ? `<path d="${parts.join(' ')}" fill-rule="evenodd" style="${style}"/>` : '';
+  return parts.length ? `<path d="${parts.join(' ')}" fill-rule="evenodd" class="${cls}"/>` : '';
 };
 // SP1h4 (pocket): area-weighted centroid for label placement (vertex-average fallback for a near-degenerate ring).
 function polyCentroid(poly) {
@@ -95,19 +96,16 @@ function pocketLabelPoint(clearedOuter, clearedHoles) {
   }
   return c;
 }
-// SP1h4: pocket depth → a ↓-prefixed label in the document unit (export form, e.g. '↓ 0.500in'). 'unset' → no label.
-const pocketDepthLabel = (cutDepth) => {
+// TASK 455: the depth chip — a rounded dark rect with white text "↓ 0.300 in" (arrow, BOLD value, lighter unit); "↓ unset" when unset.
+const depthChip = (x, y, cutDepth) => {
   const v = Number(cutDepth);
-  if (cutDepth == null || cutDepth === 'unset' || !Number.isFinite(v)) return '';
-  return '↓ ' + fmtUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { unit: true });
+  const set = cutDepth != null && cutDepth !== 'unset' && Number.isFinite(v);
+  let val = 'unset', unit = '';
+  if (set) { const f = formatShaperParam(v, SettingsManager.get('DOC_UNIT') || 'mm'); const i = f.lastIndexOf(' '); val = f.slice(0, i); unit = f.slice(i); }
+  const w = (2 + val.length + unit.length) * 2.9 + 6, h = 8.5;
+  return `<g class="sk-chip"><rect class="sk-chip-bg" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="2.5"/>` +
+    `<text class="sk-chip-text" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">↓ <tspan class="sk-chip-val">${val}</tspan><tspan class="sk-chip-unit">${unit}</tspan></text></g>`;
 };
-// Hover = LIGHT fill; Selected = STRONGER fill + a solid outline in the selection var — visually distinct (SP1d).
-const HOVER_STYLE = 'fill:var(--sk-hover, #7aa7e0); fill-opacity:0.16; stroke:var(--sk-hover, #7aa7e0); stroke-width:1.5; stroke-opacity:0.6; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
-const SELECT_STYLE = 'fill:var(--sk-selection, #4c9aff); fill-opacity:0.30; stroke:var(--sk-selection, #4c9aff); stroke-width:2.5; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linejoin:round;';
-// SP1e: an 'edge' (vector) highlight is a glowing STROKE overlay following the true geometry — visually distinct
-// from the loop FILLS (loop = filled region; edge = thick stroke).
-const EDGE_HOVER_STYLE = 'fill:none; stroke:var(--sk-hover, #7aa7e0); stroke-width:3.5; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;';
-const EDGE_SELECT_STYLE = 'fill:none; stroke:var(--sk-selection, #4c9aff); stroke-width:4; stroke-opacity:1; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round;';
 const EDGE_TOL_PX = 6; // on-stroke hit tolerance, in SCREEN px (converted to world per-call → zoom-stable)
 
 // World-space tolerance from screen px, derived from the live CTM scale (zoom-stable).
@@ -130,11 +128,11 @@ function edgeDistAt(h, pt) {
   return Infinity;
 }
 // edge highlight markup — the TRUE geometry as a stroke (reuses the renderer's path builders / calculateArcPath)
-function edgeStrokeMarkup(s, state, style) {
+function edgeStrokeMarkup(s, state, cls) {
   const J = state.joints;
-  if (s.type === 'line') { const a = J.get(s.joints[0]), b = J.get(s.joints[1]); return (a && b) ? `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="${style}"/>` : ''; }
-  if (s.type === 'circle') { const c = J.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? `<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="${style}"/>` : ''; }
-  if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" fill="none" style="${style}"/>` : ''; }
+  if (s.type === 'line') { const a = J.get(s.joints[0]), b = J.get(s.joints[1]); return (a && b) ? `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${cls}"/>` : ''; }
+  if (s.type === 'circle') { const c = J.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? `<circle cx="${c.x}" cy="${c.y}" r="${r}" class="${cls}"/>` : ''; }
+  if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" class="${cls}"/>` : ''; }
   return '';
 }
 
@@ -166,16 +164,19 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   // SP1h4: a diagonal HATCH pattern (pocket preview colour) for the cleared region. userSpaceOnUse → world-unit
   // spacing (scales with the geometry). One <defs> per mount; referenced by the pocket cleared-region fill.
   const defs = document.createElementNS(SVG_NS, 'defs');
-  const pocketCt = cutTypeById('pocket');
-  const hatchColor = (pocketCt && pocketCt.previewStroke) || '#5fb87a';
-  defs.innerHTML = `<pattern id="prepare-pocket-hatch" patternUnits="userSpaceOnUse" width="3.2" height="3.2" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3.2" style="stroke:${hatchColor}; stroke-width:0.7; stroke-opacity:0.85;"/></pattern>`;
+  // TASK 455: pocket marks = short white diagonal strokes in a regular grid, alternating "\" and "/" (a sparse X-hatch)
+  defs.innerHTML = `<pattern id="prepare-pocket-marks" patternUnits="userSpaceOnUse" width="12" height="12"><g class="sk-mark">` +
+    `<line x1="1.8" y1="1.8" x2="4.2" y2="4.2"/><line x1="10.2" y1="1.8" x2="7.8" y2="4.2"/>` +
+    `<line x1="1.8" y1="10.2" x2="4.2" y2="7.8"/><line x1="10.2" y1="10.2" x2="7.8" y2="7.8"/></g></pattern>`;
   svgEl.appendChild(defs);
   // z-order (later = on top): cut TINT (behind) < edges < toolpath (tool-aware look) < selected < hover. Joints hidden.
   const cutG = mkGroup('prepare-cut-group');           svgEl.appendChild(cutG);
   renderPrepareGeometry(state, svgEl);                 // edges — above the cut tint
-  const toolpathG = mkGroup('prepare-toolpath-group'); svgEl.appendChild(toolpathG); // SP1h: tool-aware look (above edges)
   const selectG = mkGroup('prepare-select-group');     svgEl.appendChild(selectG);
   const hoverG = mkGroup('prepare-hover-group');       svgEl.appendChild(hoverG);
+  // TASK 455: the tool path + depth chip sit ABOVE the highlighted boundary (an On Line's black dashes ride on its bold mint line)
+  const toolpathG = mkGroup('prepare-toolpath-group'); svgEl.appendChild(toolpathG);
+  const chipG = mkGroup('prepare-chip-group');         svgEl.appendChild(chipG); // the depth chip rides on the tool path
 
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loops = findLoops(state).map((l) => { const polygon = loopPolygon(l, state, shapeById); return { ...l, polygon, area: polyArea(polygon) }; });
@@ -259,24 +260,24 @@ export function mountPrepareView(state, svgEl, opts = {}) {
   //   - kind 'loop' -> ONE <path fill-rule="evenodd"> = outer loop polygon + DIRECT holes open;
   //   - kind 'profile' -> resolveProfileViews.get(id).d, evenodd style;
   //   - kind 'chain' -> edgeStrokeMarkup for each member shape.
-  const targetMarkup = (t, loopStyle, chainStyle) => {
+  const targetMarkup = (t, cls) => {
     if (!t) return '';
     if (t.kind === 'loop') {
       const outerLoop = loopById.get(t.id);
       if (!outerLoop) return '';
       const prof = derivedProfileForLoop(t.id, loops, loopPolys, state);
       const holePolys = (prof && prof.inners ? prof.inners : []).map((hid) => loopPolys[hid]).filter((p) => p && p.length >= 3);
-      return profilePathMarkup(outerLoop.polygon, holePolys, loopStyle);
+      return profilePathMarkup(outerLoop.polygon, holePolys, cls);
     }
     if (t.kind === 'profile') {
       const v = profileViews.get(t.id);
       if (!v || !v.d) return '';
-      return `<path d="${v.d}" fill-rule="evenodd" style="${loopStyle}"/>`;
+      return `<path d="${v.d}" fill-rule="evenodd" class="${cls}"/>`;
     }
     if (t.kind === 'chain') {
       const chain = chainById.get(t.id);
       if (!chain) return '';
-      return (chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, chainStyle)).join('');
+      return (chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, cls)).join('');
     }
     return '';
   };
@@ -289,70 +290,127 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     const { kind, id } = parseKey(key);
     const t = { kind, id };
     const cuts = deriveProfileCuts(t, rec, state, loops, loopPolys);
-    if (!cuts || !cuts.length) return { region: '', path: '' };
+    if (!cuts || !cuts.length) return { region: '', path: '', toolPaths: [] };
     const ct = rec && rec.cutType ? cutTypeById(rec.cutType) : null;
-    if (!ct) return { region: '', path: '' };
-    const color = ct.previewStroke;
+    if (!ct) return { region: '', path: '', toolPaths: [] };
+    // TASK 455: the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states. Every
+    // type uses the same state model; only the SHAPE differs. A Guide is a line only (no band, dashes or chip).
+    if (ct.id === 'guide') return { region: '', path: '', hasTravel: false, toolPaths: [] };
     // TASK 447: the FOOTPRINT of the round bit (what it really removes) comes from ONE core derivation
     // (#core/profile-model deriveCutFootprint); this view only draws the rings it returns. Uncut material (corners the
     // bit cannot reach) is simply the area the footprint does not cover — never highlighted.
-    const footprintFill = `fill:${color}; fill-opacity:0.28; stroke:none;`;
-    const finishFill = `fill:#f59e0b; fill-opacity:0.30; stroke:none;`; // TASK 452: finish pass (distinct from the green clearing hatch)
-    const pocketFill = `fill:url(#prepare-pocket-hatch); stroke:${color}; stroke-width:1.25; stroke-opacity:0.85; vector-effect:non-scaling-stroke; stroke-linejoin:round;`;
-    const centerStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.95; vector-effect:non-scaling-stroke; stroke-dasharray:5 3; stroke-linejoin:round; stroke-linecap:round;`;
-    const dashStyle = `fill:none; stroke:${color}; stroke-width:1.5; stroke-opacity:0.9; vector-effect:non-scaling-stroke; stroke-dasharray:5 4; stroke-linejoin:round; stroke-linecap:round;`;
-
-    let region = '', path = '', hasTravel = false;
+    const isOnline = ct.id === 'online';
+    const tpClass = isOnline ? 'sk-tp sk-tp-online' : 'sk-tp';
+    let region = '', path = '', hasTravel = false, chip = null;
+    const toolPaths = [];
     for (const fp of deriveCutFootprint(cuts, rec, state)) {
       const rings = fp.rings.filter((ring) => ring.length >= 3);
-      // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing hatch
+      // TASK 452: the pocket's FINISH ring (the Inside/Outside band at zero offset, wall -> 2r in) under the clearing area
       const finish = (fp.finishRings || []).filter((ring) => ring.length >= 3);
-      if (finish.length) region += `<path d="${finish.map(polyRingD).join(' ')}" fill-rule="nonzero" style="${finishFill}"/>`;
-      if (rings.length) region += `<path d="${rings.map(polyRingD).join(' ')}" fill-rule="${fp.fillRule}" style="${fp.kind === 'pocket' ? pocketFill : footprintFill}"/>`;
+      if (finish.length) region += `<path d="${finish.map(polyRingD).join(' ')}" fill-rule="nonzero" class="sk-finish"/>`;
+      if (rings.length) {
+        const d = rings.map(polyRingD).join(' ');
+        region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-band"/>`;
+        if (fp.kind === 'pocket') region += `<path d="${d}" fill-rule="${fp.fillRule}" class="sk-pocket-marks" fill="url(#prepare-pocket-marks)"/>`;
+      }
       // TASK 449: conventional TRAVEL (one core derivation): marching dashes along the bit-centre path in the travel
-      // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line / guide have none.
+      // direction (CSS animation, no RAF); static arrows for prefers-reduced-motion. On line has none.
+      toolPaths.push(...(fp.toolPaths || []));
       const travel = deriveCutTravel([fp]);
       for (const t of travel) {
-        path += `<path class="sk-travel" d="${polyRingD(t.path)}" style="stroke:${color};"/>`;
-        path += `<g class="sk-travel-arrows" style="fill:${color};">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
+        path += `<path class="sk-travel" d="${polyRingD(t.path)}"/>`;
+        path += `<g class="sk-travel-arrows">${t.arrows.map((a) => `<polygon transform="translate(${a.x} ${a.y}) rotate(${a.angle * 180 / Math.PI})" points="3.2,0 -2.4,2.4 -2.4,-2.4"/>`).join('')}</g>`;
         hasTravel = true;
       }
       if (fp.kind === 'pocket') {
-        const label = rings.length ? pocketDepthLabel(rec.cutDepth) : '';
-        if (label) {
-          const c = pocketLabelPoint(rings[0], rings.slice(1));
-          path += `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" style="font-size:7px; fill:${color}; font-family:sans-serif; paint-order:stroke; stroke:rgba(0,0,0,0.6); stroke-width:0.6;">${label}</text>`;
-        }
+        if (rings.length && !chip) chip = pocketLabelPoint(rings[0], rings.slice(1));
       } else if (fp.chain) {
-        path += (fp.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, fp.kind === 'guide' ? dashStyle : centerStyle)).join('');
+        path += (fp.chain.shapes || []).map((s) => edgeStrokeMarkup(s, state, tpClass)).join('');
+        if (!chip && fp.anchor) chip = fp.anchor;
       } else if (fp.center && !travel.length) {
-        path += polyMarkup(fp.center, fp.kind === 'guide' ? dashStyle : centerStyle);
+        path += polyMarkup(fp.center, tpClass);
       }
+      if (!chip && fp.anchor) chip = fp.anchor;
     }
-    return { region, path, hasTravel };
+    return { region, path, hasTravel, toolPaths, anchor: chip, depth: rec.cutDepth };
   };
   const getLook = (key, rec) => { const sig = sigOf(rec); const hit = lookCache.get(key); if (hit && hit.sig === sig) return hit; const look = computeLook(key, rec); look.sig = sig; lookCache.set(key, look); return look; };
 
-  const renderCuts = () => { let out = ''; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType) out += getLook(key, rec).region; cutG.innerHTML = out; };
-  const renderToolpaths = () => { let out = ''; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType) out += getLook(key, rec).path; toolpathG.innerHTML = out; };
-  // ONE reactive refresh: repaint BOTH layers (getLook recomputes only the changed target — its sig changed). Wired
-  // to every cut-field change (cutType / toolDia / cutOffset) so the look updates LIVE without a re-mount.
+  // TASK 455: the SAME state model for every cut type — idle: only the svg line; hover: dark band + bold white boundary +
+  // dashed tool path + depth chip; selected: teal band + bold mint boundary + the same path/chip; selected+hover: selected with
+  // a slightly brighter band. The colours are the --sk-prep-* tokens (apps/shaper/index.html).
+  let hovered = null; // current hovered target { kind, id } | null
+  const stateOf = (key) => {
+    const sel = selection.has(key), hov = !!hovered && targetKey(hovered) === key;
+    return sel ? (hov ? 'hot' : 'sel') : (hov ? 'hover' : null);
+  };
+  const renderCuts = () => {
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) { if (!(rec && rec.cutType)) continue; const st = stateOf(key); if (st) out += `<g class="sk-st-${st}">${getLook(key, rec).region}</g>`; }
+    cutG.innerHTML = out;
+  };
+  const renderToolpaths = () => {
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) { if (rec && rec.cutType && stateOf(key)) out += getLook(key, rec).path; }
+    toolpathG.innerHTML = out;
+  };
+  // TASK 455: the depth chip sits ON the tool path (centred on the dashed line) at the point NEAREST THE CURSOR and follows the cursor
+  // along it while hovering; selected-but-not-hovered it STAYS at its last spot (a target's first appearance uses the stable
+  // default anchor the footprint derivation provides).
+  let hoverPt = null;
+  const lastChip = new Map();
+  const renderChips = () => {
+    let out = '';
+    for (const [key, rec] of CUT_PLAN) {
+      if (!(rec && rec.cutType && stateOf(key))) continue;
+      const look = getLook(key, rec);
+      if (!look.anchor && !(look.toolPaths && look.toolPaths.length)) continue;
+      const hov = hovered && targetKey(hovered) === key && hoverPt;
+      const near = hov ? nearestPointOnPaths(look.toolPaths, hoverPt) : null;
+      const pos = near || lastChip.get(key) || look.anchor;
+      if (!pos) continue;
+      lastChip.set(key, pos);
+      out += depthChip(pos.x, pos.y, look.depth);
+    }
+    chipG.innerHTML = out;
+  };
+  // idle guide lines are the one coloured exception: thin blue
+  const guideShapeIds = () => {
+    const ids = new Set();
+    for (const [key, rec] of CUT_PLAN) {
+      if (!(rec && rec.cutType === 'guide')) continue;
+      const { kind, id } = parseKey(key);
+      const addLoop = (lid) => { const l = loopById.get(lid); if (l) for (const e of (l.edges || [])) ids.add(e); };
+      if (kind === 'loop') addLoop(id);
+      else if (kind === 'chain') { const c = chainById.get(id); if (c) for (const sh of (c.shapes || [])) ids.add(sh.id); }
+      else if (kind === 'profile') { const v = profileViews.get(id); if (v) { addLoop(v.outerLoopId); for (const h of (v.innerLoopIds || [])) addLoop(h); } }
+    }
+    return ids;
+  };
+  const refreshEdgeClasses = () => {
+    const guides = guideShapeIds();
+    svgEl.querySelectorAll('[data-shape-id]').forEach((el) => el.classList.toggle('sk-edge-guide', guides.has(el.getAttribute('data-shape-id'))));
+  };
+  // ONE reactive refresh: repaint the look layers (getLook recomputes only the changed target — its sig changed). Wired
+  // to every cut-field change AND to hover / selection changes so the look follows the state.
   const refreshLook = () => {
-    renderCuts(); renderToolpaths();
-    // TASK 449: the one-line direction legend shows only while some cut has a travel direction
+    renderCuts(); renderToolpaths(); renderChips(); refreshEdgeClasses();
+    // TASK 449: the one-line direction legend shows only while a visible (hovered / selected) cut has a travel direction
     const legend = document.getElementById('prepare-dir-legend');
-    if (legend) { let any = false; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
+    if (legend) { let any = false; for (const [key, rec] of CUT_PLAN) if (rec && rec.cutType && stateOf(key) && getLook(key, rec).hasTravel) any = true; legend.hidden = !any; }
   };
 
   const renderSelection = () => {
     let out = '';
-    for (const t of selection.values()) out += targetMarkup(t, SELECT_STYLE, EDGE_SELECT_STYLE);
+    for (const t of selection.values()) out += targetMarkup(t, 'sk-hl sk-hl-select');
     selectG.innerHTML = out;
   };
-  let hovered = null; // current hovered target { kind, id } | null
   const renderHover = () => {
     // Show the hover highlight UNLESS that target is already selected (selected style wins — no double-draw).
-    hoverG.innerHTML = (hovered && !selection.has(targetKey(hovered))) ? targetMarkup(hovered, HOVER_STYLE, EDGE_HOVER_STYLE) : '';
+    const k = hovered ? targetKey(hovered) : null;
+    const rec = k ? CUT_PLAN.get(k) : null;
+    hoverG.innerHTML = (hovered && !selection.has(k)) ? targetMarkup(hovered, 'sk-hl ' + (rec && rec.cutType ? 'sk-hl-hover-cut' : 'sk-hl-hover')) : '';
+    refreshLook();
   };
 
   const setHover = (t) => {
@@ -366,9 +424,11 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     if (handlePanZoomPointerMove(e, svgEl, viewState)) return;
     const wp = screenToWorld(svgEl, e.clientX, e.clientY);
     if (!wp) return;
+    hoverPt = wp;
     setHover(resolveTarget(wp));
+    if (hovered) renderChips(); // the chip follows the cursor along the path
   };
-  const onLeave = () => setHover(null);
+  const onLeave = () => { hoverPt = null; setHover(null); };
   const onDown = (e) => {
     // Two-finger touch pinch or middle-button drag: always pan/zoom
     if (e.pointerType === 'touch' && handlePanZoomPointerDown(e, svgEl, viewState)) {
@@ -395,7 +455,7 @@ export function mountPrepareView(state, svgEl, opts = {}) {
         handlePanZoomPointerDown(e, svgEl, viewState);
       }
     }
-    renderSelection(); renderHover();        // redraw on selection-CHANGE; refresh hover (a now-selected profile drops its hover)
+    renderSelection(); renderHover();        // (renderHover also repaints the look layers) redraw on selection-CHANGE; refresh hover (a now-selected profile drops its hover)
     onSelectionChange(t || selectedTarget()); // notify the cut panel (last clicked target, or selected target | null)
   };
   const onUp = (e) => {

@@ -2458,16 +2458,10 @@ switch(c.type){
             out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
           
-          // Driven Toggle Button
-          const toggleR = scale(5);
-          const toggleX = labelX + labelW/2 + toggleR + scale(4);
-          const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
-          
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2517,11 +2511,6 @@ switch(c.type){
             out.push(`<rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
 
-          // Driven Toggle Button
-          const toggleR = scale(5);
-          const toggleX = annotX + labelW/2 + toggleR + scale(4);
-          const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
-
           const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred);
           if (centred || narrow) out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX)), strokeColor, visualOpacity));
 
@@ -2529,7 +2518,6 @@ switch(c.type){
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placed.attrs}>${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
           if (!c.__editing) {
@@ -2650,15 +2638,10 @@ switch(c.type){
                 out.push(`<rect x="${tx - labelW/2}" y="${ty - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
             }
 
-            const toggleR = scale(5);
-            const toggleX = tx + labelW/2 + toggleR + scale(4);
-            const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
-            
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
                 ${dimLabelRect(tx, ty, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
                 <text ${placedAngle.attrs}>${displayVal}</text>
-                <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${ty}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
             </g>`;
             
             // Store computed label position for hit testing and dragging

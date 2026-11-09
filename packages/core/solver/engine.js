@@ -813,6 +813,83 @@ export class NewtonSolver {
     return { structuralError, dragReached };
   }
 
+  // GROUND-TRUTH per-joint freedom: the nullspace of the global (non-driven) constraint Jacobian at the
+  // present configuration, built from the same _assemble() rows the solver uses. A joint is immovable (0)
+  // only if no nullspace vector has a component on its x or y; one free direction -> 1; else 2.
+  // Returns { freedom: Map(jointId -> 0|1|2), freeX: Set, freeY: Set, nullity } (nullity = global DOF).
+  jointFreedom() {
+    const allC = this.constraints;
+    const x0 = this._pack();
+    const n = x0.length;
+    const freedom = new Map(), freeX = new Set(), freeY = new Set();
+    let nullity = 0;
+    let N = null, k = 0;
+    if (n > 0) {
+      let rows;
+      try {
+        this.constraints = allC.filter(c => c && !c.isDriven && !c.driven && c.type !== 'mouse_spring');
+        const asm = this._assemble(x0);
+        rows = this._rowsOf(asm);
+      } finally {
+        this.constraints = allC;
+      }
+      // Row-normalise (rows mix world-unit and unit-less derivatives), then reduced row echelon form.
+      const R = [];
+      for (const v of rows) {
+        let s = 0; for (let i = 0; i < n; ++i) s += v[i] * v[i];
+        s = Math.sqrt(s);
+        if (s < 1e-9) continue;
+        for (let i = 0; i < n; ++i) v[i] /= s;
+        R.push(v);
+      }
+      const TOL = 1e-7;
+      const pivotCol = [];
+      const isPivot = new Uint8Array(n);
+      let r = 0;
+      for (let c = 0; c < n && r < R.length; ++c) {
+        let best = r, bv = Math.abs(R[r][c]);
+        for (let i = r + 1; i < R.length; ++i) { const a = Math.abs(R[i][c]); if (a > bv) { bv = a; best = i; } }
+        if (bv < TOL) continue;
+        const tmp = R[r]; R[r] = R[best]; R[best] = tmp;
+        const pr = R[r], pv = pr[c];
+        for (let j = c; j < n; ++j) pr[j] /= pv;
+        for (let i = 0; i < R.length; ++i) {
+          if (i === r) continue;
+          const row = R[i], f = row[c];
+          if (f === 0) continue;
+          for (let j = c; j < n; ++j) row[j] -= f * pr[j];
+          row[c] = 0;
+        }
+        pivotCol.push(c); isPivot[c] = 1; ++r;
+      }
+      const freeCols = [];
+      for (let c = 0; c < n; ++c) if (!isPivot[c]) freeCols.push(c);
+      k = freeCols.length;
+      nullity = k;
+      // N (n x k): free column f -> e_f on f, -R[row][f] on each pivot column.
+      N = new Float64Array(n * k);
+      for (let q = 0; q < k; ++q) {
+        const f = freeCols[q];
+        N[f * k + q] = 1;
+        for (let i = 0; i < pivotCol.length; ++i) N[pivotCol[i] * k + q] = -R[i][f];
+      }
+    }
+    for (const [id] of this.joints.entries()) {
+      const vi = this._varIndex.get(id);
+      if (vi === undefined || k === 0) { freedom.set(id, 0); continue; }
+      let aa = 0, bb = 0, ab = 0;
+      const ra = (vi * 2) * k, rb = (vi * 2 + 1) * k;
+      for (let q = 0; q < k; ++q) { const a = N[ra + q], b = N[rb + q]; aa += a * a; bb += b * b; ab += a * b; }
+      const fx = aa > 1e-10, fy = bb > 1e-10;
+      if (fx) freeX.add(id);
+      if (fy) freeY.add(id);
+      let rank = 0;
+      if (fx || fy) rank = (aa * bb - ab * ab > 1e-9 * aa * bb) ? 2 : 1;
+      freedom.set(id, rank);
+    }
+    return { freedom, freeX, freeY, nullity };
+  }
+
   // One-shot rank-deficiency probe at position x. Re-assembles, builds JᵀJ
   // (no LM damping), tries Cholesky. Failure ⟺ rank(J) < n.
   // Used by the early-return path when the pre-pass converges before LM runs.

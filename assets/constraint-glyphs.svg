@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 778 494" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:affinity="https://www.affinity.studio/" style="fill-rule:evenodd;clip-rule:evenodd;">
+    <g id="guides">
+        <rect x="-0" y="0" width="780" height="494" style="fill:rgb(233,237,243);"/>
+        <rect x="26" y="26" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="182" y="26" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="338" y="26" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="494" y="26" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="650" y="26" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="26" y="182" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="182" y="182" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="338" y="182" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="494" y="182" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="650" y="182" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="26" y="338" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="182" y="338" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+        <rect x="338" y="338" width="104" height="104" style="fill:none;stroke:rgb(200,208,220);stroke-width:1.63px;"/>
+    </g>
+    <g id="glyph-polygon">
+        <path d="M390.955,371.441L406.429,382.684C406.999,383.098 407.237,383.831 407.02,384.501L401.107,402.701C400.889,403.37 400.265,403.824 399.561,403.824L380.439,403.824C379.735,403.824 379.111,403.37 378.893,402.701L372.98,384.501C372.763,383.831 373.001,383.098 373.571,382.684L389.045,371.441C389.614,371.027 390.386,371.027 390.955,371.441ZM390,374.764L376.436,384.619L381.619,400.574L398.381,400.574L403.564,384.619L390,374.764Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;stroke-miterlimit:2;"/>
+    </g>
+    <g id="labels">
+        <g>
+            <text x="42.77px" y="159.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">horizontal</text>
+        </g>
+        <g>
+            <text x="208.263px" y="159.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">vertical</text>
+        </g>
+        <g>
+            <text x="363.805px" y="159.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">parallel</text>
+        </g>
+        <g>
+            <text x="496.766px" y="159.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">perpendicular</text>
+        </g>
+        <g>
+            <g>
+                <text x="665.415px" y="159.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">coincident</text>
+            </g>
+            <g>
+                <text x="648.885px" y="173.875px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:13px;fill:rgb(102,102,102);">(also point on line)</text>
+            </g>
+        </g>
+        <g>
+            <text x="47.742px" y="315.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">collinear</text>
+        </g>
+        <g>
+            <text x="206.892px" y="315.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">tangent</text>
+        </g>
+        <g>
+            <text x="370.12px" y="315.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">equal</text>
+        </g>
+        <g>
+            <text x="515.291px" y="315.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">midpoint</text>
+        </g>
+        <g>
+            <text x="664.969px" y="315.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">concentric</text>
+        </g>
+        <g>
+            <g>
+                <text x="60.837px" y="471.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">ﬁ</text>
+                <text x="68.962px" y="471.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">xed</text>
+            </g>
+        </g>
+        <g>
+            <text x="214.12px" y="471.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">angle</text>
+        </g>
+        <g>
+            <text x="361.54px" y="471.25px" style="font-family:'ArialMT', 'Arial', sans-serif;font-size:16.25px;fill:rgb(102,102,102);">polygon</text>
+        </g>
+    </g>
+    <g id="glyph-horizontal">
+        <path d="M90.265,81.192L54.931,81.192L54.931,77.942L55.071,77.942L62.637,70.376L64.935,72.673L59.67,77.942L63.352,77.942L70.827,70.467L73.125,72.764L67.948,77.942L72.013,77.942L79.579,70.376L81.877,72.673L76.612,77.942L80.294,77.942L87.769,70.467L90.067,72.764L84.89,77.942L88.933,77.942L95.326,71.549L97.627,73.847L93.528,77.942L96.951,77.942L96.951,81.192L90.278,81.192L90.272,81.198L90.265,81.192ZM96.951,83.35L96.951,86.6L55.074,86.6L55.074,83.35L96.951,83.35Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-vertical">
+        <path d="M236.255,64.503L236.255,99.837L233.005,99.837L233.005,99.697L225.439,92.131L227.737,89.833L233.005,95.098L233.005,91.416L225.53,83.941L227.828,81.643L233.005,86.821L233.005,82.755L225.439,75.189L227.737,72.891L233.005,78.156L233.005,74.474L225.53,66.999L227.828,64.701L233.005,69.878L233.005,65.835L226.613,59.443L228.91,57.142L233.005,61.24L233.005,57.818L236.255,57.818L236.255,64.49L236.262,64.496L236.255,64.503ZM238.413,57.818L241.663,57.818L241.663,99.694L238.413,99.694L238.413,57.818Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-parallel">
+        <path d="M410,86.71L407.703,89.008L381.251,62.556L383.549,60.258L410,86.71Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M401.583,94.422L399.285,96.723L373.142,70.58L375.44,68.283L401.583,94.422Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-perpendicular">
+        <path d="M548.138,72.319L539.676,63.856L541.976,61.558L562.026,81.608L559.725,83.905L550.436,74.617L529.633,95.42L527.335,93.122L548.138,72.319Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-coincident">
+        <path d="M690.768,72.813L690.768,93.688L694.018,93.688L694.018,72.813L696.589,72.813L693.222,65.721L691.613,65.722L688.538,72.813L690.768,72.813Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <rect x="694.011" y="57.879" width="30.254" height="3.25" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <rect x="687.849" y="54.837" width="6.169" height="6.292" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <rect x="687.68" y="95.849" width="6.338" height="6.292" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-collinear">
+        <path d="M97.604,250.084L99.902,247.787L88.361,236.243L86.06,238.54L97.604,250.084Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M84.409,236.798L86.707,234.501L67.626,215.42L65.328,217.718L84.409,236.798Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M70.476,233.782L63.138,241.121L57.229,235.212L54.931,237.51L71.214,253.793L73.512,251.495L65.435,243.419L72.914,235.944L72.914,238.176L76.164,238.176L76.164,230.532L68.198,230.532L68.198,233.782L70.476,233.782Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-tangent">
+        <path d="M234.539,245.778C233.626,245.957 232.687,246.051 231.725,246.051C223.675,246.051 217.139,239.515 217.139,231.465C217.139,223.415 223.675,216.879 231.725,216.879C239.775,216.879 246.311,223.415 246.311,231.465C246.311,232.427 246.217,233.37 246.038,234.28L254.303,226.015L256.6,228.313L228.488,256.425L226.19,254.127L234.539,245.778ZM243.061,231.465C243.061,225.209 237.981,220.129 231.725,220.129C225.469,220.129 220.389,225.209 220.389,231.465C220.389,237.721 225.469,242.801 231.725,242.801C237.981,242.801 243.061,237.721 243.061,231.465Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-equal">
+        <rect x="373.188" y="227.328" width="33.673" height="3.25" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <rect x="373.139" y="238.635" width="33.673" height="3.25" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-midpoint">
+        <path d="M544.32,246.191L529.418,220.448C529.126,219.944 529.126,219.323 529.415,218.823C529.708,218.316 530.244,218.007 530.822,218.007L560.631,218.007C561.213,218.007 561.749,218.316 562.039,218.823C562.328,219.323 562.328,219.944 562.039,220.448L547.134,246.191C546.845,246.691 546.309,247 545.727,247C545.149,247 544.612,246.691 544.32,246.191ZM545.727,242.132L557.814,221.257L533.643,221.257L545.727,242.132Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+    <g id="glyph-concentric">
+        <path d="M702.244,212.345C714.399,212.345 724.269,222.216 724.269,234.371C724.269,246.526 714.399,256.396 702.244,256.396C690.089,256.396 680.218,246.526 680.218,234.371C680.218,222.216 690.089,212.345 702.244,212.345ZM702.244,215.595C691.883,215.595 683.468,224.01 683.468,234.371C683.468,244.732 691.883,253.146 702.244,253.146C712.605,253.146 721.019,244.732 721.019,234.371C721.019,224.01 712.605,215.595 702.244,215.595Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M702.244,221.01C709.618,221.01 715.604,226.996 715.604,234.371C715.604,241.745 709.618,247.731 702.244,247.731C694.869,247.731 688.883,241.745 688.883,234.371C688.883,226.996 694.869,221.01 702.244,221.01ZM702.244,224.26C696.663,224.26 692.133,228.79 692.133,234.371C692.133,239.951 696.663,244.481 702.244,244.481C707.824,244.481 712.354,239.951 712.354,234.371C712.354,228.79 707.824,224.26 702.244,224.26Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
+</svg>

@@ -12,6 +12,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
 import { draw } from '#ui/svg-renderer.js';
+import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
@@ -73,6 +74,7 @@ function seedDemo(engine, state) {
 // opts.grid: boolean — OPTIONAL: draw the shared GRID_MODE-driven canvas grid (#ui/canvas-grid.js) behind the geometry.
 // Omitted/false (default) = no grid on this canvas = byte-identical. One grid per page (it owns url(#grid) ids).
 export function mountSketch(svgEl, opts = {}) {
+  loadFusionGlyphs(); // once per page; the frame loop draws the glyphs as soon as the sheet arrives
   const engine = createEngine(null);
   engine.init();
   // view isn't driven yet (no pan/zoom UI); the svg's own viewBox maps world→screen.

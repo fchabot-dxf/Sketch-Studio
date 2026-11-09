@@ -29,6 +29,7 @@ const CONTROLS = [
   { tab: 'glyphs', key: 'GLYPH_SYMBOL_SIZE_PX',    label: 'Glyph Icon Size',      min: 8,   max: 48,  step: 1 },
   { tab: 'glyphs', key: 'GLYPH_INFERENCE_SIZE_PX', label: 'Glyph Inference Size', min: 8,   max: 64,  step: 1 },
   { tab: 'glyphs', key: 'GLYPH_OFFSET_PX',         label: 'Glyph Offset',         min: 0,   max: 200, step: 1 },
+  { tab: 'glyphs', key: 'GLYPH_OUTLINE_PX',        label: 'Glyph Outline',        min: 0.2, max: 4,   step: 0.1 },
   { tab: 'lines', key: 'GLOW_WIDTH_PX',           label: 'Glow Width',           min: 0,   max: 80,  step: 1 },
   { tab: 'lines', key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
   { tab: 'lines', key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },

@@ -97,7 +97,7 @@ await (async () => {
       assert(f.templateAboveTabs, host + ': the Template select sits above the tabs');
       assert.deepStrictEqual(f.lines.keys, ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLOW_WIDTH_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'HOVER_COLOR', 'FIXED_JOINT_FILL'], host + ' lines tab');
       assert.deepStrictEqual(f.grid.keys, ['SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'GRID_MAGNETISM', 'GRID_SIZE', 'GRID_MAJOR_STEP'], host + ' grid tab');
-      assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_STYLE', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY'], host + ' glyphs tab');
+      assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'GLYPH_STYLE', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY'], host + ' glyphs tab');
       assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');
       assert(!f.lines.hidden && f.grid.hidden && f.glyphs.hidden && f.units.hidden, host + ': only the active tab shows its fields');
 

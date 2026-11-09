@@ -23,6 +23,8 @@ import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: aut
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import SettingsManager from '#core/settings-manager.js';
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
+import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
+loadFusionGlyphs(); // the owner's constraint-glyph sheet, fetched once; the render loop picks it up when it arrives
 
 let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;

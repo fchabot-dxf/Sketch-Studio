@@ -62,6 +62,7 @@ import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
 import { constraintTargets } from '#ui/geometry-labels.js';
+import { profileFillPaths } from '#ui/profile-fill.js';
 
 // P2 theming: route a canvas color through its --sk-* theme var. var() is INVALID in SVG presentation
 // attributes, so emissions use inline style — `style="fill:${skv(color)}"`. A known canvas color maps to
@@ -162,6 +163,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const GRID_MAJOR_STEP = getNum('GRID_MAJOR_STEP', 10);
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
+  const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';
+  const LOCKED_LINE_COLOR = getStr('LOCKED_LINE_COLOR', ''); // '' = a locked line looks like any fully constrained one
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
   const LABEL_FONT_FAMILY = getStr('LABEL_FONT_FAMILY', ''); // '' = no font-family attribute (inherits the host's font)
   const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
@@ -601,6 +604,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     }
   } catch (_){ }
+
+  // PROFILE_FILL: every closed loop (rectangle, circle, polygon, closed line/arc chain) gets a translucent tint behind the
+  // geometry; overlapping loops stack a little darker. Loops are cached against the geometry (profile-fill.js).
+  if (PROFILE_FILL_ON) {
+    try {
+      for (const d of profileFillPaths(joints, shapes, constraints)) {
+        out.push(`<path class="profile-fill" d="${d}" style="fill:var(--sk-profile-tint, #3AA0DC)" fill-opacity="0.12" stroke="none" pointer-events="none"/>`);
+      }
+    } catch (err) {
+      dbg.error('renderer', '[svg-renderer] profile fill render error', err);
+    }
+  }
 
   // Combined profile background tints (evenodd, holes open; warning fill if invalid, dashed stroke drawn above shapes)
   const invalidProfileDs = [];
@@ -1043,7 +1058,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // can still move and should stay blue, otherwise the user has no visual
     // signal that the sketch isn't done.
     if (fixedShapes.has(s.id)) {
-        strokeColor = '#202020'; // Black — fully rigid
+        // LOCKED (every joint fixed:true, the Lock action) vs merely fully constrained (DOF 0): both sit in fixedShapes.
+        const locked = LOCKED_LINE_COLOR && s.joints && s.joints.length > 0 && s.joints.every(jid => { const jj = joints.get(jid); return jj && jj.fixed === true; });
+        strokeColor = locked ? LOCKED_LINE_COLOR : '#202020'; // Black — fully rigid
     } else {
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
@@ -1368,7 +1385,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     if (fixedJoints.has(id)) {
         fill = FIXED_JOINT_FILL;
-        stroke = '#202020';
+        stroke = (LOCKED_LINE_COLOR && j.fixed === true) ? LOCKED_LINE_COLOR : '#202020';
+        if (LOCKED_LINE_COLOR && j.fixed === true && FIXED_JOINT_FILL !== 'white') fill = LOCKED_LINE_COLOR;
     } else if (constrainedJoints.has(id)) {
         fill = FIXED_JOINT_FILL;
         stroke = '#202020';

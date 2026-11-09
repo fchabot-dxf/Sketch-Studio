@@ -53,6 +53,8 @@ const DEFAULT_SETTINGS = {
     HOVER_COLOR: '#1e40af',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
     FIXED_JOINT_FILL: 'white',      // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
     LABEL_FONT_FAMILY: '',          // font-family of dimension values/labels: '' = inherit from the host page (today's look) | a CSS font stack
+    PROFILE_FILL: 'off',            // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
+    LOCKED_LINE_COLOR: '',          // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

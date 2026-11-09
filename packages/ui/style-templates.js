@@ -16,7 +16,7 @@ export const STYLE_SETTING_KEYS = [
   'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
   'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLOW_WIDTH_PX',
   'DASH_LENGTH_PX', 'DASH_GAP_PX',
-  'GLYPH_STYLE', 'DIM_LABEL_BOX',   'HOVER_COLOR', 'FIXED_JOINT_FILL', 'LABEL_FONT_FAMILY',
+  'GLYPH_STYLE', 'DIM_LABEL_BOX',   'HOVER_COLOR', 'FIXED_JOINT_FILL', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
 ];
 
 const FACTORY = SettingsManager.getDefaults();
@@ -42,17 +42,18 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
       GLYPH_STYLE: 'fusion', DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
-            LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif',
+            LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
           }),
     tokens: {
-      '--sk-canvas-bg': '#E3F2FB', '--sk-canvas-bg-snapping': '#D6EBF8',
-      '--sk-grid-minor': '#C9DCE8', '--sk-grid-major': '#A9C4D6',
+      '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
+      '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
       '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
-      '--sk-geo-fixed': '#000000',         // fully constrained lines + joints
+      '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
       '--sk-construction': '#A9744F',
       '--sk-constraint-stroke': '#1F2937', // dimension lines + text
       '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
       '--sk-profile-fill': '#5B9BF0',
+      '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
       '--sk-joint-fill': '#FFFFFF',
     },
   },

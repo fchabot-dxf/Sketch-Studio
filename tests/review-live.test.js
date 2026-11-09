@@ -81,6 +81,27 @@ await (async () => {
     assert.notStrictEqual(resetShot.md5, orbitShot.md5, 'orbiting changed the picture');
     assert.notStrictEqual(orbitShot.md5, topShot.md5, 'Top changed the picture');
 
+    // TASK 497: the Wood toggle on the real board (a second view mounted by the test, with a long-X stock): flat first, then map on / off
+    const wood = await evalJs(`(async () => {
+      const { mountReviewView } = await import('/apps/shaper/src/review-view.js');
+      const host = document.createElement('div'); host.style.cssText = 'width:300px;height:200px;position:fixed;left:0;top:0'; document.body.appendChild(host);
+      const v = await mountReviewView({ host, info: document.createElement('div'), getInputs: () => ({ stock: { thickness: 18, width: 500, height: 200 }, bounds: { minX: 0, maxX: 100, minY: 0, maxY: 50 }, items: [] }) });
+      v.refresh('wood');
+      const first = v.inspect();
+      for (let i = 0; i < 100 && !(v.inspect().mapLoaded && v.inspect().edgeLoaded); i++) await new Promise((r) => setTimeout(r, 100));
+      const on = v.inspect(); v.setWood(false); const off = v.inspect(); v.setWood(true); const back = v.inspect();
+      v.destroy(); host.remove();
+      return { first, on, off, back };
+    })()`);
+    assert.strictEqual(wood.on.mapLoaded, true, 'the texture loads');
+    assert.strictEqual(wood.on.mapOn, true, 'Wood on: the face map is set');
+    assert.strictEqual(wood.off.mapOn, false, 'Wood off: flat colour');
+    assert.strictEqual(wood.back.mapOn, true, 'Wood back on');
+    assert.strictEqual(wood.on.edgeMapOn, true, 'Wood on: the edge ply texture is set');
+    assert.strictEqual(wood.off.edgeMapOn, false, 'Wood off: the edge is flat too');
+    assert.strictEqual(wood.on.edgeLoaded, true, 'the edge texture loads');
+    assert.ok(Math.abs(wood.on.top.v - wood.on.top.x / 400) < 1e-4 && Math.abs(wood.on.top.u - wood.on.top.z / 400) < 1e-4, 'top uv = x/TILE, z/TILE (swapped for a long-X board): ' + JSON.stringify(wood.on.top));
+
     await evalJs(`localStorage.setItem('shaper-mode', 'simexport')`); // the stored tab name migrates
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
     await waitFor(`!!document.querySelector('.mode-btn.active') && !!document.getElementById('review-info')`, 'shaper app ready after the reload');

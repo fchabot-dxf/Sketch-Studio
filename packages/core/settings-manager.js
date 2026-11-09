@@ -102,17 +102,6 @@ class SettingsManager {
             } catch (e) {
                 console.warn('[SettingsManager] failed to read project config:', e);
             }
-        } else if (typeof document !== 'undefined') {
-            // Browser standalone: look for embedded project config in a <script id="project-config"> tag
-            try {
-                const el = document.getElementById('project-config');
-                if (el) {
-                    const raw = el.textContent || el.innerText || '';
-                    if (raw && raw.trim()) this._project = JSON.parse(raw);
-                }
-            } catch (e) {
-                console.warn('[SettingsManager] failed to parse embedded project config:', e);
-            }
         }
 
         // 2. Load local overrides from localStorage (browser)
@@ -194,85 +183,6 @@ class SettingsManager {
     // Get all factory defaults
     getDefaults() {
         return { ...DEFAULT_SETTINGS };
-    }
-    
-    async saveProjectFile(obj) {
-        // Node filesystem case (project file in repo)
-        if (canWriteProject) {
-            try {
-                const p = path.resolve(process.cwd(), PROJECT_FILE);
-                fs.writeFileSync(p, JSON.stringify(obj, null, 2), 'utf8');
-                this._project = obj;
-                this._settings = { ...DEFAULT_SETTINGS, ...this._project, ...this._local };
-                this._emitChange();
-                return true;
-            } catch (e) { console.warn('[SettingsManager] saveProjectFile error', e); return false; }
-        }
-
-        // Browser standalone: embed project config in HTML and attempt to write directly using
-        // the File System Access API (showSaveFilePicker). If not available, fall back to download.
-        if (typeof document !== 'undefined') {
-            try {
-                // Update or create a <script id="project-config" type="application/json"> tag
-                let el = document.getElementById('project-config');
-                if (!el) {
-                    el = document.createElement('script');
-                    el.id = 'project-config';
-                    el.type = 'application/json';
-                    // Place near head for readability
-                    if (document.head) document.head.appendChild(el);
-                    else document.body.appendChild(el);
-                }
-                el.textContent = JSON.stringify(obj, null, 2);
-
-                // Serialize full HTML (include DOCTYPE)
-                const doctype = new XMLSerializer().serializeToString(document.doctype || new DOMParser().parseFromString('<!doctype html>', 'text/html'));
-                const html = doctype + "\n" + document.documentElement.outerHTML;
-
-                // Prefer File System Access API if available (allows replacing the original file)
-                if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
-                    try {
-                        const suggestedName = (window.location && window.location.pathname) ? window.location.pathname.split('/').pop() || 'sketch-studio-standalone.html' : 'sketch-studio-standalone.html';
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName,
-                            types: [{ description: 'HTML File', accept: { 'text/html': ['.html', '.htm'] } }]
-                        });
-                        const writable = await handle.createWritable();
-                        await writable.write(html);
-                        await writable.close();
-
-                        // Keep runtime state consistent
-                        this._project = obj;
-                        this._settings = { ...DEFAULT_SETTINGS, ...this._project, ...this._local };
-                        this._emitChange();
-                        return true;
-                    } catch (e) {
-                        console.warn('[SettingsManager] saveProjectFile (FS Access) failed, falling back to download', e);
-                        // If FS API fails, fall through to download fallback
-                    }
-                }
-
-                // Fallback: trigger download of updated HTML
-                const blob = new Blob([html], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                const name = (window.location && window.location.pathname) ? window.location.pathname.split('/').pop() || 'sketch-studio-standalone.html' : 'sketch-studio-standalone.html';
-                a.href = url;
-                a.download = name;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-
-                // Keep runtime state consistent
-                this._project = obj;
-                this._settings = { ...DEFAULT_SETTINGS, ...this._project, ...this._local };
-                this._emitChange();
-                return true;
-            } catch (e) { console.warn('[SettingsManager] saveProjectFile (standalone) error', e); return false; }
-        }
-
-        return false;
     }
 }
 

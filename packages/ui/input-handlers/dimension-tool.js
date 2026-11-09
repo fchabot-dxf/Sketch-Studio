@@ -11,6 +11,7 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
+import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { showNotification } from '#ui/notification-manager.js';
 
@@ -916,7 +917,8 @@ export function handleDimensionPointerMove(e, svg, state, w) {
     // Dragging an existing dimension label
     if (state.drag && state.drag.type === DRAG_TYPES.DIMENSION) {
         const constraint = state.drag.constraint;
-        updateConstraintOffset(state, constraint, w);
+        if (state.drag.mode === 'label') dragDimensionLabel(state, state.drag, e, w);
+        else updateConstraintOffset(state, constraint, w);
         return true;
     }
 

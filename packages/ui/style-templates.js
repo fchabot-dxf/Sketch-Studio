@@ -16,7 +16,7 @@ export const STYLE_SETTING_KEYS = [
   'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
   'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLOW_WIDTH_PX',
   'DASH_LENGTH_PX', 'DASH_GAP_PX',
-  'GLYPH_STYLE', 'DIM_LABEL_BOX', 'HOVER_COLOR', 'FIXED_JOINT_FILL',
+  'GLYPH_STYLE', 'DIM_LABEL_BOX',   'HOVER_COLOR', 'FIXED_JOINT_FILL', 'LABEL_FONT_FAMILY',
 ];
 
 const FACTORY = SettingsManager.getDefaults();
@@ -42,7 +42,8 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
       GLYPH_STYLE: 'fusion', DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
-    }),
+            LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif',
+          }),
     tokens: {
       '--sk-canvas-bg': '#E3F2FB', '--sk-canvas-bg-snapping': '#D6EBF8',
       '--sk-grid-minor': '#C9DCE8', '--sk-grid-major': '#A9C4D6',

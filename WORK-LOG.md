@@ -13242,3 +13242,18 @@ Edge scale from ply density: PLY_PER_MM = 13/19.05; IMAGE_PLY_COUNT = 26 (dark-s
 **Tests updated:** cluster-dof-sync case 3 used distance value 0 (degenerate; now offset 3, same intent); filleted-underconstrained-movability asserted the virtual sharp "reads d0 per Task 416" (that was the bug; now asserts not fixed). New: tests/joint-dof-truth.test.js (truth vs report, global DOF == nullity, pin-perturbation cross-check, perf).
 Evidence (local): .evidence/496/{before,after}-full.png, -top-zoom.png.
 Gate: GATE files=222 pass=222 fail=0, SMOKE 12/12, HEADLESS-LEFT 0.
+
+## TURN 491
+Fusion glyph polish (Default byte-identical: dump md5 fe31d63a.../00434aba... identical on origin/main and this branch). fusion-glyphs.js: front shapes are white fill only, stroke none (circles keep the 1-unit ring); black outline behind = declared HALO_PX 1.6 / CORE_PX 0, one function for all glyphs; sprite shapes untouched. New glyphs icon-point-on-line, icon-fixed, icon-angle, icon-symmetric + CONSTRAINT_GLYPH map; point-on-line no longer reuses coincident in Fusion (sprite id kept for badge). New packages/ui/dim-placement.js: placeDimText (Fusion value above a horizontal dimension line / beside a vertical, rotated to read along it, 3px gap) and freeGlyphSpot (the one glyph rule: a glyph square that would cover a distance-dimension label moves to the nearest free ring spot). svg-renderer.js: dimension geometry hoisted into resolveDimEnds/linearDimGeom/radiusLabelPos/placeDimLabel (same maths); DIM_FONT from new LABEL_FONT_FAMILY setting ('' = today's look; Fusion = Segoe UI, Arial, Helvetica, sans-serif) reaches linear, radius and angle texts; Style panel Glyphs tab +1 row (22 controls). Known gaps: angle-dimension labels are not in the glyph-avoid set; dimension-tool preview texts do not get the font; fixed/symmetric/angle glyphs exist in the module only (no renderer constraint type draws them). Tests: tests/fusion-glyphs-polish.test.js. Evidence: .evidence/491/ (glyph-sheet-before/after, hv, sketch).
+
+## TURN 491 (midpoint addition)
+icon-midpoint redrawn as Fusion's: apex-up triangle over a short baseline bar, no end ticks; same paint (white face, HALO_PX outline, no white stroke). No other glyph/sprite shape touched. Evidence .evidence/491/midpoint-after.png (before = midpoint tile in glyph-sheet-before.png).
+
+## TURN 491 (midpoint correction)
+Supersedes the hand-drawn midpoint: icon-midpoint is now the existing toolbar triangle, path 'M6.5,2 L11.5,11 L1.5,11 Z' (viewBox 13x13) copied from 'icon-midpoint' in packages/ui/cursor-manager.js; no ticks/baseline; same Fusion paint. Evidence .evidence/491/midpoint-before.png / midpoint-after.png.
+
+## TURN 491 (midpoint scale)
+Fusion midpoint triangle (cursor-manager.js 'icon-midpoint') scaled to the other glyphs' extent: size 13 -> 11.7. Evidence .evidence/491/midpoint-after.png.
+
+## TURN 491 (tangent glyph)
+Tangent glyph now sits at the tangency point (foot of the perpendicular from the circle/arc centre onto the line), TANGENT_GLYPH_OFFSET_PX = 6 off it, outside the curve; one glyph per tangent constraint (was: line midpoint + 40px normal / smart-layout fan). Fixed in the one TANGENT case of drawConstraintGlyph in svg-renderer.js. Applies to Default too (the old position was wrong there as well). Test tests/tangent-glyph-position.test.js (line+circle, fillet corner: within 6px, no shared position). Evidence .evidence/491/fillet-before.png / fillet-after.png. Icon reuse rule: no new icon drawn this turn (tangent uses the existing icon-tangent).

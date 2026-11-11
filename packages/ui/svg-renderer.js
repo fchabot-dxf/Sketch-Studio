@@ -12,7 +12,8 @@ import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
-import { placeDimText, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
+import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
+import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -371,6 +372,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // A radius label: explicit placement (__pos), else `offset` along the declared labelAngle from the centre.
   const radiusLabelPos = (c, center, offset) => {
+    if (c && c.labelPos) return { x: c.labelPos.x, y: c.labelPos.y };
     if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
     const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : 0;
     return { x: center.x + Math.cos(angle) * offset, y: center.y + Math.sin(angle) * offset };
@@ -448,21 +450,38 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       dimLineEnd = ext2End;
       adx = dx / len; ady = dy / len;
     }
-    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady };
+    const narrow = isNarrowDim(Math.hypot(dimLineEnd.x - dimLineStart.x, dimLineEnd.y - dimLineStart.y), scale(1));
+    let centred = false;
+    if (c.labelPos) { annotX = c.labelPos.x; annotY = c.labelPos.y; centred = true; }
+    else if (narrow) {
+      // Too narrow for two arrowheads: they flip outside, and the value sits beyond the far stub.
+      const alongHalf = DIM_LABEL_BOX ? Math.abs(adx) * scale(20) + Math.abs(ady) * scale(9) : dimTextWidth(displayVal, scale(11)) / 2;
+      const reach = scale(DIM_ARROW_PX + DIM_NARROW_STUB_PX) + alongHalf;
+      annotX = dimLineEnd.x + adx * reach; annotY = dimLineEnd.y + ady * reach;
+    }
+    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred };
   };
 
   // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
   // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
   // goes just above/beside the line, reading along it; a leader label (dirX null: radius/angle) stays centred on its point.
-  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40)) => {
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false) => {
     const fontPx = scale(11);
     const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${DIM_TEXT_ATTRS}`;
-    if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)) };
-    if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
-    const p = placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
+    if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)), rect: axisRect(cx, cy, boxW, scale(18)) };
+    if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
+    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
     const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
-    return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds };
+    return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds, rect: p.rect };
   };
+
+  // The thin dimension lines a moved or narrow value needs (see dimension-lead.js): an extension of the dimension line and/or
+  // a leader to the text. Both stay out of the markup when the value sits where it normally does.
+  const leadLines = (lead, strokeColor, visualOpacity) => [lead.extension, lead.leader].filter(Boolean).map(s =>
+    `<line class="dim-lead" x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${visualOpacity}"/>`);
+
+  // The blue dot on a selected dimension that moves the dimension LINE (its offset); the value itself drags freely.
+  const dimHandle = (cIdx, x, y) => `<circle class="dim-offset-handle" data-constraint-idx="${cIdx}" cx="${x}" cy="${y}" r="${scale(4)}" style="cursor:move; fill:${skv('#2563eb')}; stroke:${skv('white')}" stroke-width="${scale(1)}"/>`;
 
   // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
   const dimLabelBounds = [];
@@ -477,7 +496,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         dimLabelBounds.push(placeDimLabel(p.x, p.y, null, null, formatConstraintValue(c, { value: typeof c.value === 'number' ? c.value : 0 }), scale(50)).bounds);
       } else if (j2) {
         const g = linearDimGeom(c, j1, j2, offset);
-        dimLabelBounds.push(placeDimLabel(g.annotX, g.annotY, g.adx, g.ady, g.displayVal).bounds);
+        dimLabelBounds.push(placeDimLabel(g.annotX, g.annotY, g.adx, g.ady, g.displayVal, undefined, g.centred).bounds);
       }
     }
   }
@@ -2402,7 +2421,7 @@ switch(c.type){
           // Direction from center to label (use offset as radial distance)
           // TASK 448: the label's angle around the centre = the declared constraint field `labelAngle` (default 0 = the
           // old horizontal-right leader, so saved dimensions without it look exactly as before).
-          const angle = (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : (Number.isFinite(c.labelAngle) ? c.labelAngle : 0));
+          const angle = c.labelPos ? Math.atan2(c.labelPos.y - center.y, c.labelPos.x - center.x) : (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : (Number.isFinite(c.labelAngle) ? c.labelAngle : 0));
           // Prefer explicit placement from import/export: __pos (preferred), then glyphPos, else computed offset
           const { x: labelX, y: labelY } = radiusLabelPos(c, center, offset);
 
@@ -2412,8 +2431,13 @@ switch(c.type){
           const edgeX = center.x + Math.cos(angle) * radius;
           const edgeY = center.y + Math.sin(angle) * radius;
 
-          // Draw leader line
-          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          // Draw leader line (a value dragged free: rim point to the text's edge, via the one lead function)
+          if (c.labelPos) {
+            const lead = radialLead({ x: edgeX, y: edgeY }, placeDimLabel(labelX, labelY, null, null, displayVal, scale(50)).rect, scale(DIM_LEAD_MIN_PX));
+            if (lead) out.push(`<line x1="${lead.x1}" y1="${lead.y1}" x2="${lead.x2}" y2="${lead.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          } else {
+            out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          }
 
           // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
           // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
@@ -2452,16 +2476,10 @@ switch(c.type){
             out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
           
-          // Driven Toggle Button
-          const toggleR = scale(5);
-          const toggleX = labelX + labelW/2 + toggleR + scale(4);
-          const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
-          
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2469,7 +2487,7 @@ switch(c.type){
           // Linear dimension (line or point-to-point)
           const isPlacing = !!c.__placing;
           const isDrivenFlag = !!(c.isDriven || c.driven);
-          const { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady } = linearDimGeom(c, j1, j2, offset);
+          const { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred } = linearDimGeom(c, j1, j2, offset);
 
           // Visual ghosting when placing
           const visualOpacity = isPlacing ? 0.4 : 1.0;
@@ -2482,10 +2500,21 @@ switch(c.type){
           // Draw dimension line with arrows
           out.push(`<line x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${dimLineEnd.x}" y2="${dimLineEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
-          // Arrow markers (small triangles at ends)
-          const arrowSizeLin = scale(6);
-          out.push(`<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + ady*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
-          out.push(`<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - adx*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - adx*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - ady*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          // Arrow markers (small triangles at ends). Too narrow for two: they flip OUTSIDE the extension lines, pointing in,
+          // each with a short stub of dimension line (Fusion).
+          const arrowSizeLin = scale(DIM_ARROW_PX);
+          const sa = narrow ? -1 : 1;
+          const aax = adx * sa, aay = ady * sa;
+          out.push(`<polygon points="${dimLineStart.x},${dimLineStart.y} ${dimLineStart.x + aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineStart.x + aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineStart.y + aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          out.push(`<polygon points="${dimLineEnd.x},${dimLineEnd.y} ${dimLineEnd.x - aax*arrowSizeLin + nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin + ny*arrowSizeLin/2} ${dimLineEnd.x - aax*arrowSizeLin - nx*arrowSizeLin/2},${dimLineEnd.y - aay*arrowSizeLin - ny*arrowSizeLin/2}" style="fill:${skv(strokeColor)}"/>`);
+          let leadStart = dimLineStart, leadEnd = dimLineEnd;
+          if (narrow) {
+            const stub = scale(DIM_ARROW_PX + DIM_NARROW_STUB_PX);
+            leadStart = { x: dimLineStart.x - adx * stub, y: dimLineStart.y - ady * stub };
+            leadEnd = { x: dimLineEnd.x + adx * stub, y: dimLineEnd.y + ady * stub };
+            out.push(`<line class="dim-stub" x1="${dimLineStart.x}" y1="${dimLineStart.y}" x2="${leadStart.x}" y2="${leadStart.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            out.push(`<line class="dim-stub" x1="${dimLineEnd.x}" y1="${dimLineEnd.y}" x2="${leadEnd.x}" y2="${leadEnd.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+          }
 
           // Clickable text label with background (only editable in select or dim tool)
           const labelW = scale(40);
@@ -2500,19 +2529,19 @@ switch(c.type){
             out.push(`<rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
           }
 
-          // Driven Toggle Button
-          const toggleR = scale(5);
-          const toggleX = annotX + labelW/2 + toggleR + scale(4);
-          const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
+          const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred);
+          if (centred || narrow) out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX)), strokeColor, visualOpacity));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text ${placeDimLabel(annotX, annotY, adx, ady, displayVal).attrs}>${displayVal}</text>
-            <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${annotY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
+            <text ${placed.attrs}>${displayVal}</text>
           </g>`;
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
-          if (!c.__editing) { out.push(labelHtml); }
+          if (!c.__editing) {
+            out.push(labelHtml);
+            if (isSelected && canEdit) out.push(dimHandle(cIdx, dimLineStart.x + (dimLineEnd.x - dimLineStart.x) * 0.2, dimLineStart.y + (dimLineEnd.y - dimLineStart.y) * 0.2));
+          }
         }
       }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
@@ -2615,24 +2644,30 @@ switch(c.type){
             const labelStrokeColor = isSelected ? '#1e40af' : '#2563eb';
             const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
 
-            if (isSelected) {
-                out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+            // A value dragged free sits at labelPos, on a leader from the arc point it would normally mark
+            const tx = c.labelPos ? c.labelPos.x : labelX, ty = c.labelPos ? c.labelPos.y : labelY;
+            const placedAngle = placeDimLabel(tx, ty, null, null, displayVal);
+            if (c.labelPos) {
+              const lead = radialLead({ x: labelX, y: labelY }, placedAngle.rect, scale(DIM_LEAD_MIN_PX));
+              if (lead) out.push(...leadLines({ extension: null, leader: lead }, strokeColor, visualOpacity));
             }
 
-            const toggleR = scale(5);
-            const toggleX = labelX + labelW/2 + toggleR + scale(4);
-            const toggleFill = isDrivenFlag ? 'white' : '#2563eb';
-            
+            if (isSelected) {
+                out.push(`<rect x="${tx - labelW/2}" y="${ty - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+            }
+
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-                ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-                <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
-                <circle class="dim-driven-toggle" data-c-idx="${cIdx}" cx="${toggleX}" cy="${labelY}" r="${toggleR}" style="cursor:pointer; fill:${skv(toggleFill)}; stroke:${skv('#2563eb')}" stroke-width="${scale(1.5)}"/>
+                ${dimLabelRect(tx, ty, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
+                <text ${placedAngle.attrs}>${displayVal}</text>
             </g>`;
             
             // Store computed label position for hit testing and dragging
             try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
-            if (!c.__editing) { out.push(labelHtml); }
+            if (!c.__editing) {
+              out.push(labelHtml);
+              if (isSelected && canEdit) out.push(dimHandle(cIdx, sx, sy));
+            }
           }
         }
       }

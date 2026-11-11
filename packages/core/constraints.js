@@ -218,6 +218,7 @@ export function createConstraint(type, params) {
                 if (params.glyphPos) radiusObj.glyphPos = params.glyphPos;
                 // TASK 448: the label's angle around the centre (radians; absent = 0 = today's horizontal-right leader)
                 if (Number.isFinite(params.labelAngle)) radiusObj.labelAngle = params.labelAngle;
+                if (params.labelPos) radiusObj.labelPos = { ...params.labelPos };
                 return radiusObj;
             }
             // Line-Line Distance (Parallel)
@@ -233,6 +234,7 @@ export function createConstraint(type, params) {
                     glyphPos: params.glyphPos
                 };
                 if (params.drivenReason) llObj.drivenReason = params.drivenReason;
+                if (params.labelPos) llObj.labelPos = { ...params.labelPos };
                 return llObj;
             }
             if (!params.joints || params.joints.length < 2) return null;
@@ -252,6 +254,7 @@ export function createConstraint(type, params) {
             if (params.drivenReason) distObj.drivenReason = params.drivenReason;
             if (params.__pos) distObj.__pos = params.__pos;
             if (params.glyphPos) distObj.glyphPos = params.glyphPos;
+            if (params.labelPos) distObj.labelPos = { ...params.labelPos };
             return distObj;
         case CONSTRAINT_TYPES.EQUAL:
             // Equality normally operates on two shapes (lines or circles) -- engine.js synthesizes
@@ -268,13 +271,17 @@ export function createConstraint(type, params) {
 
         case CONSTRAINT_TYPES.ANGLE:
             if (!params.shapes || params.shapes.length !== 2) return null;
-            return { 
-                type: CONSTRAINT_TYPES.ANGLE, 
-                shapes: params.shapes.slice(), 
-                value: params.value,
-                offset: params.offset || SolverConfig.ANGLE_OFFSET || 40,
-                glyphPos: params.glyphPos
-            };
+            {
+                const angleObj = {
+                    type: CONSTRAINT_TYPES.ANGLE,
+                    shapes: params.shapes.slice(),
+                    value: params.value,
+                    offset: params.offset || SolverConfig.ANGLE_OFFSET || 40,
+                    glyphPos: params.glyphPos
+                };
+                if (params.labelPos) angleObj.labelPos = { ...params.labelPos };
+                return angleObj;
+            }
             
         case CONSTRAINT_TYPES.MIDPOINT:
             if (!params.joints || params.joints.length !== 3) return null;

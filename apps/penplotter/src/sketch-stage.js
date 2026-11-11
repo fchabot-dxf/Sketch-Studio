@@ -8,6 +8,7 @@
 // PP-7b's "Bake to Draw" stays DORMANT (one-store; toolpaths target #core directly via UNIFY-2). Host wiring ONLY.
 
 import { mountSketch } from '#ui/sketch-canvas.js';
+import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored sketch
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
@@ -160,7 +161,10 @@ export function mountSketchStage(view, ctx = {}) {
     underlayDirty = true;
     syncDocFields();
     if (document.getElementById('penUpZ')) loadDefaults();
-    if (!fitDesignView()) fitViewport();
+    // TASK 494: a restored sketch is framed (the Design canvas shows the drawing; the paper stays visible when it is near);
+    // a design with no geometry keeps the paper fit.
+    if (fitToDrawing(designCanvas, controller.state)) markFitted(); // the pen tabs then keep this shared view
+    else if (!fitDesignView()) fitViewport();
     if (state.preview.showToolpath) recalcPreview();
     renderArt();
   };

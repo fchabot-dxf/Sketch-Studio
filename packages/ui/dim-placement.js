@@ -30,7 +30,14 @@ export function placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap }) {
     [x - ux * hw, y - uy * hw], [x + ux * hw, y + uy * hw],
     [x - ux * hw + nx * h, y - uy * hw + ny * h], [x + ux * hw + nx * h, y + uy * hw + ny * h],
   ]);
-  return { x, y, deg: +deg.toFixed(3), bounds };
+  const rect = { cx: x + nx * h / 2, cy: y + ny * h / 2, ux, uy, vx: nx, vy: ny, hw, hh: h / 2 };
+  return { x, y, deg: +deg.toFixed(3), bounds, rect };
+}
+
+// The same text, but with the text's box CENTRED on (cx, cy) (a value dragged to a free spot sits where it is dropped).
+export function placeDimTextCentred({ cx, cy, dirX, dirY, text, fontPx, gap }) {
+  const first = placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap });
+  return placeDimText({ cx: cx - (first.rect.cx - cx), cy: cy - (first.rect.cy - cy), dirX, dirY, text, fontPx, gap });
 }
 
 export const rectsIntersect = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;

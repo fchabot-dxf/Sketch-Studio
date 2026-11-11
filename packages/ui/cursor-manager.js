@@ -124,8 +124,18 @@ const ICONS = {
     'icon-tool-dim': {
         viewBox: '0 0 24 24',
         content: `<path d="M3 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M21 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 8l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
-    }
-};
+            },
+            // The owner's padlock (assets/fixed flat.svg) used as drawn: its own fixed colours, no currentColor.
+            // An action button icon only: it has no TOOL_CURSOR_MAP entry, so the cursor builder never touches it.
+            'icon-lock': {
+                viewBox: '39.61 18.00 44.72 56.81',
+                content: `<g style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+            <path d="M41.612,42.040L82.331,42.040L82.331,72.809L41.612,72.809Z" style="fill:rgb(241,176,179);stroke:rgb(255,0,0);stroke-width:1.6px;"/>
+            <path d="M61.973,52.217L61.973,61.125" style="fill:none;stroke:rgb(255,0,0);stroke-width:1.6px;"/>
+            <path d="M71.881,33.388L71.877,33.388C71.877,27.921 67.439,23.484 61.973,23.484C56.506,23.484 52.064,27.921 52.064,33.388L52.068,42.038L48.577,42.038L48.577,33.388C48.577,25.996 54.581,19.996 61.973,19.996C69.360,19.996 75.364,25.996 75.364,33.388L75.364,42.038L71.881,42.038L71.881,33.388Z" style="fill:rgb(241,176,179);stroke:rgb(255,0,0);stroke-width:1.6px;"/>
+        </g>`
+            }
+        };
 
 // Map Tool Modes to Icons
 const TOOL_CURSOR_MAP = {

@@ -83,6 +83,18 @@ export function commitDimensionEdit(state, c, val) {
   return { reverted: false, clash: '' };
 }
 
+// A dimension value dragged to a free spot: its label centre follows the pointer in X and Y (constraint.labelPos, world
+// units). Pure presentation: no solve. The first move past a few pixels is ONE undo step (the state saved before it).
+export const DIM_LABEL_DRAG_THRESHOLD_PX = 4;
+export function dragDimensionLabel(state, drag, e, w) {
+  if (!drag.started) {
+    if (Math.hypot(e.clientX - drag.startClient.x, e.clientY - drag.startClient.y) < DIM_LABEL_DRAG_THRESHOLD_PX) return;
+    state.saveState();
+    drag.started = true;
+  }
+  drag.constraint.labelPos = { x: w.x, y: w.y };
+}
+
 // Toggle a dimension between DRIVING and reference (FLIP). One driver per edge: when promoting a
 // reference to driving, demote any other driver on the same edge/shapes (SWAP). When promoting, recompute
 // the value from geometry and re-solve. Returns { nowDriving, swapped, error } (error = 'ERR-DRIVE-02'

@@ -6,7 +6,7 @@
 // → Shaper) from the SAME component. Self-contained: injects its <style> once + inject-IF-MISSING icon symbols
 // (reuses cursor-manager's ICONS, the single source of truth) so #icon-* resolve in any host.
 
-import { switchToTool } from '#ui/input-manager.js';
+import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES, POLYGON_SIDES } from '#core/constants.js';
 import { clampPolygonSides } from '#core/shapes.js';
@@ -47,6 +47,8 @@ const CONSTRAIN = [
   { tool: TOOL_MODES.EQUAL,               icon: 'icon-equal',        label: 'Equal' },
   { tool: TOOL_MODES.MIDPOINT,            icon: 'icon-midpoint',     label: 'Mid' },
 ];
+// Lock is an ACTION (not a drawing mode): the same toggleFixedSelection as the F key and the context menu.
+const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock (F)' };
 // Rect variants (the dropdown) — sets state.rectMode + swaps the rect button's icon/label, like ui-manager.
 const RECT_VARIANTS = [
   { mode: RECT_MODES.TWO_POINT,   icon: 'icon-tool-rect-2pt',    label: '2-Point (Corner)' },
@@ -56,7 +58,7 @@ const RECT_VARIANTS = [
 
 // Every #icon-* the ribbon references (for inject-if-missing).
 const ICON_IDS = [
-  ...CREATE.map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon),
+  ...CREATE.map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon), LOCK.icon,
   ...RECT_VARIANTS.map(v => v.icon),
 ];
 
@@ -90,6 +92,8 @@ function injectStyles() {
 .sk-ribbon-btn:active { transform: scale(0.95); }
 .sk-ribbon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .sk-ribbon-btn:disabled:hover { background: transparent; transform: none; }
+.sk-ribbon-btn[aria-pressed="true"] { background: var(--sk-ribbon-hover, #f0f0f0); border-color: var(--sk-ribbon-sep, #cbd5e1);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
 .sk-ribbon-btn.active { background: var(--sk-selection, #3B82F6); color: #fff;
   border-color: var(--sk-selection-border, #1E40AF); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
 .sk-ribbon-btn.active .sk-ribbon-ic { color: #fff; }
@@ -167,7 +171,8 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     b.addEventListener('click', () => {
       if (t.action) {
         if (typeof t.onClick === 'function') t.onClick();
-        if (t.action === 'combine') doCombine(state, notify || undefined);
+        if (t.action === 'lock') { toggleFixedSelection(state); refresh(); }
+        else if (t.action === 'combine') doCombine(state, notify || undefined);
         else if (t.action === 'uncombine') doUncombine(state, notify || undefined);
         fire('action', { id: b.id, action: t.action });
       } else {
@@ -257,7 +262,12 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   const modifyTools = profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT;
   buildGroup('Modify', modifyTools, toolButton);  // TRACE-1: trim + break
   buildGroup('Inspect', INSPECT, toolButton);
-  buildGroup('Constrain', CONSTRAIN, toolButton);
+  buildGroup('Constrain', [...CONSTRAIN, LOCK], toolButton);
+  const lockBtn = el.querySelector('#btn-lock');
+  // Selection changes arrive through pointer / key input (no selection event exists), so re-sync after them.
+  const syncSoon = () => setTimeout(refresh, 0);
+  document.addEventListener('pointerup', syncSoon);
+  document.addEventListener('keyup', syncSoon);
 
   // EDIT: shared built-in Undo / Redo (all hosts)
   const editFrag = document.createDocumentFragment();
@@ -305,6 +315,9 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     const canRedo = (state && typeof state.canRedo === 'function') ? state.canRedo() : Boolean(state && state.redoStack && state.redoStack.length > 0);
     undoBtn.disabled = !canUndo;
     redoBtn.disabled = !canRedo;
+    const lock = state ? selectionLockState(state) : { has: false, locked: false };
+    lockBtn.disabled = !lock.has;
+    lockBtn.setAttribute('aria-pressed', String(lock.locked));
   }
 
   refresh();
@@ -314,6 +327,8 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     refresh,
     destroy: () => {
       if (unlistenHistory) unlistenHistory();
+      document.removeEventListener('pointerup', syncSoon);
+      document.removeEventListener('keyup', syncSoon);
       try { el.remove(); } catch (_) {}
     },
   };

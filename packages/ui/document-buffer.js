@@ -44,6 +44,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
   let lastSig = null;
   let intervalId = null;
   let boundId = null; // the design this buffer reads from / writes to
+  let offConflict = () => {};
   const notify = (s) => { try { onStatusChange && onStatusChange(s); } catch (_) {} };
 
   function currentDoc() {
@@ -82,17 +83,21 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
   }
 
   // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
+  // Drive changed this design elsewhere and our edit was kept as a conflicted copy: show Drive's version (never write our older state over it).
+  const onConflict = (id) => { if (id === boundId) store.get(id).then((d) => { if (d) load(d); }, (e) => console.error('reload after a Drive conflict failed', e)); };
   const onVisibility = () => { if (doc.visibilityState === 'hidden') flush(); };
   const onPageHide = () => { flush(); };
   function start() {
     if (intervalId != null) return;
     intervalId = setInterval(poll, pollMs);
+    offConflict = store.subscribeConflict(onConflict);
     if (doc) doc.addEventListener('visibilitychange', onVisibility);
     if (win) win.addEventListener('pagehide', onPageHide);
   }
   function stop() {
     if (intervalId == null) return;
     clearInterval(intervalId); intervalId = null;
+    offConflict();
     if (doc) doc.removeEventListener('visibilitychange', onVisibility);
     if (win) win.removeEventListener('pagehide', onPageHide);
   }

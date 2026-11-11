@@ -97,7 +97,7 @@ const reset = () => { state.signedIn = true; state.prefer = true; timers = []; c
     assert(!isRemoteId(p.id) && !isRemoteId(d.id) && !isRemoteId(d2.id), label + ': everything is local');
     await store.save(doc(1), { id: d.id, app: 'shaper' });
     assert.strictEqual(drive.calls.length, 0, label + ': no Drive call at all');
-    assert.deepStrictEqual(store.status(d.id), { where: 'device', state: 'saved', at: null, reason: null });
+    assert.deepStrictEqual(store.status(d.id), { where: 'device', state: 'saved', at: null, reason: null, notice: null });
   }
 }
 { // signing in moves NOTHING that exists: a local design keeps saving locally; only NEW projects go to Drive
@@ -213,14 +213,14 @@ const reset = () => { state.signedIn = true; state.prefer = true; timers = []; c
   assert.strictEqual(parseProjectFile(drive.files.get(d.id.slice(6)).content).document.geometry.joints[0][1].x, 9, 'and reaches Drive');
   assert.strictEqual(await a.local.getMeta('driveShadow:' + d.id), null);
 }
-{ // signed out while the current design is on Drive and nothing is pending: it starts empty, never writes blind, and says why
+{ // signed out while the current design is on Drive and nothing is pending: it starts empty, the pointer is KEPT (transient), nothing is written blind
   reset();
   const drive = createFakeDrive(); const a = device(drive);
   const p = await a.store.createProject('P'); await a.store.newDesign('D', { app: 'shaper', projectId: p.id });
   state.signedIn = false;
   const b = device(drive, { local: a.local });
   assert.strictEqual(await b.store.loadCurrent({ app: 'shaper' }), null, 'unreadable Drive design: nothing is opened');
-  assert.strictEqual(await a.local.getMeta('currentDesign'), null, 'the pointer is cleared so autosave cannot write into it');
+  assert.strictEqual(await a.local.getMeta('currentDesign'), 'drive:fakeid-2', 'a transient failure keeps the pointer (only a permanent one clears it)');
   assert.deepStrictEqual((await b.store.listProjects()).filter((x) => x.location === 'drive'), [], 'Drive projects are not listed while signed out');
   state.signedIn = true;
   assert.strictEqual((await b.store.listProjects()).filter((x) => x.location === 'drive').length, 1, 'signing in again restores them');

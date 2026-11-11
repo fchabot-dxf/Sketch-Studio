@@ -196,6 +196,9 @@ await (async () => {
     await shot('4-status-failed');
     await ev(`T.setStatus({ where: 'device', state: 'saved', at: null, reason: 'Google could not be reached' })`);
     assert.strictEqual(await text('[data-section=status]'), 'Not saved to Google Drive: Google could not be reached. Kept on this device.', 'a NEW design that fell back to this device says why');
+    await ev(`T.setStatus({ where: 'drive', state: 'saved', at: null, reason: null, notice: 'Another device changed this design. Your unsaved changes were kept as "Door (conflicted copy 2026-11-11 12-00)".' })`);
+    assert.strictEqual(await text('[data-section=status]'), 'Another device changed this design. Your unsaved changes were kept as "Door (conflicted copy 2026-11-11 12-00)".', 'a conflicted copy is announced');
+    assert.strictEqual(await has('[data-section=status].error'), true);
     await ev(`T.setStatus({ where: 'device', state: 'saved', at: null, reason: null })`);
     assert.strictEqual(await text('[data-section=status]'), 'Saved on this device');
 

@@ -20,7 +20,7 @@ import { serializeProjectFile, parseProjectFile, PROJECT_FILE_EXT } from '#ui/pr
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER = 'application/vnd.google-apps.folder';
-const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,version,trashed';
+const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,createdTime,version,trashed';
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
 
@@ -81,24 +81,35 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
   const getMeta = async (id) => { const r = await call(`${API}/files/${id}?fields=${encodeURIComponent(META_FIELDS)}`, undefined, { allow404: true }); const m = r ? await r.json() : null; return m && !m.trashed ? m : null; };
 
   // ---- the app root folder ----
-  async function ensureRoot() {
+  const oldestFirst = (a, b) => (Date.parse(a.createdTime) || 0) - (Date.parse(b.createdTime) || 0) || String(a.id).localeCompare(String(b.id));
+  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null. */
+  async function findRoot() {
     if (rootId) return rootId;
     const cached = await meta.getMeta(ROOT_KEY);
     if (cached) { const m = await getMeta(cached); if (m) return (rootId = cached); }
-    const find = async () => (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id')).map((f) => f.id).sort();
-    let ids = await find();
-    let id = ids[0];
-    if (!id) { // two devices signing in at the same moment can each create one: re-list, the lowest id wins, the loser trashes its own
-      id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
-      ids = await find();
-      if (ids.length && ids[0] !== id && ids.includes(id)) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); id = ids[0]; }
+    const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
+    if (!found.length) return null;
+    await meta.setMeta(ROOT_KEY, found[0].id);
+    return (rootId = found[0].id);
+  }
+  /** The root folder, CREATED when absent (only a write calls this). Two devices creating it at the same moment: the OLDEST folder is the
+   *  root; a device that lost trashes its own just-created one ONLY while it is still empty, never a folder anything was put into. */
+  async function ensureRoot() {
+    const existing = await findRoot();
+    if (existing) return existing;
+    const id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
+    const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
+    let chosen = id;
+    if (found.length && found[0].id !== id && found.some((f) => f.id === id)) {
+      const used = (await listAll(`'${id}' in parents and trashed=false`, 'id')).length > 0;
+      if (!used) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); chosen = found[0].id; }
     }
-    await meta.setMeta(ROOT_KEY, id);
-    return (rootId = id);
+    await meta.setMeta(ROOT_KEY, chosen);
+    return (rootId = chosen);
   }
 
   // ---- projects (folders) ----
-  const projectOf = (f) => ({ id: f.id, name: f.name, pinned: !!(f.appProperties && f.appProperties.skPinned === '1'), updatedAt: Number(f.appProperties && f.appProperties.skUpdatedAt) || Date.parse(f.modifiedTime) || 0 });
+  const projectOf = (f) => ({ id: f.id, name: f.name, createdAt: Date.parse(f.createdTime) || 0, pinned: !!(f.appProperties && f.appProperties.skPinned === '1'), updatedAt: Number(f.appProperties && f.appProperties.skUpdatedAt) || Date.parse(f.modifiedTime) || 0 });
   const projectProps = (p) => ({ skKind: 'project', skPinned: p.pinned ? '1' : '0', skUpdatedAt: String(p.updatedAt) });
   async function writeProject(p, existing) {
     if (existing) await call(`${API}/files/${p.id}?fields=id`, jsonOpts('PATCH', { name: p.name, appProperties: projectProps(p) }));
@@ -115,8 +126,9 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     const text = await (await call(`${API}/files/${m.id}?alt=media`)).text();
     const parsed = parseProjectFile(text); // validates the envelope + document version (a damaged / newer file throws a readable error)
     const base = designMetaOf(m);
-    return { id: m.id, projectId: base.projectId, name: parsed.name || base.name, app: base.app || parsed.app, updatedAt: base.updatedAt, document: parsed.document };
+    return { id: m.id, projectId: base.projectId, name: parsed.name || base.name, app: base.app || parsed.app, updatedAt: base.updatedAt, version: m.version, document: parsed.document };
   }
+  /** Writes the design; resolves the file's Drive `version` AFTER the write (what the next write is compared with). */
   async function writeDesign(d, existingMeta) {
     const content = serializeProjectFile({ app: d.app, name: d.name, document: d.document });
     const props = designProps(d);
@@ -125,17 +137,19 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       await call(`${UPLOAD}/files/${d.id}?uploadType=media&fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
       const q = moved ? `?addParents=${encodeURIComponent(d.projectId)}&removeParents=${encodeURIComponent(existingMeta.parents[0])}&fields=id` : '?fields=id';
       await call(`${API}/files/${d.id}${q}`, jsonOpts('PATCH', { name: fileName(d.name), appProperties: props }));
-      return;
+      return (await getMeta(d.id)).version;
     }
     const m = multipart({ id: d.id, name: fileName(d.name), mimeType: 'application/json', parents: [d.projectId], appProperties: props }, content, 'application/json');
     await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body });
+    return (await getMeta(d.id)).version;
   }
 
   const adapter = {
     // projects
     async listProjects() {
-      const root = await ensureRoot();
-      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime')).map(projectOf);
+      const root = await findRoot(); // read-only: no root yet = no projects (nothing is created by looking)
+      if (!root) return [];
+      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime,createdTime')).map(projectOf);
     },
     async getProject(id) { const m = await getMeta(id); return m ? projectOf(m) : null; },
     async putProject(p) { await writeProject(p, !!(await getMeta(p.id))); },
@@ -154,7 +168,7 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       return (await listAll(`appProperties has { key='skKind' and value='design' } and trashed=false`, 'id,name,parents,appProperties,modifiedTime')).map(designMetaOf);
     },
     async getDesign(id) { const m = await getMeta(id); return m ? readDesign(m) : null; },
-    async putDesign(d) { await writeDesign(d, await getMeta(d.id)); },
+    async putDesign(d) { return writeDesign(d, await getMeta(d.id)); },
     async putDesignIfAbsent(d) { if (await getMeta(d.id)) return false; await writeDesign(d, null); return true; },
     async updateDesign(id, fn) {
       for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -164,8 +178,8 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
         if (next == null) { if (m1) await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); return null; }
         const m2 = await getMeta(id);
         if ((m1 && m2 && m1.version !== m2.version) || (!m1 && m2)) continue; // changed elsewhere while we computed: re-read and recompute
-        await writeDesign(next, m2);
-        return next;
+        const version = await writeDesign(next, m2);
+        return { ...next, version };
       }
       throw new Error('This design is being changed somewhere else. Try again in a moment.');
     },
@@ -200,6 +214,7 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     },
 
     // meta stays local to this device
+    listMetaKeys: (prefix) => meta.listMetaKeys(prefix),
     getMeta: (k) => meta.getMeta(k),
     setMeta: (k, v) => meta.setMeta(k, v),
     setMetaIfAbsent: (k, v) => meta.setMetaIfAbsent(k, v),

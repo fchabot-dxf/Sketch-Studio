@@ -85,6 +85,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
   // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
   const statusLine = () => {
     const s = store.status ? store.status(currentDesignId) : { where: 'device', state: 'saved', at: null, reason: null };
+    if (s.notice) return { kind: 'error', text: s.notice };
     if (s.state === 'failed' || (s.where === 'device' && s.reason)) return { kind: 'error', text: `Not saved to Google Drive: ${s.reason}. Kept on this device.` };
     if (s.where === 'device') return { kind: 'info', text: 'Saved on this device' };
     if (s.state === 'saving') return { kind: 'info', text: 'Saving to Google Drive...' };

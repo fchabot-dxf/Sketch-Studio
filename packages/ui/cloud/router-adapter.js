@@ -24,7 +24,7 @@ const localId = (kind) => (kind === 'p' ? 'p' : 'd') + '_' + Date.now().toString
 
 /** createRouterAdapter({ local, getRemote, preferDrive }): getRemote() returns the Drive adapter (created lazily: nothing is built or called
  *  until Drive is used). preferDrive() -> boolean: should NEW projects / designs be created on Drive (signed in + the setting on)? */
-export function createRouterAdapter({ local, getRemote, preferDrive = () => false }) {
+export function createRouterAdapter({ local, getRemote, preferDrive = () => false, signedIn = () => false }) {
   let remoteError = null;
   let driveDefault = null; // the IN-FLIGHT lookup of the Drive default project (concurrent callers share it; never cached after: the account may change)
   const driveEnabled = async () => !!(await local.getMeta(DRIVE_ENABLED)) || preferDrive();
@@ -53,17 +53,21 @@ export function createRouterAdapter({ local, getRemote, preferDrive = () => fals
     return { newPid, idMap, oldIds: designs.map((d) => d.id) };
   }
 
-  /** The ONE Drive project called `name` (the default "My Designs"): found by name among the Drive projects, created when absent. Two
-   *  tabs / devices creating it at the same moment end with ONE: both re-list, the lowest id wins, the loser trashes its own. */
+  /** The Drive project called `name` (the default "My Designs"): found by name among the Drive projects, created when absent. Two tabs /
+   *  devices creating it at the same moment: the default is the OLDEST one (a lookup rule). A folder is trashed ONLY by the device that just
+   *  created it, and ONLY while it is still empty; one anything was put into is kept, so the duplicates just coexist. */
   async function ensureDriveDefault(name, now) {
     const remote = getRemote();
-    const find = async () => (await remote.listProjects()).filter((p) => p.name === name).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const find = async () => (await remote.listProjects()).filter((p) => p.name === name).sort((a, b) => (a.createdAt - b.createdAt) || String(a.id).localeCompare(String(b.id)));
     let found = await find();
     if (!found.length) {
       const id = await remote.newId('p');
       await remote.putProject({ id, name, pinned: false, updatedAt: now() });
       found = await find();
-      if (found.length && found[0].id !== id && found.some((p) => p.id === id)) await remote.deleteProject(id); // lost the tie: use theirs
+      if (found.length && found[0].id !== id && found.some((p) => p.id === id)) {
+        const used = (await remote.listDesigns()).some((d) => d.projectId === id);
+        if (!used) { await remote.deleteProject(id); found = found.filter((p) => p.id !== id); }
+      }
       if (!found.length) found = [{ id }];
     }
     await local.setMeta(DRIVE_ENABLED, true);
@@ -104,6 +108,7 @@ export function createRouterAdapter({ local, getRemote, preferDrive = () => fals
     },
     async deleteDesign(id) { return isRemoteId(id) ? getRemote().deleteDesign(strip(id)) : local.deleteDesign(id); },
     // ---- meta: always this device ----
+    listMetaKeys: (prefix) => local.listMetaKeys(prefix),
     getMeta: (k) => local.getMeta(k),
     setMeta: (k, v) => local.setMeta(k, v),
     setMetaIfAbsent: (k, v) => local.setMetaIfAbsent(k, v),
@@ -148,6 +153,8 @@ export function createRouterAdapter({ local, getRemote, preferDrive = () => fals
       },
       /** Whether new things are created on Drive right now (signed in + the default setting on). */
       driveWanted: () => preferDrive(),
+      /** Is an account signed in (whatever the default setting says)? Unconfirmed local copies are only sent while it is. */
+      signedIn: () => signedIn(),
       /** "Save to Google Drive": put ONE design into the Drive project "My Designs" (created when absent), WITHOUT moving its local project.
        *  A local design keeps ONE Drive copy (remembered per design, updated on a repeat); one that already lives on Drive needs no copy.
        *  `design` = the full record. Returns { fileId }. A snapshot: later autosaves of a local design do not follow it. */

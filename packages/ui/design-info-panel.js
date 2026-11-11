@@ -202,7 +202,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       const hdr = document.createElement('div'); hdr.className = 'sk-tree-hdr';
       const title = document.createElement('span'); title.className = 'sk-tree-title'; title.textContent = 'Sketches';
       const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'sk-tree-add'; addBtn.title = 'New sketch'; addBtn.textContent = '+';
-      addBtn.addEventListener('click', () => { try { state.saveState && state.saveState(); } catch (_) {} const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
+      addBtn.addEventListener('click', () => { try { state.saveState && state.saveState('new sketch'); } catch (_) {} const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
       hdr.append(title, addBtn); listEl.appendChild(hdr);
 
       const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
@@ -226,7 +226,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
           const finish = (save) => {
             if (done) return; done = true;
             const v = input.value.trim();
-            if (save && v && v !== sk.name) { try { state.saveState && state.saveState(); } catch (_) {} sk.name = v; }
+            if (save && v && v !== sk.name) { try { state.saveState && state.saveState('rename sketch'); } catch (_) {} sk.name = v; }
             refresh();
           };
           input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); } });
@@ -236,7 +236,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         const dot = document.createElement('span'); dot.className = 'sk-sketch-dot'; dot.textContent = '●';
         const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'sk-sketch-eye';
         eye.textContent = sk.visible === false ? '◌' : '◉'; eye.title = sk.visible === false ? 'Show sketch' : 'Hide sketch';
-        eye.addEventListener('click', (e) => { e.stopPropagation(); try { state.saveState && state.saveState(); } catch (_) {} sk.visible = sk.visible === false; refresh(); });
+        eye.addEventListener('click', (e) => { e.stopPropagation(); try { state.saveState && state.saveState('toggle sketch visibility'); } catch (_) {} sk.visible = sk.visible === false; refresh(); });
         const count = document.createElement('span'); count.className = 'sk-info-val'; count.textContent = String(kids.length);
         head.append(caret, name, dot, eye, count);
         head.addEventListener('click', () => { activateSketch(state, sk.id); refresh(); }); // activate (sub-elements stop their own clicks)

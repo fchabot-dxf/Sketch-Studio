@@ -19,9 +19,10 @@
 
 import { setDebugSink } from '#core/debug.js';
 import { serializeDocument } from '#core/document.js';
+import { buildJournal, DEFAULT_JOURNAL_MAX_BYTES } from '#core/journal.js'; // TASK 507: the ordered, replayable ops journal
 
 const MAX_LOG_ENTRIES = 300;
-const MAX_TOUCH_EVENTS = 60;
+const MAX_TOUCH_EVENTS = 300; // TASK 507: pointer + key + wheel events share this ring (was 60 pointer events)
 const POINTERMOVE_THROTTLE_MS = 100; // pointermove fires far more often than pointerdown/up; without
 // this a single drag gesture would evict every OTHER event from the trace before the buffer wraps.
 
@@ -29,6 +30,7 @@ const POINTERMOVE_THROTTLE_MS = 100; // pointermove fires far more often than po
 const logBuffer = [];
 const touchBuffer = [];
 let lastPointerMoveT = 0;
+let lastWheelT = 0;
 let captureInstalled = false;
 
 function safeArg(a) {
@@ -70,6 +72,25 @@ function pushTouch(e) {
   if (touchBuffer.length > MAX_TOUCH_EVENTS) touchBuffer.shift();
 }
 
+// TASK 507: key presses, in order. The CONTENTS of text/number inputs are never recorded: a printable character typed into an
+// input/textarea/select/contentEditable is stored as 'char'; named keys (Enter, Escape, Backspace, Delete, arrows, ...) and every key
+// pressed on the canvas keep their name, with the ctrl/shift/alt flags.
+function pushKey(e) {
+  const tgt = e.target;
+  const editable = !!(tgt && (tgt.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName || '')));
+  const key = editable && e.key && e.key.length === 1 ? 'char' : e.key;
+  touchBuffer.push({ t: Date.now(), type: 'keydown', key, ctrl: !!(e.ctrlKey || e.metaKey), shift: !!e.shiftKey, alt: !!e.altKey, inInput: editable });
+  if (touchBuffer.length > MAX_TOUCH_EVENTS) touchBuffer.shift();
+}
+// wheel events, coarse: deltaY rounded to the nearest 50 and throttled like pointermove, so a scroll burst is a few entries.
+function pushWheel(e) {
+  const now = Date.now();
+  if (now - lastWheelT < POINTERMOVE_THROTTLE_MS) return;
+  lastWheelT = now;
+  touchBuffer.push({ t: now, type: 'wheel', deltaY: Math.round(e.deltaY / 50) * 50, ctrl: !!(e.ctrlKey || e.metaKey), x: Math.round(e.clientX), y: Math.round(e.clientY) });
+  if (touchBuffer.length > MAX_TOUCH_EVENTS) touchBuffer.shift();
+}
+
 function installCapture() {
   if (captureInstalled || typeof window === 'undefined') return;
   captureInstalled = true;
@@ -91,6 +112,8 @@ function installCapture() {
   for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
     document.addEventListener(type, pushTouch, { capture: true, passive: true });
   }
+  document.addEventListener('keydown', pushKey, { capture: true, passive: true });
+  document.addEventListener('wheel', pushWheel, { capture: true, passive: true });
 }
 installCapture();
 
@@ -102,12 +125,18 @@ function rectOf(sel) {
   return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
-export function buildReport({ appId, getState }) {
+export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL_MAX_BYTES }) {
   const vv = window.visualViewport;
   let doc = null;
+  let journal = null, journalError;
   try {
     const state = typeof getState === 'function' ? getState() : getState;
     if (state) doc = serializeDocument(state);
+    // TASK 507: the ordered journal (base + one patch per undo step + the undone steps); null when the host has no state.
+    if (state) {
+      try { journal = buildJournal(state.history || [], state, { redoStack: state.redoStack || [], maxBytes: journalMaxBytes }); }
+      catch (err) { journalError = String(err && err.stack || err); } // a report whose journal failed is still useful: say why
+    }
   } catch (_) { /* best-effort — a report with no document is still useful */ }
   return {
     app: appId, url: location.href, ua: navigator.userAgent, t: new Date().toISOString(),
@@ -123,6 +152,8 @@ export function buildReport({ appId, getState }) {
     // The killer feature: whatever the app IS right now, in the exact shape tests/harness/sketch.js's
     // load() already accepts — a phone bug becomes an exactly-replayable Node scenario, not a description.
     document: doc,
+    journal,
+    ...(journalError ? { journalError } : {}),
   };
 }
 

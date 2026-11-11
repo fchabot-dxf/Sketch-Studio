@@ -122,7 +122,7 @@ export function mountVcarveView(state) {
     const nextKey = prof.isDerived ? `loop:${prof.outer}` : `profile:${prof.id}`;
     const matched = resolveTargetKey(nextKey, state);
     if (!matched || matched.invalid) return null;
-    try { state.saveState && state.saveState(); } catch (_) {}
+    try { state.saveState && state.saveState('vcarve region'); } catch (_) {}
     rec().region = nextKey;
     populateRegions();
     recompute();
@@ -146,7 +146,7 @@ export function mountVcarveView(state) {
   els.canvas.addEventListener('pointerdown', onCanvasDown);
   els.canvas.addEventListener('pointerup', onCanvasUp);
 
-  els.region.addEventListener('change', () => { try { state.saveState && state.saveState(); } catch (_) {} rec().region = els.region.value || null; recompute(); });
+  els.region.addEventListener('change', () => { try { state.saveState && state.saveState('vcarve region'); } catch (_) {} rec().region = els.region.value || null; recompute(); });
   els.vbit.addEventListener('change', () => { rec().vbit = { angle: Number(els.vbit.value) || 90 }; recompute(); });
   els.dstep.addEventListener('change', () => { rec().dStep = numFrom(els.dstep.value, 0.5); els.dstep.value = rec().dStep + ' mm'; recompute(); });
   els.maxdepth.addEventListener('change', () => { rec().maxDepth = numFrom(els.maxdepth.value, 6); els.maxdepth.value = rec().maxDepth + ' mm'; recompute(); });

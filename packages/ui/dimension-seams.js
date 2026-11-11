@@ -14,6 +14,13 @@ const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
 const MAX_EDIT_STEPS = 40;
 
+// TASK 507: the history label of a dimension value edit, naming the OLD and NEW value ('edit dimension 23.6 -> 17'). One
+// definition shared by every place that snapshots before such an edit.
+export function dimensionEditLabel(c, val) {
+  const r = (v) => (typeof v === 'number' ? Number(v.toFixed(4)) : v);
+  return `edit dimension ${r(c.value)} -> ${r(val)}`;
+}
+
 // Commit a numeric edit to a DRIVING dimension's value. Snapshot → set → solve; on a genuine
 // non-convergence REFUSE + REVERT to the last valid shape (restore value + positions, re-solve).
 // Returns { reverted, clash } so the caller can surface a message. No DOM, no notifications here.
@@ -89,7 +96,7 @@ export const DIM_LABEL_DRAG_THRESHOLD_PX = 4;
 export function dragDimensionLabel(state, drag, e, w) {
   if (!drag.started) {
     if (Math.hypot(e.clientX - drag.startClient.x, e.clientY - drag.startClient.y) < DIM_LABEL_DRAG_THRESHOLD_PX) return;
-    state.saveState();
+    state.saveState('move dimension label');
     drag.started = true;
   }
   drag.constraint.labelPos = { x: w.x, y: w.y };

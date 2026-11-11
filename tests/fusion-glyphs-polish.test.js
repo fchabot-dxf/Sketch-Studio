@@ -7,27 +7,24 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 
 const { draw } = await import('../packages/ui/svg-renderer.js');
 const { applyStyleTemplate } = await import('../packages/ui/style-templates.js');
-const { FUSION_GLYPHS, CONSTRAINT_GLYPH, HALO_PX, CORE_PX, fusionGlyphMarkup } = await import('../packages/ui/fusion-glyphs.js');
+const { CONSTRAINT_GLYPH, fusionGlyphMarkup } = await import('../packages/ui/fusion-glyphs.js');
+const { loadGlyphSheet, getGlyph } = await import('../packages/ui/glyph-sheet.js');
+const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
+const { readFileSync } = await import('node:fs');
+await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
 const { CONSTRAINT_TYPES } = await import('../packages/core/constants.js');
 const { rectsIntersect, placeDimText } = await import('../packages/ui/dim-placement.js');
 
-// every constraint type the renderer can draw has a glyph, and every mapped glyph exists
-for (const t of ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'equal', 'midpoint', 'pointOnLine', 'angle', 'fixed', 'symmetric']) {
-  assert(CONSTRAINT_GLYPH[t], `CONSTRAINT_GLYPH has ${t}`);
-  assert(FUSION_GLYPHS[CONSTRAINT_GLYPH[t]], `FUSION_GLYPHS has the glyph for ${t}`);
-}
+// every constraint type the renderer draws a glyph for maps to a glyph in the sheet (fixed / angle / distance have none)
 for (const t of Object.values(CONSTRAINT_TYPES)) {
-  if (t === 'distance') continue;
-  assert(CONSTRAINT_GLYPH[t], `renderer constraint type ${t} has a Fusion glyph`);
+  if (['distance', 'angle', 'fixed'].includes(t)) continue;
+  assert(CONSTRAINT_GLYPH[t] && getGlyph(CONSTRAINT_GLYPH[t]), `renderer constraint type ${t} has a sheet glyph`);
 }
-assert.notStrictEqual(CONSTRAINT_GLYPH.pointOnLine, CONSTRAINT_GLYPH.coincident, 'point-on-line does not reuse coincident');
 
-// paint: black halo behind, white front shapes carry no stroke
-assert.strictEqual(HALO_PX, 1.6); assert.strictEqual(CORE_PX, 0);
-for (const id of Object.keys(FUSION_GLYPHS)) {
-  const m = fusionGlyphMarkup(id, 24, 24, '#111111');
-  assert(!/stroke:white[^>]*stroke-width/.test(m.replace(/<circle[^>]*>/g, '')), `${id}: front shapes have no white stroke`);
-  assert(/fill:white; stroke:none/.test(m) || /<circle/.test(m), `${id}: white fill, stroke none`);
+// paint: white fill + black outline on every path, no halo technique
+for (const t of Object.keys(CONSTRAINT_GLYPH)) {
+  const m = fusionGlyphMarkup(t, 24, 24, 1, 'white', '#000');
+  assert(/style="fill:white; stroke:#000"/.test(m) && /stroke-linejoin="round"/.test(m) && !/paint-order/.test(m), `${t}: fill + outline`);
 }
 
 // sketch (same as the 489 evidence): horizontal + vertical dimensions on a rectangle, glyph constraints

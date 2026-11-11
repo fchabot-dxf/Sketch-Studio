@@ -188,6 +188,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const SYMBOL_SIZE_PX = getNum('GLYPH_SYMBOL_SIZE_PX', 20);       // Icon size (screen px)
   // Derive background diameter from symbol size (multiplier 1.6 to match previous defaults)
   const GLYPH_BG_DIAMETER_PX = Math.round(SYMBOL_SIZE_PX * 1.6); // derived background circle size (was 32 when symbol=20) 
+  const GLYPH_OUTLINE_PX = getNum('GLYPH_OUTLINE_PX', 1);     // Fusion glyph outline width (screen px)
   const INFERENCE_SIZE_PX = getNum('GLYPH_INFERENCE_SIZE_PX', 24);    // Inference hint icon size
   const GLYPH_OFFSET_PX = getNum('GLYPH_OFFSET_PX', 40);      // Offset from joints/shapes (increased to avoid overlap)
   const TANGENT_GLYPH_OFFSET_PX = 6;                          // A tangent glyph sits this far (screen px) off its tangency point, outside the curve
@@ -538,9 +539,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     // C: Top layer — icon (optional)
     const iconStyleStr = 'style="color: white !important; --icon-accent: white !important; stroke: white !important;"';
-    const fusionIconId = (opts && opts.fusionIcon) || iconId;
     const icon = FUSION_GLYPHS_ON
-      ? fusionGlyphMarkup(fusionIconId, ICON_PX, SYMBOL_SIZE_PX, (isHovered || isSelected) ? skv('#1e40af') : '#111111')
+      ? fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
+        (isHovered || isSelected) ? skv('#1e40af') : 'var(--sk-glyph-outline, #000)')
       : (iconId ? `<use href="#${iconId}" x="${-ICON_PX/2}" y="${-ICON_PX/2}" width="${ICON_PX}" height="${ICON_PX}" ${iconStyleStr}/>` : '');
 
     // Append any extra custom markup (for collinear dots, tangent mark, equal lines, etc.)
@@ -2031,7 +2032,7 @@ switch(c.type){
         try{ c.glyphPos = { x: pos.x, y: pos.y }; }catch(_){ }
 
         // Draw point-on-line using unified helper (badge look keeps the coincident sprite; fusion has its own glyph)
-        drawUnifiedGlyph(c, pos.x, pos.y, 'icon-coincident', 0, { fusionIcon: 'icon-point-on-line' });
+        drawUnifiedGlyph(c, pos.x, pos.y, 'icon-coincident');
         break;
       }
 
@@ -2146,7 +2147,7 @@ switch(c.type){
         const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" fill-opacity="${bgOpacityE}" stroke-width="${scale(3.5)}"/>` +
                            `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>` +
                            `<line x1="-${symSize}" y1="${symSize/3}" x2="${symSize}" y2="${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>`;
-        drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual, fusionIcon: 'icon-equal' });
+        drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual });
         break;
       }
 

@@ -13,6 +13,9 @@ global.document = { head: { appendChild() {} }, getElementById: () => null, crea
 
 const { default: SettingsManager } = await import('../packages/core/settings-manager.js');
 const { draw } = await import('../packages/ui/svg-renderer.js');
+const { loadGlyphSheet } = await import('../packages/ui/glyph-sheet.js');
+const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
+await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
 const { STYLE_TEMPLATES, STYLE_SETTING_KEYS, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate, getStyleTemplate, bindTemplateTokens } =
   await import('../packages/ui/style-templates.js');
 

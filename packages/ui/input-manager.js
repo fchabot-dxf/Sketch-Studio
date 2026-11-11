@@ -12,6 +12,7 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from '#ui/dimension-seams.js';
+import { showContextMenu, contextMenuItems } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
 import { updateHover } from '#ui/hover-manager.js';
@@ -546,33 +547,9 @@ function handlePointerDown(e, svg, state) {
         if (handlePanZoomPointerDown(e, svg, state)) return true;
     }
 
-    // Handle Dimension Driven/Driving Toggle Click — guard against synthetic
-    // events from tests whose targets lack classList/closest.
-    const _hasCls = e.target && e.target.classList && typeof e.target.classList.contains === 'function';
-    const _hasClosest = e.target && typeof e.target.closest === 'function';
-    if ((_hasCls && e.target.classList.contains('dim-driven-toggle')) || (_hasClosest && e.target.closest('.dim-driven-toggle'))) {
-        const el = (_hasCls && e.target.classList.contains('dim-driven-toggle')) ? e.target : e.target.closest('.dim-driven-toggle');
-        const cIdx = parseInt(el.getAttribute('data-c-idx'), 10);
-        if (!isNaN(cIdx) && state.constraints && state.constraints[cIdx]) {
-            const c = state.constraints[cIdx];
-
-            // Driving-toggle logic (one-driver-per-edge SWAP + flip + recompute + solve) lives in the
-            // shared headless seam, so the harness drives the EXACT same code. We keep only the DOM glue
-            // (event + notifications) here.
-            const res = toggleDriving(state, c);
-            if (res.swapped) {
-                showNotification('Now driving this dimension — the previous one is now a reference.', 'info');
-            }
-            if (res.error === 'ERR-DRIVE-02') {
-                showNotification(
-                    `Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.`,
-                    "warning"
-                );
-            }
-            // Return true to consume the event (prevent selection/drag)
-            return true;
-        }
-    }
+    // Right-click opens the context menu (select / dimension tools): consume the press so it neither drags nor
+    // reselects; the menu itself opens from the contextmenu event.
+    if (e.button === 2 && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION) && pickContextTarget(svg, state, e)) return true;
 
     // Update snap target using virtual pointer coords
     try { updateSnapTarget({ clientX: screenX, clientY: screenY, isTouch }, svg, state); } catch(_) { state.snapTarget = null; }
@@ -962,12 +939,14 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
         // Cleanup: remove doc handler when svg removed from DOM (best-effort)
         try { const obs = new MutationObserver((mut) => { if (!document.body.contains(svg)) { document.removeEventListener('wheel', docWheelHandler); obs.disconnect(); } }); obs.observe(document.body, { childList: true, subtree: true }); } catch(_){ }
 
-    // Prevent default context menu when drawing a line so right-click can finish a segment
+    // Right-click finishes a line segment while drawing (native menu suppressed); on a dimension / shape / joint
+    // in select mode it opens the shared context menu; anywhere else the native behaviour is untouched.
     document.addEventListener('contextmenu', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
-        try {
-            if (state.currentTool === TOOL_MODES.LINE && state.active) e.preventDefault();
-        } catch(_) {}
+        if (state.currentTool === TOOL_MODES.LINE && state.active) { e.preventDefault(); return; }
+        if (!(state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION)) return;
+        if (!(e.target instanceof Node) || !svg.contains(e.target)) return;
+        if (openContextMenuFor(e, svg, state)) e.preventDefault();
     });
 
     // Listen for viewport changes coming from pan-zoom so active tool previews update during navigation
@@ -1209,7 +1188,55 @@ function setupKeyboardShortcuts(state, opts = {}) {
     });
 }
 
-function toggleFixedSelection(state) {
+// What a right click at (clientX, clientY) is on: a dimension label, a joint, a shape, or a dimension's glyph
+// position. null = empty canvas (no menu, the native / line-tool right-click behaviour stays).
+function pickContextTarget(svg, state, e) {
+    const label = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-label') : null;
+    if (label) {
+        const c = state.constraints[parseInt(label.dataset.constraintIdx, 10)];
+        if (c) return { kind: 'dimension', constraint: c };
+    }
+    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, e.pointerType === 'touch' ? 2.0 : 1.0);
+    if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
+    if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
+    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20);
+    if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
+    return null;
+}
+
+// Right click on a target: make it the selection (Fusion: an item outside the selection replaces it; one inside
+// keeps the whole selection), then open the menu declared for its kind.
+function openContextMenuFor(e, svg, state) {
+    const target = pickContextTarget(svg, state, e);
+    if (!target) return false;
+    const sel = { j: state.selectedJoints, s: state.selectedShapes, c: state.selectedConstraints };
+    const replaceSelection = () => { sel.j.clear(); sel.s.clear(); sel.c.clear(); };
+    if (target.kind === 'dimension') {
+        if (!(sel.c.has(target.constraint) && sel.c.size === 1 && !sel.j.size && !sel.s.size)) { replaceSelection(); sel.c.add(target.constraint); }
+    } else if (target.kind === 'joint') {
+        const onSelectedShape = [...sel.s].some(sid => { const s = state.shapes.find(x => x.id === sid); return s && s.joints && s.joints.includes(target.id); });
+        if (!sel.j.has(target.id) && !onSelectedShape) { replaceSelection(); sel.j.add(target.id); }
+    } else if (!sel.s.has(target.id)) {
+        replaceSelection(); sel.s.add(target.id);
+    }
+    const actions = {
+        toggleDriving: (c) => {
+            const res = toggleDriving(state, c);
+            if (res.swapped) showNotification('Now driving this dimension — the previous one is now a reference.', 'info');
+            if (res.error === 'ERR-DRIVE-02') showNotification('Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.', 'warning');
+        },
+        deleteSelection: () => handleDelete(state),
+        toggleLock: () => toggleFixedSelection(state),
+        lockState: () => selectionLockState(state),
+    };
+    const items = contextMenuItems(target.kind === 'dimension' ? 'dimension' : 'geometry', { target, actions });
+    showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg });
+    return true;
+}
+
+// The joints the lock acts on: the selected joints plus the joints of the selected shapes (the hovered shape when
+// nothing is selected, unless `selectionOnly`).
+function lockTargets(state, selectionOnly) {
     const targets = new Set();
 
     if (state.selectedJoints && state.selectedJoints.size) {
@@ -1224,14 +1251,29 @@ function toggleFixedSelection(state) {
     }
 
     // Fallback: hovered shape
-    if (targets.size === 0 && state.hoveredShape) {
+    if (!selectionOnly && targets.size === 0 && state.hoveredShape) {
         const s = state.shapes.find(x => x.id === state.hoveredShape);
         if (s && s.joints) s.joints.forEach(jid => targets.add(jid));
     }
+    return Array.from(targets);
+}
 
-    if (targets.size === 0) return false;
+// { has, locked }: is there anything to lock, and is all of it already locked (the origin always counts as locked).
+export function selectionLockState(state, selectionOnly = true) {
+    const ids = lockTargets(state, selectionOnly);
+    const locked = ids.length > 0 && ids.every(id => {
+        if (id === 'j_origin') return true;
+        const j = state.joints.get(id);
+        return !!(j && j.fixed);
+    });
+    return { has: ids.length > 0, locked };
+}
 
-    const ids = Array.from(targets);
+// The one Lock / Unlock: the F key, the ribbon Lock button and the context menu all call this.
+export function toggleFixedSelection(state) {
+    const ids = lockTargets(state, false);
+    if (ids.length === 0) return false;
+
     const allFixed = ids.every(id => {
         if (id === 'j_origin') return true;
         const j = state.joints.get(id);
@@ -1335,7 +1377,7 @@ export function switchToTool(state, toolName) {
     } catch(_) {}
 }
 
-function handleDelete(state) {
+export function handleDelete(state) {
     try {
         // Prefer centralized delete helpers which handle cascade cleanup and undo grouping
         deleteSelection(state);

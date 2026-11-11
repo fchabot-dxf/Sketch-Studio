@@ -11,6 +11,7 @@ import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
+import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -215,7 +216,26 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 return true;
             }
 
-            // Prepare for dragging dimension offset
+            // The value drags freely in X and Y (labelPos); the blue handle (below) moves the dimension line
+            svg.setPointerCapture(e.pointerId);
+            state.drag = {
+                type: DRAG_TYPES.DIMENSION,
+                mode: 'label',
+                constraint: constraint,
+                initialOffset: constraint.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                startWorld: screenToWorld(svg, e.clientX, e.clientY),
+                startClient: { x: e.clientX, y: e.clientY },
+                pointerId: e.pointerId
+            };
+            return true;
+        }
+    }
+
+    // The blue dot on a selected dimension moves the dimension LINE (its offset)
+    const dimHandle = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-offset-handle') : null;
+    if (dimHandle) {
+        const constraint = state.constraints[parseInt(dimHandle.dataset.constraintIdx)];
+        if (constraint) {
             svg.setPointerCapture(e.pointerId);
             state.drag = {
                 type: DRAG_TYPES.DIMENSION,
@@ -578,10 +598,14 @@ export function handleSelectionPointerMove(e, svg, state) {
 
     if (!state.drag) return false;
 
-    // 1. Dragging Dimension Offset
+    // 1. Dragging a Dimension: the value moves freely (labelPos); the offset handle moves the dimension line
     if (state.drag.type === DRAG_TYPES.DIMENSION) {
         const wpt = screenToWorld(svg, e.clientX, e.clientY);
         const c = state.drag.constraint;
+        if (state.drag.mode === 'label') {
+            dragDimensionLabel(state, state.drag, e, wpt);
+            return true;
+        }
         // If this is a radial (circle) dimension, compute radial offset from center
         if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
             const s1 = state.shapes.find(s => s.id === c.shapes[0]);

@@ -74,6 +74,10 @@ const DEFAULT_SETTINGS = {
     // AI Vision: high-density debug/AI diagnostics mode (false by default)
     AI_VISION: false,
 
+    // Save to Google Drive by default (TASK 506): while signed in, NEW projects / designs are created on Drive and their autosave goes there.
+    // Only has an effect while signed in. A sidebar account-area toggle, not a Style panel row.
+    DRIVE_DEFAULT: true,
+
     // The Style panel's chosen template id (#ui/style-templates.js); replaces the never-read PRESET: 'CAD'.
     STYLE_TEMPLATE: 'default',
 

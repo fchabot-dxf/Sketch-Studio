@@ -35,10 +35,12 @@ import { browserFileSeam } from '#ui/project-file.js';
  *     own state to defaults when `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one).
  *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
  *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive indicator.
+ *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
+ *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
  * Returns { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, store }.
  */
-export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange } = {}) {
+export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, doc = globalThis.document, win = globalThis.window } = {}) {
   let lastSig = null;
   let intervalId = null;
   let boundId = null; // the design this buffer reads from / writes to
@@ -79,10 +81,23 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
     return load(design);
   }
 
-  function start() { if (intervalId == null) intervalId = setInterval(poll, pollMs); }
-  function stop() { if (intervalId != null) { clearInterval(intervalId); intervalId = null; } }
-  /** Save pending changes NOW (before an action that copies / exports the stored design). */
-  async function flush() { await poll(); }
+  // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
+  const onVisibility = () => { if (doc.visibilityState === 'hidden') flush(); };
+  const onPageHide = () => { flush(); };
+  function start() {
+    if (intervalId != null) return;
+    intervalId = setInterval(poll, pollMs);
+    if (doc) doc.addEventListener('visibilitychange', onVisibility);
+    if (win) win.addEventListener('pagehide', onPageHide);
+  }
+  function stop() {
+    if (intervalId == null) return;
+    clearInterval(intervalId); intervalId = null;
+    if (doc) doc.removeEventListener('visibilitychange', onVisibility);
+    if (win) win.removeEventListener('pagehide', onPageHide);
+  }
+  /** Save pending changes NOW (before an action that copies / exports the stored design, and when the tab hides), written through to Drive. */
+  async function flush() { await poll(); await store.flushDrive(boundId || undefined); }
 
   // ---- explicit design actions (they throw readable errors: the user asked for them) -------------------------------
   async function openDesign(id) { await flush(); return load(await store.open(id)); }

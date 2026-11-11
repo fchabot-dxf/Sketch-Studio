@@ -1,8 +1,10 @@
 // packages/ui/cloud/router-adapter.js — the ROUTER adapter (TASK 480): one adapter for the store that sends every project / design
 // to the LOCAL IndexedDB adapter or to the DRIVE adapter, by where that project lives. It is where the owner's rulings live:
-//   - signing in changes NOTHING here: Drive is used only for a project the user explicitly moved there (moveProjectToDrive),
-//     and Drive projects are even LISTED only after the user turned Drive on (enableDrive, which moveProjectToDrive also does);
-//   - a project that was never moved never touches the network (the local adapter does all of it, exactly as before 480);
+//   - signing in changes NOTHING that already exists: an existing project goes to Drive only when the user moves it there
+//     (moveProjectToDrive). TASK 506 adds the one other way onto Drive: `preferDrive()` (signed in AND the "Save to Google Drive by
+//     default" setting on) decides where NEW things are created (newId / defaultProject below); it never moves anything;
+//   - Drive projects are LISTED once Drive was used (driveEnabled meta) or while preferDrive() is true;
+//   - a project that was never moved and is never created on Drive never touches the network (the local adapter does all of it);
 //   - meta (the current-design pointer, flags) is always local.
 // Remote ids are prefixed `drive:` so every id says where it lives; the Drive adapter itself sees the plain Drive ids.
 // A project's `location` is 'drive' for remote ones (absent = local).
@@ -18,11 +20,14 @@ const fromRemoteProject = (p) => { if (!p) return p; const { location, ...rest }
 const toRemoteDesign = (d) => (d ? { ...d, id: withPrefix(d.id), projectId: withPrefix(d.projectId) } : d);
 const fromRemoteDesign = (d) => (d ? { ...d, id: strip(d.id), projectId: strip(d.projectId) } : d);
 const gone = (what) => new Error(`That ${what} no longer exists.`);
+const localId = (kind) => (kind === 'p' ? 'p' : 'd') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-/** createRouterAdapter({ local, getRemote }): getRemote() returns the Drive adapter (created lazily: nothing is built or called until Drive is used). */
-export function createRouterAdapter({ local, getRemote }) {
+/** createRouterAdapter({ local, getRemote, preferDrive }): getRemote() returns the Drive adapter (created lazily: nothing is built or called
+ *  until Drive is used). preferDrive() -> boolean: should NEW projects / designs be created on Drive (signed in + the setting on)? */
+export function createRouterAdapter({ local, getRemote, preferDrive = () => false }) {
   let remoteError = null;
-  const driveEnabled = async () => !!(await local.getMeta(DRIVE_ENABLED));
+  let driveDefault = null; // the IN-FLIGHT lookup of the Drive default project (concurrent callers share it; never cached after: the account may change)
+  const driveEnabled = async () => !!(await local.getMeta(DRIVE_ENABLED)) || preferDrive();
   /** A remote listing for the merged lists: only when Drive is on, and a failure (offline, signed out) must not hide the local projects. */
   async function remoteList(fn) {
     if (!(await driveEnabled())) return [];
@@ -48,7 +53,29 @@ export function createRouterAdapter({ local, getRemote }) {
     return { newPid, idMap, oldIds: designs.map((d) => d.id) };
   }
 
+  /** The ONE Drive project called `name` (the default "My Designs"): found by name among the Drive projects, created when absent. Two
+   *  tabs / devices creating it at the same moment end with ONE: both re-list, the lowest id wins, the loser trashes its own. */
+  async function ensureDriveDefault(name, now) {
+    const remote = getRemote();
+    const find = async () => (await remote.listProjects()).filter((p) => p.name === name).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    let found = await find();
+    if (!found.length) {
+      const id = await remote.newId('p');
+      await remote.putProject({ id, name, pinned: false, updatedAt: now() });
+      found = await find();
+      if (found.length && found[0].id !== id && found.some((p) => p.id === id)) await remote.deleteProject(id); // lost the tie: use theirs
+      if (!found.length) found = [{ id }];
+    }
+    await local.setMeta(DRIVE_ENABLED, true);
+    return withPrefix(found[0].id);
+  }
+  const driveDefaultProject = (name, now) => {
+    if (!driveDefault) driveDefault = ensureDriveDefault(name, now).finally(() => { driveDefault = null; });
+    return driveDefault;
+  };
+
   const router = {
+    isRemote: isRemoteId,
     // ---- projects ----
     async listProjects() { return [...(await local.listProjects()), ...(await remoteList(async (r) => (await r.listProjects()).map(toRemoteProject)))]; },
     async getProject(id) { return isRemoteId(id) ? toRemoteProject(await getRemote().getProject(strip(id))) : local.getProject(id); },
@@ -80,7 +107,22 @@ export function createRouterAdapter({ local, getRemote }) {
     getMeta: (k) => local.getMeta(k),
     setMeta: (k, v) => local.setMeta(k, v),
     setMetaIfAbsent: (k, v) => local.setMetaIfAbsent(k, v),
-    // newId is deliberately NOT defined: the store mints local ids; Drive ids are minted by the explicit actions below.
+    /** Where a NEW project / design is created: a design always lives where its project does; a new project (or one with no project yet)
+     *  goes to Drive when preferDrive() says so. `local: true` forces this device (the store's fallback after a Drive failure). Throws when
+     *  Drive was wanted and failed (the store then falls back and shows why). */
+    async newId(kind, projectId, { local: forceLocal = false } = {}) {
+      const drive = !forceLocal && (projectId ? isRemoteId(projectId) : preferDrive());
+      if (!drive) return localId(kind);
+      const id = withPrefix(await getRemote().newId(kind));
+      await local.setMeta(DRIVE_ENABLED, true);
+      return id;
+    },
+    /** The default project ("My Designs"): ONE on Drive while preferDrive(), else the fixed local one (created on demand). Returns its id. */
+    async defaultProject({ id, name, now, local: forceLocal = false }) {
+      if (!forceLocal && preferDrive()) return driveDefaultProject(name, now);
+      await local.putProjectIfAbsent({ id, name, pinned: false, updatedAt: now() });
+      return id;
+    },
 
     /** The explicit, user-chosen cloud actions (the store exposes them as store.cloud; the sidebar calls them). */
     cloud: {
@@ -104,6 +146,23 @@ export function createRouterAdapter({ local, getRemote }) {
         await local.deleteProject(projectId);
         return { projectId: withPrefix(newPid), designIds };
       },
+      /** Whether new things are created on Drive right now (signed in + the default setting on). */
+      driveWanted: () => preferDrive(),
+      /** "Save to Google Drive": put ONE design into the Drive project "My Designs" (created when absent), WITHOUT moving its local project.
+       *  A local design keeps ONE Drive copy (remembered per design, updated on a repeat); one that already lives on Drive needs no copy.
+       *  `design` = the full record. Returns { fileId }. A snapshot: later autosaves of a local design do not follow it. */
+      async saveDesignToDrive(design, { name, now }) {
+        if (isRemoteId(design.id)) return { fileId: strip(design.id) };
+        const remote = getRemote();
+        const pid = strip(await driveDefaultProject(name, now));
+        const key = 'driveCopy:' + design.id;
+        let fileId = await local.getMeta(key);
+        if (!fileId || !(await remote.getDesign(fileId))) { fileId = await remote.newId('d'); await local.setMeta(key, fileId); }
+        await remote.putDesign({ ...design, id: fileId, projectId: pid });
+        return { fileId };
+      },
+      /** "Check Google Drive connection" (the Drive adapter's own check): onStep(steps) as it goes. */
+      checkConnection: (onStep) => getRemote().checkConnection(onStep),
       /** The reverse: copy a Drive project down to this device, verify, then trash the Drive copy. */
       async makeProjectLocal(projectId) {
         if (!isRemoteId(projectId)) throw new Error('That project is already on this device.');

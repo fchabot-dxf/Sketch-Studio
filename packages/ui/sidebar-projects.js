@@ -1,7 +1,8 @@
 // packages/ui/sidebar-projects.js — TASK 479: the project actions + views of the shared app sidebar, wired to the project store
 // (#ui/project-store.js, task 474) through each host's document buffer. ONE module, so every app gets the SAME entries:
-//   main view  document name (click to rename inline) · New design · Save as… · Duplicate · Open recent · Projects ·
-//              Save to file · Open from file · [the host's own Download actions] · GO TO
+//   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design · Save as… ·
+//              Duplicate · Open recent · Projects · Save to file · Save to Google Drive (signed in only) · Open from file ·
+//              [the host's own Download actions] · GO TO (+ the account row: the Drive default toggle and connection check)
 //   views      'recent'   — listRecent, newest first, with project name + relative time
 //              'projects' — the Fusion-style browser: New project, pinned first, then projects; click a project -> its designs
 //                           (open on click), back; per row a small menu: rename, pin/unpin, move to…, delete (with confirm;
@@ -14,6 +15,8 @@ import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
 import { applyAppIdentity, appById } from './app-registry.js';
 import { getGoogleAccount } from './cloud/google-account.js';
+import { driveErrorText, driveFileUrl } from './cloud/drive-adapter.js';
+import SettingsManager from '#core/settings-manager.js';
 
 /** "just now" / "5 min ago" / "3 h ago" / "2 d ago" / a date. */
 export function relativeTime(ts, now = Date.now()) {
@@ -31,8 +34,9 @@ const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': 
 export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
+  let currentDesignId = null;
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
-  const fail = (e) => sidebar.notify((e && e.message) || String(e), 'error');
+  const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
   const currentId = async () => { const b = getBuffer && getBuffer(); return (b && b.designId && b.designId()) || ((await store.current()) || {}).id || null; };
@@ -41,7 +45,8 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     let c = null;
     try { c = await store.current(); } catch (_) { c = null; }
     currentName = c ? c.name : 'Untitled';
-    if (sidebar) sidebar.setDocName(currentName);
+    currentDesignId = c ? c.id : null;
+    if (sidebar) { sidebar.setDocName(currentName); sidebar.refreshStatus(); }
     applyAppIdentity(appId, { designName: c ? c.name : undefined });
   }
 
@@ -64,9 +69,32 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     { id: 'projects', label: 'Projects', icon: SIDEBAR_ICONS.folder, keepOpen: true, onClick: () => sidebar.showView('projects') },
     { divider: true },
     { id: 'save-file', label: 'Save to file', icon: SIDEBAR_ICONS.save, keepOpen: true, onClick: act(async () => { await buf().saveFile(); }) },
+    { id: 'save-drive', label: 'Save to Google Drive', icon: SIDEBAR_ICONS.cloud, keepOpen: true, tooltip: 'Save this design into the "My Designs" project on your Google Drive (the rest of its project stays on this device)',
+      visible: () => !!(account && account.state().signedIn && store.cloud),
+      onClick: act(async () => {
+        const b = buf(); await b.flush();
+        const id = b.designId();
+        if (!id) throw new Error('Nothing to save yet — draw something first.');
+        const r = await store.cloud.saveToDrive(id);
+        sidebar.notify('Saved to Google Drive', 'info', { href: driveFileUrl(r.fileId), label: 'Open in Drive' });
+      }, { close: false }) },
     { id: 'open-file', label: 'Open from file', icon: SIDEBAR_ICONS.open, keepOpen: true, onClick: act(async () => { await buf().openFile(); }) },
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
   ];
+
+  // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
+  const statusLine = () => {
+    const s = store.status ? store.status(currentDesignId) : { where: 'device', state: 'saved', at: null, reason: null };
+    if (s.state === 'failed' || (s.where === 'device' && s.reason)) return { kind: 'error', text: `Not saved to Google Drive: ${s.reason}. Kept on this device.` };
+    if (s.where === 'device') return { kind: 'info', text: 'Saved on this device' };
+    if (s.state === 'saving') return { kind: 'info', text: 'Saving to Google Drive...' };
+    return { kind: 'info', text: 'Saved to Google Drive' + (s.at ? ', ' + relativeTime(s.at) : '') };
+  };
+  const driveControls = store.cloud ? {
+    getDefault: () => SettingsManager.get('DRIVE_DEFAULT') !== false,
+    setDefault: (on) => SettingsManager.set('DRIVE_DEFAULT', !!on),
+    check: (onSteps) => store.cloud.checkConnection(onSteps),
+  } : null;
 
   // ---- views ------------------------------------------------------------------------------------------------------
   const note = (box, text) => { const d = document.createElement('div'); d.className = 'sk-note'; d.textContent = text; box.appendChild(d); };
@@ -127,6 +155,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     if (!state.project) {
       let projects = [];
       try { projects = await store.listProjects(); } catch (e) { fail(e); }
+      if (store.cloud && account && !account.state().signedIn && await store.cloud.isEnabled()) note(box, 'Your projects on Google Drive are hidden while you are signed out. Sign in again to see them; nothing was changed.');
       const nb = rowBtn('sk-new-project', `<span class="sk-sidebar-ic" aria-hidden="true">+</span><span>New project</span>`);
       nb.dataset.action = 'new-project';
       nb.addEventListener('click', () => editInline(nb, 'New project', async (name) => { await store.createProject(name); }, again));
@@ -187,7 +216,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
   }
 
   sidebar = createAppSidebar({
-    current: appId, docName: currentName, actions, account,
+    current: appId, docName: currentName, actions, account, driveControls, status: statusLine,
     onRenameDoc: (name) => act(async () => {
       const id = await currentId();
       if (!id) throw new Error('Nothing to rename yet — draw something first.');

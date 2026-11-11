@@ -12,7 +12,13 @@
 //              onClick(text); `keepOpen` leaves the drawer open after the click (an action that opens a view).
 //     onRenameDoc(name)  OPTIONAL: when given, clicking the document name edits it inline (Enter commits, Esc cancels).
 //     account  OPTIONAL Google account controller (#ui/cloud/google-account.js getGoogleAccount()): adds the account row under GO TO.
-//     notify(text, kind) shows a message line in the drawer ('error' | 'info') — e.g. the reason a store refused something.
+//     driveControls  OPTIONAL (with `account`; TASK 506): { getDefault(): bool, setDefault(bool), check(onSteps): Promise } adds, while signed
+//              in, the "Save to Google Drive by default" toggle and the "Check Google Drive connection" action (its steps listed inline).
+//     status   OPTIONAL () => { text, kind } the one-line state of the current design under its name ('error' | 'info'); read at every
+//              render and by refreshStatus().
+//     actions may carry `visible: () => bool` (hidden, not just disabled, when it returns false).
+//     notify(text, kind, link?) shows a message line in the drawer ('error' | 'info'), optionally ending in a link { href, label } that opens
+//              in a new tab — e.g. the reason a store refused something, or "Saved to Google Drive" + "Open in Drive".
 //   views    OPTIONAL extra VIEWS the drawer can show instead of the main list (e.g. a Projects browser that drills down from
 //            projects to designs and back): { [id]: { title, render(container, { go, back, close }) } }. The main view (document
 //            name, actions, GO TO) is the built-in view 'main'; `showView(id)` swaps the drawer body, a back arrow returns to
@@ -34,6 +40,7 @@ export const SIDEBAR_ICONS = {
   recent: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M9 5.5V9l2.5 1.5"/></svg>',
   folder: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3l1.5 1.5H14A1.5 1.5 0 0 1 15.5 7v6A1.5 1.5 0 0 1 14 14.5H4A1.5 1.5 0 0 1 2.5 13z"/></svg>',
   open: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V3M5.5 6.5L9 3l3.5 3.5M3 12.5v2h12v-2"/></svg>',
+  cloud: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13.5a3 3 0 0 1-.4-5.97A4.5 4.5 0 0 1 13.2 6.6 3.5 3.5 0 0 1 13 13.5zM9 7.5v4M7.3 9.3L9 7.5l1.7 1.8"/></svg>',
   new: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 15.5h8A1.5 1.5 0 0 0 14.5 14V6.5zM10.5 2.5v4h4M9 9v4M7 11h4"/></svg>',
 };
 
@@ -75,6 +82,17 @@ function injectStyles() {
 .sk-sidebar-docinput { font-size: 17px; font-weight: 600; margin: 0 0 10px; }
 .sk-sidebar-msg { margin: 6px 0 0; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
 .sk-sidebar-msg.error { background: rgba(220, 60, 60, 0.18); color: #ff9c9c; }
+.sk-sidebar-msg a { color: inherit; font-weight: 600; margin-left: 6px; }
+.sk-sidebar-status { margin: -4px 0 8px; font-size: 12.5px; line-height: 1.35; opacity: 0.75; }
+.sk-sidebar-status.error { opacity: 1; color: #ff9c9c; }
+.sk-account-toggle { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
+.sk-account-toggle input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
+.sk-check-steps { margin: 2px 10px 4px; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.4; }
+.sk-check-steps li { display: flex; gap: 8px; padding: 2px 0; }
+.sk-check-steps .mark { flex: 0 0 auto; width: 16px; text-align: center; }
+.sk-check-steps li[data-state=ok] .mark { color: #7ee2a0; }
+.sk-check-steps li[data-state=failed] { color: #ff9c9c; }
+.sk-check-steps li[data-state=skipped], .sk-check-steps li[data-state=pending] { opacity: 0.55; }
 .sk-row-main { display: flex; flex-direction: column; min-width: 0; flex: 1; text-align: left; }
 .sk-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sk-row-sub { font-size: 12px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -100,7 +118,7 @@ function injectStyles() {
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null } = {}) {
   injectStyles();
   const list = Array.isArray(apps) && apps.length ? apps : APPS;
   const cur = list.find((a) => a.id === current) || list[0];
@@ -108,7 +126,8 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   let name = docName;
   let isOpenFlag = false;
   let viewId = 'main';
-  let message = null; // { text, kind }
+  let message = null; // { text, kind, link? }
+  let checkSteps = null; // the last "Check Google Drive connection" result (steps), shown inline in the account area
   const viewDefs = { ...views };
 
   const el = document.createElement('button'); // the header button
@@ -152,10 +171,12 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       h.addEventListener('click', edit);
       h.addEventListener('keydown', (e) => { if (e.key === 'Enter') edit(); });
     }
+    if (status) { const s = document.createElement('div'); s.className = 'sk-sidebar-status'; s.dataset.section = 'status'; top.appendChild(s); paintStatus(s); }
     drawer.appendChild(top);
     drawMessage(top);
     const box = document.createElement('div'); box.className = 'sk-sidebar-actions'; box.dataset.section = 'actions';
     for (const a of acts) {
+      if (a.visible && !a.visible()) continue;
       if (a.divider) { const d = document.createElement('div'); d.className = 'sk-sidebar-sep'; box.appendChild(d); continue; }
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item'; b.dataset.action = a.id;
       b.innerHTML = `<span class="sk-sidebar-ic" aria-hidden="true">${a.icon || ''}</span><span>${a.label}</span>`;
@@ -214,6 +235,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     out.addEventListener('click', run(() => account.signOut()));
     const line = document.createElement('div'); line.className = 'sk-account-line'; line.append(av, who, out);
     row.appendChild(line);
+    if (driveControls) row.append(...driveRows(fail));
     Promise.resolve(account.userInfo ? account.userInfo() : null).then((u) => {
       if (!u || !row.isConnected) return;
       const initials = u.initials || '?';
@@ -229,6 +251,36 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     }).catch(() => { av.textContent = '?'; });
     return row;
   }
+  // Signed-in Drive rows: the default-location toggle, and the connection check with its steps listed inline (TASK 506).
+  function driveRows(fail) {
+    const toggle = document.createElement('label'); toggle.className = 'sk-account-toggle'; toggle.dataset.account = 'drive-default-row';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.account = 'drive-default'; cb.checked = !!driveControls.getDefault();
+    cb.addEventListener('change', () => { try { driveControls.setDefault(cb.checked); } catch (e) { fail(e); } });
+    const t = document.createElement('span'); t.textContent = 'Save to Google Drive by default';
+    toggle.append(cb, t);
+    const check = document.createElement('button'); check.type = 'button'; check.className = 'sk-sidebar-item'; check.dataset.account = 'check-drive';
+    check.innerHTML = '<span class="sk-sidebar-ic" aria-hidden="true">&#10003;</span><span>Check Google Drive connection</span>';
+    const list = document.createElement('ul'); list.className = 'sk-check-steps'; list.dataset.account = 'check-result';
+    const draw = () => {
+      list.innerHTML = ''; list.hidden = !checkSteps;
+      for (const s of checkSteps || []) {
+        const li = document.createElement('li'); li.dataset.state = s.state; li.dataset.step = s.id;
+        const mark = { ok: '\u2713', failed: '\u2717', running: '\u2026', skipped: '-', pending: '\u00b7' }[s.state] || '';
+        const http = s.state === 'ok' ? ' (OK)' : s.state === 'failed' ? ` (failed${s.status ? ', HTTP ' + s.status : ''}${s.detail ? ': ' + s.detail : ''})` : s.state === 'skipped' ? ' (not run)' : '';
+        li.innerHTML = '<span class="mark"></span><span class="txt"></span>';
+        li.querySelector('.mark').textContent = mark; li.querySelector('.txt').textContent = s.label + http;
+        list.appendChild(li);
+      }
+    };
+    draw();
+    check.addEventListener('click', () => {
+      if (check.disabled) return;
+      check.disabled = true;
+      Promise.resolve(driveControls.check((steps) => { checkSteps = steps; if (list.isConnected) draw(); })).catch(fail).finally(() => { check.disabled = false; });
+    });
+    return [toggle, check, list];
+  }
+  function paintStatus(el) { const s = status(); el.textContent = s.text; el.classList.toggle('error', s.kind === 'error'); el.dataset.kind = s.kind || 'info'; }
   if (account && account.subscribe) account.subscribe(() => { if (isOpenFlag && viewId === 'main') render(); });
 
   // an inline "are you sure" row (no window.confirm: it is unsupported in some embedded webviews)
@@ -259,9 +311,10 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     const old = drawer.querySelector('.sk-sidebar-msg'); if (old) old.remove();
     if (!message) return;
     const m = document.createElement('div'); m.className = 'sk-sidebar-msg ' + (message.kind || 'info'); m.setAttribute('role', message.kind === 'error' ? 'alert' : 'status'); m.textContent = message.text;
+    if (message.link) { const a = document.createElement('a'); a.href = message.link.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = message.link.label; m.appendChild(a); }
     (parent || drawer).appendChild(m);
   }
-  function notify(text, kind = 'info') { message = text ? { text, kind } : null; if (isOpenFlag) { const top = drawer.querySelector('.sk-sidebar-top') || drawer.querySelector('.sk-sidebar-viewhead'); drawMessage(top); } }
+  function notify(text, kind = 'info', link = null) { message = text ? { text, kind, link } : null; if (isOpenFlag) { const top = drawer.querySelector('.sk-sidebar-top') || drawer.querySelector('.sk-sidebar-viewhead'); drawMessage(top); } }
 
   const focusables = () => [...drawer.querySelectorAll('button:not(:disabled)')];
   function firstFocus() { const f = focusables(); if (f[0]) f[0].focus(); }
@@ -300,6 +353,8 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     el, open, close, toggle, isOpen: () => isOpenFlag,
     // updates the heading in place: a full re-render would reset an open view (e.g. the Projects browser back to its first level)
     setDocName(n) { name = n; const h = drawer.querySelector('h2.sk-sidebar-doc'); if (h) h.textContent = n; },
+    /** Repaint the status line in place (the store's state changed). */
+    refreshStatus() { const s = drawer.querySelector('[data-section=status]'); if (s && status) paintStatus(s); },
     showView, notify, registerView(id, def) { viewDefs[id] = def; },
     setActions(a) { acts = Array.isArray(a) ? a : []; if (isOpenFlag) render(); },
     destroy() { close(); try { el.remove(); backdrop.remove(); drawer.remove(); } catch (_) {} },

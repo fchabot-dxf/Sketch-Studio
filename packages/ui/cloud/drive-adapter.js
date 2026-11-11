@@ -24,6 +24,29 @@ const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,version,trashed'
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
 
+/** The browser link to a Drive file (what the "Open in Drive" link points at). */
+export const driveFileUrl = (fileId) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+
+/** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
+export function driveErrorText(e) {
+  const m = (e && e.message) || String(e);
+  if (m === 'cloud-auth') return 'Google sign-in is needed again';
+  if (m === 'cloud-unavailable') return 'Google could not be reached';
+  if (e instanceof TypeError) return `Google Drive could not be reached (${m})`;
+  const http = /^Drive (\d+)$/.exec(m);
+  if (http) return `Google Drive answered HTTP ${http[1]}`;
+  return m;
+}
+
+// The steps of "Check Google Drive connection", in order, as DATA (the sidebar lists them; the adapter runs them).
+export const CHECK_STEPS = [
+  { id: 'token', label: 'Sign-in token is valid' },
+  { id: 'root', label: `"${GOOGLE.rootFolderName}" folder found or created` },
+  { id: 'write', label: 'Test file written' },
+  { id: 'read', label: 'Test file read back identical' },
+  { id: 'trash', label: 'Test file deleted (trashed)' },
+];
+
 const fileName = (name) => String(name) + PROJECT_FILE_EXT;
 const baseName = (file) => String(file).endsWith(PROJECT_FILE_EXT) ? String(file).slice(0, -PROJECT_FILE_EXT.length) : String(file);
 
@@ -37,9 +60,14 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
   async function call(url, opts, { allow404 = false } = {}) {
     const r = await account.authedFetch(url, opts);
     if (r.status === 404 && allow404) return null;
-    if (!r.ok) throw new Error('Drive ' + r.status);
+    if (!r.ok) { const e = new Error('Drive ' + r.status); e.status = r.status; throw e; }
     return r;
   }
+  const multipart = (metadata, content, contentType) => {
+    const boundary = 'sk' + Math.random().toString(16).slice(2);
+    const part = (type, text) => `Content-Type: ${type}\r\n\r\n${text}`;
+    return { type: `multipart/related; boundary=${boundary}`, body: `--${boundary}\r\n${part('application/json; charset=UTF-8', JSON.stringify(metadata))}\r\n--${boundary}\r\n${part(contentType, content)}\r\n--${boundary}--` };
+  };
   const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   async function listAll(q, fields) {
     const out = []; let pageToken = '';
@@ -57,9 +85,14 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     if (rootId) return rootId;
     const cached = await meta.getMeta(ROOT_KEY);
     if (cached) { const m = await getMeta(cached); if (m) return (rootId = cached); }
-    const found = await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id');
-    let id = found[0] && found[0].id;
-    if (!id) id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
+    const find = async () => (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id')).map((f) => f.id).sort();
+    let ids = await find();
+    let id = ids[0];
+    if (!id) { // two devices signing in at the same moment can each create one: re-list, the lowest id wins, the loser trashes its own
+      id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
+      ids = await find();
+      if (ids.length && ids[0] !== id && ids.includes(id)) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); id = ids[0]; }
+    }
     await meta.setMeta(ROOT_KEY, id);
     return (rootId = id);
   }
@@ -94,10 +127,8 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       await call(`${API}/files/${d.id}${q}`, jsonOpts('PATCH', { name: fileName(d.name), appProperties: props }));
       return;
     }
-    const boundary = 'sk' + Math.random().toString(16).slice(2);
-    const metadata = JSON.stringify({ id: d.id, name: fileName(d.name), mimeType: 'application/json', parents: [d.projectId], appProperties: props });
-    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
-    await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+    const m = multipart({ id: d.id, name: fileName(d.name), mimeType: 'application/json', parents: [d.projectId], appProperties: props }, content, 'application/json');
+    await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body });
   }
 
   const adapter = {
@@ -139,6 +170,34 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       throw new Error('This design is being changed somewhere else. Try again in a moment.');
     },
     async deleteDesign(id) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true }), { allow404: true }); },
+
+    /** "Check Google Drive connection": token, root folder, write, read back, trash, in order. onStep(steps) after every change; resolves the
+     *  final steps = [{ id, label, state: 'pending'|'running'|'ok'|'failed'|'skipped', status?: HTTP status, detail?: text }]. A failed step skips
+     *  the rest, except the test file is always trashed once it exists. Never throws: a failure is a step. */
+    async checkConnection(onStep = () => {}) {
+      const steps = CHECK_STEPS.map((s) => ({ ...s, state: 'pending' }));
+      const by = Object.fromEntries(steps.map((s) => [s.id, s]));
+      const show = () => onStep(steps.map((s) => ({ ...s })));
+      let fileId = null, failed = false;
+      const run = async (id, fn) => {
+        const step = by[id];
+        if (failed && !(id === 'trash' && fileId)) { step.state = 'skipped'; show(); return; }
+        step.state = 'running'; show();
+        try { await fn(); step.state = 'ok'; step.status = 200; }
+        catch (e) { failed = true; step.state = 'failed'; step.status = e.status; step.detail = driveErrorText(e); }
+        show();
+      };
+      const text = `Sketch Studio connection test ${new Date().toISOString()}`;
+      await run('token', async () => { await call(`${API}/about?fields=user`); });
+      await run('root', async () => { rootId = null; await ensureRoot(); });
+      await run('write', async () => {
+        const m = multipart({ name: 'sketch-studio-connection-test.txt', mimeType: 'text/plain', parents: [await ensureRoot()] }, text, 'text/plain');
+        fileId = (await (await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body })).json()).id;
+      });
+      await run('read', async () => { const back = await (await call(`${API}/files/${fileId}?alt=media`)).text(); if (back !== text) throw new Error('The file read back is different from what was written'); });
+      await run('trash', async () => { await call(`${API}/files/${fileId}?fields=id`, jsonOpts('PATCH', { trashed: true })); });
+      return steps;
+    },
 
     // meta stays local to this device
     getMeta: (k) => meta.getMeta(k),

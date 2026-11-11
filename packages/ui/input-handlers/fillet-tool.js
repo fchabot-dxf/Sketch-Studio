@@ -231,7 +231,7 @@ function commitInput() {
   if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return; } // input stays open
 
   // One history step per fillet, owned here in the tool layer like every other tool (core does not saveState).
-  try { state.saveState?.(); } catch (_) {}
+  try { state.saveState?.('fillet'); } catch (_) {}
   const res = applyFillet(state, corner, val);
   if (!res || !res.success) { showNotification(`Can't fillet: ${(res && res.reason) || 'unknown'}`, 'warning'); return; }
 

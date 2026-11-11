@@ -26,7 +26,7 @@ export function doCombine(state, notify = () => {}) {
     notify(val.reason || 'Cannot combine selection');
     return null;
   }
-  try { state.saveState && state.saveState(); } catch (_) {}
+  try { state.saveState && state.saveState('combine'); } catch (_) {}
   const prof = makeProfile(state, val.outerLoop, val.innerLoops);
   notify(`Combined into ${prof.name || prof.id} (${val.innerLoops.length} hole${val.innerLoops.length === 1 ? '' : 's'})`);
   return prof;
@@ -54,7 +54,7 @@ export function doUncombine(state, notify = () => {}) {
     notify('No combined profile on the selection');
     return 0;
   }
-  try { state.saveState && state.saveState(); } catch (_) {}
+  try { state.saveState && state.saveState('uncombine'); } catch (_) {}
   for (const pid of toRemove) uncombineProfile(state, pid);
   notify(`Uncombined ${toRemove.size} profile${toRemove.size === 1 ? '' : 's'}`);
   return toRemove.size;

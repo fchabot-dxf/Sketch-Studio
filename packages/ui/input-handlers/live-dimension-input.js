@@ -11,6 +11,7 @@ import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geomet
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { dimensionEditLabel } from '#ui/dimension-seams.js';
 import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
 
 let inputState = {
@@ -318,7 +319,7 @@ function processCommit(detail) {
         // --- EDIT MODE ---
         const val = parseFloat(detail.value);
         if (!isNaN(val)) {
-            if (state.saveState) state.saveState();
+            if (state.saveState) state.saveState(dimensionEditLabel(inputState.target, val));
             inputState.target.value = val;
             inputState.target.isDriven = !!detail.isDriven;
             inputState.target.__placing = false;

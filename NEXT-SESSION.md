@@ -350,6 +350,27 @@ don't show in the Antigravity panel, so report each one to the owner. Every writ
   - OPEN OWNER STEPS: Cloudflare secrets (GOOGLE_CLIENT_ID/SECRET, SESSION_KEY) + publish the consent screen (click-path
     in WORK-LOG TURN 480 section 6); a real Fusion-add-in DXF with an arc+spline would help; Prepare turns a loop drawn
     inside an Outside cut into a hole band (existing rule, owner to look); Pen Plotter files per pen is now the default.
+  - MERGED 2026-11-08..11 (gated, all via merge.sh): 504 1e0c198 + owner's final glyph sheet f78f775 (assets/constraint-glyphs.svg: 11
+    named vector glyphs, one source), 498 (Clear All = whole document via clearDocument()), 499 (Save (Project) button
+    + dead settings-panel removed), 497 d8005f6 (birch face texture + plywood EDGE image, 13 plies per 19.05 mm, Wood
+    toggle), 496 ef209f8 (joint/sketch DOF from the solver NULLSPACE: only truly immovable points draw black), 491
+    242b534 (Fusion polish: white fill + black outline, glyphs avoid dimension text, sans font, tangent glyph at its
+    point), 502 042ae75 (Fusion: white canvas, PROFILE_FILL pale-blue tint, LOCKED_LINE_COLOR green).
+  - FINISHED, merging (chain8): 492 (labelPos: drag a dimension value anywhere, lead lines, narrow arrows flip outside),
+    493 (shared context menu: dimension Driving/Reference/Delete, geometry Lock/Delete; Lock ribbon button using the
+    owner's assets/fixed flat.svg padlock as drawn; the driving dot removed), 505 (the app READS assets/constraint-glyphs.svg;
+    GLYPH_OUTLINE_PX in the Style panel, Fusion default 0.5).
+  - WAITING (written in the scratchpad, sent when Copilot is back): 494 (recentre view on reload), 500 (polygon sides box
+    ON THE CANVAS, ribbon field removed), 501 (a real POLYGON constraint like Fusion's single PolygonConstraint with a
+    visible centre point; read from the owner's Fusion sketch via the API: lines[N] + centerPoint, no Equal chain).
+  - OWNER RULINGS 2026-11-08..11: glyph icons are THE OWNER'S drawings (Affinity), the sheet is the single source; fixed has no
+    glyph (locked geometry is green); angle is a dimension (no glyph); coincident also serves point-on-line; toolbar icons stay in
+    cursor-manager.js (ICONS) and are separate from canvas glyphs; snapping stays on the fine grid; the advisor runs on Sonnet
+    (advisor skill: own model + subagents rule).
+  - OPEN OWNER QUESTIONS: overlapping closed profiles darker (ours) vs uniform (Fusion's reference)? Try Google sign-in from the
+    sidebar (Cloudflare secrets + consent screen are DONE). Coincident glyph is the owner's to refine (re-export vector, Rasterize
+    NOTHING; the Affinity .af is the source).
+  - WORKERS 2026-11-11: Copilot and Antigravity both reported down by the owner; the Claude seats stay STOPPED (owner: tasks only to Copilot).
   - NEXT: Google Drive adapter. The owner's OAuth client already exists (see the PERSISTENCE epic, client
     983232817866-...; origins sketch-studio.pages.dev + localhost:8000; drive.file). Then wire the sidebar to 474.
     - OWNER (2026-11-08): "allow to have reneweable token" = stay signed in across days, no hourly re-login. PORT

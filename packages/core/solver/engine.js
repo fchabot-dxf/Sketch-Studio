@@ -181,6 +181,17 @@ export class NewtonSolver {
     return k === undefined ? undefined : this.joints.size * 2 + k;
   }
 
+  // THE radius operand of a circle/arc in a row (definitions.js radiusValue / addRadiusDerivative): { at } a circle's radius unknown;
+  // { radius } a stored constant; { rim } an arc's LIVE radius |rim - centre|, rim = its FIRST rim joint (joints[1]; makeArc's
+  // equal keeps the second rim at the same distance), so the row differentiates the radius through the rim and centre joints.
+  _radiusOperand(shape, jointIndexMap) {
+    const at = this._radiusAt(shape);
+    if (at !== undefined) return { at };
+    if (shape && typeof shape.radius === 'number') return { radius: shape.radius };
+    const rim = shape && shape.joints && shape.joints.length >= 2 ? jointIndexMap.get(shape.joints[1]) : undefined;
+    return typeof rim === 'number' ? { rim } : { radius: 0 };
+  }
+
   // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack)
   _assemble(x) {
     const n = x.length;
@@ -344,12 +355,8 @@ export class NewtonSolver {
           // -> NaN -> the constraint was silently ignored.)
           else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 1) {
             params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]) ];
-            params.radiusAt = this._radiusAt(shape);
-            if (params.radiusAt === undefined) params.radius = (typeof shape.radius === 'number')
-              ? shape.radius
-              : (shape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(shape.joints[0]) * 2; const ri = jointIndexMap.get(shape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-            // a LIVE radius (arc with no stored radius) is |rim - centre|: the rim joint takes part in the row
-            if (typeof shape.radius !== 'number' && shape.joints.length >= 2) params.rimJoint = jointIndexMap.get(shape.joints[1]);
+            const op = this._radiusOperand(shape, jointIndexMap);
+            params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;
             params.onCircle = true;
           }
         }
@@ -369,10 +376,10 @@ export class NewtonSolver {
                   const idxB = jointIndexMap.get(cB);
                   if (typeof idxA === 'number' && typeof idxB === 'number') {
                     params.joints = [ idxA, idxB ];
-                    const rA = (typeof sA.radius === 'number') ? sA.radius : (sA.joints && sA.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sA.joints[0]) * 2; const ri = jointIndexMap.get(sA.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-                    const rB = (typeof sB.radius === 'number') ? sB.radius : (sB.joints && sB.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sB.joints[0]) * 2; const ri = jointIndexMap.get(sB.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-                    params.radii = [rA, rB];
-                    params.radiiAt = [this._radiusAt(sA), this._radiusAt(sB)];   // a circle operand reads its radius unknown
+                    const opA = this._radiusOperand(sA, jointIndexMap), opB = this._radiusOperand(sB, jointIndexMap);
+                    params.radii = [opA.radius, opB.radius];
+                    params.radiiAt = [opA.at, opB.at];       // a circle operand reads its radius unknown
+                    params.rimJoints = [opA.rim, opB.rim];   // an arc operand's radius is live through its rim joint
                   }
                 }
               } else if (sA.type === 'line' && (sB.type === 'circle' || sB.type === 'arc')) {
@@ -401,10 +408,9 @@ export class NewtonSolver {
                 const arcRim = new Set(circShape.joints.slice(1));
                 if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
                 else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
-                params.radius = (typeof circShape.radius === 'number')
-                  ? circShape.radius
-                  : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
-                params.radiusAt = this._radiusAt(circShape);   // a circle: its radius unknown takes part in the row
+                // a circle's radius unknown or an arc's live |rim - centre| takes part in the row
+                const op = this._radiusOperand(circShape, jointIndexMap);
+                params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;
               }
             }
           }

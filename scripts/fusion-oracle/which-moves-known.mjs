@@ -16,6 +16,9 @@ const REASON = {
   'equal-arc-circle': "after task 515: Fusion's API refuses equal(arc, circle); ours accepts it (the circle radius follows the arc)",
   'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
   'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
+  // after task 523 the arc side of the tangent rows differentiates the arc radius through its rim: the least-change solve may resize the arc
+  'tangent-line-arc': "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; the other differences of this group are placement too)",
+  'tangent-arc-arc': "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; the other differences of this group are placement too)",
 };
 const known = {};
 for (const sc of buildScenarios()) {

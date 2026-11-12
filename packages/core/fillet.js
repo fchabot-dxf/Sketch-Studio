@@ -262,17 +262,20 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   const jCenter = genJ();
   const jTA = genJ();
   const jTB = genJ();
-  // virtual sharp: the corner as it was (see below). A corner that is the ORIGIN keeps the origin itself as its sharp:
-  // it is already fixed at the corner, both trimmed lines are held to it, and the origin must never be deleted.
-  const atOrigin = cluster.has('j_origin');
-  const jV = atOrigin ? 'j_origin' : genJ();
+  // virtual sharp: the corner as it was (see below). A corner whose cluster holds a FIXED joint (the origin is one; so is any
+  // point the user locked) keeps that joint as its sharp: it is already fixed at the corner, both trimmed lines are held to it,
+  // and it must never be deleted. With several coincident fixed joints the first one in joint order is kept (the origin is
+  // always first); the other fixed ones are coincident with it, so deleting them loses no position.
+  let keptFixed = null;
+  for (const [id, j] of joints) if (cluster.has(id) && j && j.fixed) { keptFixed = id; break; }
+  const jV = keptFixed || genJ();
 
   joints.set(jCenter, { x: centerPt.x, y: centerPt.y, fixed: false });
   joints.set(jTA, { x: tA.x, y: tA.y, fixed: false });
   joints.set(jTB, { x: tB.x, y: tB.y, fixed: false });
   // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by pointOnLine so it
   // follows them when the radius changes; overall dimensions attach to it. Not a shape => loops/export ignore it.
-  if (!atOrigin) joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
+  if (!keptFixed) joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
 
   // Update line endpoint joints to the new tangent points
   lineA.shape.joints[lineA.cornerIdx] = jTA;
@@ -342,7 +345,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 
   // Delete the old corner cluster joints
   for (const jid of cluster) {
-    if (jid !== 'j_origin') joints.delete(jid);
+    if (jid !== jV) joints.delete(jid);
   }
   removeOrphanJoints(state);
 

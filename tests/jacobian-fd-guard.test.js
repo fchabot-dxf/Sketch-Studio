@@ -15,14 +15,18 @@ const joints = () => new Map([
   ['a', { x: 0, y: 0, fixed: false }], ['b', { x: 10, y: 3, fixed: false }], ['c', { x: 0, y: 10, fixed: false }],
   ['d', { x: 7, y: 14, fixed: false }], ['m', { x: 9, y: 9, fixed: false }],
   ['n', { x: 20, y: 4, fixed: false }], ['ac', { x: -8, y: 3, fixed: false }], ['as', { x: -3, y: 4, fixed: false }], ['ae', { x: -8, y: 8, fixed: false }],
+  ['bc', { x: 12, y: -6, fixed: false }], ['bs', { x: 15, y: -2, fixed: false }], ['be', { x: 8, y: -9, fixed: false }],
 ]);
-// C1 / C2 are circles: their radius is a solver unknown (task 515), the LAST columns of x. A1 is an arc (radius live via its rims).
+// C1 / C2 are circles: their radius is a solver unknown (task 515), the LAST columns of x. A1 / A2 are arcs: the radius is live,
+// |first rim - centre| (task 523), so a row that reads it has its rim (as / bs) and centre columns. L3 ends ON A1's end rim.
 const SH = () => [
   { id: 'L1', type: 'line', joints: ['a', 'b'] },
   { id: 'L2', type: 'line', joints: ['c', 'd'] },
   { id: 'C1', type: 'circle', joints: ['m'], radius: 2 },
   { id: 'C2', type: 'circle', joints: ['n'], radius: 3.5 },
   { id: 'A1', type: 'arc', joints: ['ac', 'as', 'ae'] },
+  { id: 'A2', type: 'arc', joints: ['bc', 'bs', 'be'] },
+  { id: 'L3', type: 'line', joints: ['ae', 'd'] },
 ];
 const CASES = {
   coincident: { type: 'coincident', joints: ['a', 'b'] },
@@ -39,8 +43,8 @@ const CASES = {
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
 };
 
-// One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the J columns of
-// the circle radii so a radius case can also assert its radius column is really in the row.
+// One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on
+// each circle radius column and on each joint's x/y columns, so a radius case can also assert its radius column is really in the row.
 function guard(label, c) {
   const solver = createNewtonSolver(joints(), [{ ...c }], SH(), { maxIter: 1 });
   const x0 = solver._pack(), n = x0.length;
@@ -54,7 +58,9 @@ function guard(label, c) {
   assert.ok(asm.m > 0, `${label}: built no rows`);
   assert.ok(worst < TOL, `${label}: Jacobian differs from finite differences by ${worst} (tolerance ${TOL})`);
   const radiusCol = {};
-  solver._radiusShapes.forEach((s, q) => { let v = 0; for (let i = 0; i < asm.m; i++) v = Math.max(v, Math.abs(asm.J[i * n + solver._nJointVars + q])); radiusCol[s.id] = v; });
+  const colMax = (k) => { let v = 0; for (let i = 0; i < asm.m; i++) v = Math.max(v, Math.abs(asm.J[i * n + k])); return v; };
+  solver._radiusShapes.forEach((s, q) => { radiusCol[s.id] = colMax(solver._nJointVars + q); });
+  solver._freeIds.forEach((id, v) => { radiusCol[id] = Math.max(colMax(v * 2), colMax(v * 2 + 1)); });
   console.log(`ok ${label} (rows ${asm.m}, columns ${n}, max diff ${worst.toExponential(1)})`);
   return radiusCol;
 }
@@ -80,10 +86,19 @@ const RADIUS_CASES = [
   ['equal (circle-circle)', { type: 'equal', shapes: ['C1', 'C2'] }, ['C1', 'C2']],
   ['equal (circle-arc)', { type: 'equal', shapes: ['C1', 'A1'] }, ['C1']],
   ['equal (arc-circle)', { type: 'equal', shapes: ['A1', 'C2'] }, ['C2']],
+  // The ARC radius (task 523): every tangent form with an arc, and point-on-arc, differentiate |rim - centre| (columns as / bs).
+  ['pointOnLine (point on an arc)', { type: 'pointOnLine', joint: 'a', shape: 'A1' }, ['as']],
+  ['tangent (line-arc, {line, circle})', { type: 'tangent', line: 'L1', circle: 'A1' }, ['as']],
+  ['tangent (line-arc, shapes)', { type: 'tangent', shapes: ['A1', 'L1'] }, ['as']],
+  ['tangent (line-arc at a shared rim)', { type: 'tangent', line: 'L3', circle: 'A1' }, ['ae']],
+  ['tangent (circle-arc, external)', { type: 'tangent', shapes: ['C1', 'A1'] }, ['C1', 'as']],
+  ['tangent (arc-circle, internal)', { type: 'tangent', shapes: ['A1', 'C1'], branch: 'internal' }, ['C1', 'as']],
+  ['tangent (arc-arc, external)', { type: 'tangent', shapes: ['A1', 'A2'] }, ['as', 'bs']],
+  ['tangent (arc-arc, internal)', { type: 'tangent', shapes: ['A1', 'A2'], branch: 'internal' }, ['as', 'bs']],
 ];
 for (const [label, c, uses] of RADIUS_CASES) {
   const col = guard(label, c);
-  for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius column is ${col[id]} (expected it in the row)`);
+  for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius/rim column is ${col[id]} (expected it in the row)`);
   checked++;
 }
-console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius columns included.`);
+console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius and arc rim columns included.`);

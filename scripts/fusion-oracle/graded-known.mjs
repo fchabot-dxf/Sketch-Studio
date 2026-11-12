@@ -15,6 +15,9 @@ const REASON = {
   'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
   'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
 };
+// a tangent class with an ARC operand (A arc, F fillet arc): after task 523 the arc radius takes part in the least-change solve
+const ARC_TANGENT = "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)";
+const reasonOf = (k) => { const [g, kinds] = k.split('|'); return (g.startsWith('tangent') && /[AF]/.test(kinds || '')) ? ARC_TANGENT : REASON[g]; };
 const byClass = {};
 for (const c of cells()) {
   const k = classOf(c.cell);
@@ -24,8 +27,7 @@ for (const c of cells()) {
 const known = {};
 for (const [k, v] of Object.entries(byClass)) {
   if (!v.diff.length) continue;
-  const g = k.split('|')[0];
-  known[k] = { reason: REASON[g] || 'PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)', total: v.total, cells: v.diff.length === v.total ? 'all' : v.diff };
+  known[k] = { reason: reasonOf(k) || 'PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)', total: v.total, cells: v.diff.length === v.total ? 'all' : v.diff };
 }
 fs.writeFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves-graded-known.json'), JSON.stringify(known, null, 1));
 const nd = Object.values(known).reduce((a, v) => a + (v.cells === 'all' ? v.total : v.cells.length), 0);

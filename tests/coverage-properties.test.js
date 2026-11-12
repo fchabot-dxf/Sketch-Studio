@@ -12,17 +12,14 @@ import inventory from './harness/coverage/inventory.js';
 
 const KNOWN = {
   'scurve/C fully constrained (nullity 0)': 'N-F7',
-  'scurve/C the Design panel DOF equals the finite-difference nullity': 'N-F7',
-  'scurve/C no arc/arc tangent row differs from finite differences': 'N-F7',
   'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
-  'scurve/B no dimension is demoted': 'N-F7 (the 2nd arc radius is judged redundant)',
 
   'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };
-// drawings whose analytic Jacobian differs from finite differences today (N-F7 arc/arc tangent; F6/N-F5 fixed in task 511)
-const JAC = { scurve: 'N-F7' };
+// drawings whose analytic Jacobian differs from finite differences today (none: F6/N-F5 fixed in task 511, the N-F7 arc/arc tangent rows in task 523)
+const JAC = {};
 // demoted steps that are round 1's F1 (H and V dimension on one joint pair)
 const DEMOTED = {};   // round 1's F1 is fixed on main (task 510): the bracket's three H+V steps are no longer demoted
 
@@ -63,8 +60,7 @@ for (const d of drawings) {
   check(n === 'every-kind' ? `${n}/C deliberately loose (nullity 9)` : `${n}/C fully constrained (nullity 0)`, s.nullity === NULLITY[n], `nullity ${s.nullity}`);
   check(`${n}/C the Design panel DOF equals the finite-difference nullity`, s.panel === s.fd, `panel ${s.panel} vs fd ${s.fd}`);
   check(`${n}/C the Design panel DOF equals the analytic nullity`, s.panel === s.nullity, `panel ${s.panel} vs ${s.nullity}`);
-  if (n === 'scurve') check('scurve/C no arc/arc tangent row differs from finite differences', !s.jacobianErrors.includes('tangent'), JSON.stringify(s.jacobianErrors));
-  else check(`${n}/C analytic Jacobian rows differ from finite differences only where pinned`, (s.jacobianErrors.length > 0) === (n in JAC), JSON.stringify(s.jacobianErrors));
+  check(`${n}/C analytic Jacobian rows differ from finite differences only where pinned`, (s.jacobianErrors.length > 0) === (n in JAC), JSON.stringify(s.jacobianErrors));
   check(`${n}/D verifier OK (every driving residual < 1e-6)`, s.verifier < 1e-6, `max ${s.verifier}`);
   if (s.nullity === 0) check(`${n}/D 3 starts jittered by 2% return to the drawn geometry`, s.returns === '3/3', s.returns);
   else if (n === 'scurve') check('scurve/D 3 starts jittered by 2% return to the drawn geometry', false, 'not fully constrained: no single geometry to return to');

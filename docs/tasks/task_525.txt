@@ -1,0 +1,41 @@
+TASK 525 (Sketch-Studio): "who moves" at constraint creation, like Fusion. Replaces the stopped task 519.
+OWNER RULING 2026-11-12 on the three open questions: "do it like Fusion". So: option (c), the per-constraint order DECLARED as data
+and fitted to the recorded Fusion cells. (Equal arc/circle and redundant constraints = refuse like Fusion: task 526, NOT this task.)
+Base: origin/main. Worktree D:\APPS\Sketch-Studio.worktrees\task-525-who-moves, branch agents/task-525-who-moves.
+Read first: docs/tasks/task_519.txt (the original spec; its ban on fitted tables is LIFTED by the ruling, the rest stands), the
+519 design + STOP in D:\APPS\Sketch-Studio.worktrees\task-519-who-moves\WORK-LOG.md (`## TURN 519`) and its evidence folder
+.evidence\519\ (eval-measures.mjs, eval-out.json, grids.txt, table.txt: read-only, copy what you reuse into your own .evidence/525/),
+docs/FUSION-COMPARISON.md ("Which geometry moves", "graded"), tests/fixtures/fusion-oracle/which-moves*.json,
+tests/fusion-oracle.test.js, and ConstraintManager.placeForCreation / placeOnAnchorLine / placePerpendicularFromParallel /
+_lineEstablishmentScore in packages/core/constraint-manager.js (tasks 511, 520, 521).
+
+WHAT 519 MEASURED: no single "how held" measure reproduces Fusion; the same two operands are ordered differently per constraint type
+(parallel/perpendicular: a line pinned at one end gives way to a free line; equal: tie; angle dimension: the free line gives way).
+A rank table per constraint fits 55/55, 39/39, 73/73 etc.
+DESIGN (declare, one place):
+ 1. ONE classifier: operand -> hold class (free, corner-shared, length-dimensioned, H/V, one end fixed, end+length, H/V+end, fully
+    held, centred on origin, ... : the classes the recorded grids use). Derive it from the sketch state/solver (jointFreedom, the
+    constraints on the operand), in one function. Lines, arcs, circles, points, the origin: cover every operand kind in the fixtures.
+ 2. ONE declared table (data, its own module under packages/core, e.g. creation-placement table): constraint type -> { the order of
+    hold classes (who stays), the tie rule (first pick stays), the placement function for the mover }. Generate/fit the orders from
+    the recorded fixture with a script kept in scripts/fusion-oracle/ so the table can be re-derived when Fusion is re-recorded; the
+    table in the code is the data the script outputs, and a test asserts table == script output from the fixture (no drift, no lie).
+ 3. placeForCreation reads only that table. _lineEstablishmentScore and the per-constraint branches it replaces are DELETED (grep
+    their callers; list any function whose last non-test caller you removed). No second mechanism left beside the table.
+ 4. Placement per constraint as in task_519.txt item 1 (rotate about the fixed end else the midpoint; equal keeps the start; etc.),
+    ONE operand moves. Includes: a free circle is resized/moved the way Fusion does (equal, tangent, concentric, point on circle),
+    and perpendicular/parallel must not shrink lines. If the mover cannot satisfy alone, the other moves; if neither, the solve.
+ 5. The collapse check from 521 stays. Report what happens to the 15 feasible cells 521 made refused (fixed by placement, or not).
+ 6. Dimensions (commitDimensionEdit in packages/ui/dimension-seams.js): same table drives which end moves IF it can be done through
+    the same placeForCreation seam without a copy; otherwise STOP on that part and report (do the geometric constraints fully).
+TEST = the recorded Fusion cells (tests/fusion-oracle.test.js). Regenerate KNOWN lists and docs with the scripts. REPORT a table per
+constraint: matching cells before -> after (which-moves 315, graded 2438, drawings 954) and every remaining class of difference with
+a one-line reason. Do not chase 100% with special cases outside the table; remaining differences are flagged for the owner.
+Other audits (constraint-audit, coverage-properties, coverage-matrix, jacobian-fd-guard) stay green; a KNOWN entry that starts
+passing is deleted with evidence. Tasks 522/523/524 are in flight on other branches (tests, tangent rows in solver/definitions.js,
+fillet.js): do not touch those files' concerns; expect to merge origin/main and regenerate KNOWN lists before your final gate.
+DO NOT: change solver rows or drag behaviour; change the saved-file format; hidden globals; silent catch; env-dependent paths.
+STOP and ask if: the table needs a class the state cannot classify; a fitted order conflicts between the 315 and the 2438 fixture;
+or a behaviour change for existing users appears beyond "which operand moves at creation" (list every behaviour change).
+Never kill a process you did not start. REPORT once, leave nothing running.
+Gate green (`npm run gate`, foreground), commit by path, push the branch, WORK-LOG `## TURN 525`, the AGENTS.md REPORT block.

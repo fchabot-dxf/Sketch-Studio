@@ -107,20 +107,13 @@ export function isDimensionDetermined(state, c) {
 
 // Toggle a dimension between DRIVING and reference (FLIP). A reference whose quantity the rest of the sketch still determines
 // cannot become driving (Fusion: over-constrained): the toggle is REFUSED and nothing changes, returned as { refused: true }.
-// A reference radius keeps the one-driver-per-shape swap. When promoting, recompute the value from geometry and re-solve.
-// Returns { nowDriving, swapped, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
+// Every mode goes through that one test, a radius too (a circle's radius is a solver unknown since task 515, so a second driving
+// radius on the same circle, or an equal to a dimensioned circle, determines it: there is no separate radius swap any more).
+// When promoting, recompute the value from geometry and re-solve.
+// Returns { nowDriving, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
 // No DOM, no notifications here.
 export function toggleDriving(state, c) {
-  let swapped = false;
-  if (c.isDriven) {
-    if (isDimensionDetermined(state, c)) return { nowDriving: false, swapped: false, refused: true, error: null };
-    if (c.type === CONSTRAINT_TYPES.DISTANCE && c.isRadius && c.shape) {
-      const others = state.constraints.filter(oc =>
-        oc !== c && !oc.isDriven && !oc.driven &&
-        oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
-      if (others.length) { for (const oc of others) { oc.isDriven = true; oc.driven = true; } swapped = true; }
-    }
-  }
+  if (c.isDriven && isDimensionDetermined(state, c)) return { nowDriving: false, refused: true, error: null };
 
   c.isDriven = !c.isDriven;
   c.driven = c.isDriven; // keep both flags in sync (solver/renderer read isDriven || driven)
@@ -158,5 +151,5 @@ export function toggleDriving(state, c) {
       if (result && result.converged === false) error = 'ERR-DRIVE-02';
     }
   }
-  return { nowDriving: !c.isDriven, swapped, refused: false, error };
+  return { nowDriving: !c.isDriven, refused: false, error };
 }

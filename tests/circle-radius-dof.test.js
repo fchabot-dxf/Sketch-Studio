@@ -5,7 +5,8 @@
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, isDimensionDetermined, toggleDriving } from '#ui/dimension-seams.js';
+import { deleteConstraints } from '#core/delete-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { createSketches } from '#core/sketch-model.js';
@@ -51,6 +52,29 @@ const ok = (name, cond, detail = '') => { assert.ok(cond, name + (detail ? '  ' 
   ok('equal on two circles removes one DOF (2 x 3 - radius dim - equal = 4)', L.nullity(S) === 4, 'nullity ' + L.nullity(S));
   const r = commitDimensionEdit(S.state, da, 11);
   ok('edit c1 radius 8 -> 11: both circles follow', !r.reverted && near(R(S, a.id), 11) && near(R(S, b.id), 11), JSON.stringify([r, R(S, a.id), R(S, b.id)]));
+}
+
+// 2b. task 516's ONE gate (isDimensionDetermined = the engine rank test) covers a circle radius now that it is a real row: a radius dimension
+//     on a circle the sketch already determines (equal to a dimensioned circle) is placed DRIVEN, and Driving is refused while it is determined.
+{
+  const S = L.newSketch();
+  const a = L.circle(S, 0, 50, 8), b = L.circle(S, 60, 50, 12);
+  add(S, 'distance', { shape: a.id, value: 8, isRadius: true });
+  const e = add(S, 'equal', { shapes: [a.id, b.id] });
+  S.engine.solve(L.ITER);
+  const db = add(S, 'distance', { shape: b.id, value: R(S, b.id), isRadius: true });
+  ok('a radius dimension on a circle equal to a dimensioned circle is placed driven (determined)', !!db && db.isDriven === true && db.driven === true, JSON.stringify(db && { isDriven: db.isDriven, why: db.drivenReason }));
+  ok('isDimensionDetermined says so (the same gate the value box and the Driving toggle ask)', isDimensionDetermined(S.state, db) === true);
+  const t = toggleDriving(S.state, db);
+  ok('Driving on it is refused while the equal determines it', t.refused === true && db.isDriven === true, JSON.stringify(t));
+  deleteConstraints(S.state, [e]);
+  S.engine.solve(L.ITER);
+  ok('after deleting the equal it is no longer determined', isDimensionDetermined(S.state, db) === false);
+  const t2 = toggleDriving(S.state, db);
+  ok('... and Driving is accepted (the radius dimension drives circle 2)', t2.refused === false && t2.nowDriving === true && !db.isDriven && L.nullity(S) === 4, JSON.stringify([t2, L.nullity(S)]));
+  const free = L.circle(S, 200, 50, 5);
+  const df = { type: 'distance', shape: free.id, value: 5, isRadius: true };
+  ok('a radius dimension on a free circle is not determined', isDimensionDetermined(S.state, df) === false);
 }
 
 // 3. equal(circle, arc): the circle's radius and the arc's centre-rim distance

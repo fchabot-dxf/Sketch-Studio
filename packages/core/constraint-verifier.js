@@ -278,7 +278,9 @@ export function measureResidual(c, joints, shapes) {
             }
             if (!a || !b || !p || !q) return 0;
             const ux = b.x - a.x, uy = b.y - a.y, vx = q.x - p.x, vy = q.y - p.y;
-            if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return 0; // degenerate line: angle undefined
+            // A zero-length line has NO angle: the solver row (|u||v| sin(theta - t)) is 0 there, so a solve may collapse a line and look
+            // satisfied. That is not an angle at all: report the largest angular error so such a solve never counts as converged.
+            if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return Math.PI / 2;
             const theta = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
             let d = theta - (Number(c.value) || 0) * Math.PI / 180;
             while (d <= -Math.PI) d += 2 * Math.PI;

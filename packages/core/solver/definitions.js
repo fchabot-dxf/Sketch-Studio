@@ -119,7 +119,7 @@ export const Definitions = {
       // OPT-IN `mutual`: the point AND both line endpoints take part (full derivative of r = (w x u)/|u|).
       // Used by a fillet's virtual-sharp joint V, which must FOLLOW its two trimmed lines when the radius
       // is edited. Without the flag the legacy point-only form below is byte-identical.
-      if (params.mutual) {
+      if (params.mutual || params.fullDerivative) {
         const r = (wx * uy - wy * ux) / denom;
         const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
         outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
@@ -243,6 +243,16 @@ export const Definitions = {
         // ∂error/∂Cx = -uy/denom ; ∂error/∂Cy = ux/denom
         outRows[r][ci*2 + 0] = -uy / denom;
         outRows[r][ci*2 + 1] = ux / denom;
+        if (params.fullDerivative) {
+          // ANALYSIS build only (engine _assemble opts.analysis): the full derivative of r = (u x w)/|u|, so the baseline's own
+          // freedom is not hidden. The solver step keeps the one-sided row above.
+          const cx = positions[ci*2], cy = positions[ci*2+1];
+          const wx = cx - ax, wy = cy - ay;
+          const rr = (ux * wy - uy * wx) / denom;
+          const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
+          outRows[r][ji[0]*2 + 0] = ((-wy + uy) - rr * dd(-1, 0)) / denom; outRows[r][ji[0]*2 + 1] = ((-ux + wx) - rr * dd(0, -1)) / denom;
+          outRows[r][ji[1]*2 + 0] = ((wy) - rr * dd(1, 0)) / denom;        outRows[r][ji[1]*2 + 1] = ((-wx) - rr * dd(0, 1)) / denom;
+        }
       }
     }
   },

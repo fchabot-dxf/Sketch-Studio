@@ -169,6 +169,13 @@ export class ConstraintManager {
             this.alignParallelOrientation(state, normalized.shapes);
         }
 
+        // ANGLE: the solver's angle is the SIGNED counter-clockwise angle from line 1 to line 2, while a dimension measures the
+        // unsigned interior angle. Store the pair in the order whose signed angle is the measured one, so the stored value is
+        // satisfiable at the measured value (a clockwise pair is otherwise unsatisfiable and collapses a line).
+        if (type === CONSTRAINT_TYPES.ANGLE && normalized.shapes && normalized.shapes.length === 2) {
+            this.orderAnglePairCCW(state, normalized.shapes);
+        }
+
         // COLLINEAR is REFERENCE-based: the solver anchors the FIRST shape (its endpoints are the baseline;
         // only the other line's points are moved onto it). So order matters. If one line is axis-aligned
         // (already H/V-constrained) and the other isn't, anchor the established one (make it first) — a bare
@@ -1079,6 +1086,18 @@ export class ConstraintManager {
         } catch (e) {
             dbg.warn('constraints', '[ConstraintManager] lockTangentBranch error:', e);
         }
+    }
+
+    // Reorder `shapeIds` in place so the signed angle from line 1 to line 2 is counter-clockwise (cross >= 0).
+    static orderAnglePairCCW(state, shapeIds) {
+        const s1 = state.shapes.find(s => s.id === shapeIds[0]);
+        const s2 = state.shapes.find(s => s.id === shapeIds[1]);
+        if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line') return;
+        const a = state.joints.get(s1.joints[0]), b = state.joints.get(s1.joints[1]);
+        const c = state.joints.get(s2.joints[0]), d = state.joints.get(s2.joints[1]);
+        if (!a || !b || !c || !d) return;
+        const cross = (b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x);
+        if (cross < 0) { const t = shapeIds[0]; shapeIds[0] = shapeIds[1]; shapeIds[1] = t; }
     }
 
     static alignParallelOrientation(state, shapeIds) {

@@ -1,5 +1,6 @@
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getCoincidentJoints } from './joints.js';
+import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
 import { NewtonSolver } from './solver/engine.js';
 
 // The nullspace only changes when the geometry, constraints or joint positions change, so the last result is
@@ -34,6 +35,8 @@ function getHVBetweenJoints(j1, j2, constraints) {
 }
 
 export function analyzeConstraintStatus({ joints, shapes, constraints }) {
+    // a sketch with a constraint on an axis resolves it in the scene (task 539); any other sketch is analysed exactly as before
+    if ((constraints || []).some(constraintReferencesAxis)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes || []); }
     // 1. Data Structures
     const jointDOFs = new Map(); // Default 2
     const processingQueue = [];

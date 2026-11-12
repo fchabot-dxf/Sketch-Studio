@@ -1,8 +1,11 @@
 import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
+import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
 
 export function measureResidual(c, joints, shapes) {
     if (!c) return 0;
+    // a constraint that names an axis resolves it in the scene (task 539); every other constraint reads the containers as given
+    if (constraintReferencesAxis(c)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes); }
 
     switch (c.type) {
         case CONSTRAINT_TYPES.COINCIDENT: {

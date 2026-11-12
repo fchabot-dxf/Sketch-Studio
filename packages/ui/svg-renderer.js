@@ -13,6 +13,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
+import { angleDimensionSector, angleLabelAngle } from '#ui/angle-dimension.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
@@ -55,6 +56,8 @@ export function formatConstraintValue(c, options = {}) {
   return numStr;
 }
 
+
+export { angleDimensionSector };
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
@@ -1701,26 +1704,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
           const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
           
-          // Determine sector based on mouse position
+          // The sector under the cursor: the label's spot at creation decides what the dimension measures (angle-dimension.js)
           const labelAngle = Math.atan2(mp.y - int.y, mp.x - int.x);
-          const rays = [a1, a1 + Math.PI, a2, a2 + Math.PI].map(a => {
-             let ang = a % (Math.PI * 2);
-             if (ang < 0) ang += Math.PI * 2;
-             return ang;
-          });
-          let lAng = labelAngle % (Math.PI * 2);
-          if (lAng < 0) lAng += Math.PI * 2;
-          
-          rays.sort((a, b) => a - b);
-          let startAngle = rays[rays.length - 1] - Math.PI * 2;
-          let endAngle = rays[0];
-          for (let i = 0; i < rays.length - 1; i++) {
-              if (lAng >= rays[i] && lAng <= rays[i+1]) {
-                  startAngle = rays[i];
-                  endAngle = rays[i+1];
-                  break;
-              }
-          }
+          const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, labelAngle, null);
           
           const sx = int.x + Math.cos(startAngle) * radius;
           const sy = int.y + Math.sin(startAngle) * radius;
@@ -2584,39 +2570,10 @@ switch(c.type){
             const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
             const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
             
-            // Determine which sector the label is in (glyphPos or default)
-            // Use glyphPos to determine sector, but compute actual label position on the arc
-            let sectorAngle;
-            if (c.glyphPos) {
-                sectorAngle = Math.atan2(c.glyphPos.y - int.y, c.glyphPos.x - int.x);
-            } else if (c.__pos) {
-                sectorAngle = Math.atan2(c.__pos.y - int.y, c.__pos.x - int.x);
-            } else {
-                sectorAngle = (a1 + a2) / 2;
-            }
-            
-            // Normalize sectorAngle to 0-2PI
-            let sAng = sectorAngle % (Math.PI * 2);
-            if (sAng < 0) sAng += Math.PI * 2;
-            
-            // We have 4 rays from intersection: a1, a1+PI, a2, a2+PI.
-            const rays = [a1, a1 + Math.PI, a2, a2 + Math.PI].map(a => {
-                let ang = a % (Math.PI * 2);
-                if (ang < 0) ang += Math.PI * 2;
-                return ang;
-            });
-            
-            // Sort rays and find the sector containing the label
-            rays.sort((a, b) => a - b);
-            let startAngle = rays[rays.length - 1] - Math.PI * 2;
-            let endAngle = rays[0];
-            for (let i = 0; i < rays.length - 1; i++) {
-                if (sAng >= rays[i] && sAng <= rays[i+1]) {
-                    startAngle = rays[i];
-                    endAngle = rays[i+1];
-                    break;
-                }
-            }
+            // Where the label sits picks which of the arcs that span the value
+            const sectorAngle = angleLabelAngle(c, int, a1, a2);
+            const drivingValue = (!(c.isDriven || c.driven) && typeof c.value === 'number') ? c.value : null;
+            const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, sectorAngle, drivingValue);
             
             // Compute label position: bisector of the sector, at arc radius
             const bisect = (startAngle + endAngle) / 2;

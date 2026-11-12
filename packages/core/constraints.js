@@ -142,6 +142,8 @@ function withDimensionState(obj, params) {
     // TASK 535: the dimension's NAME (d1, d2, ... or the user's) and its FORMULA (only when one was typed) travel here, once, for every mode
     if (typeof params.name === 'string' && params.name) obj.name = params.name;
     if (typeof params.expression === 'string' && params.expression) obj.expression = params.expression;
+    // TASK 543: an ANGLE dimension's sector: absent = the value is the pair's CCW angle, true = its supplement (definitions.js angle row)
+    if (params.supplement === true) obj.supplement = true;
     return obj;
 }
 

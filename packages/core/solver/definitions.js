@@ -33,6 +33,8 @@ const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
   }
 };
 
+const angleSign = (params) => (params.supplement === true ? -1 : 1);
+
 export const Definitions = {
   // Distance constraint:
   //   joint-pair  (joints=[a,b], value):                  |a−b| − value
@@ -535,6 +537,8 @@ export const Definitions = {
     }
   },
 
+  // TASK 543: params.supplement === true measures the SUPPLEMENTARY sector (180 - theta, theta = the CCW angle u -> v the pair is
+  // stored with): the sign of sin(t) flips, so the row is zero iff theta == -t (mod 180) instead of theta == t. Absent = unchanged.
   // Angle: enforce the angle between two line segments equals params.value (degrees).
   //
   // Lines are direction-symmetric (flipping a line by 180° is geometrically the
@@ -554,7 +558,7 @@ export const Definitions = {
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
       const t = ((Number(params.value) || 0) * Math.PI) / 180;
-      const ct = Math.cos(t), st = Math.sin(t);
+      const ct = Math.cos(t), st = angleSign(params) * Math.sin(t);
       return (ux * vy - uy * vx) * ct - (ux * vx + uy * vy) * st;
     },
     computeJacobian: (params, positions, outRow) => {
@@ -566,7 +570,7 @@ export const Definitions = {
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
       const t = ((Number(params.value) || 0) * Math.PI) / 180;
-      const ct = Math.cos(t), st = Math.sin(t);
+      const ct = Math.cos(t), st = angleSign(params) * Math.sin(t);
       // r = cross·ct − dot·st
       // ∂cross/∂(ux,uy) = (vy, −vx); ∂dot/∂(ux,uy) = (vx, vy)
       // ∂cross/∂(vx,vy) = (−uy, ux); ∂dot/∂(vx,vy) = (ux, uy)

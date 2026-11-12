@@ -1,6 +1,6 @@
-// TASK 514 -- DRAG: the select tool's solver seam, headless. selection-tools.js handleSelectionPointerMove sets `joint.dragTarget`, clamps the step to
-// SolverConfig.MAX_DRAG_STEP and calls engine.solve(SolverConfig.QUICK_SOLVE, { dragTarget }) once per pointer frame; pointer-up deletes the
-// dragTarget (no final full solve). dragJoint() runs exactly those solver calls (the DOM hit-testing and the UI axis mask are not part of the
+// TASK 514 -- DRAG: the select tool's solver seam, headless. selection-tools.js handleSelectionPointerMove sets `joint.dragTarget` and calls
+// engine.solve(SolverConfig.QUICK_SOLVE, { dragTarget }) once per pointer frame; pointer-up deletes the dragTarget (no final full solve). A
+// pointer jump longer than SolverConfig.MAX_DRAG_STEP is walked in sub-moves (task 548); these frames are far shorter, which dragJoint asserts. dragJoint() runs exactly those solver calls (the DOM hit-testing and the UI axis mask are not part of the
 // solver: the mask is analyzeConstraintStatus, i.e. the panel DOF, which the I2 property and the drawings table already check).
 import * as L from '../audit/lib.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -9,9 +9,8 @@ import { buildDrawing } from './prop-lib.js';
 export function dragJoint(S, id, dx, dy, frames = 5) {
   const j = S.state.joints.get(id), start = { x: j.x, y: j.y };
   for (let f = 1; f <= frames; f++) {
-    let tx = start.x + dx * f / frames, ty = start.y + dy * f / frames;
-    const sx = tx - j.x, sy = ty - j.y, step = Math.hypot(sx, sy), max = SolverConfig.MAX_DRAG_STEP;
-    if (max > 0 && step > max) { tx = j.x + sx * max / step; ty = j.y + sy * max / step; }
+    const tx = start.x + dx * f / frames, ty = start.y + dy * f / frames, max = SolverConfig.MAX_DRAG_STEP;
+    if (max > 0 && Math.hypot(dx, dy) / frames > max) throw new Error(`dragJoint: a frame of ${Math.hypot(dx, dy) / frames} is longer than MAX_DRAG_STEP ${max}: the app walks it in sub-moves (selection-tools.js), this seam does not`);
     j.dragTarget = { x: tx, y: ty };
     S.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: { jointId: id, x: tx, y: ty, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
   }

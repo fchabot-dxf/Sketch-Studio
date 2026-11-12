@@ -13507,3 +13507,12 @@ longer pre-placed; (6) when neither operand can move alone the solve starts from
 - New files: tests/fusion-dim-edit.test.js, tests/harness/fusion-oracle/dim-edit.js, scripts/fusion-oracle/{run-dim-edit.py,dim-edit-jobs.mjs,dim-edit-cli.mjs,dim-edit-known.mjs}, two fixtures. No existing fixture, KNOWN list or doc section edited.
 - Fusion hygiene: all sketches CLAUDE_TEST_*, deleted; the scratch document closed without saving; the two pre-existing Untitled documents untouched; Fusion not launched or killed.
 - Follow-up (locked lines): tests added for BOTH lines locked and ONE line locked, then the corner filleted. Accepted; nullity unchanged (both 0 -> 0, one 1 -> 1, same free joints/directions); far ends still fixed in place; directions unchanged after a jitter re-solve; the new tangent-end joints are not free. selectionLockState on a trimmed line afterwards = {has:true, locked:false} (its tangent end joint is not fixed). Reported, not changed. Gate after merging origin/main: files=250 pass=250 fail=0, SMOKE 12/12.
+- Round 2 (advisor): merged origin/main ad0e122 (task 528, dimension-edit oracle, 864 runs). commitDimensionEdit now places the giving
+  operand at EVERY value step (the stepping is kept) instead of skipping the steps once placed: a single jump left angle edits to 179 degrees
+  and to a negative value short of their value (58 runs). tests/fusion-dim-edit.test.js: 381 same on main -> 594 (place once) -> 644 same (place
+  per step), 220 differ (.evidence/525/dim-edit-compare-final.txt). STOPPED before regenerating fusion-dim-edit-known.json: 30 runs that agreed
+  on main now differ: 20 runs where Fusion moves the same operand but does NOT reach the value and ours does (dim-aligned LL 3,5 / LP 7,0 /
+  RL 0,7, dim-vertical RL 0,7, dim-point-line PL 0,7; x2, x0.5, +1%, x20), and 10 runs dim-horizontal / dim-vertical LP 0,4 where Fusion moves
+  the picked line end alone and ours translates the whole line. Moving the FIRST pick's point alone for H/V dimensions fixed those 10 runs (and
+  the 315 / graded H/V dim cells: 287 -> 299, 1996 -> 2011) but re-opened coverage-properties N-F6 (a tangent circle flips sides on a horizontal
+  dimension edit), so it was not kept. Graded / 315 / drawings unchanged by round 2: 1996 / 287 / 829.

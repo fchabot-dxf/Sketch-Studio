@@ -22,6 +22,7 @@
 
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
+import { basePer } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -43,6 +44,25 @@ const RECT_ATTRS = [['id', 'infinite-grid'], ['x', '-50000'], ['y', '-50000'], [
 export function gridRectMarkup(mode) {
   const attrs = RECT_ATTRS.map(([k, v]) => `${k}="${v}"`).join(' ');
   return `<rect ${attrs}${normalizeGridMode(mode) === 'off' ? ' display="none"' : ''}/>`;
+}
+
+// The grid's base (minor) and major spacing, as DATA, in the file's own unit. The level-of-detail ratio is major/base
+// (gridLevel), so each row also fixes how the grid coarsens when zoomed out. A unit with NO row (mm, cm) uses the
+// GRID_SIZE / GRID_MAJOR_STEP settings (world units = mm: today's 2 / 10, still tunable in the Style panel), so the mm
+// grid is exactly what it always was. A unit added later needs only a row here.
+export const GRID_SPACING_BY_UNIT = {
+  in: { base: 0.1, major: 1 },
+};
+
+/**
+ * THE one grid spacing, in WORLD units (mm), for a document unit: { GRID_SIZE, GRID_MAJOR_STEP }. PURE.
+ * The grid drawing (svg-renderer.js) and the grid snap (input-manager.js) both read it: no second copy of the spacing.
+ */
+export function gridSpacing(docUnit, { GRID_SIZE, GRID_MAJOR_STEP }) {
+  const row = GRID_SPACING_BY_UNIT[docUnit];
+  if (!row) return { GRID_SIZE, GRID_MAJOR_STEP };
+  const k = basePer(docUnit);
+  return { GRID_SIZE: row.base * k, GRID_MAJOR_STEP: row.major * k };
 }
 
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */

@@ -15,6 +15,9 @@ export const BASE = 'mm'; // 1 world unit = 1 mm
 // mm per 1 of each unit
 const TO_MM = { mm: 1, cm: 10, in: 25.4 };
 
+// world units (mm) in 1 of a document unit (1 for an unknown unit): the ONE conversion factor, for callers that need a length in BASE
+export const basePer = (docUnit) => TO_MM[docUnit] || 1;
+
 // the valid document units (also the accepted input suffixes)
 export const UNITS = ['mm', 'cm', 'in'];
 

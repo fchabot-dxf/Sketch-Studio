@@ -4,7 +4,7 @@
 // Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM. (The grid is no longer one of
 // them: it is created inside the canvas svg by #ui/canvas-grid.js, shared by SketchStudio and any mountSketch host.)
 import { dbg } from '#core/debug.js';
-import { updateGridFromSettings } from '#ui/canvas-grid.js';
+import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
@@ -160,8 +160,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
   const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
-  const GRID_SIZE = getNum('GRID_SIZE', 2);
-  const GRID_MAJOR_STEP = getNum('GRID_MAJOR_STEP', 10);
+  const { GRID_SIZE, GRID_MAJOR_STEP } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', 2), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', 10) });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';

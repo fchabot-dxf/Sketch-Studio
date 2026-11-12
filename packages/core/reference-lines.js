@@ -25,6 +25,7 @@ export const axisOfShapeId = (id) => (SHAPE_BY_ID.get(id) || {}).axis || null;
 // A constraint that names an axis (shape / shapes / line / circle fields, or a dimension's shapes).
 export function constraintReferencesAxis(c) {
   if (!c) return false;
+  if (Array.isArray(c.joints) && c.joints.some(isReferenceJointId)) return true;
   if (isReferenceShapeId(c.shape) || isReferenceShapeId(c.line) || isReferenceShapeId(c.circle)) return true;
   return Array.isArray(c.shapes) && c.shapes.some(isReferenceShapeId);
 }
@@ -34,8 +35,12 @@ export function constraintReferencesAxis(c) {
 export const REFERENCE_PICK_TOOLS = Object.freeze([
   TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
-// (DIMENSION joins this list when the dimension tool resolves an axis: task 539 follow-up. Until then it would take an axis click as a dimension on a one-unit line.)
-export const referenceLinesPickable = (state) => !!state && REFERENCE_PICK_TOOLS.includes(state.currentTool);
+// (DIMENSION is not in this list: see dimensionAsksSecondTarget.)
+// The DIMENSION tool asks for an axis only for its SECOND pick, after a real first pick (a pending joint: state.active.mode 'dim'; or a
+// line's length dimension being placed: state.placingConstraint), so a first dimension click near an axis still picks real geometry.
+const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION
+  && !!((state.active && state.active.mode === TOOL_MODES.DIMENSION) || (state.placingConstraint && state.placingConstraint.__placing));
+export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool) || dimensionAsksSecondTarget(state));
 // The shapes a target pick may hit now: the real ones, then (only while pickable) the two axes LAST, so real geometry wins a tie.
 export function pickableShapes(state) {
   return referenceLinesPickable(state) ? [...state.shapes, ...REFERENCE_SHAPES] : state.shapes;
@@ -88,4 +93,11 @@ export function findShapeById(shapes, id) {
 export function referenceEnds(shape) {
   const a = shape && AXIS_SNAP_TARGETS[shape.axis];
   return a ? [{ x: 0, y: 0 }, { x: a.end.x, y: a.end.y }] : null;
+}
+
+// A view of a sketch state whose joints / shapes are the SCENE (real + axes); every other property reads and writes the real state. Handed
+// to the code that VALIDATES / places a new constraint that names an axis (ConstraintManager.createConstraint), never to anything that iterates geometry.
+export function referenceView(state) {
+  const joints = sceneJoints(state.joints), shapes = sceneShapes(state.shapes);
+  return new Proxy(state, { get: (t, k) => (k === 'joints' ? joints : k === 'shapes' ? shapes : t[k]) });
 }

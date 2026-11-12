@@ -118,6 +118,30 @@ await (async () => {
       assert(d.constraints.some((c) => JSON.stringify(c).includes('ref_axis')), name + ': stored against an axis: ' + JSON.stringify(d.constraints));
       console.log(name.padEnd(18), 'glyphs', g, 'constraints', d.constraints.map((c) => c.type).join(','));
     }
+    // dimension tool: the second pick may be an axis (point-line distance, angle); a first pick near an axis still picks real geometry
+    const dimScenarios = {
+      'dimension point-X': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 200, o.y - 150); await click(o.x + 250, o.y + 3); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_x') },
+      'dimension point-Y': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 380, o.y - 60); await click(o.x + 3, o.y - 300); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_y') },
+      'dimension angle-X': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 290, o.y - 105); await click(o.x + 250, o.y + 3); }, want: (c) => c.type === 'angle' && (c.shapes || []).includes('ref_axis_x') },
+    };
+    for (const [name, sc] of Object.entries(dimScenarios)) {
+      const o = await fresh();
+      await sc.run(o);
+      await click(o.x + 330, o.y - 30); await key('Enter', 'Enter', 13); await sleep(300); // drop the label, accept the value
+      const label = await evalJs(`document.querySelectorAll('.dim-label').length`);
+      assert(label >= 1, name + ': the dimension label is drawn; got ' + label);
+      await shot('dim-' + name.replace(' ', '-') + '.png', { x: o.x - 60, y: o.y - 330, w: 520, h: 400 });
+      await esc(); await tool('select'); await sleep(300); await waitSaved(); const d = await stored();
+      assert(d.constraints.some(sc.want), name + ': stored: ' + JSON.stringify(d.constraints));
+      assert(d.shapes.length === 1, name + ': the axis is not a shape');
+      console.log(name.padEnd(20), 'labels', label, d.constraints.map((c) => c.type).join(','));
+    }
+    { // a FIRST dimension click on an axis picks nothing (no axis dimension is started)
+      const o = await fresh(); await drawLine(o); await tool('dim'); await click(o.x + 250, o.y + 3); await sleep(200);
+      assert((await litCount()) === 0, 'dimension: the first click near an axis does not light or pick it');
+      await esc(); await tool('select'); await sleep(300); await waitSaved(); const d = await stored();
+      assert(!d.constraints.some((c) => JSON.stringify(c).includes('ref_')), 'no axis dimension from a first click');
+    }
     console.log('reference-lines-glyph-live: ok');
     ws.close();
   } finally {

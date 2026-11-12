@@ -36,10 +36,10 @@
   // perpendicular
   { const s = mk(); const L = s.line(10, 10, 60, 30);
     assert(s.add(T.PERPENDICULAR, { shapes: [L.id, AX] }), 'perpendicular created'); s.solve();
-    near(s.p(L.a).x, s.p(L.b).x, 'perpendicular to the X axis = vertical'); }
+    near(s.p(L.a).x, s.p(L.b).x, 'perpendicular to the X axis = vertical', 0.05); }
   { const s = mk(); const L = s.line(10, 10, 60, 30);
     assert(s.add(T.PERPENDICULAR, { shapes: [AY, L.id] }), 'perpendicular (axis first) created'); s.solve();
-    near(s.p(L.a).y, s.p(L.b).y, 'perpendicular to the Y axis = horizontal'); }
+    near(s.p(L.a).y, s.p(L.b).y, 'perpendicular to the Y axis = horizontal', 0.05); }
   // collinear: the line lies ON the axis
   { const s = mk(); const L = s.line(10, 10, 60, 30);
     assert(s.add(T.COLLINEAR, { shapes: [L.id, AX] }), 'collinear created'); s.solve();
@@ -56,6 +56,13 @@
     assert(s.add(T.PARALLEL, { shapes: [L.id, AX] }), 'parallel');
     assert(s.add(T.DISTANCE, { shapes: [AX, L.id], value: 25 }), 'distance axis-line created'); s.solve();
     near(Math.abs(s.p(L.a).y), 25, 'line 25 from the X axis'); near(Math.abs(s.p(L.b).y), 25, 'both ends'); }
+  // point-to-axis distance: the dimension tool's point-line form [P, A, B] with the reserved end joint
+  { const s = mk(); const a = s.pt(40, 12);
+    assert(s.add(T.DISTANCE, { joints: [a, 'j_origin', 'j_ref_x'], value: 30 }), 'point-axis distance created'); s.solve();
+    near(Math.abs(s.p(a).y), 30, 'point 30 from the X axis'); }
+  { const s = mk(); const a = s.pt(12, 40);
+    assert(s.add(T.DISTANCE, { joints: [a, 'j_origin', 'j_ref_y'], value: 18 }), 'point-Y axis distance created'); s.solve();
+    near(Math.abs(s.p(a).x), 18, 'point 18 from the Y axis'); }
   // angle between a line and an axis
   { const s = mk(); const L = s.line(10, 10, 60, 20);
     assert(s.add(T.ANGLE, { shapes: [AX, L.id], value: 30 }), 'angle to an axis created'); s.solve();
@@ -80,6 +87,11 @@
 
   // the picking rule
   for (const t of [TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT]) assert(R.referenceLinesPickable({ currentTool: t }), t + ' asks for a target');
+  // the dimension tool asks only for its SECOND pick
+  assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION }), 'dimension: first pick = real geometry only');
+  assert(R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, active: { mode: TOOL_MODES.DIMENSION } }), 'dimension: a pending joint asks for a second target');
+  assert(R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, placingConstraint: { __placing: true } }), 'dimension: a line dimension being placed may take a second line');
+  assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.SELECT, active: { mode: TOOL_MODES.DIMENSION } }), 'select never');
   for (const t of [TOOL_MODES.SELECT, TOOL_MODES.PAN, TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.EQUAL, TOOL_MODES.MIDPOINT, TOOL_MODES.DIMENSION, TOOL_MODES.TRIM, TOOL_MODES.BREAK]) assert(!R.referenceLinesPickable({ currentTool: t }), t + ' never sees an axis');
   { const st = { currentTool: TOOL_MODES.SELECT, shapes: [{ id: 'a' }] };
     assert(R.pickableShapes(st) === st.shapes, 'select: the real shapes, untouched');

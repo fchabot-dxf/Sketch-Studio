@@ -1,4 +1,5 @@
 // Unified constraint creation service
+import { constraintReferencesAxis, referenceView } from './reference-lines.js';
 import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
@@ -118,6 +119,8 @@ export class ConstraintManager {
         });
     }
     static createConstraint(state, type, params, options = {}) {
+        // a constraint naming an axis is validated and placed against the scene (real + the two built-in reference lines, task 539); any other is untouched
+        if (constraintReferencesAxis(params)) state = referenceView(state);
         const opts = {
             autoSolve: true,
             solveIterations: 500,

@@ -9,11 +9,12 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '#ui/input-handlers/selection-tools.js';
+import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 
 // the ONE drag path of every cell (declared as data in the fixture header)
 export const PATH = { shape: 'straight line from the grab point to the target', steps: 20, ms: 600, settleMs: 120, vectorFraction: 0.3 };
-// the app's render loop (apps/sketchstudio/main.js loop(): engine.solve(SolverConfig.ITERATIONS || 500) every animation frame) runs between pointer events; it is what moves a
-// BODY drag (the move handler's own solve passes the shape id as the spring joint; the frame solve auto-detects the first joint carrying joint.dragTarget). Frames per pointer move: 1
+// the app's render loop (apps/sketchstudio/main.js loop(): engine.solve(SolverConfig.ITERATIONS || 500) every animation frame) runs between pointer events. A BODY drag
+// (task 538) is solved by the move handler's own solve and by every frame solve through the one shape carrying shape.dragTarget (the grabbed point). Frames per pointer move: 1
 export const FRAMES_PER_MOVE = Number(process.env.DRAG_FRAMES || 1);
 export const TOL_CM = 0.005;      // a point / radius that moved less than this "stayed" (0.5 px at 100 px/cm); ours is mm: x10
 const R = (v) => Math.round(v * 10000) / 10000;
@@ -118,6 +119,28 @@ function originCells() {
   ];
 }
 
+// TASK 540 (recorded in Fusion 2706.1.17, 2026-11-12, the same real-mouse path): an ARC grabbed by its BODY, free / centre fixed / both
+// ends fixed, at mid-sweep (angle 90, target 'body') and 10 % of the sweep from the end (angle 146, target 'bodynear'), pulled out / in /
+// along the tangent (counter-clockwise) / diagonal (out + tangent); and a free circle by its rim pulled IN (the out / tangent / diagonal
+// pulls are the existing circle.free.rim.along / across / diag cells). Vector length = vectorFraction of the shape size (2 r).
+function bodyCells540() {
+  const out = [];
+  const c = [1.2, 0.5], r = 0.9, a0 = 20 * Math.PI / 180, a1 = 160 * Math.PI / 180, d = PATH.vectorFraction * 2 * r;
+  const s = [R(c[0] + r * Math.cos(a0)), R(c[1] + r * Math.sin(a0))], e = [R(c[0] + r * Math.cos(a1)), R(c[1] + r * Math.sin(a1))];
+  const grabs = { body: 90, bodynear: 146 };
+  const plan = [['free', 'body', ['out', 'in', 'tang', 'diag']], ['fixc', 'body', ['out', 'in', 'tang', 'diag']], ['fixends', 'body', ['out', 'in', 'tang', 'diag']], ['free', 'bodynear', ['out', 'tang']]];
+  for (const [hold, target, vecs] of plan) {
+    const cons = hold === 'fixc' ? [{ t: 'fix', pt: ['A', 0] }] : hold === 'fixends' ? [{ t: 'fix', pt: ['A', 1] }, { t: 'fix', pt: ['A', 2] }] : [];
+    const t = grabs[target] * Math.PI / 180, u = [Math.cos(t), Math.sin(t)], w = [-Math.sin(t), Math.cos(t)];
+    const from = [R(c[0] + r * u[0]), R(c[1] + r * u[1])];
+    const V = { out: u, in: [-u[0], -u[1]], tang: w, diag: [(u[0] + w[0]) / Math.SQRT2, (u[1] + w[1]) / Math.SQRT2] };
+    for (const vn of vecs) out.push({ id: `arc.${hold}.${target}.${vn}`, kind: 'arc', hold, target, vec: vn, ents: [{ n: 'A', k: 'arc', c, s, e }], cons, grab: { body: 'A' }, from, to: [R(from[0] + V[vn][0] * d), R(from[1] + V[vn][1] * d)] });
+  }
+  const cc = [1.2, 1.1], cr = 0.8, cd = PATH.vectorFraction * 2 * cr;
+  out.push({ id: 'circle.free.rim.in', kind: 'circle', hold: 'free', target: 'rim', vec: 'in', ents: [{ n: 'C', k: 'circle', c: cc, r: cr }], cons: [], grab: { body: 'C' }, from: [R(cc[0] + cr), cc[1]], to: [R(cc[0] + cr - cd), cc[1]] });
+  return out;
+}
+
 // vectors: along / across the shape's axis, diagonal; one size = vectorFraction of the shape size
 function withVectors(cell) {
   const out = [];
@@ -140,7 +163,7 @@ export function buildCells() {
     if (c.origin && !((c.kind === 'line' && v.vec === 'along') || (c.kind === 'rect' && v.vec === 'diag'))) continue;
     cells.push(v);
   }
-  return cells;
+  return [...cells, ...bodyCells540()];
 }
 
 // ------------------------------------------------------------------------------------------------ the record (shared by Fusion and ours)
@@ -232,6 +255,11 @@ export function runOurs(cell) {
   muted(() => S.engine.solve(L.ITER));
   const snap = () => { const out = {}; for (const [n, e] of Object.entries(built)) { const d = { pts: e.joints.map(pos) }; if (e.k === 'circle') d.r = L.shape(S, e.shape).radius; if (e.k === 'arc') d.r = dist(pos(e.joints[0]), pos(e.joints[1])); out[n] = d; } return out; };
   const before = snap(), nC0 = st.constraints.length;
+  // task 538 guards: no line / arc / circle may collapse (constraint-verifier.js findCollapsedShape, COLLAPSE_RATIO) during or after the
+  // drag; the nullity before the drag (0 = fully constrained: nothing may move); every constraint's residual after it
+  const sizes0 = measureShapeSizes(st), nullity0 = S.engine.jointFreedom().nullity;
+  let collapsed = null;
+  const collapseCheck = (when) => { const c = findCollapsedShape(st, sizes0); if (c && !collapsed) collapsed = `${c.id} (${c.type}) ${when}`; };
   // the real pointer sequence of a mouse drag: down on the entity, 20 moves along the straight path, up
   st.currentTool = 'select'; st.selectedJoints = new Set(); st.selectedShapes = new Set(); st.selectedConstraints = new Set();
   const A = X(cell.from), B = X(cell.to);
@@ -241,14 +269,15 @@ export function runOurs(cell) {
     if (cell.grab.pt) { const id = J(cell.grab.pt); started = handleSelectionPointerDown(ev(A), SVG, st, { id, j: st.joints.get(id) }, null, null); }
     else { const sh = L.shape(S, built[cell.grab.body].shape); started = handleSelectionPointerDown(ev(A), SVG, st, null, { shape: sh, pt: { x: A[0], y: A[1] } }, null); }
     const frame = () => { for (let k = 0; k < FRAMES_PER_MOVE; k++) S.engine.solve(SolverConfig.ITERATIONS || 500); };
-    for (let i = 1; i <= PATH.steps; i++) { handleSelectionPointerMove(ev([A[0] + (B[0] - A[0]) * i / PATH.steps, A[1] + (B[1] - A[1]) * i / PATH.steps]), SVG, st); frame(); }
-    handleSelectionPointerUp(ev(B), SVG, st); frame();
+    for (let i = 1; i <= PATH.steps; i++) { handleSelectionPointerMove(ev([A[0] + (B[0] - A[0]) * i / PATH.steps, A[1] + (B[1] - A[1]) * i / PATH.steps]), SVG, st); frame(); collapseCheck('at move ' + i); }
+    handleSelectionPointerUp(ev(B), SVG, st); frame(); collapseCheck('after the release');
   });
   const after = snap();
   // the origin cells: the origin joint is part of the record only through the 'origin' constraint (compared against 0,0 in mm)
   const toCm = (s) => { const out = {}; for (const [n, d] of Object.entries(s)) out[n] = { pts: d.pts.map(p => [(p[0] - o[0]) / 10, (p[1] - o[1]) / 10]), ...(d.r != null ? { r: d.r / 10 } : {}) }; return out; };
   const rec = record(cell, toCm(before), toCm(after), 1);
-  return { ...rec, started: !!started, refusedPrep: refused, addedConstraints: st.constraints.length - nC0, before: toCm(before), after: toCm(after) };
+  const residual = L.residuals(S).max;
+  return { ...rec, started: !!started, refusedPrep: refused, addedConstraints: st.constraints.length - nC0, before: toCm(before), after: toCm(after), collapsed, nullity0, residual };
 }
 
 // ------------------------------------------------------------------------------------------------ comparing

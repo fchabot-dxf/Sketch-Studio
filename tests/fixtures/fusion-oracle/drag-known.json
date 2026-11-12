@@ -1,24 +1,4 @@
 {
- "line.free.mid.along": {
-  "class": "line.mid: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.free.mid.across": {
-  "class": "line.mid: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.free.mid.diag": {
-  "class": "line.mid: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.H.mid.along": {
-  "class": "line.mid: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.H.mid.diag": {
-  "class": "line.mid: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
  "line.len.end.across": {
   "class": "line.end: translate -> rotate",
   "reason": "length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it (both ends move, length kept)"
@@ -26,74 +6,6 @@
  "line.len.end.diag": {
   "class": "line.end: translate -> rotate",
   "reason": "length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it (both ends move, length kept)"
- },
- "line.len.mid.across": {
-  "class": "line.mid: translate -> rotate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.len.mid.diag": {
-  "class": "line.mid: translate -> rotate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.fix0.mid.along": {
-  "class": "line.mid: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.fix0.mid.across": {
-  "class": "line.mid: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.fix0.mid.diag": {
-  "class": "line.mid: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.fix0len.mid.across": {
-  "class": "line.mid: rotate -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "line.fix0len.mid.diag": {
-  "class": "line.mid: rotate -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "rect.free.edge.along": {
-  "class": "rect.edge: translate -> stretch",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "rect.free.edge.diag": {
-  "class": "rect.edge: stretch -> stretch (moved set)",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "rect.fix0.edge.along": {
-  "class": "rect.edge: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "rect.fix0.edge.diag": {
-  "class": "rect.edge: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.free.rim.along": {
-  "class": "circle.rim: stretch -> translate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.free.rim.across": {
-  "class": "circle.rim: stretch -> translate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.free.rim.diag": {
-  "class": "circle.rim: stretch -> translate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.fixc.rim.along": {
-  "class": "circle.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.fixc.rim.across": {
-  "class": "circle.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "circle.fixc.rim.diag": {
-  "class": "circle.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
  },
  "arc.free.end.along": {
   "class": "arc.end: stretch -> rotate",
@@ -171,18 +83,6 @@
   "class": "tangent.lineend: stretch -> stretch (moved set)",
   "reason": "line end of a tangent line + circle: ours moves / resizes the circle in a different set of cells than Fusion"
  },
- "tangent.free.rim.along": {
-  "class": "tangent.rim: stretch -> rotate",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "tangent.free.rim.across": {
-  "class": "tangent.rim: stretch -> stretch (moved set)",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "tangent.free.rim.diag": {
-  "class": "tangent.rim: stretch -> stretch (moved set)",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
  "tangent.fixc.lineend.across": {
   "class": "tangent.lineend: stretch -> stretch (moved set)",
   "reason": "line end of a tangent line + circle: ours moves / resizes the circle in a different set of cells than Fusion"
@@ -190,17 +90,5 @@
  "tangent.fixc.lineend.diag": {
   "class": "tangent.lineend: stretch -> stretch (moved set)",
   "reason": "line end of a tangent line + circle: ours moves / resizes the circle in a different set of cells than Fusion"
- },
- "tangent.fixc.rim.along": {
-  "class": "tangent.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "tangent.fixc.rim.across": {
-  "class": "tangent.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
- },
- "tangent.fixc.rim.diag": {
-  "class": "tangent.rim: stretch -> none",
-  "reason": "grabbing a shape BODY: the move handler own solver spring is on the SHAPE id, so only the render-loop solve moves it, and that picks the FIRST free joint carrying dragTarget: ours stretches the shape / moves one end (circle: translates), nothing in some hold states; Fusion translates or resizes the whole body (checked in the real app: tests/fusion-drag-live.test.js)"
  }
 }

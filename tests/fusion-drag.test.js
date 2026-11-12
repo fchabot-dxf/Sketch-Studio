@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildCells, compareCell, PATH } from './harness/fusion-oracle/drag-cells.js';
+import { buildCells, compareCell, runOurs, PATH } from './harness/fusion-oracle/drag-cells.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const load = (f) => JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures/fusion-oracle', f), 'utf8'));
@@ -32,6 +32,16 @@ for (const cell of cells) {
   else if (KNOWN[cell.id].class !== c.cls) fail(`${cell.id}: KNOWN as "${KNOWN[cell.id].class}" but now "${c.cls}": regenerate drag-known.json`);
   else if (KNOWN[cell.id].reason === 'UNEXPLAINED') fail(`${cell.id}: KNOWN entry has no reason`);
 }
+// task 538 guards over EVERY cell (ours): no line / arc / circle collapses during or after the drag; a fully constrained sketch (nullity 0)
+// does not move; every constraint and dimension holds after the drag.
+let guarded = 0;
+for (const cell of cells) {
+  const o = cache.get(cell.id) || runOurs(cell);
+  if (o.collapsed) fail(`${cell.id}: ${o.collapsed} collapsed (findCollapsedShape)`);
+  if (o.nullity0 === 0 && /M|r/.test(o.moved)) fail(`${cell.id}: fully constrained (nullity 0) but moved: ${o.moved}`);
+  if (!(o.residual < 1e-6)) fail(`${cell.id}: a constraint is broken after the drag (worst residual ${o.residual})`);
+  guarded++;
+}
 const ids = new Set(cells.map(c => c.id));
 for (const id of Object.keys(KNOWN)) if (!ids.has(id)) fail(`KNOWN entry ${id} has no cell`);
 
@@ -39,4 +49,4 @@ if (failures.length) {
   console.error('fusion-drag FAILED:\n  ' + failures.join('\n  '));
   process.exit(1);
 }
-console.log(`fusion-drag: ${cells.length} cells, ${same} same as Fusion, ${diff} KNOWN differences, ${unstable} unstable in Fusion (two runs differ, not compared) (Fusion ${fx.fusion}, recorded ${fx.date})`);
+console.log(`fusion-drag: ${cells.length} cells, ${guarded} guarded (0 collapses, nothing fully constrained moved, every residual < 1e-6), ${same} same as Fusion, ${diff} KNOWN differences, ${unstable} unstable in Fusion (two runs differ, not compared) (Fusion ${fx.fusion}, recorded ${fx.date})`);

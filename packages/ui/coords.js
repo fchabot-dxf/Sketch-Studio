@@ -63,9 +63,12 @@ export function worldToScreen(svg, pt) {
 }
 
 /**
- * Get the zoom factor for screen↔world conversion.
+ * World units per screen pixel: the ONE conversion for a threshold given in screen pixels (SNAP.* ...) that is compared with
+ * a world-unit distance. Same basis as screenToWorld / worldToScreen (the rendered rect and the viewBox).
+ * Pixels to world: px * getZoomFactor(svg).
  */
 export function getZoomFactor(svg) {
+    const rect = svg.getBoundingClientRect();
     const vb = svg.viewBox.baseVal;
-    return Math.max(vb.width / svg.clientWidth, vb.height / svg.clientHeight);
+    return Math.max(vb.width / rect.width, vb.height / rect.height);
 }

@@ -8,7 +8,7 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, DRAG_TYPES, DRAG_UNDO_LABELS, DRAG_SHAPE_UNDO_LABELS, SNAP, CONSTRAINT_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
-import { screenToWorld, worldToScreen } from '#ui/coords.js';
+import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
@@ -815,7 +815,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
                 // Check inference relative to start position (allow full geometry-based inference)
                 const primaryId = state.drag && state.drag.id;
                 const draggedType = state.drag && state.drag.type === DRAG_TYPES.JOINT ? 'joint' : 'other';
-                const inf = findInference(initialPos, target, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType });
+                const inf = findInference(initialPos, target, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType, worldPerPx: getZoomFactor(svg), constraints: state.constraints });
                 if (inf) {
                     const infState = { type: inf.type, pos: inf.pos, origin: initialPos, targetId: inf.targetId || null, ref: inf };
                     if (canApplyInference(state, primaryId, infState, { full: false })) {

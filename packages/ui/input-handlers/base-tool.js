@@ -22,7 +22,7 @@ export function checkDragThreshold(e, dragStart, threshold = 3) {
  * @returns {{ startId, startPt, snap }}
  */
 export function beginDrawing(state, hitSnap, worldPt, toolMode, extraProps = {}) {
-    try { state.beginUndoGroup(); } catch (_) { }
+    try { state.beginDrawStep(); } catch (_) { }
     const snap = state.activeSnap || hitSnap;
     const startPt = (snap && snap.isLocked && snap.pt) ? snap.pt : worldPt;
     const startId = state.genJ();

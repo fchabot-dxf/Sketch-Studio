@@ -58,12 +58,11 @@ export function handlePolygonPointerUp(e, svg, state, hitSnap, w) {
 /** Build the polygon from the active centre joint to `endPt` (the first corner). Returns true when the event was handled. */
 export function createPolygon(state, endPt) {
     const center = state.joints.get(state.active && state.active.start);
-    if (!center || !endPt) { try { state.endUndoGroup(); } catch (_) {} state.active = null; return false; }
+    if (!center || !endPt) { state.closeDrawStep(); state.active = null; return false; }
     const radius = Math.hypot(endPt.x - center.x, endPt.y - center.y);
     localState.isDragging = false; localState.dragStartScreen = null;
     if (!(radius > MIN_RADIUS)) {   // a second click on the centre: no polygon, and the centre joint made by the first click goes too
-        state.joints.delete(state.active.start);
-        try { state.endUndoGroup(); } catch (_) {}
+        state.closeDrawStep(); // nothing committed: the centre joint made by the first click goes with the cancelled step
         clearPreview(state);
         state.active = null;
         return true;

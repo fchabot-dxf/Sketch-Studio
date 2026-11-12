@@ -154,6 +154,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
   function selectTool(tool) {
+    state.closeDrawStep(); // TASK 549: picking a tool in the middle of a draw cancels it (nothing committed: no orphan point, no undo step)
     if (typeof onToolClick === 'function') { try { onToolClick(tool); } catch (_) {} } // host owns activation
     else { try { switchToTool(state, tool); } catch (_) {} }                            // default: shared tool-switch
     fire('tool', tool);

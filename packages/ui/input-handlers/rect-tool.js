@@ -137,7 +137,7 @@ export function handleRectPointerDown(e, svg, state, hitSnap, w){
 			return true;
 		}
 	dbg.log('rect-tool', '[rect-tool] pointerDown', { hitSnap, activeSnap: state.activeSnap, w });
-	try{ state.beginUndoGroup(); }catch(_){ }
+	try{ state.beginDrawStep(); }catch(_){ }
 	const snap = state.activeSnap || hitSnap;
 	const startPt = (snap && snap.pt && snap.isLocked) ? snap.pt : w;
 	const startId = state.genJ();

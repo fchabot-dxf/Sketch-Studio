@@ -23,7 +23,7 @@
         shapes: [],
         constraints: [],
         genJ: () => 'j' + (genCounter++),
-        beginUndoGroup: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
         endUndoGroup: () => {},
         saveState: () => {},
         currentTool: TOOL_MODES.LINE,

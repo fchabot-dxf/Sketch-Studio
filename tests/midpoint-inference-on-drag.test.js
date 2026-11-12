@@ -10,7 +10,7 @@
         selectedJoints: new Set(),
         selectedShapes: new Set(),
         selectedConstraints: new Set(),
-        beginUndoGroup: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
         endUndoGroup: () => {},
         saveState: () => {},
         currentTool: 'select'

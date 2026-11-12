@@ -8,7 +8,7 @@
         constraints: [],
         selectedJoints: new Set(),
         selectedShapes: new Set(),
-        beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select'
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select'
     };
 
     // Line A: j1(0,0)-j2(10,0)

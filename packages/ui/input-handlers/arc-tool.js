@@ -84,7 +84,7 @@ export function _test_setArcLockedRadius(v) { arcState.lockedRadius = v; }
 export function handleArcPointerDown(e, svg, state, hitSnap, w) {
   arcLog('pointerDown', { x: e && e.clientX, y: e && e.clientY, arcMode: state && state.arcMode });
   if (state.active && state.active.mode === TOOL_MODES.ARC) return true;
-  try { state.beginUndoGroup(); } catch (_) { }
+  try { state.beginDrawStep(); } catch (_) { }
   const snap = state.activeSnap || hitSnap;
   const pt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
   const pointId = state.genJ();
@@ -273,11 +273,7 @@ export function handleArcKeyDown(e, svg, state) {
 
   if (e.key === 'Escape') {
     if (state.active && state.active.mode === TOOL_MODES.ARC) {
-      try {
-        if (state.active.center) state.joints.delete(state.active.center);
-        if (state.active.start) state.joints.delete(state.active.start);
-        state.endUndoGroup();
-      } catch (_) { }
+      state.closeDrawStep(); // nothing committed: the document goes back as it was (the centre / start points made by the clicks go with it) and no step is kept
       state.active = null;
       resetArcState(state);
       return true;

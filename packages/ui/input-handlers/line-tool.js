@@ -16,6 +16,7 @@ import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } 
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
 import { clearHover } from '#ui/hover-manager.js';
+import SettingsManager from '#core/settings-manager.js';
 import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from '#ui/input-handlers/live-dimension-input.js';
 
 let lineState = { lockedLength: null, lockedAngle: null, isDriven: false };
@@ -24,6 +25,29 @@ const SNAP_DEBUG = false;
 const localState = { isDragging: false, dragStartScreen: null };
 let justCreatedActive = false;
 let lastLineCommitTime = 0;
+// TASK 549 (undo): ONE drawn segment = ONE undo step. The step opens at the segment's FIRST click and closes at its commit. A CHAIN's next
+// segment starts with a floating start joint (+ a coincident) made right after the previous commit; the document as it was just BEFORE
+// those two is kept here and becomes the next step's "before", so Undo removes the segment's start joint, end joint, shape and
+// constraints together and leaves no orphan. LINE_CHAIN_UNDO = 'per-tool-session' keeps ONE step open for the whole chain instead.
+let pendingStepSnapshot = null;
+const chainPerSession = () => SettingsManager.get('LINE_CHAIN_UNDO') === 'per-tool-session';
+// open the step of a chain's next segment (its first click / typed length) unless one is already open
+function ensureSegmentStep(state){
+    if (state.isUndoGroupOpen()) return;
+    state.beginDrawStep(undefined, pendingStepSnapshot || undefined);
+    pendingStepSnapshot = null;
+}
+// the segment is committed: close its step (per-segment) and remember the document BEFORE the floating next-start joint is made
+function endSegmentStep(state){
+    if (chainPerSession()) return;
+    state.endUndoGroup();
+    pendingStepSnapshot = state.captureUndoSnapshot();
+}
+// the draw ended without a (further) segment: remove the floating start joint and settle the step (cancelled = no step, kept = the chain)
+function abortLine(state){
+    deactivateLineTool(state);
+    state.closeDrawStep();
+}
 const LINE_POINTERUP_DEBOUNCE_MS = 500;
 
 function canPreviewLineInference(state, startId, endId, newShapeId, activeInf) {
@@ -128,7 +152,7 @@ export function handleLineKeyDown(e, svg, state) {
     // ergonomic to reach for. deactivateLineTool removes the in-flight start
     // joint and any pending coincident constraint that the polyline auto-added.
     if (e.key === 'Enter') {
-        try { deactivateLineTool(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
+        try { abortLine(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
         return true;
     }
 
@@ -139,6 +163,7 @@ export function resetLineState(state) {
     if(state){ state.continueFrom = null; state.polylineOrigin = null; }
     justCreatedActive = false;
     lastLineCommitTime = 0;
+    pendingStepSnapshot = null;
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
     lineState.isDriven = false;
@@ -153,9 +178,10 @@ export function handleLinePointerDown(e, svg, state, hitSnap, w) {
         activeStart: state.active?.start,
         w 
     });
-    if (state.active && state.active.start) return true;
+    if (state.active && state.active.start) { ensureSegmentStep(state); return true; }
 
     if (state.continueFrom) {
+        ensureSegmentStep(state);
         const prevId = state.continueFrom;
         const prevPt = state.joints.get(prevId) || { x: 0, y: 0 };
         const newStartId = state.genJ();
@@ -173,7 +199,8 @@ export function handleLinePointerDown(e, svg, state, hitSnap, w) {
         justCreatedActive = true;
         return true;
     }
-    try{ state.beginUndoGroup(); }catch(_){ }
+    pendingStepSnapshot = null;
+    state.beginDrawStep();
     const startPt = hitSnap ? hitSnap.pt : w;
 
     if (hitSnap && hitSnap.type === 'joint'){
@@ -350,7 +377,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     const segLen = Math.hypot((endPt.x - startPt.x), (endPt.y - startPt.y));
     if (segLen < 1e-4) {
         state.joints.delete(endId);
-        state.active = null;
+        abortLine(state);
         justCreatedActive = false;
         localState.dragStartScreen = null;
         return true;
@@ -454,7 +481,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         state.previewConstraint = null;
     }
     state.inference = null;
-    try{ state.endUndoGroup(); }catch(_){ }
+    endSegmentStep(state);
 
     try{
         const ep = state.joints.get(endId);
@@ -483,7 +510,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
 export function finalizeLineFromActive(svg, state) {
     dbg.log('line-tool', '[DEBUG LINE] Finalizing line. Locked:', lineState);
     if (!state || !state.active || state.active.mode !== TOOL_MODES.LINE) return false;
-    try{ state.beginUndoGroup(); }catch(_){ }
+    ensureSegmentStep(state);
 
     const endPt = (state.active.preview && state.active.preview.pt) ? state.active.preview.pt : (state.tempMousePos || state.active.startPt || { x: 0, y: 0 });
     let endId = null;
@@ -509,10 +536,9 @@ export function finalizeLineFromActive(svg, state) {
     const segLen = Math.hypot((endPt.x - spt.x), (endPt.y - spt.y));
     if (segLen < 1e-4) {
         if (!nearbyId && endId) state.joints.delete(endId);
-        state.active = null;
+        abortLine(state);
         justCreatedActive = false;
         localState.dragStartScreen = null;
-        try{ state.endUndoGroup(); }catch(_){ }
         return true;
     }
 
@@ -571,6 +597,7 @@ export function finalizeLineFromActive(svg, state) {
     try{ if (state.active && state.active.startSnapTarget && state.active.startSnapTarget.isLocked) applySnapConstraint(state, startId, state.active.startSnapTarget, { excludeJoints: [endId] }); }catch(_){ }
     try{ if (state.active && state.active.preview && state.active.preview.snapTarget && state.active.preview.snapTarget.isLocked) applySnapConstraint(state, endId, state.active.preview.snapTarget, { excludeJoints: [startId] }); }catch(_){ }
 
+    endSegmentStep(state);
     try{
         const ep = state.joints.get(endId);
         const newStart = state.genJ();
@@ -588,7 +615,6 @@ export function finalizeLineFromActive(svg, state) {
         localState.dragStartScreen = null;
     }catch(_){ }
 
-    try{ state.endUndoGroup(); }catch(_){ }
     return true;
 }
 
@@ -596,6 +622,7 @@ export function finalizeLineFromActive(svg, state) {
 export function deactivateLineTool(state) {
     try{
         if(!state) return;
+        pendingStepSnapshot = null;
         if(!state.active || state.active.mode !== TOOL_MODES.LINE){
             state.active = null; state.continueFrom = null; state.polylineOrigin = null; return;
         }

@@ -168,8 +168,9 @@ export function createSketchState(engine, view) {
       this.initStore(); // re-creates the origin joint
     },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
-    saveStateForce: function(label){
-      this.history.push(this._stamp(this._captureSnapshot(), label));
+    // TASK 549: `snapshot` (optional) = a state captured EARLIER with captureUndoSnapshot(), pushed as this step's "before" instead of the live one.
+    saveStateForce: function(label, snapshot){
+      this.history.push(this._stamp(snapshot || this._captureSnapshot(), label));
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       this._notifyHistory();
@@ -190,7 +191,7 @@ export function createSketchState(engine, view) {
       }
       this.saveStateForce(label);
     },
-    beginUndoGroup: function(label){
+    beginUndoGroup: function(label, snapshot){
       if(this._undoGroupActive) {
         this._undoGroupDepth = (this._undoGroupDepth || 1) + 1;
         return;
@@ -198,7 +199,7 @@ export function createSketchState(engine, view) {
       this._undoGroupActive = true;
       this._undoGroupDepth = 1;
       // capture snapshot before group begins so undo will remove entire group
-      this.saveStateForce(label);
+      this.saveStateForce(label, snapshot);
       // record start index and segment list
       this._undoGroupInfo = { startIndex: this.history.length - 1, segmentIndices: [] };
     },
@@ -217,6 +218,33 @@ export function createSketchState(engine, view) {
       this._undoGroupInfo = null;
       this._undoGroupActive = false;
       this._notifyHistory();
+    },
+    // ── DRAW STEP (TASK 549): ONE drawn element = ONE undo step (Fusion's rule) ─────────────────────────────────────────────────
+    // A drawing tool opens its step at the element's FIRST click (beginDrawStep: the snapshot is the document BEFORE the element, so
+    // Undo removes the element's joints, shape and every constraint made while drawing it) and closes it when the element is committed
+    // (its own endUndoGroup). closeDrawStep() is the ONE place a draw that did NOT commit ends (Esc, another tool picked, Undo mid-draw):
+    // nothing was committed -> the document is put back exactly as it was and the step is dropped, so no half-drawn point is left behind
+    // and no empty step is on the stack; something was committed (a bezier / line chain kept by Esc) -> the step is kept.
+    // Only groups opened by beginDrawStep are touched: a dimension edit / drag / delete group is never cancelled by a tool switch.
+    captureUndoSnapshot: function(){ return this._captureSnapshot(); },
+    isUndoGroupOpen: function(){ return !!this._undoGroupActive; },
+    beginDrawStep: function(label, snapshot){
+      if(this._undoGroupActive){ this._undoGroupDepth = (this._undoGroupDepth || 1) + 1; return; }
+      this.beginUndoGroup(label, snapshot);
+      this._undoGroupInfo.draw = true;
+    },
+    closeDrawStep: function(){
+      const info = this._undoGroupInfo;
+      if(!this._undoGroupActive || !info || !info.draw) return 'none';
+      const start = this.history[info.startIndex];
+      const known = new Set(start.shapes.map(s => s.id));
+      this._undoGroupDepth = 1;
+      if(this.shapes.some(s => !known.has(s.id))){ this.endUndoGroup(); return 'kept'; }
+      this._undoGroupInfo = null; this._undoGroupActive = false; this._undoGroupDepth = 0;
+      this.history.splice(info.startIndex);
+      this._restoreSnapshot(start);
+      this._notifyHistory();
+      return 'cancelled';
     },
     // Cancel the active undo group and revert to the snapshot taken before the group started.
     cancelUndoGroup: function(){
@@ -262,6 +290,7 @@ export function createSketchState(engine, view) {
       return true;
     },
     undo: function() {
+      if(this.closeDrawStep() === 'cancelled') return; // TASK 549: Undo in the middle of a draw cancels that draw (nothing committed yet)
       if(this.history.length === 0) return;
       // BURN-DOWN-2: capture the CURRENT live state so redo() can return to it, THEN restore the previous snapshot.
       const snapshot = this.history.pop();
@@ -271,6 +300,7 @@ export function createSketchState(engine, view) {
     },
     // BURN-DOWN-2: re-apply the most recently undone state (symmetric with undo()). No-op when nothing was undone.
     redo: function() {
+      this.closeDrawStep(); // TASK 549: a half-drawn element is cancelled before Redo re-applies the undone one
       if(!this.redoStack || this.redoStack.length === 0) return;
       // The current state becomes undoable again, then restore the redo snapshot.
       const snapshot = this.redoStack.pop();

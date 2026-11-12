@@ -36,7 +36,9 @@ restart: rerun merge.sh) and `agents/task-512-coverage-matrix` (audit only, GATE
 `git diff --name-only` is tests/docs/scripts only; both write docs/COVERAGE-AUDIT.md: keep both sections).
 IN FLIGHT: 511 (F6 DOF lie + F3 clockwise angle) on `agents/task-511-audit-fixes-b`. Advisor decision given: option (a), the solver
 STEP also uses the full derivative for point_on_line and collinear (one Jacobian, drop the `mutual` opt-in), so the owner's
-fillet-corner dimension drives; behaviour change: a point on a FREE line can move the line. WIP pushed before the restart; resume it.
+fillet-corner dimension drives; behaviour change: a point on a FREE line can move the line. DONE, pushed d2b291c, gate 237/238 (the
+1 fail prepare-look = EPERM profile-cleanup flake, passes alone). Review the diff, then merge AFTER 514 and 512. OWNER QUESTION open:
+collinear between two FREE lines now moves both (meet in the middle) instead of anchoring the first; an H/V line is still anchored.
 QUEUE (in order): 511 -> 517 (N-F4+N-F3 lost dimension fields in one normaliser helper, N-F1 fillet deletes origin, N-F2 fillet on polygon
 corners) -> 516 (redundant dimension placed DRIVEN, cannot be typed; wait for the Fusion check) -> 515 (circle radius a solver unknown like
 Fusion; fixes F2) -> NEW-1/NEW-5/NEW-3/NEW-2 from 512 (point-to-line dim throws `c is not defined` dimension-tool.js:619; line-line dim

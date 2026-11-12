@@ -7,10 +7,14 @@
 import * as L from '../audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
+import { SolverConfig } from '#core/solver-config.js';
 import { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } from '#ui/input-handlers/selection-tools.js';
 
 // the ONE drag path of every cell (declared as data in the fixture header)
 export const PATH = { shape: 'straight line from the grab point to the target', steps: 20, ms: 600, settleMs: 120, vectorFraction: 0.3 };
+// the app's render loop (apps/sketchstudio/main.js loop(): engine.solve(SolverConfig.ITERATIONS || 500) every animation frame) runs between pointer events; it is what moves a
+// BODY drag (the move handler's own solve passes the shape id as the spring joint; the frame solve auto-detects the first joint carrying joint.dragTarget). Frames per pointer move: 1
+export const FRAMES_PER_MOVE = Number(process.env.DRAG_FRAMES || 1);
 export const TOL_CM = 0.005;      // a point / radius that moved less than this "stayed" (0.5 px at 100 px/cm); ours is mm: x10
 const R = (v) => Math.round(v * 10000) / 10000;
 
@@ -236,8 +240,9 @@ export function runOurs(cell) {
   muted(() => {
     if (cell.grab.pt) { const id = J(cell.grab.pt); started = handleSelectionPointerDown(ev(A), SVG, st, { id, j: st.joints.get(id) }, null, null); }
     else { const sh = L.shape(S, built[cell.grab.body].shape); started = handleSelectionPointerDown(ev(A), SVG, st, null, { shape: sh, pt: { x: A[0], y: A[1] } }, null); }
-    for (let i = 1; i <= PATH.steps; i++) handleSelectionPointerMove(ev([A[0] + (B[0] - A[0]) * i / PATH.steps, A[1] + (B[1] - A[1]) * i / PATH.steps]), SVG, st);
-    handleSelectionPointerUp(ev(B), SVG, st);
+    const frame = () => { for (let k = 0; k < FRAMES_PER_MOVE; k++) S.engine.solve(SolverConfig.ITERATIONS || 500); };
+    for (let i = 1; i <= PATH.steps; i++) { handleSelectionPointerMove(ev([A[0] + (B[0] - A[0]) * i / PATH.steps, A[1] + (B[1] - A[1]) * i / PATH.steps]), SVG, st); frame(); }
+    handleSelectionPointerUp(ev(B), SVG, st); frame();
   });
   const after = snap();
   // the origin cells: the origin joint is part of the record only through the 'origin' constraint (compared against 0,0 in mm)

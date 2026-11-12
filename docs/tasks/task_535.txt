@@ -1,0 +1,65 @@
+TASK 535 (Sketch-Studio): a PARAMETER TABLE like Fusion's "Change Parameters". Owner 2026-11-12: "Can we add a param table?";
+his choices: (1) LIKE FUSION: user parameters with names (width = 120) + a list of every dimension of the sketch; a dimension
+can be typed as a number, a name or a formula (width / 2 + 5); changing a parameter updates every dimension that uses it.
+(2) It lives in a POP-UP WINDOW opened by a button (like Fusion's dialog), not in a docked tab.
+Today: every dimension holds a plain number; there are no named values or formulas anywhere (grep found none).
+Worktree D:\APPS\Sketch-Studio.worktrees\task-535-parameters, branch agents/task-535-parameters (from origin/main d2e31b7).
+
+THIS TASK IS PHASE 1 = DESIGN ONLY. Write docs/PARAMETERS-DESIGN.md, commit, push, REPORT, STOP. No code under packages/ or
+apps/ in this phase (small throwaway probes under .evidence/535/ are fine). The advisor reviews the design with the owner before
+any build.
+Read first: NEXT-SESSION.md PROJECT PRINCIPLES (north star: ONE reusable Design tab; DECLARE over hand-roll; one source, no
+copies); packages/ui/dimension-seams.js (commitDimensionEdit, showEditInput, isDimensionDetermined, toggleDriving: the ONE path a
+typed dimension value takes; NOTE task 525 is about to change this file: design against the seam, not its lines);
+packages/core/constraints.js (withDimensionState, the dimension fields and the normaliser); packages/core/units.js (parse/format,
+DOC_UNIT); the numeric input (packages/ui/numeric-input*.js); save/load and undo (how a document is serialised, versioned and
+migrated; the style-templates and settings stores for comparison); packages/ui/tabbed-dock-panel.js, context menu and any
+existing modal/pop-up (is there ONE shared dialog component? which hosts use it); how the shared Design tab is mounted in
+SketchStudio, Shaper and Pen Plotter (mountSketch); docs/FUSION-COMPARISON.md "Editing a dimension" (what Fusion does with
+impossible / negative / zero values); the audits' KNOWN pattern.
+
+THE DESIGN DOC MUST DECIDE (each with the alternative considered and why; mark every point that is the OWNER'S call):
+ A. DATA MODEL: where parameters live (per document / per sketch; in the saved file: this is a saved-format ADDITION: give the
+    exact JSON, the version/migration story, and proof old files load unchanged); a parameter = { name, expression, unit?,
+    comment? }; a dimension gains an `expression` beside its numeric value (the number stays the solver's truth; the expression
+    is the user's source): ONE helper carries it through save/load/undo (withDimensionState), no per-type copies.
+    Every dimension gets a stable NAME (Fusion: d1, d2, ...): how they are numbered, shown on the canvas or not, renamed.
+ B. EXPRESSIONS: grammar (numbers with units "10 mm", "1/2 in", names, + - * / ^, parentheses, functions: which; angle units);
+    ONE parser/evaluator in packages/core (pure, no eval(), no Function()), unit handling through units.js (no second unit
+    table), dimension analysis or not (Fusion checks units: say what we do), errors as data (unknown name, cycle, unit mismatch,
+    division by zero, non-finite), case sensitivity, reserved names, valid name syntax.
+ C. DEPENDENCIES: the graph parameter -> parameter -> dimension; cycle detection; evaluation order; what happens on rename
+    (references follow) and on delete of a parameter that is in use (Fusion refuses: say what Fusion does and copy it).
+ D. APPLYING A CHANGE: changing one parameter changes N dimensions at once: through the ONE existing dimension-edit seam (N
+    commits in one undo group? one combined solve?), what "refused" means for a batch (all-or-nothing with the drawing restored,
+    like task 521's collapse rule; which dimension is reported), order sensitivity, performance on 100 dimensions; driven /
+    reference dimensions (read-only rows; can an expression READ a driven dimension? Fusion allows it); a dimension with an
+    expression that becomes determined (task 516 rule); zero / negative results (see the owner's pending rulings in
+    FUSION-COMPARISON: do not decide those here, design so either ruling fits).
+ E. TYPING ON THE CANVAS: the dimension's edit box accepts an expression; what the label shows (value; an "fx" mark when it
+    is a formula, as Fusion); typing a plain number over an expression replaces it; typing `name = 50` creates a parameter?
+    (Fusion does not: say).
+ F. THE POP-UP: opened from where (a toolbar button in the shared Design tab: declared the way tools are declared, so every
+    host of the Design tab gets it; hosts that must NOT show it: say and test); layout: two groups (User parameters with add /
+    delete / rename, Sketch dimensions), columns Name / Expression / Value / Unit / Comment, inline editing, live preview vs
+    apply-on-enter, error display per row, sorting/filter, hover or click a row highlights the dimension on the canvas, keyboard
+    (Tab / Enter / Esc), modal or modeless (Fusion's is modeless-ish: say), draggable, remembers position; mobile / narrow
+    screens (the app has a mobile layout: check); accessibility; reuse the existing shared components (name them): no second
+    dialog system, no second table widget if one exists.
+ G. HOSTS AND EXPORT: Shaper and Pen Plotter share the Design tab: do parameters travel in their project files; exports (SVG /
+    DXF) carry numbers only; import; the Fusion direction (could parameters be exported to Fusion user parameters later: note only).
+ H. TESTS: parser unit tests (table-driven), dependency/cycle tests, round trip save/load/undo of expressions for every dimension
+    mode (the inventory in tests/harness/coverage/inventory.js), batch apply with a refusal restores everything, live real-app
+    tests of the pop-up (headless) and of typing a formula on the canvas, a property test (random parameter edits keep
+    dimension value == evaluated expression), and what an old file looks like.
+ I. BUILD PLAN: slices that each leave main green and useful, in order (e.g. 1 parser + model + save/load, invisible; 2 canvas
+    edit accepts expressions; 3 the pop-up read-only list; 4 editing in the pop-up + user parameters; 5 rename/delete/cycles
+    polish), each with its files, its tests, its STOP conditions and an estimate of size; which slices can run in parallel.
+ J. A plain-language summary at the top for the owner (half a page: what he will see and be able to do, what it will NOT do in
+    version 1), and the list of OWNER DECISIONS with a recommended answer each.
+Use what is known of Fusion (user parameters vs model parameters d1.., expressions with units, fx mark, refuses deleting a
+parameter in use, comments column, favourites): mark anything about Fusion you are not sure of as "to verify in Fusion"; do NOT
+call Fusion (the advisor will verify the list).
+REPORT: the doc path, the owner-decision list, the slice plan, and anything in the current code that blocks the design.
+Commit by path, push the branch, WORK-LOG `## TURN 535 (design)`. No gate needed for a docs-only commit: say "gate: not run,
+docs only". No Fusion, mouse or keyboard. Leave nothing running.

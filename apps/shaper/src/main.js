@@ -8,6 +8,7 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
+import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
@@ -561,6 +562,7 @@ function ensureSketch() {
   const applyRestored = ({ hosts }) => {
     try {
       designController.engine.solve(500);
+      fitToDrawing(document.getElementById('design-canvas'), designController.state); // TASK 494: frame the restored drawing (armed until the canvas has a size)
       if (infoPanel) infoPanel.refresh();
       if (vcarveView) vcarveView.refresh();
     } catch (_) {}

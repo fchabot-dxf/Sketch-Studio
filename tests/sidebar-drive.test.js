@@ -166,11 +166,11 @@ await (async () => {
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=sign-in]').length`), 1, 'exactly ONE sign-in door');
     await shot('1-signed-out');
 
-    // 2. signed in: the action sits next to Save to file, the toggle is ON by default and persists when changed
+    // 2. signed in: the action sits before Open from file, the toggle is ON by default and persists when changed
     await ev(`T.mount(true)`); await sleep(300);
     assert.strictEqual(await has('[data-action=save-drive]'), true);
-    const order = await ev(`[...document.querySelectorAll('[data-section=actions] [data-action]')].map((b) => b.dataset.action).filter((a) => a === 'save-file' || a === 'save-drive' || a === 'open-file')`);
-    assert.deepStrictEqual(order, ['save-file', 'save-drive', 'open-file'], 'next to Save to file');
+    const order = await ev(`[...document.querySelectorAll('[data-section=actions] [data-action]')].map((b) => b.dataset.action).filter((a) => a === 'save-drive' || a === 'open-file')`);
+    assert.deepStrictEqual(order, ['save-drive', 'open-file'], 'Save to file is no longer in the menu');
     assert.strictEqual(await text('[data-action=save-drive]'), 'Save to Google Drive');
     assert.strictEqual(await ev(`document.querySelector('[data-account=drive-default]').checked`), true, 'default ON');
     assert.strictEqual(await text('[data-account=drive-default-row]'), 'Save to Google Drive by default');

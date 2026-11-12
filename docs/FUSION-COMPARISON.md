@@ -88,6 +88,23 @@ Same Fusion answers, ours re-run, KNOWN files regenerated (`graded-known.mjs`) a
 
 In the other direction, 15 graded cells where Fusion accepts are now refused by ours (our solve's answer there collapsed a shape): coincident-pp RL 0,4 / RO 0,c / RP 0,4; collinear LS 3,0 / 7,0; horizontal-2pt RL 0,4 / RO 0,c / RP 0,4; midpoint LS m,0 / o,0, ZS 0,0; parallel LC 3,4, LL 3,4 / 3,5, SL 0,4; vertical-2pt LR 3,0 (counted in the totals above).
 
+### After task 523 (the arc side of the tangent rows differentiates the arc radius through its rim joint): differing cells before -> after
+
+Same Fusion answers, ours re-run, KNOWN files regenerated with `scripts/fusion-oracle/{which-moves,graded,drawings}-known.mjs` (a new reason for every tangent class with an arc or fillet arc operand: "arc resizes at tangent creation; placement, task 525") and the three sections with the `*-doc.mjs` scripts. No Fusion run. Only the rows that changed:
+
+| section | constraint / drawing | before | after |
+|---|---|---|---|
+| which-moves | tangent-line-arc | 12 | 14 |
+| which-moves | tangent-arc-arc | 8 | 10 |
+| graded | tangent-line-circle | 106 | 128 |
+| graded | tangent-circle-circle | 44 | 63 |
+| drawings | scurve | 13 | 9 |
+| TOTAL which-moves | all | 212 | 216 |
+| TOTAL graded | all | 1549 | 1590 |
+| TOTAL drawings | all | 129 | 125 |
+
+Before 523 the arc's radius was a constant in the row's derivative, so the solve never resized an arc and, with its centre held, kept it rigid: that matched Fusion by accident. The row is now exact (it equals finite differences), and an arc's radius takes part in the least-change solve like a free circle's since task 515. Moved AWAY from Fusion (49 graded, 4 which-moves): a tangent to an arc whose centre is held (graded level c; which-moves B_fix1 / A_fix1) also resizes the arc, e.g. `which-moves tangent-line-arc.B_fix1.AB: Fusion A:MM B:.... | ours A:MM B:.MMr`, `graded tangent-line-circle|LA|0,c: Fusion stretch / . | ours stretch / scale+radius`. Owner ruling: "do it like Fusion"; keeping the arc at tangent creation is placement, task 525. Now agree with Fusion: 8 graded cells (tangent-line-circle LA 7,c, RA 8,c, AL c,7, AR c,8; tangent-circle-circle OA cr,c, AO c,cr, AA c,cr, AA cr,c) and 4 drawings rows (scurve recipe/7 is no longer demoted to a reference; scurve edit0 / edit3 / edit4 are no longer refused).
+
 ## Which geometry moves
 
 Question (owner): when a constraint is added to geometry that does not satisfy it, which entity moves and which stays? Method: each case starts from
@@ -110,7 +127,7 @@ them, so only A-B is run for those rows.
 
 <!-- which-moves:begin -->
 
-Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 103 identical, 212 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
+Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 99 identical, 216 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
 
 | constraint / dimension | cells | same as Fusion |
 |---|---|---|
@@ -130,9 +147,9 @@ Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 103 identical, 212 differ (all
 | equal-arc-arc | 14 | 4 |
 | equal-arc-circle | 2 | 0 |
 | tangent-line-circle | 16 | 2 |
-| tangent-line-arc | 16 | 4 |
+| tangent-line-arc | 16 | 2 |
 | tangent-circle-circle | 14 | 4 |
-| tangent-arc-arc | 14 | 6 |
+| tangent-arc-arc | 14 | 4 |
 | dim-aligned | 18 | 0 |
 | dim-horizontal | 18 | 3 |
 | dim-vertical | 18 | 3 |
@@ -412,7 +429,7 @@ Proposed fix: placeForCreation: move the line (never the circle) onto tangency, 
 | B_fixfull | A:MM B:.. | A:MM B:.. | yes | A:MM B:.. | A:MM B:.. | yes |
 | B_dim | A:.. B:M. | A:MM B:M. | **NO** | A:.. B:M. | A:MM B:M. | **NO** |
 
-#### tangent-line-arc  (4 of 16 cells the same)
+#### tangent-line-arc  (2 of 16 cells the same)
 
 Fusion's rule: The LINE moves and the arc stays (even with a dimensioned radius); a pinned or fixed line stays and the whole arc is translated.
 
@@ -427,7 +444,7 @@ Proposed fix: Same hook as tangent-line-circle. Ours also changes the arc's radi
 | A_fixfull | A:.. B:MMM. | A:.. B:MMMr | **NO** | A:.. B:MMM. | A:.. B:MMMr | **NO** |
 | A_hv | A:MM B:.... | A:MM B:MMMr | **NO** | A:MM B:.... | A:MM B:MMMr | **NO** |
 | A_dim | A:MM B:.... | A:MM B:MMMr | **NO** | A:MM B:.... | A:MM B:MMMr | **NO** |
-| B_fix1 | A:MM B:.... | A:MM B:.... | yes | A:MM B:.... | A:MM B:.... | yes |
+| B_fix1 | A:MM B:.... | A:MM B:.MMr | **NO** | A:MM B:.... | A:MM B:.MMr | **NO** |
 | B_fixfull | A:MM B:.... | A:MM B:.... | yes | A:MM B:.... | A:MM B:.... | yes |
 | B_dim | A:MM B:.... | A:MM B:MMM. | **NO** | A:MM B:.... | A:MM B:MMM. | **NO** |
 
@@ -449,7 +466,7 @@ Proposed fix: Not a createConstraint fix: our circle radius is shape data (O2 / 
 | B_fixfull | A:Mr B:.. | A:Mr B:.. | yes | A:Mr B:.. | A:Mr B:.. | yes |
 | B_dim | A:.. B:M. | A:Mr B:M. | **NO** | A:.. B:M. | A:Mr B:M. | **NO** |
 
-#### tangent-arc-arc  (6 of 14 cells the same)
+#### tangent-arc-arc  (4 of 14 cells the same)
 
 Fusion's rule: The SECOND-picked arc moves and re-sizes (3 points + radius); the first stays; a pinned centre makes that arc the one that changes; fixed / radius-dimensioned arcs stay.
 
@@ -460,10 +477,10 @@ Proposed fix: Same anchor choice as equal-arc-arc.
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
 | free | A:.... B:MMMr | A:MMMr B:MMMr | **NO** | A:MMMr B:.... | A:MMMr B:MMMr | **NO** |
-| A_fix1 | A:.... B:MMMr | A:.... B:MMMr | yes | A:.MMr B:.... | A:.... B:MMMr | **NO** |
+| A_fix1 | A:.... B:MMMr | A:.MMr B:MMMr | **NO** | A:.MMr B:.... | A:.MMr B:MMMr | **NO** |
 | A_fixfull | A:.... B:MMMr | A:.... B:MMMr | yes | A:.... B:MMMr | A:.... B:MMMr | yes |
 | A_dim | A:MMM. B:.... | A:MMM. B:MMMr | **NO** | A:MMM. B:.... | A:MMM. B:MMMr | **NO** |
-| B_fix1 | A:.... B:.MMr | A:MMMr B:.... | **NO** | A:MMMr B:.... | A:MMMr B:.... | yes |
+| B_fix1 | A:.... B:.MMr | A:MMMr B:.MMr | **NO** | A:MMMr B:.... | A:MMMr B:.MMr | **NO** |
 | B_fixfull | A:MMMr B:.... | A:MMMr B:.... | yes | A:MMMr B:.... | A:MMMr B:.... | yes |
 | B_dim | A:.... B:MMM. | A:MMMr B:MMM. | **NO** | A:.... B:MMM. | A:MMMr B:MMM. | **NO** |
 
@@ -621,8 +638,8 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 | pointOnCircle | 130 | 56 | 4 | 0 |
 | midpoint | 117 | 48 | 0 | 3 |
 | equal-circle | 100 | 48 | 44 | 0 |
-| tangent-line-circle | 180 | 74 | 0 | 4 |
-| tangent-circle-circle | 100 | 56 | 0 | 7 |
+| tangent-line-circle | 180 | 52 | 0 | 0 |
+| tangent-circle-circle | 100 | 37 | 0 | 0 |
 | horizontal-line | 9 | 7 | 0 | 0 |
 | vertical-line | 9 | 7 | 0 | 0 |
 | dim-length | 9 | 5 | 1 | 0 |
@@ -1250,43 +1267,43 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
 | LO | 16 | 5 | a:8 b:7 R:1 | a:3 b:3 X:9 R:1 | translate:10 stretch:2 one end:2 radius:1 | translate:8 stretch:4 translate+radius:4 radius:4 |
-| LA | 16 | 7 | a:10 b:5 R:1 | a:6 b:2 X:6 R:2 | translate:8 stretch:4 one end:2 scale+radius:1 | stretch:4 deform+radius:4 deform:4 translate:4 |
-| LF | 8 | 4 | a:5 b:2 R:1 | a:3 b:1 X:3 R:1 | stretch:2 translate:2 deform:2 one end:1 | stretch:4 deform:4 one end:2 |
+| LA | 16 | 5 | a:10 b:5 R:1 | a:3 b:3 X:9 R:1 | translate:8 stretch:4 one end:2 scale+radius:1 | stretch:4 deform+radius:4 scale+radius:4 deform:4 |
+| LF | 8 | 2 | a:5 b:2 R:1 | b:1 X:6 R:1 | stretch:2 translate:2 deform:2 one end:1 | deform:7 stretch:4 one end:2 |
 | CO | 8 | 1 | a:5 b:3 | a:2 X:6 | translate:4 stretch:2 one end:2 | stretch:4 one end:4 translate+radius:2 radius:2 |
-| CA | 8 | 4 | a:6 b:2 | a:4 X:4 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 deform:2 |
-| CF | 4 | 2 | a:3 b:1 | a:2 X:2 | stretch:2 deform:1 one end:1 | stretch:2 deform:2 one end:2 |
+| CA | 8 | 2 | a:6 b:2 | a:2 X:6 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 scale+radius:2 |
+| CF | 4 | 0 | a:3 b:1 | X:4 | stretch:2 deform:1 one end:1 | deform:4 stretch:2 one end:2 |
 | SO | 4 | 1 | a:3 b:1 | a:1 X:3 | scale:3 translate:1 | scale:4 translate+radius:1 radius:1 translate:1 |
-| SA | 4 | 2 | a:4 | a:2 X:2 | scale:4 | scale:4 deform+radius:1 deform:1 |
-| SF | 2 | 1 | a:2 | a:1 X:1 | scale:2 | scale:2 deform:1 |
+| SA | 4 | 1 | a:4 | a:1 X:3 | scale:4 | scale:4 deform+radius:1 scale+radius:1 deform:1 |
+| SF | 2 | 0 | a:2 | X:2 | scale:2 | scale:2 deform:2 |
 | RO | 8 | 4 | a:3 b:4 R:1 | a:1 b:3 X:3 R:1 | deform:3 translate:3 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
-| RA | 8 | 3 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:4 translate:2 scale+radius:1 | deform:6 deform+radius:2 |
-| RF | 4 | 3 | a:2 b:1 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
+| RA | 8 | 3 | a:4 b:3 R:1 | a:1 b:3 X:3 R:1 | deform:4 translate:2 scale+radius:1 | deform:6 deform+radius:2 scale+radius:2 |
+| RF | 4 | 2 | a:2 b:1 R:1 | b:1 X:2 R:1 | deform:3 | deform:5 |
 | OL | 16 | 5 | a:7 b:8 R:1 | a:3 b:3 X:9 R:1 | translate:10 stretch:2 one end:2 radius:1 | translate:8 translate+radius:4 stretch:4 one end:4 |
 | OC | 8 | 1 | a:3 b:5 | b:2 X:6 | translate:4 stretch:2 one end:2 | stretch:4 one end:4 translate+radius:2 radius:2 |
 | OS | 4 | 1 | a:1 b:3 | b:1 X:3 | scale:3 translate:1 | scale:4 translate+radius:1 radius:1 translate:1 |
 | OR | 8 | 4 | a:4 b:3 R:1 | a:3 b:1 X:3 R:1 | deform:3 translate:3 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
-| AL | 16 | 7 | a:5 b:10 R:1 | a:2 b:6 X:6 R:2 | translate:8 stretch:4 one end:2 scale+radius:1 | deform+radius:4 stretch:4 translate:4 one end:4 |
-| AC | 8 | 4 | a:2 b:6 | b:4 X:4 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 deform:2 |
-| AS | 4 | 2 | b:4 | b:2 X:2 | scale:4 | scale:4 deform+radius:1 deform:1 |
-| AR | 8 | 3 | a:3 b:4 R:1 | a:2 b:2 X:2 R:2 | deform:4 translate:2 scale+radius:1 | deform:6 deform+radius:2 |
-| FL | 8 | 4 | a:2 b:5 R:1 | a:1 b:3 X:3 R:1 | stretch:2 translate:2 deform:2 one end:1 | deform:4 stretch:4 one end:2 |
-| FC | 4 | 2 | a:1 b:3 | b:2 X:2 | stretch:2 deform:1 one end:1 | deform:2 stretch:2 one end:2 |
-| FS | 2 | 1 | b:2 | b:1 X:1 | scale:2 | scale:2 deform:1 |
-| FR | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
+| AL | 16 | 5 | a:5 b:10 R:1 | a:3 b:3 X:9 R:1 | translate:8 stretch:4 one end:2 scale+radius:1 | deform+radius:4 stretch:4 translate:4 one end:4 |
+| AC | 8 | 2 | a:2 b:6 | b:2 X:6 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 scale+radius:2 |
+| AS | 4 | 1 | b:4 | b:1 X:3 | scale:4 | scale:4 deform+radius:1 scale+radius:1 deform:1 |
+| AR | 8 | 3 | a:3 b:4 R:1 | a:3 b:1 X:3 R:1 | deform:4 translate:2 scale+radius:1 | deform:6 deform+radius:2 scale+radius:2 |
+| FL | 8 | 2 | a:2 b:5 R:1 | a:1 X:6 R:1 | stretch:2 translate:2 deform:2 one end:1 | deform:7 stretch:4 one end:2 |
+| FC | 4 | 0 | a:1 b:3 | X:4 | stretch:2 deform:1 one end:1 | deform:4 stretch:2 one end:2 |
+| FS | 2 | 0 | b:2 | X:2 | scale:2 | deform:2 scale:2 |
+| FR | 4 | 2 | a:1 b:2 R:1 | a:1 X:2 R:1 | deform:3 | deform:5 |
 
 #### tangent-circle-circle
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
 | OO | 16 | 7 | a:5 b:10 R:1 | a:3 b:3 X:9 R:1 | translate:7 translate+radius:4 radius:4 | translate+radius:8 radius:8 translate:8 |
-| OA | 16 | 9 | a:12 b:3 R:1 | a:6 b:2 X:6 R:2 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate+radius:4 deform+radius:4 deform:4 radius:4 |
-| OF | 8 | 5 | a:4 b:3 R:1 | a:3 b:1 X:3 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
-| AO | 16 | 9 | a:3 b:12 R:1 | a:2 b:6 X:6 R:2 | translate+radius:4 radius:4 translate:4 deform+radius:1 | deform+radius:4 translate+radius:4 radius:4 translate:4 |
-| AA | 16 | 8 | a:5 b:10 R:1 | a:4 b:4 X:4 R:4 | deform:7 deform+radius:4 scale+radius:4 | deform+radius:8 deform:8 |
-| AF | 8 | 5 | a:3 b:4 R:1 | a:2 b:2 X:2 R:2 | deform:5 deform+radius:1 scale+radius:1 | deform:6 deform+radius:2 |
-| FO | 8 | 5 | a:3 b:4 R:1 | a:1 b:3 X:3 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
-| FA | 8 | 5 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:5 deform+radius:1 scale+radius:1 | deform:6 deform+radius:2 |
-| FF | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
+| OA | 16 | 7 | a:12 b:3 R:1 | a:3 b:3 X:9 R:1 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate+radius:4 deform+radius:4 scale+radius:4 deform:4 |
+| OF | 8 | 2 | a:4 b:3 R:1 | b:1 X:6 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:7 translate+radius:2 radius:2 translate:2 |
+| AO | 16 | 7 | a:3 b:12 R:1 | a:3 b:3 X:9 R:1 | translate+radius:4 radius:4 translate:4 deform+radius:1 | deform+radius:4 translate+radius:4 radius:4 translate:4 |
+| AA | 16 | 7 | a:5 b:10 R:1 | a:3 b:3 X:9 R:1 | deform:7 deform+radius:4 scale+radius:4 | deform+radius:8 scale+radius:8 deform:8 |
+| AF | 8 | 2 | a:3 b:4 R:1 | b:1 X:6 R:1 | deform:5 deform+radius:1 scale+radius:1 | deform:9 deform+radius:2 scale+radius:2 |
+| FO | 8 | 2 | a:3 b:4 R:1 | a:1 X:6 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:7 translate+radius:2 radius:2 translate:2 |
+| FA | 8 | 2 | a:4 b:3 R:1 | a:1 X:6 R:1 | deform:5 deform+radius:1 scale+radius:1 | deform:9 deform+radius:2 scale+radius:2 |
+| FF | 4 | 1 | a:1 b:2 R:1 | X:3 R:1 | deform:3 | deform:6 |
 
 #### horizontal-line
 
@@ -1349,7 +1366,7 @@ Rows are one per recipe step; `same?` needs the outcome (accepted / reference / 
 | bracket (round 1) | 30 | 148 | 126 | 22 |
 | triangle (round 1) | 10 | 45 | 34 | 11 |
 | polygon (round 1) | 11 | 54 | 51 | 3 |
-| scurve (round 2) | 11 | 54 | 41 | 13 |
+| scurve (round 2) | 11 | 54 | 45 | 9 |
 | slot (round 2) | 11 | 46 | 40 | 6 |
 | collinear-concentric (round 2) | 18 | 94 | 86 | 8 |
 | axis-symmetry (round 2) | 15 | 76 | 73 | 3 |
@@ -1542,19 +1559,19 @@ Divergences and verdicts:
 | 4 l1 tangent to arc a1 | accepted | accepted | yes | another valid branch | F... / F... ; sketch: nullity 7 / not fully constrained |
 | 5 arc a1 radius 30 | accepted | accepted | **NO** | another valid branch | F... / FF.. * ; sketch: nullity 6 / not fully constrained |
 | 6 a1 quarter turn: C1-Q horizontal | accepted | accepted | yes | another valid branch | FF.. / FF.. ; sketch: nullity 5 / not fully constrained |
-| 7 arc a1 tangent to arc a2 | accepted | accepted | yes | another valid branch | FF.. / FF.. ; sketch: nullity 4 / not fully constrained |
-| 8 arc a2 radius 25 | reference | accepted | **NO** | another valid branch | FF.. / FFF. * ; sketch: nullity 4 / not fully constrained |
+| 7 arc a1 tangent to arc a2 | accepted | accepted | yes | another valid branch | FF.. / FF.. ; sketch: nullity 5 / not fully constrained |
+| 8 arc a2 radius 25 | accepted | accepted | **NO** | another valid branch | FF.. / FFF. * ; sketch: nullity 4 / not fully constrained |
 | 9 l2 horizontal | accepted | accepted | **NO** | another valid branch | FF.. / FFF. * ; sketch: nullity 3 / not fully constrained |
 | 10 l2 tangent to arc a2 | accepted | accepted | **NO** | another valid branch | FF.. / FFFF * ; sketch: nullity 2 / not fully constrained |
 | 11 l2 length 40 | accepted | accepted | **NO** | another valid branch | FF.. / FFFF * ; sketch: nullity 1 / fully constrained * |
 
-Step E, 6 dimension edits (0.8x, 1.25x): 3 agree (accepted or refused alike); differ: edit x0.8 of dimension 40.000 -> 32.000 (ours refused, Fusion accepted); edit x1.25 of dimension 30.000 -> 37.500 (ours refused, Fusion accepted); edit x0.8 of dimension 40.000 -> 32.000 (ours refused, Fusion accepted).
+Step E, 6 dimension edits (0.8x, 1.25x): 6 agree (accepted or refused alike).
 
 Step F: redundant dimension: ours accepted, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours accepted, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 2, Fusion not fully constrained.
 
 Divergences and verdicts:
 
-* OUR BUG N-F7 (tangent between two arcs sharing a rim joint is degenerate): step 1 full, step 4 full, step 7 outcome, step 7 full, step 8 full, step 9 full, step 10 full, step 10 sketchFull, edit0 outcome, edit3 outcome, edit4 outcome, redundant outcome (+1 more)
+* OUR BUG N-F7 (tangent between two arcs sharing a rim joint is degenerate): step 1 full, step 4 full, step 7 full, step 8 full, step 9 full, step 10 full, step 10 sketchFull, redundant outcome, conflict outcome
 
 #### slot: Slot: two arcs + two lines (4 tangents) (round 2)
 

@@ -2757,28 +2757,32 @@
   ]
  },
  "tangent-line-circle|LA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 16,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
    "3,0",
+   "3,c",
    "3,r",
    "4,0",
+   "4,c",
    "4,r",
    "7,0",
-   "7,c",
    "7,r"
   ]
  },
  "tangent-line-circle|LF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "3,0",
    "3,c",
-   "4,0"
+   "4,0",
+   "4,c"
   ]
  },
  "tangent-line-circle|CO": {
@@ -2795,22 +2799,21 @@
   ]
  },
  "tangent-line-circle|CA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
    "4,0",
+   "4,c",
    "4,r"
   ]
  },
  "tangent-line-circle|CF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
-  "cells": [
-   "0,0",
-   "4,0"
-  ]
+  "cells": "all"
  },
  "tangent-line-circle|SO": {
   "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
@@ -2822,19 +2825,18 @@
   ]
  },
  "tangent-line-circle|SA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
    "0,0",
+   "0,c",
    "0,r"
   ]
  },
  "tangent-line-circle|SF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 2,
-  "cells": [
-   "0,0"
-  ]
+  "cells": "all"
  },
  "tangent-line-circle|RO": {
   "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
@@ -2847,21 +2849,22 @@
   ]
  },
  "tangent-line-circle|RA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
    "8,0",
-   "8,c",
    "8,r"
   ]
  },
  "tangent-line-circle|RF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
-   "0,0"
+   "0,0",
+   "0,c"
   ]
  },
  "tangent-line-circle|OL": {
@@ -2914,14 +2917,16 @@
   ]
  },
  "tangent-line-circle|AL": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 16,
   "cells": [
    "0,0",
    "0,3",
    "0,4",
    "0,7",
-   "c,7",
+   "c,0",
+   "c,3",
+   "c,4",
    "r,0",
    "r,3",
    "r,4",
@@ -2929,64 +2934,65 @@
   ]
  },
  "tangent-line-circle|AC": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
    "0,4",
+   "c,0",
+   "c,4",
    "r,0",
    "r,4"
   ]
  },
  "tangent-line-circle|AS": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
    "0,0",
+   "c,0",
    "r,0"
   ]
  },
  "tangent-line-circle|AR": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
    "0,8",
-   "c,8",
+   "c,0",
    "r,0",
    "r,8"
   ]
  },
  "tangent-line-circle|FL": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
    "0,3",
    "0,4",
-   "c,3"
+   "c,0",
+   "c,3",
+   "c,4"
   ]
  },
  "tangent-line-circle|FC": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
+  "total": 4,
+  "cells": "all"
+ },
+ "tangent-line-circle|FS": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
+  "total": 2,
+  "cells": "all"
+ },
+ "tangent-line-circle|FR": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
    "0,0",
-   "0,4"
-  ]
- },
- "tangent-line-circle|FS": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "tangent-line-circle|FR": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0"
+   "c,0"
   ]
  },
  "tangent-circle-circle|OO": {
@@ -3005,86 +3011,105 @@
   ]
  },
  "tangent-circle-circle|OA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 16,
-  "cells": [
-   "0,0",
-   "0,r",
-   "c,0",
-   "c,r",
-   "r,0",
-   "r,r",
-   "cr,c"
-  ]
- },
- "tangent-circle-circle|OF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "c,0",
-   "r,0"
-  ]
- },
- "tangent-circle-circle|AO": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 16,
   "cells": [
    "0,0",
    "0,c",
    "0,r",
-   "c,cr",
+   "c,0",
+   "c,c",
+   "c,r",
+   "r,0",
+   "r,c",
+   "r,r"
+  ]
+ },
+ "tangent-circle-circle|OF": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
+  "total": 8,
+  "cells": [
+   "0,0",
+   "0,c",
+   "c,0",
+   "c,c",
+   "r,0",
+   "r,c"
+  ]
+ },
+ "tangent-circle-circle|AO": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
+  "total": 16,
+  "cells": [
+   "0,0",
+   "0,c",
+   "0,r",
+   "c,0",
+   "c,c",
+   "c,r",
    "r,0",
    "r,c",
    "r,r"
   ]
  },
  "tangent-circle-circle|AA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 16,
   "cells": [
    "0,0",
    "0,c",
    "0,r",
+   "c,0",
    "c,c",
-   "c,cr",
+   "c,r",
    "r,0",
-   "r,r",
-   "cr,c"
+   "r,c",
+   "r,r"
   ]
  },
  "tangent-circle-circle|AF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "c,c",
-   "r,0"
-  ]
- },
- "tangent-circle-circle|FO": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
    "0,c",
-   "0,r"
+   "c,0",
+   "c,c",
+   "r,0",
+   "r,c"
   ]
  },
- "tangent-circle-circle|FA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+ "tangent-circle-circle|FO": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
-   "c,c"
+   "c,0",
+   "c,c",
+   "c,r"
+  ]
+ },
+ "tangent-circle-circle|FA": {
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
+  "total": 8,
+  "cells": [
+   "0,0",
+   "0,c",
+   "0,r",
+   "c,0",
+   "c,c",
+   "c,r"
   ]
  },
  "tangent-circle-circle|FF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
-   "0,0"
+   "0,0",
+   "0,c",
+   "c,0"
   ]
  },
  "horizontal-line|L": {

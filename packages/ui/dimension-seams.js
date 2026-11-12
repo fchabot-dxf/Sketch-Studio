@@ -7,11 +7,12 @@
 
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
+import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { angleDimensionChoiceFor } from '#ui/angle-dimension.js';
 import { replaceParameters } from '#core/parameters.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
@@ -240,11 +241,17 @@ export function toggleDriving(state, c) {
         const j1a = state.joints.get(s1.joints[0]); const j1b = state.joints.get(s1.joints[1]);
         const j2a = state.joints.get(s2.joints[0]); const j2b = state.joints.get(s2.joints[1]);
         if (j1a && j1b && j2a && j2b) {
-          const a1 = Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x);
-          const a2 = Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x);
-          let v = Math.abs((a1 - a2) * 180 / Math.PI);
-          if (v > 180) v = 360 - v;
-          c.value = v;
+          // the sector the label sits in is what a reference measured (task 543): its span, with `supplement` when it is the other pair
+          const int = getLineIntersection(j1a, j1b, j2a, j2b);
+          if (int) {
+            const ch = angleDimensionChoiceFor(c, j1a, j1b, j2a, j2b, int);
+            c.value = ch.value;
+            if (ch.supplement) c.supplement = true; else delete c.supplement;
+          } else {
+            // parallel lines have no sectors: the angle between the directions (0 or 180)
+            let v = Math.abs((Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x) - Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x)) * 180 / Math.PI);
+            c.value = v > 180 ? 360 - v : v;
+          }
         }
       }
     }

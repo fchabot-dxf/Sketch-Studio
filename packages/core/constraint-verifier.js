@@ -286,7 +286,8 @@ export function measureResidual(c, joints, shapes) {
             // satisfied. That is not an angle at all: report the largest angular error so such a solve never counts as converged.
             if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return Math.PI / 2;
             const theta = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
-            let d = theta - (Number(c.value) || 0) * Math.PI / 180;
+            // TASK 543: a supplementary-sector dimension (c.supplement) is the same row with sin(t) negated: zero iff theta == -t (mod 180)
+            let d = theta - (c.supplement === true ? -1 : 1) * (Number(c.value) || 0) * Math.PI / 180;
             while (d <= -Math.PI) d += 2 * Math.PI;
             while (d > Math.PI) d -= 2 * Math.PI;
             return Math.min(Math.abs(d), Math.PI - Math.abs(d));

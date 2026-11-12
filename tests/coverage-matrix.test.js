@@ -84,7 +84,7 @@ ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r 
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
   'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
-  'NEW-10': 'task 550: coincident onto a fillet arc whose centre is shared with the other operand (LF / CF / SF shared): our nearest solve brings the fillet arc ends together (79 -> 0 degrees). Before task 550 that zero-sweep collapse was ACCEPTED (the cell read PASS); it is now refused by the zero-sweep rule (findCollapsedShape, EA-1). PlaneGCS keeps the arc (83 degrees): a feasible coincident refused, like NEW-9 was before task 525',
+  'NEW-10': 'coincident onto a fillet arc whose centre is shared with the other operand (LF / CF / SF shared): feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it (its two ends meet, 79 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and the cell read PASS); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521',
   // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
   // the who-moves placement moves one operand and no matrix cell fails it any more.
 };

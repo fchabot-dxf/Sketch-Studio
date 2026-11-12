@@ -9,7 +9,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
-import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
+import { seedFilletForRadius, filletHasCollapsedLine, filletLines } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { angleDimensionChoiceFor } from '#ui/angle-dimension.js';
@@ -119,12 +119,15 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     list.forEach(e => { e.c.value = e.value; });
     const collapsedFillet = fillets.findIndex(f => f && filletHasCollapsedLine(state, f));
     if (collapsedFillet !== -1) return revert({ reverted: true, clash: '', reason: `R = ${Number(list[collapsedFillet].value).toFixed(2)} collapsed a line to zero length` });
-    // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
-    // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET radius edit is judged above by
-    // filletHasCollapsedLine instead: its tangent legs legitimately get very short as R approaches the singular value (a short leg is no collapse).
-    const collapsed = fillets.every(Boolean) ? null : findCollapsedShape(state, sizesBefore);
+    // Any constraint satisfied by collapsing a line / arc / circle to a point (or an arc's two ends together) is no solution (task 521,
+    // task 550); the edited dimension's own size is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET
+    // radius edit goes through the same rule for every shape (the fillet arc included: its two ends must not meet) EXCEPT the fillet's own
+    // tangent legs, judged above by filletHasCollapsedLine: they legitimately get very short as R approaches the singular value (a short leg,
+    // under 1 % of its length, is no collapse; only a zero-length leg is).
+    const legs = new Set(fillets.filter(Boolean).flatMap(f => filletLines(state, f).map(l => l.line.id)));
+    const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
-      const own = list.find((e, i) => !fillets[i]);
+      const own = list.find((e, i) => !fillets[i]) || list[0];
       return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse a ${collapsed.type} to a point` });
     }
     if (result && result.converged === false) {

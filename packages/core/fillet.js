@@ -393,7 +393,9 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 // ---- radius edit support for an existing fillet (arc.filletSharp = its virtual-sharp joint V) ----
 
 /** The two trimmed lines of a fillet arc, with their far (non-arc) and rim (arc) joints. */
-function filletLines(state, arc) {
+// The fillet's two tangent LEGS ({ line, rim: the joint on the arc, far: the other end }). Exported for the dimension seam (task 550): a
+// fillet radius edit judges the legs by filletHasCollapsedLine and everything else by findCollapsedShape.
+export function filletLines(state, arc) {
   const out = [];
   for (const c of (state.constraints || [])) {
     if (!c || c.type !== CONSTRAINT_TYPES.TANGENT || c.circle !== arc.id || !c.line) continue;

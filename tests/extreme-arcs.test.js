@@ -76,11 +76,12 @@ for (const ctl of [CONTROL, FILLET_CONTROL]) {
 
 // the explicit question: is a zero-sweep collapse accepted anywhere? Task 550: findCollapsedShape measures the arc's ends (chord and sweep), so a
 // constraint or dimension whose solve brings an arc's two ends together is REFUSED at creation (Fusion: "failed to solve"). What remains (EA-1)
-// is outside creation: a fillet RADIUS edit (judged by filletHasCollapsedLine, not findCollapsedShape) and a DRAG (no refusal while dragging).
+// is outside creation and edits: a DRAG (no refusal while dragging). A fillet RADIUS edit goes through findCollapsedShape too (its legs excepted).
 const zero = cells.filter(c => c.issues.includes('zero-sweep'));
-ok('no constraint creation leaves an arc at zero sweep (task 550; was EA-1 in 45 cells): every accepted zero-sweep is after a later fillet edit or drag', zero.length === 0, zero.map(c => `${c.variant} ${c.row}/${c.state}`).join('; '));
+ok('no constraint creation leaves an arc at zero sweep (task 550; was EA-1 in 45 cells): every accepted zero-sweep is after a later drag', zero.length === 0, zero.map(c => `${c.variant} ${c.row}/${c.state}`).join('; '));
 const later = cells.filter(c => c.issues.some(i => /^(edit[0-9.]+|drag)-zero-sweep$/.test(i)));
-console.log(`zero-sweep after a later fillet-radius edit or drag in ${later.length} cell(s): rows ${[...new Set(later.map(c => c.row))].join(', ')}; variants ${[...new Set(later.map(c => c.variant))].join(', ')}`);
+ok('no dimension edit leaves an arc at zero sweep (task 550: fillet radius edits go through findCollapsedShape too)', !cells.some(c => c.issues.some(i => /^edit[0-9.]+-zero-sweep$/.test(i))), later.map(c => `${c.variant} ${c.row}/${c.state}`).join('; '));
+console.log(`zero-sweep after a later drag in ${later.length} cell(s): rows ${[...new Set(later.map(c => c.row))].join(', ')}; variants ${[...new Set(later.map(c => c.variant))].join(', ')}`);
 
 // ---------------------------------------------------------------------------------------------------------------- repros (each is expected to show its finding today)
 for (const id of Object.keys(REPRO_CELL)) {

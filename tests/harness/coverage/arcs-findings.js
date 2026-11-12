@@ -9,9 +9,9 @@ import { runArcCell, ROWS } from './arcs-rows.js';
 export const KNOWN = {
   'EA-1': {
     severity: 'MEDIUM',
-    title: 'A zero-sweep collapse is still ACCEPTED after a fillet-radius edit or a drag (refused at constraint creation since task 550)',
-    diagnosis: 'task 550: findCollapsedShape (constraint-verifier.js) measures the ends of an arc (chord and chord / radius), so a constraint or dimension whose solve brings the two ends of an arc together is refused at creation (the coincident of the own ends of an arc: refused on every variant, like Fusion). Not covered: a FILLET radius edit (commitDimensionEdit judges a fillet edit by filletHasCollapsedLine only: f2r10 radius x1.5 / x0.67 with a point on the arc / a tangent circle) and a DRAG of an arc joint (f179r10 end dragged across its start: no refusal while dragging, EA-4 family).',
-    task: 'judge a fillet radius edit by findCollapsedShape as well; decide with Fusion what a drag that closes an arc does',
+    title: 'A zero-sweep collapse is still ACCEPTED after a DRAG (refused at constraint creation and on every dimension edit since task 550)',
+    diagnosis: 'task 550: findCollapsedShape (constraint-verifier.js) measures the ends of an arc (chord and chord / radius), and every "converged, accept" decision uses it: constraint creation (the coincident of the own ends of an arc: refused on every variant, like Fusion) and every dimension edit, a fillet radius edit included (only the fillet legs are judged by filletHasCollapsedLine). Not covered: a DRAG of an arc joint (f179r10, the end of a 1 degree fillet arc dragged across its start: no refusal while dragging, EA-4 family).',
+    task: 'decide with Fusion what a drag that closes an arc does (refuse the frame, or flip the direction)',
   },
   // EA-2 (the stored largeArc flag never recomputed: an arc past 180 degrees drawn and exported as the other arc) FIXED in task 550: the large-arc
   // choice is derived from the joints and the direction by geometry.js arcSweepInfo everywhere (renderer, exports, loop paths, bounds). A cell whose
@@ -98,7 +98,7 @@ export function ui10() { const f = uiFacts(variant('s30cw')); return { ok: !f.ar
 
 // the cell repro of an EA id: the first (variant,row,state) that shows it, as a command line the doc quotes
 export const REPRO_CELL = {
-  'EA-1': ['f2r10', 'point-on-arc', 'sep'],
+  'EA-1': ['f179r10', 'hv-start-end', 'sep'],
   // EA-3 and EA-5: their first repros (s0.1cw / r0.5s30cw tangent-line sep) pass since task 525 (the who-moves placement moves the line and
   // keeps the arc); the repro is now the first cell that still shows the finding
   'EA-3': ['r0.5s0.1cw', 'tangent-arc', 'shared'],

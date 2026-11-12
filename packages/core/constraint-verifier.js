@@ -335,14 +335,16 @@ export function measureShapeSizes(state) {
 // the angle with the ends apart: neither is the ends meeting). A size the user SET on purpose is exempt: a driving distance dimension on
 // exactly the two joints that measure it (a line's ends, an arc's centre and start = its radius, an arc's start and end = its chord) or a
 // driving radius dimension on the shape itself (the radius), is the user's own value (0 or tiny included), so it is never judged collapsed.
-export function findCollapsedShape(state, before) {
+// `skip`: shape ids judged elsewhere (a fillet radius edit's own tangent legs, which legitimately get very short as R nears its singular
+// value: dimension-seams.js judges them by fillet.js filletHasCollapsedLine, an absolute zero length).
+export function findCollapsedShape(state, before, skip = null) {
     const after = measureShapeSizes(state);
     const driving = (state.constraints || []).filter(c => c.type === CONSTRAINT_TYPES.DISTANCE && !c.isDriven && !c.driven);
     const onPair = (c, p, q) => !c.isRadius && c.joints && c.joints.length === 2 && ((c.joints[0] === p && c.joints[1] === q) || (c.joints[0] === q && c.joints[1] === p));
     const fell = (was, now, k) => was[k] >= MIN_TRACKED_SIZE && now[k] < was[k] * COLLAPSE_RATIO;
     for (const s of state.shapes || []) {
         const was = before.get(s.id), now = after.get(s.id);
-        if (was === undefined || now === undefined) continue;
+        if (was === undefined || now === undefined || (skip && skip.has(s.id))) continue;
         if (fell(was, now, 0) && !driving.some(c => (c.isRadius && c.shape === s.id) || (s.joints && s.joints.length >= 2 && onPair(c, s.joints[0], s.joints[1])))) return s;
         if (was.length === 3 && now.length === 3 && fell(was, now, 1) && fell(was, now, 2) && !driving.some(c => onPair(c, s.joints[1], s.joints[2]))) return s;
     }

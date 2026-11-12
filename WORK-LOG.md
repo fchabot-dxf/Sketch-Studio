@@ -13461,3 +13461,20 @@ They do not: with a length dimension, a (0,5) or small-step move leaves the poin
 Per the task, no fixtures recorded. Evidence: .evidence/527/step1-measurements.txt (local). Only a real mouse drag (UI automation) could
 serve as the oracle: owner decision needed.
 - Follow-up (locked lines): tests added for BOTH lines locked and ONE line locked, then the corner filleted. Accepted; nullity unchanged (both 0 -> 0, one 1 -> 1, same free joints/directions); far ends still fixed in place; directions unchanged after a jitter re-solve; the new tangent-end joints are not free. selectionLockState on a trimmed line afterwards = {has:true, locked:false} (its tangent end joint is not fixed). Reported, not changed. Gate after merging origin/main: files=250 pass=250 fail=0, SMOKE 12/12.
+
+## TURN 530 (phase 1 TRIAL only; nothing under packages/ touched; phase 2 not started)
+Real mouse drag into Fusion 360, driven from an OUTSIDE script (scripts/fusion-oracle/win-mouse.py: ctypes SendInput, per-monitor DPI aware) between
+bridge calls (drag-trial-setup.py builds the case, enters sketch edit mode, frames the view, prints the screen pixel of the point and target;
+drag-trial-read.py reads positions back). Not tried from inside the bridge: a bridge script blocks Fusion's UI thread while it runs (task_530 a), and
+the outside method works, so one method kept. Test document: new unsaved, user parameter CLAUDE_MARK, sketch CLAUDE_TEST_DRAG; closed unsaved at the end
+(2 pre-existing Untitled documents untouched, still open).
+Mapping: screen px = viewport px + (-2560, 695) here (the Fusion window sits on a second monitor at negative x); 95 px/cm at viewExtents 9; checked
+on screenshots (origin and line end drawn exactly at the predicted pixel). viewToScreen() beyond the first points is NOT linear (viewToScreen(2560,858)
+gave y=1035, not 1553): use modelToViewSpace + the offset, verify on a screenshot.
+Free line (case 2) drag (8,1)->(11,6), 3 runs: (11.0, 6.0035) x3 (0.33 px). Pixel-to-model accuracy about 0.01 cm / px.
+Rectangle (case 3, corner (0,0) fixed, H/V, coincident) corner (8,5)->(12,6), 3 runs: (11.938,5.951) / (11.9965,6.0035) / (11.938,5.951): bimodal, 0.06 cm.
+Line, start fixed, length 10 (case 1), end (10,0)->(13,5): NOT the projection (9.34,3.60). 20 steps/600 ms: (6.98656,7.15458) x2, (6.98632,7.15481)
+(repeatable to 2e-4); 2 steps: (5.88,8.09); 60 steps/3 s: (7.16,6.98); 200 steps/4 s: no movement at all ((10,0), drag not started); 2000 ms hold before
+release: identical to no hold. Target (8.66,5) on the circle: (8.43,5.38). Target (0,6): (-5.69,8.22). So Fusion's constrained drag is path dependent
+(event sequence), not "nearest solution to the cursor". Evidence: .evidence/530/ (local).
+Stale display: after setting the camera through the API the on-screen window did not repaint until vp.fit(); always screenshot the window to confirm.

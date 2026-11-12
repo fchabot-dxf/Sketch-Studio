@@ -13460,3 +13460,4 @@ They do not: with a length dimension, a (0,5) or small-step move leaves the poin
 (9.8126,-1.9269), a wrong-branch point (deterministic). Unconstrained / H-only moves behave plausibly. Fully constrained: silent no-op.
 Per the task, no fixtures recorded. Evidence: .evidence/527/step1-measurements.txt (local). Only a real mouse drag (UI automation) could
 serve as the oracle: owner decision needed.
+- Follow-up (locked lines): tests added for BOTH lines locked and ONE line locked, then the corner filleted. Accepted; nullity unchanged (both 0 -> 0, one 1 -> 1, same free joints/directions); far ends still fixed in place; directions unchanged after a jitter re-solve; the new tangent-end joints are not free. selectionLockState on a trimmed line afterwards = {has:true, locked:false} (its tangent end joint is not fixed). Reported, not changed. Gate after merging origin/main: files=250 pass=250 fail=0, SMOKE 12/12.

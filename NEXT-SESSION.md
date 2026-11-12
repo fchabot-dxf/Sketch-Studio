@@ -77,6 +77,31 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-12, turn 820)
+- MERGED since turn 796: 521 no-collapse (85241c7), 524 fillet keeps a locked corner as the virtual sharp, locked lines stay held like
+  Fusion (54d0eb3 + c68fe68), 523 arc tangent rows differentiate the live arc radius, Opus (c0224bc). Gate 250/250 on main c68fe68.
+- OWNER RULINGS 2026-11-12: the three open questions = "do it like Fusion": who-moves = per-constraint table declared as data and
+  generated from the recorded Fusion cells (task 525, Opus, IN FLIGHT, agents/task-525-who-moves); equal(arc, circle) refused and a
+  redundant geometric constraint refused (task 526, QUEUED after 525: same file, same KNOWN lists). 523 side effect accepted until
+  525: a tangent to an arc can resize the arc (KNOWN entries tagged "placement, task 525").
+- IN FLIGHT: 522 test hygiene (prepare-look / penplotter-stage-undo flakes at the cause; solver-scenarios must be able to fail),
+  Sonnet. 528 Fusion oracle for editing a dimension value (Sonnet; drives Fusion). Specs in docs/tasks/ (527/528/530 on their branches).
+- "ALL 3" Fusion oracles (owner): 527 drag STOPPED: Fusion API point.move/sketch.move is not a mouse drag. Replaced by 530 (spec on
+  agents/task-527-fusion-drag): REAL mouse input in the Fusion window, trial first. Owner 2026-11-12: "use it as you want for a few
+  hours" (PC + mouse, that day only; ask again another day). Starts when 528 releases Fusion. 529 (each tool's result vs Fusion) after.
+  Computer-use tools are NOT available in the VS Code session.
+- MEASURED IN FUSION (API): fillet on a locked corner POINT: accepted, the point and its lock are deleted; fillet with locked LINES:
+  accepted, lines stay locked. Ours locks a line by its two end joints, so 524 = Fusion for locked lines; differs only for a lone
+  locked point with free lines (ours keeps the lock).
+- FOUND, NOT FIXED: after a fillet a trimmed locked line no longer SHOWS as locked (selectionLockState: its tangent-end joint is
+  not fixed) though it cannot move; parallel.computeJacobian assigns a shared joint's column twice (F6; perpendicular and angle use
+  the same pattern, maybe the F4 cells); NEW-6 remaining 3 cells: lockTangentBranch picks external on equal concentric circles, an
+  arc centred on another arc's rim collapses, one cell flips with the PlaneGCS oracle's run order.
+- LESSON: TaskStop on a background merge.sh does NOT stop it: its gate kept running and PUSHED (54d0eb3) after the advisor had told
+  the owner nothing was pushed. To hold a merge, do not start it; to abort one, kill the merge.sh bash process tree and verify
+  origin/main afterwards (and again later). Never push to main while a merge.sh is running (its push would be rejected): put specs
+  on the task branch instead.
+
 ### Update (2026-11-12, turn 796)
 - MERGED since turn 772: 517 (a853dfe), 520 (9feea55), 518 Fusion oracle (6da9d8d), 516 (aced80c), 515 circle radius unknown,
   Opus (66d8648). Gate 248/248 on main.

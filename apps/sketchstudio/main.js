@@ -4,6 +4,7 @@ import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { draw } from '#ui/svg-renderer.js';
 import { setupInput, showDimInput } from '#ui/input-manager.js';
+import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { applyDefaultState } from '#core/state.js';
@@ -188,15 +189,15 @@ function initApp(){
   docBuffer = createDocumentBuffer({
     state,
     app: 'sketchstudio', // TASK 474: the design records who saved it last
-    onRestored: () => { try { engine.solve(500); } catch (_) {} }, // after the initial restore AND after Open / New / Open from file
+    onRestored: () => { try { engine.solve(500); } catch (_) {} fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view)
     onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });
   docBuffer.restore();
   docBuffer.start();
 
-  // DIAG-OVERLAY: reachable from the header, next to the save-status indicator.
+  // DIAG-OVERLAY: the Log button lives in the bottom status bar (where the MODE label was), on every screen width.
   const diagLog = createDiagnosticLog({ appId: 'sketchstudio', state });
-  header.el.appendChild(diagLog.toggleEl);
+  document.getElementById('status-diag-slot').appendChild(diagLog.toggleEl);
 
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {

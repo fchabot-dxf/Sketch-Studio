@@ -57,7 +57,7 @@ export function handleTrimPointerDown(e, ctx, state, viewState) {
   const hit = findTrimInterval(world, state, svg, viewState);
   if (!hit) return false;
 
-  try { state.saveState?.(); } catch (_) {}
+  try { state.saveState?.('trim'); } catch (_) {}
 
   const result = trimShape(state, hit.shapeId, world);
   if (result) {

@@ -22,8 +22,8 @@ export function deleteConstraints(state, constraintsOrIds) {
   if (!state) return 0;
   const toDelete = Array.isArray(constraintsOrIds) ? constraintsOrIds : [constraintsOrIds];
   if (toDelete.length === 0) return 0;
-  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup(); } catch (_) {}
-  try { if (typeof state.saveState === 'function') state.saveState(); } catch (_) {}
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete constraints'); } catch (_) {}
+  try { if (typeof state.saveState === 'function') state.saveState('delete constraints'); } catch (_) {}
 
   let removed = 0;
   for (const c of toDelete) {
@@ -62,8 +62,8 @@ export function deleteShapes(state, shapeIds) {
   if (!state) return 0;
   const ids = Array.isArray(shapeIds) ? shapeIds.slice() : [shapeIds];
   if (ids.length === 0) return 0;
-  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup(); } catch (_) {}
-  try { if (typeof state.saveState === 'function') state.saveState(); } catch (_) {}
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete shapes'); } catch (_) {}
+  try { if (typeof state.saveState === 'function') state.saveState('delete shapes'); } catch (_) {}
 
   let removed = 0;
   const removedJoints = new Set();
@@ -124,8 +124,8 @@ export function deleteJoints(state, jointIds) {
   if (!state) return 0;
   const ids = Array.isArray(jointIds) ? jointIds.slice() : [jointIds];
   if (ids.length === 0) return 0;
-  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup(); } catch (_) {}
-  try { if (typeof state.saveState === 'function') state.saveState(); } catch (_) {}
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete joints'); } catch (_) {}
+  try { if (typeof state.saveState === 'function') state.saveState('delete joints'); } catch (_) {}
 
   let removed = 0;
   // Remove joints from shapes; if any shape loses joints, remove it
@@ -172,7 +172,7 @@ export function deleteJoints(state, jointIds) {
 export function deleteSelection(state) {
   if (!state) return;
 
-  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup(); } catch (_) {}
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
 
   // 1. Identify explicit selections
   const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints) : [];

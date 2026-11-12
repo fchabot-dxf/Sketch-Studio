@@ -3,6 +3,8 @@
 // arc sweep extrema (start/end rim points + any cardinal angles crossed along the sweep, excluding the unrendered
 // center joint), cubic beziers by analytical derivative extrema, and joint-only sketches by non-origin joints.
 
+import { hiddenSketchIds, sketchOf } from './sketch-model.js';
+
 const TAU = Math.PI * 2;
 const CARDINAL_ANGLES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
 const normAngle = (a) => ((a % TAU) + TAU) % TAU;
@@ -52,9 +54,10 @@ export function computeGeometryBounds(state) {
   };
 
   const J = state && state.joints;
-  const shapes = (state && state.shapes) || [];
+  const hidden = hiddenSketchIds(state); // geometry of a hidden sketch is not on the canvas, so it is not in the box
+  const shapes = ((state && state.shapes) || []).filter((s) => !(s && hidden.has(sketchOf(s))));
 
-  if (shapes.length > 0 && J) {
+  if (state && Array.isArray(state.shapes) && state.shapes.length > 0 && J) {
     for (const s of shapes) {
       if (!s) continue;
       if (s.type === 'line' && Array.isArray(s.joints)) {
@@ -128,7 +131,7 @@ export function computeGeometryBounds(state) {
     }
   } else if (J && typeof J.entries === 'function') {
     for (const [id, j] of J.entries()) {
-      if (j && id !== 'j_origin' && Number.isFinite(j.x) && Number.isFinite(j.y)) {
+      if (j && id !== 'j_origin' && !hidden.has(sketchOf(j)) && Number.isFinite(j.x) && Number.isFinite(j.y)) {
         ext(j.x, j.y);
       }
     }

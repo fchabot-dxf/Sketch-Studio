@@ -67,6 +67,43 @@ export function fitViewToExtents(svg, view, state, options = {}) {
     updateViewBox(svg, view);
 }
 
+// Smallest world width a fit may zoom in to: a single point or a 1-unit line is framed at 10 units across, never blown up
+// further (the same floor `fitViewToExtents` declares as its default `minWidth`).
+export const FIT_MIN_WIDTH = 10;
+// Empty space left around the drawing on each side, as a fraction of the fitted extent (10%).
+export const FIT_MARGIN = 0.1;
+
+const pendingFits = new WeakMap(); // svg -> stop() of its armed "fit once the canvas has a size" observer
+
+/**
+ * Frames the visible drawing (`computeGeometryBounds`: joints of visible shapes, arc extents, circles by radius, construction
+ * included, dimension labels not) centred in `svg` with `margin` (default FIT_MARGIN) on each side, by setting the shared
+ * `state.view`. An empty drawing leaves the view alone. Returns true when the view was set now.
+ * A canvas with no size yet (hidden tab) is not fitted: the fit is armed and runs at the first real size, unless the user
+ * has panned or zoomed `state.view` in the meantime. The next call for the same svg replaces an armed fit.
+ */
+export function fitToDrawing(svg, state, { margin = FIT_MARGIN } = {}) {
+    if (!svg || !state || !state.view) return false;
+    const armed = pendingFits.get(svg);
+    if (armed) armed();
+    if (!computeGeometryBounds(state)) return false;
+    const sized = () => { const r = svg.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const fit = () => fitViewToExtents(svg, state.view, state, { padding: 1 + 2 * margin, minWidth: FIT_MIN_WIDTH });
+    if (sized()) { fit(); return true; }
+    if (typeof ResizeObserver === 'undefined') return false;
+    const { x, y, w } = state.view;
+    const ro = new ResizeObserver(() => {
+        if (!sized()) return;
+        stop();
+        const v = state.view;
+        if (v.x === x && v.y === y && v.w === w) fit(); // untouched since the restore
+    });
+    const stop = () => { ro.disconnect(); pendingFits.delete(svg); };
+    pendingFits.set(svg, stop);
+    ro.observe(svg);
+    return false;
+}
+
 function getTouchMetrics(pz = panZoomState) {
     const pts = Array.from(pz.touchPoints.values());
     if (pts.length < 2) return null;

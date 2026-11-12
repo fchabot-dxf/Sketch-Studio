@@ -43,18 +43,6 @@ export function setupUI(state){
     // calls refresh() so KEYBOARD tool-switches (switchToTool) follow too.
     if (toolRibbon) toolRibbon.refresh();
 
-    // Update mode text
-    const mt = document.getElementById('modeText');
-    let modeText = t.toUpperCase();
-    if(t === TOOL_MODES.RECT) {
-      const modeNames = { 
-        [RECT_MODES.TWO_POINT]: '2PT', 
-        [RECT_MODES.CENTER]: 'CENTER', 
-        [RECT_MODES.THREE_POINT]: '3PT' 
-      };
-      modeText = 'RECT ' + (modeNames[state.rectMode] || '');
-    }
-    if(mt) mt.innerText = 'MODE: ' + modeText; 
   }
   
   // S7c-2d-pre: the rich tool-activation logic (migrated from the old per-button click handlers, made
@@ -96,16 +84,13 @@ export function setupUI(state){
       // Clicking the same pending constraint tool again cancels it
       if(state.pendingConstraint && state.pendingConstraint.type === effectiveType){
         state.pendingConstraint = null;
-        setTool(TOOL_MODES.SELECT); // sets modeText SELECT + refreshes the ribbon
+        setTool(TOOL_MODES.SELECT); // refreshes the ribbon
         return;
       }
 
-      // Enter the tool, wait for the first element; mode-text hint (overrides setTool's plain modeText)
+      // Enter the tool and wait for the first element
       state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
       setTool(t);
-      const mt = document.getElementById('modeText');
-      const hint = t === TOOL_MODES.COLLINEAR ? (t.toUpperCase() + ' - 1/3 Points') : (t.toUpperCase() + (firstEl ? ' - Select 2nd Element' : ' - Select 1st Element'));
-      if(mt) mt.innerText = 'MODE: ' + hint;
       return;
     }
 
@@ -232,7 +217,7 @@ export function setupUI(state){
     constructToggle.addEventListener('click', () => {
       // If shapes are selected, toggle their construction state (undoable)
       if (state.selectedShapes && state.selectedShapes.size > 0) {
-        try{ state.beginUndoGroup(); }catch(_){ }
+        try{ state.beginUndoGroup('toggle construction'); }catch(_){ }
         for (const sid of state.selectedShapes) {
           const s = state.shapes.find(x => x.id === sid);
           if (s) s.isConstruction = !s.isConstruction;
@@ -283,7 +268,6 @@ export function setupUI(state){
 
         // Reset UI mode
         setTool(TOOL_MODES.SELECT);
-        const mt = document.getElementById('modeText'); if(mt) mt.innerText = 'MODE: SELECT';
       }catch(err){
         console.error('[clear] error clearing canvas', err);
       }
@@ -337,7 +321,7 @@ export function setupUI(state){
     if(e.key === 'Escape'){
       if(state.pendingConstraint){
         state.pendingConstraint = null;
-        setTool(TOOL_MODES.SELECT); // S7c-2d: sets modeText + syncs the ribbon (no #tool-select null-deref)
+        setTool(TOOL_MODES.SELECT); // S7c-2d: syncs the ribbon (no #tool-select null-deref)
         return;
       }
       

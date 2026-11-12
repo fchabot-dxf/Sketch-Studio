@@ -8,6 +8,7 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
+import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
@@ -249,7 +250,7 @@ function doGroup() {
   const st = designController.state;
   const sel = (st.selectedShapes instanceof Set) ? [...st.selectedShapes] : [];
   if (sel.length < 2) { groupStatus('Select 2+ shapes to group'); return; }
-  try { st.saveState && st.saveState(); } catch (_) {}
+  try { st.saveState && st.saveState('group'); } catch (_) {}
   const g = makeGroup(st, sel);
   groupStatus(`Grouped ${sel.length} shapes → ${g ? g.name : 'group'}`);
 }
@@ -260,7 +261,7 @@ function doUngroup() {
   const byId = new Map((st.shapes || []).map((s) => [s.id, s]));
   const gids = new Set(); for (const id of sel) { const gid = groupOf(byId.get(id)); if (gid) gids.add(gid); }
   if (!gids.size) { groupStatus('No group on the selection'); return; }
-  try { st.saveState && st.saveState(); } catch (_) {}
+  try { st.saveState && st.saveState('ungroup'); } catch (_) {}
   for (const gid of gids) ungroup(st, gid);
   groupStatus(`Ungrouped ${gids.size} group${gids.size === 1 ? '' : 's'}`);
 }
@@ -309,7 +310,7 @@ function svgImportDescriptors(svg) {
 }
 // A finished import (joints + shapes) becomes one NEW named, active sketch: shared by the SVG and the DXF parsers (TASK 478).
 function landImport(st, fileName, joints, shapes) {
-  try { st.saveState && st.saveState(); } catch (_) {}
+  try { st.saveState && st.saveState('import ' + (fileName || 'file')); } catch (_) {}
   const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
   activateSketch(st, sk.id);
   for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
@@ -443,7 +444,7 @@ const refreshCutPanel = () => {
 function cutEdit(apply) {
   const st = designController && designController.state;
   const before = JSON.stringify(captureCutPlan());
-  if (st) st.saveState();
+  if (st) st.saveState('cut plan edit');
   const n = st ? st.history.length : 0;
   apply();
   if (st && JSON.stringify(captureCutPlan()) === before) st.discardSnapshotAt(n);
@@ -561,6 +562,7 @@ function ensureSketch() {
   const applyRestored = ({ hosts }) => {
     try {
       designController.engine.solve(500);
+      fitToDrawing(document.getElementById('design-canvas'), designController.state); // TASK 494: frame the restored drawing (armed until the canvas has a size)
       if (infoPanel) infoPanel.refresh();
       if (vcarveView) vcarveView.refresh();
     } catch (_) {}

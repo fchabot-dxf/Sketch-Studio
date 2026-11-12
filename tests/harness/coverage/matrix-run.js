@@ -331,8 +331,9 @@ export function classify(c) {
   if (r === 'tangent' && has('refused-feasible')) return { v: 'NEW-6' };
   if ((r === 'dim-horizontal' || r === 'dim-vertical') && has('demoted')) return { v: 'F1' };
   if (r.startsWith('dim-angle') && has('undo-nullity')) return { v: 'NEW-4' };
-  if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual')) && !shared) return { v: 'F3' };
-  if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };
+  if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };   // shared-joint angle not enforced (F4; tolerated)
+  // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)
+  if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual'))) return { v: 'F3' };
   if (r.startsWith('dim-line-line') && has('demoted')) return { v: 'NEW-5' };
   if (has('nullity!=fd')) return { v: 'F6' };
   if (r === 'collinear' && (has('nominal') || has('nullity!=oracle'))) return { v: 'NEW-7' };

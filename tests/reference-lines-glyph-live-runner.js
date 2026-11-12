@@ -1,4 +1,4 @@
-// tests/reference-lines-glyph-live.test.js - TASK 539 live: a constraint on an axis shows its usual glyph next to the real line, and nothing but the glyph is drawn for it.
+// tests/reference-lines-glyph-live-runner.js - TASK 539 live: a constraint on an axis shows its usual glyph next to the real line, and nothing but the glyph is drawn for it.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -104,7 +104,9 @@ await (async () => {
       'tangent X': async (o) => { await tool('circle'); await click(o.x + 300, o.y - 100); await click(o.x + 350, o.y - 100); await esc(); await tool('tangent'); await click(o.x + 300, o.y - 150); await click(o.x + 250, o.y + 3); },
       'tangent Y': async (o) => { await tool('circle'); await click(o.x + 300, o.y - 100); await click(o.x + 350, o.y - 100); await esc(); await tool('tangent'); await click(o.x + 300, o.y - 150); await click(o.x + 3, o.y - 300); },
     };
+    const SCEN = process.env.SCEN ? new RegExp(process.env.SCEN) : null; // the gate runs each *.test.js under 90 s: three wrappers set SCEN
     for (const [name, run] of Object.entries(scenarios)) {
+      if (SCEN && !SCEN.test(name)) continue;
       const o = await fresh();
       await run(o);
       await tool('select'); await move(o.x + 700, o.y + 300); await sleep(400);
@@ -124,6 +126,7 @@ await (async () => {
       'dimension point-Y': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 380, o.y - 60); await click(o.x + 3, o.y - 300); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_y') },
     };
     for (const [name, sc] of Object.entries(dimScenarios)) {
+      if (SCEN && !SCEN.test(name)) continue;
       const o = await fresh();
       await sc.run(o);
       await click(o.x + 330, o.y - 30); await key('Enter', 'Enter', 13); await sleep(300); // drop the label, accept the value
@@ -135,7 +138,7 @@ await (async () => {
       assert(d.shapes.length === 1, name + ': the axis is not a shape');
       console.log(name.padEnd(20), 'labels', label, d.constraints.map((c) => c.type).join(','));
     }
-    { // a FIRST dimension click on an axis picks nothing (no axis dimension is started)
+    if (!SCEN || SCEN.test('dimension')) { // a FIRST dimension click on an axis picks nothing (no axis dimension is started)
       const o = await fresh(); await drawLine(o); await tool('dim'); await click(o.x + 250, o.y + 3); await sleep(200);
       assert((await litCount()) === 0, 'dimension: the first click near an axis does not light or pick it');
       await esc(); await tool('select'); await sleep(300); await waitSaved(); const d = await stored();

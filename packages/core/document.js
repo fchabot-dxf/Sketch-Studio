@@ -18,6 +18,7 @@ import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js';
+import { legacyAngleSector } from '#core/angle-sector.js';
 
 // 2 (TASK 535, owner ruling O2): the version that carries dimension names, dimension formulas and geometry.parameters. Always written;
 // a version-1 file still loads (parameters absent -> none, every dimension is named on load) but an older build refuses a version-2 file.
@@ -97,7 +98,8 @@ export function deserializeDocument(doc, state) {
 
   state.constraints.length = 0;
   for (const c of (g.constraints || [])) {
-    const proto = { ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined };
+    // TASK 553: an angle dimension saved by an older build (no `sector`) is converted here, the one load path, from the loaded geometry
+    const proto = legacyAngleSector({ ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined }, state.joints, state.shapes);
     addConstraintObject(state, proto);
   }
 

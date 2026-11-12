@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
-const OWNER = JSON.parse(fs.readFileSync(new URL('../.evidence/543/owner-report-document.json', import.meta.url), 'utf8'));
+const OWNER = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/owner-trapezoid-angle.json', import.meta.url), 'utf8'));
 const RADIUS = OWNER.geometry.constraints.find((c) => c.type === 'angle').offset;   // the arc is the SVG arc path with this radius
 const INT = { x: 587.4900947223791, y: 7584.647136653884 };                        // the lines' intersection (computed from the document)
 

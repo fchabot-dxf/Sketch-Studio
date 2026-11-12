@@ -45,7 +45,7 @@ const within = (arc, value, msg) => assert(arc && Math.abs(arc.span - value) < 0
 
 // 1. the owner's document
 {
-  const geo = JSON.parse(fs.readFileSync(new URL('../.evidence/543/owner-report-document.json', import.meta.url), 'utf8')).geometry;
+  const geo = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/owner-trapezoid-angle.json', import.meta.url), 'utf8')).geometry;
   const joints = new Map(geo.joints);
   const c = geo.constraints.find((k) => k.type === 'angle');
   const arc = arcOf(joints, geo.shapes, c, 120000);

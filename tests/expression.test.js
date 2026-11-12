@@ -1,6 +1,6 @@
 // TASK 535 slice 1a — packages/core/expression.js (parser / evaluator / printer / dependencies) and the units.js table.
 // TABLE-DRIVEN: each row is [input, ctx, expected, canonicalText?].
-//   ctx      '' (no target, mm document) | 'in' (inch document, no target) | 'L' length target | 'Lin' length target, inch document
+//   ctx      '' (no target, mm document) | 'in' / 'cm' (inch / cm document, no target) | 'L' length target | 'Lin' length target, inch document
 //            | 'A' angle target | 'N' unitless target
 //   expected [v, L, A] (v in base mm / degrees; L and A the unit exponents)  OR  'CODE@start,end' (an error and its position)
 import { readFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ const SCOPE = {
   d5: { ok: false, code: 'REFERENCE_DIM', message: 'd5 is a reference dimension' },
 };
 const lookup = (n) => (Object.prototype.hasOwnProperty.call(SCOPE, n) ? SCOPE[n] : undefined);
-const CTX = { '': {}, in: { unit: 'in' }, L: { target: 'length' }, Lin: { target: 'length', unit: 'in' }, A: { target: 'angle' }, N: { target: 'none' } };
+const CTX = { '': {}, in: { unit: 'in' }, cm: { unit: 'cm' }, L: { target: 'length' }, Lin: { target: 'length', unit: 'in' }, A: { target: 'angle' }, N: { target: 'none' } };
 
 const ROWS = [
   // ── NUMBER ──
@@ -76,8 +76,10 @@ const ROWS = [
   ['abs(-4 mm)', '', [4, 1, 0]], ['abs(-4)', '', [4, 0, 0]], ['abs(3 deg - 5 deg)', '', [2, 0, 1]],
   ['floor(2.7) * 1 mm', '', [2, 1, 0]], ['floor(2.7)', '', [2, 0, 0]], ['floor(-2.1)', '', [-3, 0, 0]], ['floor(2.7 mm)', '', [2, 1, 0]],
   ['ceil(2.1)', '', [3, 0, 0]], ['ceil(2.1 mm)', '', [3, 1, 0]], ['ceil(-2.9)', '', [-2, 0, 0]],
-  ['round(2.5)', '', [3, 0, 0]], ['round(2.4)', '', [2, 0, 0]], ['round(width / 7)', '', [17, 1, 0]],
-  ['round(1.4 in)', '', [36, 1, 0]], ['round(1.4 in)', 'in', [25.4, 1, 0]], ['floor(1.9 in)', 'in', [25.4, 1, 0]], ['ceil(1.1 in)', 'in', [50.8, 1, 0]],
+  ['round(2.5)', '', [3, 0, 0]], ['round(2.4)', '', [2, 0, 0]], ['round(width / 7)', '', 'UNIT_MISMATCH@0,16'], ['floor(width)', '', 'UNIT_MISMATCH@0,12'], ['ceil(1 mm + 2 mm)', '', 'UNIT_MISMATCH@0,17'], ['round(ang)', '', 'UNIT_MISMATCH@0,10'],
+  ['floor(width / 1 mm) * 1 mm', '', [120, 1, 0]], ['floor(width / 7 mm) * 1 mm', '', [17, 1, 0]], ['ceil(holes / 3) * 1 mm', '', [2, 1, 0]],
+  ['floor(-2.7 mm)', '', [-3, 1, 0]], ['ceil(-2.7 mm)', '', [-2, 1, 0]], ['floor(1/2 in)', '', [0, 1, 0]], ['ceil(1/2 in)', '', [25.4, 1, 0]], ['round(2.5 deg)', '', [3, 0, 1]],
+  ['floor(2.7 cm)', '', [20, 1, 0]], ['floor(holes)', '', [4, 0, 0]], ['floor(PI)', '', [3, 0, 0]], ['round(1.4 in)', '', [25.4, 1, 0]], ['round(1.4 in)', 'in', [25.4, 1, 0]],
   ['min(1; 2)', '', [1, 0, 0]], ['min(3, 2, 1)', '', [1, 0, 0]], ['min(3; 2, 1)', '', [1, 0, 0]], ['max(2 mm; 3 mm)', '', [3, 1, 0]],
   ['max(2 mm, 3 mm)', '', [3, 1, 0]], ['max(width; 50 mm)', '', [120, 1, 0]], ['max(1 mm; 2)', '', [2, 1, 0], 'max(1 mm; 2 mm)'],
   ['max(2; 1 mm)', 'in', [25.4 * 2, 1, 0], 'max(2 in; 1 mm)'], ['min(1 mm; 2 deg)', '', 'UNIT_MISMATCH@0,16'], ['max(holes; width)', '', 'UNIT_MISMATCH@0,17'],
@@ -108,7 +110,21 @@ const ROWS = [
   ['max(a = 3; 1)', '', 'ASSIGN_NOT_TOP@6,7'], ['1 + a = 3', '', 'ASSIGN_NOT_TOP@6,7'],
 ];
 
+// Fusion MEASURED (API, 535-1a ruling): floor / ceil / round round in the unit the ARGUMENT IS WRITTEN IN, never the document's or
+// the parameter's unit. Same result in an mm, a cm and an inch document.
+const MEASURED = [
+  ['floor(2.7 mm)', [2, 1, 0]], ['floor(27 mm)', [27, 1, 0]], ['ceil(2.7 mm)', [3, 1, 0]], ['round(2.4 mm)', [2, 1, 0]], ['floor(30.5 mm)', [30, 1, 0]],
+  ['floor(2.7 in)', [50.8, 1, 0]], ['floor(1 in)', [25.4, 1, 0]], ['round(25.4 mm)', [25, 1, 0]], ['floor(2.7) * 1 mm', [2, 1, 0]],
+  ['floor(27 mm / 1 mm) * 1 mm', [27, 1, 0]],
+];
+const MEASURED_TARGETS = [['', {}], ['in', { unit: 'in' }], ['cm', { unit: 'cm' }], ['L', { target: 'length' }], ['Lin', { target: 'length', unit: 'in' }]];
 let rows = 0;
+for (const [input, want] of MEASURED) for (const [k, c] of MEASURED_TARGETS) {
+  rows++;
+  const r = evaluateText(input, lookup, c);
+  assert(r.ok && near(r.v, want[0]) && r.L === 1 && r.A === 0, `measured ${input} [${k}]: expected ${want[0]} mm, got ${JSON.stringify(r.ok ? [r.v, r.L, r.A] : r.code)}`);
+}
+
 const parseExpect = (e) => { const m = /^([A-Z_]+)@(\d+),(\d+)$/.exec(e); return { code: m[1], start: +m[2], end: +m[3] }; };
 for (const [input, ck, expected, text] of ROWS) {
   rows++;
@@ -299,9 +315,6 @@ for (const s of PARSE_STRINGS) {
       total++;
       if (a.ok) {
         okCount++;
-        // KNOWN design conflict (reported in 535-1a): floor / ceil / round act in the CONTEXT unit (design B), so a stored text that
-        // rounds a length cannot also be independent of the document unit (O19). Those texts are checked for stability only.
-        if (/(floor|ceil|round)\(/.test(text)) continue;
         // O19: the stored text is unit-complete: it gives the same answer under a different document unit
         const c = canonicalize(p.ast, lookup, ctx);
         assert(c.ok, 'canonicalize ok when evaluate ok');

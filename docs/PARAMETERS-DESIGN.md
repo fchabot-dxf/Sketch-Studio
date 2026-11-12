@@ -234,8 +234,14 @@ constant   = "PI" ;                                     (* a NAME the evaluator 
 - `*` `/` multiply / divide the exponents. `^`: the exponent must be unitless; a unit base needs an integer exponent.
   `sqrt` halves even exponents (`sqrt(d1^2 + d2^2)` is a length), refuses odd ones.
 - Trig takes an angle (a unitless argument is promoted to `deg`) and returns unitless; `asin` / `acos` / `atan` return degrees.
-  `floor` / `ceil` / `round` act on the value in the CONTEXT unit (`round(width)` rounds to whole mm in a mm document; to verify
-  in Fusion UI what Fusion rounds in).
+`floor` / `ceil` / `round` round in the unit the ARGUMENT IS WRITTEN IN, never the document's or the parameter's
+  unit (so a stored file means the same in any browser, O19). **measured (API)** Fusion, 2026-11-12, inch document: `floor(2.7 mm)` = 2 mm;
+  `floor(27 mm)` = 27 mm; `ceil(2.7 mm)` = 3 mm; `round(2.4 mm)` = 2 mm; `floor(30.5 mm)` = 30 mm; `floor(2.7 in)` = 2 in (5.08 cm);
+  `floor(1 in)` in a parameter whose unit is mm = 1 in (2.54 cm); `round(25.4 mm)` in a parameter whose unit is in = 25 mm;
+  `floor(2.7)` is stored back as `( floor(2.7) ) * 1 mm` = 2 mm; `floor(27 mm / 1 mm) * 1 mm` = 27 mm. Our rule: a unitless argument rounds
+  plainly (result unitless); a single literal with a unit (optionally signed, optionally the O20 fraction `1/2 in`) rounds that number in that
+  unit; any other argument with a length or angle (a name, a sum, a product) is UNIT_MISMATCH, with the message naming the explicit form
+  `floor(gap / 1 mm) * 1 mm`. Fusion's behaviour for a NAME argument (`floor(gap)`) is not measured: **to verify in Fusion UI**.
 - The result must match the target: a length dimension needs `(1,0)`, an angle dimension `(0,1)`, a parameter its unit's kind.
   A unitless RESULT for a length / angle target is taken in the context unit (Fusion, measured (API): `7` typed in an inch
   dimension became `7 "`).

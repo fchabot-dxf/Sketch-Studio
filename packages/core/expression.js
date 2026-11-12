@@ -385,7 +385,19 @@ function finite(q, at) {
   if (!Number.isFinite(q.v)) throw new Bail(fail('NOT_FINITE', 'the result is not a number', at));
   return q;
 }
-function ctxScale(q, env) { return isLength(q) ? env.lenUnit.f : isAngle(q) ? env.angUnit.f : 1; }
+// floor / ceil / round (Fusion, measured): they round in the unit the ARGUMENT IS WRITTEN IN, never the document's or the parameter's.
+// Returns { n (the written number, sign applied), f (the written unit's factor) } for a single literal with a unit
+// (optionally signed, optionally the O20 fraction form), else null.
+function writtenUnitLiteral(node) {
+  let sign = 1;
+  let x = node;
+  while (x.t === 'neg') { sign = -sign; x = x.arg; }
+  if (x.t !== 'unit') return null;
+  const u = unitInfo(x.unit);
+  if (x.arg.t === 'num') return { n: sign * x.arg.value, f: u.f };
+  if (x.arg.t === 'bin' && x.arg.op === '/' && x.arg.left.t === 'num' && x.arg.right.t === 'num') return { n: (sign * x.arg.left.value) / x.arg.right.value, f: u.f };
+  return null;
+}
 
 function walk(n, env) {
   const at = span(n);
@@ -448,8 +460,12 @@ function walkCall(n, env, at) {
   switch (n.fn) {
     case 'abs': return done({ v: Math.abs(a.v), L: a.L, A: a.A, bare: a.bare });
     case 'floor': case 'ceil': case 'round': {
-      const u = ctxScale(a, env); // acts on the value in the CONTEXT unit
-      return done({ v: Math[n.fn](a.v / u) * u, L: a.L, A: a.A, bare: a.bare });
+      if (unitless(a)) return done({ v: Math[n.fn](a.v), L: 0, A: 0, bare: a.bare }); // plain rounding
+      const lit = writtenUnitLiteral(a.node);
+      if (!lit || !(isLength(a) || isAngle(a))) {
+        throw new Bail(fail('UNIT_MISMATCH', `${n.fn} of ${kindName(a)} needs a number written with its unit, e.g. ${n.fn}(2.7 mm); to round a name or a sum write ${n.fn}(gap / 1 mm) * 1 mm`, at));
+      }
+      return done({ v: Math[n.fn](lit.n) * lit.f, L: a.L, A: a.A, bare: false });
     }
     case 'sqrt': {
       if (a.L % 2 !== 0 || a.A % 2 !== 0) throw new Bail(fail('UNIT_MISMATCH', `sqrt of ${kindName(a)} has no whole-number unit`, at));

@@ -6,7 +6,7 @@
 // loops, `polyArea`, `pointInPolygon`, and `polygonContains` are PURE (no DOM) and Node-oracle-tested. The export
 // HOST can precompute loop polygons in the browser and pass them in to keep `shaper-export` pure.
 
-import { calculateArcPath } from './geometry.js';
+import { calculateArcPath, arcSweepInfo } from './geometry.js';
 import { buildNodeMap } from './loop-finder.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -17,7 +17,7 @@ const dist2 = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx +
 export function sampleArc(s, state, N = 24) {
   const [p1, p2, p3] = (s.joints || []).map((id) => state.joints.get(id));
   if (!p1 || !p2 || !p3) return [];
-  const d = calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep });
+  const d = calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep });
   if (typeof document === 'undefined' || !document.createElementNS) return [{ x: p1.x, y: p1.y }, { x: p3.x, y: p3.y }];
   const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d);
   let len = 0; try { len = path.getTotalLength(); } catch (_) {}
@@ -95,23 +95,17 @@ function num(n) {
   return String(r);
 }
 
-function angleSweep(center, start, end) {
-  let d = Math.atan2(end.y - center.y, end.x - center.x) - Math.atan2(start.y - center.y, start.x - center.x);
-  while (d <= -Math.PI) d += 2 * Math.PI;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  return d > 0 ? 1 : 0;
-}
-
 function arcSeg(shape, fromPos, toPos, state) {
   const center = state.joints.get(shape.joints[0]);
   const start = state.joints.get(shape.joints[1]);
   const end = state.joints.get(shape.joints[2]);
   if (!center || !start || !end) return `L ${num(toPos.x)} ${num(toPos.y)}`;
   const r = Math.hypot(start.x - center.x, start.y - center.y);
-  const stored = (typeof shape.sweep === 'boolean') ? (shape.sweep ? 1 : 0) : angleSweep(center, start, end);
+  const info = arcSweepInfo(center, start, end, { sweep: shape.sweep });   // TASK 550: direction + derived large-arc, one function
+  const stored = info.dir > 0 ? 1 : 0;
   const forward = Math.hypot(fromPos.x - start.x, fromPos.y - start.y) <= Math.hypot(fromPos.x - end.x, fromPos.y - end.y);
   const sweep = forward ? stored : (stored ? 0 : 1);
-  const largeArc = shape.largeArc ? 1 : 0;
+  const largeArc = info.large ? 1 : 0;
   return `A ${num(r)} ${num(r)} 0 ${largeArc} ${sweep} ${num(toPos.x)} ${num(toPos.y)}`;
 }
 

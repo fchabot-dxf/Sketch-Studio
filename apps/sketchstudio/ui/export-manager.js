@@ -1,6 +1,7 @@
 // Export manager: build SVG or DXF exports from sketch data (only lines & arcs)
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
+import { arcSweepInfo } from '#core/geometry.js';
 
 function getJointPos(state, jid) {
   const j = state.joints.get(jid);
@@ -145,7 +146,9 @@ export function buildSVG(state, opts = {}) {
       const r0 = Math.hypot(st0.x - c0.x, st0.y - c0.y);
       const startAngle = Math.atan2(st0.y - c0.y, st0.x - c0.x);
       const endAngle = Math.atan2(en0.y - c0.y, en0.x - c0.x);
-      const largeArc = !!s.largeArc; const sweep = !!s.sweep;
+      // TASK 550: direction and large-arc from the one arc-sweep function (a stored largeArc is ignored; a fillet arc has no flags)
+      const info = arcSweepInfo(c0, st0, en0, { sweep: s.sweep });
+      const largeArc = info.large; const sweep = info.dir > 0;
 
       // Transform center and radius
       const center = transform(c0);
@@ -215,11 +218,13 @@ export function buildDXF(state, opts = {}) {
       let startAngle = deg(Math.atan2(st0.y - c0.y, st0.x - c0.x));
       let endAngle = deg(Math.atan2(en0.y - c0.y, en0.x - c0.x));
       if (startAngle < 0) startAngle += 360; if (endAngle < 0) endAngle += 360;
-      if (s.sweep === false) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
+      // a DXF ARC runs counter-clockwise (increasing angle) from 50 to 51: an arc in the decreasing direction is written end -> start
+      // (TASK 550: the direction from the one arc-sweep function, so a fillet arc without a stored flag is written the way it is drawn)
+      if (arcSweepInfo(c0, st0, en0, { sweep: s.sweep }).dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
 
       if (arcApprox) {
-        // approximate arc using line segments
-        const pts = sampleArcPoints(c0.x, c0.y, r0, startAngle * Math.PI/180, endAngle * Math.PI/180, s.sweep, arcSeg).map(p => to(p));
+        // approximate arc using line segments (always increasing angle from startAngle to endAngle, as the ARC entity)
+        const pts = sampleArcPoints(c0.x, c0.y, r0, startAngle * Math.PI/180, endAngle * Math.PI/180, true, arcSeg).map(p => to(p));
         for (let i = 0; i < pts.length - 1; i++) {
           const p1 = pts[i], p2 = pts[i+1];
           lines.push('0','LINE','8','0','10',formatNum(p1.x, precision),'20',formatNum(p1.y, precision),'11',formatNum(p2.x, precision),'21',formatNum(p2.y, precision));

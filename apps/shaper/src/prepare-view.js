@@ -32,7 +32,7 @@ function edgesMarkup(state) {
       if (c && r) out.push(`<circle data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" class="${EDGE_CLASS}"/>`);
     } else if (s.type === 'arc') {
       const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id));
-      if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" class="${EDGE_CLASS}"/>`);
+      if (p1 && p2 && p3) out.push(`<path data-shape-id="${s.id}" d="${calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep })}" class="${EDGE_CLASS}"/>`);
     }
   }
   return out.join('');
@@ -132,7 +132,7 @@ function edgeStrokeMarkup(s, state, cls) {
   const J = state.joints;
   if (s.type === 'line') { const a = J.get(s.joints[0]), b = J.get(s.joints[1]); return (a && b) ? `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="${cls}"/>` : ''; }
   if (s.type === 'circle') { const c = J.get(s.joints[0]); const r = (s.radius > 0) ? s.radius : 0; return (c && r) ? `<circle cx="${c.x}" cy="${c.y}" r="${r}" class="${cls}"/>` : ''; }
-  if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { largeArc: s.largeArc, sweep: s.sweep })}" class="${cls}"/>` : ''; }
+  if (s.type === 'arc') { const [p1, p2, p3] = (s.joints || []).map((id) => J.get(id)); return (p1 && p2 && p3) ? `<path d="${calculateArcPath(p1, p2, p3, s.subType, { sweep: s.sweep })}" class="${cls}"/>` : ''; }
   return '';
 }
 

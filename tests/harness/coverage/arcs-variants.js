@@ -97,25 +97,28 @@ export function measureArc(S, shapeId) {
   const sh = L.shape(S, shapeId);
   const [c, s, e] = sh.joints.map(id => P(S, id));
   const R = Math.hypot(s.x - c.x, s.y - c.y), Re = Math.hypot(e.x - c.x, e.y - c.y), chord = Math.hypot(e.x - s.x, e.y - s.y);
-  const info = arcSweepInfo(c, s, e, { largeArc: sh.largeArc, sweep: sh.sweep });
-  const flagged = typeof sh.largeArc === 'boolean' && typeof sh.sweep === 'boolean';
+  // TASK 550: the arc is read like the app reads it: its direction (`sweep`) through arcSweepInfo; the large-arc flag is the one the renderer's
+  // path DRAWS (derived), so "flag coherent" asks whether the drawn arc is the arc the joints say (EA-2), not what a stored field holds.
+  const info = arcSweepInfo(c, s, e, { sweep: sh.sweep });
+  const flagged = typeof sh.sweep === 'boolean';
   const span = info.span, signed = info.dir * span;
   const finite = [R, Re, chord, span].every(Number.isFinite);
-  const path = calculateArcPath(c, s, e, sh.subType, { largeArc: sh.largeArc, sweep: sh.sweep });
+  const path = calculateArcPath(c, s, e, sh.subType, { sweep: sh.sweep });
   const pathOk = typeof path === 'string' && path.length > 0 && !/NaN|Infinity|undefined/.test(path);
   // the arc the SVG path draws: centre implied by (radius, flags, the two end points) -- should be the stored centre
-  let impliedCentre = null, centreErr = null;
+  let impliedCentre = null, centreErr = null, drawnLarge = null;
   const m = /^M\s+(\S+)\s+(\S+)\s+A\s+(\S+)\s+(\S+)\s+0\s+(\d)\s+(\d)\s+(\S+)\s+(\S+)$/.exec(path || '');
   if (m) {
     const [x1, y1, r, , la, sw, x2, y2] = [+m[1], +m[2], +m[3], +m[4], +m[5], +m[6], +m[7], +m[8]];
+    drawnLarge = !!la;
     const q = svgCircularArcCentre(x1, y1, r, !!la, !!sw, x2, y2);
     if (q) { impliedCentre = q; centreErr = Math.hypot(q.cx - c.x, q.cy - c.y); }
   }
   return {
     R, Re, chord, span, signed, spanDeg: span * 180 / Math.PI, signedDeg: signed * 180 / Math.PI, dir: info.dir, finite, flagged,
-    largeArc: sh.largeArc, sweepFlag: sh.sweep, pathOk, path,
-    // the large-arc flag must say whether the span is above a half circle (the renderer trusts the flag, it does not recompute it)
-    flagCoherent: !flagged || (!!sh.largeArc === (span > Math.PI + 1e-9)) || Math.abs(span - Math.PI) < 1e-4,
+    largeArc: drawnLarge, sweepFlag: sh.sweep, pathOk, path,
+    // the drawn large-arc flag must say whether the span is above a half circle
+    flagCoherent: drawnLarge === null || drawnLarge === (span > Math.PI + 1e-9) || Math.abs(span - Math.PI) < 1e-4,
     // the renderer draws a different arc than the joints say (flags stale, or radius from the start side only)
     centreErr, drawnOk: centreErr === null ? chord === 0 : centreErr <= 1e-3 * Math.max(R, 1e-3) + 1e-6,
     // the joint-side orientation sign (lib.signature 'A'): cross(start - centre, end - centre)

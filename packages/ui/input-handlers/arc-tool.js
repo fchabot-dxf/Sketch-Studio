@@ -226,10 +226,9 @@ function handleCenterArc(state, snap, pt, w) {
       if (res && res.shapes) res.shapes.forEach(s => state.shapes.push(s));
       if (res && res.constraints) res.constraints.forEach(c => ConstraintManager.createConstraint(state, c.type, c, { source: 'arc' }));
 
-      // Apply winding flags to the new shape
+      // Apply the winding DIRECTION to the new shape (the large-arc choice is derived from the joints, geometry.arcSweepInfo, task 550)
       if (res && res.shapes && res.shapes.length > 0) {
           const s = res.shapes[0];
-          s.largeArc = Math.abs(state.active.totalSweep || 0) > Math.PI;
           s.sweep = (state.active.totalSweep || 0) > 0;
       }
 

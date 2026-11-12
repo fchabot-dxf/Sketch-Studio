@@ -224,29 +224,15 @@ export function isCoincidentConstraint(c) {
  * Generates SVG Path 'd' attribute for Arcs
  * Supports subType: 'CENTER' (center + start + end)
  * Returns an SVG path string (move + arc) or empty string on failure/degenerate case.
+ * TASK 550: the large-arc flag is DERIVED from the joints and the arc's direction (arcSweepInfo: options.sweep, the shape's
+ * stored direction; absent = the shortest way), never read from a stored flag, so an arc whose sweep crossed 180 degrees is drawn right.
  */
 export function calculateArcPath(p1, p2, p3, subType, options = {}) {
     // Only CENTER subType supported: p1 = Center, p2 = Start, p3 = End (sweep direction)
     if (subType === 'CENTER') {
         const r = getDist(p1, p2);
-
-        // If explicit flags are provided, use them
-        if (typeof options.largeArc === 'boolean' && typeof options.sweep === 'boolean') {
-             return `M ${p2.x} ${p2.y} A ${r} ${r} 0 ${options.largeArc ? 1 : 0} ${options.sweep ? 1 : 0} ${p3.x} ${p3.y}`;
-        }
-
-        const startAngle = angleBetween(p1, p2);
-        const endAngle = angleBetween(p1, p3);
-
-        let diff = endAngle - startAngle;
-        // Normalize to -PI...PI to ensure shortest path
-        while (diff <= -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-
-        const largeArcFlag = 0; // Always use shortest path for consistent behavior
-        const sweepFlag = diff > 0 ? 1 : 0;
-
-        return `M ${p2.x} ${p2.y} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${p3.x} ${p3.y}`;
+        const info = arcSweepInfo(p1, p2, p3, options);
+        return `M ${p2.x} ${p2.y} A ${r} ${r} 0 ${info.large ? 1 : 0} ${info.dir > 0 ? 1 : 0} ${p3.x} ${p3.y}`;
     }
     return "";
 }
@@ -274,22 +260,25 @@ export function getArcParams(p1, p2, p3) {
 }
 
 
-// TASK 448: the angular SPAN an arc [centre, start, end] covers, matching calculateArcPath exactly (explicit SVG
-// largeArc+sweep flags if present, else the shortest way). Returns { a0, span, dir } — start angle (atan2, world coords),
-// swept angle in [0, 2PI], dir = +1 (increasing angle, SVG sweep=1) or -1.
+// TASK 448 / TASK 550: THE arc's sweep from its joints [centre, start, end], in its stored direction: options.sweep (the shape's `sweep`
+// boolean: true = increasing angle, SVG sweep=1) or, when the arc carries none (a fillet arc), the shortest way. Every consumer (renderer,
+// SVG / DXF / Shaper export, loop paths, bounds, hit testing, the collapse check, the solver's orientation lock) reads the arc through
+// this one function. A stored `largeArc` flag (old files) is ignored: the large-arc choice is derived here (large = span > PI).
+// Returns { a0, span, dir, large } -- start angle (atan2, world coords), swept angle in [0, 2PI), dir = +1 (increasing angle) or -1.
 export function arcSweepInfo(center, start, end, options = {}) {
     const a0 = Math.atan2(start.y - center.y, start.x - center.x);
     const a1 = Math.atan2(end.y - center.y, end.x - center.x);
     const TAU = Math.PI * 2;
     const mod = (v) => ((v % TAU) + TAU) % TAU;
-    if (typeof options.sweep === 'boolean' && typeof options.largeArc === 'boolean') {
+    if (typeof options.sweep === 'boolean') {
         const dir = options.sweep ? 1 : -1;
-        return { a0, span: mod((a1 - a0) * dir), dir };
+        const span = mod((a1 - a0) * dir);
+        return { a0, span, dir, large: span > Math.PI };
     }
     let diff = a1 - a0;
     while (diff <= -Math.PI) diff += TAU;
     while (diff > Math.PI) diff -= TAU;
-    return { a0, span: Math.abs(diff), dir: diff > 0 ? 1 : -1 };
+    return { a0, span: Math.abs(diff), dir: diff > 0 ? 1 : -1, large: false };
 }
 
 // Is the direction `angle` (radians) inside the arc's sweep (see arcSweepInfo)?

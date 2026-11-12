@@ -2,14 +2,15 @@
 // (ARC entities, polyline bulges) and by the SVG importer (a circular path `A` command), so both produce exactly what the arc
 // tool stores. PURE (no DOM).
 //
-// The #core arc: { type:'arc', subType:'CENTER', joints:[centre, start, end], largeArc, sweep } in the Y-DOWN world, with the SVG
-// meaning of the two flags (sweep true = the positive-angle direction = clockwise on screen); see geometry.calculateArcPath.
+// The #core arc: { type:'arc', subType:'CENTER', joints:[centre, start, end], sweep } in the Y-DOWN world, with the SVG
+// meaning of the flag (sweep true = the positive-angle direction = clockwise on screen); see geometry.calculateArcPath. The large-arc
+// choice is not stored: it is derived from the joints and the direction (geometry.arcSweepInfo, task 550).
 // The centre is a joint of its own; the START and END joints are the endpoints the arc SHARES with its neighbouring segments, so a
 // profile stays a connected, closed loop.
 
-/** The arc shape. `joints` = [centreId, startId, endId]; flags are booleans in world (Y-down) terms. */
-export function arcShape(id, centreId, startId, endId, { largeArc, sweep }) {
-  return { id, type: 'arc', subType: 'CENTER', joints: [centreId, startId, endId], largeArc: !!largeArc, sweep: !!sweep };
+/** The arc shape. `joints` = [centreId, startId, endId]; sweep = the direction, a boolean in world (Y-down) terms. */
+export function arcShape(id, centreId, startId, endId, { sweep }) {
+  return { id, type: 'arc', subType: 'CENTER', joints: [centreId, startId, endId], sweep: !!sweep };
 }
 
 /**

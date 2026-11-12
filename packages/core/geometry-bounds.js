@@ -4,6 +4,7 @@
 // center joint), cubic beziers by analytical derivative extrema, and joint-only sketches by non-origin joints.
 
 import { hiddenSketchIds, sketchOf } from './sketch-model.js';
+import { arcSweepInfo } from './geometry.js';
 
 const TAU = Math.PI * 2;
 const CARDINAL_ANGLES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
@@ -83,17 +84,9 @@ export function computeGeometryBounds(state) {
           const dy2 = (p2.y - p3.y) / 2;
           const d2 = dx2 * dx2 + dy2 * dy2;
           if (r0 > 0 && d2 > 1e-18) {
-            let la, sw;
-            if (typeof s.largeArc === 'boolean' && typeof s.sweep === 'boolean') {
-              la = s.largeArc;
-              sw = s.sweep;
-            } else {
-              let diff = Math.atan2(p3.y - p1.y, p3.x - p1.x) - Math.atan2(p2.y - p1.y, p2.x - p1.x);
-              while (diff <= -Math.PI) diff += TAU;
-              while (diff > Math.PI) diff -= TAU;
-              la = false;
-              sw = diff > 0;
-            }
+            // TASK 550: the flags the renderer draws with, derived by the one arc-sweep function (never a stored largeArc)
+            const info = arcSweepInfo(p1, p2, p3, { sweep: s.sweep });
+            const la = info.large, sw = info.dir > 0;
             // W3C SVG F.6.5/F.6.6 endpoint-to-center conversion for M p2 A r0 r0 0 la sw p3
             const r = Math.max(r0, Math.sqrt(d2));
             const k = Math.sqrt(Math.max(0, (r * r - d2) / d2)) * (la === sw ? -1 : 1);

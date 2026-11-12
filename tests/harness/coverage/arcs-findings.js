@@ -13,12 +13,9 @@ export const KNOWN = {
     diagnosis: 'constraint-verifier.js:314-324 measureShapeSizes measures an arc by |centre - start| only, so findCollapsedShape (:329-341, used at constraint-manager.js:356 / :495 and dimension-seams.js:74) cannot see start = end. The coincident tool (constraint-tools.js:120-132) has no own-ends check either. Seen: coincident of the arc\'s own start and end on EVERY arc variant (sep and dimmed; refused only when the joints are locked, ERR-CMATH-01); H/V between the ends of a fillet arc; a fillet-radius edit on a 2 degree corner with a point on the arc.',
     task: 'extend measureShapeSizes / findCollapsedShape to the arc chord (sweep), and refuse the own-ends coincident in the tool',
   },
-  'EA-2': {
-    severity: 'HIGH',
-    title: 'The stored largeArc flag is never recomputed: an arc whose sweep crosses 180 degrees is DRAWN as the other arc (and exported wrongly)',
-    diagnosis: 'arc-tool.js:232-233 sets largeArc / sweep once at creation; nothing in the solver or the edit paths updates them. calculateArcPath (geometry.js:234-236) and the exporters (shaper-export.js:49-53, loop-geometry.js:111-115, export-manager.js:148-166) emit the stale flag, arcSweepInfo (geometry.js:285-288) keeps the stored direction. Seen after tangent / midpoint / H-V / perpendicular rows, after a radius edit (x1.5, x0.67) and after a drag of the end, on arcs within a few degrees of 180.',
-    task: 'derive largeArc from the live span (one place: calculateArcPath / arcSweepInfo), or write it back after every solve',
-  },
+  // EA-2 (the stored largeArc flag never recomputed: an arc past 180 degrees drawn and exported as the other arc) FIXED in task 550: the large-arc
+  // choice is derived from the joints and the direction by geometry.js arcSweepInfo everywhere (renderer, exports, loop paths, bounds). A cell whose
+  // drawn path is not the arc the joints say is still classified EA-2 below and fails the test (no KNOWN entry).
   'EA-3': {
     severity: 'HIGH',
     title: 'A constraint on a very short (or almost full) arc makes the sweep jump to the complement (0.1 deg -> 359.8 deg and back)',
@@ -106,7 +103,6 @@ export function ui10() { const f = uiFacts(variant('s30cw')); return { ok: !f.ar
 // the cell repro of an EA id: the first (variant,row,state) that shows it, as a command line the doc quotes
 export const REPRO_CELL = {
   'EA-1': ['s30cw', 'coincident-own-ends', 'sep'],
-  'EA-2': ['s179cw', 'hv-centre-end', 'sep'],
   // EA-3 and EA-5: their first repros (s0.1cw / r0.5s30cw tangent-line sep) pass since task 525 (the who-moves placement moves the line and
   // keeps the arc); the repro is now the first cell that still shows the finding
   'EA-3': ['s180cw', 'coincident-own-ends', 'sep'],

@@ -13,7 +13,7 @@ import { flattenCubic } from './svg-import.js'; // UNIFY-3: reuse the ONE cubic 
 
 const CIRCLE_SEGMENTS = 64; // full-circle rim resolution (a plotter draws a circle as a fine polygon)
 
-// shape  — a #core shape: { type:'line'|'circle'|'arc', joints:[jointId...], radius?, subType?, largeArc?, sweep? }.
+// shape  — a #core shape: { type:'line'|'circle'|'arc', joints:[jointId...], radius?, subType?, sweep? }.
 // joints — the sketch's joint Map (id -> { x, y }), i.e. state.joints.
 // opts   — { circleSegments?, arcSegments? } (defaults 64 / 24).
 // Returns [[x,y], ...] (>= 2 points), or [] if the shape can't be resolved.

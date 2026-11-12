@@ -114,54 +114,37 @@ export function dragDimensionLabel(state, drag, e, w) {
   drag.constraint.labelPos = { x: w.x, y: w.y };
 }
 
-// Toggle a dimension between DRIVING and reference (FLIP). One driver per edge: when promoting a
-// reference to driving, demote any other driver on the same edge/shapes (SWAP). When promoting, recompute
-// the value from geometry and re-solve. Returns { nowDriving, swapped, error } (error = 'ERR-DRIVE-02'
-// when the solve doesn't converge after promoting). No DOM, no notifications here.
+// THE redundancy test for a dimension (owner ruling, task 516): is this dimension's quantity already DETERMINED by the other
+// DRIVING constraints of the sketch? One engine rank test (engine.isDistanceRedundant, which reads the constraint's own Jacobian
+// row(s), so it covers every mode: aligned / horizontal / vertical, point-to-line, line-line, angle, radius). The dimension is
+// lifted out of the constraint list for the test so it is never compared with itself. Every caller (placement, the value box,
+// the Driving toggle) asks THIS function.
+export function isDimensionDetermined(state, c) {
+  if (!c || (c.type !== CONSTRAINT_TYPES.DISTANCE && c.type !== CONSTRAINT_TYPES.ANGLE)) return false;
+  if (!state || !state.engine || typeof state.engine.isDistanceRedundant !== 'function') return false;
+  const idx = state.constraints.indexOf(c);
+  if (idx !== -1) state.constraints.splice(idx, 1);
+  try {
+    return state.engine.isDistanceRedundant({ ...c, isDriven: false, driven: false });
+  } finally {
+    if (idx !== -1) state.constraints.splice(idx, 0, c);
+  }
+}
+
+// Toggle a dimension between DRIVING and reference (FLIP). A reference whose quantity the rest of the sketch still determines
+// cannot become driving (Fusion: over-constrained): the toggle is REFUSED and nothing changes, returned as { refused: true }.
+// A reference radius keeps the one-driver-per-shape swap. When promoting, recompute the value from geometry and re-solve.
+// Returns { nowDriving, swapped, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
+// No DOM, no notifications here.
 export function toggleDriving(state, c) {
   let swapped = false;
-  // If c is currently a reference (about to become driving), demote other same-edge/shape drivers.
   if (c.isDriven) {
-    let others = [];
-    if (c.type === CONSTRAINT_TYPES.DISTANCE) {
-      if (c.isRadius && c.shape) {
-        others = state.constraints.filter(oc =>
-          oc !== c && !oc.isDriven && !oc.driven &&
-          oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
-      } else if (isPointLineDistance(c)) {
-        others = state.constraints.filter(oc =>
-          oc !== c && !oc.isDriven && !oc.driven && oc.type === CONSTRAINT_TYPES.DISTANCE && isPointLineDistance(oc) &&
-          oc.joints[0] === c.joints[0] && ((oc.joints[1] === c.joints[1] && oc.joints[2] === c.joints[2]) || (oc.joints[1] === c.joints[2] && oc.joints[2] === c.joints[1])));
-      } else if (c.joints && c.joints.length >= 2) {
-        const [j1, j2] = c.joints;
-        others = state.constraints.filter(oc =>
-          oc !== c && !oc.isDriven && !oc.driven &&
-          oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length === 2 &&
-          ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
-      }
-    } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-      const [s1, s2] = c.shapes;
-      others = state.constraints.filter(oc =>
+    if (isDimensionDetermined(state, c)) return { nowDriving: false, swapped: false, refused: true, error: null };
+    if (c.type === CONSTRAINT_TYPES.DISTANCE && c.isRadius && c.shape) {
+      const others = state.constraints.filter(oc =>
         oc !== c && !oc.isDriven && !oc.driven &&
-        oc.type === CONSTRAINT_TYPES.ANGLE && oc.shapes && oc.shapes.length === 2 &&
-        ((oc.shapes[0] === s1 && oc.shapes[1] === s2) || (oc.shapes[0] === s2 && oc.shapes[1] === s1)));
-    }
-    if (others.length) { for (const oc of others) { oc.isDriven = true; oc.driven = true; } swapped = true; }
-
-    // Generalize the swap to RANK-REDUNDANCY (not just same joint-pair): if promoting c would leave it
-    // DETERMINED by other drivers — a redundant 2nd driver on a determined measurement, e.g. the opposite
-    // edge of a dimensioned rect — demote the driver whose removal makes c carry new info, so c takes over
-    // and its partner becomes a reference. Reuses the #6 rank helper. (Same-edge swap above is one case.)
-    if (c.type === CONSTRAINT_TYPES.DISTANCE && state.engine && typeof state.engine.isDistanceRedundant === 'function') {
-      const cand = { type: c.type, joints: c.joints ? [...c.joints] : undefined, value: c.value, isRadius: c.isRadius, shape: c.shape };
-      if (state.engine.isDistanceRedundant(cand)) {
-        const drivers = state.constraints.filter(d => d !== c && !d.isDriven && !d.driven && d.type === CONSTRAINT_TYPES.DISTANCE);
-        for (const d of drivers) {
-          d.isDriven = true; d.driven = true;                                  // tentatively demote
-          if (!state.engine.isDistanceRedundant(cand)) { swapped = true; break; } // d determined c → keep demoted
-          d.isDriven = false; d.driven = false;                               // not the determiner → restore
-        }
-      }
+        oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
+      if (others.length) { for (const oc of others) { oc.isDriven = true; oc.driven = true; } swapped = true; }
     }
   }
 
@@ -201,5 +184,5 @@ export function toggleDriving(state, c) {
       if (result && result.converged === false) error = 'ERR-DRIVE-02';
     }
   }
-  return { nowDriving: !c.isDriven, swapped, error };
+  return { nowDriving: !c.isDriven, swapped, refused: false, error };
 }

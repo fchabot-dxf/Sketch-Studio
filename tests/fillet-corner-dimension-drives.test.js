@@ -26,6 +26,9 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
   const state = createSketchState(engine, { x: 0, y: 0, w: 200, h: 200 });
   state.saveState = () => {};
   setupNumericInput(svg, state);
+  // the 'already determined -> driven' notice is raised for real (no swallowed error): give it a DOM that can build its toast container (it is never found again, so no toast is drawn)
+  global.document.createElement = () => ({ style: {} });
+  global.document.body = { appendChild() {} };
   const J = (id, x, y, fixed = false) => { engine.addJoint(id, x, y, fixed); state.joints.set(id, { x, y, fixed }); };
   const L = (id, a, b) => engine.addShape({ id, type: 'line', joints: [a, b] });
   const C = (type, o) => ConstraintManager.createConstraint(state, type, o, { source: 'test' });

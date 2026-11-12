@@ -4,7 +4,7 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { commitDimensionEdit, dimensionEditLabel } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
 import SettingsManager from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
@@ -267,30 +267,16 @@ export function showEditInput(svg, state, constraint, initialKey) {
 
     // If target is driven or fully fixed endpoints, skip opening the editor and force driven.
     if (constraint.isDriven || constraint.driven) return;
-    try {
-        if (constraint.type === CONSTRAINT_TYPES.DISTANCE && constraint.joints && constraint.joints.length === 2 && state && state.engine && typeof state.engine.isDistanceRedundant === 'function') {
-            // Decide by the solver's rank test (the global truth), not per-joint DOF: a joint can read DOF 0 locally
-            // (e.g. a fillet's virtual sharp) while the sketch still has freedom for this dimension to drive.
-            // The constraint is lifted out of the engine's list so it is not compared against itself.
-            const idx = state.constraints.indexOf(constraint);
-            if (idx !== -1) state.constraints.splice(idx, 1);
-            let redundant;
-            try {
-                redundant = state.engine.isDistanceRedundant({ ...constraint, isDriven: false, driven: false });
-            } finally {
-                if (idx !== -1) state.constraints.splice(idx, 0, constraint);
-            }
-            if (redundant) {
-                constraint.isDriven = true;
-                constraint.driven = true;
-                showNotification(
-                    'Dimension added as Driven (already determined by existing constraints). [ERR-DRIVEN-02]',
-                    'info'
-                );
-                return;
-            }
-        }
-    } catch(_) { /* fail open */ }
+    // A dimension on a quantity the sketch already determines is placed DRIVEN (a measurement) and is never typed.
+    if (isDimensionDetermined(state, constraint)) {
+        constraint.isDriven = true;
+        constraint.driven = true;
+        showNotification(
+            'Dimension added as Driven (already determined by existing constraints). [ERR-DRIVEN-02]',
+            'info'
+        );
+        return;
+    }
 
     resetState();
     uiState.active = true;

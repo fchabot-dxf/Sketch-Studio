@@ -1,0 +1,35 @@
+TASK 528 (Sketch-Studio): Fusion as an oracle for EDITING A DIMENSION VALUE. Owner 2026-11-12: "All 3" (drag, dimension edit, tools).
+(527, dragging, STOPPED: the Fusion API's point.move / sketch.move does not behave like a mouse drag under a dimension. Do not use it.)
+Worktree D:\APPS\Sketch-Studio.worktrees\task-528-fusion-dim-edit, branch agents/task-528-fusion-dim-edit (from origin/main c0224bc).
+Read first: docs/FUSION-COMPARISON.md, scripts/fusion-oracle/* (how task 518 generated jobs, ran them in Fusion through the MCP
+bridge on port 7654 with run-jobs.py, recorded fixtures, built KNOWN lists and docs), tests/fusion-oracle.test.js, and
+commitDimensionEdit in packages/ui/dimension-seams.js (the ONE path our app uses when a dimension value is typed).
+
+GOAL: record what Fusion does when the value of an existing driving dimension is changed (sketchDimension.parameter.value /
+.expression: the same thing as typing in the box), replay the same edit through commitDimensionEdit, compare offline.
+1. FIRST prove on 3 hand cases that setting the parameter re-solves the sketch like a typed edit (geometry follows, the sketch
+   stays valid, an impossible value is refused or errors: record how). If not, STOP and report what you measured. Fusion units: cm.
+2. Cases declared as DATA, generated from the inventory the graded cells use (tests/harness/coverage/inventory.js and
+   scripts/fusion-oracle/graded-jobs.mjs), not hand-written:
+   dimension kinds: every dimension mode we have (aligned/linear point-point, horizontal, vertical, line length, point-to-line,
+   line-line distance, angle, radius, diameter if we have it) x operand kinds (line, rectangle side, polygon side, circle, arc,
+   filleted corner, the origin as one end) x the hold states of the graded grid for EACH end (free, H/V, one end fixed, other
+   dimension present, corner shared, tangent to something, on the origin) x edits: grow x2, shrink x0.5, tiny change, to a value
+   that makes a neighbour impossible (expect a refusal: record it), to zero and negative (record what Fusion does).
+   A few hundred cells.
+3. Record per cell: all point positions and radii before/after, which entities moved (the M / . notation of which-moves), which
+   END of the dimension moved, refused or not and the error text, and whether other dimensions kept their values.
+4. Ours: the same sketch built the way the existing oracle builds ours, the edit through commitDimensionEdit (no test-only path).
+5. tests/fusion-dim-edit.test.js (offline, in the gate): compares; each class of difference = a KNOWN entry with a one-line reason;
+   a KNOWN that starts passing fails loudly. A script to regenerate KNOWN, and an "Editing a dimension" section in
+   docs/FUSION-COMPARISON.md: per-class table (same / different) and the 5 most important differences in plain words.
+   NEW files only (fusion-dim-edit*.json ...). Do NOT edit the existing which-moves / graded / drawings fixtures, KNOWN lists or
+   their doc sections (task 525 is rewriting who-moves and regenerates those; expect to merge origin/main before your final gate).
+DO NOT change packages/ (this task only measures). Report findings; fix nothing.
+FUSION SAFETY (hard rules): work ONLY in a NEW unsaved document you create; sketches named CLAUDE_TEST_*; never open, modify,
+save or close any other document; delete only what you created; close your test document without saving at the end; never click
+or script Repair/Reset/sign-in; do not launch or kill Fusion; if Fusion or the bridge is unreachable, STOP and report.
+Never kill a process you did not start. REPORT once, leave nothing running.
+STOP if: step 1 fails; Fusion's result differs between two runs of the same cell (report the spread).
+Gate green (`npm run gate`, run it and wait for its exit), commit by path, push the branch, WORK-LOG `## TURN 528`, the AGENTS.md
+REPORT block with counts and the evidence in .evidence/528/.

@@ -7,18 +7,17 @@ import { buildScenarios, runOurs, cellOf } from '../../tests/harness/fusion-orac
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves.json'), 'utf8'));
-// reason class per group. "pending task 511" = collinear / pointOnLine placement that task 511 changes in packages/core.
+// reason class per group after task 525 (who moves at creation from the declared table). "Task 526" = Fusion refuses what ours accepts.
 const REASON = {
-  'pointOnLine': 'remaining after task 511: a pinned operand / line held differently from Fusion', 'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion',
-  // after task 515 a circle's radius is a solver unknown: the least-change solve may now also change a free radius, where Fusion keeps the moving circle's radius
-  'pointOnCircle': 'remaining after tasks 511 + 515: a pinned operand differs from Fusion; since 515 ours may also change the free circle radius (least change)',
-  'equal-circle-circle': 'after task 515: which circle resizes / moves differs from Fusion (ours: least change over both)',
-  'equal-arc-circle': "after task 515: Fusion's API refuses equal(arc, circle); ours accepts it (the circle radius follows the arc)",
-  'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
-  'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
-  // after task 523 the arc side of the tangent rows differentiates the arc radius through its rim: the least-change solve may resize the arc
-  'tangent-line-arc': "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; the other differences of this group are placement too)",
-  'tangent-arc-arc': "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; the other differences of this group are placement too)",
+  'horizontal-line': 'same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end',
+  'vertical-line': 'same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end',
+  'equal-line-line': 'after task 525: Fusion moves both lines (shared joint, second line picked first): outside the one-mover table',
+  'equal-arc-circle': "Fusion's API refuses equal(arc, circle); ours accepts it (task 526)",
+  'dim-aligned': 'after task 525: the 315 and the graded fixture disagree on two free lines (here the first pick moves, in dim-aligned|LL|0,0 the second)',
+  'dim-horizontal': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',
+  'dim-vertical': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',
+  'dim-length': 'same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)',
+  'dim-radius-arc': 'same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve moves the centre too where Fusion keeps it; on a fully fixed arc Fusion refuses the dimension, ours adds it as a reference (task 526)',
 };
 const known = {};
 for (const sc of buildScenarios()) {

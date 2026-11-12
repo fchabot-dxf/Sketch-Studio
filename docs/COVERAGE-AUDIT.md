@@ -627,3 +627,26 @@ Fusion decides these; we only know what PlaneGCS and finite differences say. (va
 - The Jacobian check uses a threshold scaled with the coordinate size (1e-4 x max(1, max|coordinate| / 100)) because finite differences lose digits at R 5000; below it nothing was flagged.
 - PlaneGCS verdicts on refusals flip with run order in some cells (task 523 saw the same); the EA-8 cells were checked against the oracle in this run only.
 - Fusion was not called (another seat holds it).
+
+### After task 525 (who moves at creation)
+
+Same test after task 525 (the who-moves placement; merged with task 533's per-joint Jacobian rows): 2880 cells = **PASS 1793, N/A 132, NA-BUILD 788, FAIL 167** (from PASS 1711 / N/A 176 / FAIL 205 at task 531; the task 531 numbers above stay as measured). Cells per finding now: EA-1 52, EA-2 70, EA-3 15, EA-4 18, EA-5 12, EA-6 21, EA-7 3, EA-8 8, EA-9 13, F5 1. Per-cell diff of main's placement code against the task 525 branch (`.evidence/525/arc-verdicts-diff2.txt` on that branch): 84 cells differ, 35 better, 41 shifted between findings / refusals, 8 worse.
+
+Rule that keeps arcs safe: "who moves" is a question between two DIFFERENT shapes. When both operands of a new constraint belong to the SAME shape (an arc's centre and end, its own start and end, a line's two ends, a radius) nothing is placed and the constraint goes to the solve from the untouched pose, as before task 525. No same-shape cell differs from main (the one hv-start-end cell that differed in one run, `f90r0.5 hv-start-end sep`, is N/A on both side by side: a PlaneGCS refusal verdict that flips between runs, see Limits).
+
+The 8 cells that passed on main and fail now. Each is a constraint main refused or left alone that is now placed and accepted, exposing an existing finding:
+
+| cell (variant row state) | main | after task 525 |
+|---|---|---|
+| s181cw tangent-line dimmed | PASS | EA-2 |
+| r0.5s181cw tangent-line dimmed | PASS | EA-2 |
+| r0.5s30cw parallel-chord shared | N/A (refused) | EA-6 |
+| r0.5s0.1cw parallel-chord sep | N/A (refused) | EA-6 |
+| r0.5s0.1cw parallel-chord locked | N/A (refused) | EA-6 |
+| r0.5s0.1cw parallel-chord dimmed | N/A (refused) | EA-6 |
+| f179r10 parallel-chord sep | N/A (refused) | EA-6 |
+| f179r10 tangent-line sep | PASS | EA-5 |
+
+- f179r10 tangent-line sep: the table moved the LINE (the fillet arc is the anchor and stays at creation: sweep -1 degree, R 10 before and after the add); the EA-5 shrink is in the harness's later drag step (`drag-sweep-shrunk`: the edits and drag then move the arc to -0.034 degrees from the new tangent pose).
+- The EA-3 and EA-5 repros of task 531 (`s0.1cw tangent-line sep`, `r0.5s30cw tangent-line sep`) PASS now: the placement moves the line and keeps the arc (sweep 0.1 and 30 degrees unchanged). The findings keep their other cells; their repros are now `--cell s180cw coincident-own-ends sep` (EA-3) and `--cell r0.5s0.1cw dim-chord sep` (EA-5).
+- The control arc's `s30cw parallel-chord shared` is accepted now (main refused it): it passes (no Jacobian difference since task 533, jitter re-solve residual 5.5e-8).

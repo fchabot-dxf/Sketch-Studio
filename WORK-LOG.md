@@ -13443,6 +13443,46 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
 - Two coincident fixed joints: the first in joint order is kept as V, the others are coincident with it (same position) and are deleted with the cluster. No separate `fixed` constraint object exists (grep: only `joint.fixed`; `'fixed'` constraint type is only skipped in constraint-status), so joint.fixed is the only lock.
 - Tests: tests/fillet-fixed-corner-524.test.js (fail-first: "the locked joint still exists, fixed, at (70,50): undefined"); 517 tests unchanged and green; the four audits pass, no KNOWN entry became stale.
 - Gate: GATE files=250 pass=250 fail=0, SMOKE 12/12, HEADLESS-LEFT 0 (.evidence/524/gate.log).
+
+## TURN 525 (who moves at creation, like Fusion: ONE classifier, ONE declared table fitted to the recorded Fusion cells)
+WHAT CHANGED
+- packages/core/creation-placement.js (new): holdClass (ONE classifier: shape family + what holds it, from engine.jointFreedom and the
+  constraints on the operand: free, corner, chain, hv, sized, pinned, centred, full; a picked point that cannot move = point:fixed); PLACE
+  (per table key: the two operands in pick order and the mover's placement: one similarity of its body (turn about its held point / single
+  attached end / midpoint, translate, scale about a held centre), or SOLVE_ALONE = the least-change solve of the mover with the anchor frozen
+  (tangents, equal circles, angle dimensions, a perpendicular whose handedness is locked)). A placement is kept only if it satisfies the new
+  constraint and no existing driving constraint gets worse; else the other operand; else the solve starts from the giving operand's pose.
+- packages/core/creation-placement-table.js (new, GENERATED): per key the tiers of hold classes (lowest gives way) and a fitted tie rule.
+  scripts/fusion-oracle/fit-placement-table.mjs derives it from which-moves-graded.json (2438) + which-moves.json (315) through the SAME
+  creationOperands / holdClass the app uses; tests/creation-placement-table.test.js asserts module == fit (2187 one-mover cells, 17 keys).
+- ConstraintManager.placeForCreation only delegates to the table. DELETED (no caller left, grep): _lineEstablishmentScore,
+  anchorEstablishedLine, _lineHasAxisConstraint, _lineIsGeometricallyAxisAligned, placeOnAnchorLine, placePerpendicularFromParallel,
+  PARALLEL_START_SIN. commitDimensionEdit (packages/ui/dimension-seams.js) calls the same ConstraintManager.placeForCreation seam with the
+  edited dimension; when it places, one solve (no value stepping).
+- Harness: which-moves.js runOurs split into buildOurs / actOf / dimActOf (used by the fit). KNOWN lists + FUSION-COMPARISON regenerated
+  by the scripts (reason texts updated); the graded section now prints the table the app reads.
+RESULT (.evidence/525/counts-before.json vs counts-after.json, same script): which-moves 103 -> 285 / 315, graded 889 -> 1988 / 2438,
+drawings 825 -> 826 / 954. Per group (graded same, who-moves agrees): parallel 11->90 (21->92), perpendicular 31->74 (41->112),
+collinear 52->98 (89->105), equal-line-line 35->112, dim-angle 20->78 (20->92), coincident-pp 104->229, dim-aligned 60->113 (119->184),
+dim-horizontal 45->93, dim-vertical 53->89, horizontal-2pt 68->153, vertical-2pt 58->155, pointOnLine 42->117, pointOnCircle 56->122,
+midpoint 48->117, equal-circle 48->52, tangent-line-circle 74->168, tangent-circle-circle 56->92, H/V-line 7->9 each, dim-length 5->8,
+dim-radius 9->10. Remaining 450 graded differences: 204 are Fusion refusals (task 526); the rest per class in which-moves-graded-known.json.
+- The 16 cells task 521 turned into refusals (coincident RL 0,4 / RO 0,c / RP 0,4, collinear LS 3,0 / 7,0, horizontal-2pt RL / RO / RP,
+  midpoint LS m,0 / o,0, ZS 0,0, parallel LC 3,4, LL 3,4 / 3,5, SL 0,4, vertical-2pt LR 3,0): all accepted now and equal to Fusion
+  (.evidence/525/521-refused-cells-after.txt). The 521 collapse check is unchanged.
+- KNOWN entries deleted because they now pass: coverage-matrix NEW-9 (and its classify rule), coverage-properties N-F6 (pinned check).
+STOP CONDITIONS
+- Fixture conflict (reported, not special-cased): the two fixtures disagree on 7 cells of 3 class pairs: coincident-pp line:free vs line:hv
+  (315 A_hv.BA, B_hv.AB move the H/V line; graded LL|0,3 moves the free one), dim-aligned free vs free (315 free.BA vs graded LL|0,0),
+  dim-horizontal / dim-vertical line:hv vs line:free (315 A_hv.AB, B_hv.BA vs graded LL|3,0). The fit keeps the better-supported order;
+  the other cells are KNOWN. Also a single free line made H/V: 315 turns it about its midpoint, graded moves its second end (ours).
+- Perpendicular with a locked handedness: the branched solver row is stationary at exactly 90 degrees, so an exact rigid turn hides one DOF
+  (coverage-matrix perpendicular LR/LS: nullity 0 instead of -1). Ours reaches 90 degrees by the least-change solve of the mover there
+  (who moves right in 112/113, how = stretch where Fusion rotates rigidly: 39 cells). Owner decision: a solver-row task could make the exact turn safe.
+BEHAVIOUR CHANGES for existing users: (1) every constraint and dimension edit in the table moves ONE operand (the table's) instead of both;
+(2) a dimension edit that can be placed solves once instead of in value steps; (3) H/V of one line moves its second end only; (4) a
+point-on-line between free operands slides the line (Fusion) instead of moving the point; (5) a collinear in the 3-joint form (no UI path) is no
+longer pre-placed; (6) when neither operand can move alone the solve starts from the giving operand's placement.
 ## TURN 523 (arc tangent Jacobian; round 1 STOPPED on a who-moves change, round 2 finished for merge after the advisor's ruling: option (a))
 - Cause confirmed (probe `.evidence/523/probe-before.txt`): every tangent form with an arc read the arc radius as a constant computed from the joints at assembly, so the rim column was 0 and the centre column lacked the radius term: `line-arc {line,circle}: rows 1, max |J - fd| = 9.81e-1 at as.x`, same 9.81e-1 for circle-arc (external/internal), arc-circle, arc-arc (external/internal).
 - Fix in ONE formulation: definitions.js `radiusValue` / `addRadiusDerivative` = THE radius operand of a row (circle unknown `at`, arc LIVE |rim - centre| via `rimJoint` / `rimJoints[i]` with the row's centre, else constant), used by point-on-circle and both tangent forms (line-circle and circle-circle, both branches); engine.js `_radiusOperand(shape)` declares it once (arc rim = joints[1], the definition already used by point-on-arc, radius dims and equal; makeArc's equal keeps joints[2] at the same distance) and replaces the three copied inline radius-from-joints functions. No saved-format change, no new unknown.
@@ -13458,6 +13498,11 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
   - fusion-oracle: which-moves-known.mjs / graded-known.mjs give every tangent class with an arc or fillet-arc operand the reason "arc resizes at tangent creation; placement, task 525 (...)"; KNOWN regenerated (`216 KNOWN of 315`, `352 KNOWN classes of 383; 1590 differing cells of 2438`, `125 KNOWN rows`), the three doc sections regenerated, "After task 523" table added to docs/FUSION-COMPARISON.md. `fusion-oracle OK`.
   - docs/COVERAGE-AUDIT.md: NEW-6 updated (5 -> 3; remaining: lockTangentBranch locks external on equal concentric circles; an arc centred on another arc's rim collapses; the run-order flip is PlaneGCS's verdict), tangent grid refreshed, "Fixed in task 523" section with the F6 parallel shared-joint overwrite diagnosis (not fixed), N-F7 row updated.
   - Final: jacobian-fd-guard 29 cases, coverage-matrix passed (PASS=1788, NEW-6=3, NEW-9=2), coverage-properties passed (5 KNOWN), constraint-audit passed (1 KNOWN), fusion-oracle OK (which-moves 99 same / 216 KNOWN, graded 848 / 1590, drawings 829 / 125). Gate: `GATE files=249 pass=249 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.
+- Merge of origin/main c0224bc (task 523 arc tangent rows + 524): conflicts only in generated KNOWN / doc files and the KNOWN maps (resolved:
+  NEW-6 text from 523, NEW-9 stays deleted), then table + KNOWN + docs regenerated. After the merge: which-moves 287 / 315 (28 KNOWN),
+  graded 1996 / 2438 (442 KNOWN in 134 classes), drawings 829 / 954 (125 KNOWN); tangent-circle-circle 100 / 100 and tangent-arc-arc 14 / 14:
+  the 523 "arc resizes at tangent creation; placement, task 525" entries all agree now (the anchor arc is frozen, the mover alone solves).
+  The "before" numbers above are main before 523 (counts-before.json); the remaining differences per class: which-moves-graded-known.json.
 
 ## TURN 527 (STOPPED at step 1, nothing under packages/ touched)
 Measured in a new unsaved Fusion document (closed unsaved) whether SketchPoint.move / sketch.move reproduce a constrained mouse drag.
@@ -13473,6 +13518,25 @@ serve as the oracle: owner decision needed.
 - New files: tests/fusion-dim-edit.test.js, tests/harness/fusion-oracle/dim-edit.js, scripts/fusion-oracle/{run-dim-edit.py,dim-edit-jobs.mjs,dim-edit-cli.mjs,dim-edit-known.mjs}, two fixtures. No existing fixture, KNOWN list or doc section edited.
 - Fusion hygiene: all sketches CLAUDE_TEST_*, deleted; the scratch document closed without saving; the two pre-existing Untitled documents untouched; Fusion not launched or killed.
 - Follow-up (locked lines): tests added for BOTH lines locked and ONE line locked, then the corner filleted. Accepted; nullity unchanged (both 0 -> 0, one 1 -> 1, same free joints/directions); far ends still fixed in place; directions unchanged after a jitter re-solve; the new tangent-end joints are not free. selectionLockState on a trimmed line afterwards = {has:true, locked:false} (its tangent end joint is not fixed). Reported, not changed. Gate after merging origin/main: files=250 pass=250 fail=0, SMOKE 12/12.
+- Round 2 (advisor): merged origin/main ad0e122 (task 528, dimension-edit oracle, 864 runs). commitDimensionEdit now places the giving
+  operand at EVERY value step (the stepping is kept) instead of skipping the steps once placed: a single jump left angle edits to 179 degrees
+  and to a negative value short of their value (58 runs). tests/fusion-dim-edit.test.js: 381 same on main -> 594 (place once) -> 644 same (place
+  per step), 220 differ (.evidence/525/dim-edit-compare-final.txt). STOPPED before regenerating fusion-dim-edit-known.json: 30 runs that agreed
+  on main now differ: 20 runs where Fusion moves the same operand but does NOT reach the value and ours does (dim-aligned LL 3,5 / LP 7,0 /
+  RL 0,7, dim-vertical RL 0,7, dim-point-line PL 0,7; x2, x0.5, +1%, x20), and 10 runs dim-horizontal / dim-vertical LP 0,4 where Fusion moves
+  the picked line end alone and ours translates the whole line. Moving the FIRST pick's point alone for H/V dimensions fixed those 10 runs (and
+  the 315 / graded H/V dim cells: 287 -> 299, 1996 -> 2011) but re-opened coverage-properties N-F6 (a tangent circle flips sides on a horizontal
+  dimension edit), so it was not kept. Graded / 315 / drawings unchanged by round 2: 1996 / 287 / 829.
+- Round 3 (advisor ruling Q3/Q4): fusion-dim-edit KNOWN regenerated with scripts/fusion-oracle/dim-edit-known.mjs after three RULES in
+  tests/harness/fusion-oracle/dim-edit.js (classifyDiff now also passes Fusion's text): start-geometry (45 runs, RE-CHECK IN FUSION), point-alone
+  (20), angle-short (1). Fact behind start-geometry, from the recorded data (.evidence/525/dim-edit-unreached-facts.txt): Fusion health [0,""],
+  dim-aligned|LP|7,0#grow2 valueAdd 95.6883, value read back 191.3766 (= its own x2), point (110,60) -> (200,92.5); OUR start line is at y=20
+  where Fusion recorded y=27.5 (the level setup's H on the line now moves only its second end), so the target is 196.98 (twice OUR measured
+  98.4886) and Fusion reads "value not reached". 5 cells (x2, x0.5, +1%, x20): dim-aligned LL 3,5 / LP 7,0 / RL 0,7, dim-vertical RL 0,7,
+  dim-point-line PL 0,7. The same family covers 25 more runs (13 were both-operands, 12 neighbours on main).
+- fusion-dim-edit: 381 same / 483 KNOWN in 9 classes (main) -> 644 same / 220 KNOWN in 11 classes. Doc: "After task 525" subsection under
+  "Editing a dimension (task 528)" (class transitions, per dimension, per edit, the new classes, the point-alone follow-up). Tried and reverted:
+  the first pick's point alone for H/V dimensions (315 287 -> 299, graded 1996 -> 2011, dim-edit 654 same) re-opens N-F6; needs the N-F6 branch lock.
 
 ## TURN 532
 Canvas grid in the file's unit (owner 2026-11-12). packages/ui/canvas-grid.js: ONE pure `gridSpacing(docUnit, settings)` + data table `GRID_SPACING_BY_UNIT` (inch row: major from INCH_GRID_MAJOR (default 1 in), divisions from INCH_GRID_DIVISIONS 10/2/4/8/16 (default 10), per-divisions level-of-detail ratio x10 decimal / x2 binary); mm/cm use GRID_SIZE / GRID_MAJOR_STEP in mm. `gridLevel` takes the optional lodRatio (mm path unchanged). The grid drawing (svg-renderer.js) and the grid snap (input-manager.js) both read gridSpacing. `gridLabelsMarkup`: numbers on the X and Y axes at displayed heavy lines (Fusion's look: rotated, no unit, shortest form via units.js format, no 0, skip when denser than 40 px, 11 px constant, `--sk-grid-label`). Style panel: declarative `showWhen: {key, in}` on a control spec; metric pair for mm/cm, inch pair for in. Owner: mm DEFAULT grid now heavy 100 / light 10 (settings-manager DEFAULT_SETTINGS, the one place). Tests: canvas-grid-units, canvas-grid-labels-live (real apps, headless), style-panel-tabs (showWhen, live redraw).
@@ -13531,6 +13595,27 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Behaviour changes: 7 feasible shared-corner parallel / perpendicular matrix cells and 5 extreme-arc shared chord cells are accepted where they were refused; 1 arc cell (s30cw perpendicular-chord shared, PlaneGCS infeasible) is refused where it was accepted; random properties: 2 ops refused -> driving, 2 dimensions reference -> driving, 1 collinear driving -> refused (seed 7191, different start; our solve collapses a line, NEW-9 family). DOF counts on shared-joint rows now equal finite differences.
 - matrix-run.js: `preCollinear` also covers parallel (two horizontal rect sides sharing a corner: the row is a combination of the two H rows, delta 0 = finite differences, PlaneGCS counts -1 as it does for collinear there).
 - EA-6 measured (not fixed): perpendicular cells are the DOUBLE root of the branch-locked row u x v - |u||v| (stops at r = 1e-6, angle 1.162e-3 rad, predicted 1.163e-3); normalising would not fix it. EA-7 unchanged (not this family). Docs: COVERAGE-AUDIT "Fixed in task 533", extreme-arcs table rows regenerated; CONSTRAINT-AUDIT F4.
+- Round 5 (advisor ruling, Option A first form): RULE at the operand seam (creation-placement.js creationOperands): "who moves" is between two
+  DIFFERENT shapes; when both operands belong to the SAME shape (two points of one line / arc / circle) nothing is placed and there is no forced
+  start-pose fallback: the solve starts from the untouched pose, as on main. The single-shape keys (horizontal-line, vertical-line, dim-length,
+  dim-radius) are gone. Merged origin/main d2e31b7 (533 per-joint Jacobian rows, 530 drag oracle, 532 grid).
+- Extreme arcs, per-cell verdicts main placement code vs branch (.evidence/525/arc-verdicts-diff2.txt): 2880 cells, 84 differ: 35 better, 41
+  shifted, 8 worse; the 30 hv-centre-end regressions are back to main; same-shape cells differing from main: 0 (f90r0.5 hv-start-end sep differed
+  in one run only, N/A on both side by side: PlaneGCS refusal flake). The 8 accepted (newly accepted constraints exposing existing findings):
+  s181cw tangent-line dimmed PASS->EA-2; r0.5s181cw tangent-line dimmed PASS->EA-2; r0.5s30cw parallel-chord shared N/A->EA-6;
+  r0.5s0.1cw parallel-chord sep / locked / dimmed N/A->EA-6; f179r10 parallel-chord sep N/A->EA-6; f179r10 tangent-line sep PASS->EA-5 (the
+  table moved the LINE; the fillet arc stays at creation, -1 deg R 10; the shrink is the harness's later drag step, -1 -> -0.034 deg).
+  EA-3 / EA-5 repros pass (placement keeps the arc); new repros s180cw coincident-own-ends sep (EA-3), r0.5s0.1cw dim-chord sep (EA-5).
+  extreme-arcs: FAIL=167 N/A=132 NA-BUILD=788 PASS=1793 (task 531: 205 / 176 / 788 / 1711). Doc: COVERAGE-AUDIT "After task 525".
+- Coverage matrix, per-cell: 3384 cells, 2 differ, both better (coincident LR / CR shared UNCLASSIFIED -> PASS), 0 worse.
+- Oracles: which-moves 286 / 315 (29 KNOWN), graded 1988 / 2438 (450 KNOWN, 141 classes), drawings 829 / 954, fusion-dim-edit 672 / 864
+  (192 KNOWN, 11 classes: start-geometry gone, its 45 runs agree now that the level setup's H on one line is not pre-placed; fusion-angle-supplement
+  1 run, a fact from the data), fusion-drag 91 / 146 (unchanged). The cells that went back to KNOWN this round (H/V-line, dim-length, dim-radius
+  singles) were KNOWN on main before 525 too. coverage-properties N-U1 now passes (entry deleted, 2 runs).
+- Cells that agreed with Fusion before task 525 (253b792 KNOWN lists) and differ now (present since round 1, not changed by this round):
+  graded 48 (collinear LL 1,5 1,7 4,3 5,3 7,1, CL 4,3; dim-aligned LL 2,4 2,5 2,6 2,7 2,o 4,2 5,2 6,2 7,2 o,2, LA 4,0 7,0 o,0, OA c,0, AL 0,4
+  0,7, AO 0,c, AP 0,4, PA 4,0, ZA; dim-horizontal / dim-vertical LL 0,4 0,7 2,4 2,7, LO 0,c, LP 0,4, LZ 0,0, AL, AO, AP, AZ) and which-moves 6
+  (dim-horizontal / dim-vertical A_fixfull.BA, B_fix1.AB, B_fixfull.AB). List: .evidence/525/oracle-pass-to-fail-vs-pre525.txt.
 
 ## TURN 534
 - Positive Y points UP for the user (like Fusion) through ONE seam: `worldToUserY` / `userToWorldY` in packages/core/units.js. Only site that showed a y: the grid axis numbers (`gridLabelsMarkup`, packages/ui/canvas-grid.js: SketchStudio + Shaper Design). Label positions unchanged (picture does not move); the Y number now reads `worldToUserY(y)`.

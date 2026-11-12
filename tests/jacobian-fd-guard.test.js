@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { Definitions } from '#core/solver/definitions.js';
+import { Definitions, BODY_POINTS } from '#core/solver/definitions.js';
 import { createNewtonSolver } from '#core/solver/engine.js';
 
 // GUARD (task 511, audit F6): the DOF / redundancy analysis (engine.jointFreedom, rankRowRedundant) reads the nullspace of the
@@ -153,4 +153,28 @@ for (const [label, c, extra] of SHARED_CASES) {
   checked++;
 }
 assert.ok(sharedBad.length === 0, `${sharedBad.length} of ${SHARED_CASES.length} shared-joint rows differ from finite differences:\n  ` + sharedBad.join('\n  '));
+// The BODY drag target (task 538): the mouse spring on the grabbed point of a shape, one declared BODY_POINTS entry per shape kind
+// (line: a fraction t along it; circle / arc: the rim point on the target's ray from the centre, through the circle's radius unknown / the
+// arc's live radius, so the centre columns carry the ray's turn too). A target ON the centre has no ray (the point falls back to the grab
+// angle): not differentiable there, so not a case.
+// Every kind needs a case; its rows are checked on every column like a constraint row, and the radius / rim column must be in them.
+const BODY = (shape, param) => ({ type: 'mouse_spring', body: { shape, param }, value: [3, -2], stiffness: 1e4, joints: [] });
+const BODY_CASES = [
+  ['line', 'body point on a line, t = 0.3', BODY('L1', 0.3), [], ['a', 'b']],
+  ['line', 'body point on a line, t = 0 (an end)', BODY('L1', 0), [], ['a']],
+  ['line', 'body point on a line, t = 1 (an end)', BODY('L1', 1), [], ['b']],
+  ['line', 'body point on a line whose two ends are one joint', BODY('LX', 0.4), LX('a', 'a'), ['a']],
+  ['circle', 'body point on a circle rim, target off the centre', BODY('C1', 0.7), [], ['C1', 'm']],
+  ['arc', 'body point on an arc rim, target off the centre', BODY('A1', 2.0), [], ['as', 'ac']],
+  ['arc', 'body point on an arc whose centre is another arc rim', BODY('A3', -1.1), ARC3('as', 'bs', 'be'), ['bs', 'as']],
+  // a temporary HOLD of the drag (engine.bodyDragTarget: the circle's / arc's centre held off its place): its rows are checked too
+  ['circle', 'body point on a circle rim, centre held', { ...BODY('C1', 0.7), stiffness: 1, body: { shape: 'C1', param: 0.7, hold: [{ joint: 'm', x: 8, y: 9.5 }] } }, [], ['C1', 'm']],
+  ['arc', 'body point on an arc rim, centre held', { ...BODY('A1', 2.0), stiffness: 1, body: { shape: 'A1', param: 2.0, hold: [{ joint: 'ac', x: -7, y: 3 }] } }, [], ['as', 'ac']],
+];
+for (const kind of Object.keys(BODY_POINTS)) assert.ok(BODY_CASES.some(b => b[0] === kind), `BODY_POINTS kind "${kind}" has no case in this guard: add one`);
+for (const [, label, c, extra, uses] of BODY_CASES) {
+  const col = guard('body drag: ' + label, c, extra);
+  for (const id of uses) assert.ok(col[id] > 0.5, `body drag: ${label}: the ${id} column is ${col[id]} (expected it in the row)`);
+  checked++;
+}
 console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius and arc rim columns included, ${SHARED_CASES.length} of them with a joint shared inside the row.`);

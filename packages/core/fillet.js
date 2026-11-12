@@ -76,16 +76,21 @@ export function findCornerAtJoint(state, jointId) {
   const cJoint = state.joints.get(jointId);
   const cluster = getCoincidentCluster(state, jointId);
 
+  // Construction lines (a Polygon's radials) hang off the corner but are not part of it: they do not count as a third
+  // line. They stay attached through the fillet (applyFillet re-links them to the virtual sharp). A corner made ONLY
+  // of construction lines still counts them (nothing else to fillet).
+  const lineShapes = (state.shapes || []).filter(s => s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2);
+  const touches = (s) => cluster.has(s.joints[0]) !== cluster.has(s.joints[1]);
+  const solid = lineShapes.filter(s => !s.isConstruction);
+  const cornerLines = solid.filter(touches).length > 0 ? solid : lineShapes;
   const incidentLines = [];
-  for (const s of (state.shapes || [])) {
-    if (s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2) {
-      const in0 = cluster.has(s.joints[0]);
-      const in1 = cluster.has(s.joints[1]);
-      if (in0 && !in1) {
-        incidentLines.push({ shape: s, cornerJoint: s.joints[0], otherJoint: s.joints[1], cornerIdx: 0 });
-      } else if (in1 && !in0) {
-        incidentLines.push({ shape: s, cornerJoint: s.joints[1], otherJoint: s.joints[0], cornerIdx: 1 });
-      }
+  for (const s of cornerLines) {
+    const in0 = cluster.has(s.joints[0]);
+    const in1 = cluster.has(s.joints[1]);
+    if (in0 && !in1) {
+      incidentLines.push({ shape: s, cornerJoint: s.joints[0], otherJoint: s.joints[1], cornerIdx: 0 });
+    } else if (in1 && !in0) {
+      incidentLines.push({ shape: s, cornerJoint: s.joints[1], otherJoint: s.joints[0], cornerIdx: 1 });
     }
   }
 
@@ -257,18 +262,28 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   const jCenter = genJ();
   const jTA = genJ();
   const jTB = genJ();
-  const jV = genJ(); // virtual sharp: the corner as it was (see below)
+  // virtual sharp: the corner as it was (see below). A corner that is the ORIGIN keeps the origin itself as its sharp:
+  // it is already fixed at the corner, both trimmed lines are held to it, and the origin must never be deleted.
+  const atOrigin = cluster.has('j_origin');
+  const jV = atOrigin ? 'j_origin' : genJ();
 
   joints.set(jCenter, { x: centerPt.x, y: centerPt.y, fixed: false });
   joints.set(jTA, { x: tA.x, y: tA.y, fixed: false });
   joints.set(jTB, { x: tB.x, y: tB.y, fixed: false });
   // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by pointOnLine so it
   // follows them when the radius changes; overall dimensions attach to it. Not a shape => loops/export ignore it.
-  joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
+  if (!atOrigin) joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
 
   // Update line endpoint joints to the new tangent points
   lineA.shape.joints[lineA.cornerIdx] = jTA;
   lineB.shape.joints[lineB.cornerIdx] = jTB;
+
+  // Construction lines on the corner (a Polygon's radial) keep meaning the sharp corner: re-link them to V
+  for (const s of shapes) {
+    if (s && s.type === 'line' && s.isConstruction && s !== lineA.shape && s !== lineB.shape && Array.isArray(s.joints)) {
+      for (let k = 0; k < s.joints.length; k++) if (cluster.has(s.joints[k])) s.joints[k] = jV;
+    }
+  }
 
   // Update constraints referencing the corner joints
   if (Array.isArray(constraints)) {
@@ -327,7 +342,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 
   // Delete the old corner cluster joints
   for (const jid of cluster) {
-    joints.delete(jid);
+    if (jid !== 'j_origin') joints.delete(jid);
   }
   removeOrphanJoints(state);
 
@@ -343,6 +358,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     value: finalRadius,
     isRadius: true,
     isDriven: false,
+    driven: false,
     offset: Math.max(finalRadius * 0.6, 6)
   };
   constraints.push(radiusConstraint);

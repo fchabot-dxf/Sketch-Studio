@@ -63,10 +63,10 @@ export class SceneShapes {
   constructor(base) { this.base = base; }
   _all() { return [...this.base, ...REFERENCE_SHAPES]; }
   get length() { return this.base.length + REFERENCE_SHAPES.length; }
-  find(fn, t) { return this._all().find(fn, t); }
+  find(fn, t) { return this.base.find(fn, t) || REFERENCE_SHAPES.find(fn, t); }
   findIndex(fn, t) { return this._all().findIndex(fn, t); }
   filter(fn, t) { return this._all().filter(fn, t); }
-  some(fn, t) { return this._all().some(fn, t); }
+  some(fn, t) { return this.base.some(fn, t) || REFERENCE_SHAPES.some(fn, t); }
   every(fn, t) { return this._all().every(fn, t); }
   map(fn, t) { return this._all().map(fn, t); }
   forEach(fn, t) { return this._all().forEach(fn, t); }

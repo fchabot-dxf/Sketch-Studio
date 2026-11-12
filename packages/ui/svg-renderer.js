@@ -7,7 +7,7 @@ import { dbg } from '#core/debug.js';
 import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
-import { REFERENCE_SHAPES } from '#core/reference-lines.js';
+import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '#core/reference-lines.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -144,6 +144,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Accumulate SVG markup and set once at the end to avoid partial-frame renders
   const out = [];
+  // Constraint / dimension OPERANDS (the shapes and joints a constraint names) are resolved through the scene (task 539): the real containers
+  // read live + the two built-in reference lines. Shape DRAWING loops stay on `shapes` / `joints`, so an axis is never drawn as geometry.
+  const opJoints = sceneJoints(joints), opShapes = sceneShapes(shapes);
   // Container for overlays that must be drawn last (ensures top-most stacking)
   let lateOverlay = '';
   // Calculate zoom factor to keep stroke widths constant in screen space
@@ -332,12 +335,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const resolveDimEnds = (c) => {
     let j1 = null, j2 = null;
     if(c.isRadius && c.shape){
-      const shape = shapes.find(s => s.id === c.shape);
-      if(shape && shape.joints && shape.joints.length >= 1) j1 = joints.get(shape.joints[0]);
+      const shape = opShapes.find(s => s.id === c.shape);
+      if(shape && shape.joints && shape.joints.length >= 1) j1 = opJoints.get(shape.joints[0]);
     } else if(isPointLineDistance(c)){
       // Point-to-line: from P to the foot of the perpendicular on line AB
-      j1 = joints.get(c.joints[0]);
-      const la = joints.get(c.joints[1]), lb = joints.get(c.joints[2]);
+      j1 = opJoints.get(c.joints[0]);
+      const la = opJoints.get(c.joints[1]), lb = opJoints.get(c.joints[2]);
       if(j1 && la && lb){
         const dx = lb.x - la.x, dy = lb.y - la.y;
         const det = dx*dx + dy*dy;
@@ -347,14 +350,14 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         }
       }
     } else if(c.joints && c.joints.length >= 2){
-      j1 = joints.get(c.joints[0]); j2 = joints.get(c.joints[1]);
+      j1 = opJoints.get(c.joints[0]); j2 = opJoints.get(c.joints[1]);
     } else if(c.shapes && c.shapes.length === 2){
       // Line-Line Distance (Parallel)
-      const s1 = shapes.find(s => s.id === c.shapes[0]);
-      const s2 = shapes.find(s => s.id === c.shapes[1]);
+      const s1 = opShapes.find(s => s.id === c.shapes[0]);
+      const s2 = opShapes.find(s => s.id === c.shapes[1]);
       if(s1 && s2 && s1.joints && s2.joints){
-        const l1a = joints.get(s1.joints[0]), l1b = joints.get(s1.joints[1]);
-        const l2a = joints.get(s2.joints[0]), l2b = joints.get(s2.joints[1]);
+        const l1a = opJoints.get(s1.joints[0]), l1b = opJoints.get(s1.joints[1]);
+        const l2a = opJoints.get(s2.joints[0]), l2b = opJoints.get(s2.joints[1]);
         if(l1a && l1b && l2a && l2b){
           // Project midpoint of s1 onto s2 to get perpendicular distance points
           const mx = (l1a.x + l1b.x)/2, my = (l1a.y + l1b.y)/2;
@@ -369,10 +372,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       }
     } else if(c.joint && c.shape){
       // Point-Line Distance
-      j1 = joints.get(c.joint);
-      const s = shapes.find(s => s.id === c.shape);
+      j1 = opJoints.get(c.joint);
+      const s = opShapes.find(s => s.id === c.shape);
       if(j1 && s && s.joints){
-         const l1 = joints.get(s.joints[0]), l2 = joints.get(s.joints[1]);
+         const l1 = opJoints.get(s.joints[0]), l2 = opJoints.get(s.joints[1]);
          if(l1 && l2){
            const dx = l2.x - l1.x, dy = l2.y - l1.y;
            const det = dx*dx + dy*dy;
@@ -866,9 +869,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
                   if (!c) continue;
                   if (c.type === CONSTRAINT_TYPES.POINT_ON_LINE && (c.joint === jid || (c.joints && c.joints.includes && c.joints.includes(jid)))) {
                     if (c.shape) {
-                      const s = shapes.find(sh => sh.id === c.shape);
+                      const s = opShapes.find(sh => sh.id === c.shape);
                       if (s && s.type === 'line' && s.joints && s.joints.length >= 2) {
-                        const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]);
+                        const a = opJoints.get(s.joints[0]), b = opJoints.get(s.joints[1]);
                         if (a && b) {
                           const vx = b.x - a.x, vy = b.y - a.y; const m = Math.hypot(vx, vy);
                           if (m > 1e-6) { freedomDir = { x: vx / m, y: vy / m }; break; }
@@ -878,17 +881,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
                   }
                   if (c.type === CONSTRAINT_TYPES.COLLINEAR) {
                     // prefer explicit line reference
-                    const lineId = c.line || (c.shapes && c.shapes.find(id => shapes.find(s => s.id === id && s.type === 'line')));
+                    const lineId = c.line || (c.shapes && c.opShapes.find(id => opShapes.find(s => s.id === id && s.type === 'line')));
                     if (lineId) {
-                      const s = shapes.find(sh => sh.id === lineId);
+                      const s = opShapes.find(sh => sh.id === lineId);
                       if (s && s.type === 'line' && s.joints && s.joints.length >= 2) {
-                        const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]);
+                        const a = opJoints.get(s.joints[0]), b = opJoints.get(s.joints[1]);
                         if (a && b) { const vx = b.x - a.x, vy = b.y - a.y; const m = Math.hypot(vx, vy); if (m > 1e-6) { freedomDir = { x: vx / m, y: vy / m }; break; } }
                       }
                     } else if (c.joints && c.joints.length >= 2) {
                       const other = c.joints.find(id => id !== jid);
                       if (other && joints.has(other)) {
-                        const ov = joints.get(other); const vx = ov.x - jpt.x, vy = ov.y - jpt.y; const m = Math.hypot(vx, vy);
+                        const ov = opJoints.get(other); const vx = ov.x - jpt.x, vy = ov.y - jpt.y; const m = Math.hypot(vx, vy);
                         if (m > 1e-6) { freedomDir = { x: vx / m, y: vy / m }; break; }
                       }
                     }
@@ -901,16 +904,16 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
                     const matchC = activeConstraints.find(c => `${c.type}:${c.id || 'auto'}` === ds);
                     if (!matchC) continue;
                     if (matchC.type === CONSTRAINT_TYPES.POINT_ON_LINE && matchC.shape) {
-                      const s = shapes.find(sh => sh.id === matchC.shape);
+                      const s = opShapes.find(sh => sh.id === matchC.shape);
                       if (s && s.type === 'line' && s.joints && s.joints.length >= 2) {
-                        const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]);
+                        const a = opJoints.get(s.joints[0]), b = opJoints.get(s.joints[1]);
                         if (a && b) { const vx = b.x - a.x, vy = b.y - a.y; const m = Math.hypot(vx, vy); if (m > 1e-6) { freedomDir = { x: vx / m, y: vy / m }; break; } }
                       }
                     }
                     if (matchC.type === CONSTRAINT_TYPES.COLLINEAR && matchC.line) {
-                      const s = shapes.find(sh => sh.id === matchC.line);
+                      const s = opShapes.find(sh => sh.id === matchC.line);
                       if (s && s.type === 'line' && s.joints && s.joints.length >= 2) {
-                        const a = joints.get(s.joints[0]), b = joints.get(s.joints[1]);
+                        const a = opJoints.get(s.joints[0]), b = opJoints.get(s.joints[1]);
                         if (a && b) { const vx = b.x - a.x, vy = b.y - a.y; const m = Math.hypot(vx, vy); if (m > 1e-6) { freedomDir = { x: vx / m, y: vy / m }; break; } }
                       }
                     }
@@ -973,13 +976,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
                   if (c.type === CONSTRAINT_TYPES.DISTANCE) {
                     if (c.joints && c.joints.includes(jid)) {
                       const other = c.joints.find(id => id !== jid);
-                      if (other && joints.has(other)) { anchor = joints.get(other); break; }
+                      if (other && joints.has(other)) { anchor = opJoints.get(other); break; }
                     }
                     if (c.isRadius && c.shape) {
-                      const s = shapes.find(sh => sh.id === c.shape);
+                      const s = opShapes.find(sh => sh.id === c.shape);
                       if (s && s.joints && s.joints.length > 1 && s.joints.includes(jid)) {
                         const centerId = s.joints[0];
-                        if (centerId && joints.has(centerId)) { anchor = joints.get(centerId); break; }
+                        if (centerId && joints.has(centerId)) { anchor = opJoints.get(centerId); break; }
                       }
                     }
                   }
@@ -1206,9 +1209,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           drawUnifiedGlyph(previewC, x, y, 'icon-coincident', 0, { isPreview: true });
         }
       } else if(active.mode === CONSTRAINT_TYPES.PARALLEL && active.shape1){
-        const shape = shapes.find(s => s.id === active.shape1);
+        const shape = opShapes.find(s => s.id === active.shape1);
         if(shape && shape.joints){
-          const a = joints.get(shape.joints[0]), b = joints.get(shape.joints[1]);
+          const a = opJoints.get(shape.joints[0]), b = opJoints.get(shape.joints[1]);
           if(a && b){
             const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
             const { nx, ny, len } = perpendicularNormal(a, b);
@@ -1220,9 +1223,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           }
         }
       } else if(active.mode === TOOL_MODES.PERPENDICULAR && active.shape1){
-        const shape = shapes.find(s => s.id === active.shape1);
+        const shape = opShapes.find(s => s.id === active.shape1);
         if(shape && shape.joints){
-          const a = joints.get(shape.joints[0]), b = joints.get(shape.joints[1]);
+          const a = opJoints.get(shape.joints[0]), b = opJoints.get(shape.joints[1]);
           if(a && b){
             const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
             const { nx, ny, len } = perpendicularNormal(a, b);
@@ -1236,7 +1239,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       } else if(active.mode === TOOL_MODES.HORIZONTAL_VERTICAL){
         // H/V will show on the line being evaluated
       } else if(active.mode === CONSTRAINT_TYPES.COLLINEAR && active.joints && active.joints.length > 0){
-        const lastJoint = joints.get(active.joints[active.joints.length - 1]);
+        const lastJoint = opJoints.get(active.joints[active.joints.length - 1]);
         if(lastJoint){
           const offset = scale(GLYPH_OFFSET_PX);
           const x = lastJoint.x + offset, y = lastJoint.y - offset;
@@ -1247,9 +1250,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       } else if(active.mode === CONSTRAINT_TYPES.TANGENT && (active.line || active.circle)){
         // Show on line or circle
         if(active.line){
-          const shape = shapes.find(s => s.id === active.line);
+          const shape = opShapes.find(s => s.id === active.line);
           if(shape && shape.joints){
-            const a = joints.get(shape.joints[0]), b = joints.get(shape.joints[1]);
+            const a = opJoints.get(shape.joints[0]), b = opJoints.get(shape.joints[1]);
             if(a && b){
               const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
               const { nx, ny, len } = perpendicularNormal(a, b);
@@ -1702,11 +1705,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     }
   } else if (active && active.mode === 'dim-angle' && active.shapes && active.shapes.length === 2) {
     // Draw Angle Dimension Preview
-    const s1 = shapes.find(s => s.id === active.shapes[0]);
-    const s2 = shapes.find(s => s.id === active.shapes[1]);
+    const s1 = opShapes.find(s => s.id === active.shapes[0]);
+    const s2 = opShapes.find(s => s.id === active.shapes[1]);
     if (s1 && s2 && s1.joints && s2.joints) {
-      const j1 = joints.get(s1.joints[0]), j2 = joints.get(s1.joints[1]);
-      const j3 = joints.get(s2.joints[0]), j4 = joints.get(s2.joints[1]);
+      const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
+      const j3 = opJoints.get(s2.joints[0]), j4 = opJoints.get(s2.joints[1]);
       if (j1 && j2 && j3 && j4) {
         const int = getLineIntersection(j1, j2, j3, j4);
         if (int) {
@@ -2015,9 +2018,9 @@ switch(c.type){
 
       case CONSTRAINT_TYPES.PARALLEL:
       case CONSTRAINT_TYPES.PERPENDICULAR: {
-        const s1 = shapes.find(s => s.id === c.shapes[0]);
+        const s1 = opShapes.find(s => s.id === c.shapes.find(id => !isReferenceShapeId(id)));
         if(!s1 || !s1.joints) return;
-        const j1 = joints.get(s1.joints[0]), j2 = joints.get(s1.joints[1]);
+        const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
         if(!j1 || !j2) return;
         const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2;
         const { nx, ny } = perpendicularNormal(j1, j2);
@@ -2040,7 +2043,7 @@ switch(c.type){
       }
 
       case CONSTRAINT_TYPES.POINT_ON_LINE: {
-        const pt = joints.get(c.joint); if(!pt) return;
+        const pt = opJoints.get(c.joint); if(!pt) return;
         const isHovered = isGlyphHovered;
         const isSelected = isGlyphSelected;
 
@@ -2067,9 +2070,9 @@ switch(c.type){
         else {
           if(c.shapes && c.shapes.length >= 2){
              // Position at midpoint of first line
-             const s1 = shapes.find(s => s.id === c.shapes[0]);
+             const s1 = opShapes.find(s => s.id === c.shapes.find(id => !isReferenceShapeId(id)));
              if(s1 && s1.joints){
-                 const j1 = joints.get(s1.joints[0]), j2 = joints.get(s1.joints[1]);
+                 const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
                  if(j1 && j2){
                      px = (j1.x + j2.x)/2; py = (j1.y + j2.y)/2;
                      const n = perpendicularNormal(j1, j2); nx = n.nx; ny = n.ny;
@@ -2077,11 +2080,11 @@ switch(c.type){
              }
           } else if(c.joints && c.joints.length >= 3) {
              const midIdx = Math.floor(c.joints.length / 2);
-             const midJoint = joints.get(c.joints[midIdx]); if(!midJoint) return;
+             const midJoint = opJoints.get(c.joints[midIdx]); if(!midJoint) return;
              px = midJoint.x; py = midJoint.y;
              // Compute normal from neighbors
-             const a = joints.get(c.joints[Math.max(0, midIdx - 1)]);
-             const b = joints.get(c.joints[Math.min(c.joints.length - 1, midIdx + 1)]);
+             const a = opJoints.get(c.joints[Math.max(0, midIdx - 1)]);
+             const b = opJoints.get(c.joints[Math.min(c.joints.length - 1, midIdx + 1)]);
              if(a && b){
                 const n = perpendicularNormal(a, b); nx = n.nx; ny = n.ny;
              }
@@ -2099,9 +2102,9 @@ switch(c.type){
       }
 
       case CONSTRAINT_TYPES.TANGENT: {
-        const lineShape = shapes.find(s => s.id === c.line); const circleShape = shapes.find(s => s.id === c.circle);
+        const lineShape = opShapes.find(s => s.id === c.line); const circleShape = opShapes.find(s => s.id === c.circle);
         if(!lineShape || !circleShape || !lineShape.joints || !circleShape.joints) return;
-        const la = joints.get(lineShape.joints[0]); const lb = joints.get(lineShape.joints[1]); const center = joints.get(circleShape.joints[0]);
+        const la = opJoints.get(lineShape.joints[0]); const lb = opJoints.get(lineShape.joints[1]); const center = opJoints.get(circleShape.joints[0]);
         if(!la || !lb || !center) return;
         const { nx, ny } = perpendicularNormal(la, lb);
         // The ONE tangent glyph sits at the tangency point (foot of the perpendicular from the centre onto the line),
@@ -2124,10 +2127,10 @@ switch(c.type){
         let gx = null, gy = null;
         if (c.__pos) { gx = c.__pos.x; gy = c.__pos.y; }
         else if (c.shapes && c.shapes.length > 0) {
-          const s0 = shapes.find(s => s.id === c.shapes[0]);
+          const s0 = opShapes.find(s => s.id === c.shapes[0]);
           if (s0) {
             if (s0.type === 'line' && s0.joints && s0.joints.length >= 2) {
-                const a0 = joints.get(s0.joints[0]); const b0 = joints.get(s0.joints[1]);
+                const a0 = opJoints.get(s0.joints[0]); const b0 = opJoints.get(s0.joints[1]);
                 if (a0 && b0) { 
                     gx = (a0.x + b0.x)/2; gy = (a0.y + b0.y)/2; 
                     const { nx, ny } = perpendicularNormal(a0, b0);
@@ -2241,7 +2244,7 @@ switch(c.type){
           else if (c.joints && c.joints.length >= 2) {
             // Prefer grouping by shape if a line/shape contains both joints
             const aId = c.joints[0], bId = c.joints[1];
-            const shapeMatch = shapes.find(s => s.joints && s.joints.length >= 2 && s.joints.includes(aId) && s.joints.includes(bId));
+            const shapeMatch = opShapes.find(s => s.joints && s.joints.length >= 2 && s.joints.includes(aId) && s.joints.includes(bId));
             if (shapeMatch) key = `shape:${shapeMatch.id}`;
             else { const [mn, mx] = [aId, bId].sort(); key = `pair:${mn}|${mx}`; }
           } else {
@@ -2258,10 +2261,10 @@ switch(c.type){
 
       if (k.startsWith('shape:')) {
         const sid = k.slice(6);
-        const s = shapes.find(ss => ss.id === sid);
+        const s = opShapes.find(ss => ss.id === sid);
         if (s && s.joints && s.joints.length >= 2) {
           // Treat as line: fan around midpoint (radial distribution)
-          const jA = joints.get(s.joints[0]), jB = joints.get(s.joints[1]);
+          const jA = opJoints.get(s.joints[0]), jB = opJoints.get(s.joints[1]);
           if (jA && jB) {
             const mx = (jA.x + jB.x) / 2, my = (jA.y + jB.y) / 2;
             const r = Math.max(scale(GLYPH_OFFSET_PX), glyphSize * 2);
@@ -2351,27 +2354,27 @@ switch(c.type){
     } else if((c.type === CONSTRAINT_TYPES.PARALLEL || c.type === CONSTRAINT_TYPES.EQUAL || c.type === CONSTRAINT_TYPES.COLLINEAR) && c.shapes && c.shapes.length >= 2){
       // Dual-glyph rendering for shape-pair constraints (parallel, equal, collinear)
       // Draw two glyphs - one attached to each shape involved in the parallel constraint
-      const s1 = shapes.find(s => s.id === c.shapes[0]);
-      const s2 = shapes.find(s => s.id === c.shapes[1]);
+      const s1 = opShapes.find(s => s.id === c.shapes[0]);
+      const s2 = opShapes.find(s => s.id === c.shapes[1]);
       if(s1 && s1.joints && s2 && s2.joints){
         const offset = scale(GLYPH_OFFSET_PX);
         const computePosForShape = (shape) => {
           if (!shape || !shape.joints || shape.joints.length < 1) return null;
           if (shape.type === 'line' && shape.joints.length >= 2) {
-            const a = joints.get(shape.joints[0]);
-            const b = joints.get(shape.joints[1]);
+            const a = opJoints.get(shape.joints[0]);
+            const b = opJoints.get(shape.joints[1]);
             if (!a || !b) return null;
             const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
             const { nx, ny } = perpendicularNormal(a, b);
             return { x: mx + nx * offset, y: my + ny * offset, dir: { x: b.x - a.x, y: b.y - a.y } };
           }
           // Circles/arcs: place glyph just outside radius along a stable angle
-          const center = joints.get(shape.joints[0]);
+          const center = opJoints.get(shape.joints[0]);
           if (!center) return null;
           let r = shape.radius;
           let angle = -Math.PI / 4;
           if (typeof r !== 'number' && shape.joints.length >= 2) {
-            const rim = joints.get(shape.joints[1]);
+            const rim = opJoints.get(shape.joints[1]);
             if (rim) {
               r = Math.hypot(rim.x - center.x, rim.y - center.y);
               angle = Math.atan2(rim.y - center.y, rim.x - center.x);
@@ -2387,17 +2390,17 @@ switch(c.type){
           const c1 = { ...c, __pos: { x: p1.x, y: p1.y } };
           const c2 = { ...c, __pos: { x: p2.x, y: p2.y } };
           try{ c.glyphPos = [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }]; }catch(_){ }
-          drawConstraintGlyph(svg, c1, { parent: c });
-          drawConstraintGlyph(svg, c2, { parent: c });
+          if (!s1.reference) drawConstraintGlyph(svg, c1, { parent: c }); // an axis gets no glyph (task 539): the real line carries it
+          if (!s2.reference) drawConstraintGlyph(svg, c2, { parent: c });
         }
       }
     } else if(c.type === CONSTRAINT_TYPES.PERPENDICULAR && c.shapes && c.shapes.length >= 2){
         // Draw glyph on both shapes participating in perpendicular constraint
-        const s1 = shapes.find(s => s.id === c.shapes[0]);
-        const s2 = shapes.find(s => s.id === c.shapes[1]);
+        const s1 = opShapes.find(s => s.id === c.shapes[0]);
+        const s2 = opShapes.find(s => s.id === c.shapes[1]);
         if(s1 && s1.joints && s2 && s2.joints){
-          const j1a = joints.get(s1.joints[0]), j1b = joints.get(s1.joints[1]);
-          const j2a = joints.get(s2.joints[0]), j2b = joints.get(s2.joints[1]);
+          const j1a = opJoints.get(s1.joints[0]), j1b = opJoints.get(s1.joints[1]);
+          const j2a = opJoints.get(s2.joints[0]), j2b = opJoints.get(s2.joints[1]);
           if(j1a && j1b && j2a && j2b){
             const mx1 = (j1a.x + j1b.x)/2, my1 = (j1a.y + j1b.y)/2;
             const { nx: nx1, ny: ny1, len: len1 } = perpendicularNormal(j1a, j1b);
@@ -2411,8 +2414,8 @@ switch(c.type){
             const c1 = { ...c, __pos: { x: gx1, y: gy1 } };
             const c2 = { ...c, __pos: { x: gx2, y: gy2 } };
             try{ c.glyphPos = [{ x: gx1, y: gy1 }, { x: gx2, y: gy2 }]; }catch(_){ }
-            drawConstraintGlyph(svg, c1, { parent: c });
-            drawConstraintGlyph(svg, c2, { parent: c });
+            if (!s1.reference) drawConstraintGlyph(svg, c1, { parent: c }); // an axis gets no glyph (task 539): the real line carries it
+            if (!s2.reference) drawConstraintGlyph(svg, c2, { parent: c });
           }
         }
     } else if(c.type === CONSTRAINT_TYPES.DISTANCE){
@@ -2426,10 +2429,10 @@ switch(c.type){
         if(c.isRadius){
           // Circle radius dimension
           const center = j1;
-          const shape = shapes.find(s => s.id === c.shape);
+          const shape = opShapes.find(s => s.id === c.shape);
           // Always use actual geometry radius for drawing the arrow so it stays attached to the rim
           // (TASK 448: an arc made without a stored radius falls back to centre->start-joint, so the leader meets the rim)
-          const arcStart = (shape && shape.type === 'arc' && shape.joints && shape.joints[1]) ? joints.get(shape.joints[1]) : null;
+          const arcStart = (shape && shape.type === 'arc' && shape.joints && shape.joints[1]) ? opJoints.get(shape.joints[1]) : null;
           const actualRadius = (shape && typeof shape.radius === 'number') ? shape.radius : (arcStart ? getDist(center, arcStart) : 0);
           const radius = actualRadius;
 
@@ -2569,11 +2572,11 @@ switch(c.type){
       }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
       // Angle Dimension
-      const s1 = shapes.find(s => s.id === c.shapes[0]);
-      const s2 = shapes.find(s => s.id === c.shapes[1]);
+      const s1 = opShapes.find(s => s.id === c.shapes[0]);
+      const s2 = opShapes.find(s => s.id === c.shapes[1]);
       if (s1 && s2 && s1.joints && s2.joints) {
-        const j1 = joints.get(s1.joints[0]), j2 = joints.get(s1.joints[1]);
-        const j3 = joints.get(s2.joints[0]), j4 = joints.get(s2.joints[1]);
+        const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
+        const j3 = opJoints.get(s2.joints[0]), j4 = opJoints.get(s2.joints[1]);
         if (j1 && j2 && j3 && j4) {
           const int = getLineIntersection(j1, j2, j3, j4);
           if (int) {
@@ -2668,8 +2671,8 @@ switch(c.type){
     } else if(c.type === CONSTRAINT_TYPES.POINT_ON_LINE){
       // Small circle with dot for point-on-line constraint
       // FIGURATIVE COINCIDENT: Hidden by default; drawConstraintGlyph will reveal when the attached joint/cluster is selected
-      const pt = joints.get(c.joint);
-      const shape = shapes.find(s => s.id === c.shape);
+      const pt = opJoints.get(c.joint);
+      const shape = opShapes.find(s => s.id === c.shape);
       if(pt && shape){
         const isHovered = highlight.kind === 'constraint' && highlight.id === c;
         const isSelected = selectedConstraints && selectedConstraints.has(c);
@@ -2683,9 +2686,9 @@ switch(c.type){
       // Three dots in a line for collinear constraint
       if(c.shapes && c.shapes.length >= 2){
           // Shape-based collinear
-          const s1 = shapes.find(s => s.id === c.shapes[0]);
+          const s1 = opShapes.find(s => s.id === c.shapes[0]);
           if(s1 && s1.joints){
-             const j1 = joints.get(s1.joints[0]);
+             const j1 = opJoints.get(s1.joints[0]);
              if(j1){
                  // Just trigger the draw call, position logic is inside drawConstraintGlyph
                  drawConstraintGlyph(svg, c);
@@ -2695,19 +2698,19 @@ switch(c.type){
       else if(c.joints && c.joints.length >= 3){
         // Legacy Joint-based Position at the middle joint
         const midIdx = Math.floor(c.joints.length / 2);
-        const midJoint = joints.get(c.joints[midIdx]);
+        const midJoint = opJoints.get(c.joints[midIdx]);
         if(midJoint){
           drawConstraintGlyph(svg, c);
         }
       }
     } else if(c.type === CONSTRAINT_TYPES.TANGENT){
       // Circle touching a line for tangent constraint
-      const lineShape = shapes.find(s => s.id === c.line);
-      const circleShape = shapes.find(s => s.id === c.circle);
+      const lineShape = opShapes.find(s => s.id === c.line);
+      const circleShape = opShapes.find(s => s.id === c.circle);
       if(lineShape && circleShape && lineShape.joints && circleShape.joints){
-        const la = joints.get(lineShape.joints[0]);
-        const lb = joints.get(lineShape.joints[1]);
-        const center = joints.get(circleShape.joints[0]);
+        const la = opJoints.get(lineShape.joints[0]);
+        const lb = opJoints.get(lineShape.joints[1]);
+        const center = opJoints.get(circleShape.joints[0]);
         if(la && lb && center){
           // Position glyph at the midpoint of the line
           const mx = (la.x + lb.x) / 2, my = (la.y + lb.y) / 2;

@@ -1126,9 +1126,12 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
         if (histAction === 'undo') {
-            // TASK 549: a line chain's floating start point must not ride into the Redo snapshot (it would come back as an orphan)
-            try{ if(state.currentTool === TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
-            state.undo(); e.preventDefault();
+            // TASK 549 (Fusion, measured): Ctrl+Z while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the uncommitted
+            // rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT Ctrl+Z undoes one element.
+            const DRAWING = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
+            if (state.active && DRAWING.includes(state.currentTool)) handleEscape(state);
+            else state.undo();
+            e.preventDefault();
         }
         else if (histAction === 'redo') { state.redo(); e.preventDefault(); }
 

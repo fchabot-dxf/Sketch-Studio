@@ -293,6 +293,25 @@ await (async () => {
       want('chain per-tool-session', (r) => r.row.existingPointsKept, 'none of the pre-existing points is removed');
       want('chain per-tool-session', (r) => r.row.redoExact, 'ONE Ctrl+Y restores the whole chain exactly');
     }
+    // Fusion, measured (task 551): Ctrl+Z while the Line tool is still active (2 segments drawn) removes NOTHING, it ENDS the tool;
+    // then each Ctrl+Z removes one segment (and its new end point), one per press.
+    if (!only || only.includes('ctrl+z while line active')) {
+      await tool('line');
+      const d0 = await readDoc();
+      const nl = (d) => d.shapes.filter((x) => x.type === 'line').length - d0.shapes.filter((x) => x.type === 'line').length;
+      await clicks(P(-380, -100), P(-300, -100), P(-300, -30)); // two committed segments, the third start floating
+      await undoKey(); const a = await readDoc();
+      const toolAfter = await evalJs("document.querySelector('.sk-ribbon-btn.active') && document.querySelector('.sk-ribbon-btn.active').id");
+      await undoKey(); const b = await readDoc();
+      await undoKey(); const c = await readDoc();
+      const row = { name: 'ctrl+z while line active', linesAfterFirstUndo: nl(a), orphansAfterFirstUndo: orphans(a, d0), toolAfterFirstUndo: toolAfter, linesAfterSecond: nl(b), orphansAfterSecond: orphans(b, d0), linesAfterThird: nl(c), exactAfterThird: canon(c) === canon(d0) };
+      rows.push(row); console.log('ROW ctrl+z while line active', JSON.stringify(row));
+      results['ctrl+z while line active'] = { row };
+      want('ctrl+z while line active', (r) => r.row.linesAfterFirstUndo === 2, 'the first Ctrl+Z while drawing removes no committed segment');
+      want('ctrl+z while line active', (r) => r.row.orphansAfterFirstUndo.length === 0 && r.row.toolAfterFirstUndo !== 'tool-line', 'the first Ctrl+Z ends the tool and leaves no floating start point');
+      want('ctrl+z while line active', (r) => r.row.linesAfterSecond === 1 && r.row.orphansAfterSecond.length === 0, 'the second Ctrl+Z removes one segment and its new end point only');
+      want('ctrl+z while line active', (r) => r.row.linesAfterThird === 0 && r.row.exactAfterThird, 'the third Ctrl+Z restores the pre-chain document exactly');
+    }
     for (const n of ['line empty-to-empty', 'line from existing point', 'rect', 'circle', 'arc', 'polygon', 'bezier', 'fillet']) {
       want(n, (r) => r.row.undoExact, 'one Ctrl+Z must restore the pre-draw document exactly');
       want(n, (r) => r.row.orphansAfterUndo.length === 0, 'no orphan joint after undo');

@@ -79,8 +79,8 @@
   { const s = mk(); const a = s.pt(30, 40); s.add(T.HORIZONTAL, { joints: [a, 'j_origin'] }); s.solve(); near(s.p(a).y, 0, '537 constraint untouched'); }
 
   // the picking rule
-  for (const t of [TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT, TOOL_MODES.DIMENSION]) assert(R.referenceLinesPickable({ currentTool: t }), t + ' asks for a target');
-  for (const t of [TOOL_MODES.SELECT, TOOL_MODES.PAN, TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.EQUAL, TOOL_MODES.MIDPOINT, TOOL_MODES.TRIM, TOOL_MODES.BREAK]) assert(!R.referenceLinesPickable({ currentTool: t }), t + ' never sees an axis');
+  for (const t of [TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT]) assert(R.referenceLinesPickable({ currentTool: t }), t + ' asks for a target');
+  for (const t of [TOOL_MODES.SELECT, TOOL_MODES.PAN, TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.EQUAL, TOOL_MODES.MIDPOINT, TOOL_MODES.DIMENSION, TOOL_MODES.TRIM, TOOL_MODES.BREAK]) assert(!R.referenceLinesPickable({ currentTool: t }), t + ' never sees an axis');
   { const st = { currentTool: TOOL_MODES.SELECT, shapes: [{ id: 'a' }] };
     assert(R.pickableShapes(st) === st.shapes, 'select: the real shapes, untouched');
     st.currentTool = TOOL_MODES.PARALLEL;

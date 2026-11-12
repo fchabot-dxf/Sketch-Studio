@@ -32,8 +32,9 @@ export function constraintReferencesAxis(c) {
 // The tool modes that ASK FOR A TARGET an axis can be: the ONE declaration of "an axis is pickable now". Everything else (select,
 // drawing, H/V, equal, midpoint ...) never sees an axis, so it cannot be hit, selected, dragged or deleted.
 export const REFERENCE_PICK_TOOLS = Object.freeze([
-  TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT, TOOL_MODES.DIMENSION
+  TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
+// (DIMENSION joins this list when the dimension tool resolves an axis: task 539 follow-up. Until then it would take an axis click as a dimension on a one-unit line.)
 export const referenceLinesPickable = (state) => !!state && REFERENCE_PICK_TOOLS.includes(state.currentTool);
 // The shapes a target pick may hit now: the real ones, then (only while pickable) the two axes LAST, so real geometry wins a tie.
 export function pickableShapes(state) {

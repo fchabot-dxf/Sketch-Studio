@@ -36,10 +36,10 @@ export const REFERENCE_PICK_TOOLS = Object.freeze([
   TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
 // (DIMENSION is not in this list: see dimensionAsksSecondTarget.)
-// The DIMENSION tool asks for an axis only for its SECOND pick, after a real first pick (a pending joint: state.active.mode 'dim'; or a
-// line's length dimension being placed: state.placingConstraint), so a first dimension click near an axis still picks real geometry.
-const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION
-  && !!((state.active && state.active.mode === TOOL_MODES.DIMENSION) || (state.placingConstraint && state.placingConstraint.__placing));
+// The DIMENSION tool asks for an axis only for its SECOND pick after a real first JOINT (state.active.mode 'dim': a pending joint), so a
+// first dimension click near an axis picks real geometry. NOT while a line's length dimension is being placed: that click is also the
+// label drop, and a drop near an axis would turn into a line-line / angle upgrade (it broke fusion-drag-live and journal-live).
+const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION && !!(state.active && state.active.mode === TOOL_MODES.DIMENSION) && !state.placingConstraint;
 export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool) || dimensionAsksSecondTarget(state));
 // The shapes a target pick may hit now: the real ones, then (only while pickable) the two axes LAST, so real geometry wins a tie.
 export function pickableShapes(state) {

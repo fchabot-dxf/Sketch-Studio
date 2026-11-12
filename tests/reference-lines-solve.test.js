@@ -90,7 +90,8 @@
   // the dimension tool asks only for its SECOND pick
   assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION }), 'dimension: first pick = real geometry only');
   assert(R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, active: { mode: TOOL_MODES.DIMENSION } }), 'dimension: a pending joint asks for a second target');
-  assert(R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, placingConstraint: { __placing: true } }), 'dimension: a line dimension being placed may take a second line');
+  assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, placingConstraint: { __placing: true } }), 'dimension: a label drop is never an axis pick');
+  assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.DIMENSION, active: { mode: TOOL_MODES.DIMENSION }, placingConstraint: { __placing: false } }), 'dimension: a placed dimension (state.active left over) is no longer asking');
   assert(!R.referenceLinesPickable({ currentTool: TOOL_MODES.SELECT, active: { mode: TOOL_MODES.DIMENSION } }), 'select never');
   for (const t of [TOOL_MODES.SELECT, TOOL_MODES.PAN, TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.EQUAL, TOOL_MODES.MIDPOINT, TOOL_MODES.DIMENSION, TOOL_MODES.TRIM, TOOL_MODES.BREAK]) assert(!R.referenceLinesPickable({ currentTool: t }), t + ' never sees an axis');
   { const st = { currentTool: TOOL_MODES.SELECT, shapes: [{ id: 'a' }] };

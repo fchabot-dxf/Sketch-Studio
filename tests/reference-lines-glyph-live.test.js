@@ -122,7 +122,6 @@ await (async () => {
     const dimScenarios = {
       'dimension point-X': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 200, o.y - 150); await click(o.x + 250, o.y + 3); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_x') },
       'dimension point-Y': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 380, o.y - 60); await click(o.x + 3, o.y - 300); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_y') },
-      'dimension angle-X': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 290, o.y - 105); await click(o.x + 250, o.y + 3); }, want: (c) => c.type === 'angle' && (c.shapes || []).includes('ref_axis_x') },
     };
     for (const [name, sc] of Object.entries(dimScenarios)) {
       const o = await fresh();

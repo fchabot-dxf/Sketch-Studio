@@ -12,6 +12,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
+import { angleDimensionChoice } from '#ui/angle-dimension.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -998,6 +999,13 @@ export function updateConstraintOffset(state, c, w) {
                     c.offset = getDist(int, w);
                     // Also store explicit position for sector detection
                     c.glyphPos = w;
+                    // TASK 543: while a NEW angle dimension is being placed, the sector under the label decides what it measures
+                    // (value + supplement). Geometry is untouched: both choices hold the lines where they are.
+                    if (c.__placing && c.__newlyPlaced && !(c.isDriven || c.driven)) {
+                        const choice = angleDimensionChoice(j1, j2, j3, j4, Math.atan2(w.y - int.y, w.x - int.x));
+                        c.value = choice.value;
+                        if (choice.supplement) c.supplement = true; else delete c.supplement;
+                    }
                 }
             }
         }

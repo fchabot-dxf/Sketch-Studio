@@ -69,6 +69,50 @@ await (async () => {
     assert.strictEqual(JSON.stringify(await evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas line.shape-elem')].map(e => [e.getAttribute('x1'), e.getAttribute('y1'), e.getAttribute('x2'), e.getAttribute('y2')]))`)), stable, 'B: the lines did not move');
     await shot('arc-after-label-drag.png');
     console.log('B. label dragged into other sectors: arc stays 10, geometry unchanged');
+
+    // ---- C. CREATION: the sector the label is dropped in decides what a NEW dimension measures (Fusion: 10.00 in the 10 degree sector, 170.00 in the 170 one)
+    const key = async (k, code, vk) => { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); await sleep(300); };
+    const clickEl = async (sel) => { const c = await centerOf(sel); assert(c, sel + ' not found'); await click(c.x, c.y); };
+    const labels = () => evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas .dim-label')].map(e => e.textContent.replace(/\s+/g, '')))`).then(JSON.parse);
+    const inputOpen = `(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`;
+    await clickEl('#btn-clear'); await sleep(3500);                                  // an empty design, then a reload for the default view (the owner document's view is zoomed far out)
+    await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
+    await waitFor(`!!document.getElementById('svgCanvas') && !!document.getElementById('tool-dim')`, 'SketchStudio to reload');
+    await sleep(1500);
+    const C = await centerOf('#svgCanvas');
+    const corner = { x: C.x - 250, y: C.y + 100 };
+    const drawLine = async (a, b) => { await clickEl('#tool-line'); await click(a.x, a.y); await click(b.x, b.y); await key('Escape', 'Escape', 27); await sleep(200); };
+    await drawLine(corner, { x: corner.x + 400, y: corner.y });                       // line A: along +x
+    await drawLine(corner, { x: corner.x + 346, y: corner.y - 200 });                 // line B: 30 degrees above it, sharing the corner
+    const create = async (drop, text) => {
+      await clickEl('#tool-dim');
+      await click(corner.x + 200, corner.y);                                          // line A
+      await click(corner.x + 173, corner.y - 100);                                    // line B
+      await click(drop.x, drop.y);                                                    // drop the label in the chosen sector
+      await waitFor(inputOpen, 'the value input after dropping the angle label', 8000);
+      const shown = parseFloat(await evalJs(`document.getElementById('dimInput').value`));
+      if (text) { await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`); await send('Input.insertText', { text }); await sleep(100); }
+      await key('Enter', 'Enter', 13); await sleep(500);
+      return shown;
+    };
+    const narrow = await create({ x: corner.x + 300, y: corner.y - 40 });             // inside the 30 degree sector
+    const t1 = (await labels()).pop();
+    await clickEl('#btn-undo'); await sleep(300);
+    assert.strictEqual((await labels()).length, 0, 'C: one undo removes the narrow dimension');
+    const wide = await create({ x: corner.x + 120, y: corner.y + 120 });             // inside the 150 degree sector below line A
+    const t2 = (await labels()).pop();
+    console.log('C. label in the narrow sector reads', narrow, '(' + t1 + '), in the wide sector', wide, '(' + t2 + ')');
+    assert(Math.abs(narrow - 30) < 2, 'C: the narrow sector measures about 30: ' + narrow);
+    assert(Math.abs(narrow + wide - 180) < 0.2, `C: the two sectors are supplements (30 + 150): ${narrow} + ${wide}`);
+    assert(t1.includes(narrow.toFixed(1)) && t2.includes(wide.toFixed(1)), 'C: the labels read what the value box showed: ' + t1 + ' / ' + t2);
+    // the wide dimension drives: typing 120 re-solves the lines so that sector is 120 (the lines were 150 apart in that sector)
+    { const lab = await centerOf('#svgCanvas .dim-label'); await mouse('mouseMoved', lab.x, lab.y, 0); for (let i = 0; i < 2; i++) { await mouse('mousePressed', lab.x, lab.y, 1); await sleep(30); await mouse('mouseReleased', lab.x, lab.y, 0); await sleep(60); } }
+    await waitFor(inputOpen, 'the editor to open on a double click', 8000);
+    await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`); await send('Input.insertText', { text: '120' }); await key('Enter', 'Enter', 13); await sleep(500);
+    const t3 = (await labels()).pop();
+    assert(t3.includes('120.0'), 'C: the wide dimension was edited to 120: ' + t3);
+    await shot('arc-created-wide.png');
+    console.log('C. wide-sector dimension typed to 120 holds:', t3);
   } finally {
     await cdp.close();
   }

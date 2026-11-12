@@ -265,12 +265,17 @@ export function createConstraint(type, params) {
 
         case CONSTRAINT_TYPES.ANGLE:
             if (!params.shapes || params.shapes.length !== 2) return null;
-            return withDimensionState({
-                type: CONSTRAINT_TYPES.ANGLE,
-                shapes: params.shapes.slice(),
-                value: params.value,
-                offset: params.offset || SolverConfig.ANGLE_OFFSET || 40
-            }, params);
+            {
+                const angle = withDimensionState({
+                    type: CONSTRAINT_TYPES.ANGLE,
+                    shapes: params.shapes.slice(),
+                    value: params.value,
+                    offset: params.offset || SolverConfig.ANGLE_OFFSET || 40
+                }, params);
+                // TASK 543: which of the two sectors the value measures: absent = the CCW angle u -> v itself, true = its supplement
+                if (params.supplement === true) angle.supplement = true;
+                return angle;
+            }
 
         case CONSTRAINT_TYPES.MIDPOINT:
             if (!params.joints || params.joints.length !== 3) return null;

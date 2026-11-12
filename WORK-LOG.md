@@ -13531,3 +13531,18 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Behaviour changes: 7 feasible shared-corner parallel / perpendicular matrix cells and 5 extreme-arc shared chord cells are accepted where they were refused; 1 arc cell (s30cw perpendicular-chord shared, PlaneGCS infeasible) is refused where it was accepted; random properties: 2 ops refused -> driving, 2 dimensions reference -> driving, 1 collinear driving -> refused (seed 7191, different start; our solve collapses a line, NEW-9 family). DOF counts on shared-joint rows now equal finite differences.
 - matrix-run.js: `preCollinear` also covers parallel (two horizontal rect sides sharing a corner: the row is a combination of the two H rows, delta 0 = finite differences, PlaneGCS counts -1 as it does for collinear there).
 - EA-6 measured (not fixed): perpendicular cells are the DOUBLE root of the branch-locked row u x v - |u||v| (stops at r = 1e-6, angle 1.162e-3 rad, predicted 1.163e-3); normalising would not fix it. EA-7 unchanged (not this family). Docs: COVERAGE-AUDIT "Fixed in task 533", extreme-arcs table rows regenerated; CONSTRAINT-AUDIT F4.
+
+## TURN 535 (design)
+- PHASE 1 = design only: docs/PARAMETERS-DESIGN.md (Fusion-style parameter table: named user parameters, formulas in dimensions,
+  auto names d1.., a pop-up window). Nothing under packages/ or apps/ changed. Gate: not run, docs only.
+- Grounded in the code at d2e31b7 (file:line per seam): withDimensionState carries `name` + `expression`; addConstraint names
+  dimensions; ONE parser in packages/core/expression.js (no eval), unit table in units.js gains deg/rad; parameters.js (graph,
+  cycles, planChange); commitDimensionEdit generalised to an all-or-nothing batch with ONE combined stepped solve; document v2.
+- Owner requirements R1 (parameter chains) and R2 (`name = value` creates the parameter) designed in as decided; the advisor's
+  Fusion API measurements (2026-11-12) tagged "measured (API)"; the rest "to verify in Fusion UI". 23 owner decisions O1-O23,
+  each with a recommendation. Build plan: slices 1a, 1b, 2 (after task 525), 3, 4, 5, 6.
+- Blockers found: SketchStudio `#dimInput` is type="number" (apps/sketchstudio/index.html:390: no formula, and likely no `0.25in`
+  today); DOC_UNIT is per browser, not per file (handled: units stored in every formula); constraints have no id; three snapshot
+  codec copies; no single constraint-removal funnel; an unreachable second edit path in live-dimension-input.js:418/:319-333;
+  no shared dialog component (the unused tabbed dock recommended); fillet.js:327-328 rewrites a length dimension.
+- Evidence: .evidence/535/code-greps.txt (greps behind the blocker claims).

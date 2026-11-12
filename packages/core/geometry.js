@@ -113,6 +113,15 @@ export function midpoint(p1, p2) {
 }
 
 /**
+ * A DISTANCE constraint stored with THREE joints [P, A, B] is a POINT-TO-LINE dimension: the perpendicular distance
+ * from P to the infinite line AB (the same row as a line-line distance, solver/definitions.js distance.__lineLine).
+ * The arity is the declaration (like a joint-form collinear or equal); no helper joint is needed.
+ */
+export function isPointLineDistance(c) {
+    return !!c && !c.isRadius && Array.isArray(c.joints) && c.joints.length === 3;
+}
+
+/**
  * Calculate perpendicular offset from a line
  * @param {object} pt - Point {x, y}
  * @param {object} lineStart - Line start point {x, y}

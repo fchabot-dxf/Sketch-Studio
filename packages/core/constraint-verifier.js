@@ -1,4 +1,4 @@
-import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints } from './geometry.js';
+import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 
 export function measureResidual(c, joints, shapes) {
@@ -23,6 +23,10 @@ export function measureResidual(c, joints, shapes) {
                         if (center && rim) currentDist = getDist(center, rim);
                     }
                 }
+            } else if (isPointLineDistance(c)) {
+                // Point-to-line: the same convention as the solver row (distance.__lineLine) -- |perpendicular distance| from P to line AB.
+                const pt = joints.get(c.joints[0]), a = joints.get(c.joints[1]), b = joints.get(c.joints[2]);
+                if (pt && a && b) currentDist = Math.abs(perpendicularDistance(pt, a, b));
             } else if (c.shapes && c.shapes.length === 2 && !(c.joints && c.joints.length >= 2)) {
                 // Line-to-line distance: SAME convention as the solver row (solver/engine.js line-line synthesis,
                 // definitions.js distance.__lineLine) -- perpendicular distance from line 2's FIRST endpoint to the

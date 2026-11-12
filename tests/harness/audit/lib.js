@@ -384,6 +384,8 @@ export function toPlanegcs(S) {
         } else if (c.shapes && c.shapes.length === 2 && !(c.joints && c.joints.length >= 2)) {
           const l1 = shape(S, c.shapes[0]), l2 = shape(S, c.shapes[1]);
           add({ type: 'p2l_distance', p_id: l2.joints[0], l_id: l1.id, distance: c.value });
+        } else if (c.joints && c.joints.length === 3) {
+          add({ type: 'p2l_distance', p_id: c.joints[0], l_id: helperLine(c.joints[1], c.joints[2]), distance: c.value });   // point-to-line: joints [P, A, B]
         } else if (c.dimMode === 'horizontal' || c.dimMode === 'vertical') {
           const k = c.dimMode === 'horizontal' ? 'x' : 'y';
           add({ type: 'difference', param1: { o_id: c.joints[0], prop: k }, param2: { o_id: c.joints[1], prop: k }, difference: (c.dimSign === -1 ? -1 : 1) * c.value });

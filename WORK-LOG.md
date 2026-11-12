@@ -13377,3 +13377,29 @@ Fixed coverage-properties findings N-F4 + N-F3, N-F1, N-F2 (branch agents/task-5
 - Tests: tests/dimension-point-line.test.js (node; the four matrix repros as passing assertions + undo group closes on a throw + DOF -1 + typed value + delete leaves no joint), tests/dimension-point-line-live.test.js (SketchStudio, real mouse/keyboard: point then line, typed value drives 3 -> 4.5 scales the perpendicular distance by 1.5, swing the line by a real drag and the distance holds, ONE Undo removes the dimension; line-line in both click orders is driving and positive). Fail-first: both fail on d703ebb's packages (ReferenceError: c is not defined / undo does not remove the dimension). KNOWN NEW-1/2/3/5, their repro pins (matrix-findings.js) and classify rules deleted; coverage-matrix: 3384 cells, 1783 PASS, 0 unexplained.
 - Harness changes needed by the new form: tests/harness/audit/lib.js oracle maps a 3-joint distance to PlaneGCS p2l_distance; inventory.js recognises `addViaManager(CONSTRAINT_TYPES.x` as a creation site (pointOnLine had only the dimension tool's site in its scan; snap-constraints still creates it) and the dim-point-line mode text; matrix-run.js `produces` of dim-point-line = 3 joints.
 - Open for the advisor: tests/harness/coverage/prop-random.js (task 517/514 domain, not touched) still builds the OLD helper-joint construction by hand for its point-to-line dimension, so it no longer matches the tool; prop-findings.js mentions "the helper projection joint". Branched perpendicular row is singular at exactly 90 degrees (honest-DOF lie for a branch-locked perpendicular on already-perpendicular lines): report only.
+
+## TURN 519 (who moves at creation: design measured offline, STOPPED before app code)
+DESIGN (written before coding, as the task asks):
+- "How held" = DOF of the operand, taken from the solver: nullity(sketch) - nullity(sketch with the operand's joints frozen), two `engine.jointFreedom()` calls, no engine.js change. Line levels: free 4, corner 4, length 3, H/V 3, end fixed 2, end+length 1, H/V+end 1, full 0.
+- Anchor = the operand with fewer DOF; a tie keeps the first pick. If the mover cannot satisfy the constraint alone (anchor frozen, sandbox solve, no collapsed line), the other operand moves. This would replace `_lineEstablishmentScore`.
+- Placement table (data: constraint type -> function in placeForCreation): parallel / perpendicular / angle: rotate the mover about its fixed end, else its midpoint. equal(line): keep the start, slide the end. coincident: translate the mover's component. H/V(2pt): move the mover's point. pointOnLine / onCircle / midpoint: move the point (task 511). tangent: move the mover. Dimensions: commitDimensionEdit is a different place (packages/ui/dimension-seams.js), so they are a follow-up.
+PREDICTION from the recorded data (offline, no app code changed: .evidence/519/eval-measures.mjs, run on main 6da9d8d). Which operand moves, counted over Fusion's one-mover cells of the line x line grid:
+| constraint | ours today | DOF measure + "can move alone" | pick order + "can move alone" (no measure) | fitted rank table (report) |
+|---|---|---|---|---|
+| parallel | 10/55 | 45/55 | 48/55 | 55/55 |
+| perpendicular | 10/55 | 45/55 | 48/55 | 55/55 |
+| collinear | 30/39 | 36/39 | 36/39 | 39/39 |
+| equal-line-line | 30/55 | 44/55 | 47/55 | 55/55 |
+| coincident-pp | 38/73 | 61/73 | 57/73 | 73/73 |
+| horizontal-2pt / vertical-2pt | 12/21, 12/21 | 19/21, 21/21 | 17/21, 19/21 | 20/21, 21/21 |
+| pointOnLine / midpoint | 13/21, 12/21 | 18/21, 18/21 | 19/21, 19/21 | 20/21, 20/21 |
+| dim-angle / dim-aligned (follow-up) | 10/55, 50/75 | 55/55, 69/75 | 46/55, 65/75 | 54/55, 73/75 |
+STOP (task: "STOP and ask if the general measure contradicts Fusion on more than a small class"). Classes where the DOF measure contradicts Fusion:
+1. parallel and perpendicular, 10 of 55 cells each (0,4 0,5 1,4 1,5 2,4 2,5 4,0 4,1 4,2 5,2): a line with ONE END FIXED (levels 4, 5) against a free, corner or length-dimensioned line. Fusion turns the pinned line about its fixed end, in both pick orders; the measure keeps it because it has fewer DOF.
+2. equal-line-line, 11 of 55 cells: Fusion holds a corner line (1) more than a free, H/V or pinned line; it ties a pinned line with a free one, and H/V with H/V+end.
+3. coincident-pp, 12 of 73 cells: Fusion holds a corner line (1) more than a free line, and holds a line centred on the origin (m) LESS than its 2 DOF say.
+No single measure can match all three, solver-derived or hand-made. Same two operands (A free line, B line with one end fixed), both able to move alone (eval-out.json):
+parallel|LL|0,4 Fusion moves b, parallel|LL|4,0 moves a (the pinned line gives way in both orders). equal-line-line|LL|0,4 moves b, |4,0 moves b (a tie). dim-angle|LL|0,4 moves a, |4,0 moves b (the free line gives way in both orders).
+So one pair of operands gets three different orders, depending only on the constraint type.
+- collinear|LL|6,4 (Fusion refuses, ours accepts): cause = task 520 (e19668b) made `_sandboxVerify` start from the placed pose. B's free end lands on A's line, then the solve satisfies collinear by collapsing A (H/V + one end fixed) to ZERO LENGTH (A's free end goes onto its fixed end, 80,26 -> 20,26). The sandbox then sees burst errors [0.049,0,0]: no conflict. From the unplaced pose it sees [0.02245,133.97,133.97]: conflict (.evidence/519/trace-collinear-6-4.txt). A who-moves change does not fix it. It is a degenerate-solution bug (a line collapsed to a point is accepted as collinear) and needs its own task.
+No app code, test or fixture changed. Evidence: .evidence/519/ (local).

@@ -111,19 +111,11 @@ const perpFrom = (dx, dy, setup) => {
   return { S, c, l1, l2, dot: (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v)), v, p2: J(S, l2.p), q2: J(S, l2.q), nullity: L.nullity(S) };
 };
 {
-  for (const [dx, dy, name] of [[60, 0, 'parallel'], [-60, 0, 'anti-parallel'], [60, 30, '27 degree']]) {
+  for (const [dx, dy, name] of [[60, 0, 'parallel'], [-60, 0, 'anti-parallel'], [60, 0.01, '0.01 degree'], [60, 30, '27 degree']]) {
     const r = perpFrom(dx, dy);
     assert(r.c, 'NEW-3: perpendicular accepted from a ' + name + ' start');
     assert(Math.abs(r.dot) < 1e-4, 'NEW-3: the lines end up perpendicular (cos ' + r.dot + ') from a ' + name + ' start');
-  }
-  // TASK 521: from a 0.01 degree start the solve alone "converges" by shrinking BOTH lines from 60 to 0.2 long (placePerpendicularFromParallel
-  // only catches EXACTLY parallel). That is a collapse, so it is refused with the geometry unchanged (it used to be accepted with the lines destroyed).
-  // OPEN for the owner: widening the placement tolerance would make this start work like the exactly parallel one.
-  {
-    const S0 = L.newSketch(); const p = L.point(S0, 100, 100), q = L.point(S0, 160, 100), r = L.point(S0, 250, 110), s = L.point(S0, 310, 110.01);
-    const a = L.line(S0, p, q), b = L.line(S0, r, s), before = L.snapshot(S0);
-    assert.strictEqual(ConstraintManager.createConstraint(S0.state, 'perpendicular', { shapes: [a, b] }, { source: 'audit' }), null, 'NEW-3 / task 521: perpendicular from a 0.01 degree start would collapse both lines: refused');
-    assert(L.maxDeviation(S0, before) < 1e-9 && S0.state.constraints.length === 0, 'and nothing changed');
+    if (name === '0.01 degree') { const [la, lb] = [Math.hypot(60, 0), Math.hypot(J(r.S, r.l2.q).x - J(r.S, r.l2.p).x, J(r.S, r.l2.q).y - J(r.S, r.l2.p).y)]; assert(Math.abs(lb - 60) < 1e-3 && Math.abs(Math.hypot(J(r.S, r.l1.q).x - J(r.S, r.l1.p).x, J(r.S, r.l1.q).y - J(r.S, r.l1.p).y) - la) < 1e-3, 'task 521: both lengths unchanged from a near-parallel start (' + lb + ')'); }
   }
   // Fusion rule: the SECOND-picked line turns (counter-clockwise on the tie) about its midpoint; the first line stays
   const r = perpFrom(60, 0);

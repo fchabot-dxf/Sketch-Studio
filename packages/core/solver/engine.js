@@ -5,6 +5,25 @@ import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
 import { isPointLineDistance } from '../geometry.js';
 
+// THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
+// and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
+// value back. An arc is not one of these: its radius is live through its rim joints (|rim - centre|).
+export function hasRadiusUnknown(s) {
+  return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius);
+}
+
+// The solver state is joint x/y AND every circle radius: a caller that tries a solve and rolls it back snapshots and restores both here.
+export function snapshotSolverState(joints, shapes) {
+  const pos = new Map(), radii = new Map();
+  for (const [id, j] of joints) pos.set(id, { x: j.x, y: j.y });
+  for (const s of (shapes || [])) if (hasRadiusUnknown(s)) radii.set(s, s.radius);
+  return { pos, radii };
+}
+export function restoreSolverState(joints, shapes, snap) {
+  for (const [id, j] of joints) { const p = snap.pos.get(id); if (p) { j.x = p.x; j.y = p.y; } }
+  for (const [s, r] of snap.radii) s.radius = r;
+}
+
 // Newton-Raphson + Levenberg-Marquardt solver class
 export class NewtonSolver {
   constructor(jointsMap, constraintsArray, shapesArray, config = {}) {
@@ -104,13 +123,18 @@ export class NewtonSolver {
       freeReps.push(rep);
     }
 
-    // Build solution vector using representative ordering
-    const n = freeReps.length * 2;
-    const x = new Float64Array(n);
+    // Build the solution vector: x,y of each free joint representative, then the radius of each circle (hasRadiusUnknown), in
+    // shapes order. Radius k is x[_nJointVars + k] here and positions[2 * joints.size + k] in the dense array the Definitions read.
+    const nJ = freeReps.length * 2;
+    this._radiusShapes = (this.shapes || []).filter(hasRadiusUnknown);
+    this._radiusSlot = new Map(this._radiusShapes.map((s, k) => [s.id, k]));
+    const x = new Float64Array(nJ + this._radiusShapes.length);
     for (let i = 0; i < freeReps.length; ++i) {
       const j = this.joints.get(freeReps[i]); x[i*2] = j.x; x[i*2+1] = j.y;
     }
+    for (let k = 0; k < this._radiusShapes.length; ++k) x[nJ + k] = this._radiusShapes[k].radius;
     this._freeIds = freeReps;
+    this._nJointVars = nJ;
     return x;
   }
 
@@ -127,12 +151,14 @@ export class NewtonSolver {
         j.y = x[i*2+1];
       }
     }
+    // THE write-back of a circle's solved radius (shape.radius is its only store).
+    for (let k = 0; k < this._radiusShapes.length; ++k) this._radiusShapes[k].radius = x[this._nJointVars + k];
   }
 
-  // Build positions array indexed by joint-order (dense array) for use by Definitions
+  // Build the dense array the Definitions read: x,y of every joint in insertion order of this.joints, then each circle radius
+  // (radius k at 2 * joints.size + k, see _radiusAt).
   _positionsFromVector(x) {
-    // build positions array for all joints in insertion order of this.joints
-    const positions = new Float64Array(this.joints.size * 2);
+    const positions = new Float64Array(this.joints.size * 2 + this._radiusShapes.length);
     let idx = 0;
     for (const [id, j] of this.joints.entries()) {
       const varIdx = this._varIndex.has(id) ? this._varIndex.get(id) : -1;
@@ -145,18 +171,24 @@ export class NewtonSolver {
         positions[idx++] = j.x; positions[idx++] = j.y;
       }
     }
+    for (let k = 0; k < this._radiusShapes.length; ++k) positions[idx++] = x[this._nJointVars + k];
     return positions;
   }
 
-  // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints)
+  // Dense index of a shape's radius unknown, or undefined (not a circle with a radius unknown).
+  _radiusAt(shape) {
+    const k = shape ? this._radiusSlot.get(shape.id) : undefined;
+    return k === undefined ? undefined : this.joints.size * 2 + k;
+  }
+
+  // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack)
   _assemble(x) {
     const n = x.length;
-    const positions = this._positionsFromVector(x);
+    const nJ = this._nJointVars, nR = this._radiusShapes.length, jointDense = this.joints.size * 2;
 
     // First pass: compute number of scalar constraint rows (use def.rows when available)
     let m = 0;
     const rowsPerConstraint = new Int32Array(this.constraints.length);
-    const denseLen = this.joints.size * 2;
     for (let i = 0; i < this.constraints.length; ++i) {
       const c = this.constraints[i];
       if (c.isDriven || c.driven) { rowsPerConstraint[i] = 0; continue; } // references are FREE — no rows
@@ -200,10 +232,25 @@ export class NewtonSolver {
     let jIdx = 0;
     for (const [id] of this.joints.entries()) { jointIndexMap.set(id, jIdx++); }
 
-    // Create a positions array indexed by joint insertion order to satisfy Definitions.
-    const densePositions = new Float64Array(this.joints.size * 2);
-    jIdx = 0;
-    for (const [id, j] of this.joints.entries()) { densePositions[jIdx*2] = (this._varIndex.has(id) ? x[this._varIndex.get(id)*2] : j.x); densePositions[jIdx*2+1] = (this._varIndex.has(id) ? x[this._varIndex.get(id)*2+1] : j.y); jIdx++; }
+    // The dense array the Definitions read (joints in insertion order, then the circle radii).
+    const densePositions = this._positionsFromVector(x);
+    const denseLen = densePositions.length;
+    // Copy one dense Jacobian row into J row `row`: a joint column sums its cluster members, a radius column is copied.
+    const copyRow = (rowBuf) => {
+      for (let vi = 0; vi < this._freeIds.length; ++vi) {
+        const base = vi*2; const repId = this._freeIds[vi];
+        const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
+        let sumX = 0.0, sumY = 0.0;
+        for (const mem of members) {
+          const denseIdx = jointIndexMap.get(mem) * 2;
+          sumX += rowBuf[denseIdx + 0];
+          sumY += rowBuf[denseIdx + 1];
+        }
+        J[row * n + base + 0] = sumX * wStruct;
+        J[row * n + base + 1] = sumY * wStruct;
+      }
+      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * wStruct;
+    };
 
     // --- Drag-time structural weighting ---------------------------------------
     // A temporary mouse-spring (added by InteractionSolver during a drag) carries
@@ -292,13 +339,13 @@ export class NewtonSolver {
           if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
             params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1]) ];
           }
-          // Point-on-circle/arc: pull the point onto the rim. joints = [point, center];
-          // radius is captured as a constant from the shape so only the point moves.
-          // (Without this branch a circle target left params.joints empty -> NaN -> the
-          // constraint was silently ignored.)
+          // Point-on-circle/arc: |P - centre| = radius. joints = [point, center]; a circle's radius is its unknown (radiusAt),
+          // an arc's is live through its rim joint (rimJoint). (Without this branch a circle target left params.joints empty
+          // -> NaN -> the constraint was silently ignored.)
           else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 1) {
             params.joints = [ jointIndexMap.get(c.joint), jointIndexMap.get(shape.joints[0]) ];
-            params.radius = (typeof shape.radius === 'number')
+            params.radiusAt = this._radiusAt(shape);
+            if (params.radiusAt === undefined) params.radius = (typeof shape.radius === 'number')
               ? shape.radius
               : (shape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(shape.joints[0]) * 2; const ri = jointIndexMap.get(shape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
             // a LIVE radius (arc with no stored radius) is |rim - centre|: the rim joint takes part in the row
@@ -325,6 +372,7 @@ export class NewtonSolver {
                     const rA = (typeof sA.radius === 'number') ? sA.radius : (sA.joints && sA.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sA.joints[0]) * 2; const ri = jointIndexMap.get(sA.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
                     const rB = (typeof sB.radius === 'number') ? sB.radius : (sB.joints && sB.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(sB.joints[0]) * 2; const ri = jointIndexMap.get(sB.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
                     params.radii = [rA, rB];
+                    params.radiiAt = [this._radiusAt(sA), this._radiusAt(sB)];   // a circle operand reads its radius unknown
                   }
                 }
               } else if (sA.type === 'line' && (sB.type === 'circle' || sB.type === 'arc')) {
@@ -356,14 +404,16 @@ export class NewtonSolver {
                 params.radius = (typeof circShape.radius === 'number')
                   ? circShape.radius
                   : (circShape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(circShape.joints[0]) * 2; const ri = jointIndexMap.get(circShape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+                params.radiusAt = this._radiusAt(circShape);   // a circle: its radius unknown takes part in the row
               }
             }
           }
         }
-        // Distance "radius on circle" — {shape, isRadius, value}: center→rim distance.
+        // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), an arc's center→rim distance.
         else if (c.type === 'distance' && c.isRadius && c.shape) {
           const shape = this.shapes.find(s => s.id === c.shape);
-          if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
+          if (this._radiusAt(shape) !== undefined) params.radiusAt = this._radiusAt(shape);
+          else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
             params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
           }
         }
@@ -387,6 +437,19 @@ export class NewtonSolver {
             }
           }
         }
+        // Equal with a CIRCLE operand: one size term per shape, a circle's radius unknown or the length of a line / an arc's
+        // centre-rim pair (its first two joints), so equal(circle, circle) is r1 - r2 and equal(circle, arc) r - |rim - centre|.
+        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(this.shapes.find(x => x && x.id === sid)) !== undefined)) {
+          const terms = c.shapes.map(sid => {
+            const s = this.shapes.find(x => x && x.id === sid);
+            const at = this._radiusAt(s);
+            if (at !== undefined) return { at };
+            const a = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[0]) : undefined;
+            const b = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[1]) : undefined;
+            return typeof a === 'number' && typeof b === 'number' ? { a, b } : null;
+          });
+          if (terms.every(Boolean)) params.terms = terms;
+        }
         else if ((c.type === 'collinear' || c.type === 'parallel' || c.type === 'perpendicular' || c.type === 'equal' || c.type === 'angle') && c.shapes && c.shapes.length > 0) {
           const jointList = [];
           for (const sid of c.shapes) {
@@ -402,18 +465,10 @@ export class NewtonSolver {
         }
       }
 
-      // A radius distance on a shape with NO rim joint (a real CIRCLE) is an intentionally INERT row:
-      // circle-tool.js gives it only the center joint, so the synthesis above leaves params.joints
-      // empty on purpose (dimension-seams.js's commitDimensionEdit moves shape.radius directly instead
-      // of through the Jacobian). But Definitions.distance.computeError unconditionally indexes
-      // params.joints[0]/[1] -- with an empty array that's `positions[NaN]` -> NaN, and even though the
-      // resulting Jacobian row is genuinely all-zero (invalid-index writes silently no-op on the typed
-      // array), Algebra.atx's per-column accumulation still computes `0 * NaN = NaN` for every column,
-      // poisoning the WHOLE gradient the instant this constraint shares ANY joint with another real
-      // constraint (tangent, point-on-circle, ...) -- confirmed live: cost/lambda spike to NaN/Infinity
-      // from iteration 0 and the solve never moves, silently disabling every other constraint on that
-      // joint. Make the "no rim joint" case an EXPLICIT zero row instead of an accidental NaN one.
-      if (c.type === 'distance' && c.isRadius && (!params.joints || params.joints.length < 2)) {
+      // A radius distance whose shape gives neither a radius unknown nor a centre-rim pair (the shape is missing or has no
+      // radius) has nothing to measure: an EXPLICIT zero row. Definitions.distance would index params.joints[0]/[1] of an empty
+      // array -> positions[NaN] -> NaN, and Algebra.atx's 0 * NaN poisons the whole gradient of every constraint it shares.
+      if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && (!params.joints || params.joints.length < 2)) {
         r[row] = 0;
         row++;
         continue;
@@ -427,39 +482,14 @@ export class NewtonSolver {
         def.computeJacobian(params, densePositions, outRows);
         for (let k = 0; k < e.length; ++k) {
           r[row] = e[k] * wStruct;
-          const rowBuf = outRows[k];
-          // copy applicable columns into J
-          for (let vi = 0; vi < this._freeIds.length; ++vi) {
-            const base = vi*2; // variable columns correspond to free joint ordering
-            const repId = this._freeIds[vi];
-            const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
-            let sumX = 0.0, sumY = 0.0;
-            for (const mem of members) {
-              const denseIdx = jointIndexMap.get(mem) * 2;
-              sumX += rowBuf[denseIdx + 0];
-              sumY += rowBuf[denseIdx + 1];
-            }
-            J[row * n + base + 0] = sumX * wStruct;
-            J[row * n + base + 1] = sumY * wStruct;
-          }
+          copyRow(outRows[k]);
           row++;
         }
       } else {
         r[row] = e * wStruct;
         const rowBuf = new Float64Array(denseLen); rowBuf.fill(0.0);
         def.computeJacobian(params, densePositions, rowBuf);
-        for (let vi = 0; vi < this._freeIds.length; ++vi) {
-          const base = vi*2; const repId = this._freeIds[vi];
-          const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
-          let sumX = 0.0, sumY = 0.0;
-          for (const mem of members) {
-            const denseIdx = jointIndexMap.get(mem) * 2;
-            sumX += rowBuf[denseIdx + 0];
-            sumY += rowBuf[denseIdx + 1];
-          }
-          J[row * n + base + 0] = sumX * wStruct;
-          J[row * n + base + 1] = sumY * wStruct;
-        }
+        copyRow(rowBuf);
         row++;
       }
     }
@@ -506,19 +536,6 @@ export class NewtonSolver {
   // (which is true whenever ANY DOF is free, e.g. an undimensioned height).
   rankRowRedundant(candidate) {
     if (!candidate) return false;
-    // A radius distance on a shape with no rim joint (a real CIRCLE -- circle-tool.js gives it only
-    // the center joint; makeArc DOES give an arc 2 rim joints, so arcs are unaffected) has a
-    // structurally ALL-ZERO Jacobian row: it can never "raise rank" by construction, which this
-    // generic rank check misreads as "already determined" even with ZERO other constraints present
-    // (live-confirmed: a brand-new circle's first-ever radius dimension came back isDriven=true).
-    // That row doesn't participate in the Jacobian at all -- dimension-seams.js's commitDimensionEdit
-    // writes shape.radius directly instead -- so rank redundancy is meaningless for it; whether the
-    // shape already has a driving radius is already handled correctly, earlier, by the explicit
-    // same-shape check in ConstraintManager.createConstraint (_edgeHasDrivingDistance).
-    if (candidate.isRadius && candidate.shape) {
-      const s = this.shapes.find(x => x.id === candidate.shape);
-      if (s && (!s.joints || s.joints.length < 2)) return false;
-    }
     const allC = this.constraints;
     const x0 = this._pack();
     const n = x0.length;
@@ -822,13 +839,14 @@ export class NewtonSolver {
 
   // GROUND-TRUTH per-joint freedom: the nullspace of the global (non-driven) constraint Jacobian at the
   // present configuration, built from the same _assemble() rows the solver uses. A joint is immovable (0)
-  // only if no nullspace vector has a component on its x or y; one free direction -> 1; else 2.
-  // Returns { freedom: Map(jointId -> 0|1|2), freeX: Set, freeY: Set, nullity } (nullity = global DOF).
+  // only if no nullspace vector has a component on its x or y; one free direction -> 1; else 2. A circle's radius column likewise:
+  // its id is in radiusFree when a nullspace vector moves the radius.
+  // Returns { freedom: Map(jointId -> 0|1|2), freeX: Set, freeY: Set, radiusFree: Set(circle id), nullity } (nullity = global DOF).
   jointFreedom() {
     const allC = this.constraints;
     const x0 = this._pack();
     const n = x0.length;
-    const freedom = new Map(), freeX = new Set(), freeY = new Set();
+    const freedom = new Map(), freeX = new Set(), freeY = new Set(), radiusFree = new Set();
     let nullity = 0;
     let N = null, k = 0;
     if (n > 0) {
@@ -894,7 +912,12 @@ export class NewtonSolver {
       if (fx || fy) rank = (aa * bb - ab * ab > 1e-9 * aa * bb) ? 2 : 1;
       freedom.set(id, rank);
     }
-    return { freedom, freeX, freeY, nullity };
+    for (let q = 0; q < this._radiusShapes.length && k > 0; ++q) {
+      const base = (this._nJointVars + q) * k;
+      let rr = 0; for (let t = 0; t < k; ++t) rr += N[base + t] * N[base + t];
+      if (rr > 1e-10) radiusFree.add(this._radiusShapes[q].id);
+    }
+    return { freedom, freeX, freeY, radiusFree, nullity };
   }
 
   // One-shot rank-deficiency probe at position x. Re-assembles, builds JᵀJ

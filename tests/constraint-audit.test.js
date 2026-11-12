@@ -10,23 +10,23 @@ import { FINDINGS } from './harness/audit/findings.js';
 import { compareWithFixture } from './harness/audit/fixture-compare.js';
 
 // name -> one line (finding id in docs/CONSTRAINT-AUDIT.md). Each name is a `check(name, ...)` below or a finding id.
+// (F2 'equal on circles is a no-op' and its two plate entries were deleted by task 515: a circle's radius is a solver unknown.)
 const KNOWN = {
-  'plate/E every dimension edits cleanly': 'F2: the hole radius edit is refused because equal(circle,circle) is checked but never solved',
-  'plate/X equal-radius on two circles drags the radius': 'F2',
-  F2: 'equal on circles',
   F8: 'shared-corner outline',
 };
 // Edits that are MATHEMATICALLY impossible and must be refused cleanly (EXPECTED): the isosceles triangle's angle dimension reads 180 - base angle,
 // so 0.8 x 110 = 88 would need a base angle over 90 degrees (the apex at infinity); the refusal must leave the geometry untouched.
 const EXPECTED_REFUSED = { triangle: ['angle=110.000 x0.8'] };
-// Accepted, driving, and the DOF count did not move (redundant with what is there, or inert: a circle's radius dimension is shape data).
+// Accepted, driving, and the DOF count did not move (redundant with what is there).
 // Pinned so a change in how the app treats them is visible. (UNCLEAR in the report: the app flags redundant DIMENSIONS but not redundant constraints.)
+// Task 515: a circle's radius is a solver unknown, so the circle radius dimensions and the equal radii on circles (plate 17-20, bracket 'hole
+// radius 8', triangle 'circle radius 20', polygon radii 25 / 8) now each remove one DOF and left this list (finite differences and PlaneGCS agree).
 const NO_EFFECT = {
-  plate: ['hole radius h1 = 8', 'equal radius h2 = h1', 'equal radius h3 = h1', 'equal radius h4 = h1'],
+  plate: [],
   trapezoid: [],
-  bracket: ['slot bottom line tangent to right arc', 'slot arcs equal radius', 'hole radius 8'],
-  triangle: ['circle tangent to CA (3rd: consistent by symmetry)', 'circle radius 20 (sets the size)'],
-  polygon: ['axis symmetric about O: midpoint(M0,M3)=O', 'concentric circle radius 25', 'second circle radius 8'],
+  bracket: ['slot bottom line tangent to right arc', 'slot arcs equal radius'],
+  triangle: ['circle tangent to CA (3rd: consistent by symmetry)'],
+  polygon: ['axis symmetric about O: midpoint(M0,M3)=O'],
 };
 // Steps of the recipe the app turns into a reference (the F1 bug), by drawing.
 const DEMOTED = { plate: [], trapezoid: [], bracket: [], triangle: [], polygon: [] };
@@ -60,8 +60,8 @@ for (const file of DRAWINGS) {
     check(`${n}/fixture: same constraint multiset except the owner's one extra pointOnLine (the top-edge point, redundant with the midpoint)`, t(minePlus) === t(c.fixtureDriving.types), `mine ${t(c.mine.types)} vs fixture ${t(c.fixtureDriving.types)}`);
     check(`${n}/fixture: the owner's sketch is fully constrained once its top width drives (nullity 0), 1 as saved (the width is a reference)`, c.fixtureDriving.nullity === 0 && c.fixtureAsSaved.nullity === 1 && c.fixtureDriving.fdNullity === 0 && c.fixtureAsSaved.fdNullity === 1, JSON.stringify([c.fixtureDriving.nullity, c.fixtureAsSaved.nullity]));
   }
-  // A. geometry only: 2 x movable joints
-  check(`${n}/A bare nullity = 2 x movable joints`, R.A.bareNullity === 2 * R.A.movable, `bare ${R.A.bareNullity} vs ${2 * R.A.movable}`);
+  // A. geometry only: 2 x movable joints + 1 per circle (its radius is a solver unknown since task 515, as in Fusion and PlaneGCS)
+  check(`${n}/A bare nullity = 2 x movable joints + circle radii`, R.A.bareNullity === 2 * R.A.movable + R.A.circles, `bare ${R.A.bareNullity} vs ${2 * R.A.movable} + ${R.A.circles}`);
   // B. the recipe
   check(`${n}/B no step is refused`, R.B.every(r => r.accepted), R.B.filter(r => !r.accepted).map(r => r.label + ' ' + r.errors.join(',')).join('; '));
   check(`${n}/B no dimension is demoted`, R.B.every(r => !r.driven) , R.B.filter(r => r.driven).map(r => r.label).join('; '));

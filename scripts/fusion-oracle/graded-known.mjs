@@ -8,9 +8,12 @@ import { cellKey, classOf } from '../../tests/harness/fusion-oracle/graded.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REASON = {
-  'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion', 'pointOnLine': 'remaining after task 511: held-operand cases differ from Fusion', 'pointOnCircle': 'remaining after task 511: held-operand cases differ from Fusion',
-  'equal-circle': 'OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either',
-  'tangent-circle-circle': 'DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle',
+  'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion', 'pointOnLine': 'remaining after task 511: held-operand cases differ from Fusion',
+  // after task 515 a circle's radius is a solver unknown: the least-change solve may now also change a free radius, where Fusion keeps the moving circle's radius
+  'pointOnCircle': 'remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle',
+  'equal-circle': "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
+  'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
 };
 const byClass = {};
 for (const c of cells()) {

@@ -81,4 +81,23 @@ for (const [name, build] of Object.entries(CASES)) {
   assert(L.maxDeviation(k.S, before) < 1e-6, 'geometry restored');
 }
 
+// CIRCLES (task 515: the radius is a solver unknown). A radius that legitimately changes a lot is no collapse; only a collapse toward zero is,
+// and its refusal restores the RADII, not just the joints. A typed radius dimension is the user's own size (exempt), as for a line.
+{
+  const S = L.newSketch();
+  const a = L.circle(S, 0, 50, 30), b = L.circle(S, 100, 50, 8);
+  const da = make(S, 'distance', { shape: a.id, value: 30, isRadius: true });
+  assert(da && !L.isDriven(da), 'setup: radius dimension on the big circle');
+  assert(make(S, 'equal', { shapes: [a.id, b.id] }), 'equal(circle 30, circle 8) accepted: 8 -> 30 is no collapse');
+  assert(Math.abs(L.shape(S, b.id).radius - 30) < 1e-4, 'the second circle grew to 30: ' + L.shape(S, b.id).radius);
+  const er = quiet(() => commitDimensionEdit(S.state, da, 0.01));
+  assert.strictEqual(er.reverted, true, 'typing 0.01 on the big circle would shrink the equal circle to a point: refused');
+  assert(/collapse/.test(er.reason || ''), 'with the collapse reason: ' + er.reason);
+  assert(Math.abs(L.shape(S, a.id).radius - 30) < 1e-6 && Math.abs(L.shape(S, b.id).radius - 30) < 1e-4, 'both RADII restored: ' + [a, b].map(x => L.shape(S, x.id).radius));
+  const solo = L.newSketch(); const c = L.circle(solo, 0, 0, 10);
+  const dc = make(solo, 'distance', { shape: c.id, value: 10, isRadius: true });
+  const er2 = quiet(() => commitDimensionEdit(solo.state, dc, 0.05));
+  assert.strictEqual(er2.reverted, false, 'a typed radius on the circle itself (10 -> 0.05) is the user own size: accepted');
+}
+
 console.log('no-collapse: ok');

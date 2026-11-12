@@ -12,6 +12,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { dimensionEditLabel } from '#ui/dimension-seams.js';
+import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl } from '#ui/numeric-input-manager.js';
 
 let inputState = {
@@ -178,9 +179,8 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
 function validateWithSandbox(state, config) {
     if (!state || !state.engine) return { success: true, isDriven: false };
 
-    // 1. Snapshot positions
-    const savedPositions = new Map();
-    for (const [id, j] of state.joints) savedPositions.set(id, { x: j.x, y: j.y });
+    // 1. Snapshot the solver state (joint positions and circle radii)
+    const savedPositions = snapshotSolverState(state.joints, state.shapes);
 
     // 2. Setup Test Scenario
     // If Editing: modify the existing constraint temporarily
@@ -276,10 +276,7 @@ function validateWithSandbox(state, config) {
     }
 
     // 5. Restore Geometry
-    for (const [id, pos] of savedPositions) {
-        const j = state.joints.get(id);
-        if (j) { j.x = pos.x; j.y = pos.y; }
-    }
+    restoreSolverState(state.joints, state.shapes, savedPositions);
 
     // 6. Verdict
     // Stricter threshold (0.1) to catch subtle distortions

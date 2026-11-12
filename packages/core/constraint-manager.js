@@ -5,6 +5,7 @@ import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
 import { measureResidual, measureShapeSizes, findCollapsedShape } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
+import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -18,6 +19,9 @@ const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.TANGENT, CONSTRAINT_TYPES.POINT_ON_LINE, CONSTRAINT_TYPES.EQUAL,
     CONSTRAINT_TYPES.MIDPOINT
 ]);
+
+// |sin| of the angle below which two lines count as parallel for a perpendicular's creation placement (about 0.06 degree).
+const PARALLEL_START_SIN = 1e-3;
 
 export class ConstraintManager {
     static canAddConstraint(state, type, params, options = {}) {
@@ -302,11 +306,11 @@ export class ConstraintManager {
             }
         }
 
-        // Snapshot positions BEFORE persisting, so a genuinely over-constraining ADD can be handled below:
-        // an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
+        // Snapshot the solver state (joint positions and circle radii) BEFORE persisting, so a genuinely over-constraining ADD can be
+        // handled below: an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
-        const _preAdd = (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })();
+        const _preAdd = snapshotSolverState(state.joints, state.shapes);
         const _sizesBefore = measureShapeSizes(state);
 
         // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
@@ -353,7 +357,7 @@ export class ConstraintManager {
         if (collapsed) {
             const ci = state.constraints.indexOf(created);
             if (ci >= 0) state.constraints.splice(ci, 1);
-            for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+            restoreSolverState(state.joints, state.shapes, _preAdd);
             if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
                 try { state.engine.solve(opts.solveIterations); } catch (e) { console.error('[ConstraintManager] Solver error:', e); }
             }
@@ -416,7 +420,7 @@ export class ConstraintManager {
                     const reason = pinned ? 'the geometry is fully fixed' : `conflicts with ${this._friendlyName(mangled.type)}`;
                     const ci = state.constraints.indexOf(created);
                     if (ci >= 0) state.constraints.splice(ci, 1);
-                    for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+                    restoreSolverState(state.joints, state.shapes, _preAdd);
                     if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
                         try { state.engine.solve(opts.solveIterations); } catch (_) {}
                     }
@@ -451,9 +455,8 @@ export class ConstraintManager {
      */
     static _sandboxVerify(state, type, params, _unused) {
         try {
-            // 1. Snapshot all joint positions
-            const saved = new Map();
-            for (const [id, j] of state.joints) saved.set(id, { x: j.x, y: j.y });
+            // 1. Snapshot the solver state (joint positions and circle radii)
+            const saved = snapshotSolverState(state.joints, state.shapes);
             const sizesBefore = measureShapeSizes(state);
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
@@ -515,11 +518,8 @@ export class ConstraintManager {
                 const idx = state.constraints.indexOf(tempC);
                 if (idx !== -1) state.constraints.splice(idx, 1);
 
-                // 6. Restore joint positions
-                for (const [id, j] of state.joints) {
-                    const s = saved.get(id);
-                    if (s) { j.x = s.x; j.y = s.y; }
-                }
+                // 6. Restore the solver state
+                restoreSolverState(state.joints, state.shapes, saved);
             }
 
             return hasConflict;
@@ -1137,7 +1137,8 @@ export class ConstraintManager {
         }
     }
 
-    // Perpendicular between two EXACTLY parallel lines (u x v = 0): u.v is stationary there, so the solve never leaves the
+    // Perpendicular between two parallel or NEARLY parallel lines (|sin| <= PARALLEL_START_SIN, about 0.06 degree; task 521: from a closer start the
+    // solve alone shrinks both lines to a point instead of turning one) (u x v = 0): u.v is stationary there, so the solve never leaves the
     // start. Choose the branch as Fusion does: the SECOND-picked line turns by the smaller angle to 90 degrees (a parallel
     // pair is a tie) and a tie goes counter-clockwise. The turn pivots on a fixed or shared joint of the second line, else
     // on its midpoint; a second line that cannot move (both ends fixed or shared) is left to the solve. No branch is locked: the
@@ -1153,7 +1154,7 @@ export class ConstraintManager {
         const ux = b.x - a.x, uy = b.y - a.y, vx = d.x - c.x, vy = d.y - c.y;
         const lenU = Math.hypot(ux, uy), lenV = Math.hypot(vx, vy);
         if (lenU < 1e-9 || lenV < 1e-9) return;
-        if (Math.abs(ux * vy - uy * vx) > 1e-9 * lenU * lenV) return;     // not exactly parallel: the general branch lock applies
+        if (Math.abs(ux * vy - uy * vx) > PARALLEL_START_SIN * lenU * lenV) return;     // not (nearly) parallel: the general branch lock applies
         const pinned = (id) => { const j = state.joints.get(id); return !!(j && (j.fixed || id === 'j_origin')) || s1.joints.includes(id); };
         const [idC, idD] = s2.joints;
         let pivot;

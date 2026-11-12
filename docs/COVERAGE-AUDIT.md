@@ -309,6 +309,11 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `tangent circle/arc, centres dimensioned 151 apart: accepted=false errors=ERR-CSOLVE-01 oracleFeasible=true`
 * Diagnosis: the radius of an arc is a joint distance the solver must move; from the current pose even 500 iterations leave the residual at 53 (circle 15 / arc 20 with the centres dimensioned 151 apart: tangent needs R 136). Same family as F5 (feasibility judged from the pose) but not a sandbox-burst issue: a forced add does not converge either.
 * Proposed task: seed the arc radius from the tangency (like seedFilletForRadius does for fillets) or verify with a continuation; test: the tangent in this repro is accepted.
+* Task 515: the circle/arc cells (tangent OA/shared, OA/dimmed) PASS, the circle's radius is a solver unknown and moves. The repro now uses the
+  still-failing arc/arc pair (`tangent arc/arc, centres dimensioned 151 apart: accepted=false errors=ERR-CSOLVE-01 oracleFeasible=true`). Found while
+  doing it: the ARC side of the tangent rows (line-arc away from a shared rim, circle-arc, arc-arc) reads the arc radius as a constant taken from
+  the joints at assembly, so its rim columns differ from finite differences by 0.98 (`.evidence/515/arc-tangent-probe.txt`, same on origin/main):
+  a likely cause of the remaining NEW-6 cells; arcs were out of scope for 515.
 
 ### 7. NEW-8 (LOW): parallel between a polygon side and a LOCKED rect top converges slowly
 
@@ -323,6 +328,10 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `collinear polygon sides, pre-dimensioned: panel delta -1, finite-difference delta -1, PlaneGCS delta -2, expected -2`
 * Diagnosis: UNVERIFIED root: collinear is one-sided (constraint-manager.js anchors the first line; the solver only moves the second line points), so the DOF the panel reads may not be the DOF of the geometric constraint. Same family as F6.
 * Proposed task: check the one-sided collinear rows in jointFreedom the way F6 proposes for pointOnLine, then re-run this cell.
+
+## Fixed in task 515 (F2: a circle's radius is a solver unknown)
+
+Cell counts (`node tests/coverage-matrix.test.js`): 3384 cells: **1789 PASS**, 1416 N/A, 163 not buildable, 12 FAIL caused by a round-1 finding (F4=11, F6=1), 4 FAIL NEW (NEW-6=3, NEW-8=1), 0 unexplained. The four F2 cells (equal OA sep/shared/locked/dimmed) and two NEW-6 cells (tangent OA shared/dimmed) pass. Expectations changed because a circle has 3 DOF (each agrees with the finite-difference count and with PlaneGCS, whose circle has a free radius): `dim-radius` on a circle removes 1 (was 0), `equal` circle/circle removes 1 (was 0); the PlaneGCS translation (tests/harness/audit/lib.js) no longer fixes an undimensioned circle's radius. One cell is not compared with PlaneGCS: tangent between two circles that SHARE their centre (dist - |r1 - r2| with dist = 0 is r1 = r2, 1 DOF for us and finite differences; PlaneGCS's tangent_cc counts 0 there while its equal_radius_cc counts 1: `.evidence/515/planegcs-concentric-probe.txt`). The NEW-6 count varies between 3 and 5 with the run order (tangent SA/RA shared, arc cells with no circle, also on origin/main).
 
 ## Fixed in task 520 (NEW-1, NEW-2, NEW-3, NEW-5)
 

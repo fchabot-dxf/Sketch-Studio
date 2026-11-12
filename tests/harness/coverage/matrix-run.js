@@ -35,8 +35,9 @@ export const ROWS = [
   { id: 'collinear', label: 'collinear', type: 'collinear', arity: 2, tool: TOOL_MODES.COLLINEAR, ui: both(lineLike), nominal: () => 2, hits: (X, Y) => [{ shape: X }, { shape: Y }], produces: c => c.type === 'collinear' },
   { id: 'tangent', label: 'tangent', type: 'tangent', arity: 2, tool: TOOL_MODES.TANGENT, ui: (x, y) => (lineLike(x) && circleLike(y)) || (circleLike(x) && lineLike(y)) || (circleLike(x) && circleLike(y)), nominal: () => 1, hits: (X, Y) => [{ shape: X }, { shape: Y }], produces: c => c.type === 'tangent' },
   { id: 'equal', label: 'equal', type: 'equal', arity: 2, tool: TOOL_MODES.EQUAL, ui: (x, y) => (lineLike(x) && lineLike(y)) || (circleLike(x) && circleLike(y)),
-    // two circles: the radius is shape data, not a DOF; two fillet arcs: each already carries a driving R
-    nominal: (x, y) => (lineLike(x) ? 1 : ((x === 'O' && y === 'O') || (x === 'F' && y === 'F') ? 0 : 1)), hits: (X, Y) => [{ shape: X }, { shape: Y }], produces: c => c.type === 'equal' },
+    // two fillet arcs: each already carries a driving R. (Two circles: 1 since task 515, a circle's radius is a solver unknown like
+    // Fusion's and PlaneGCS's; it was 0 while the radius was shape data.)
+    nominal: (x, y) => (lineLike(x) ? 1 : ((x === 'F' && y === 'F') ? 0 : 1)), hits: (X, Y) => [{ shape: X }, { shape: Y }], produces: c => c.type === 'equal' },
   { id: 'midpoint-line', label: 'midpoint (line + joint)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: anyLine, nominal: () => 2,
     hits: (X, Y) => (lineLike(X.k) ? [{ shape: X }, { joint: Y.jn }] : [{ shape: Y }, { joint: X.jn }]), produces: c => c.type === 'midpoint' },
   { id: 'midpoint-3pt', label: 'midpoint (3 joints)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: () => true, nominal: () => 2, extraPoint: true,
@@ -51,7 +52,8 @@ export const ROWS = [
   { id: 'dim-line-line-yx', label: 'dim line to line (other pick order)', type: 'distance', arity: 2, dim: true, mode: 'linesline', swap: true, ui: both(lineLike), nominal: () => 1, parallel: true, layout: [30, 90], produces: c => c.type === 'distance' && c.shapes && c.shapes.length === 2 },
   { id: 'dim-angle-xy', label: 'dim angle (X then Y)', type: 'angle', arity: 2, dim: true, mode: 'angle', ui: both(lineLike), nominal: () => 1, layout: [120, 60], dir2: [30, 70], produces: c => c.type === 'angle' },
   { id: 'dim-angle-yx', label: 'dim angle (Y then X)', type: 'angle', arity: 2, dim: true, mode: 'angle', swap: true, ui: both(lineLike), nominal: () => 1, layout: [120, 60], dir2: [30, 70], produces: c => c.type === 'angle' },
-  { id: 'dim-radius', label: 'dim radius', type: 'distance', arity: 1, dim: true, mode: 'radius', ui: circleLike, nominal: (x) => (x === 'O' ? 0 : x === 'F' ? 0 : 1), produces: c => c.type === 'distance' && c.isRadius },
+  // a fillet arc already carries its driving R (0). A circle: 1 since task 515 (its radius is a solver unknown; it was 0 as shape data).
+  { id: 'dim-radius', label: 'dim radius', type: 'distance', arity: 1, dim: true, mode: 'radius', ui: circleLike, nominal: (x) => (x === 'F' ? 0 : 1), produces: c => c.type === 'distance' && c.isRadius },
 ];
 // diameter: the label branch exists (svg-renderer.js) but no tool creates it -> not a cell, reported as "no creation path" (see the inventory)
 export const NO_PATH_ROWS = ['dim-diameter'];
@@ -230,7 +232,11 @@ export async function runCell(row, cols, variant) {
   if (!(rec.residual < eps)) rec.issues.push('residual');
   if (row.dim && !rec.driven) { rec.moved = L.maxDeviation(S, snap0); if (!(rec.moved < 1e-3)) rec.issues.push('dim-moved-geometry'); }   // a dimension placed at its measured value must leave the drawing alone
   if (rec.delta !== rec.fdDelta) rec.issues.push('nullity!=fd');
-  if (rec.oracleMapped && rec.delta !== rec.oracleDelta && !preCollinear) rec.issues.push('nullity!=oracle');
+  // tangent between two circles that share their CENTRE (the O/O 'shared' variant): the row is dist - |r1 - r2| with dist = 0, i.e. r1 = r2,
+  // one DOF (ours = finite differences). PlaneGCS's tangent_cc is degenerate there and counts 0 (dof 4 -> 4, while equal_radius_cc on the same
+  // two concentric circles counts 4 -> 3: .evidence/515/planegcs-concentric-probe.txt), so it is not the oracle for this case (task 515).
+  const concentricTangent = row.id === 'tangent' && kx === 'O' && ky === 'O' && X.joints[0] === Y.joints[0];
+  if (rec.oracleMapped && rec.delta !== rec.oracleDelta && !preCollinear && !concentricTangent) rec.issues.push('nullity!=oracle');
   if (rec.oracleMapped && rec.oracleConflict > 0 && !rec.driven) rec.issues.push('accepted-conflict');
   if (preCollinear) { if (rec.delta !== 0) rec.issues.push('nominal'); else rec.notes.push('lines already collinear: the row is redundant, DOF unchanged'); }
   else if (rec.nominal != null && !rec.driven && rec.delta !== -rec.nominal) {   // nominal is set for the sep variant only

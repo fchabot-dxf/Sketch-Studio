@@ -16,7 +16,7 @@ import { KINDS, VARIANTS, lineLike, circleLike, build, applyVariant, docOf } fro
 import { oracleState } from './matrix-oracle.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 
-const svgStub = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 800 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 800 }), innerHTML: '', setPointerCapture() {}, releasePointerCapture() {}, addEventListener() {}, removeEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; } };
+export const svgStub = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 800 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 800 }), innerHTML: '', setPointerCapture() {}, releasePointerCapture() {}, addEventListener() {}, removeEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; } };
 const evt = (x, y) => ({ clientX: x, clientY: y, pointerType: 'mouse', pointerId: 1, target: { closest: () => null } });
 
 // ------------------------------------------------------------------------------------------------------------------ rows
@@ -67,13 +67,13 @@ export function columnsFor(row) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------ driving
-function muted(fn) { const e = console.error, w = console.warn; console.error = () => {}; console.warn = () => {}; try { return fn(); } finally { console.error = e; console.warn = w; } }
+export function muted(fn) { const e = console.error, w = console.warn; console.error = () => {}; console.warn = () => {}; try { return fn(); } finally { console.error = e; console.warn = w; } }
 const hitJ = (S, id) => ({ id, j: S.state.joints.get(id) });
 const hitS = (S, op) => ({ shape: L.shape(S, op.shape) });
 const sh = (S, h) => (h.shape && h.shape.shape ? hitS(S, h.shape) : null);
 const posOf = (S, id) => S.state.joints.get(id);
 
-function driveConstraintTool(S, row, hits) {
+export function driveConstraintTool(S, row, hits) {
   const st = S.state;
   st.currentTool = row.tool; st.pendingConstraint = null;
   const rets = [];
@@ -88,7 +88,7 @@ function wForMode(S, mode, A, B) {
   if (mode === 'vertical') return { x: B.x + 50 * Math.sign(dx || 1), y: B.y };                                           // past B, pulled along x
   return { x: B.x, y: B.y };
 }
-function driveDimensionTool(S, row, hits) {
+export function driveDimensionTool(S, row, hits) {
   const st = S.state;
   st.currentTool = TOOL_MODES.DIMENSION;
   resetDimensionState(st);
@@ -112,8 +112,8 @@ function driveDimensionTool(S, row, hits) {
 // ------------------------------------------------------------------------------------------------------------------ the cell
 const eps = SolverConfig.VERIFIER_TOLERANCE;   // the app's own definition of 'satisfied' (0.001); residuals are in the verifier's units
 export const spy = { calls: [], orig: null };
-function spyOn() { if (spy.orig) return; spy.orig = ConstraintManager.createConstraint; ConstraintManager.createConstraint = function (state, type, params, opts) { const r = spy.orig.call(this, state, type, params, opts); spy.calls.push({ type, params: { ...params }, result: r }); return r; }; }
-function spyOff() { if (spy.orig) { ConstraintManager.createConstraint = spy.orig; spy.orig = null; } }
+export function spyOn() { if (spy.orig) return; spy.orig = ConstraintManager.createConstraint; ConstraintManager.createConstraint = function (state, type, params, opts) { const r = spy.orig.call(this, state, type, params, opts); spy.calls.push({ type, params: { ...params }, result: r }); return r; }; }
+export function spyOff() { if (spy.orig) { ConstraintManager.createConstraint = spy.orig; spy.orig = null; } }
 
 const fdNull = (S) => L.fdJacobian(S);
 
@@ -296,7 +296,7 @@ export function docDiff(a, b) {
 function finish(rec) { rec.pass = rec.issues.length === 0; return rec; }
 
 // selections the tool refuses by its own rule (not a solver matter): the same joint twice, or a joint on the line it is paired with
-function selfSelection(S, row, hits) {
+export function selfSelection(S, row, hits) {
   const js = hits.filter(h => h.joint).map(h => h.joint);
   if (new Set(js).size < js.length) return 'the same joint picked twice (self-click)';
   if (row.type === 'coincident' && js.length === 2 && S.state.shapes.some(sh => sh.joints && sh.joints.includes(js[0]) && sh.joints.includes(js[1]))) return 'degenerate: both joints belong to one shape (coincident would collapse it)';

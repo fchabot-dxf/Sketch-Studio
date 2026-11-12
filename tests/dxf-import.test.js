@@ -48,13 +48,14 @@
   assert(near(c.x, 10) && near(c.y, -20), 'arc centre');
   assert(near(Math.hypot(s.x - c.x, s.y - c.y), 5) && near(Math.hypot(e.x - c.x, e.y - c.y), 5), 'arc radius at both ends');
   assert(near(s.x, 15) && near(s.y, -20) && near(e.x, 10) && near(e.y, -25), 'arc start at 0deg, end at 90deg (flipped)');
-  assert(arc.sweep === false && arc.largeArc === false, 'CCW in DXF = sweep false on the Y-down canvas');
-  const info = arcSweepInfo(c, s, e, { largeArc: arc.largeArc, sweep: arc.sweep });
-  assert(near(info.span, Math.PI / 2) && info.dir === -1, 'core sweep info = 90deg');
+  assert(arc.sweep === false && !('largeArc' in arc), 'CCW in DXF = sweep false on the Y-down canvas (no stored large-arc flag, task 550)');
+  const info = arcSweepInfo(c, s, e, { sweep: arc.sweep });
+  assert(near(info.span, Math.PI / 2) && info.dir === -1 && info.large === false, 'core sweep info = 90deg');
   const big = run(dxf(4, ARC(0, 0, 5, 270, 90))).shapes[0];       // wraps through 0: 180deg; and a 270deg one
-  assert(run(dxf(4, ARC(0, 0, 5, 45, 315))).shapes[0].largeArc === true, 'span > 180 = largeArc');
+  const L = run(dxf(4, ARC(0, 0, 5, 45, 315))), Ls = L.shapes[0], Lj = jmap(L);
+  assert(arcSweepInfo(...Ls.joints.map((id) => Lj.get(id)), { sweep: Ls.sweep }).large === true, 'span > 180 = a large arc (derived from the joints, task 550)');
   const w = run(dxf(4, ARC(0, 0, 5, 300, 60))), wj = jmap(w), ws = w.shapes[0];
-  assert(near(arcSweepInfo(...ws.joints.map((id) => wj.get(id)), { largeArc: ws.largeArc, sweep: ws.sweep }).span, Math.PI * 2 / 3), 'angle wrap 300->60 = 120deg');
+  assert(near(arcSweepInfo(...ws.joints.map((id) => wj.get(id)), { sweep: ws.sweep }).span, Math.PI * 2 / 3), 'angle wrap 300->60 = 120deg');
   assert(big.type === 'arc', 'half arc imports');
 
   // 4. LWPOLYLINE with a bulge: line + arc, CLOSED through shared joints.
@@ -68,7 +69,7 @@
   const rr = Math.hypot(bs.x - bc.x, bs.y - bc.y);
   assert(near(rr, Math.hypot(be.x - bc.x, be.y - bc.y)), 'bulge arc equidistant from its centre');
   assert(near(rr, 20 * (1 + 0.25) / (4 * 0.5)), 'bulge radius = chord(1+b^2)/(4b)');
-  assert(near(arcSweepInfo(bc, bs, be, { largeArc: bArc.largeArc, sweep: bArc.sweep }).span, 4 * Math.atan(0.5)), 'bulge sweep = 4*atan(b)');
+  assert(near(arcSweepInfo(bc, bs, be, { sweep: bArc.sweep }).span, 4 * Math.atan(0.5)), 'bulge sweep = 4*atan(b)');
   const cw = run(dxf(4, LWP(false, [[0, 0, -1], [10, 0]]))).shapes[0];       // CW semicircle bulging into +y
   assert(cw.type === 'arc' && cw.sweep === true, 'negative bulge = CW = sweep true');
 
@@ -179,8 +180,8 @@
     const rj = jmap(real);
     for (const a of real.shapes.filter((x) => x.type === 'arc')) {
       const [c, s, e] = a.joints.map((id) => rj.get(id));
-      assert(a.sweep === true && a.largeArc === false, 'negative bulge = a clockwise minor arc');
-      assert(near(arcSweepInfo(c, s, e, { largeArc: a.largeArc, sweep: a.sweep }).span, Math.PI / 2, 1e-6), 'each fillet arc sweeps 90 deg');
+      assert(a.sweep === true && arcSweepInfo(c, s, e, { sweep: a.sweep }).large === false, 'negative bulge = a clockwise minor arc');
+      assert(near(arcSweepInfo(c, s, e, { sweep: a.sweep }).span, Math.PI / 2, 1e-6), 'each fillet arc sweeps 90 deg');
       assert(near(Math.hypot(s.x - c.x, s.y - c.y), 0.15 * 25.4, 1e-4), 'fillet radius 0.15 in = 3.81 mm');
     }
     // the polylines are CLOSED loops through shared joints; construction lines never split them (loop-finder skips construction)

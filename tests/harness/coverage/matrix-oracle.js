@@ -2,7 +2,7 @@
 // (collinear, circle-circle tangent). `mapped` is false when a constraint still has no PlaneGCS twin, and the dof is then not compared.
 import * as L from '../audit/lib.js';
 import { GcsWrapper } from '@salusoft89/planegcs';
-import { measureResidual } from '#core/constraint-verifier.js';
+import { measureResidual, measureShapeSizes, COLLAPSE_RATIO } from '#core/constraint-verifier.js';
 
 export async function oracleState(S) {
   const mod = await L.planegcs();
@@ -32,6 +32,9 @@ export async function oracleState(S) {
     // a 'solution' that collapses a line to a point is not a drawing (PlaneGCS accepts it, the app must not)
     let collapsed = false;
     for (const sh of S.state.shapes) if (sh.type === 'line' && sh.joints.length === 2) { const a = solved.get(sh.joints[0]), b = solved.get(sh.joints[1]); if (a && b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-3) collapsed = true; }
+    // TASK 550: likewise an arc whose two ends meet (the app's own rule, constraint-verifier.js findCollapsedShape, EA-1)
+    { const sizes = (P) => measureShapeSizes({ joints: P, shapes: S.state.shapes }), was = sizes(S.state.joints), now = sizes(solved);
+      for (const sh of S.state.shapes) { const w = was.get(sh.id), n = now.get(sh.id); if (sh.type === 'arc' && w && n && w.length === 3 && n.length === 3 && w[1] > 1e-6 && n[1] < w[1] * COLLAPSE_RATIO && n[2] < w[2] * COLLAPSE_RATIO) collapsed = true; } }
     return { collapsed, residual, status, dof: w.gcs.dof(), conflicting: w.get_gcs_conflicting_constraints().length, redundant: w.get_gcs_redundant_constraints().length, mapped: left.length === 0 };
   } finally { w.destroy_gcs_module(); }
 }

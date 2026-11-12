@@ -101,10 +101,10 @@ for (const file of ['fusion-shaper-addin.svg', 'fusion-shaper-addin-arcs.svg']) 
     const [c, s, e] = a.joints.map(J);
     near(c.x, wantCentres[i][0], 1e-3, 'arc centre x'); near(c.y, wantCentres[i][1], 1e-3, 'arc centre y');
     near(Math.hypot(s.x - c.x, s.y - c.y), 3.81, 1e-3, 'radius 3.81 mm at the start'); near(Math.hypot(e.x - c.x, e.y - c.y), 3.81, 1e-3, 'and at the end');
-    assert.strictEqual(a.subType, 'CENTER'); assert.strictEqual(a.largeArc, false);
+    assert.strictEqual(a.subType, 'CENTER'); assert.strictEqual(arcSweepInfo(c, s, e, { sweep: a.sweep }).large, false);
     // the Y flip (det -1) REVERSES the sweep: the file says sweep-flag 1, the world arc is sweep false; the quarter arc runs the SHORT way
     assert.strictEqual(a.sweep, false, 'sweep reversed by the Y-flipping transform');
-    near(arcSweepInfo(c, s, e, { largeArc: a.largeArc, sweep: a.sweep }).span, Math.PI / 2, 1e-6, 'a 90 deg arc, not 270');
+    near(arcSweepInfo(c, s, e, { sweep: a.sweep }).span, Math.PI / 2, 1e-6, 'a 90 deg arc, not 270');
   });
   // the same path WITHOUT the flip keeps the file's sweep flag (1)
   let k = 0;

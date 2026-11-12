@@ -1140,7 +1140,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const [p1, p2, p3] = s.joints.map(id => joints.get(id));
       if (!p1 || !p2 || !p3) continue;
 
-      const opts = { largeArc: s.largeArc, sweep: s.sweep };
+      const opts = { sweep: s.sweep };   // TASK 550: direction only; the large-arc choice is derived (geometry.js arcSweepInfo)
       const pathData = calculateArcPath(p1, p2, p3, s.subType, opts);
 
       // Glow only when the arc shape itself is selected (constraint glyph selection should not add arc glow)
@@ -2455,7 +2455,7 @@ switch(c.type){
           if (shape && shape.type === 'arc' && shape.joints && shape.joints.length >= 3 && radius > 0) {
             const pS = joints.get(shape.joints[1]), pE = joints.get(shape.joints[2]);
             if (pS && pE) {
-              const info = arcSweepInfo(center, pS, pE, { largeArc: shape.largeArc, sweep: shape.sweep });
+              const info = arcSweepInfo(center, pS, pE, { sweep: shape.sweep });
               if (!angleInArcSweep(info, angle)) {
                 const TAU = Math.PI * 2;
                 const wrap = (v) => { v = ((v % TAU) + TAU) % TAU; return v > Math.PI ? v - TAU : v; }; // signed short-way angle

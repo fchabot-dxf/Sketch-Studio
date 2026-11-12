@@ -71,7 +71,9 @@ assert(Math.abs(largeCcw.maxX - 10) < 1e-9);
 assert(Math.abs(largeCcw.minY - (-10)) < 1e-9);
 assert(Math.abs(largeCcw.maxY - 10) < 1e-9);
 
-// 6. Explicit largeArc=true, sweep=true (W3C SVG selects reflected center (10, 10), crossing 0 -> (20, 10) and +pi/2 -> (10, 20))
+// 6. A stored largeArc=true that the geometry contradicts (an old file whose arc crossed 180 degrees after it was made, EA-2): the
+//    large-arc choice is DERIVED from the joints and the direction (task 550), so this is the 90 degree arc about its own centre (0, 0)
+//    from (10,0) to (0,10) in the increasing direction, as drawn (was: the SVG flag picked the reflected centre (10, 10), a 270 degree arc)
 const largeCw = computeGeometryBounds({
   joints: new Map([
     ['jc', { x: 0, y: 0 }],
@@ -81,9 +83,9 @@ const largeCw = computeGeometryBounds({
   shapes: [{ id: 'a_lg_cw', type: 'arc', subType: 'CENTER', joints: ['jc', 'js', 'je'], largeArc: true, sweep: true }],
 });
 assert(Math.abs(largeCw.minX - 0) < 1e-9);
-assert(Math.abs(largeCw.maxX - 20) < 1e-9);
+assert(Math.abs(largeCw.maxX - 10) < 1e-9);
 assert(Math.abs(largeCw.minY - 0) < 1e-9);
-assert(Math.abs(largeCw.maxY - 20) < 1e-9);
+assert(Math.abs(largeCw.maxY - 10) < 1e-9);
 
 // 7. Cubic bezier analytical derivative extrema (arch from (0,0) to (100,0) with c1=(0,100), c2=(100,100) peaks at t=0.5 -> y=75)
 const bez = computeGeometryBounds({

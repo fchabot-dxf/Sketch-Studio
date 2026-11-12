@@ -1,14 +1,71 @@
 {
+ "angle-box-refused": {
+  "reason": "an angle dimension typed 0 or a negative value (also x2 / x0.5 of an angle placed at 0, which types 0 again: Fusion moves nothing): this recording (Fusion API, parameter.expression) accepts it, but the Fusion dimension BOX refuses it (task 551, real mouse and keys: -30 not accepted, 0 silently refused); ours refuses it like the box (task 550, \"an angle must be more than 0 degrees\")",
+  "runs": [
+   "dim-angle|LL|0,0#zero",
+   "dim-angle|LL|0,0#negative",
+   "dim-angle|LL|0,4#zero",
+   "dim-angle|LL|0,4#negative",
+   "dim-angle|LL|1,0#zero",
+   "dim-angle|LL|1,0#negative",
+   "dim-angle|LL|1,4#zero",
+   "dim-angle|LL|1,4#negative",
+   "dim-angle|LL|2,0#zero",
+   "dim-angle|LL|2,0#negative",
+   "dim-angle|LL|2,4#zero",
+   "dim-angle|LL|2,4#negative",
+   "dim-angle|LL|3,0#zero",
+   "dim-angle|LL|3,0#negative",
+   "dim-angle|LL|3,4#zero",
+   "dim-angle|LL|3,4#negative",
+   "dim-angle|LL|4,0#zero",
+   "dim-angle|LL|4,0#negative",
+   "dim-angle|LL|4,4#zero",
+   "dim-angle|LL|4,4#negative",
+   "dim-angle|LL|5,0#zero",
+   "dim-angle|LL|5,0#negative",
+   "dim-angle|LL|5,4#zero",
+   "dim-angle|LL|5,4#negative",
+   "dim-angle|LL|6,0#zero",
+   "dim-angle|LL|6,0#negative",
+   "dim-angle|LL|6,4#zero",
+   "dim-angle|LL|6,4#negative",
+   "dim-angle|LL|7,0#zero",
+   "dim-angle|LL|7,0#negative",
+   "dim-angle|LL|7,4#zero",
+   "dim-angle|LL|7,4#negative",
+   "dim-angle|LC|0,0#zero",
+   "dim-angle|LC|0,0#negative",
+   "dim-angle|LC|4,0#zero",
+   "dim-angle|LC|4,0#negative",
+   "dim-angle|CL|0,0#zero",
+   "dim-angle|CL|0,0#negative",
+   "dim-angle|CL|4,0#zero",
+   "dim-angle|CL|4,0#negative",
+   "dim-angle|LS|0,0#zero",
+   "dim-angle|LS|0,0#negative",
+   "dim-angle|SL|0,0#zero",
+   "dim-angle|SL|0,0#negative",
+   "dim-angle|LR|0,0#zero",
+   "dim-angle|LR|0,0#negative",
+   "dim-angle|LR|4,0#zero",
+   "dim-angle|LR|4,0#negative",
+   "dim-angle|RL|0,0#zero",
+   "dim-angle|RL|0,0#negative",
+   "dim-angle|RL|8,0#zero",
+   "dim-angle|RL|8,0#negative",
+   "dim-angle|CC|0,0#zero",
+   "dim-angle|CC|0,0#negative",
+   "dim-angle|SS|0,0#grow2",
+   "dim-angle|SS|0,0#shrink05",
+   "dim-angle|SS|0,0#zero",
+   "dim-angle|SS|0,0#negative"
+  ]
+ },
  "fusion-angle-supplement": {
   "reason": "an angle edited to 179 degrees: the Fusion parameter reads 179 (health 0) but its lines end at the supplementary angle by the unsigned measure (dim-angle|LL|1,4#huge20: line1 shrinks from 61.8 to 2.1 long and turns, the lines are 1.1 degrees apart), so it reads \"value not reached\"; ours turns line1 to 179 degrees",
   "runs": [
    "dim-angle|LL|1,4#huge20"
-  ]
- },
- "angle-short": {
-  "reason": "an angle edited far (dim-angle|SS|0,0#huge20: two parallel polygon sides, 0 -> 179 degrees): ours turns the same side but its angle does not read the typed value (the angle row is satisfied modulo 180 degrees, so the stepped turn of the polygon can stop on the other branch); Fusion reaches it",
-  "runs": [
-   "dim-angle|SS|0,0#huge20"
   ]
  },
  "fusion-refuses-dimension": {

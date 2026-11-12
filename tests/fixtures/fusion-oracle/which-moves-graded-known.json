@@ -1166,6 +1166,13 @@
    "0,4"
   ]
  },
+ "tangent-circle-circle|FF": {
+  "reason": "feasible (Fusion deforms the fillet arc without collapsing it) but our solve collapses fillet 1 (its two ends meet, 90 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and read like Fusion's deform); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521",
+  "total": 4,
+  "cells": [
+   "0,c"
+  ]
+ },
  "horizontal-line|L": {
   "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
   "total": 4,

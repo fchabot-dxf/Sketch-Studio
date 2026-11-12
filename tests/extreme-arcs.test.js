@@ -61,7 +61,6 @@ ok('no cell fails for a reason no finding explains', unclassified.length === 0, 
 const badNA = cells.filter(c => c.verdict === 'N/A' && !c.refusedCleanly);
 ok('every refused cell left the document untouched', badNA.length === 0, badNA.slice(0, 3).map(c => `${c.variant} ${c.row} ${c.state}`).join('; '));
 for (const id of Object.keys(KNOWN)) {
-  if (id === 'EA-10') continue;   // a UI fact, below
   const n = perId.get(id) || 0;
   if (n > 0) console.log(`known ${id} [${KNOWN[id].severity}] ${KNOWN[id].title}  ${n} cell(s)`);
   else fail(`KNOWN entry ${id} now has NO failing cell, delete it (${KNOWN[id].title})`);
@@ -75,10 +74,14 @@ for (const ctl of [CONTROL, FILLET_CONTROL]) {
   ok(`control ${ctl}: only EA-1 (own-ends coincident) and round-1 findings fail`, bad.length === 0, bad.map(c => `${c.row}/${c.state} ${c.verdict}`).join('; '));
 }
 
-// the explicit question: is a zero-sweep collapse accepted anywhere? (the task 521 check measures the radius only)
+// the explicit question: is a zero-sweep collapse accepted anywhere? Task 550: findCollapsedShape measures the arc's ends (chord and sweep), so a
+// constraint or dimension whose solve brings an arc's two ends together is REFUSED at creation (Fusion: "failed to solve"). What remains (EA-1)
+// is outside creation and edits: a DRAG (no refusal while dragging). A fillet RADIUS edit goes through findCollapsedShape too (its legs excepted).
 const zero = cells.filter(c => c.issues.includes('zero-sweep'));
-ok('zero-sweep collapse IS accepted today (EA-1): cells where the tool kept the constraint and start = end', zero.length > 0 && zero.every(c => c.accepted), `${zero.length} cells`);
-console.log(`zero-sweep accepted in ${zero.length} cell(s): rows ${[...new Set(zero.map(c => c.row))].join(', ')}; variants ${[...new Set(zero.map(c => c.variant))].length} of ${VARIANTS.length}`);
+ok('no constraint creation leaves an arc at zero sweep (task 550; was EA-1 in 45 cells): every accepted zero-sweep is after a later drag', zero.length === 0, zero.map(c => `${c.variant} ${c.row}/${c.state}`).join('; '));
+const later = cells.filter(c => c.issues.some(i => /^(edit[0-9.]+|drag)-zero-sweep$/.test(i)));
+ok('no dimension edit leaves an arc at zero sweep (task 550: fillet radius edits go through findCollapsedShape too)', !cells.some(c => c.issues.some(i => /^edit[0-9.]+-zero-sweep$/.test(i))), later.map(c => `${c.variant} ${c.row}/${c.state}`).join('; '));
+console.log(`zero-sweep after a later drag in ${later.length} cell(s): rows ${[...new Set(later.map(c => c.row))].join(', ')}; variants ${[...new Set(later.map(c => c.variant))].join(', ')}`);
 
 // ---------------------------------------------------------------------------------------------------------------- repros (each is expected to show its finding today)
 for (const id of Object.keys(REPRO_CELL)) {
@@ -95,7 +98,7 @@ const sub = facts.filter(f => f.chord < 0.05);
 ok('sub-tolerance arcs (chord < GEOMETRY_TOLERANCE 0.05): both ends are pickable (some pixels return the end joint)', sub.every(f => f.endPickable), sub.filter(f => !f.endPickable).map(f => f.variant).join());
 for (const f of sub) console.log(`ui: ${f.variant} chord ${f.chord.toPrecision(3)}: of the 225 pixels around the END joint ${f.endPixelsReturnEnd} pick the end, ${f.endPixelsReturnStart} pick the START (a click on a sub-pixel chord is a coin flip)`);
 const u = ui10();
-if (u.ok) fail('KNOWN EA-10 now passes (the arc is no longer picked outside its sweep), delete it'); else console.log(`known EA-10 [${KNOWN['EA-10'].severity}] ${KNOWN['EA-10'].title}  -- ${u.observed}`);
+ok('the arc is picked only on its drawn sweep (EA-10 fixed in task 550): the mouse on its circle outside the sweep does not pick it', u.ok, u.observed);
 
 const total = (Date.now() - t0) / 1000;
 ok('the whole audit runs in under 60 s', total < 60, total.toFixed(1) + ' s');

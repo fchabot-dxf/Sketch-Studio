@@ -7,7 +7,7 @@
 //   importDxf(text, opts)                → importDxfGeometry result | { error }   (the one call a host makes)
 //
 // Mapping (a DECLARED table, ENTITY_EMITTERS below): LINE → line; CIRCLE → circle; ARC → #core arc (CENTER subType:
-// joints [centre, start, end] + explicit largeArc/sweep, exactly what the arc tool stores); LWPOLYLINE / POLYLINE
+// joints [centre, start, end] + the sweep direction, exactly what the arc tool stores); LWPOLYLINE / POLYLINE
 // with bulges → lines + arcs; SPLINE (clamped, non-rational, degree 2/3) → EXACT cubic beziers, otherwise flattened
 // and COUNTED; ELLIPSE → flattened ring/arc at the SVG importer's curve density. Everything else is SKIPPED and
 // COUNTED with a reason. Output is STATIC (no constraints), like the SVG import.
@@ -313,7 +313,7 @@ export function importDxfGeometry(parsed, { genJ, idPrefix = 'dxf' } = {}) {
     else if (q.k === 'circle') shapes.push({ id: SID(), type: 'circle', joints: [centre(q.c)], radius: q.r * sc });
     else if (q.k === 'arc') {
       const js = endpoint(q.s), je = endpoint(q.e);
-      shapes.push(arcShape(SID(), centre(q.c), js, je, { largeArc: q.large, sweep: !q.ccw }));
+      shapes.push(arcShape(SID(), centre(q.c), js, je, { sweep: !q.ccw }));
     } else if (q.k === 'bezier') {
       const o1 = out(q.c1), o2 = out(q.c2);
       shapes.push({ id: SID(), type: 'bezier', joints: [endpoint(q.p0), endpoint(q.p3)], c1: [o1.x, o1.y], c2: [o2.x, o2.y] });

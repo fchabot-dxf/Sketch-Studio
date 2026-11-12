@@ -20,7 +20,8 @@ export function geometrySignature(joints, shapes, constraints) {
     if (s.isConstruction) h = mix(h, 1);
     if (s.joints) for (const jid of s.joints) h = mixStr(h, jid);
     if (s.type === 'circle') h = mix(h, Math.round((s.radius || 0) * 1000));
-    if (s.type === 'arc') h = mix(mix(h, s.largeArc ? 1 : 0), typeof s.sweep === 'boolean' ? (s.sweep ? 2 : 3) : 0);
+    // an arc's path follows its joints (hashed above) and its direction; the large-arc choice is derived from them (task 550)
+    if (s.type === 'arc') h = mix(h, typeof s.sweep === 'boolean' ? (s.sweep ? 2 : 3) : 0);
   }
   for (const c of constraints) {
     if (c && c.type === 'coincident' && Array.isArray(c.joints)) for (const jid of c.joints) h = mixStr(h, jid);

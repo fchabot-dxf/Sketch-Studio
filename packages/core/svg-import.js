@@ -281,7 +281,7 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
       const a = arcAt.get(prev);
       if (a && a.to === i) {
         const c = svgCircularArcCentre(a.x1, a.y1, a.rx, a.fA, a.fS, a.x2, a.y2);
-        pushShape(arcShape(SID(), J(c.cx, c.cy), id[prev], id[i], { largeArc: !!a.fA, sweep: det < 0 ? !a.fS : !!a.fS }));
+        pushShape(arcShape(SID(), J(c.cx, c.cy), id[prev], id[i], { sweep: det < 0 ? !a.fS : !!a.fS }));
       } else if (id[prev] !== id[i]) pushShape({ id: SID(), type: 'line', joints: [id[prev], id[i]] });
       prev = i;
     }

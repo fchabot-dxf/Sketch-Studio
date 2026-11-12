@@ -12,6 +12,7 @@ import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { replaceParameters } from '#core/parameters.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
@@ -24,71 +25,135 @@ export function dimensionEditLabel(c, val) {
   return `edit dimension ${r(c.value)} -> ${r(val)}`;
 }
 
-// Commit a numeric edit to a DRIVING dimension's value. Snapshot → set → solve; on a genuine
-// non-convergence REFUSE + REVERT to the last valid shape (restore value + positions, re-solve).
-// Returns { reverted, clash } so the caller can surface a message. No DOM, no notifications here.
+// Commit a numeric edit to a DRIVING dimension's value: the ONE-ELEMENT case of commitDimensionEdits (TASK 535 slice 2), no second path.
+// Returns { reverted, clash, reason?, culprit? } so the caller can surface a message. No DOM, no notifications here.
 export function commitDimensionEdit(state, c, val) {
+  return commitDimensionEdits(state, [{ c, value: val }]);
+}
+
+// Commit N dimension value changes as ONE operation (docs/PARAMETERS-DESIGN.md section D). edits = [{ c, value, name? }] (`name` only
+// labels a refusal; default c.name). ALL-OR-NOTHING: snapshot of the whole solver state (joints AND circle radii) and of every edited value,
+// ONE combined walk (all edited values move together, step count = the largest any single edit needs, capped at MAX_EDIT_STEPS; each step
+// places every giving operand through the creation placement, then ONE solve). Any refusal (fillet seed, fillet collapse, task 521 collapse,
+// non-convergence) restores every value, position and radius, re-solves, and returns
+//   { reverted:true, clash, reason?, culprit: { index, name, reason } | null }
+// culprit = the FIRST edit (in the given order) that is impossible ALONE, found by a diagnostic pass on refusal only; null when each one
+// passes alone (the combination is impossible). A one-element batch is its own culprit.
+// opts.refuseReference (the parameter entry point sets it): an edit on a reference (driven) dimension, or on a dimension the other driving
+// constraints already DETERMINE (isDimensionDetermined), is refused before anything changes, and that dimension is the culprit.
+// Snapshot / undo of the DOCUMENT (saveState) is the caller's: this seam only guarantees the solver-visible state.
+export function commitDimensionEdits(state, edits, opts = {}) {
   // Every dimension, a circle's radius included, drives the geometry through the solve: a circle's radius is a solver unknown
   // (engine.js hasRadiusUnknown), written back to shape.radius by the solve. The snapshot is the whole solver state (joints AND
   // circle radii), so a refusal restores both.
   const engine = state && state.engine;
   if (!engine || typeof engine.solve !== 'function') {
-    c.value = val;
+    for (const e of edits) e.c.value = e.value;
     return { reverted: false, clash: '' };
   }
-  const oldValue = c.value;
+  if (!edits.length) return { reverted: false, clash: '' };
+  const labelOf = (e, i) => e.name || e.c.name || `dimension ${i + 1}`;
+  const whyOf = (r) => r.reason || (r.clash ? `conflicts with ${r.clash}` : 'did not converge');
+  if (opts.refuseReference) {
+    for (let i = 0; i < edits.length; i++) {
+      const c = edits[i].c;
+      const why = (c.isDriven || c.driven) ? 'is a reference dimension' : isDimensionDetermined(state, c) ? 'is already determined by the other constraints' : null;
+      if (why) return { reverted: true, clash: '', reason: `${labelOf(edits[i], i)} ${why}`, culprit: { index: i, name: labelOf(edits[i], i), reason: why } };
+    }
+  }
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
   const shapes = engine.getShapes ? engine.getShapes() : state.shapes;
   const snap = snapshotSolverState(joints, shapes);
+  const oldValues = edits.map(e => e.c.value);
   const sizesBefore = measureShapeSizes(state);
+  const restoreAll = () => { edits.forEach((e, i) => { e.c.value = oldValues[i]; }); restoreSolverState(joints, shapes, snap); };
+  const revert = (res) => { restoreAll(); engine.solve(ITER()); return res; };
 
-  // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero
-  // length), and refuse the one singular value where a line would collapse. Snapshot above restores on refusal.
-  const filletArc = (c.isRadius && c.shape && state.shapes) ? state.shapes.find(s => s.id === c.shape && s.type === 'arc' && s.filletSharp) : null;
-  if (filletArc) {
-    const seeded = seedFilletForRadius(state, filletArc, val);
-    if (!seeded.ok) return { reverted: true, clash: '', reason: seeded.reason };
+  // ONE attempt at a list of edits from the snapshot state. On a refusal it leaves the state as it found it (restored + re-solved).
+  const attempt = (list) => {
+    // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero length), and
+    // refuse the one singular value where a line would collapse. Each is seeded first; a refusal restores the ones already seeded.
+    const fillets = list.map(e => (e.c.isRadius && e.c.shape && state.shapes) ? state.shapes.find(s => s.id === e.c.shape && s.type === 'arc' && s.filletSharp) || null : null);
+    for (let i = 0; i < list.length; i++) {
+      if (!fillets[i]) continue;
+      const seeded = seedFilletForRadius(state, fillets[i], list[i].value);
+      if (!seeded.ok) { restoreAll(); return { reverted: true, clash: '', reason: seeded.reason }; }
+    }
+    // Walk the values in steps of at most STEP_FRACTION of each old value, solving at each: one big jump lets the solver land on
+    // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
+    // continuously. A fillet radius edit is already seeded analytically above, so it is not stepped (it takes its value at once). At each
+    // step the operand that gives way is placed at the step's value by the creation placement (the who-moves table, task 525) before the solve.
+    let steps = 1;
+    list.forEach((e, i) => {
+      if (fillets[i]) return;
+      const old = e.c.value, span = Math.abs(e.value - old);
+      if (Number.isFinite(span) && Math.abs(old) > 0) steps = Math.max(steps, Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(old) * STEP_FRACTION)))));
+    });
+    const from = list.map(e => e.c.value);
+    let result;
+    for (let k = 1; k <= steps; k++) {
+      list.forEach((e, i) => {
+        e.c.value = (fillets[i] || k === steps) ? e.value : from[i] + (e.value - from[i]) * (k / steps);
+        if (!fillets[i]) ConstraintManager.placeForCreation(state, e.c.type, e.c);
+      });
+      result = engine.solve(ITER());
+      if (result && result.converged === false) break;
+    }
+    list.forEach(e => { e.c.value = e.value; });
+    const collapsedFillet = fillets.findIndex(f => f && filletHasCollapsedLine(state, f));
+    if (collapsedFillet !== -1) return revert({ reverted: true, clash: '', reason: `R = ${Number(list[collapsedFillet].value).toFixed(2)} collapsed a line to zero length` });
+    // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
+    // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET radius edit is judged above by
+    // filletHasCollapsedLine instead: its tangent legs legitimately get very short as R approaches the singular value (a short leg is no collapse).
+    const collapsed = fillets.every(Boolean) ? null : findCollapsedShape(state, sizesBefore);
+    if (collapsed) {
+      const own = list.find((e, i) => !fillets[i]);
+      return revert({ reverted: true, clash: '', reason: `${Number(own.value).toFixed(2)} would collapse a ${collapsed.type} to a point` });
+    }
+    if (result && result.converged === false) {
+      const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
+      return revert({ reverted: true, clash });
+    }
+    return { reverted: false, clash: '' };
+  };
+
+  const res = attempt(edits);
+  if (!res.reverted) return res;
+  // Refused: name the dimension that is the problem. One edit is its own culprit; several: the first impossible ALONE, from the restored state.
+  if (edits.length === 1) return { ...res, culprit: { index: 0, name: labelOf(edits[0], 0), reason: whyOf(res) } };
+  let culprit = null;
+  for (let i = 0; i < edits.length && !culprit; i++) {
+    const alone = attempt([edits[i]]);
+    if (alone.reverted) culprit = { index: i, name: labelOf(edits[i], i), reason: whyOf(alone) };
+    else restoreAll();
   }
-  c.value = val;
-  // Walk the value in steps of at most STEP_FRACTION of the old value, solving at each: one big jump lets the solver land on
-  // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
-  // continuously. A fillet radius edit is already seeded analytically above, so it takes the single solve. At each step the
-  // operand that gives way is placed at the step's value by the creation placement (the who-moves table, task 525) before the solve.
-  let result;
-  const span = Math.abs(val - oldValue);
-  const steps = (!filletArc && Number.isFinite(span) && Math.abs(oldValue) > 0)
-    ? Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(oldValue) * STEP_FRACTION)))) : 1;
-  for (let k = 1; k <= steps; k++) {
-    c.value = k === steps ? val : oldValue + (val - oldValue) * (k / steps);
-    if (!filletArc) ConstraintManager.placeForCreation(state, c.type, c);
-    result = engine.solve(ITER());
-    if (result && result.converged === false) break;
+  engine.solve(ITER());
+  return { ...res, culprit };
+}
+
+// THE entry point that applies a planChange result (slices 3-5 call only this; parameters.js planChange is pure). plan = the { ok:true, paramsAfter,
+// edits:[{ c, name, value, expression }], solve } it returned. ALL-OR-NOTHING including the PARAMETERS: ONE undo step (saveState before), then the
+// dimension values go through the batch seam (commitDimensionEdits, reference / determined dimensions refused); only after it succeeds are
+// state.parameters and every dimension's name / expression written. A refusal leaves parameters, expressions, names, values, geometry and radii exactly
+// as they were and drops the undo step it took (discardSnapshotAt), so the history length is unchanged.
+// Returns { ok:true } | { ok:false, reverted:true, clash, reason, culprit } | the refused plan itself ({ ok:false, code, message }; nothing was touched).
+export function applyParameterChange(state, plan, label = 'change parameter') {
+  if (!plan || !plan.ok) return plan || { ok: false, code: 'SYNTAX', message: 'no plan' };
+  const saved = typeof state.saveState === 'function';
+  if (saved) state.saveState(label);
+  const length = saved && state.history ? state.history.length : -1; // discardSnapshotAt pops the newest entry only if the history is still this long
+  const moves = plan.edits.filter(e => e.value !== e.c.value).map(e => ({ c: e.c, value: e.value, name: e.name }));
+  const res = commitDimensionEdits(state, moves, { refuseReference: true });
+  if (res.reverted) {
+    if (length >= 0 && typeof state.discardSnapshotAt === 'function') state.discardSnapshotAt(length);
+    return { ok: false, ...res };
   }
-  c.value = val;
-  if (filletArc && filletHasCollapsedLine(state, filletArc)) {
-    c.value = oldValue;
-    restoreSolverState(joints, shapes, snap);
-    engine.solve(ITER());
-    return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
+  replaceParameters(state.parameters, plan.paramsAfter);
+  for (const e of plan.edits) {
+    e.c.name = e.name;
+    if (e.expression) e.c.expression = e.expression; else delete e.c.expression;
   }
-  // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
-  // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET radius edit is judged above by
-  // filletHasCollapsedLine instead: its tangent legs legitimately get very short as R approaches the singular value (a short leg is no collapse).
-  const collapsed = filletArc ? null : findCollapsedShape(state, sizesBefore);
-  if (collapsed) {
-    c.value = oldValue;
-    restoreSolverState(joints, shapes, snap);
-    engine.solve(ITER());
-    return { reverted: true, clash: '', reason: `${Number(val).toFixed(2)} would collapse a ${collapsed.type} to a point` };
-  }
-  if (result && result.converged === false) {
-    const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
-    c.value = oldValue;
-    restoreSolverState(joints, shapes, snap);
-    engine.solve(ITER());
-    return { reverted: true, clash };
-  }
-  return { reverted: false, clash: '' };
+  return { ok: true };
 }
 
 // A dimension value dragged to a free spot: its label centre follows the pointer in X and Y (constraint.labelPos, world

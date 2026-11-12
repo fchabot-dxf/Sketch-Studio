@@ -13654,3 +13654,11 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Existing test edited: tests/dimension-fields-and-fillet-517.test.js builds a dimension by hand and pushes it without a name; the load now names it, so the test names it (`name: 'd1'`) and checks `name` survives with the other fields. No other existing test changed.
 - Tests (new): parameters-graph (chains depth 1..40, diamond, self/2/3 cycles with path, order, rename, delete, freeze, planChange affected lists, names), parameters-roundtrip (every inventory dimension mode x driving/reference, byte-stable save-load-save x3, undo/redo/cancelUndoGroup/journal), parameters-old-files (owner-trapezoid v1 file + 13 audit/coverage drawings written as v1: loaded content equals input but for `name`; v2 without parameters; version gate; project-file envelope). One-off: the owner-trapezoid loaded by origin/main code and by this branch give byte-identical documents once `name` is dropped (.evidence/535-1b/).
 - Behaviour changes for existing users: saved files carry version 2 and a `name` on every dimension (and `parameters: []`); nothing visible. An older build refuses a version-2 file (accepted by the owner).
+
+## TURN 535-2 (STOPPED: 100 dimensions take 50 s, STOP is 2 s)
+Slice 2, batch seam. Added `commitDimensionEdits(state, edits, opts)` and `applyParameterChange(state, plan, label)` in packages/ui/dimension-seams.js;
+`commitDimensionEdit` is now `commitDimensionEdits(state, [{c, value}])` (one path). tests/parameters-batch.test.js (80 checks pass for n <= 30;
+at n = 100 its timing check fails by design). Existing dimension tests, fusion-dim-edit (864 runs, 672 same, 192 KNOWN), fusion-oracle, fusion-drag,
+constraint-audit, coverage-matrix/properties, jacobian audit, solver-scenarios all unchanged. Cause of the STOP: see .evidence/535-2/timing.txt
+(per-step creation placement = 700 placeForCreation calls, each runs trial solves on the whole sketch; and even without placement the 7 combined-walk
+solves of a 100-dimension sketch take 4 s because the dense solver is cubic). Gate NOT run (the new test is red on purpose).

@@ -1797,7 +1797,6 @@ Divergences and verdicts:
 
 <!-- drawings:end -->
 
-<<<<<<< HEAD
 ## Dragging (real mouse, qualitative)
 
 **Method (task 530).** Fusion's API cannot reproduce a constrained drag (task 527: `point.move` / `sketch.move` leave a length-dimensioned point where it is or put it on the wrong branch), so
@@ -1845,7 +1844,7 @@ sibling vector in every case I checked, so I read the 'none' cells as refusals.
 5. **Tangent line end**: with a free circle, Fusion also moves the circle (`C:M.`); ours moves / resizes the circle in a different set of cells (`tangent.*.lineend.diag`).
 Agreement is complete for a rectangle corner (13/13), a circle centre (12/12), the shared corner of two lines (9/9) and every fully constrained cell (nothing moves in either).
 KNOWN list: `tests/fixtures/fusion-oracle/drag-known.json` (regenerate with `node scripts/fusion-oracle/drag-known.mjs`), test `tests/fusion-drag.test.js`.
-=======
+
 ## Editing a dimension (task 528)
 
 Question: when the value of an EXISTING driving dimension is changed, does our `commitDimensionEdit` (packages/ui/dimension-seams.js, the one path the app uses when a value is typed) re-solve the sketch the way Fusion does? Measured in Fusion 2706.1.17 (recorded 2026-11-12), replayed offline by `tests/fusion-dim-edit.test.js` (fixture `tests/fixtures/fusion-oracle/fusion-dim-edit.json`, KNOWN list `fusion-dim-edit-known.json`). Nothing under `packages/` was changed: this is measurement only.
@@ -1905,4 +1904,3 @@ Question: when the value of an EXISTING driving dimension is changed, does our `
 5. **Redundant dimensions.** An angle on two sides of a fully constrained rectangle: Fusion refuses to place it (over-constrained), ours places it driving and the edit moves nothing or is refused (6 runs). The other way round, a zero distance from a point to the origin: Fusion places and edits it, ours turns it into a reference (6 runs). Also on arcs: Fusion keeps the centre on a radius edit, ours moves the centre (5 runs).
 
 Not found different: a radius edit of a circle, a fillet radius edit and the line-length edits of held lines agree with Fusion (the 381 agreeing runs), and the other dimensions of the sketch kept their values in every agreeing run.
->>>>>>> origin/main

@@ -10,6 +10,8 @@
 #                                                                a chord (ctrl+z ctrl+y ctrl+shift+z) or type:TEXT (digits - . only)   (task 551)
 #   python win-mouse.py dismiss TITLE_SUBSTR X Y               -> ONLY way to touch a Fusion dialog: the foreground window must be a Fusion360.exe window whose title
 #                                                                contains TITLE_SUBSTR and (X,Y) must lie inside that window; one click, nothing else (task 551)
+#                                                                OWNER RULE (2026-11-12): dismiss is for the CANCEL button of a Fusion dialog ONLY (never OK / Yes /
+#                                                                Save / Delete); screenshot the dialog first, name the button clicked in the REPORT.
 #   Env FUSION_DOC = a substring the Fusion main window title must contain (the scratch document); checked before EVERY mouse/key action.
 # Safety (all enforced here, before AND during the drag): foreground window must be Fusion360.exe's main window; both points must be
 # inside the canvas rect passed in (default: the Fusion window client rect); cursor in a screen corner (<=3 px) aborts the run; if the

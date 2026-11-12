@@ -16,8 +16,19 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 // The harness drives the REAL app edit/toggle logic via shared headless seams (single source of truth).
 import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+import { replayJournal, documentHash } from '#core/journal.js';
 
 const ITER = SolverConfig.ITERATIONS || 500;
+
+// TASK 507: rebuild the drawing from a pasted diagnostic REPORT (its `journal`: a base document + one patch per step) with no tool logic
+// re-run. Returns the final document (serializeDocument's shape; its `.geometry` feeds createSketch().load(...)) and refuses a replay
+// whose result does not match the journal's own digest of the live document. includeRedo: also apply the undone steps.
+export function replayReport(report, { includeRedo = false } = {}) {
+  if (!report || !report.journal) throw new Error('replayReport: the report has no journal');
+  const doc = replayJournal(report.journal, { includeRedo });
+  if (!includeRedo && documentHash(doc) !== report.journal.current.hash) throw new Error('replayReport: replayed document does not match journal.current.hash');
+  return doc;
+}
 
 export function createSketch() {
   const engine = createEngine(null);

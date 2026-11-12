@@ -78,6 +78,14 @@ export function createSketchState(engine, view) {
         host: this.hostSnapshot ? this.hostSnapshot.capture() : undefined // TASK 463: the host's own undoable data
       };
     },
+    // TASK 507 (ops journal): every stored snapshot carries WHEN it was saved (`t`) and WHAT the user did next (`label`; default =
+    // the current tool). The snapshot is taken BEFORE the action, so its label names the action that follows it. These two
+    // fields never touch undo/redo (_restoreSnapshot ignores them); packages/core/journal.js turns the history into an ordered log.
+    _stamp: function(snapshot, label){
+      snapshot.t = Date.now();
+      snapshot.label = label || this.currentTool;
+      return snapshot;
+    },
     // BURN-DOWN-2: restore the live store from a snapshot (extracted verbatim from undo() so redo() reuses it).
     _restoreSnapshot: function(snapshot){
       this.joints.clear();
@@ -155,8 +163,8 @@ export function createSketchState(engine, view) {
       this.initStore(); // re-creates the origin joint
     },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
-    saveStateForce: function(){
-      this.history.push(this._captureSnapshot());
+    saveStateForce: function(label){
+      this.history.push(this._stamp(this._captureSnapshot(), label));
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       this._notifyHistory();
@@ -168,16 +176,16 @@ export function createSketchState(engine, view) {
       return true;
     },
     // Normal save - during an active undo group we still create segment snapshots (they will be compressed on commit)
-    saveState: function() {
+    saveState: function(label) {
       if(this._undoGroupActive){
         // Create a segment snapshot and remember its index for the active group
-        this.saveStateForce();
+        this.saveStateForce(label);
         try{ if(this._undoGroupInfo) this._undoGroupInfo.segmentIndices.push(this.history.length - 1); }catch(_){ }
         return;
       }
-      this.saveStateForce();
+      this.saveStateForce(label);
     },
-    beginUndoGroup: function(){
+    beginUndoGroup: function(label){
       if(this._undoGroupActive) {
         this._undoGroupDepth = (this._undoGroupDepth || 1) + 1;
         return;
@@ -185,7 +193,7 @@ export function createSketchState(engine, view) {
       this._undoGroupActive = true;
       this._undoGroupDepth = 1;
       // capture snapshot before group begins so undo will remove entire group
-      this.saveStateForce();
+      this.saveStateForce(label);
       // record start index and segment list
       this._undoGroupInfo = { startIndex: this.history.length - 1, segmentIndices: [] };
     },
@@ -250,8 +258,8 @@ export function createSketchState(engine, view) {
     undo: function() {
       if(this.history.length === 0) return;
       // BURN-DOWN-2: capture the CURRENT live state so redo() can return to it, THEN restore the previous snapshot.
-      this.redoStack.push(this._captureSnapshot());
       const snapshot = this.history.pop();
+      this.redoStack.push(this._stamp(this._captureSnapshot(), snapshot.label)); // the redo entry is labelled with the action it re-does
       this._restoreSnapshot(snapshot); // cleanup after undo is disabled; trust the snapshot as saved
       this._notifyHistory();
     },
@@ -259,9 +267,9 @@ export function createSketchState(engine, view) {
     redo: function() {
       if(!this.redoStack || this.redoStack.length === 0) return;
       // The current state becomes undoable again, then restore the redo snapshot.
-      this.history.push(this._captureSnapshot());
-      if(this.history.length > this.maxHistory) this.history.shift();
       const snapshot = this.redoStack.pop();
+      this.history.push(this._stamp(this._captureSnapshot(), snapshot.label));
+      if(this.history.length > this.maxHistory) this.history.shift();
       this._restoreSnapshot(snapshot);
       this._notifyHistory();
     }

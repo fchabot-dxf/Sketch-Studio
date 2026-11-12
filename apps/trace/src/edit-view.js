@@ -117,7 +117,7 @@ export function importSvgToEdit(svgText, name, onStatus) {
     return;
   }
 
-  try { st.saveState?.(); } catch (_) {}
+  try { st.saveState?.('import trace'); } catch (_) {}
 
   const sk = addSketch(st, name || 'Traced');
   activateSketch(st, sk.id);

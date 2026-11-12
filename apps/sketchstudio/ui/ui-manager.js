@@ -217,7 +217,7 @@ export function setupUI(state){
     constructToggle.addEventListener('click', () => {
       // If shapes are selected, toggle their construction state (undoable)
       if (state.selectedShapes && state.selectedShapes.size > 0) {
-        try{ state.beginUndoGroup(); }catch(_){ }
+        try{ state.beginUndoGroup('toggle construction'); }catch(_){ }
         for (const sid of state.selectedShapes) {
           const s = state.shapes.find(x => x.id === sid);
           if (s) s.isConstruction = !s.isConstruction;

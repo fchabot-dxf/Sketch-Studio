@@ -926,8 +926,8 @@ export function handleSelectionPointerUp(e, svg, state) {
                   if (snap.type !== 'grid') {
                       try{ dbg.log('selection', '[selection-tools] creating snap-based constraint (from state.activeSnap)', { dragIds: state.drag && state.drag.jointIds, snap, lockedTo: state.drag && state.drag.lockedTo }); }catch(_){ }
                       try{
-                          state.beginUndoGroup();
-                          state.saveState();
+                          state.beginUndoGroup('drag snap constraint');
+                          state.saveState('drag snap constraint');
                           const dragged = state.drag.jointIds || [];
                           const primary = state.drag.id;
                           // Filter primary out of excludeJoints to avoid blocking the constraint if applySnapConstraint checks source against exclude list
@@ -997,7 +997,7 @@ export function handleSelectionPointerUp(e, svg, state) {
                   // Apply inference constraints even when no snap lock was present (commit on release)
                   try{
                       if (state.inference && canApplyInference(state, state.drag && state.drag.id, state.inference, { full: true })) {
-                          try{ state.beginUndoGroup(); state.saveState(); }catch(_){ }
+                          try{ state.beginUndoGroup('drag inference constraint'); state.saveState('drag inference constraint'); }catch(_){ }
                           const primary = state.drag && state.drag.id;
                           const dir = state.inference.type;
                           const shapesToConstrain = state.shapes.filter(s => s.type === 'line' && Array.isArray(s.joints) && s.joints.includes(primary));
@@ -1054,7 +1054,7 @@ export function handleSelectionPointerUp(e, svg, state) {
             if (!state.activeSnap) {
                 try{
                     if (state.inference && canApplyInference(state, state.drag && state.drag.id, state.inference, { full: true })) {
-                        try{ state.beginUndoGroup(); state.saveState(); }catch(_){ }
+                        try{ state.beginUndoGroup('drag inference constraint'); state.saveState('drag inference constraint'); }catch(_){ }
                         const primary = state.drag && state.drag.id;
                         const dir = state.inference.type;
                         const shapesToConstrain = state.shapes.filter(s => s.type === 'line' && Array.isArray(s.joints) && s.joints.includes(primary));

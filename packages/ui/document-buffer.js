@@ -136,7 +136,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
   async function openDesign(id) { await flush(); return load(await store.open(id)); }
   async function newDesign(name) { await flush(); return load(await store.newDesign(name || 'Untitled', { app })); }
   async function saveAs(name) { await flush(); const p = await store.saveAs(name, { app, fromId: boundId || undefined }); boundId = p.id; return p; }
-  async function saveFile(seam = browserFileSeam) { await flush(); return store.exportFile(boundId || undefined, seam); }
+  /** Save a design to a file: the bound (current) design, or `designId` (a design picked in the project manager). */
+  async function saveFile(seam = browserFileSeam, designId) { await flush(); return store.exportFile(designId || boundId || undefined, seam); }
   async function openFile(seam = browserFileSeam) {
     await flush();
     const p = await store.importFile(seam, { app });

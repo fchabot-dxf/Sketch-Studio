@@ -3,9 +3,9 @@ import { Definitions } from '#core/solver/definitions.js';
 import { createNewtonSolver } from '#core/solver/engine.js';
 
 // GUARD (task 511, audit F6): the DOF / redundancy analysis (engine.jointFreedom, rankRowRedundant) reads the nullspace of the
-// analysis Jacobian, _assemble(x, { analysis: true }). For EVERY constraint type in Definitions that Jacobian must equal a central
+// solver Jacobian, _assemble(x). For EVERY constraint type in Definitions that Jacobian must equal a central
 // finite difference of the residual on EVERY free column (point AND line endpoints), or the nullity lies about freedom.
-// (The solver's own step may keep a one-sided row, e.g. point_on_line; that is not what the nullity reads.)
+// (The solver step and the nullity read the SAME rows: there is no one-sided row any more.)
 // Tolerance: max |analytic - finite difference| < TOL per entry.
 const TOL = 1e-4, EPS = 1e-6;
 const EXEMPT = { mouse_spring: 'transient drag spring, never analysed', mouseSpring: 'alias of mouse_spring' };
@@ -43,7 +43,7 @@ for (const key of Object.keys(Definitions)) {
   assert.ok(c, `Definitions key "${key}" has no case in this guard: add one or EXEMPT it with a reason`);
   const solver = createNewtonSolver(joints(), [{ ...c }], SH(), { maxIter: 1 });
   const x0 = solver._pack(), n = x0.length;
-  const asm = solver._assemble(x0, { analysis: true });
+  const asm = solver._assemble(x0);
   let worst = 0;
   for (let k = 0; k < n; k++) {
     const xp = Float64Array.from(x0), xm = Float64Array.from(x0); xp[k] += EPS; xm[k] -= EPS;
@@ -51,7 +51,7 @@ for (const key of Object.keys(Definitions)) {
     for (let i = 0; i < asm.m; i++) worst = Math.max(worst, Math.abs((rp[i] - rm[i]) / (2 * EPS) - asm.J[i * n + k]));
   }
   assert.ok(asm.m > 0, `${key}: built no rows`);
-  assert.ok(worst < TOL, `${key}: analysis Jacobian differs from finite differences by ${worst} (tolerance ${TOL})`);
+  assert.ok(worst < TOL, `${key}: Jacobian differs from finite differences by ${worst} (tolerance ${TOL})`);
   console.log(`ok ${key} (rows ${asm.m}, max diff ${worst.toExponential(1)})`);
   checked++;
 }

@@ -14,7 +14,7 @@ const KNOWN = {
   'plate/E every dimension edits cleanly': 'F2: the hole radius edit is refused because equal(circle,circle) is checked but never solved',
   'plate/X equal-radius on two circles drags the radius': 'F2',
   F2: 'equal on circles',
-  F5: 'order-dependent tangent refusal', F8: 'shared-corner outline',
+  F8: 'shared-corner outline',
 };
 // Edits that are MATHEMATICALLY impossible and must be refused cleanly (EXPECTED): the isosceles triangle's angle dimension reads 180 - base angle,
 // so 0.8 x 110 = 88 would need a base angle over 90 degrees (the apex at infinity); the refusal must leave the geometry untouched.

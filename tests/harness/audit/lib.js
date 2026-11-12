@@ -528,7 +528,7 @@ export async function runDrawing(drawing, { oracleOn = true, buildOpts = {} } = 
 export function fdJacobian(S) {
   const nonDriven = S.state.constraints.filter(c => c && !isDriven(c) && c.type !== 'mouse_spring');
   const solver = createNewtonSolver(S.state.joints, S.state.constraints, S.state.shapes, { maxIter: ITER, tol: 1e-6, lambdaInit: 1e-3, lambdaUp: 10, lambdaDown: 0.1 });
-  const x0 = solver._pack(), n = x0.length, asm = solver._assemble(x0, { analysis: true }), m = asm.m;
+  const x0 = solver._pack(), n = x0.length, asm = solver._assemble(x0), m = asm.m;
   const owners = [];
   for (const c of nonDriven) { const k = (c.type === 'coincident' || c.type === 'midpoint') ? 2 : 1; for (let i = 0; i < k; i++) owners.push(c); }
   const eps = 1e-6, Jfd = [];
@@ -542,7 +542,7 @@ export function fdJacobian(S) {
   const mapped = owners.length === m;
   for (let i = 0; i < m; i++) {
     let err = 0; for (let k = 0; k < n; k++) err = Math.max(err, Math.abs(Jfd[i][k] - asm.J[i * n + k]));
-    const t = mapped ? owners[i].type + (owners[i].mutual ? '(mutual)' : '') : 'row' + i;
+    const t = mapped ? owners[i].type : 'row' + i;
     byType.set(t, Math.max(byType.get(t) || 0, err));
   }
   // nullity from the finite-difference rows: Gaussian elimination on row-normalised rows

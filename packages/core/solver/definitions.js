@@ -116,27 +116,13 @@ export const Definitions = {
       const wx = px - ax, wy = py - ay;
       const denom = Math.hypot(ux, uy) || 1e-12;
 
-      // OPT-IN `mutual`: the point AND both line endpoints take part (full derivative of r = (w x u)/|u|).
-      // Used by a fillet's virtual-sharp joint V, which must FOLLOW its two trimmed lines when the radius
-      // is edited. Without the flag the legacy point-only form below is byte-identical.
-      if (params.mutual || params.fullDerivative) {
-        const r = (wx * uy - wy * ux) / denom;
-        const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
-        outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
-        outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
-        outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
-        return;
-      }
-      const inv = 1 / (denom * denom * denom); // used for derivative of 1/denom
-
-      // d/dP ( (P-A) x U / |U| ) => ( uy, -ux ) / |U|
-      outRow[pi*2 + 0] = uy / denom; outRow[pi*2 + 1] = -ux / denom;
-
-      // For point-on-line snapping we prefer to move the POINT (params.joints[0])
-      // rather than moving the line endpoints. Set derivatives only for the point
-      // so the solver updates the point position instead of altering the shape.
-      outRow[ai*2 + 0] = 0; outRow[ai*2 + 1] = 0;
-      outRow[bi*2 + 0] = 0; outRow[bi*2 + 1] = 0;
+      // FULL derivative of r = (w x u)/|u|: the point AND both line endpoints take part, so a point on a line that can still move
+      // can move the line (like Fusion), and the DOF analysis reads the same rows the solver steps with.
+      const r = (wx * uy - wy * ux) / denom;
+      const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
+      outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
+      outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
+      outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
     }
   },
 
@@ -237,15 +223,13 @@ export const Definitions = {
       const bx = positions[ji[1]*2], by = positions[ji[1]*2+1];
       const ux = bx - ax, uy = by - ay;
       const denom = Math.hypot(ux, uy) || 1e-12;
-      // For robustness we move the extra points (Ci) onto the baseline AB; set derivatives only on Ci
       for (let r = 0; r < ji.length - 2; ++r) {
         const ci = ji[2 + r];
         // ∂error/∂Cx = -uy/denom ; ∂error/∂Cy = ux/denom
         outRows[r][ci*2 + 0] = -uy / denom;
         outRows[r][ci*2 + 1] = ux / denom;
-        if (params.fullDerivative) {
-          // ANALYSIS build only (engine _assemble opts.analysis): the full derivative of r = (u x w)/|u|, so the baseline's own
-          // freedom is not hidden. The solver step keeps the one-sided row above.
+        {
+          // the full derivative of r = (u x w)/|u| too: the baseline's own freedom is not hidden and the baseline can move
           const cx = positions[ci*2], cy = positions[ci*2+1];
           const wx = cx - ax, wy = cy - ay;
           const rr = (ux * wy - uy * wx) / denom;

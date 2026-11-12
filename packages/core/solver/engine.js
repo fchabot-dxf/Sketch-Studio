@@ -148,11 +148,7 @@ export class NewtonSolver {
   }
 
   // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints)
-  // opts.analysis = true: DOF/rank ANALYSIS build. A one-sided row (point_on_line, collinear move only the point so the SOLVER
-  // keeps the line's shape) is differentiated in FULL here (params.fullDerivative), so the line's own freedom is not hidden.
-  // The solver's step (analysis unset) keeps the one-sided row.
-  _assemble(x, opts) {
-    const analysis = !!(opts && opts.analysis);
+  _assemble(x) {
     const n = x.length;
     const positions = this._positionsFromVector(x);
 
@@ -268,7 +264,6 @@ export class NewtonSolver {
 
       // Normalize parameters: map joint ids -> indices in densePositions
       const params = { ...c };
-      if (analysis) params.fullDerivative = true;
       // Prefer explicit `c.joints` when present (tests may pass joint-index arrays)
       params.joints = (c.joints || []).map(id => jointIndexMap.get(id));
 
@@ -526,9 +521,9 @@ export class NewtonSolver {
     let redundant;
     try {
       this.constraints = basisCons;
-      const basisRows = this._rowsOf(this._assemble(x0, { analysis: true }));
+      const basisRows = this._rowsOf(this._assemble(x0));
       this.constraints = basisCons.concat([candidate]);
-      const candRows = this._rowsOf(this._assemble(x0, { analysis: true })).slice(basisRows.length);
+      const candRows = this._rowsOf(this._assemble(x0)).slice(basisRows.length);
       redundant = candRows.length > 0 && !this._rowsRaiseRank(basisRows, candRows, n);
     } finally {
       this.constraints = allC;
@@ -834,7 +829,7 @@ export class NewtonSolver {
       let rows;
       try {
         this.constraints = allC.filter(c => c && !c.isDriven && !c.driven && c.type !== 'mouse_spring');
-        const asm = this._assemble(x0, { analysis: true });
+        const asm = this._assemble(x0);
         rows = this._rowsOf(asm);
       } finally {
         this.constraints = allC;

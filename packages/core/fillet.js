@@ -262,7 +262,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   joints.set(jCenter, { x: centerPt.x, y: centerPt.y, fixed: false });
   joints.set(jTA, { x: tA.x, y: tA.y, fixed: false });
   joints.set(jTB, { x: tB.x, y: tB.y, fixed: false });
-  // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by `mutual` pointOnLine so it
+  // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by pointOnLine so it
   // follows them when the radius changes; overall dimensions attach to it. Not a shape => loops/export ignore it.
   joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
 
@@ -322,8 +322,8 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 
   // V is held on both trimmed lines. Pushed BEFORE removeOrphanJoints, which would otherwise delete V (it is
   // referenced by constraints only, not by a shape).
-  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineA.shape.id, mutual: true });
-  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineB.shape.id, mutual: true });
+  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineA.shape.id });
+  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineB.shape.id });
 
   // Delete the old corner cluster joints
   for (const jid of cluster) {

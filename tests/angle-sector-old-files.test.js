@@ -26,6 +26,7 @@ const mods = {
 };
 const { outcomesOf } = await import('./harness/angle-legacy.js');
 const { measureResidual } = await import('../packages/core/constraint-verifier.js');
+const { serializeDocument, validateDocument } = await import('../packages/core/document.js');
 
 const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/legacy-angles.json', import.meta.url), 'utf8'));
 const TOL = 1e-9;
@@ -107,11 +108,17 @@ for (const d of fx.docs) {
   worst.jitter = Math.max(worst.jitter, wj);
   docs++;
 }
-// the conversion holds the loaded geometry exactly (the row is satisfied where the old one was) and drops `supplement`
+// the conversion holds the loaded geometry exactly (the row is satisfied where the old one was) and drops `supplement`; every document is
+// loaded as written (version 2, the owner's version 1) AND as the other old version (1 <-> 2): both load and convert the same, and the
+// next save is version 3 (DOCUMENT_VERSION, task 553: an older build refuses it instead of re-solving its angles modulo 180)
+const versions = {};
 {
-  for (const d of fx.docs) {
+  for (const d of fx.docs) for (const version of [d.doc.version, d.doc.version === 1 ? 2 : 1]) {
     const state = mods.createSketchState((() => { const e = mods.createEngine(null); e.init(); return e; })(), {});
-    quiet(() => mods.deserializeDocument(JSON.parse(JSON.stringify(d.doc)), state));
+    const res = quiet(() => mods.deserializeDocument({ ...JSON.parse(JSON.stringify(d.doc)), version }, state));
+    assert(res.ok, `${d.name} as version ${version}: ${res.reason}`);
+    versions[version] = (versions[version] || 0) + 1;
+    assert.strictEqual(serializeDocument(state).version, 3, `${d.name}: saved as version 3`);
     for (const c of state.constraints.filter((x) => x.type === 'angle')) {
       assert(!('supplement' in c), `${d.name}: supplement dropped`);
       if (c.isDriven || c.driven) { assert(!('sector' in c), `${d.name}: a reference stores no sector`); continue; }
@@ -120,6 +127,8 @@ for (const d of fx.docs) {
     }
   }
 }
+assert(versions[1] === fx.docs.length && versions[2] === fx.docs.length && fx.docs.some((d) => d.doc.version === 1) && fx.docs.some((d) => d.doc.version === 2), `version 1 and 2 documents load and convert: ${JSON.stringify(versions)}`);
+assert(!validateDocument({ version: 4, geometry: {} }).ok && validateDocument({ version: 3, geometry: {} }).ok, 'version 3 is this build; a newer one is refused');
 assert(docs === fx.docs.length && fx.docs.some((d) => d.name === 'owner-trapezoid-angle') && fx.docs.some((d) => /d4-triangle/.test(d.name)), 'every recorded document checked');
 // the second known difference (6 edits, pinned): two SEPARATE lines (no shared vertex) whose 10 degree dimension sits in the -u/-v sector,
 // edited to 3: the crossing point moves away and main's label, left where it was, ended up nearer the +u/+v sector, so main drew that one

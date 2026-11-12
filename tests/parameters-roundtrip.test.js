@@ -83,7 +83,7 @@ const expected = build();
 const doc1 = serializeDocument(state, { hosts: { test: { x: 1 } } });
 const json1 = JSON.stringify(doc1);
 {
-  assert(doc1.version === DOCUMENT_VERSION && DOCUMENT_VERSION === 2, 'always the new version (O2)');
+  assert(doc1.version === DOCUMENT_VERSION && DOCUMENT_VERSION === 3, 'always the new version (O2)');
   eq(doc1.geometry.parameters, PARAMS, 'parameters are in the document');
   const originals = state.constraints.filter((x) => x.type === 'distance' || x.type === 'angle').map((c) => JSON.parse(JSON.stringify(c)));
   // TASK 553: a DRIVING angle keeps the sector it was created with; a reference one stores none (it measures the sector under its label)

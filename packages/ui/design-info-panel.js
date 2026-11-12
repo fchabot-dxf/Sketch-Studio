@@ -113,6 +113,15 @@ function failingConstraints(engine, cons) {
   return new Set(cons.filter((c) => !(c.isDriven || c.driven) && ((c.id != null && ids.has(c.id)) || keys.has(constraintKey(c)))));
 }
 
+// TASK 485: picking a dimension / constraint in a list selects the CONSTRAINT, not the geometry that was selected before (`extend` = Shift
+// keeps it): otherwise Delete removed the constraint AND that geometry. Shared by this panel and the Parameters window (TASK 535-4).
+export function toggleConstraintSelection(state, c, extend = false) {
+  if (!extend) { if (state.selectedShapes instanceof Set) state.selectedShapes.clear(); if (state.selectedJoints instanceof Set) state.selectedJoints.clear(); }
+  if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
+  if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
+  else state.selectedConstraints.add(c);
+}
+
 /**
  * createDesignInfoPanel({ state, engine }) → { el, render(container), refresh, destroy }
  *   Reads state.constraints / state.selectedConstraints / state.joints / state.shapes (the shared sketch state).
@@ -156,12 +165,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     row.addEventListener('mouseenter', () => { hoveredByPanel = c; state.hoveredConstraint = c; });
     row.addEventListener('mouseleave', () => { if (state.hoveredConstraint === c) state.hoveredConstraint = null; if (hoveredByPanel === c) hoveredByPanel = null; });
     row.addEventListener('click', (ev) => {
-      // TASK 485: picking a dimension / constraint in the list selects the CONSTRAINT, not the geometry that was selected before (Shift extends):
-      // otherwise Delete removed the constraint AND that geometry.
-      if (!(ev && ev.shiftKey)) { if (state.selectedShapes instanceof Set) state.selectedShapes.clear(); if (state.selectedJoints instanceof Set) state.selectedJoints.clear(); }
-      if (!(state.selectedConstraints instanceof Set)) state.selectedConstraints = new Set();
-      if (state.selectedConstraints.has(c)) state.selectedConstraints.delete(c);
-      else state.selectedConstraints.add(c);
+      toggleConstraintSelection(state, c, !!(ev && ev.shiftKey));
       refresh(); // update the row highlight; the canvas auto-highlights via the renderer reading the Set
     });
     return row;

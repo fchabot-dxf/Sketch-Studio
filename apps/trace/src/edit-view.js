@@ -39,7 +39,7 @@ export function ensureEditMount() {
 
   // Mount the shared tool ribbon (shared CREATE + INSPECT + CONSTRAIN groups)
   if (ribbonEl && !ribbonMounted) {
-    const ribbon = createToolRibbon({ state: designController.state, extraGroups: [] });
+    const ribbon = createToolRibbon({ state: designController.state, extraGroups: [], parameters: false }) // O14: Trace has no Parameters window;
     ribbonEl.appendChild(ribbon.el);
     ribbonMounted = true;
   }

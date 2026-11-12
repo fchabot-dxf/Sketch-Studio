@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('#ui/input-handlers/selection-tools.js');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
@@ -12,7 +13,7 @@
     selectedConstraints: new Set(),
     beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
     endUndoGroup: () => {},
-    saveState: () => {},
+    ...undoStub(),
     currentTool: 'select'
   };
 

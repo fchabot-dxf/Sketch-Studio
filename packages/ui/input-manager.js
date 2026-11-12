@@ -842,7 +842,12 @@ function handlePointerUp(e, svg, state) {
     // RECOVERY: If snap was lost just now (e.g. < 200ms ago), recover it.
     // This handles "release jitter" where the mouse slips slightly while clicking.
     // We apply this globally so ALL tools (Line, Rect, Select) benefit from sticky snapping.
-    if (!state.snapTarget && state.lastLockedSnap && (Date.now() - (state.lastLockedTime || 0) < 200)) {
+    // A slip, not a move (task 546): the release must still be within the snap's release (hysteresis) distance of the lost
+    // point. A fast drag AWAY from a snapped press point (press on the origin, flick, release in < 200 ms) is not jitter:
+    // recovering there put the drag's end back on its start, so a polygon/circle got a zero radius and drew nothing.
+    const lostSnapScreen = state.lastLockedSnap && state.lastLockedSnap.pt ? worldToScreen(svg, state.lastLockedSnap.pt) : null;
+    const releaseIsSlip = !!lostSnapScreen && isWithinMagnet(Math.hypot(screenX - lostSnapScreen.x, screenY - lostSnapScreen.y), 'snap', true);
+    if (!state.snapTarget && releaseIsSlip && (Date.now() - (state.lastLockedTime || 0) < 200)) {
         state.snapTarget = state.lastLockedSnap;
         state.activeSnap = state.snapTarget;
         try{ dbg.log('input', '[input-manager] recovered lost snap on pointerUp'); }catch(_){}

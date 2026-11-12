@@ -1,6 +1,6 @@
 // TASK 538 -- a RIM body drag (circle, arc): the radius changes and the CENTRE stays wherever the constraints allow it (owner 2026-11-12,
 // like Fusion); the centre moves only when the pull cannot be followed with it kept (definitions.js BODY_POINTS rim entry: prefersHold
-// [centre], slides; engine.bodyDragTarget). Through the app's real pointer path (handleSelectionPointerDown / Move / Up) plus the app's
+// [centre], the rim point on the cursor's ray from the centre; engine.bodyDragTarget). Through the app's real pointer path (handleSelectionPointerDown / Move / Up) plus the app's
 // per-frame engine.solve after every move (apps/sketchstudio/main.js loop()), as tests/harness/fusion-oracle/drag-cells.js runOurs does.
 // After every drag: the temporary hold left nothing behind (no `fixed` flag, no drag target) and the document differs from the pre-drag
 // one only in coordinates / radii; every constraint and dimension holds.

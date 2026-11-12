@@ -98,14 +98,19 @@ export const Definitions = {
       return cross / denom;
     },
     computeJacobian: (params, positions, outRow) => {
-      // Point-on-circle/arc: move only the point along the radial direction.
+      // Point-on-circle/arc: r = |P - C| - R, the full derivative (the centre takes part, so a circle can move to meet its point).
       if (params.onCircle) {
         const pi = params.joints[0], ci = params.joints[1];
         const dx = positions[pi*2] - positions[ci*2];
         const dy = positions[pi*2+1] - positions[ci*2+1];
         const d = Math.hypot(dx, dy) || 1e-12;
         outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
-        outRow[ci*2 + 0] = 0; outRow[ci*2 + 1] = 0;
+        outRow[ci*2 + 0] = -dx / d; outRow[ci*2 + 1] = -dy / d;
+        if (typeof params.rimJoint === 'number') {
+          const ri = params.rimJoint, rx = positions[ri*2] - positions[ci*2], ry = positions[ri*2+1] - positions[ci*2+1], rd = Math.hypot(rx, ry) || 1e-12;
+          outRow[ri*2 + 0] = -rx / rd; outRow[ri*2 + 1] = -ry / rd;
+          outRow[ci*2 + 0] += rx / rd; outRow[ci*2 + 1] += ry / rd;
+        }
         return;
       }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
@@ -116,27 +121,13 @@ export const Definitions = {
       const wx = px - ax, wy = py - ay;
       const denom = Math.hypot(ux, uy) || 1e-12;
 
-      // OPT-IN `mutual`: the point AND both line endpoints take part (full derivative of r = (w x u)/|u|).
-      // Used by a fillet's virtual-sharp joint V, which must FOLLOW its two trimmed lines when the radius
-      // is edited. Without the flag the legacy point-only form below is byte-identical.
-      if (params.mutual) {
-        const r = (wx * uy - wy * ux) / denom;
-        const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
-        outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
-        outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
-        outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
-        return;
-      }
-      const inv = 1 / (denom * denom * denom); // used for derivative of 1/denom
-
-      // d/dP ( (P-A) x U / |U| ) => ( uy, -ux ) / |U|
-      outRow[pi*2 + 0] = uy / denom; outRow[pi*2 + 1] = -ux / denom;
-
-      // For point-on-line snapping we prefer to move the POINT (params.joints[0])
-      // rather than moving the line endpoints. Set derivatives only for the point
-      // so the solver updates the point position instead of altering the shape.
-      outRow[ai*2 + 0] = 0; outRow[ai*2 + 1] = 0;
-      outRow[bi*2 + 0] = 0; outRow[bi*2 + 1] = 0;
+      // FULL derivative of r = (w x u)/|u|: the point AND both line endpoints take part, so a point on a line that can still move
+      // can move the line (like Fusion), and the DOF analysis reads the same rows the solver steps with.
+      const r = (wx * uy - wy * ux) / denom;
+      const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
+      outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
+      outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
+      outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
     }
   },
 
@@ -237,12 +228,20 @@ export const Definitions = {
       const bx = positions[ji[1]*2], by = positions[ji[1]*2+1];
       const ux = bx - ax, uy = by - ay;
       const denom = Math.hypot(ux, uy) || 1e-12;
-      // For robustness we move the extra points (Ci) onto the baseline AB; set derivatives only on Ci
       for (let r = 0; r < ji.length - 2; ++r) {
         const ci = ji[2 + r];
         // ∂error/∂Cx = -uy/denom ; ∂error/∂Cy = ux/denom
         outRows[r][ci*2 + 0] = -uy / denom;
         outRows[r][ci*2 + 1] = ux / denom;
+        {
+          // the full derivative of r = (u x w)/|u| too: the baseline's own freedom is not hidden and the baseline can move
+          const cx = positions[ci*2], cy = positions[ci*2+1];
+          const wx = cx - ax, wy = cy - ay;
+          const rr = (ux * wy - uy * wx) / denom;
+          const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
+          outRows[r][ji[0]*2 + 0] = ((-wy + uy) - rr * dd(-1, 0)) / denom; outRows[r][ji[0]*2 + 1] = ((-ux + wx) - rr * dd(0, -1)) / denom;
+          outRows[r][ji[1]*2 + 0] = ((wy) - rr * dd(1, 0)) / denom;        outRows[r][ji[1]*2 + 1] = ((-wx) - rr * dd(0, 1)) / denom;
+        }
       }
     }
   },

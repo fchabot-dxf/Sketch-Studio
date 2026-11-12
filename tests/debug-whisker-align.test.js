@@ -17,8 +17,8 @@
 
   // Build a slanted line (0,0) -> (10,10) and a joint constrained onto that line at (5,5)
   const joints = new Map();
-  joints.set('a', { x: 0, y: 0 });
-  joints.set('b', { x: 10, y: 10 });
+  joints.set('a', { x: 0, y: 0, fixed: true });
+  joints.set('b', { x: 10, y: 10, fixed: true });
   joints.set('j1', { x: 5, y: 5 });
 
   const shapes = [ { id: 'L1', type: 'line', joints: ['a','b'] } ];

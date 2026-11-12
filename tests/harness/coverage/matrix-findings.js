@@ -73,24 +73,6 @@ export const NEW_FINDINGS = [
     },
   },
   {
-    id: 'NEW-4', severity: 'MEDIUM', row: 'dim-angle-xy',
-    title: 'a REFERENCE angle dimension comes back as a DRIVING one after undo (its driven flag is lost; redo restores through the same function, not separately verified)',
-    diagnosis: 'packages/core/constraints.js:275-283 createConstraint(ANGLE) builds {type, shapes, value, offset, glyphPos} and drops isDriven / driven / drivenReason (the distance and line-line branches carry them, :226-250). Undo restores constraints through addConstraintObject -> addConstraint -> createConstraint, so the reference becomes a driver and the DOF drops.',
-    proposal: 'carry isDriven / driven / drivenReason in the ANGLE branch like the line-line distance does; test: a reference angle survives saveState + undo with the same nullity.',
-    async run() {
-      const S = L.newSketch(); const st = S.state;
-      const X = build(S, 'L', 100, 100, [60, 20]), Y = build(S, 'S', 220, 190, [30, 70]);
-      applyVariant(S, 'shared', X, Y); S.engine.solve(L.ITER);   // a line and a polygon side sharing a joint: the angle is kept as a reference (F4 over-constraint path)
-      const c = ConstraintManager.createConstraint(st, 'angle', { shapes: [X.shape, Y.shape], value: 60 });
-      S.engine.solve(L.ITER);
-      const n0 = L.nullity(S);
-      st.saveState('x'); deleteConstraints(st, [c]); st.undo(); S.engine.solve(L.ITER);
-      const back = st.constraints.find(k => k && k.type === 'angle');
-      const flag = !!(back && (back.isDriven || back.driven));
-      return { ok: !!back && flag && L.nullity(S) === n0, observed: `reference angle created isDriven=${!!(c.isDriven || c.driven)} nullity ${n0}; after delete + undo: isDriven=${flag} nullity ${L.nullity(S)}` };
-    },
-  },
-  {
     id: 'NEW-5', severity: 'HIGH', row: 'dim-line-line',
     title: 'a line-to-line dimension made with the Dimension tool is born as a REFERENCE (ERR-CSOLVE-02) with a NEGATIVE value, in one of the two click orders',
     diagnosis: 'dimension-tool.js:437 passes value: perpendicularDistance(j1a, j2a, j2b), which is SIGNED (geometry.js:122-130 uses a normal vector); definitions.js:32 compares Math.abs(signed) - value, so a negative value is a conflict and the sandbox demotes it. Which order breaks depends on which side line 2 is on.',
@@ -119,12 +101,5 @@ export const NEW_FINDINGS = [
     diagnosis: 'the radius of an arc is a joint distance the solver must move; from the current pose even 500 iterations leave the residual at 53 (circle 15 / arc 20 with the centres dimensioned 151 apart: tangent needs R 136). Same family as F5 (feasibility judged from the pose) but not a sandbox-burst issue: a forced add does not converge either.',
     proposal: 'seed the arc radius from the tangency (like seedFilletForRadius does for fillets) or verify with a continuation; test: the tangent in this repro is accepted.',
     async run() { const r = await runCell(ROWS.find(x => x.id === 'tangent'), ['O', 'A'], 'dimmed'); return { ok: r.pass, observed: `tangent circle/arc, centres dimensioned 151 apart: accepted=${r.accepted} errors=${r.errors.join(',')} oracleFeasible=${r.oracleFeasible}` }; },
-  },
-  {
-    id: 'NEW-7', severity: 'LOW', row: 'collinear',
-    title: 'collinear removes 1 DOF in the Design panel (and in the finite-difference count) where PlaneGCS removes 2, for two polygon sides with an aligned dimension between their start joints',
-    diagnosis: 'UNVERIFIED root: collinear is one-sided (constraint-manager.js anchors the first line; the solver only moves the second line points), so the DOF the panel reads may not be the DOF of the geometric constraint. Same family as F6.',
-    proposal: 'check the one-sided collinear rows in jointFreedom the way F6 proposes for pointOnLine, then re-run this cell.',
-    async run() { const r = await runCell(ROWS.find(x => x.id === 'collinear'), ['S', 'S'], 'dimmed'); return { ok: r.pass, observed: `collinear polygon sides, pre-dimensioned: panel delta ${r.delta}, finite-difference delta ${r.fdDelta}, PlaneGCS delta ${r.oracleDelta}, expected ${-r.nominal}` }; },
   },
 ];

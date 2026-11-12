@@ -13,9 +13,8 @@ import { compareWithFixture } from './harness/audit/fixture-compare.js';
 const KNOWN = {
   'plate/E every dimension edits cleanly': 'F2: the hole radius edit is refused because equal(circle,circle) is checked but never solved',
   'plate/X equal-radius on two circles drags the radius': 'F2',
-  'triangle/F delete a dimension: nullity rises by exactly 1': 'F6: nullity stays 0 (one-sided pointOnLine Jacobian)',
-  F2: 'equal on circles', F3: 'clockwise angle dimension',
-  F5: 'order-dependent tangent refusal', F6: 'DOF lie with non-mutual pointOnLine', F8: 'shared-corner outline',
+  F2: 'equal on circles',
+  F8: 'shared-corner outline',
 };
 // Edits that are MATHEMATICALLY impossible and must be refused cleanly (EXPECTED): the isosceles triangle's angle dimension reads 180 - base angle,
 // so 0.8 x 110 = 88 would need a base angle over 90 degrees (the apex at infinity); the refusal must leave the geometry untouched.
@@ -31,8 +30,8 @@ const NO_EFFECT = {
 };
 // Steps of the recipe the app turns into a reference (the F1 bug), by drawing.
 const DEMOTED = { plate: [], trapezoid: [], bracket: [], triangle: [], polygon: [] };
-// Finite-difference vs analytic Jacobian: rows whose analytic derivative is incomplete (non-mutual pointOnLine moves only the point).
-const JACOBIAN_ERRORS = { plate: [], trapezoid: [], bracket: [], triangle: ['pointOnLine'], polygon: [] };
+// Finite-difference vs analysis Jacobian (_assemble opts.analysis): rows whose derivative is incomplete (none since task 511).
+const JACOBIAN_ERRORS = { plate: [], trapezoid: [], bracket: [], triangle: [], polygon: [] };
 
 const seen = new Set();
 let failures = 0;

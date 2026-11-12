@@ -22,8 +22,8 @@
   // Collinear (joint-based): third joint should be projected to the AB line
   {
     const joints = new Map();
-    joints.set('a', { x: 0, y: 0, fixed: false });
-    joints.set('b', { x: 10, y: 0, fixed: false });
+    joints.set('a', { x: 0, y: 0, fixed: true });
+    joints.set('b', { x: 10, y: 0, fixed: true });
     joints.set('c', { x: 5, y: 2, fixed: false });
     const constraints = [{ type: CONSTRAINT_TYPES.COLLINEAR, joints: ['a','b','c'] }];
     const solver = createNewtonSolver(joints, constraints, [], { maxIter: 30, tol: 1e-9 });
@@ -36,8 +36,8 @@
   // Collinear (shape-based): both joints of second line should snap onto first line
   {
     const joints = new Map();
-    joints.set('a', { x: 0, y: 0, fixed: false });
-    joints.set('b', { x: 10, y: 0, fixed: false });
+    joints.set('a', { x: 0, y: 0, fixed: true });
+    joints.set('b', { x: 10, y: 0, fixed: true });
     joints.set('c', { x: 0, y: 1, fixed: false });
     joints.set('d', { x: 10, y: 1, fixed: false });
     const shapes = [ { id: 'l1', type: 'line', joints: ['a','b'] }, { id: 'l2', type: 'line', joints: ['c','d'] } ];

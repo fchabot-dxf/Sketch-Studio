@@ -10,7 +10,7 @@ export const RECIPE = [
   { label: 'A at the origin', type: 'coincident', joints: ['A', origin] },
   { label: 'base AB horizontal', type: 'horizontal', joints: ['A', 'B'] },
   { label: 'equal sides CA = BC', type: 'equal', shapes: ['lCA', 'lBC'] },
-  { label: 'interior angle at A = 70 (the dimension reads the angle between the directed lines AB and CA: 180 - 70)', type: 'angle', shapes: ['lCA', 'lAB'], value: 110, why: 'shape order: the signed angle row needs the CCW pair; [lAB,lCA] collapses the triangle (finding BUG-3)' },
+  { label: 'interior angle at A = 70 (the dimension reads the angle between the directed lines AB and CA: 180 - 70)', type: 'angle', shapes: ['lAB', 'lCA'], value: 110 },
   { label: 'M = midpoint of the base', type: 'midpoint', joints: ['A', 'B', 'M'] },
   { label: 'circle centre on the axis C-M', type: 'pointOnLine', joint: 'I', shape: 'axis' },
   { label: 'circle tangent to AB', type: 'tangent', line: 'lAB', circle: 'ring' },

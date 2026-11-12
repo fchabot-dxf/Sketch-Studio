@@ -297,6 +297,8 @@ export class NewtonSolver {
             params.radius = (typeof shape.radius === 'number')
               ? shape.radius
               : (shape.joints.length >= 2 ? (function(){ const ci = jointIndexMap.get(shape.joints[0]) * 2; const ri = jointIndexMap.get(shape.joints[1]) * 2; const dx = densePositions[ri] - densePositions[ci]; const dy = densePositions[ri+1] - densePositions[ci+1]; return Math.hypot(dx, dy); })() : 0);
+            // a LIVE radius (arc with no stored radius) is |rim - centre|: the rim joint takes part in the row
+            if (typeof shape.radius !== 'number' && shape.joints.length >= 2) params.rimJoint = jointIndexMap.get(shape.joints[1]);
             params.onCircle = true;
           }
         }

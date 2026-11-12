@@ -153,7 +153,6 @@ export function createConstraint(type, params) {
         case CONSTRAINT_TYPES.POINT_ON_LINE:
             if (!params.joint || !params.shape) return null;
             const pol = { type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: params.joint, shape: params.shape };
-            if (params.mutual) pol.mutual = true; // opt-in: line endpoints also move (fillet virtual-sharp joint)
             return pol;
             
         case CONSTRAINT_TYPES.HORIZONTAL:
@@ -279,6 +278,9 @@ export function createConstraint(type, params) {
                     offset: params.offset || SolverConfig.ANGLE_OFFSET || 40,
                     glyphPos: params.glyphPos
                 };
+                // carry the reference flags (+ reason) like the distance branches, so a reference angle stays a reference through undo
+                if (params.isDriven || params.driven) { angleObj.isDriven = true; angleObj.driven = true; }
+                if (params.drivenReason) angleObj.drivenReason = params.drivenReason;
                 if (params.labelPos) angleObj.labelPos = { ...params.labelPos };
                 return angleObj;
             }

@@ -15,7 +15,8 @@
 
     // Test joint->line point-on-line
     // Create a line shape
-    state.joints.set('la', { x: 0, y: 0 }); state.joints.set('lb', { x: 100, y: 0 });
+    // the line's endpoints are pinned: a point on a FREE line moves the line too (task 511), this test is about the projection
+    state.joints.set('la', { x: 0, y: 0, fixed: true }); state.joints.set('lb', { x: 100, y: 0, fixed: true });
     const sId = 's_line1'; state.shapes.push({ id: sId, type: 'line', joints: ['la','lb'] });
     state.joints.set('j3', { x: 50, y: 0 });
 

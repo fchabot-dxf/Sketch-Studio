@@ -542,7 +542,7 @@ export function fdJacobian(S) {
   const mapped = owners.length === m;
   for (let i = 0; i < m; i++) {
     let err = 0; for (let k = 0; k < n; k++) err = Math.max(err, Math.abs(Jfd[i][k] - asm.J[i * n + k]));
-    const t = mapped ? owners[i].type + (owners[i].mutual ? '(mutual)' : '') : 'row' + i;
+    const t = mapped ? owners[i].type : 'row' + i;
     byType.set(t, Math.max(byType.get(t) || 0, err));
   }
   // nullity from the finite-difference rows: Gaussian elimination on row-normalised rows

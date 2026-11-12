@@ -4,6 +4,8 @@
 // drag-resizable (corner; content that uses an auto-fill grid reflows one icon at a time, floor = 1 wide) ·
 // tabbed (horizontal strip) · persists pos/size/active-tab via localStorage + persistKey.
 // (DEBT-1: localStorage is fine for v1; swap to an injected persistence adapter later.)
+// POP-UP use (TASK 535-4): opt-in `open:false` (starts hidden), `closable` (close button + Esc), `title` (role=dialog + aria-label),
+// `initial` (first-run position/size), `narrowSheet` (<=640px: a full-width bottom sheet, no drag) and open()/close()/isOpen().
 // Themed via --sk-dock-* (falling back to --sk-* / neutral) so each shell's :root retints it. Self-contained:
 // injects its own <style> once; imports nothing.
 
@@ -42,6 +44,18 @@ function injectStyles() {
 .sk-dock-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
   touch-action: none; background: linear-gradient(135deg, transparent 45%, var(--sk-dock-border, rgba(255,255,255,0.35)) 45%); }
 .sk-dock[data-dock] .sk-dock-resize { display: none; }
+.sk-dock[hidden] { display: none; }
+.sk-dock:focus { outline: none; }
+.sk-dock-close { flex: 0 0 auto; background: transparent; color: inherit; border: 0; border-radius: 6px; width: 24px; height: 24px;
+  cursor: pointer; font: 14px/1 system-ui, sans-serif; opacity: 0.7; }
+.sk-dock-close:hover { background: var(--sk-dock-hover, rgba(255,255,255,0.08)); opacity: 1; }
+.sk-dock-close:focus-visible, .sk-dock-tab:focus-visible { outline: 2px solid var(--sk-dock-accent, var(--sk-selection, #4c9aff)); outline-offset: 1px; }
+@media (max-width: 640px) {
+  .sk-dock[data-sheet] { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important;
+    height: min(60vh, 420px) !important; border-radius: 12px 12px 0 0; }
+  .sk-dock[data-sheet] .sk-dock-header { cursor: default; }
+  .sk-dock[data-sheet] .sk-dock-resize { display: none; }
+}
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -63,9 +77,13 @@ function nearEdge(x, y) {
  * createTabbedDockPanel({ tabs, persistKey })
  *   tabs: [{ label, icon?, render(container) }]
  *   persistKey: localStorage key for pos/size/active-tab/dock
- * Returns { el, setActiveTab(i), getState(), destroy() }.
+ *   open (default true): false starts the panel hidden (pop-up use); closable: a close button in the header + Esc closes (when focus is inside);
+ *   title: role="dialog" + aria-label; initial: { left, top, w, h } first-run geometry (a persisted one wins); narrowSheet: <=640px = bottom sheet;
+ *   onClose(): called after a close() that came from the user (close button / Esc) so the opener can return focus.
+ * Returns { el, setActiveTab(i), getState(), open(), close(), isOpen(), destroy() }.
  */
-export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabStripTarget = null } = {}) {
+export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabStripTarget = null, open: startOpen = true, closable = false,
+  title = '', initial = null, narrowSheet = false, onClose = null } = {}) {
   injectStyles();
 
   const root = document.createElement('div'); root.className = 'sk-dock';
@@ -79,7 +97,11 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
   if (tabStripTarget) { root.classList.add('sk-dock-detached'); tabStripTarget.appendChild(tabStrip); }
   else { header.appendChild(tabStrip); }
 
-  const st = Object.assign({ left: 80, top: 80, w: 280, h: 320, tab: 0, dock: null }, loadState(persistKey));
+  const st = Object.assign({ left: 80, top: 80, w: 280, h: 320, tab: 0, dock: null }, initial || {}, loadState(persistKey));
+  if (title) { root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', title); }
+  root.tabIndex = -1; // programmatic focus target on open (a pop-up moves focus into itself)
+  if (narrowSheet) root.dataset.sheet = '';
+  const isSheet = () => narrowSheet && typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
   let activeTab = Math.min(Math.max(0, st.tab | 0), Math.max(0, tabs.length - 1));
 
   const tabBtns = tabs.map((t, i) => {
@@ -120,7 +142,8 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
 
   // ── Move (header drag) — also docks (near edge) / undocks (drag off the edge) ──
   header.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.sk-dock-tab')) return; // let tab clicks through
+    if (e.target.closest('.sk-dock-tab, .sk-dock-close')) return; // let tab / close clicks through
+    if (isSheet()) return; // a bottom sheet does not move
     e.preventDefault();
     const startX = e.clientX, startY = e.clientY;
     const r = root.getBoundingClientRect();
@@ -158,6 +181,34 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
   });
 
+  // ── Pop-up use: close button, Esc, open / close ──
+  function isOpen() { return !root.hidden; }
+  function clamp() { // keep the header inside the viewport (a remembered position can be off-screen after a resize / reload)
+    if (st.dock || typeof window === 'undefined') return;
+    st.left = Math.max(0, Math.min(st.left, Math.max(0, window.innerWidth - 80)));
+    st.top = Math.max(0, Math.min(st.top, Math.max(0, window.innerHeight - 40)));
+    root.style.left = st.left + 'px'; root.style.top = st.top + 'px';
+  }
+  function open() {
+    if (!root.hidden) return;
+    root.hidden = false;
+    clamp();
+    try { root.focus({ preventScroll: true }); } catch (_) { /* not focusable here */ }
+  }
+  function close(fromUser = false) {
+    if (root.hidden) return;
+    root.hidden = true;
+    if (fromUser && typeof onClose === 'function') onClose();
+  }
+  if (closable) {
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'sk-dock-close';
+    x.title = 'Close'; x.setAttribute('aria-label', 'Close'); x.textContent = '✕';
+    x.addEventListener('click', () => close(true));
+    header.appendChild(x);
+    root.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.stopPropagation(); close(true); } });
+  }
+  if (!startOpen) root.hidden = true;
+
   applyLayout();
   setActiveTab(activeTab);
   if (typeof document !== 'undefined' && document.body) document.body.appendChild(root);
@@ -165,6 +216,7 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
   return {
     el: root,
     setActiveTab,
+    open, close: () => close(false), isOpen,
     getState: () => ({ ...st }),
     destroy: () => { try { root.remove(); } catch (_) {} try { tabStrip.remove(); } catch (_) {} },
   };

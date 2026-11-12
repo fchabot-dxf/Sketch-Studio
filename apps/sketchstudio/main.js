@@ -194,9 +194,9 @@ function initApp(){
   docBuffer.restore();
   docBuffer.start();
 
-  // DIAG-OVERLAY: reachable from the header, next to the save-status indicator.
+  // DIAG-OVERLAY: the Log button lives in the bottom status bar (where the MODE label was), on every screen width.
   const diagLog = createDiagnosticLog({ appId: 'sketchstudio', state });
-  header.el.appendChild(diagLog.toggleEl);
+  document.getElementById('status-diag-slot').appendChild(diagLog.toggleEl);
 
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {

@@ -68,6 +68,17 @@
     assert(s.add(T.ANGLE, { shapes: [AX, L.id], value: 30 }), 'angle to an axis created'); s.solve();
     const a = s.p(L.a), b = s.p(L.b); const ang = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI);
     assert(Math.abs(ang - 30) < 0.05 || Math.abs(ang - 150) < 0.05, 'angle 30 to the X axis, got ' + ang); }
+  // task 553 sector with an axis: the angle to the X axis at 30 and at 200 (reflex) solves and the verifier agrees
+  for (const deg of [30, 200]) {
+    const { measureResidual } = await import('#core/constraint-verifier.js');
+    const s = mk(); const L = s.line(10, 10, 60, 20);
+    const c = s.add(T.ANGLE, { shapes: [AX, L.id], value: deg }); assert(c, 'angle ' + deg + ' to an axis created'); s.solve();
+    const res = measureResidual(s.state.constraints.find(x => x.type === T.ANGLE), s.state.joints, s.state.shapes);
+    assert(res < 1e-3, 'angle ' + deg + ' to the X axis: verifier residual ' + res);
+    const a = s.p(L.a), b = s.p(L.b); let ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; ang = ((ang % 360) + 360) % 360;
+    const ok = [deg % 360, (deg + 180) % 360].some((t) => Math.abs(ang - t) < 0.1);
+    assert(ok, 'line direction ' + ang + ' for an angle of ' + deg + ' to the X axis');
+  }
   // tangent: a circle tangent to an axis
   { const s = mk(); const c = s.pt(100, 70); const rimId = s.pt(130, 70);
     s.engine.addShape({ id: 'C1', type: 'circle', joints: [c, rimId], radius: 30 });

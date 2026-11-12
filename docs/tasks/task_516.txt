@@ -1,0 +1,22 @@
+TASK 516 (Sketch-Studio): a dimension the geometry already determines is placed as DRIVEN and cannot be typed (owner ruling).
+Base: origin/main after 511. Read docs/CONSTRAINT-AUDIT.md O3.
+Today: on a fully constrained 100 x 100 rectangle, placing a diagonal dimension opens the value box; typing 150 is accepted, then the
+constraint is demoted to a reference, the typed value is replaced by the measured 141.4, and a toast explains. Owner: "Adding that diagonal
+should be as driven and can't be typed."
+1. When the Dimension tool places a dimension, decide redundancy BEFORE the value box opens, using the existing rank test
+   (isDistanceRedundant / the engine nullspace; find the one that ConstraintManager already uses for the demotion; do not write a second
+   test). Redundant -> the dimension is created driven at its measured value, shown in brackets as driven dimensions are, and NO value box
+   opens. Not redundant -> unchanged (box opens, typed value drives).
+2. A driven dimension cannot be typed anywhere: double-click / edit on it does not open the box. Grep every path that opens the dimension
+   value box (numeric-input-manager, dimension seams, double-click handler) and gate it on driven in ONE place.
+3. Right-click "Driving" on a driven dimension whose quantity is still determined by the rest of the sketch is refused with a short message
+   (the rank test again); if the rest no longer determines it (e.g. the user deleted the other dimension), it becomes driving at its current
+   value and then can be typed.
+4. The old typed-then-demoted path stays only as the safety net for a conflict that the rank test could not see; say in the REPORT whether
+   any path still reaches it, with a test.
+5. Same rule for every dimension mode (aligned, horizontal, vertical, angle, radius, line-line).
+Tests (fail-first, real pointer events in SketchStudio for 1-3): diagonal on the full rectangle -> driven, (141.4), no box in the DOM; double-click
+it -> no box; right-click Driving -> refused message; delete one side dimension, then right-click Driving on the diagonal -> driving, box
+opens on double-click; a non-redundant dimension still opens the box. Screenshot the bracketed diagonal into .evidence/516.
+Update docs/CONSTRAINT-AUDIT.md O3. DO NOT add hidden globals, silent catch, a second redundancy test, or per-mode copies of the gate.
+Gate green, commit by path, push, WORK-LOG `## TURN 516`, the usual REPORT block.

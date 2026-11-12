@@ -1,0 +1,22 @@
+TASK 517 (Sketch-Studio): fix coverage-audit findings N-F4 + N-F3 (lost constraint fields), N-F1 (fillet deletes the origin), N-F2 (fillet on
+a Polygon corner). Base: origin/main after 511. Read docs/COVERAGE-AUDIT.md "Properties" for each; repros in tests/harness/coverage/prop-findings.js.
+Delete each fixed finding's KNOWN entry in tests/coverage-properties.test.js.
+
+N-F4 + N-F3 (one cause): the constraint normaliser in packages/core/constraints.js (~l.209-284, one `case` per type) rebuilds each constraint
+  from a per-type whitelist, so fields the type does not list are dropped on save/load and undo: ANGLE drops isDriven/driven (a reference
+  angle becomes DRIVING again), radius drops driven/drivenReason, distances drop dimSign/dimSignMode. Fix in ONE place: the dimension state
+  fields (isDriven, driven, drivenReason, dimSign, dimSignMode, labelPos, glyphPos, offset, dimMode: check which exist by grep) are carried by
+  ONE shared helper used by every dimension case, not by adding them to each case by hand. Test: every dimension mode x {driving, driven} x
+  {save/load, undo/redo} keeps every field (iterate the inventory, tests/harness/coverage/inventory.js).
+N-F1: fillet.js (~l.328-331) deletes every joint of the corner cluster, including j_origin when the corner sits on the origin. The origin must
+  never be deleted; a corner that is (or is coincident with) the origin keeps the origin as the virtual sharp / the joint the trimmed lines are
+  held to (read how the virtual sharp jV is made and decide; say which in the REPORT). Test: rectangle with a corner on the origin, fillet that
+  corner: j_origin still exists, still fixed, the fillet is correct, the sketch DOF is unchanged in meaning.
+N-F2: fillet.js (~l.92) counts the polygon's construction radial (shapes.js ~l.260) as a third line at the corner, so no Polygon-tool corner can be
+  filleted. Construction geometry must not block a fillet: decide from the code whether the corner test should ignore construction lines or
+  whether the radial must stay attached (it must: the polygon constraint uses it); say which and why. Test: hexagon from makePolygon, fillet
+  one corner and then all six: each accepted, radii equal when made equal, polygon still regular (the equal constraints hold), nullity as
+  expected.
+DO NOT touch the other findings (N-F5, N-F6, N-F7, N-U*, F5, F8). Same DO-NOT list as before: no hidden globals, no silent catch, no per-case
+copies. STOP if the normaliser change alters any saved fixture beyond adding the kept fields (quote the diff).
+Gate green, commit by path, push, WORK-LOG `## TURN 517`, the usual REPORT block with `node scripts/coverage-properties.cjs` before/after.

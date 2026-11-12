@@ -13453,3 +13453,10 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
   - fusion-oracle: which-moves-known.mjs / graded-known.mjs give every tangent class with an arc or fillet-arc operand the reason "arc resizes at tangent creation; placement, task 525 (...)"; KNOWN regenerated (`216 KNOWN of 315`, `352 KNOWN classes of 383; 1590 differing cells of 2438`, `125 KNOWN rows`), the three doc sections regenerated, "After task 523" table added to docs/FUSION-COMPARISON.md. `fusion-oracle OK`.
   - docs/COVERAGE-AUDIT.md: NEW-6 updated (5 -> 3; remaining: lockTangentBranch locks external on equal concentric circles; an arc centred on another arc's rim collapses; the run-order flip is PlaneGCS's verdict), tangent grid refreshed, "Fixed in task 523" section with the F6 parallel shared-joint overwrite diagnosis (not fixed), N-F7 row updated.
   - Final: jacobian-fd-guard 29 cases, coverage-matrix passed (PASS=1788, NEW-6=3, NEW-9=2), coverage-properties passed (5 KNOWN), constraint-audit passed (1 KNOWN), fusion-oracle OK (which-moves 99 same / 216 KNOWN, graded 848 / 1590, drawings 829 / 125). Gate: `GATE files=249 pass=249 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.
+
+## TURN 527 (STOPPED at step 1, nothing under packages/ touched)
+Measured in a new unsaved Fusion document (closed unsaved) whether SketchPoint.move / sketch.move reproduce a constrained mouse drag.
+They do not: with a length dimension, a (0,5) or small-step move leaves the point unchanged (a drag rotates it), and (3,5) lands at
+(9.8126,-1.9269), a wrong-branch point (deterministic). Unconstrained / H-only moves behave plausibly. Fully constrained: silent no-op.
+Per the task, no fixtures recorded. Evidence: .evidence/527/step1-measurements.txt (local). Only a real mouse drag (UI automation) could
+serve as the oracle: owner decision needed.

@@ -4,7 +4,7 @@
     const { makeRectFromCenter } = await import('#core/shapes.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
-    const createState = () => ({ joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, isConstructionMode: false, currentTool: TOOL_MODES.RECT, rectMode: RECT_MODES.CENTER, activeSnap: null, snapTarget: null });
+    const createState = () => ({ joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup: () => {}, saveState: () => {}, isConstructionMode: false, currentTool: TOOL_MODES.RECT, rectMode: RECT_MODES.CENTER, activeSnap: null, snapTarget: null });
 
     const svg = null; // not needed for this test
 

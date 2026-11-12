@@ -7,7 +7,7 @@
   const makeSVG = () => ({ viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } }, getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }), innerHTML: '', setPointerCapture: () => {}, releasePointerCapture: () => {} });
 
   function makeState(){
-    return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, saveState: () => {}, endUndoGroup: () => {}, selectedConstraints: new Set() };
+    return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), saveState: () => {}, endUndoGroup: () => {}, selectedConstraints: new Set() };
   }
 
   // Create a simple cluster: pair of coincident joints a1/a2 and pair b1/b2

@@ -11,7 +11,7 @@ import { undoStub } from './helpers/undo-stub.js';
         selectedJoints: new Set(),
         selectedShapes: new Set(),
         selectedConstraints: new Set(),
-        beginUndoGroup: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
         endUndoGroup: () => {},
         ...undoStub(),
         currentTool: 'select'

@@ -1125,7 +1125,14 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
-        if (histAction === 'undo') { state.undo(); e.preventDefault(); }
+        if (histAction === 'undo') {
+            // TASK 549 (Fusion, measured): Ctrl+Z while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the uncommitted
+            // rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT Ctrl+Z undoes one element.
+            const DRAWING = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
+            if (state.active && DRAWING.includes(state.currentTool)) handleEscape(state);
+            else state.undo();
+            e.preventDefault();
+        }
         else if (histAction === 'redo') { state.redo(); e.preventDefault(); }
 
         // Toggle fixed on selection
@@ -1315,6 +1322,7 @@ export const showDimInput = showEditInput;
 
 // Helper: Switch the active tool programmatically with UI update fallback
 export function switchToTool(state, toolName) {
+    state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
@@ -1415,6 +1423,7 @@ function handleEscape(state) {
     try{ resetFilletState(); }catch(_){ }
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
+    state.closeDrawStep(); // TASK 549: a draw cancelled by Esc leaves nothing and no undo step (a committed bezier / line chain is kept)
 
     // 3. Clear transient interaction data
     try{ state.tempMousePos = null; }catch(_){ }

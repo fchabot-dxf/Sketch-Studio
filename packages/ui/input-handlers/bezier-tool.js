@@ -68,7 +68,7 @@ export function handleBezierPointerDown(e, svg, state, w) {
   // Fresh path: open an undo group + a new shared groupId for the whole stroke.
   if (pen.finished) {
     pen.anchors = []; pen.groupId = 'bezier_' + (++bezierSeq) + '_' + now; pen.finished = false;
-    try { state.beginUndoGroup && state.beginUndoGroup(); } catch (_) {}
+    try { state.beginDrawStep && state.beginDrawStep(); } catch (_) {}
   }
 
   // Begin placing this anchor (corner by default; a drag upgrades it to smooth in pointermove).

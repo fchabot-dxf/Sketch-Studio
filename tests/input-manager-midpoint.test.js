@@ -5,7 +5,7 @@
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Setup minimal state
-    const state = { joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, selectedShapes: new Set(), selectedJoints: new Set() };
+    const state = { joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup: () => {}, saveState: () => {}, selectedShapes: new Set(), selectedJoints: new Set() };
     // Line
     state.joints.set('a', { x: 0, y: 0 }); state.joints.set('b', { x: 100, y: 0 }); state.shapes.push({ id: 'L1', type: 'line', joints: ['a','b'] });
     // free point joint

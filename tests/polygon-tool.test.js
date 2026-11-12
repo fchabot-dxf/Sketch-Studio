@@ -81,7 +81,7 @@ for (const n of [3, 6, 64]) {
 // 4. editing: dragging ONE corner keeps the polygon regular (the constraints hold it)
 for (const n of [3, 5, 6, 12]) {
   const s = createSketch();
-  const state = s.state; state.saveState = () => {}; state.endUndoGroup = () => {}; state.beginUndoGroup = () => {};
+  const state = s.state; state.saveState = () => {}; state.endUndoGroup = () => {}; state.beginUndoGroup = () => {}; state.beginDrawStep = () => {}; state.closeDrawStep = () => 'none'; state.isUndoGroupOpen = () => false; state.captureUndoSnapshot = () => ({});
   const center = s.point(0, 0, false); state.active = { mode: 'polygon', start: center }; state.polygonSides = n;
   createPolygon(state, { x: 10, y: 0 });
   s.solve();
@@ -115,7 +115,7 @@ function measureDof(s, jointIds, samples) {
 }
 for (const n of [3, 4, 5, 6, 8]) {
   const s = createSketch();
-  const state = s.state; state.saveState = () => {}; state.endUndoGroup = () => {}; state.beginUndoGroup = () => {};
+  const state = s.state; state.saveState = () => {}; state.endUndoGroup = () => {}; state.beginUndoGroup = () => {}; state.beginDrawStep = () => {}; state.closeDrawStep = () => 'none'; state.isUndoGroupOpen = () => false; state.captureUndoSnapshot = () => ({});
   const center = s.point(0, 0, false); state.active = { mode: 'polygon', start: center }; state.polygonSides = n;
   createPolygon(state, { x: 10, y: 0 });
   s.solve();

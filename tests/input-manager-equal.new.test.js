@@ -10,7 +10,7 @@
         shapes: [],
         constraints: [],
         genJ: () => 'j' + Math.floor(Math.random()*10000),
-        beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup: () => {}, saveState: () => {},
         selectedShapes: new Set(), selectedJoints: new Set(),
         // lightweight engine stub (ConstraintManager may call state.engine.solve)
         engine: { solve: () => ({ error: 0, converged: true }) }

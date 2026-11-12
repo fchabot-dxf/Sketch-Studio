@@ -9,7 +9,7 @@
         joints: new Map(),
         shapes: [],
         constraints: [],
-        beginUndoGroup: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
         endUndoGroup: () => {},
         saveState: () => {}
     };

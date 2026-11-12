@@ -13,7 +13,7 @@ function scene() {
       { id: 'A1', type: 'arc', subType: 'CENTER', joints: ['ac', 'as', 'ae'] }],
     constraints: [],
     selectedConstraints: new Set(), selectedShapes: new Set(), selectedJoints: new Set(),
-    beginUndoGroup() {}, endUndoGroup() {}, saveState() {}, engine: { solve() {} },
+    beginUndoGroup() {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup() {}, saveState() {}, engine: { solve() {} },
   };
   const KINDS = {
     'distance (two points)': { type: 'distance', joints: ['a', 'b'], value: 40 },

@@ -9,7 +9,7 @@
         shapes: [],
         constraints: [],
         genJ: () => 'j' + (counter++),
-        beginUndoGroup: () => {},
+        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
         endUndoGroup: () => {},
         saveState: () => {}
     };

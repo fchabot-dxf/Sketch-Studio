@@ -13339,3 +13339,12 @@ Owner bug: on a phone the header "Log" toggle (Diagnostic Log, Copy Report) was 
 
 ## TURN 514
 Solver coverage audit part 2 (audit only, no app code changed). Added: 8 new drawings (tests/harness/coverage/drawings/n1..n8), prop-random.js (300 seeded random cases, 7 invariants, ablation attribution, shrinker), prop-drag.js, prop-roundtrip.js (project store memory backend + replayJournal), prop-oracle.js (PlaneGCS collinear + arc/arc tangent), prop-findings.js (9 repros), tests/coverage-properties.test.js (~17 s), scripts/coverage-properties.cjs, docs/COVERAGE-AUDIT.md "Properties". New findings: N-F1 fillet at the origin deletes j_origin (HIGH), N-F4 reference angle becomes driving after save/undo (HIGH), N-F7 arc/arc tangent at a shared rim degenerate (HIGH), N-F5 collinear panel DOF lie, N-F2 polygon corners cannot be filleted, N-F6 orientation flips on edit, N-F3 dimSign dropped, N-U1/N-U2 unexplained. Fusion oracle skipped: Fusion not reachable on port 7654. Merged origin/main (task 510 F1/F4/F7 fixes); not task 512's branch.
+
+## TURN 518 (Fusion as an oracle for the SketchStudio solver)
+
+Audit only: no app code changed. Fusion 360 2706.1.17 (a scratch document made with documents.add, never saved, closed at the end) answered:
+* part 0: 315 which-moves cells (every constraint type + dimension mode, A/B pick orders, fixed / H-V / dimensioned / shared joint) vs ours: 94 same, 221 KNOWN differences.
+* part 0b (owner addition): 2438 graded cells (21 constraint / dimension groups x shape kinds line, construction line, polygon side, rect side, circle, arc, fillet arc, point and the origin x hold levels): 884 same, 1554 KNOWN (349 classes). One rank-per-level rule per constraint predicts Fusion's mover (55/55 parallel, 39/39 collinear, 73/73 coincident ...). The origin never moved or was deleted in any cell.
+* part 1: 13 drawings (round 1 + round 2) replayed step by step incl. the 0.8x / 1.25x edits and the redundant / conflicting / delete probes: 954 rows, 822 same, 132 KNOWN.
+Files: docs/FUSION-COMPARISON.md; tests/fusion-oracle.test.js (offline, replays the fixtures in tests/fixtures/fusion-oracle/*.json); tests/harness/fusion-oracle/*; scripts/fusion-oracle/* (Fusion runners + generators of the fixtures and the report).
+Findings: Fusion keeps the first pick and moves the second (ours meets in the middle); Fusion refuses redundant / over-constraining input (ours: silent O1 / reference O3); circle radius (F2 / O2) shows in equal and tangent; scurve = N-F7; collinear / pointOnLine marked pending task 511.

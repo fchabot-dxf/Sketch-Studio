@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildScenarios, runOurs, cellOf } from './harness/fusion-oracle/which-moves.js';
+import { loadDrawings } from './harness/coverage/prop-lib.js';
+import { compareDrawing } from './harness/fusion-oracle/drawings.js';
 import { buildCells, materialize, fusionMove, oursMove, cellKey, classOf } from './harness/fusion-oracle/graded.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +63,26 @@ const fail = (m) => failures.push(m);
   }
   for (const [k, v] of Object.entries(GK)) if (!seen[k] || seen[k].total !== v.total) fail(`graded KNOWN class ${k}: ${seen[k] ? seen[k].total : 0} cells now, ${v.total} recorded`);
   console.log(`which-moves-graded: ${cells.length} cells, ${same} same as Fusion, ${diff} KNOWN differences in ${Object.keys(GK).length} classes, origin never moved (Fusion ${gx.fusion}, recorded ${gx.date})`);
+}
+
+// ------------------------------------------------------------------------------------------------ part 1: the round-1 and round-2 drawings, step by step
+{
+  const DK = load('drawings-known.json');            // "<drawing>/<row key>" -> reason class
+  let rows = 0, same = 0, known = 0;
+  const seenKnown = new Set();
+  for (const d of await loadDrawings()) {
+    const fx = load(d.mod.NAME + '.json');
+    if (!fx.fusion || !fx.date) fail(`${d.mod.NAME}.json carries no Fusion version / date`);
+    const { rows: rs } = compareDrawing(d.mod, fx);
+    for (const r of rs) {
+      rows++;
+      const k = `${d.mod.NAME}/${r.key}`;
+      if (r.same) { same++; if (DK[k]) fail(`drawing ${k}: KNOWN (${DK[k]}) but ours now agrees with Fusion: delete the entry`); }
+      else { known++; seenKnown.add(k); if (!DK[k]) fail(`drawing ${k}: NEW divergence at "${r.label}". ours ${r.ours} | Fusion ${r.fusion}`); }
+    }
+  }
+  for (const k of Object.keys(DK)) if (!seenKnown.has(k) && !failures.some(f => f.includes(k))) fail(`drawing KNOWN entry ${k} no longer differs or no longer exists`);
+  console.log(`drawings: ${rows} comparison rows, ${same} same, ${known} KNOWN differences`);
 }
 
 if (failures.length) {

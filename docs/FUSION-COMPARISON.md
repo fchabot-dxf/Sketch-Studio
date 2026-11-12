@@ -5,6 +5,20 @@ document made for the run and closed without saving) through `scripts/fusion-ora
 `tests/fixtures/fusion-oracle/`. `tests/fusion-oracle.test.js` (pure node, in the gate) replays every recipe through OUR pipeline and compares.
 Units: our mm; Fusion's API is cm (x10 on the way out). Divergences are reported, not changed: the owner decides each one.
 
+## Summary
+
+Fusion 360 (2706.1.17) answered 315 + 2438 which-moves cells and replayed 13 drawings (954 comparison rows) with the same recipes as our audits. Divergences are **reported, not changed**: the owner decides each one.
+
+1. **Who moves when a constraint is added to geometry that does not satisfy it.** Fusion moves the operand that is held LEAST and never meets in the middle: with equal holds the first pick stays and the second is moved (parallel / perpendicular / angle: rotate about its midpoint; equal(line): keep the start, change the length; coincident: translate the whole second line; dimensions: the free end slides). One ranking of the hold levels per constraint predicts 55/55 (parallel, perpendicular, equal), 39/39 (collinear), 73/73 (coincident), 54/55 (angle) of the one-mover cells (section "graded"). Ours moves BOTH operands for most constraints and ignores the pick order for several (coincident, 2-point H/V); collinear / pointOnLine placement is task 511 (marked pending). Proposed fixes per constraint are in "Which geometry moves" (one place: `placeForCreation` in `createConstraint`, the hook task 511 added; dimension rows: `commitDimensionEdit`).
+2. **Refusals.** Fusion refuses an over-constraining or redundant constraint or dimension (`VCS_SKETCH_OVER_CONSTRAINTS`, "already has the same dimension"); ours keeps a redundant geometric constraint silently (O1) and a redundant / conflicting dimension as a driven reference (O3). The reverse (ours refuses what Fusion accepts): the hole-radius edits (F2), `perpendicular` / `collinear` / `pointOnLine` placements on a held operand (task 511 for the last two), and the S-curve (N-F7).
+3. **Circles.** `equal` on circles is refused in ours (F2) and `tangent` between circles never changes a radius (Fusion resizes the moving circle): both follow from the radius being shape data (O2).
+4. **The origin** is an operand like any point: in all 2438 graded cells (both pick orders, every point constraint, the levels "end at origin" and "midpoint at origin") it never moved and was never deleted, in Fusion (`sk.originPoint`) and in ours (`j_origin`). Ours has no axis entities, so axis constraints cannot be run in ours.
+5. **Fully-constrained flags.** Fusion reports `isFullyConstrained` per entity and for the sketch (no DOF count); they differ from ours mainly on circles (O2) and on fillet arcs; every row is in the per-drawing tables.
+
+The 512 coverage matrix is indexed in `tests/fixtures/fusion-oracle/matrix.json`: 604 classes (constraint / dimension row x kind-pair class x variant sep | shared | locked | dimmed); a representative cell was run in Fusion for 249 of them (how it was picked is in `scripts/fusion-oracle/matrix-index.mjs`); the 355 others are listed with the reason (shared joint outside the line-line rows 122, pair class outside the graded set 108, midpoint of three free points has no Fusion equivalent 64, the point-to-line dimension throws in ours 28, other 33). Kinds skipped in Fusion with the reason: bezier (no equivalent), `equal(arc, circle)` (Fusion's API refuses), concentric / symmetric (not in our constraint list).
+
+Re-run: `node tests/fusion-oracle.test.js` (offline, a few seconds). Re-record in Fusion: `scripts/fusion-oracle/*` (the runners need a scratch document holding the user parameter `CLAUDE_MARK`; they refuse to run anywhere else).
+
 ## Which geometry moves
 
 Question (owner): when a constraint is added to geometry that does not satisfy it, which entity moves and which stays? Method: each case starts from
@@ -1251,3 +1265,450 @@ Single operand: O@0: F radius / - | ours radius / -; O@c: F radius / - | ours ra
 Kind letters: L line, C construction line, S polygon side, R rect side, O circle, A arc, F fillet arc, P point, Z origin. Who-moves letters as above (`a` first pick only, `b` second only, `X` both, `-` none, `R` refused). `how`: translate, rotate (rigid), stretch (a line changes length), `one end` (one endpoint of a line moves: rotate / stretch about the other), scale, deform, radius, `+radius` (the radius changed as well).
 
 <!-- graded:end -->
+
+
+## Per drawing: Fusion's answers step by step
+
+<!-- drawings:begin -->
+
+Rows are one per recipe step; `same?` needs the outcome (accepted / reference / refused), the per-shape and sketch "fully constrained" flags and the coordinates to agree. Coordinates: the same solution within 0.01 mm, or "another valid branch": Fusion landed elsewhere but its geometry satisfies OUR constraint set (residual <= 1e-3). Fusion has no DOF count, so the flags are `isFullyConstrained` of each entity and of the sketch; ours is "every joint of the shape has zero freedom (the finite-difference nullspace)", plus, for a circle, a driving radius dimension (a circle's radius is shape data: audit O2).
+
+| drawing | recipe steps | comparisons | same | KNOWN differences |
+|---|---|---|---|---|
+| plate (round 1) | 20 | 96 | 82 | 14 |
+| trapezoid (round 1) | 9 | 54 | 49 | 5 |
+| bracket (round 1) | 30 | 148 | 126 | 22 |
+| triangle (round 1) | 10 | 45 | 33 | 12 |
+| polygon (round 1) | 11 | 54 | 51 | 3 |
+| scurve (round 2) | 11 | 54 | 41 | 13 |
+| slot (round 2) | 11 | 46 | 40 | 6 |
+| collinear-concentric (round 2) | 18 | 94 | 86 | 8 |
+| axis-symmetry (round 2) | 15 | 76 | 73 | 3 |
+| welded-T (round 2) | 15 | 76 | 61 | 15 |
+| filleted-polygon (round 2) | 9 | 55 | 45 | 10 |
+| every-kind (round 2) | 19 | 106 | 89 | 17 |
+| two-sketches (round 2) | 9 | 50 | 46 | 4 |
+
+#### plate: Plate: filleted rectangle + 4 holes (round 1)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 centre: midpoint(vTL,vBR) = origin | accepted | accepted | yes | same | ............ / ............ ; sketch: nullity 10 / not fully constrained |
+| 2 width  vTL-vTR (horizontal) 200 | accepted | accepted | **NO** | same | ............ / .F.F........ * ; sketch: nullity 9 / not fully constrained |
+| 3 height vTR-vBR (vertical) 120 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 8 / not fully constrained |
+| 4 delete R dim of fillet TR (keep TL) | accepted | accepted | **NO** | same | ..FF.FFF.... / FFFF.FFF.... * ; sketch: nullity 9 / not fully constrained |
+| 5 delete R dim of fillet BR | accepted | accepted | **NO** | same | ...F..FF.... / FFFF..FF.... * ; sketch: nullity 10 / not fully constrained |
+| 6 delete R dim of fillet BL | accepted | accepted | **NO** | same | .......F.... / FFFF...F.... * ; sketch: nullity 11 / not fully constrained |
+| 7 equal radius aTR = aTL | accepted | accepted | **NO** | same | F...F..F.... / FFFFF..F.... * ; sketch: nullity 10 / not fully constrained |
+| 8 equal radius aBR = aTL | accepted | accepted | **NO** | same | FF..FF.F.... / FFFFFF.F.... * ; sketch: nullity 9 / not fully constrained |
+| 9 equal radius aBL = aTL | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 8 / not fully constrained |
+| 10 hole centres c1-c2 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 7 / not fully constrained |
+| 11 hole centres c2-c3 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 6 / not fully constrained |
+| 12 hole centres c3-c4 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 5 / not fully constrained |
+| 13 hole centres c4-c1 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 4 / not fully constrained |
+| 14 holes symmetric: midpoint(c1,c3) = origin | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 2 / not fully constrained |
+| 15 hole spacing c1-c2 (horizontal) 140 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 1 / not fully constrained |
+| 16 hole spacing c2-c3 (vertical) 70 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 0 / not fully constrained |
+| 17 hole radius h1 = 8 | accepted | accepted | yes | same | FFFFFFFFF... / FFFFFFFFF... ; sketch: nullity 0 / not fully constrained |
+| 18 equal radius h2 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFF.. * ; sketch: nullity 0 / not fully constrained |
+| 19 equal radius h3 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFFF. * ; sketch: nullity 0 / not fully constrained |
+| 20 equal radius h4 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFFFF * ; sketch: nullity 0 / fully constrained * |
+
+Step E, 12 dimension edits (0.8x, 1.25x): 10 agree (accepted or refused alike); differ: edit x0.8 of dimension 8.000 -> 6.400 (ours refused, Fusion accepted); edit x1.25 of dimension 8.000 -> 10.000 (ours refused, Fusion accepted).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 3 full, step 4 full, step 5 full, step 6 full, step 7 full, step 17 full, step 18 full, step 19 full
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): step 19 sketchFull
+* OUR BUG F2 (equal on circles does nothing; the hole radius edit is refused): edit10 outcome, edit11 outcome
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### trapezoid: Trapezoid: slanted sides, centre line, 4 fillets (owner shape) (round 1)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 top line horizontal | accepted | accepted | yes | another valid branch | ......... / ......... ; sketch: nullity 11 / not fully constrained |
+| 2 bottom line horizontal | accepted | accepted | yes | another valid branch | ......... / ......... ; sketch: nullity 10 / not fully constrained |
+| 3 centre line vertical | accepted | accepted | yes | another valid branch | ......... / ......... ; sketch: nullity 9 / not fully constrained |
+| 4 midpoint of top edge = P | accepted | accepted | yes | another valid branch | ......... / ......... ; sketch: nullity 7 / not fully constrained |
+| 5 midpoint of bottom edge = Q | accepted | accepted | yes | another valid branch | ......... / ......... ; sketch: nullity 5 / not fully constrained |
+| 6 Q at the origin | accepted | accepted | **NO** | another valid branch | ......... / ..F.....F * ; sketch: nullity 3 / not fully constrained |
+| 7 height (line-to-line) 431.8 | accepted | accepted | **NO** | another valid branch | ........F / F.F.....F * ; sketch: nullity 2 / not fully constrained |
+| 8 bottom width vBL-vBR 150 | accepted | accepted | **NO** | another valid branch | ........F / F.F.....F * ; sketch: nullity 1 / not fully constrained |
+| 9 top width vTL-vTR 400 | accepted | accepted | yes | another valid branch | FFFFFFFFF / FFFFFFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 14 dimension edits (0.8x, 1.25x): 14 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 5 full, step 6 full, step 7 full
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### bracket: Bracket: 8-line L outline + slot + hole (round 1)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 A at the origin | accepted | accepted | yes | same | ............. / ............. ; sketch: nullity 26 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 25 / not fully constrained |
+| 3 CD vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 24 / not fully constrained |
+| 4 DE horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 23 / not fully constrained |
+| 5 EF vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 22 / not fully constrained |
+| 6 FG horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 21 / not fully constrained |
+| 7 HA vertical | accepted | accepted | **NO** | same | ............. / F......F..... * ; sketch: nullity 20 / not fully constrained |
+| 8 AB length 130 | accepted | accepted | **NO** | same | F............ / F......F..... * ; sketch: nullity 19 / not fully constrained |
+| 9 chamfer BC across 10 | accepted | accepted | **NO** | same | F............ / F.F....F..... * ; sketch: nullity 18 / not fully constrained |
+| 10 chamfer BC up 10 | accepted | accepted | **NO** | same | FF........... / FFF....F..... * ; sketch: nullity 17 / not fully constrained |
+| 11 CD length 30 | accepted | accepted | **NO** | same | FFF.......... / FFFF...F..... * ; sketch: nullity 16 / not fully constrained |
+| 12 DE length 100 | accepted | accepted | **NO** | same | FFFF......... / FFFFF..F..... * ; sketch: nullity 15 / not fully constrained |
+| 13 EF length 100 | accepted | accepted | **NO** | same | FFFFF........ / FFFFFF.F..... * ; sketch: nullity 14 / not fully constrained |
+| 14 FG length 30 | accepted | accepted | **NO** | same | FFFFFF....... / FFFFFF.F..... * ; sketch: nullity 13 / not fully constrained |
+| 15 chamfer GH down 10 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 12 / not fully constrained |
+| 16 slot left end: midpoint(a1,b1)=CL | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 11 / not fully constrained |
+| 17 slot right end: midpoint(a2,b2)=CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 10 / not fully constrained |
+| 18 slot top line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 9 / not fully constrained |
+| 19 slot top line tangent to right arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 8 / not fully constrained |
+| 20 slot bottom line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 7 / not fully constrained |
+| 21 slot bottom line tangent to right arc | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
+| 22 slot arcs equal radius | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
+| 23 slot radius 8 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 6 / not fully constrained |
+| 24 slot axis horizontal CL-CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 5 / not fully constrained |
+| 25 slot length CL-CR 50 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 4 / not fully constrained |
+| 26 slot position: CL x = 60 from A | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 3 / not fully constrained |
+| 27 slot position: CL y = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 2 / not fully constrained |
+| 28 hole x = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 1 / not fully constrained |
+| 29 hole y = 90 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 0 / not fully constrained |
+| 30 hole radius 8 | accepted | accepted | **NO** | same | FFFFFFFFFFFFF / FFFFFFFFF...F * ; sketch: fully constrained / not fully constrained * |
+
+Step E, 30 dimension edits (0.8x, 1.25x): 30 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 2 full, step 3 full, step 4 full, step 5 full, step 6 full, step 7 full, step 8 full, step 9 full, step 10 full, step 11 full, step 12 full (+5 more)
+* UNCLEAR / O1: a redundant geometric constraint: Fusion refuses it as over-constrained, ours accepts it silently (audit O1: "the app flags redundant dimensions but not redundant constraints"): step 20 outcome, step 21 outcome
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): step 29 sketchFull
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### triangle: Triangle + inscribed circle (three tangents) (round 1)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 A at the origin | accepted | accepted | yes | same | ..... / ..... ; sketch: nullity 8 / not fully constrained |
+| 2 base AB horizontal | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 7 / not fully constrained |
+| 3 equal sides CA = BC | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 6 / not fully constrained |
+| 4 interior angle at A = 70 (the dimension reads the angle between the di | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 5 / not fully constrained |
+| 5 M = midpoint of the base | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 3 / not fully constrained |
+| 6 circle centre on the axis C-M | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 2 / not fully constrained |
+| 7 circle tangent to AB | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 1 / not fully constrained |
+| 8 circle tangent to BC | accepted | accepted | **NO** | same | FFFF. / F.F.. * ; sketch: nullity 0 / not fully constrained |
+| 9 circle tangent to CA (3rd: consistent by symmetry) | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
+| 10 circle radius 20 (sets the size) | accepted | accepted | yes | same | FFFFF / FFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 4 dimension edits (0.8x, 1.25x): 3 agree (accepted or refused alike); differ: edit x0.8 of dimension 110.000 -> 88.000 (ours refused, Fusion accepted).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours fully constrained, Fusion not fully constrained *.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 2 full, step 3 full, step 4 full, step 5 full, step 6 full, step 7 full
+* UNCLEAR / O1: a redundant geometric constraint: Fusion refuses it as over-constrained, ours accepts it silently (audit O1: "the app flags redundant dimensions but not redundant constraints"): step 8 outcome
+* UNCLEAR: the angle dimension reads 180 - base angle in ours (the 0.8x value is geometrically impossible there); Fusion measures the other side, so the same number is feasible: edit0 outcome
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): delete sketchFull
+
+#### polygon: Hexagon + concentric circle + tangent circle + midpoint axis (round 1)
+
+* the polygon is our tool's structure (sides + construction radials + equal constraints), replayed as lines and equals, not a Fusion polygon
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 centre O at the origin | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 10 / not fully constrained |
+| 2 circumradius O-k0 = 40 | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 9 / not fully constrained |
+| 3 M0 = midpoint of edge e0 (k0,k1) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 7 / not fully constrained |
+| 4 M3 = midpoint of the opposite edge e3 (k3,k4) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 5 / not fully constrained |
+| 5 axis M0-M3 horizontal (rotation) | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 4 / not fully constrained |
+| 6 axis symmetric about O: midpoint(M0,M3)=O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 4 / not fully constrained |
+| 7 concentric circle: centre = O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 2 / not fully constrained |
+| 8 concentric circle radius 25 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 2 / not fully constrained |
+| 9 second circle tangent to edge e1 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 1 / not fully constrained |
+| 10 second circle tangent to edge e2 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 0 / not fully constrained |
+| 11 second circle radius 8 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFFF / FFFFFFFFFFFFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 6 dimension edits (0.8x, 1.25x): 6 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion fully constrained *.
+
+Divergences and verdicts:
+
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): delete sketchFull
+
+#### scurve: S-curve: line - arc - arc - line, all tangent (round 2)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 P0 at the origin | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 10 / not fully constrained |
+| 2 l1 horizontal | accepted | accepted | **NO** | another valid branch | .... / F... * ; sketch: nullity 9 / not fully constrained |
+| 3 l1 length 40 | accepted | accepted | yes | another valid branch | F... / F... ; sketch: nullity 8 / not fully constrained |
+| 4 l1 tangent to arc a1 | accepted | accepted | yes | another valid branch | F... / F... ; sketch: nullity 7 / not fully constrained |
+| 5 arc a1 radius 30 | accepted | accepted | **NO** | another valid branch | F... / FF.. * ; sketch: nullity 6 / not fully constrained |
+| 6 a1 quarter turn: C1-Q horizontal | accepted | accepted | yes | another valid branch | FF.. / FF.. ; sketch: nullity 5 / not fully constrained |
+| 7 arc a1 tangent to arc a2 | accepted | accepted | yes | another valid branch | FF.. / FF.. ; sketch: nullity 4 / not fully constrained |
+| 8 arc a2 radius 25 | reference | accepted | **NO** | another valid branch | FF.. / FFF. * ; sketch: nullity 4 / not fully constrained |
+| 9 l2 horizontal | accepted | accepted | **NO** | another valid branch | FF.. / FFF. * ; sketch: nullity 3 / not fully constrained |
+| 10 l2 tangent to arc a2 | accepted | accepted | **NO** | another valid branch | FF.. / FFFF * ; sketch: nullity 2 / not fully constrained |
+| 11 l2 length 40 | accepted | accepted | **NO** | another valid branch | FF.. / FFFF * ; sketch: nullity 1 / fully constrained * |
+
+Step E, 6 dimension edits (0.8x, 1.25x): 3 agree (accepted or refused alike); differ: edit x0.8 of dimension 40.000 -> 32.000 (ours refused, Fusion accepted); edit x1.25 of dimension 30.000 -> 37.500 (ours refused, Fusion accepted); edit x0.8 of dimension 40.000 -> 32.000 (ours refused, Fusion accepted).
+
+Step F: redundant dimension: ours accepted, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours accepted, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 2, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* OUR BUG N-F7 (tangent between two arcs sharing a rim joint is degenerate): step 1 full, step 4 full, step 7 outcome, step 7 full, step 8 full, step 9 full, step 10 full, step 10 sketchFull, edit0 outcome, edit3 outcome, edit4 outcome, redundant outcome (+1 more)
+
+#### slot: Slot: two arcs + two lines (4 tangents) (round 2)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 left centre at the origin | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 8 / not fully constrained |
+| 2 centres horizontal | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 7 / not fully constrained |
+| 3 centre distance 50 | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 6 / not fully constrained |
+| 4 left end is a diameter: midpoint(a1,b1)=CL | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 5 / not fully constrained |
+| 5 right end is a diameter: midpoint(a2,b2)=CR | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 4 / not fully constrained |
+| 6 top line tangent to left arc | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 3 / not fully constrained |
+| 7 top line tangent to right arc | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 2 / not fully constrained |
+| 8 bottom line tangent to left arc | accepted | accepted | yes | another valid branch | .... / .... ; sketch: nullity 1 / not fully constrained |
+| 9 bottom line tangent to right arc | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
+| 10 arcs equal radius | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
+| 11 radius 8 | accepted | accepted | **NO** | same | FFFF / F... * ; sketch: fully constrained / not fully constrained * |
+
+Step E, 4 dimension edits (0.8x, 1.25x): 4 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR / O1: a redundant geometric constraint: Fusion refuses it as over-constrained, ours accepts it silently (audit O1: "the app flags redundant dimensions but not redundant constraints"): step 8 outcome, step 9 outcome
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 10 full
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): step 10 sketchFull
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### collinear-concentric: Collinear lines, concentric circle + arc, midpoint symmetry, point on arc (round 2)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 A at the origin | accepted | accepted | yes | another valid branch | ..... / ..... ; sketch: nullity 19 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | another valid branch | ..... / F.... * ; sketch: nullity 18 / not fully constrained |
+| 3 AB length 30 | accepted | accepted | yes | another valid branch | F.... / F.... ; sketch: nullity 17 / not fully constrained |
+| 4 CD collinear with AB | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 15 / not fully constrained |
+| 5 CD length 40 | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 14 / not fully constrained |
+| 6 gap B-C 20 | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 13 / not fully constrained |
+| 7 circle centre 45 right of the origin | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 12 / not fully constrained |
+| 8 circle centre 60 below A (the origin joint pair is taken by the H dim: | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 11 / not fully constrained |
+| 9 circle radius 15 | accepted | accepted | yes | another valid branch | FFF.. / FFF.. ; sketch: nullity 11 / not fully constrained |
+| 10 concentric: arc centre = circle centre | accepted | accepted | yes | another valid branch | FFF.. / FFF.. ; sketch: nullity 9 / not fully constrained |
+| 11 arc radius 25 | accepted | accepted | **NO** | another valid branch | FFF.. / FFFF. * ; sketch: nullity 8 / not fully constrained |
+| 12 arc start level with its centre | accepted | accepted | **NO** | another valid branch | FFF.. / FFFF. * ; sketch: nullity 7 / not fully constrained |
+| 13 arc end above its centre | accepted | accepted | yes | another valid branch | FFFF. / FFFF. ; sketch: nullity 6 / not fully constrained |
+| 14 E-F horizontal | accepted | accepted | yes | another valid branch | FFFF. / FFFF. ; sketch: nullity 5 / not fully constrained |
+| 15 symmetry: O is the midpoint of E-F | accepted | accepted | **NO** | another valid branch | FFFF. / FFFFF * ; sketch: nullity 3 / not fully constrained |
+| 16 E-F length 70 | accepted | accepted | yes | another valid branch | FFFFF / FFFFF ; sketch: nullity 2 / not fully constrained |
+| 17 point P on the arc | accepted | accepted | yes | another valid branch | FFFFF / FFFFF ; sketch: nullity 1 / not fully constrained |
+| 18 P 10 right of the arc centre | accepted | accepted | yes | another valid branch | FFFFF / FFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 18 dimension edits (0.8x, 1.25x): 18 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 3 full, step 4 full, step 10 full, step 11 full, step 14 full
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### axis-symmetry: House outline symmetric about a construction centre line (round 2)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 axis top A0 at the origin | accepted | accepted | yes | same | ...... / ...... ; sketch: nullity 16 / not fully constrained |
+| 2 axis vertical | accepted | accepted | **NO** | same | ...... / .....F * ; sketch: nullity 15 / not fully constrained |
+| 3 axis length 120 | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 14 / not fully constrained |
+| 4 apex T on the axis | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 13 / not fully constrained |
+| 5 apex 10 below A0 | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 12 / not fully constrained |
+| 6 shoulder midpoint Mc on the axis | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 11 / not fully constrained |
+| 7 shoulders L2-R2 horizontal | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 10 / not fully constrained |
+| 8 shoulders symmetric: midpoint(L2,R2)=Mc | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 8 / not fully constrained |
+| 9 shoulder width 50 | accepted | accepted | yes | same | .....F / .....F ; sketch: nullity 7 / not fully constrained |
+| 10 shoulder level 30 below A0 | accepted | accepted | yes | same | F...FF / F...FF ; sketch: nullity 6 / not fully constrained |
+| 11 base midpoint Mb on the axis | accepted | accepted | yes | same | F...FF / F...FF ; sketch: nullity 5 / not fully constrained |
+| 12 base L1-R1 horizontal | accepted | accepted | yes | same | F...FF / F...FF ; sketch: nullity 4 / not fully constrained |
+| 13 base symmetric: midpoint(L1,R1)=Mb | accepted | accepted | yes | same | F...FF / F...FF ; sketch: nullity 2 / not fully constrained |
+| 14 base width 60 | accepted | accepted | yes | same | F...FF / F...FF ; sketch: nullity 1 / not fully constrained |
+| 15 base level 80 below A0 | accepted | accepted | yes | same | FFFFFF / FFFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 12 dimension edits (0.8x, 1.25x): 12 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### welded-T: T outline, one shared joint per corner (round 2)
+
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 A at the origin | accepted | accepted | yes | same | ........ / ........ ; sketch: nullity 14 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 13 / not fully constrained |
+| 3 BC vertical | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 12 / not fully constrained |
+| 4 CD horizontal | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 11 / not fully constrained |
+| 5 DE vertical | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 10 / not fully constrained |
+| 6 EF horizontal | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 9 / not fully constrained |
+| 7 FG vertical | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 8 / not fully constrained |
+| 8 GH horizontal | accepted | accepted | **NO** | same | ........ / F....... * ; sketch: nullity 7 / not fully constrained |
+| 9 HA vertical | accepted | accepted | **NO** | same | ........ / F......F * ; sketch: nullity 6 / not fully constrained |
+| 10 AB length 100 | accepted | accepted | **NO** | same | F....... / FF.....F * ; sketch: nullity 5 / not fully constrained |
+| 11 BC height 20 | accepted | accepted | **NO** | same | FF...... / FFF....F * ; sketch: nullity 4 / not fully constrained |
+| 12 CD length 40 | accepted | accepted | **NO** | same | FFF..... / FFFF...F * ; sketch: nullity 3 / not fully constrained |
+| 13 DE height 60 | accepted | accepted | **NO** | same | FFFF.... / FFFFF..F * ; sketch: nullity 2 / not fully constrained |
+| 14 EF length 20 | accepted | accepted | **NO** | same | FFFFF... / FFFFFF.F * ; sketch: nullity 1 / not fully constrained |
+| 15 HA height 20 | accepted | accepted | yes | same | FFFFFFFF / FFFFFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 12 dimension edits (0.8x, 1.25x): 12 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 2 full, step 3 full, step 4 full, step 5 full, step 6 full, step 7 full, step 8 full, step 9 full, step 10 full, step 11 full, step 12 full (+1 more)
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### filleted-polygon: House pentagon, every corner filleted (R6) (round 2)
+
+* the polygon is our tool's structure (sides + construction radials + equal constraints), replayed as lines and equals, not a Fusion polygon
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 sharp A at the origin | accepted | accepted | yes | another valid branch | .......... / .......... ; sketch: nullity 8 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | another valid branch | .......... / F......... * ; sketch: nullity 7 / not fully constrained |
+| 3 BC vertical | accepted | accepted | **NO** | another valid branch | .......... / F......... * ; sketch: nullity 6 / not fully constrained |
+| 4 EA vertical | accepted | accepted | **NO** | another valid branch | .........F / F...F....F * ; sketch: nullity 5 / not fully constrained |
+| 5 width vA-vB 60 | accepted | accepted | **NO** | another valid branch | F....F...F / FF..FF...F * ; sketch: nullity 4 / not fully constrained |
+| 6 right wall vB-vC 40 | accepted | accepted | **NO** | another valid branch | F....F...F / FF..FF...F * ; sketch: nullity 3 / not fully constrained |
+| 7 left wall vA-vE 40 | accepted | accepted | **NO** | another valid branch | F....F...F / FF..FF...F * ; sketch: nullity 2 / not fully constrained |
+| 8 roof sides equal: /vC vD/ = /vD vE/ | accepted | accepted (skipped: the arc keeps its radius structurally in Fusion) | yes | - | - |
+| 9 apex 30 below vE | accepted | accepted | **NO** | same | FFFFFFFFFF / FF..FF...F * ; sketch: fully constrained / not fully constrained * |
+
+Step E, 18 dimension edits (0.8x, 1.25x): 18 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 2 full, step 3 full, step 4 full, step 5 full, step 6 full, step 8 full
+* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): step 8 sketchFull
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### every-kind: Every shape kind in one drawing (round 2)
+
+* not expressible in Fusion and left out: s_bezier (bezier) (Fusion has no cubic bezier with our control-point data; its two end joints are kept as points)
+* the polygon is our tool's structure (sides + construction radials + equal constraints), replayed as lines and equals, not a Fusion polygon
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 rect corner c1 at the origin | accepted | accepted | **NO** | another valid branch | ...................... / F..F...............?.. * ; sketch: nullity 27 / not fully constrained |
+| 2 rect width 60 | accepted | accepted | **NO** | another valid branch | F...F................. / FF.FF..............?.. * ; sketch: nullity 26 / not fully constrained |
+| 3 rect height V-c3 43 (V = the filleted TR sharp; the pair c1-c3 is take | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 25 / not fully constrained |
+| 4 hexagon centre 150 right | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 24 / not fully constrained |
+| 5 hexagon centre 20 down | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 23 / not fully constrained |
+| 6 hexagon circumradius 20 | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 22 / not fully constrained |
+| 7 hexagon first radial horizontal | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 21 / not fully constrained |
+| 8 circle centre 40 right | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 20 / not fully constrained |
+| 9 circle centre 90 down | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 19 / not fully constrained |
+| 10 circle radius 10 | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 19 / not fully constrained |
+| 11 arc centre 100 right | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 18 / not fully constrained |
+| 12 arc centre 90 down | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 17 / not fully constrained |
+| 13 arc radius 15 | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 16 / not fully constrained |
+| 14 arc start level with its centre | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 15 / not fully constrained |
+| 15 bezier start = arc end | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 13 / not fully constrained |
+| 16 line horizontal | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 12 / not fully constrained |
+| 17 line length 30 | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 11 / not fully constrained |
+| 18 construction line vertical | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 10 / not fully constrained |
+| 19 lone point on the line | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..FF?.. * ; sketch: nullity 9 / not fully constrained |
+
+Step E, 26 dimension edits (0.8x, 1.25x): 26 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 10, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 0 full, step 1 full, step 6 full, step 7 full, step 8 full, step 9 full, step 10 full, step 11 full, step 12 full, step 13 full, step 14 full, step 15 full (+3 more)
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+#### two-sketches: Two sketches, constraints in each, one link (round 2)
+
+* built in ONE Fusion sketch: Fusion constraints cannot cross sketches, and our solver is one global system that never reads sketchId, so the comparison is of the constraint maths only
+* fillets are an arc + tangent constraints + a radius dimension + a virtual sharp point (a plain sketch point on both lines), as the fillet tool builds them
+* units: ours mm, Fusion API cm (x 0.1 on the way in); angle dimensions are given in degrees
+
+| step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
+|---|---|---|---|---|---|
+| 1 S1 rect corner c1 at the origin | accepted | accepted | **NO** | another valid branch | ....... / F..F... * ; sketch: nullity 8 / not fully constrained |
+| 2 S1 rect width 60 | accepted | accepted | **NO** | another valid branch | F...... / FF.F... * ; sketch: nullity 7 / not fully constrained |
+| 3 S1 rect height 40 (right side; the pair c1-c3 is taken by the width: F | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 6 / not fully constrained |
+| 4 S2 triangle base AB horizontal | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 5 / not fully constrained |
+| 5 S2 triangle sides CA = BC | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 4 / not fully constrained |
+| 6 S2 base length 60 | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 3 / not fully constrained |
+| 7 S2 apex 50 above the base (line-to-point) | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 2 / not fully constrained |
+| 8 LINK: A is 100 right of the rect corner c1 | accepted | accepted | yes | same | FFFF... / FFFF... ; sketch: nullity 1 / not fully constrained |
+| 9 LINK: A is level with the rect corner c1 | accepted | accepted | yes | same | FFFFFFF / FFFFFFF ; sketch: fully constrained / fully constrained |
+
+Step E, 10 dimension edits (0.8x, 1.25x): 10 agree (accepted or refused alike).
+
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
+
+Divergences and verdicts:
+
+* UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 0 full, step 1 full
+* FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
+
+<!-- drawings:end -->

@@ -1,0 +1,4968 @@
+{
+ "how": "see the header of scripts/fusion-oracle/matrix-index.mjs",
+ "classes": [
+  {
+   "row": "coincident",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|LL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:coincident-pp|LL|2,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|LO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|LA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|LP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|OO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|OA|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|OP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|AL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|AO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|AA|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|AP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "coincident",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "coincident",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": ". / translate",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "coincident",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|PA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "coincident",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "coincident",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:coincident-pp|PP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "coincident",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:coincident-pp|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "coincident",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|LL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:horizontal-2pt|LL|2,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "rotate / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|LO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|LA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|LP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|OO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|OA|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|OP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|AL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|AO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|AA|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|AP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|PA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:horizontal-2pt|PP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:horizontal-2pt|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "horizontal-2pt",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|LL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:vertical-2pt|LL|2,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "rotate / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|LO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|LA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|LP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|OO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|OA|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|OP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|AL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|AO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|AA|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|AP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|PA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:vertical-2pt|PP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:vertical-2pt|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "vertical-2pt",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "horizontal-line",
+   "pair": "L",
+   "variant": "sep",
+   "covered": "graded:horizontal-line|L|0",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "stretch / -",
+   "same": false
+  },
+  {
+   "row": "horizontal-line",
+   "pair": "L",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "horizontal-line",
+   "pair": "L",
+   "variant": "locked",
+   "covered": "graded:horizontal-line|L|4",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "one end / -",
+   "same": true
+  },
+  {
+   "row": "horizontal-line",
+   "pair": "L",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "vertical-line",
+   "pair": "L",
+   "variant": "sep",
+   "covered": "graded:vertical-line|L|0",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "stretch / -",
+   "same": false
+  },
+  {
+   "row": "vertical-line",
+   "pair": "L",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "vertical-line",
+   "pair": "L",
+   "variant": "locked",
+   "covered": "graded:vertical-line|L|4",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "one end / -",
+   "same": true
+  },
+  {
+   "row": "vertical-line",
+   "pair": "L",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "parallel",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:parallel|LL|0,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "stretch / stretch",
+   "same": false
+  },
+  {
+   "row": "parallel",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": "which-moves:parallel.shared.AB",
+   "why": null
+  },
+  {
+   "row": "parallel",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:parallel|LL|4,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / stretch",
+   "same": false
+  },
+  {
+   "row": "parallel",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:parallel|LL|2,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "rotate / stretch",
+   "same": false
+  },
+  {
+   "row": "perpendicular",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:perpendicular|LL|0,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "stretch / stretch",
+   "same": false
+  },
+  {
+   "row": "perpendicular",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": "which-moves:perpendicular.shared.AB",
+   "why": null
+  },
+  {
+   "row": "perpendicular",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:perpendicular|LL|4,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / stretch",
+   "same": false
+  },
+  {
+   "row": "perpendicular",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:perpendicular|LL|2,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "rotate / stretch",
+   "same": false
+  },
+  {
+   "row": "collinear",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:collinear|LL|0,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": ". / stretch",
+   "same": false
+  },
+  {
+   "row": "collinear",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": "which-moves:collinear.shared.AB",
+   "why": null
+  },
+  {
+   "row": "collinear",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:collinear|LL|4,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": ". / stretch",
+   "same": false
+  },
+  {
+   "row": "collinear",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:collinear|LL|2,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": ". / stretch",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:tangent-line-circle|LO|0,0",
+   "why": null,
+   "fusion": "stretch / .",
+   "ours": "stretch / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:tangent-line-circle|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "tangent",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:tangent-line-circle|LA|0,0",
+   "why": null,
+   "fusion": "stretch / .",
+   "ours": "stretch / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:tangent-line-circle|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "tangent",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:tangent-line-circle|OL|0,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": "translate / stretch",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:tangent-line-circle|OL|c,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": ". / stretch",
+   "same": true
+  },
+  {
+   "row": "tangent",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": "graded:tangent-line-circle|OL|r,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / stretch",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:tangent-circle-circle|OO|0,0",
+   "why": null,
+   "fusion": ". / translate+radius",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:tangent-circle-circle|OO|c,0",
+   "why": null,
+   "fusion": ". / translate+radius",
+   "ours": ". / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": "graded:tangent-circle-circle|OO|r,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:tangent-circle-circle|OA|0,0",
+   "why": null,
+   "fusion": "translate+radius / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:tangent-circle-circle|OA|c,0",
+   "why": null,
+   "fusion": "radius / .",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": "graded:tangent-circle-circle|OA|r,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:tangent-line-circle|AL|0,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": "deform+radius / stretch",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": "graded:tangent-line-circle|AL|c,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": ". / stretch",
+   "same": true
+  },
+  {
+   "row": "tangent",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": "graded:tangent-line-circle|AL|r,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": "deform / stretch",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:tangent-circle-circle|AO|0,0",
+   "why": null,
+   "fusion": ". / translate+radius",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": "graded:tangent-circle-circle|AO|c,0",
+   "why": null,
+   "fusion": ". / translate+radius",
+   "ours": ". / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": "graded:tangent-circle-circle|AO|r,0",
+   "why": null,
+   "fusion": ". / translate+radius",
+   "ours": "deform / translate",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:tangent-circle-circle|AA|0,0",
+   "why": null,
+   "fusion": ". / deform+radius",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "tangent",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "tangent",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": "graded:tangent-circle-circle|AA|c,0",
+   "why": null,
+   "fusion": ". / deform+radius",
+   "ours": ". / deform+radius",
+   "same": true
+  },
+  {
+   "row": "tangent",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": "graded:tangent-circle-circle|AA|r,0",
+   "why": null,
+   "fusion": "deform / .",
+   "ours": "deform / deform+radius",
+   "same": false
+  },
+  {
+   "row": "equal",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:equal-line-line|LL|0,0",
+   "why": null,
+   "fusion": ". / one end",
+   "ours": "stretch / stretch",
+   "same": false
+  },
+  {
+   "row": "equal",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": "which-moves:equal-line-line.shared.AB",
+   "why": null
+  },
+  {
+   "row": "equal",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:equal-line-line|LL|4,0",
+   "why": null,
+   "fusion": ". / one end",
+   "ours": "one end / stretch",
+   "same": false
+  },
+  {
+   "row": "equal",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:equal-line-line|LL|2,0",
+   "why": null,
+   "fusion": ". / one end",
+   "ours": ". / stretch",
+   "same": false
+  },
+  {
+   "row": "equal",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:equal-circle|OO|0,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "equal",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:equal-circle|OO|c,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": "graded:equal-circle|OO|r,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:equal-circle|OA|0,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "equal",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:equal-circle|OA|c,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": "graded:equal-circle|OA|r,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:equal-circle|AO|0,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "equal",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": "graded:equal-circle|AO|c,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": "graded:equal-circle|AO|r,0",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:equal-circle|AA|0,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "equal",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": "graded:equal-circle|AA|c,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "equal",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": "graded:equal-circle|AA|r,0",
+   "why": null,
+   "fusion": ". / .",
+   "ours": ". / .",
+   "same": true
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:midpoint|LL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:midpoint|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:midpoint|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:midpoint|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:midpoint|AL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:midpoint|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:midpoint|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "midpoint-line",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "midpoint-3pt",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no Fusion equivalent (a midpoint of three free points)"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|LL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|LL|4,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:dim-aligned|LL|2,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "rotate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|LO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|LA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|LA|4,0",
+   "why": null,
+   "fusion": ". / deform+radius",
+   "ours": ". / deform+radius",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|LP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|OL|c,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|OO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|OA|c,0",
+   "why": null,
+   "fusion": ". / deform+radius",
+   "ours": ". / deform+radius",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|OP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|AL|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|AO|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|AA|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|AP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|PL|4,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|PA|4,0",
+   "why": null,
+   "fusion": ". / deform+radius",
+   "ours": ". / deform+radius",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:dim-aligned|PP|0,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:dim-aligned|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-aligned",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|LL|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:dim-horizontal|LL|2,0",
+   "why": null,
+   "fusion": "rotate / .",
+   "ours": "rotate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|LO|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|LA|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|LP|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|OO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|OA|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|OP|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|AL|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|AO|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|AA|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|AP|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|PA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:dim-horizontal|PP|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:dim-horizontal|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-horizontal",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|LL|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|LL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:dim-vertical|LL|2,0",
+   "why": null,
+   "fusion": "rotate / .",
+   "ours": "rotate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|LO|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|LO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|LA|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|LA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|LP|0,0",
+   "why": null,
+   "fusion": "one end / .",
+   "ours": "one end / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|LP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|OL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|OL|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OO",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|OO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OO",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|OO|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OA",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|OA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OA",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|OA|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OP",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|OP|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OP",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|OP|c,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "OP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|AL|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AO",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|AO|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AO",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AA",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|AA|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AA",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AP",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|AP|0,0",
+   "why": null,
+   "fusion": "deform+radius / .",
+   "ours": "deform+radius / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AP",
+   "variant": "locked",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "AP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|PL|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|PL|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / one end",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PO",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|PO|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PO",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PO",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|PO|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PA",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|PA|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PA",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PA",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|PA|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / deform+radius",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PP",
+   "variant": "sep",
+   "covered": "graded:dim-vertical|PP|0,0",
+   "why": null,
+   "fusion": "translate / .",
+   "ours": "translate / translate",
+   "same": false
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PP",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PP",
+   "variant": "locked",
+   "covered": "graded:dim-vertical|PP|4,0",
+   "why": null,
+   "fusion": ". / translate",
+   "ours": ". / translate",
+   "same": true
+  },
+  {
+   "row": "dim-vertical",
+   "pair": "PP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "no such level for this kind"
+  },
+  {
+   "row": "dim-length",
+   "pair": "L",
+   "variant": "sep",
+   "covered": "graded:dim-length|L|0",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "stretch / -",
+   "same": false
+  },
+  {
+   "row": "dim-length",
+   "pair": "L",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-length",
+   "pair": "L",
+   "variant": "locked",
+   "covered": "graded:dim-length|L|4",
+   "why": null,
+   "fusion": "one end / -",
+   "ours": "one end / -",
+   "same": true
+  },
+  {
+   "row": "dim-length",
+   "pair": "L",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "pair class not in the graded set"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LO",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LO",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LO",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LO",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LA",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LA",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LA",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LA",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LP",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LP",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LP",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "LP",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "OL",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "OL",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "OL",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "OL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "AL",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "AL",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "AL",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "AL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "PL",
+   "variant": "sep",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "PL",
+   "variant": "shared",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "PL",
+   "variant": "locked",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-point-line",
+   "pair": "PL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "ours projects a helper joint and the tool throws (finding NEW-1)"
+  },
+  {
+   "row": "dim-line-line",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": null,
+   "why": "not run in Fusion (distance between two parallel lines)"
+  },
+  {
+   "row": "dim-line-line",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "not run in Fusion (distance between two parallel lines)"
+  },
+  {
+   "row": "dim-line-line",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": null,
+   "why": "not run in Fusion (distance between two parallel lines)"
+  },
+  {
+   "row": "dim-line-line",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "not run in Fusion (distance between two parallel lines)"
+  },
+  {
+   "row": "dim-line-line-yx",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": null,
+   "why": "not run in Fusion"
+  },
+  {
+   "row": "dim-line-line-yx",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "not run in Fusion"
+  },
+  {
+   "row": "dim-line-line-yx",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": null,
+   "why": "not run in Fusion"
+  },
+  {
+   "row": "dim-line-line-yx",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": null,
+   "why": "not run in Fusion"
+  },
+  {
+   "row": "dim-angle-xy",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:dim-angle|LL|0,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "stretch / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-angle-xy",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-angle-xy",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:dim-angle|LL|4,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": "one end / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-angle-xy",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:dim-angle|LL|2,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "rotate / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-angle-yx",
+   "pair": "LL",
+   "variant": "sep",
+   "covered": "graded:dim-angle|LL|0,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "stretch / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-angle-yx",
+   "pair": "LL",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-angle-yx",
+   "pair": "LL",
+   "variant": "locked",
+   "covered": "graded:dim-angle|LL|4,0",
+   "why": null,
+   "fusion": ". / stretch",
+   "ours": "one end / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-angle-yx",
+   "pair": "LL",
+   "variant": "dimmed",
+   "covered": "graded:dim-angle|LL|2,0",
+   "why": null,
+   "fusion": ". / rotate",
+   "ours": "rotate / stretch",
+   "same": false
+  },
+  {
+   "row": "dim-radius",
+   "pair": "O",
+   "variant": "sep",
+   "covered": "graded:dim-radius|O|0",
+   "why": null,
+   "fusion": "radius / -",
+   "ours": "radius / -",
+   "same": true
+  },
+  {
+   "row": "dim-radius",
+   "pair": "O",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-radius",
+   "pair": "O",
+   "variant": "locked",
+   "covered": "graded:dim-radius|O|c",
+   "why": null,
+   "fusion": "radius / -",
+   "ours": "radius / -",
+   "same": true
+  },
+  {
+   "row": "dim-radius",
+   "pair": "O",
+   "variant": "dimmed",
+   "covered": "graded:dim-radius|O|r",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  },
+  {
+   "row": "dim-radius",
+   "pair": "A",
+   "variant": "sep",
+   "covered": "graded:dim-radius|A|0",
+   "why": null,
+   "fusion": "scale+radius / -",
+   "ours": "deform+radius / -",
+   "same": false
+  },
+  {
+   "row": "dim-radius",
+   "pair": "A",
+   "variant": "shared",
+   "covered": null,
+   "why": "shared joint is run for the line-line rows only (part 0 \"shared\")"
+  },
+  {
+   "row": "dim-radius",
+   "pair": "A",
+   "variant": "locked",
+   "covered": "graded:dim-radius|A|c",
+   "why": null,
+   "fusion": "scale+radius / -",
+   "ours": "scale+radius / -",
+   "same": true
+  },
+  {
+   "row": "dim-radius",
+   "pair": "A",
+   "variant": "dimmed",
+   "covered": "graded:dim-radius|A|r",
+   "why": null,
+   "fusion": "refused",
+   "ours": "refused",
+   "same": true
+  }
+ ]
+}

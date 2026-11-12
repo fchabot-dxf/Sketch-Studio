@@ -12,7 +12,7 @@ import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier
 import { seedFilletForRadius, filletHasCollapsedLine, filletLines } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { angleDimensionChoiceFor } from '#ui/angle-dimension.js';
+import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { replaceParameters, usersOf } from '#core/parameters.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
@@ -55,14 +55,14 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   if (!edits.length) return { reverted: false, clash: '' };
   const labelOf = (e, i) => e.name || e.c.name || `dimension ${i + 1}`;
   const whyOf = (r) => r.reason || (r.clash ? `conflicts with ${r.clash}` : 'did not converge');
-  // TASK 550: an ANGLE dimension takes a value above 0 (Fusion's dimension box, measured with real keys: 0 and negative values are refused;
-  // the sector keeps opening the same way round as the value grows, see the walk below). Refused before anything changes.
+  // TASK 550 / 553: an ANGLE dimension takes 0 < value <= 360 (Fusion's dimension box, measured with real keys, task 551: 0 and negative
+  // values are refused, 190 / 270 / 360 accepted: the stored sector keeps opening the same way round as the value grows, past 180, see the
+  // walk below). Refused before anything changes.
   for (let i = 0; i < edits.length; i++) {
     const e = edits[i];
-    if (e.c.type === CONSTRAINT_TYPES.ANGLE && !(Number(e.value) > 0)) {
-      const why = 'an angle must be more than 0 degrees';
-      return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
-    }
+    if (e.c.type !== CONSTRAINT_TYPES.ANGLE) continue;
+    const why = !(Number(e.value) > 0) ? 'an angle must be more than 0 degrees' : !(Number(e.value) <= 360) ? 'an angle must be at most 360 degrees' : null;
+    if (why) return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
   }
   if (opts.refuseReference) {
     for (let i = 0; i < edits.length; i++) {
@@ -94,7 +94,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     // continuously. A fillet radius edit is already seeded analytically above, so it is not stepped (it takes its value at once). At each
     // step the operand that gives way is placed at the step's value by the creation placement (the who-moves table, task 525) before the solve.
     // The step is a fraction of the OLD value, or of the NEW one when the old value is 0 (TASK 550: an angle edited from 0, two parallel lines,
-    // to 179 turned in one jump and the angle row, satisfied modulo 180 degrees, landed on the reversed line at 1 degree; in steps of 17.9
+    // to 179 turned in one jump and the angle row, then satisfied modulo 180 degrees, landed on the reversed line at 1 degree; in steps of 17.9
     // degrees the line turns continuously to exactly 179, like Fusion).
     let steps = 1;
     list.forEach((e, i) => {
@@ -253,16 +253,18 @@ export function toggleDriving(state, c) {
         const j1a = state.joints.get(s1.joints[0]); const j1b = state.joints.get(s1.joints[1]);
         const j2a = state.joints.get(s2.joints[0]); const j2b = state.joints.get(s2.joints[1]);
         if (j1a && j1b && j2a && j2b) {
-          // the sector the label sits in is what a reference measured (task 543): its span, with `supplement` when it is the other pair
+          // the sector the label sits in is what a reference measured (task 543): it becomes the stored sector, its span the value (task 553)
           const int = getLineIntersection(j1a, j1b, j2a, j2b);
           if (int) {
-            const ch = angleDimensionChoiceFor(c, j1a, j1b, j2a, j2b, int);
+            const d1 = Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x), d2 = Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x);
+            const ch = angleSectorUnderLabel(d1, d2, angleLabelAngle(c, int, d1, d2));
             c.value = ch.value;
-            if (ch.supplement) c.supplement = true; else delete c.supplement;
+            c.sector = ch.sector;
           } else {
-            // parallel lines have no sectors: the angle between the directions (0 or 180)
+            // parallel lines have no sectors: the angle between the directions (0 or 180), the CCW sector from line 1's direction
             let v = Math.abs((Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x) - Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x)) * 180 / Math.PI);
             c.value = v > 180 ? 360 - v : v;
+            c.sector = angleSectorOf(null);
           }
         }
       }

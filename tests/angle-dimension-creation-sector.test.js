@@ -1,7 +1,8 @@
 // tests/angle-dimension-creation-sector.test.js -- TASK 543 round 2: the sector where the label is dropped when an angle dimension is CREATED
 // decides what it measures (Fusion, measured through its API: 10.00 in the 10 degree sector, 170.00 in the 170 degree one; a later label drag
-// changes nothing). The stored constraint is the CCW pair (task 511) plus the additive field `supplement: true` = "the value is the SUPPLEMENT of
-// the pair's CCW angle". The solver row, the verifier and the arc all read it; an old constraint without it is unchanged.
+// changes nothing). The stored constraint is the CCW pair (task 511) plus the measured SECTOR (task 553, #core/angle-sector.js:
+// { ray1, ray2, turn }: the sector runs from a ray of line 1 to a ray of line 2, counter-clockwise or clockwise). The solver row, the
+// verifier and the arc all read it.
 import assert from 'node:assert';
 
 const store = {};
@@ -38,12 +39,11 @@ function spanContaining(S, c, ang) {
   for (let i = 0; i < 4; i++) { const lo = rays[i], hi = i === 3 ? rays[0] + 360 : rays[i + 1]; const aa = i === 3 && a < lo ? a + 360 : a; if (aa >= lo && aa <= hi) return hi - lo; }
   throw new Error('no sector');
 }
-// what the stored constraint measures in the live geometry: the CCW angle of its pair, or its supplement
-function measured(S, c) {
-  const d = norm(deg(dirOf(S, c.shapes[1]) - dirOf(S, c.shapes[0])));
-  const th = d > 180 ? 360 - d : d;
-  return c.supplement === true ? 180 - th : th;
-}
+// what the stored constraint measures in the live geometry: the angle from its ray of line 1 to its ray of line 2, turning its way
+const rayDeg = (S, c, i) => deg(dirOf(S, c.shapes[i])) + ((i === 0 ? c.sector.ray1 : c.sector.ray2) < 0 ? 180 : 0);
+function measured(S, c) { return norm(c.sector.turn * (rayDeg(S, c, 1) - rayDeg(S, c, 0))); }
+// does direction `ang` (degrees) lie inside the stored sector
+function inSector(S, c, ang) { const from = c.sector.turn > 0 ? rayDeg(S, c, 0) : rayDeg(S, c, 1); return norm(ang - from) <= measured(S, c) + 1e-9; }
 const arcSpan = (S, c) => {
   const svg = { viewBox: { baseVal: { x: -2000, y: -2000, width: 4000, height: 4000 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 800 }), innerHTML: '' };
   draw(S.state.joints, S.state.shapes, svg, null, null, [c], new Set(), new Set(), 'select', null, new Set(), null, null, null, null, null, false, null);
@@ -76,7 +76,7 @@ for (const [d1, d2] of PAIRS) {
     // 1. stored value == the sector's span; the lines have not moved
     assert(Math.abs(c.value - span) < 1e-6, `${tag}: stored value ${c.value} != span ${span}`);
     assert(L.maxDeviation(S, before) === 0, tag + ': placing the label moved geometry');
-    assert.strictEqual(c.supplement === true, Math.abs(span - theta) > 1e-6, tag + ': supplement flag is set exactly when the sector is the supplement of the pair angle');
+    assert(theta > 0 && Math.abs(measured(S, c) - span) < 1e-6 && inSector(S, c, labelDeg), `${tag}: the stored sector ${JSON.stringify(c.sector)} is the one under the label (spans ${measured(S, c)})`);
     // 2. the drawn arc spans it
     assert(Math.abs(arcSpan(S, c) - span) < 0.5, `${tag}: arc spans ${arcSpan(S, c)} not ${span}`);
     // 3. the solver holds it: residual 0, the measured sector is still the chosen span after a jitter re-solve, nothing collapsed
@@ -85,7 +85,7 @@ for (const [d1, d2] of PAIRS) {
     assert(S.engine.solve(500).converged, tag + ': converged after jitter');
     assert(Math.abs(measured(S, c) - span) < 1e-3, `${tag}: after a jitter re-solve the dimension measures ${measured(S, c)}, not ${span}`);
     assert(Math.abs(spanContaining(S, c, labelDeg) - span) < 1e-3, `${tag}: the label's sector still spans ${spanContaining(S, c, labelDeg)}`);
-    // 4. editing the value to 120 drives the chosen sector (CCW angle 120 or its supplement 60), the label stays in that sector
+    // 4. editing the value to 120 drives the chosen sector, the label stays in that sector
     const er = commitDimensionEdit(S.state, c, 120);
     assert(!er.reverted, tag + ': edit to 120 accepted ' + JSON.stringify(er));
     assert(Math.abs(measured(S, c) - 120) < 1e-3, `${tag}: after editing to 120 the dimension measures ${measured(S, c)}`);
@@ -96,39 +96,49 @@ for (const [d1, d2] of PAIRS) {
     // 6. save / load keeps it; undo keeps it
     const doc = JSON.parse(JSON.stringify(serializeDocument(S.state)));
     const saved = doc.geometry.constraints.find((x) => x.type === 'angle');
-    assert.strictEqual(saved.supplement === true, c.supplement === true, tag + ': saved');
+    assert.deepStrictEqual(saved.sector, c.sector, tag + ': saved');
     S.state.saveState('edit');
-    const keepSup = c.supplement === true, keepVal = c.value;
-    c.value = 33; delete c.supplement;
+    const keepSector = JSON.stringify(c.sector), keepVal = c.value;
+    c.value = 33; c.sector = { ray1: -c.sector.ray1, ray2: c.sector.ray2, turn: -c.sector.turn };
     S.state.undo();
     const back = S.state.constraints.find((x) => x.type === 'angle');
-    assert(back.value === keepVal && (back.supplement === true) === keepSup, tag + ': undo restores value + sector');
+    assert(back.value === keepVal && JSON.stringify(back.sector) === keepSector, tag + ': undo restores value + sector');
     const S2 = L.newSketch(); deserializeDocument(doc, S2.state);
     const loaded = S2.state.constraints.find((x) => x.type === 'angle');
-    assert(loaded && (loaded.supplement === true) === keepSup && Math.abs(loaded.value - keepVal) < 1e-9, tag + ': loaded');
+    assert(loaded && JSON.stringify(loaded.sector) === keepSector && Math.abs(loaded.value - keepVal) < 1e-9, tag + ': loaded');
     cases++;
   }
 }
 
-// the row itself, both variants, at a 10 degree geometry: plain t = 10 and supplement t = 170 are satisfied, plain t = 170 / supplement t = 10 are not
+// the row itself, at a 10 degree geometry (u at 0, v at 10): the 10 sector (+u -> +v counter-clockwise) and the 170 sector (+v -> -u, i.e.
+// from -u clockwise to +v) hold it; the same values in the other sector do not
 {
-  const pos = Float64Array.from([0, 0, 100, 0, 0, 0, Math.cos(10 * Math.PI / 180) * 100, Math.sin(10 * Math.PI / 180) * 100]);
-  const err = (value, supplement) => Math.abs(Definitions.angle.computeError({ joints: [0, 1, 2, 3], value, supplement }, pos));
-  assert(err(10, false) < 1e-9 && err(170, true) < 1e-9, 'plain 10 and supplement 170 hold a 10 degree pair');
-  assert(err(170, false) > 100 && err(10, true) > 100, 'plain 170 and supplement 10 do not');
+  const at = (d) => Float64Array.from([0, 0, 100, 0, 0, 0, Math.cos(d * Math.PI / 180) * 100, Math.sin(d * Math.PI / 180) * 100]);
+  const err = (value, sector, d = 10) => Math.abs(Definitions.angle.computeError({ joints: [0, 1, 2, 3], value, sector }, at(d)));
+  const CCW = { ray1: 1, ray2: 1, turn: 1 }, WIDE = { ray1: -1, ray2: 1, turn: -1 };
+  assert(err(10, CCW) < 1e-9 && err(170, WIDE) < 1e-9, '10 in the CCW sector and 170 in the wide one hold a 10 degree pair');
+  assert(err(170, CCW) > 100 && err(10, WIDE) > 100, '170 in the CCW sector and 10 in the wide one do not');
+  // TASK 553: modulo 360, not 180: a 190 dimension (from +u counter-clockwise) is held by the 190 pose only, not by 10 or 170
+  assert(err(190, CCW, 190) < 1e-9, '190 holds the 190 pose');
+  for (const d of [10, 170]) assert(err(190, CCW, d) > 100, `190 is not held by the ${d} pose (residual ${err(190, CCW, d)})`);
+  // and every sector variant: its value at its own pose is 0, the opposite pose (the old modulo-180 twin) is not
+  for (const ray1 of [1, -1]) for (const ray2 of [1, -1]) for (const turn of [1, -1]) for (const value of [10, 120, 190, 270, 359]) {
+    const sector = { ray1, ray2, turn }, pose = turn * value + (ray1 !== ray2 ? 180 : 0);
+    assert(err(value, sector, pose) < 1e-9, `${JSON.stringify(sector)} ${value}: held at ${pose}`);
+    assert(err(value, sector, pose + 180) > 100, `${JSON.stringify(sector)} ${value}: not held at the opposite pose ${pose + 180}`);
+  }
 }
 
-// an OLD constraint (no field) is untouched: its row is the signed line-to-line angle mod 180, exactly as before
+// a constraint built in code without a sector measures the CCW sector from line 1 to line 2 (the default), modulo 360
 {
   const S = L.newSketch();
   const { l1, l2 } = build(S, 0, 10);
   assert(ConstraintManager.createConstraint(S.state, 'angle', { shapes: [l1, l2], value: 170 }, { source: 'test' }));
   const c = S.state.constraints.find((x) => x.type === 'angle');
-  assert(!('supplement' in c), 'no field unless asked');
+  assert.deepStrictEqual(c.sector, { ray1: 1, ray2: 1, turn: 1 }, 'the default sector is stored');
   S.engine.solve(500);
-  // today's row: the signed CCW angle line 1 -> line 2 is 170 MOD 180 (so 170 or -10), and the pair is not reordered or flagged
   const signed = norm(deg(dirOf(S, c.shapes[1]) - dirOf(S, c.shapes[0])));
-  assert(Math.abs(((signed - 170) % 180 + 180) % 180) < 1e-3 || Math.abs(((signed - 170) % 180 + 180) % 180 - 180) < 1e-3, `an old-format 170 still holds the signed angle 170 mod 180 (today's behaviour), got ${signed}`);
+  assert(Math.abs(signed - 170) < 1e-3, `a 170 without a sector holds the CCW angle 170 from line 1 to line 2 (not -10), got ${signed}`);
   assert(measureResidual(c, S.state.joints, S.state.shapes) < 1e-9, 'and the verifier agrees');
 }
 
@@ -141,7 +151,7 @@ for (const [d1, d2] of PAIRS) {
   const int = intOf(S, c);
   c.glyphPos = { x: int.x + Math.cos(-8 * Math.PI / 180) * 300, y: int.y + Math.sin(-8 * Math.PI / 180) * 300 };   // the 170 sector
   toggleDriving(S.state, c);
-  assert(!c.isDriven && Math.abs(c.value - 170) < 1e-6 && c.supplement === true, `promoted reference: value ${c.value} supplement ${c.supplement}`);
+  assert(!c.isDriven && Math.abs(c.value - 170) < 1e-6 && inSector(S, c, -8), `promoted reference: value ${c.value} sector ${JSON.stringify(c.sector)}`);
   assert(Math.abs(measured(S, c) - 170) < 1e-3, 'and the geometry measures 170 in that sector');
 }
-console.log(`angle-dimension-creation-sector: ${cases} creation cases (3 line pairs x 4 sectors) with edit, jitter, Jacobian, save/load, undo; row variants; old format; promotion passed.`);
+console.log(`angle-dimension-creation-sector: ${cases} creation cases (3 line pairs x 4 sectors) with edit, jitter, Jacobian, save/load, undo; row variants (modulo 360); default sector; promotion passed.`);

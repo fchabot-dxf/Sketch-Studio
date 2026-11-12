@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS = {
     // Grid style drawn by the shared canvas grid (#ui/canvas-grid.js): 'lines' | 'off' | 'points'. Default 'lines' = the
     // grid SketchStudio always drew. A genuine display preference → persisted locally like the other display settings.
     GRID_MODE: 'lines',
+    // Minor squares per inch in an INCH file (#ui/canvas-grid.js GRID_INCH_DIVISIONS: 10 | 2 | 4 | 8 | 16; the major stays 1 in).
+    // Default 10 = decimal tenths. Read only when DOC_UNIT is 'in'; a mm file never reads it.
+    INCH_GRID_DIVISIONS: 10,
 
     // Visual defaults
     LINE_STROKE: 1.0,

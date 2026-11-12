@@ -46,28 +46,40 @@ export function gridRectMarkup(mode) {
   return `<rect ${attrs}${normalizeGridMode(mode) === 'off' ? ' display="none"' : ''}/>`;
 }
 
-// The grid's base (minor) and major spacing, as DATA, in the file's own unit. The level-of-detail ratio is major/base
-// (gridLevel), so each row also fixes how the grid coarsens when zoomed out. A unit with NO row (mm, cm) uses the
-// GRID_SIZE / GRID_MAJOR_STEP settings (world units = mm: today's 2 / 10, still tunable in the Style panel), so the mm
-// grid is exactly what it always was. A unit added later needs only a row here.
+// The grid spacing of a document unit, as DATA, in that unit. A unit with NO row (mm, cm) uses the GRID_SIZE /
+// GRID_MAJOR_STEP settings (world units = mm: today's 2 / 10, still tunable in the Style panel), so the mm grid is exactly
+// what it always was. A unit added later needs only a row here.
+//   major     — the major spacing, in the unit.
+//   divisions — { setting, options }: how many minor squares per `major`, read from that declared setting (minor = major/n).
+//   lodRatio  — the level-of-detail step (zoomed out each level multiplies the minor by it), per divisions value; `other`
+//               for any value not listed. Decimal (10): x10 (0.1, 1, 10 in). Binary (2/4/8/16): x2 (1/16, 1/8, 1/4, 1/2,
+//               1, then 2, 4, 8 in): every level stays a round number of the chosen system, and the major follows as
+//               max(major, 2 x minor) (1 in until the minor reaches 1 in, then 2, 4, 8 in). Chosen over feet-style 6/12 in
+//               because the plain doubling continues the same binary sequence with no special case.
+export const GRID_INCH_DIVISIONS = [10, 2, 4, 8, 16];
 export const GRID_SPACING_BY_UNIT = {
-  in: { base: 0.1, major: 1 },
+  in: { major: 1, divisions: { setting: 'INCH_GRID_DIVISIONS', options: GRID_INCH_DIVISIONS }, lodRatio: { 10: 10, other: 2 } },
 };
 
 /**
- * THE one grid spacing, in WORLD units (mm), for a document unit: { GRID_SIZE, GRID_MAJOR_STEP }. PURE.
- * The grid drawing (svg-renderer.js) and the grid snap (input-manager.js) both read it: no second copy of the spacing.
+ * THE one grid spacing, in WORLD units (mm), for a document unit: { GRID_SIZE, GRID_MAJOR_STEP, lodRatio? }. PURE.
+ * `settings` carries GRID_SIZE / GRID_MAJOR_STEP and any row's divisions setting (INCH_GRID_DIVISIONS). The grid drawing
+ * (svg-renderer.js) and the grid snap (input-manager.js) both read it: no second copy of the spacing. lodRatio is
+ * undefined for a unit with no row (gridLevel then uses major/size, as it always did).
  */
-export function gridSpacing(docUnit, { GRID_SIZE, GRID_MAJOR_STEP }) {
+export function gridSpacing(docUnit, settings) {
   const row = GRID_SPACING_BY_UNIT[docUnit];
-  if (!row) return { GRID_SIZE, GRID_MAJOR_STEP };
+  if (!row) return { GRID_SIZE: settings.GRID_SIZE, GRID_MAJOR_STEP: settings.GRID_MAJOR_STEP };
   const k = basePer(docUnit);
-  return { GRID_SIZE: row.base * k, GRID_MAJOR_STEP: row.major * k };
+  const asked = Number(settings[row.divisions.setting]);
+  const n = row.divisions.options.includes(asked) ? asked : row.divisions.options[0];
+  return { GRID_SIZE: (row.major / n) * k, GRID_MAJOR_STEP: row.major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other };
 }
 
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */
-export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
-  const ratio = GRID_MAJOR_STEP / GRID_SIZE;
+export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
+  // lodRatio (gridSpacing's, for units with a row) = the step between levels; absent = major/size (the mm path, unchanged).
+  const ratio = lodRatio || GRID_MAJOR_STEP / GRID_SIZE;
   const pxPerUnit = 1 / scale(1);
   let factor = 1;
   // ratio <= 1 cannot subdivide into levels; keep the base grid.
@@ -77,7 +89,7 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
   const minor = GRID_SIZE * factor;
   const minorPx = minor * pxPerUnit;
   const fade = Math.min(1, Math.max(0, (minorPx - MIN_MINOR_PX) / (MINOR_FADE_SPAN * MIN_MINOR_PX)));
-  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : minor * ratio, minorPx, fade };
+  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : Math.max(GRID_MAJOR_STEP, minor * ratio), minorPx, fade };
 }
 
 /**
@@ -90,8 +102,8 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
  * 'lines' (and 'off', which only hides the rect) = the pattern grid. 'points' = a dot at every grid intersection,
  * same levels, heavier at every major.
  */
-export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) {
-  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale });
+export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio }) {
+  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
   // Fully opaque adds no attribute, so the base level stays byte-identical to the original markup.
   const op = (attr) => (fade < 1 ? ` ${attr}="${fade}"` : '');
   if (normalizeGridMode(gridMode) === 'points') {
@@ -163,11 +175,11 @@ export function ensureCanvasGrid(svgEl) {
 const applied = new WeakMap(); // svgEl → last applied signature (skip the DOM write on idle frames)
 
 /** Mount (if needed) + retune the grid on svgEl for the given spacing/zoom/mode. Returns false if it refused. */
-export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) {
+export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio }) {
   const parts = ensureCanvasGrid(svgEl);
   if (!parts) return false;
   const mode = normalizeGridMode(gridMode);
-  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode });
+  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode, lodRatio });
   const sig = mode + '|' + markup;
   if (applied.get(svgEl) !== sig || !parts.defs.firstChild) {
     parts.defs.innerHTML = markup;
@@ -178,6 +190,6 @@ export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gri
 }
 
 /** updateCanvasGrid with the mode read live from the declared GRID_MODE setting (what both render ctxs call). */
-export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale }) {
-  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: SettingsManager.get('GRID_MODE') });
+export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
+  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE') });
 }

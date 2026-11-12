@@ -1,6 +1,5 @@
-// tests/axis-snap-live.test.js - TASK 537: a point drawn or dragged near the X / Y axis snaps onto it and leaves the horizontal /
-// vertical constraint with j_origin. Live headless CDP with real pointer events on #svgCanvas; results read from the stored design.
-// Modelled on tests/snap-origin-coincident.test.js (484).
+// tests/axis-snap-live-runner.js - TASK 537 live scenarios (headless CDP, real pointer events). NOT a test file itself: the gate runs each
+// *.test.js under a 90 s limit, so axis-snap-live-{lines,shapes,session}.test.js each set ONLY and import this runner.
 
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -190,7 +189,7 @@ await (async () => {
     need('arc centre on X axis', (r) => r.h >= 1 && r.onX.length >= 1, 'arc centre on the X axis with a horizontal constraint');
     need('select drag to X axis', (r) => r.h >= 1 && r.onX.length >= 1, 'the dragged joint on the X axis with a horizontal constraint');
 
-    if (!only || only.includes('line end on X axis')) {
+    if (!only || only.includes('session')) {
       // the line's second point stays on the axis when the FIRST point is dragged; save/load keeps it; undo removes it
       await fresh();
       let o = await toScreen(0, 0);

@@ -8,6 +8,12 @@
 // params.radius (or radii[i]).
 
 function idx(positions, jointIndex) { return jointIndex * 2; }
+// THE one way a row writes a joint's derivative (task 533): ACCUMULATE (gx, gy) into that joint's two columns, never assign. A row
+// can name the same joint more than once (two lines sharing a corner, the same line twice, a point that is an end of its own line,
+// a line ending on a circle's centre): each occurrence adds its own partial. Assigning let the last write overwrite the others
+// (F6: parallel of two lines sharing a corner, |J - fd| = 29; turn 404 for equal). The caller hands every row zeroed
+// (engine._assemble allocates a fresh zero-filled row per constraint).
+const addGrad = (outRow, j, gx, gy) => { outRow[j*2 + 0] += gx; outRow[j*2 + 1] += gy; };
 // The radius a row uses: the circle's unknown, the arc's |rim - centre|, else the constant.
 const radiusValue = (positions, at, constant, rim, centre) => {
   if (typeof at === 'number') return positions[at];
@@ -22,8 +28,8 @@ const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
   if (typeof rim === 'number' && typeof centre === 'number') {
     const rx = positions[rim*2] - positions[centre*2], ry = positions[rim*2+1] - positions[centre*2+1];
     const rd = Math.hypot(rx, ry) || 1e-12;
-    outRow[rim*2 + 0] += coef * rx / rd; outRow[rim*2 + 1] += coef * ry / rd;
-    outRow[centre*2 + 0] -= coef * rx / rd; outRow[centre*2 + 1] -= coef * ry / rd;
+    addGrad(outRow, rim, coef * rx / rd, coef * ry / rd);
+    addGrad(outRow, centre, -coef * rx / rd, -coef * ry / rd);
   }
 };
 
@@ -67,7 +73,7 @@ export const Definitions = {
       return Math.hypot(dx, dy) - (params.value || 0);
     },
     computeJacobian: (params, positions, outRow) => {
-      if (typeof params.radiusAt === 'number') { outRow[params.radiusAt] = 1; return; }
+      if (typeof params.radiusAt === 'number') { outRow[params.radiusAt] += 1; return; }
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -82,23 +88,20 @@ export const Definitions = {
         // d|signed|/dvar = sgn · d(signed)/dvar
         // d(cross/|u|)/dvar — same chain as in tangent's circle-line case.
         const lu3 = lu * lu * lu;
-        outRow[pi*2 + 0] = sgn * (uy / lu);
-        outRow[pi*2 + 1] = sgn * (-ux / lu);
-        outRow[ai*2 + 0] = sgn * ((wy - uy) / lu + cross * (ux / lu3));
-        outRow[ai*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
-        outRow[bi*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
-        outRow[bi*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
+        addGrad(outRow, pi, sgn * (uy / lu), sgn * (-ux / lu));
+        addGrad(outRow, ai, sgn * ((wy - uy) / lu + cross * (ux / lu3)), sgn * ((ux - wx) / lu + cross * (uy / lu3)));
+        addGrad(outRow, bi, sgn * ((-wy) / lu + cross * (-ux / lu3)), sgn * ((wx) / lu + cross * (-uy / lu3)));
         return;
       }
       const ia = params.joints[0], ib = params.joints[1];
       const ax = positions[ia*2], ay = positions[ia*2+1];
       const bx = positions[ib*2], by = positions[ib*2+1];
-      if (params.dimMode === 'horizontal') { const sg = params.dimSign || 1; outRow[ia*2] = -sg; outRow[ib*2] = sg; return; }
-      if (params.dimMode === 'vertical') { const sg = params.dimSign || 1; outRow[ia*2 + 1] = -sg; outRow[ib*2 + 1] = sg; return; }
+      if (params.dimMode === 'horizontal') { const sg = params.dimSign || 1; addGrad(outRow, ia, -sg, 0); addGrad(outRow, ib, sg, 0); return; }
+      if (params.dimMode === 'vertical') { const sg = params.dimSign || 1; addGrad(outRow, ia, 0, -sg); addGrad(outRow, ib, 0, sg); return; }
       const dx = ax - bx, dy = ay - by;
       const r = Math.hypot(dx, dy) || 1e-12;
-      outRow[ia*2 + 0] = dx / r; outRow[ia*2 + 1] = dy / r;
-      outRow[ib*2 + 0] = -dx / r; outRow[ib*2 + 1] = -dy / r;
+      addGrad(outRow, ia, dx / r, dy / r);
+      addGrad(outRow, ib, -dx / r, -dy / r);
     }
   },
 
@@ -130,8 +133,8 @@ export const Definitions = {
         const dx = positions[pi*2] - positions[ci*2];
         const dy = positions[pi*2+1] - positions[ci*2+1];
         const d = Math.hypot(dx, dy) || 1e-12;
-        outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
-        outRow[ci*2 + 0] = -dx / d; outRow[ci*2 + 1] = -dy / d;
+        addGrad(outRow, pi, dx / d, dy / d);
+        addGrad(outRow, ci, -dx / d, -dy / d);
         addRadiusDerivative(outRow, positions, -1, params.radiusAt, params.rimJoint, ci);
         return;
       }
@@ -147,9 +150,9 @@ export const Definitions = {
       // can move the line (like Fusion), and the DOF analysis reads the same rows the solver steps with.
       const r = (wx * uy - wy * ux) / denom;
       const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
-      outRow[pi*2 + 0] = uy / denom;  outRow[pi*2 + 1] = -ux / denom;
-      outRow[ai*2 + 0] = ((-uy + wy) - r * dd(-1, 0)) / denom; outRow[ai*2 + 1] = ((-wx + ux) - r * dd(0, -1)) / denom;
-      outRow[bi*2 + 0] = ((-wy) - r * dd(1, 0)) / denom;       outRow[bi*2 + 1] = ((wx) - r * dd(0, 1)) / denom;
+      addGrad(outRow, pi, uy / denom, -ux / denom);
+      addGrad(outRow, ai, ((-uy + wy) - r * dd(-1, 0)) / denom, ((-wx + ux) - r * dd(0, -1)) / denom);
+      addGrad(outRow, bi, ((-wy) - r * dd(1, 0)) / denom, ((wx) - r * dd(0, 1)) / denom);
     }
   },
 
@@ -165,11 +168,9 @@ export const Definitions = {
     computeJacobian: (params, positions, outRows) => {
       const a = params.joints[0], b = params.joints[1];
       // first row: x difference
-      outRows[0][a*2 + 0] = 1; outRows[0][a*2 + 1] = 0;
-      outRows[0][b*2 + 0] = -1; outRows[0][b*2 + 1] = 0;
+      addGrad(outRows[0], a, 1, 0); addGrad(outRows[0], b, -1, 0);
       // second row: y difference
-      outRows[1][a*2 + 0] = 0; outRows[1][a*2 + 1] = 1;
-      outRows[1][b*2 + 0] = 0; outRows[1][b*2 + 1] = -1;
+      addGrad(outRows[1], a, 0, 1); addGrad(outRows[1], b, 0, -1);
     }
   },
 
@@ -183,8 +184,7 @@ export const Definitions = {
     },
     computeJacobian: (params, positions, outRow) => {
       const a = params.joints[0], b = params.joints[1];
-      outRow[a*2 + 0] = 0; outRow[a*2 + 1] = 1;
-      outRow[b*2 + 0] = 0; outRow[b*2 + 1] = -1;
+      addGrad(outRow, a, 0, 1); addGrad(outRow, b, 0, -1);
     }
   },
 
@@ -198,8 +198,7 @@ export const Definitions = {
     },
     computeJacobian: (params, positions, outRow) => {
       const a = params.joints[0], b = params.joints[1];
-      outRow[a*2 + 0] = 1; outRow[a*2 + 1] = 0;
-      outRow[b*2 + 0] = -1; outRow[b*2 + 1] = 0;
+      addGrad(outRow, a, 1, 0); addGrad(outRow, b, -1, 0);
     }
   },
   // Midpoint: ensure joint[2] is midpoint of joint[0]-joint[1]
@@ -218,8 +217,8 @@ export const Definitions = {
       // slaves m to a,b. Least-change keeps placing-a-marker behaviour: m free + endpoints held -> only m
       // moves; a pinned m -> the endpoints follow.
       const a = params.joints[0], b = params.joints[1], m = params.joints[2];
-      outRows[0][a*2 + 0] = 0.5; outRows[0][b*2 + 0] = 0.5; outRows[0][m*2 + 0] = -1;
-      outRows[1][a*2 + 1] = 0.5; outRows[1][b*2 + 1] = 0.5; outRows[1][m*2 + 1] = -1;
+      addGrad(outRows[0], a, 0.5, 0); addGrad(outRows[0], b, 0.5, 0); addGrad(outRows[0], m, -1, 0);
+      addGrad(outRows[1], a, 0, 0.5); addGrad(outRows[1], b, 0, 0.5); addGrad(outRows[1], m, 0, -1);
     }
   },
 
@@ -253,16 +252,15 @@ export const Definitions = {
       for (let r = 0; r < ji.length - 2; ++r) {
         const ci = ji[2 + r];
         // ∂error/∂Cx = -uy/denom ; ∂error/∂Cy = ux/denom
-        outRows[r][ci*2 + 0] = -uy / denom;
-        outRows[r][ci*2 + 1] = ux / denom;
+        addGrad(outRows[r], ci, -uy / denom, ux / denom);
         {
           // the full derivative of r = (u x w)/|u| too: the baseline's own freedom is not hidden and the baseline can move
           const cx = positions[ci*2], cy = positions[ci*2+1];
           const wx = cx - ax, wy = cy - ay;
           const rr = (ux * wy - uy * wx) / denom;
           const dd = (dux, duy) => (dux * ux + duy * uy) / denom; // d|u|/d(var)
-          outRows[r][ji[0]*2 + 0] = ((-wy + uy) - rr * dd(-1, 0)) / denom; outRows[r][ji[0]*2 + 1] = ((-ux + wx) - rr * dd(0, -1)) / denom;
-          outRows[r][ji[1]*2 + 0] = ((wy) - rr * dd(1, 0)) / denom;        outRows[r][ji[1]*2 + 1] = ((-wx) - rr * dd(0, 1)) / denom;
+          addGrad(outRows[r], ji[0], ((-wy + uy) - rr * dd(-1, 0)) / denom, ((-ux + wx) - rr * dd(0, -1)) / denom);
+          addGrad(outRows[r], ji[1], ((wy) - rr * dd(1, 0)) / denom, ((-wx) - rr * dd(0, 1)) / denom);
         }
       }
     }
@@ -298,10 +296,11 @@ export const Definitions = {
       //   ∂r/∂bx =  vy   ∂r/∂by = −vx    (∂u/∂b = +I)
       //   ∂r/∂cx =  uy   ∂r/∂cy = −ux    (∂v/∂c = −I)
       //   ∂r/∂dx = −uy   ∂r/∂dy =  ux    (∂v/∂d = +I)
-      outRow[aI*2 + 0] = -vy; outRow[aI*2 + 1] =  vx;
-      outRow[bI*2 + 0] =  vy; outRow[bI*2 + 1] = -vx;
-      outRow[cI*2 + 0] =  uy; outRow[cI*2 + 1] = -ux;
-      outRow[dI*2 + 0] = -uy; outRow[dI*2 + 1] =  ux;
+      // ACCUMULATE: the two lines may share a joint (b === c at a corner), each part adds its own partial (addGrad).
+      addGrad(outRow, aI, -vy,  vx);
+      addGrad(outRow, bI,  vy, -vx);
+      addGrad(outRow, cI,  uy, -ux);
+      addGrad(outRow, dI, -uy,  ux);
     }
   },
 
@@ -338,10 +337,10 @@ export const Definitions = {
       const vx = dx - cx, vy = dy - cy;
       if (params.branch !== 1 && params.branch !== -1) {
         // Original dot-product Jacobian
-        outRow[a*2 + 0] = -vx; outRow[a*2 + 1] = -vy;
-        outRow[b*2 + 0] =  vx; outRow[b*2 + 1] =  vy;
-        outRow[c*2 + 0] = -ux; outRow[c*2 + 1] = -uy;
-        outRow[d*2 + 0] =  ux; outRow[d*2 + 1] =  uy;
+        addGrad(outRow, a, -vx, -vy);
+        addGrad(outRow, b,  vx,  vy);
+        addGrad(outRow, c, -ux, -uy);
+        addGrad(outRow, d,  ux,  uy);
         return;
       }
       // Branched: r = (ux*vy − uy*vx) − branch · |u| · |v|
@@ -356,11 +355,11 @@ export const Definitions = {
       const drdvx = -uy - br * lenU * (vx / lenV);
       const drdvy =  ux - br * lenU * (vy / lenV);
       // u = b − a  →  ∂u/∂a = −I, ∂u/∂b = +I
-      outRow[a*2 + 0] = -drdux; outRow[a*2 + 1] = -drduy;
-      outRow[b*2 + 0] =  drdux; outRow[b*2 + 1] =  drduy;
+      addGrad(outRow, a, -drdux, -drduy);
+      addGrad(outRow, b,  drdux,  drduy);
       // v = d − c  →  ∂v/∂c = −I, ∂v/∂d = +I
-      outRow[c*2 + 0] = -drdvx; outRow[c*2 + 1] = -drdvy;
-      outRow[d*2 + 0] =  drdvx; outRow[d*2 + 1] =  drdvy;
+      addGrad(outRow, c, -drdvx, -drdvy);
+      addGrad(outRow, d,  drdvx,  drdvy);
     }
   },
 
@@ -423,8 +422,8 @@ export const Definitions = {
         const x2 = positions[i2*2], y2 = positions[i2*2+1];
         const dx = x2 - x1, dy = y2 - y1;
         const r = Math.hypot(dx, dy) || 1e-12;
-        outRow[i1*2 + 0] = -dx / r; outRow[i1*2 + 1] = -dy / r;
-        outRow[i2*2 + 0] =  dx / r; outRow[i2*2 + 1] =  dy / r;
+        addGrad(outRow, i1, -dx / r, -dy / r);
+        addGrad(outRow, i2,  dx / r,  dy / r);
         // each operand's radius (a circle's unknown or an arc's |rim - centre|): target r1 + r2 (external) or |r1 - r2| (internal)
         const at = params.radiiAt || [], rim = params.rimJoints || [];
         const r1 = radiusValue(positions, at[0], params.radii[0], rim[0], i1), r2 = radiusValue(positions, at[1], params.radii[1], rim[1], i2);
@@ -450,11 +449,9 @@ export const Definitions = {
         const wpx = positions[pI*2] - cx, wpy = positions[pI*2+1] - cy;
         const g = wpx * ux + wpy * uy;
         const lu3 = lu * lu * lu;
-        const add = (idx, dwx, dwy, dux, duy) => {
-          outRow[idx*2 + 0] += (dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3;
-          outRow[idx*2 + 1] += (dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3;
-        };
-        outRow[cI*2] = outRow[cI*2+1] = outRow[aI*2] = outRow[aI*2+1] = outRow[bI*2] = outRow[bI*2+1] = 0;
+        const add = (idx, dwx, dwy, dux, duy) => addGrad(outRow, idx,
+          (dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3,
+          (dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3);
         // x and y components are independent: variable x moves (dw,du) along x only.
         add(cI, -1, -1, 0, 0);
         add(pI, 1, 1, 0, 0);
@@ -471,12 +468,9 @@ export const Definitions = {
       // ∂(1/|u|)/∂{Bx,By} = (−ux/|u|³, −uy/|u|³)
       // ∂(1/|u|)/∂{Cx,Cy} = 0
       const lu3 = lu * lu * lu;
-      outRow[cI*2 + 0] = sgn * (uy / lu);
-      outRow[cI*2 + 1] = sgn * (-ux / lu);
-      outRow[aI*2 + 0] = sgn * ((wy - uy) / lu + cross * (ux / lu3));
-      outRow[aI*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
-      outRow[bI*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
-      outRow[bI*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
+      addGrad(outRow, cI, sgn * (uy / lu), sgn * (-ux / lu));
+      addGrad(outRow, aI, sgn * ((wy - uy) / lu + cross * (ux / lu3)), sgn * ((ux - wx) / lu + cross * (uy / lu3)));
+      addGrad(outRow, bI, sgn * ((-wy) / lu + cross * (-ux / lu3)), sgn * ((wx) / lu + cross * (-uy / lu3)));
       addRadiusDerivative(outRow, positions, -1, params.radiusAt, params.rimJoint, cI);
     }
   },
@@ -505,7 +499,6 @@ export const Definitions = {
       return 0;
     },
     computeJacobian: (params, positions, outRow) => {
-      outRow.fill(0.0);
       if (params.terms) {
         // ACCUMULATE: the two terms may share a joint (see below).
         params.terms.forEach((t, i) => {
@@ -513,8 +506,8 @@ export const Definitions = {
           if (typeof t.at === 'number') { outRow[t.at] += sg; return; }
           const dx = positions[t.a*2] - positions[t.b*2], dy = positions[t.a*2+1] - positions[t.b*2+1];
           const l = Math.hypot(dx, dy) || 1e-12;
-          outRow[t.a*2 + 0] += sg * dx / l; outRow[t.a*2 + 1] += sg * dy / l;
-          outRow[t.b*2 + 0] -= sg * dx / l; outRow[t.b*2 + 1] -= sg * dy / l;
+          addGrad(outRow, t.a, sg * dx / l, sg * dy / l);
+          addGrad(outRow, t.b, -sg * dx / l, -sg * dy / l);
         });
         return;
       }
@@ -531,13 +524,13 @@ export const Definitions = {
         // ACCUMULATE (+= / -=), never assign: the two lengths may share a joint. Every arc is
         // equal [centre, rim1, centre, rim2] (shapes.js makeArc), so a === c, and an assignment let the
         // second length's partial overwrite the first on the centre -> wrong Jacobian -> drags stalled
-        // (turn 404). outRow is zero-filled above, so this is exact for distinct joints too.
+        // (turn 404). The row starts at zero (addGrad), so this is exact for distinct joints too.
         // ∂len1/∂a = (dx1/l1, dy1/l1); ∂len1/∂b = (-dx1/l1, -dy1/l1)
-        outRow[a*2 + 0] += dx1 / l1; outRow[a*2 + 1] += dy1 / l1;
-        outRow[b*2 + 0] -= dx1 / l1; outRow[b*2 + 1] -= dy1 / l1;
+        addGrad(outRow, a, dx1 / l1, dy1 / l1);
+        addGrad(outRow, b, -dx1 / l1, -dy1 / l1);
         // subtract derivatives for second length (len1 - len2)
-        outRow[c*2 + 0] -= dx2 / l2; outRow[c*2 + 1] -= dy2 / l2;
-        outRow[d*2 + 0] += dx2 / l2; outRow[d*2 + 1] += dy2 / l2;
+        addGrad(outRow, c, -dx2 / l2, -dy2 / l2);
+        addGrad(outRow, d, dx2 / l2, dy2 / l2);
       }
     }
   },
@@ -581,10 +574,10 @@ export const Definitions = {
       const drduy = -vx * ct - vy * st;
       const drdvx = -uy * ct - ux * st;
       const drdvy =  ux * ct - uy * st;
-      outRow[aI*2 + 0] = -drdux; outRow[aI*2 + 1] = -drduy;
-      outRow[bI*2 + 0] =  drdux; outRow[bI*2 + 1] =  drduy;
-      outRow[cI*2 + 0] = -drdvx; outRow[cI*2 + 1] = -drdvy;
-      outRow[dI*2 + 0] =  drdvx; outRow[dI*2 + 1] =  drdvy;
+      addGrad(outRow, aI, -drdux, -drduy);
+      addGrad(outRow, bI,  drdux,  drduy);
+      addGrad(outRow, cI, -drdvx, -drdvy);
+      addGrad(outRow, dI,  drdvx,  drdvy);
     }
   },
 
@@ -602,9 +595,8 @@ export const Definitions = {
     computeJacobian: (params, positions, outRows) => {
       const pi = params.joints[0];
       const w = Math.sqrt(params.stiffness || 1e4);
-      const idx = pi * 2;
-      outRows[0][idx + 0] = w; outRows[0][idx + 1] = 0;
-      outRows[1][idx + 0] = 0; outRows[1][idx + 1] = w;
+      addGrad(outRows[0], pi, w, 0);
+      addGrad(outRows[1], pi, 0, w);
     }
   }
 };

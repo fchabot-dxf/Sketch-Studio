@@ -20,6 +20,7 @@
 import { setDebugSink } from '#core/debug.js';
 import { serializeDocument } from '#core/document.js';
 import { buildJournal, DEFAULT_JOURNAL_MAX_BYTES } from '#core/journal.js'; // TASK 507: the ordered, replayable ops journal
+import { browserFileSeam } from '#ui/project-file.js'; // TASK 544: the app's shared file-save helper (the Download fallback)
 
 const MAX_LOG_ENTRIES = 300;
 const MAX_TOUCH_EVENTS = 300; // TASK 507: pointer + key + wheel events share this ring (was 60 pointer events)
@@ -28,6 +29,10 @@ const POINTERMOVE_THROTTLE_MS = 100; // pointermove fires far more often than po
 
 // ── module-level capture state (installed once per page load, before any overlay is ever opened) ──
 const logBuffer = [];
+// TASK 544: every warn/error entry also goes in its own ring (same entry object), so the REPORT keeps it however far the busy 300-entry
+// ring has since wrapped. The in-app log view still reads logBuffer only.
+const MAX_ALERT_ENTRIES = 200;
+const alertBuffer = [];
 const touchBuffer = [];
 let lastPointerMoveT = 0;
 let lastWheelT = 0;
@@ -53,8 +58,10 @@ function pushLog(kind, category, level, args) {
   const last = logBuffer[logBuffer.length - 1];
   if (last && key === lastKey) { last.count++; last.tLast = now; return; }
   lastKey = key;
-  logBuffer.push({ t: now, tLast: now, count: 1, kind, category, level, args: safe });
+  const entry = { t: now, tLast: now, count: 1, kind, category, level, args: safe };
+  logBuffer.push(entry);
   if (logBuffer.length > MAX_LOG_ENTRIES) logBuffer.shift();
+  if (level === 'warn' || level === 'error') { alertBuffer.push(entry); if (alertBuffer.length > MAX_ALERT_ENTRIES) alertBuffer.shift(); }
 }
 
 function pushTouch(e) {
@@ -125,7 +132,76 @@ function rectOf(sel) {
   return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
-export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL_MAX_BYTES }) {
+// ── TASK 544: the REPORT is trimmed to what a human/agent needs; the in-app log view and the buffers are NOT.
+// Kept whole: app/url/ua/viewport, document, journal, every warn/error entry however old. Trimmed: `log` to the last
+// REPORT_LOG_KEEP meaningful entries, `touchTrace` to the last REPORT_TOUCH_KEEP events; consecutive noise / pointermove runs collapse
+// into one summary; `trimmed` says what was dropped, so nothing is silently lost. "Copy full report" skips all of this.
+export const REPORT_LOG_KEEP = 50;
+export const REPORT_TOUCH_KEEP = 30;
+// The NOISE categories, as DATA: per-event / per-redraw dbg lines that say "something happened" but carry nothing a reader needs.
+// An entry is noise when its category matches and its first argument starts with `message`. warn/error entries are never noise.
+export const REPORT_NOISE = [
+  { category: 'selection', message: '[selection-tools] pointerMove' },
+  { category: 'selection', message: '[selection-tools] bestVisible check' },
+  { category: 'renderer', message: 'constraints' },        // {total, visible} on every redraw
+  { category: 'joints', message: '[input-manager] hit detection' },
+  { category: 'solver', message: 'converged in' },          // one line per solve
+  { category: 'snap', message: '[ug.snap]' },
+  { category: 'snap', message: '[SNAP CHECK]' },
+  { category: 'magnifier', message: 'focus' },
+];
+const isNoise = (e) => e.level !== 'warn' && e.level !== 'error' && REPORT_NOISE.some((n) => n.category === e.category && typeof e.args[0] === 'string' && e.args[0].startsWith(n.message));
+const noiseKey = (e) => `[${e.category}] ${typeof e.args[0] === 'string' ? e.args[0] : ''}`.trim();
+const bump = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
+
+export function trimLog(log) {
+  const total = log.reduce((a, e) => a + (e.count || 1), 0);
+  const meaningful = []; log.forEach((e, i) => { if (!isNoise(e)) meaningful.push(i); });
+  const cutoff = meaningful.length > REPORT_LOG_KEEP ? meaningful[meaningful.length - REPORT_LOG_KEEP] : 0;
+  const droppedOld = {}, noiseCollapsed = {};
+  const out = []; let run = null;
+  const flush = () => {
+    if (!run) return;
+    const parts = Object.entries(run.keys).map(([k, n]) => `${n} × ${k}`);
+    out.push({ t: run.t, tLast: run.tLast, count: run.count, kind: 'noise-summary', category: 'noise', level: 'log', args: [parts.join(', ')] });
+    run = null;
+  };
+  log.forEach((e, i) => {
+    const n = e.count || 1;
+    if (i < cutoff) { if (e.level === 'warn' || e.level === 'error') out.push(e); else bump(droppedOld, e.category, n); return; }
+    if (isNoise(e)) {
+      if (!run) run = { t: e.t, tLast: e.tLast, count: 0, keys: {} };
+      run.count += n; run.tLast = e.tLast; bump(run.keys, noiseKey(e), n); bump(noiseCollapsed, e.category, n);
+    } else { flush(); out.push(e); }
+  });
+  flush();
+  return { log: out, trimmed: { total, keptEntries: out.length, droppedOld, noiseCollapsed } };
+}
+
+// consecutive pointermoves -> the first event (with count) and the last event of the run; then the last REPORT_TOUCH_KEEP items.
+export function trimTouchTrace(trace) {
+  const items = [];
+  for (let i = 0; i < trace.length;) {
+    const e = trace[i];
+    if (e.type !== 'pointermove') { items.push(e); i++; continue; }
+    let j = i; while (j + 1 < trace.length && trace[j + 1].type === 'pointermove') j++;
+    items.push(j > i ? { ...e, count: j - i + 1 } : e);
+    if (j > i) items.push({ ...trace[j], runEnd: true });
+    i = j + 1;
+  }
+  const tail = items.slice(-REPORT_TOUCH_KEEP);
+  const droppedOld = {};
+  for (const e of items.slice(0, items.length - tail.length)) bump(droppedOld, e.type, e.count || 1);
+  return { touchTrace: tail, trimmed: { total: trace.length, keptItems: tail.length, droppedOld, collapsedMoves: items.reduce((a, e) => a + (e.count ? e.count - 2 : 0), 0) } };
+}
+
+// the live log plus the warn/error entries the live ring has already dropped, oldest first
+function reportLogEntries() {
+  const live = new Set(logBuffer);
+  return alertBuffer.filter((e) => !live.has(e)).concat(logBuffer);
+}
+
+export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL_MAX_BYTES, full = false }) {
   const vv = window.visualViewport;
   let doc = null;
   let journal = null, journalError;
@@ -138,6 +214,7 @@ export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL
       catch (err) { journalError = String(err && err.stack || err); } // a report whose journal failed is still useful: say why
     }
   } catch (_) { /* best-effort — a report with no document is still useful */ }
+  const tl = full ? null : trimLog(reportLogEntries()), tt = full ? null : trimTouchTrace(touchBuffer);
   return {
     app: appId, url: location.href, ua: navigator.userAgent, t: new Date().toISOString(),
     viewport: {
@@ -147,15 +224,21 @@ export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL
       devicePixelRatio: window.devicePixelRatio,
       rects: { canvas: rectOf('svg[id$="-canvas"], #svgCanvas'), ribbon: rectOf('.sk-ribbon, #design-ribbon, #sketch-ribbon, #toolsRibbon'), header: rectOf('header') },
     },
-    touchTrace: touchBuffer.slice(),
-    log: logBuffer.slice(),
+    touchTrace: full ? touchBuffer.slice() : tt.touchTrace,
+    log: full ? reportLogEntries() : tl.log,
     // The killer feature: whatever the app IS right now, in the exact shape tests/harness/sketch.js's
     // load() already accepts — a phone bug becomes an exactly-replayable Node scenario, not a description.
     document: doc,
     journal,
     ...(journalError ? { journalError } : {}),
+    trimmed: full ? null : { log: tl.trimmed, touchTrace: tt.trimmed },
   };
 }
+
+// TASK 544: the text that goes on the clipboard / into the downloaded file: the WHOLE report as MINIFIED JSON (one line, so pasting
+// it into a chat is one paste). JSON.parse of it deep-equals the report.
+export function reportToText(report) { return JSON.stringify(report); }
+export function formatBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B'; }
 
 // ── overlay UI (mirrors style-panel.js's open/close idiom for consistency) ─────────────────────────
 let stylesInjected = false;
@@ -178,8 +261,9 @@ function injectStyles() {
 .sk-diag-entry { padding: 3px 0; border-bottom: 1px solid rgba(127,127,127,0.12); font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
 .sk-diag-entry.err { color: #dc2626; }
 .sk-diag-empty { opacity: 0.55; font-style: italic; padding: 20px 0; text-align: center; }
-.sk-diag-status { font-size: 11px; opacity: 0.75; }
-.sk-diag-fallback { width: 100%; height: 120px; margin-top: 8px; font-family: ui-monospace, monospace; font-size: 10px; }
+.sk-diag-status { font-size: 11px; opacity: 0.75; min-width: 0; }
+.sk-diag-head { flex-wrap: wrap; }
+.sk-diag-btn.sk-hidden { display: none; }
 .sk-diag-toggle { background: transparent; border: 1px solid currentColor; opacity: 0.7; border-radius: 6px; padding: 4px 10px; font: 12px system-ui, sans-serif; cursor: pointer; color: inherit; }
 .sk-diag-toggle:hover { opacity: 1; }
 `;
@@ -205,8 +289,10 @@ export function createDiagnosticLog({ appId, state } = {}) {
   const spacer = document.createElement('span'); spacer.className = 'sk-diag-spacer';
   const clearBtn = document.createElement('button'); clearBtn.type = 'button'; clearBtn.className = 'sk-diag-btn'; clearBtn.textContent = 'Clear';
   const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.className = 'sk-diag-btn sk-diag-btn-primary'; copyBtn.textContent = 'Copy Report';
+  const copyFullBtn = document.createElement('button'); copyFullBtn.type = 'button'; copyFullBtn.className = 'sk-diag-btn'; copyFullBtn.textContent = 'Copy full report';
+  const downloadBtn = document.createElement('button'); downloadBtn.type = 'button'; downloadBtn.className = 'sk-diag-btn sk-diag-download sk-hidden'; downloadBtn.textContent = 'Download report (.json)';
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-diag-close'; closeBtn.textContent = '✕';
-  head.append(title, status, spacer, clearBtn, copyBtn, closeBtn);
+  head.append(title, status, spacer, clearBtn, copyFullBtn, copyBtn, downloadBtn, closeBtn);
 
   const body = document.createElement('div'); body.className = 'sk-diag-body';
   el.append(head, body);
@@ -227,25 +313,42 @@ export function createDiagnosticLog({ appId, state } = {}) {
     status.textContent = `${logBuffer.length} entries · ${touchBuffer.length} touch events`;
   }
 
-  clearBtn.addEventListener('click', () => { logBuffer.length = 0; lastKey = null; touchBuffer.length = 0; render(); });
+  clearBtn.addEventListener('click', () => { logBuffer.length = 0; alertBuffer.length = 0; lastKey = null; touchBuffer.length = 0; render(); });
 
-  async function copyReport() {
-    const report = buildReport({ appId, getState: state });
-    const text = JSON.stringify(report, null, 1);
-    let ok = false;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }
-    } catch (_) { /* fall through to the textarea fallback below */ }
-    if (ok) { copyBtn.textContent = 'Copied!'; setTimeout(() => { copyBtn.textContent = 'Copy Report'; }, 1500); return; }
-    // Fallback: a selectable textarea (clipboard can be blocked, e.g. no user-gesture context, or an
-    // insecure origin) — the user can still select-all/copy manually.
-    let ta = body.querySelector('.sk-diag-fallback');
-    if (!ta) { ta = document.createElement('textarea'); ta.className = 'sk-diag-fallback'; ta.readOnly = true; body.prepend(ta); }
-    ta.value = text;
-    ta.focus(); ta.select();
-    copyBtn.textContent = 'Select & copy below';
+  // TASK 544: ONE click puts the whole report on the clipboard as minified JSON. The confirmation (size) and any failure go in the
+  // panel's status line; on failure the "Download report (.json)" button appears (same text, through the shared file-save helper).
+  let lastText = null, copiedTimer = null;
+  async function copyReport(full) {
+    const text = reportToText(buildReport({ appId, getState: state, full }));
+    lastText = text;
+    const size = formatBytes(new TextEncoder().encode(text).length);
+    let failure = null;
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) failure = 'the clipboard is not available here (insecure context?)';
+    else {
+      try { await navigator.clipboard.writeText(text); }
+      catch (err) { failure = (err && err.message) || String(err); }
+    }
+    if (!failure) {
+      downloadBtn.classList.add('sk-hidden');
+      status.textContent = `Copied ${size} report`;
+      copyBtn.textContent = 'Copied!'; clearTimeout(copiedTimer); copiedTimer = setTimeout(() => { copyBtn.textContent = 'Copy Report'; }, 1500);
+      return;
+    }
+    clearTimeout(copiedTimer); copyBtn.textContent = 'Copy Report';
+    status.textContent = `Copy failed (${failure}): download the ${size} report instead`;
+    downloadBtn.classList.remove('sk-hidden');
   }
-  copyBtn.addEventListener('click', () => { copyReport(); });
+  async function downloadReport() {
+    const text = lastText != null ? lastText : reportToText(buildReport({ appId, getState: state }));
+    const name = `sketch-studio-report-${appId || 'app'}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    try {
+      const r = await browserFileSeam.save(text, name);
+      status.textContent = r ? `Saved ${r.name}` : 'Download cancelled';
+    } catch (err) { status.textContent = `Download failed: ${(err && err.message) || err}`; }
+  }
+  downloadBtn.addEventListener('click', () => { downloadReport(); });
+  copyBtn.addEventListener('click', () => { copyReport(false); });
+  copyFullBtn.addEventListener('click', () => { copyReport(true); });
 
   let isOpen = false, escHandler = null;
   function open() {

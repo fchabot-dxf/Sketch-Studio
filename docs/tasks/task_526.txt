@@ -1,0 +1,14 @@
+TASK 526 (Sketch-Studio): refuse like Fusion. QUEUED: starts after task 525 is merged (same file, same KNOWN lists).
+OWNER RULING 2026-11-12: "do it like Fusion" for both.
+ A. Equal between an arc and a circle: Fusion refuses; ours accepts. Refuse it (with the message style of the other refusals).
+ B. A redundant geometric constraint (it removes no freedom: the drawing already satisfies it by its other constraints): Fusion
+    refuses; ours accepts silently. Refuse it at creation, ONE check in the one creation path (the rank test the engine already has:
+    isDistanceRedundant / nullity before vs after), not a rule per constraint type. Dimensions keep task 516's behaviour (a
+    determined dimension is added as driven, not refused).
+Before coding: list from tests/fixtures/fusion-oracle which cells Fusion refuses as redundant vs accepts (Fusion accepts some
+redundant-looking constraints, e.g. H on an already horizontal-by-construction line?): the fixture decides, quote the classes.
+STOP if Fusion's refusals are not explained by "rank does not increase" on more than a small class.
+Check auto-constraints made by tools (rectangle, polygon, snapping, fillet) are never refused by this (they go through the same
+path?): quote the grep; STOP if a tool would break. Loading a saved file that contains a redundant constraint must still load.
+List every behaviour change for existing users. Tests: the fusion-oracle cells; fail-first unit tests for A and B; audits green.
+Gate green, commit by path, push the branch, WORK-LOG `## TURN 526`, the AGENTS.md REPORT block.

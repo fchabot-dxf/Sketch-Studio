@@ -34,7 +34,7 @@ export function commitDimensionEdit(state, c, val) {
 // Commit N dimension value changes as ONE operation (docs/PARAMETERS-DESIGN.md section D). edits = [{ c, value, name? }] (`name` only
 // labels a refusal; default c.name). ALL-OR-NOTHING: snapshot of the whole solver state (joints AND circle radii) and of every edited value,
 // ONE combined walk (all edited values move together, step count = the largest any single edit needs, capped at MAX_EDIT_STEPS; each step
-// places every giving operand through the creation placement, then ONE solve). Any refusal (fillet seed, fillet collapse, task 521 collapse,
+// places NOTHING when there are several edits (the placement rule below) and then ONE solve). Any refusal (fillet seed, fillet collapse, task 521 collapse,
 // non-convergence) restores every value, position and radius, re-solves, and returns
 //   { reverted:true, clash, reason?, culprit: { index, name, reason } | null }
 // culprit = the FIRST edit (in the given order) that is impossible ALONE, found by a diagnostic pass on refusal only; null when each one
@@ -90,11 +90,15 @@ export function commitDimensionEdits(state, edits, opts = {}) {
       if (Number.isFinite(span) && Math.abs(old) > 0) steps = Math.max(steps, Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(old) * STEP_FRACTION)))));
     });
     const from = list.map(e => e.c.value);
+    // THE PLACEMENT RULE: "who moves" answers a question about the ONE dimension the user typed, so a batch of exactly ONE edit places per step
+    // (bit-identical to the old single edit); a batch of several edits is a re-solve of the sketch at new values (what Fusion does for a
+    // parameter change) and does NOT place. Known consequence: N independent single edits may land a different (equally valid) pose than the batch.
+    const placing = list.length === 1;
     let result;
     for (let k = 1; k <= steps; k++) {
       list.forEach((e, i) => {
         e.c.value = (fillets[i] || k === steps) ? e.value : from[i] + (e.value - from[i]) * (k / steps);
-        if (!fillets[i]) ConstraintManager.placeForCreation(state, e.c.type, e.c);
+        if (placing && !fillets[i]) ConstraintManager.placeForCreation(state, e.c.type, e.c);
       });
       result = engine.solve(ITER());
       if (result && result.converged === false) break;
@@ -140,12 +144,18 @@ export function commitDimensionEdits(state, edits, opts = {}) {
 export function applyParameterChange(state, plan, label = 'change parameter') {
   if (!plan || !plan.ok) return plan || { ok: false, code: 'SYNTAX', message: 'no plan' };
   const saved = typeof state.saveState === 'function';
+  // saveState drops the OLDEST entry when the history is at its cap and clears the redo branch: a refused change must lose neither
+  const evicted = saved && state.history && state.history.length >= state.maxHistory ? state.history[0] : null;
+  const redo = saved && state.redoStack ? [...state.redoStack] : null;
   if (saved) state.saveState(label);
   const length = saved && state.history ? state.history.length : -1; // discardSnapshotAt pops the newest entry only if the history is still this long
   const moves = plan.edits.filter(e => e.value !== e.c.value).map(e => ({ c: e.c, value: e.value, name: e.name }));
   const res = commitDimensionEdits(state, moves, { refuseReference: true });
   if (res.reverted) {
     if (length >= 0 && typeof state.discardSnapshotAt === 'function') state.discardSnapshotAt(length);
+    if (evicted) state.history.unshift(evicted);
+    if (redo) state.redoStack.push(...redo);
+    if ((evicted || redo) && typeof state._notifyHistory === 'function') state._notifyHistory();
     return { ok: false, ...res };
   }
   replaceParameters(state.parameters, plan.paramsAfter);

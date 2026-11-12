@@ -106,11 +106,6 @@ export const defaultInputCtx = {
     const toolEl = document.getElementById('tool-' + toolName);
     if (toolEl) toolEl.classList.add('active');
   },
-  // setModeText — write the status/mode readout.
-  setModeText(text) {
-    const el = document.getElementById('modeText');
-    if (el) el.innerText = text;
-  },
   // resetToSelectTool — clear all toolbar buttons + activate Select; returns true if the select button was found.
   resetToSelectTool() {
     document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(btn => {
@@ -1333,9 +1328,6 @@ export function switchToTool(state, toolName) {
         // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
         inputCtx.highlightActiveTool?.(toolName);
 
-        // Update mode text
-        inputCtx.setModeText?.('MODE: ' + toolName.toUpperCase());
-
         // Fallback preselection for constraint tools (matches toolbar behavior)
         const constraintTools = [
             TOOL_MODES.COINCIDENT,
@@ -1367,12 +1359,6 @@ export function switchToTool(state, toolName) {
 
             const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
             state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
-
-            let modeText = toolName.toUpperCase();
-            if (toolName === TOOL_MODES.COLLINEAR) modeText += ' - 1/3 Points';
-            else if (firstEl) modeText += ' - Select 2nd Element';
-            else modeText += ' - Select 1st Element';
-            inputCtx.setModeText?.('MODE: ' + modeText);
         }
     } catch(_) {}
 }

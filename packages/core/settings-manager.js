@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = {
     // Minor squares per inch in an INCH file (#ui/canvas-grid.js GRID_INCH_DIVISIONS: 10 | 2 | 4 | 8 | 16; the major stays 1 in).
     // Default 10 = decimal tenths. Read only when DOC_UNIT is 'in'; a mm file never reads it.
     INCH_GRID_DIVISIONS: 10,
+    // Major (heavy) line spacing in an INCH file, in inches (any positive number; default 1). minor = this / INCH_GRID_DIVISIONS.
+    INCH_GRID_MAJOR: 1,
 
     // Visual defaults
     LINE_STROKE: 1.0,

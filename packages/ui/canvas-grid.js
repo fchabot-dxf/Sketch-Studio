@@ -49,16 +49,16 @@ export function gridRectMarkup(mode) {
 // The grid spacing of a document unit, as DATA, in that unit. A unit with NO row (mm, cm) uses the GRID_SIZE /
 // GRID_MAJOR_STEP settings (world units = mm: today's 2 / 10, still tunable in the Style panel), so the mm grid is exactly
 // what it always was. A unit added later needs only a row here.
-//   major     — the major spacing, in the unit.
-//   divisions — { setting, options }: how many minor squares per `major`, read from that declared setting (minor = major/n).
+//   major     — { setting, default }: the major spacing in the unit, read from that declared setting (any positive number).
+//   divisions — { setting, options }: how many minor squares per `major`, read from that declared setting (minor = major/n; snap = minor).
 //   lodRatio  — the level-of-detail step (zoomed out each level multiplies the minor by it), per divisions value; `other`
 //               for any value not listed. Decimal (10): x10 (0.1, 1, 10 in). Binary (2/4/8/16): x2 (1/16, 1/8, 1/4, 1/2,
-//               1, then 2, 4, 8 in): every level stays a round number of the chosen system, and the major follows as
-//               max(major, 2 x minor) (1 in until the minor reaches 1 in, then 2, 4, 8 in). Chosen over feet-style 6/12 in
+//               1, then 2, 4, 8 in; the sequence starts from the chosen major M: M/16 ... M, 2M, 4M ...): every level stays a round number
+//               of the chosen system, and the major follows as max(M, ratio x minor). Chosen over feet-style 6/12 in
 //               because the plain doubling continues the same binary sequence with no special case.
 export const GRID_INCH_DIVISIONS = [10, 2, 4, 8, 16];
 export const GRID_SPACING_BY_UNIT = {
-  in: { major: 1, divisions: { setting: 'INCH_GRID_DIVISIONS', options: GRID_INCH_DIVISIONS }, lodRatio: { 10: 10, other: 2 } },
+  in: { major: { setting: 'INCH_GRID_MAJOR', default: 1 }, divisions: { setting: 'INCH_GRID_DIVISIONS', options: GRID_INCH_DIVISIONS }, lodRatio: { 10: 10, other: 2 } },
 };
 
 /**
@@ -73,7 +73,9 @@ export function gridSpacing(docUnit, settings) {
   const k = basePer(docUnit);
   const asked = Number(settings[row.divisions.setting]);
   const n = row.divisions.options.includes(asked) ? asked : row.divisions.options[0];
-  return { GRID_SIZE: (row.major / n) * k, GRID_MAJOR_STEP: row.major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other };
+  const askedMajor = Number(settings[row.major.setting]);
+  const major = askedMajor > 0 && Number.isFinite(askedMajor) ? askedMajor : row.major.default;
+  return { GRID_SIZE: (major / n) * k, GRID_MAJOR_STEP: major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other };
 }
 
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */

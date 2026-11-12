@@ -9,7 +9,7 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
-import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
+import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
@@ -20,7 +20,7 @@ function logDim() { /* logging disabled */ }
 // Helper: check if a driving DISTANCE constraint exists for a pair of joints
 function hasDrivingDistanceForJoints(state, aId, bId){
     if(!state || !Array.isArray(state.constraints)) return false;
-    return state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE && Array.isArray(c.joints) && c.joints.length>=2 && (
+    return state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE && Array.isArray(c.joints) && c.joints.length===2 && (
         (c.joints[0] === aId && c.joints[1] === bId) || (c.joints[0] === bId && c.joints[1] === aId)
     ) && (typeof c.value === 'number'));
 }
@@ -298,6 +298,8 @@ export function anchorPlacingDimension(svg, state) {
         const j1 = state.joints.get(pending.joints[0]);
         const j2 = state.joints.get(pending.joints[1]);
         if (j1 && j2) pending.value = Math.abs(j2.y - j1.y);
+    } else if (isPointLineDistance(pending)) {
+        // a point-to-line dimension keeps the value it was born with (the perpendicular distance); nothing to re-measure
     } else if (pending.joints && pending.joints.length >= 2 && state) {
         const j1 = state.joints.get(pending.joints[0]);
         const j2 = state.joints.get(pending.joints[1]);
@@ -322,7 +324,19 @@ export function anchorPlacingDimension(svg, state) {
     return true;
 }
 
+// The undo group of a dimension gesture is owned HERE: whatever way a click leaves handleDimensionPointerDown (a
+// normal return on any path, or a throw), a group this click opened is closed. Nothing is caught: a throw still
+// propagates after the group is closed.
 export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) {
+    const groupWasOpen = !!(state && state._undoGroupActive);
+    try {
+        return dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint);
+    } finally {
+        if (!groupWasOpen && state && state._undoGroupActive) endDimUndo(state);
+    }
+}
+
+function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) {
     logDim('pointer-down', {
         tool: state.currentTool,
         hitShape: hitShape ? hitShape.shape.id : null,
@@ -433,7 +447,8 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                         // Create Line-Line Distance
                         const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
                             shapes: [s1.id, s2.id],
-                            value: perpendicularDistance(j1a, j2a, j2b)
+                            // the stored value is a distance (positive); which side line 2 lies on is not part of it (the solver row is |signed|)
+                            value: Math.abs(perpendicularDistance(j1a, j2a, j2b))
                         });
                         success = !!res;
                     } else {
@@ -588,33 +603,26 @@ export function handleDimensionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 return true; 
             }
 
-            beginDimUndo(state);
             const a = state.joints.get(lineShape.joints[0]);
             const b = state.joints.get(lineShape.joints[1]);
             const firstJ = state.joints.get(firstId);
-            
-            if (a && b && firstJ) {
-                // Project point onto line to find perpendicular distance
-                const projPt = projectPointOnLine(firstJ, a, b);
-                
-                // Create internal helper joint at projection
-                const projId = state.genJ();
-                state.joints.set(projId, { x: projPt.x, y: projPt.y, fixed: false, isInternal: true });
-                
-                // Attach projection to line
-                ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: projId, shape: lineShape.id }, { source: 'dimension' });
-
-                // Create distance constraint
-                ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-                    joints: [firstId, projId],
-                    value: getDist(firstJ, projPt)
-                }, { source: 'dimension' });
-                
-                const c = state.constraints[state.constraints.length - 1];
-                try{ c.offset = perpendicularDistance(w, a, b); } catch(_){ c.offset = SolverConfig.DIMENSION_OFFSET || 30; }
-                
-                startPlacing(svg, state, c, e, w);
+            if (!a || !b || !firstJ) {
+                resetDimensionState(state);
+                return true;
             }
+
+            // Point-to-line = the PERPENDICULAR distance from the point to the line: one distance constraint stored with
+            // the three joints [P, A, B] (solver row distance.__lineLine, the same one a line-line distance uses). No helper joint.
+            beginDimUndo(state);
+            const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
+                joints: [firstId, lineShape.joints[0], lineShape.joints[1]],
+                value: Math.abs(perpendicularDistance(firstJ, a, b))
+            }, { source: 'dimension' });
+            const c = (res && typeof res === 'object') ? res : null;
+            if (!c) { endDimUndo(state); resetDimensionState(state); return true; }
+
+            startPlacing(svg, state, c, e, w);
+            updateConstraintOffset(state, c, w);
             dimensionState.pendingDimension = null;
             finalizeDimBirth(c, state);
             return true;
@@ -1006,6 +1014,16 @@ export function updateConstraintOffset(state, c, w) {
         // For simplicity, we can just store the mouse position as glyphPos and let renderer handle it,
         // or calculate offset relative to the first line.
         c.glyphPos = w;
+    } else if (isPointLineDistance(c)) {
+        // Point-to-line: the dimension line runs from P to the foot of the perpendicular; the label sits `offset` to its side.
+        const pt = state.joints.get(c.joints[0]), la = state.joints.get(c.joints[1]), lb = state.joints.get(c.joints[2]);
+        if (pt && la && lb) {
+            const foot = projectPointOnLine(pt, la, lb);
+            try { c.offset = perpendicularDistance(w, pt, foot); } catch(_) { c.offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30; }
+            const dx = foot.x - pt.x, dy = foot.y - pt.y, len = Math.hypot(dx, dy);
+            const nx = len > 0.01 ? -dy / len : 0, ny = len > 0.01 ? dx / len : -1;
+            c.glyphPos = { x: (pt.x + foot.x) / 2 + nx * c.offset, y: (pt.y + foot.y) / 2 + ny * c.offset };
+        }
     } else if (c.joints && c.joints.length >= 2) {
         const j1 = state.joints.get(c.joints[0]);
         const j2 = state.joints.get(c.joints[1]);

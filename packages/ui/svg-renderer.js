@@ -6,7 +6,7 @@
 import { dbg } from '#core/debug.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
-import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep } from '#core/geometry.js';
+import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -331,6 +331,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     if(c.isRadius && c.shape){
       const shape = shapes.find(s => s.id === c.shape);
       if(shape && shape.joints && shape.joints.length >= 1) j1 = joints.get(shape.joints[0]);
+    } else if(isPointLineDistance(c)){
+      // Point-to-line: from P to the foot of the perpendicular on line AB
+      j1 = joints.get(c.joints[0]);
+      const la = joints.get(c.joints[1]), lb = joints.get(c.joints[2]);
+      if(j1 && la && lb){
+        const dx = lb.x - la.x, dy = lb.y - la.y;
+        const det = dx*dx + dy*dy;
+        if(det > 0.00001){
+          const t = ((j1.x - la.x)*dx + (j1.y - la.y)*dy) / det;
+          j2 = { x: la.x + t*dx, y: la.y + t*dy };
+        }
+      }
     } else if(c.joints && c.joints.length >= 2){
       j1 = joints.get(c.joints[0]); j2 = joints.get(c.joints[1]);
     } else if(c.shapes && c.shapes.length === 2){

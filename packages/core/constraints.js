@@ -122,6 +122,26 @@ export function getConstrainedGeometry(constraint, shapes) {
 }
 
 /**
+ * The state every dimension (distance of any mode, radius, angle) carries besides its geometry and value: the driving / reference
+ * flags (+ reason), the H/V side lock, and the label placement. ONE place, so save / load and undo (which rebuild each constraint
+ * through createConstraint) keep all of it for every dimension mode.
+ */
+function withDimensionState(obj, params) {
+    const driven = !!(params.isDriven || params.driven);
+    obj.isDriven = driven;
+    obj.driven = driven;
+    if (params.drivenReason) obj.drivenReason = params.drivenReason;
+    if (params.dimMode !== undefined) obj.dimMode = params.dimMode;
+    if (params.dimSign === 1 || params.dimSign === -1) obj.dimSign = params.dimSign;
+    if (params.dimSignMode !== undefined) obj.dimSignMode = params.dimSignMode;
+    if (params.glyphPos) obj.glyphPos = params.glyphPos;
+    if (params.__pos) obj.__pos = params.__pos;
+    if (Number.isFinite(params.labelAngle)) obj.labelAngle = params.labelAngle;
+    if (params.labelPos) obj.labelPos = { ...params.labelPos };
+    return obj;
+}
+
+/**
  * Create a constraint object with validation
  * @param {string} type - Constraint type
  * @param {object} params - Constraint parameters
@@ -205,56 +225,31 @@ export function createConstraint(type, params) {
             // reference dimensions and label placement intact.
             if (params.isRadius) {
                 if (!params.shape) return null;
-                const radiusObj = {
+                return withDimensionState({
                     type: CONSTRAINT_TYPES.DISTANCE,
                     shape: params.shape,
                     value: params.value,
                     offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
-                    isRadius: true,
-                    isDriven: !!(params.isDriven || params.driven)
-                };
-                if (params.__pos) radiusObj.__pos = params.__pos;
-                if (params.glyphPos) radiusObj.glyphPos = params.glyphPos;
-                // TASK 448: the label's angle around the centre (radians; absent = 0 = today's horizontal-right leader)
-                if (Number.isFinite(params.labelAngle)) radiusObj.labelAngle = params.labelAngle;
-                if (params.labelPos) radiusObj.labelPos = { ...params.labelPos };
-                return radiusObj;
+                    isRadius: true
+                }, params);
             }
             // Line-Line Distance (Parallel)
             if (params.shapes && params.shapes.length === 2) {
-                const _driven = !!(params.isDriven || params.driven);
-                const llObj = {
+                return withDimensionState({
                     type: CONSTRAINT_TYPES.DISTANCE,
                     shapes: params.shapes.slice(),
                     value: params.value,
-                    offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
-                    isDriven: _driven,
-                    driven: _driven,
-                    glyphPos: params.glyphPos
-                };
-                if (params.drivenReason) llObj.drivenReason = params.drivenReason;
-                if (params.labelPos) llObj.labelPos = { ...params.labelPos };
-                return llObj;
+                    offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30
+                }, params);
             }
             if (!params.joints || params.joints.length < 2) return null;
-            // Carry BOTH driven flags (+ reason) so isDriven and driven never disagree downstream
-            // (the renderer + solver read `isDriven || driven`).
-            const _driven = !!(params.isDriven || params.driven);
-            const distObj = {
+            return withDimensionState({
                 type: CONSTRAINT_TYPES.DISTANCE,
                 joints: params.joints,
                 value: params.value,
                 offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
-                isRadius: params.isRadius || false,
-                isDriven: _driven,
-                driven: _driven,
-                dimMode: params.dimMode
-            };
-            if (params.drivenReason) distObj.drivenReason = params.drivenReason;
-            if (params.__pos) distObj.__pos = params.__pos;
-            if (params.glyphPos) distObj.glyphPos = params.glyphPos;
-            if (params.labelPos) distObj.labelPos = { ...params.labelPos };
-            return distObj;
+                isRadius: params.isRadius || false
+            }, params);
         case CONSTRAINT_TYPES.EQUAL:
             // Equality normally operates on two shapes (lines or circles) -- engine.js synthesizes
             // joints from `shapes` at solve time. An arc's two rim points are ONE shape apiece (no
@@ -270,21 +265,13 @@ export function createConstraint(type, params) {
 
         case CONSTRAINT_TYPES.ANGLE:
             if (!params.shapes || params.shapes.length !== 2) return null;
-            {
-                const angleObj = {
-                    type: CONSTRAINT_TYPES.ANGLE,
-                    shapes: params.shapes.slice(),
-                    value: params.value,
-                    offset: params.offset || SolverConfig.ANGLE_OFFSET || 40,
-                    glyphPos: params.glyphPos
-                };
-                // carry the reference flags (+ reason) like the distance branches, so a reference angle stays a reference through undo
-                if (params.isDriven || params.driven) { angleObj.isDriven = true; angleObj.driven = true; }
-                if (params.drivenReason) angleObj.drivenReason = params.drivenReason;
-                if (params.labelPos) angleObj.labelPos = { ...params.labelPos };
-                return angleObj;
-            }
-            
+            return withDimensionState({
+                type: CONSTRAINT_TYPES.ANGLE,
+                shapes: params.shapes.slice(),
+                value: params.value,
+                offset: params.offset || SolverConfig.ANGLE_OFFSET || 40
+            }, params);
+
         case CONSTRAINT_TYPES.MIDPOINT:
             if (!params.joints || params.joints.length !== 3) return null;
             return { type: CONSTRAINT_TYPES.MIDPOINT, joints: params.joints.slice() };

@@ -3,6 +3,7 @@ import { Definitions } from './definitions.js';
 import { InteractionSolver } from './interaction.js';
 import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
+import { isPointLineDistance } from '../geometry.js';
 
 // Newton-Raphson + Levenberg-Marquardt solver class
 export class NewtonSolver {
@@ -279,6 +280,9 @@ export class NewtonSolver {
         }
         params.dimSign = c.dimSign;
       }
+
+      // Point-to-line dimension: joints [P, A, B] -> the perpendicular distance from P to line AB (the line-line row).
+      if (c.type === 'distance' && isPointLineDistance(c)) params.__lineLine = true;
 
       // Backwards compatibility: many constraints use `joint` + `shape` or `shapes` instead of `joints`.
       // Synthesize `params.joints` for common shape-backed constraints (pointOnLine, collinear, parallel, perpendicular).

@@ -16,9 +16,8 @@ const KNOWN = {
   'scurve/C no arc/arc tangent row differs from finite differences': 'N-F7',
   'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
   'scurve/B no dimension is demoted': 'N-F7 (the 2nd arc radius is judged redundant)',
-  'N-F1': 'fillet at the origin deletes j_origin', 'N-F2': 'polygon-tool corners cannot be filleted', 'N-F3': 'dimSign dropped on save / undo',
+
   'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
-  'roundtrip: documents are identical after save -> load': 'N-F3 (dimSign / dimSignMode dropped) on every drawing with an H/V dimension',
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };
@@ -108,7 +107,6 @@ for (const d of drawings) {
   const n = d.mod.NAME;
   check(`${n}/roundtrip: save -> load keeps nullity, panel DOF, geometry, constraint count and driven flags`, r.loadOk && r.nullityBefore === r.nullityAfter && r.panelBefore === r.panelAfter && r.geometryDev < 1e-9 && r.geometryDevSolved < 1e-6 && r.constraints[0] === r.constraints[1] && r.drivenFlagsSame, JSON.stringify(r));
   if (r.docIdentical) identicalByte++;
-  check(`${n}/roundtrip: the document is identical except dimSign / dimSignMode (N-F3)`, r.docIdenticalExceptDimSign, JSON.stringify(r.differingKeys));
   check(`${n}/roundtrip: replayJournal rebuilds the identical document (${r.journal.steps} steps)`, r.journal.hashOk && r.journal.identical && !r.journal.truncated, JSON.stringify(r.journal));
 }
 check('roundtrip: documents are identical after save -> load', identicalByte === drawings.length, `${identicalByte}/${drawings.length} identical`);

@@ -46,7 +46,7 @@ export const ROWS = [
   { id: 'dim-horizontal', label: 'dim point-point H', type: 'distance', arity: 2, dim: true, mode: 'horizontal', ui: () => true, nominal: () => 1, layout: [150, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
   { id: 'dim-vertical', label: 'dim point-point V', type: 'distance', arity: 2, dim: true, mode: 'vertical', ui: () => true, nominal: () => 1, layout: [150, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
   { id: 'dim-length', label: 'dim line length', type: 'distance', arity: 1, dim: true, mode: 'length', ui: lineLike, nominal: () => 1, produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
-  { id: 'dim-point-line', label: 'dim point to line', type: 'distance', arity: 2, dim: true, mode: 'pointline', ui: anyLine, nominal: () => 1, layout: [30, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
+  { id: 'dim-point-line', label: 'dim point to line', type: 'distance', arity: 2, dim: true, mode: 'pointline', ui: anyLine, nominal: () => 1, layout: [30, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 3 && !c.isRadius },
   { id: 'dim-line-line', label: 'dim line to line (parallel)', type: 'distance', arity: 2, dim: true, mode: 'linesline', ui: both(lineLike), nominal: () => 1, parallel: true, layout: [30, 90], produces: c => c.type === 'distance' && c.shapes && c.shapes.length === 2 },
   { id: 'dim-line-line-yx', label: 'dim line to line (other pick order)', type: 'distance', arity: 2, dim: true, mode: 'linesline', swap: true, ui: both(lineLike), nominal: () => 1, parallel: true, layout: [30, 90], produces: c => c.type === 'distance' && c.shapes && c.shapes.length === 2 },
   { id: 'dim-angle-xy', label: 'dim angle (X then Y)', type: 'angle', arity: 2, dim: true, mode: 'angle', ui: both(lineLike), nominal: () => 1, layout: [120, 60], dir2: [30, 70], produces: c => c.type === 'angle' },
@@ -268,7 +268,7 @@ export async function runCell(row, cols, variant) {
   const nullityBeforeDelete = L.nullity(S);
   deleteConstraints(st, added);
   S.engine.solve(L.ITER);
-  rec.nullityAfterDelete = L.nullity(S) - 2 * newJoints;   // the helper joint of a point-line dimension stays behind, free
+  rec.nullityAfterDelete = L.nullity(S) - 2 * newJoints;   // (a joint a tool created and a delete leaves behind is free)
   if (rec.nullityAfterDelete !== nullity0) rec.issues.push('delete-nullity');
   st.undo();
   S.engine.solve(L.ITER);
@@ -330,9 +330,7 @@ export function classify(c) {
   const has = (i) => c.issues.some(x => x === i || x.startsWith(i + ':'));
   const shared = c.variant === 'shared';
   const r = c.row;
-  if (r === 'dim-point-line' && has('tool-threw')) return { v: 'NEW-1', also: has('nominal') ? ['NEW-2'] : [] };   // the tool throws on EVERY use; where the DOF is also wrong that is NEW-2
-  if (r === 'dim-point-line' && (has('nominal') || has('edit-refused'))) return { v: 'NEW-2' };
-  if (r === 'perpendicular' && has('refused-feasible')) return { v: shared ? 'F4' : 'NEW-3' };
+  if (r === 'perpendicular' && has('refused-feasible') && shared) return { v: 'F4' };
   if ((r === 'parallel' || r === 'collinear') && has('refused-feasible') && shared) return { v: 'F4' };
   if (r === 'parallel' && has('bite') && shared) return { v: 'F4' };
   if (r === 'equal' && has('refused-feasible')) return { v: 'F2' };
@@ -341,7 +339,6 @@ export function classify(c) {
   if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };   // shared-joint angle not enforced (F4; tolerated)
   // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)
   if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual'))) return { v: 'F3' };
-  if (r.startsWith('dim-line-line') && has('demoted')) return { v: 'NEW-5' };
   if (has('nullity!=fd')) return { v: 'F6' };
   if (r === 'parallel' && has('bite')) return { v: 'NEW-8' };
   return { v: 'UNCLASSIFIED', why: c.issues.join('+') };

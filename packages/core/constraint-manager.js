@@ -4,6 +4,7 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
 import { measureResidual } from './constraint-verifier.js';
+import { isPointLineDistance } from './geometry.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -139,6 +140,11 @@ export class ConstraintManager {
             if (c.type !== CONSTRAINT_TYPES.DISTANCE || c.isDriven || c.driven) return false;
             if (params.isRadius || c.isRadius) {
                 return !!(params.isRadius && c.isRadius && c.shape && params.shape && c.shape === params.shape);
+            }
+            if (isPointLineDistance(c) || isPointLineDistance(params)) {
+                // point-to-line: one driving dimension per (point, line) -- the same three joints
+                return isPointLineDistance(c) && isPointLineDistance(params) && c.joints[0] === params.joints[0]
+                    && ((c.joints[1] === params.joints[1] && c.joints[2] === params.joints[2]) || (c.joints[1] === params.joints[2] && c.joints[2] === params.joints[1]));
             }
             if (c.joints && c.joints.length >= 2 && params.joints && params.joints.length >= 2) {
                 const [a, b] = c.joints; const [x, y] = params.joints;
@@ -433,7 +439,11 @@ export class ConstraintManager {
             const saved = new Map();
             for (const [id, j] of state.joints) saved.set(id, { x: j.x, y: j.y });
 
-                // 2. Temporarily add the constraint
+                // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
+            // the real add; the positions are restored below either way.
+            this.placeForCreation(state, type, params);
+
+            // 2. Temporarily add the constraint
             const tempC = { ...params, type, __sandbox: true };
             state.constraints.push(tempC);
 
@@ -748,7 +758,7 @@ export class ConstraintManager {
 
                 // Fixed endpoints with mismatched length → force drive/demote
                 // Only treat as immovable when BOTH are explicitly fixed (or origin), not just constrained by chain.
-                if (params.joints && params.joints.length >= 2 && typeof params.value === 'number') {
+                if (params.joints && params.joints.length === 2 && typeof params.value === 'number') {
                     const [j1, j2] = params.joints;
                     if (isFixed(j1) && isFixed(j2)) {
                         const p1 = getPos(j1);
@@ -773,8 +783,8 @@ export class ConstraintManager {
                     return null;
                 }
 
-                // Joint-pair distance: check for conflicting distance on same pair
-                if (params.joints && params.joints.length >= 2) {
+                // Joint-pair distance: check for conflicting distance on same pair (a point-to-line dimension is no pair)
+                if (params.joints && params.joints.length === 2) {
                     const [j1, j2] = params.joints;
                     const dimMode = params.dimMode || 'aligned';
                     const existing = onJointPair(j1, j2);
@@ -922,7 +932,7 @@ export class ConstraintManager {
                 if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
                 if (c.isDriven || c.driven) continue;
                 if (c.dimMode && c.dimMode !== 'aligned') continue;
-                if (!c.joints || c.joints.length < 2) continue;
+                if (!c.joints || c.joints.length !== 2) continue;
                 if (c.joints[0] === jid) result.push({ other: c.joints[1], dist: c.value });
                 else if (c.joints[1] === jid) result.push({ other: c.joints[0], dist: c.value });
             }
@@ -986,7 +996,7 @@ export class ConstraintManager {
                 return !!(params.joint && params.shape);
             case CONSTRAINT_TYPES.DISTANCE:
                 // Joint-pair, radius, OR line-line (shapes) distance
-                return (params.joints && params.joints.length === 2)
+                return (params.joints && (params.joints.length === 2 || params.joints.length === 3))
                     || (params.isRadius && params.shape)
                     || (params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2);
             case CONSTRAINT_TYPES.COLLINEAR:
@@ -1108,12 +1118,45 @@ export class ConstraintManager {
         }
     }
 
+    // Perpendicular between two EXACTLY parallel lines (u x v = 0): u.v is stationary there, so the solve never leaves the
+    // start. Choose the branch as Fusion does: the SECOND-picked line turns by the smaller angle to 90 degrees (a parallel
+    // pair is a tie) and a tie goes counter-clockwise. The turn pivots on a fixed or shared joint of the second line, else
+    // on its midpoint; a second line that cannot move (both ends fixed or shared) is left to the solve. No branch is locked: the
+    // branched residual is stationary at exactly 90 degrees (its row would vanish and hide the removed DOF), u.v is not.
+    static placePerpendicularFromParallel(state, normalized) {
+        if (!normalized.shapes || normalized.shapes.length !== 2) return;
+        const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
+        const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
+        if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line' || !s1.joints || s1.joints.length < 2 || !s2.joints || s2.joints.length < 2) return;
+        const a = state.joints.get(s1.joints[0]), b = state.joints.get(s1.joints[1]);
+        const c = state.joints.get(s2.joints[0]), d = state.joints.get(s2.joints[1]);
+        if (!a || !b || !c || !d) return;
+        const ux = b.x - a.x, uy = b.y - a.y, vx = d.x - c.x, vy = d.y - c.y;
+        const lenU = Math.hypot(ux, uy), lenV = Math.hypot(vx, vy);
+        if (lenU < 1e-9 || lenV < 1e-9) return;
+        if (Math.abs(ux * vy - uy * vx) > 1e-9 * lenU * lenV) return;     // not exactly parallel: the general branch lock applies
+        const pinned = (id) => { const j = state.joints.get(id); return !!(j && (j.fixed || id === 'j_origin')) || s1.joints.includes(id); };
+        const [idC, idD] = s2.joints;
+        let pivot;
+        if (!pinned(idC) && !pinned(idD)) pivot = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
+        else if (pinned(idC) && !pinned(idD)) pivot = c;
+        else if (pinned(idD) && !pinned(idC)) pivot = d;
+        else return;
+        for (const [id, j] of [[idC, c], [idD, d]]) {
+            if (pinned(id)) continue;
+            const rx = j.x - pivot.x, ry = j.y - pivot.y;
+            j.x = pivot.x - ry; j.y = pivot.y + rx;                       // +90 degrees (counter-clockwise)
+        }
+    }
+
     // CREATION placement (one place) for the constraints whose solver row moves BOTH the point and the line: collinear
     // (anchor = first shape / first two joints) and pointOnLine (the point moves onto the line, the line stays; a fixed
-    // point leaves the placement to the solve, which then moves the line).
+    // point leaves the placement to the solve, which then moves the line), and perpendicular from an exactly parallel start.
     static placeForCreation(state, type, normalized) {
         const lineJoints = (sid) => { const sh = state.shapes.find(x => x.id === sid); return sh && sh.type === 'line' && sh.joints && sh.joints.length >= 2 ? sh.joints : null; };
-        if (type === CONSTRAINT_TYPES.COLLINEAR) {
+        if (type === CONSTRAINT_TYPES.PERPENDICULAR) {
+            this.placePerpendicularFromParallel(state, normalized);
+        } else if (type === CONSTRAINT_TYPES.COLLINEAR) {
             if (normalized.shapes && normalized.shapes.length === 2) {
                 const a = lineJoints(normalized.shapes[0]), m = lineJoints(normalized.shapes[1]);
                 if (a && m) this.placeOnAnchorLine(state, a[0], a[1], m.slice(0, 2));

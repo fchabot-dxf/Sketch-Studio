@@ -310,7 +310,9 @@ export function measureResidual(c, joints, shapes) {
 export const COLLAPSE_RATIO = 0.01;
 const MIN_TRACKED_SIZE = 1e-6;
 
-// shape id -> its size now (line length, arc / circle radius), for the shapes that have one.
+// shape id -> its sizes now, for the shapes that have one: a line [length], a circle [radius], an arc [radius, chord, chord / radius]. The
+// chord (the distance between the arc's two end joints, 2R sin(sweep / 2)) vanishes when the sweep goes to 0 or to a full 360: its two ends
+// meet (task 550, EA-1: Fusion refuses the coincident of an arc's own ends, "failed to solve").
 export function measureShapeSizes(state) {
     const sizes = new Map();
     for (const s of state.shapes || []) {
@@ -318,24 +320,30 @@ export function measureShapeSizes(state) {
         const a = state.joints.get(s.joints && s.joints[0]);
         const b = state.joints.get(s.joints && s.joints[1]);
         const size = (s.type === 'circle' && typeof s.radius === 'number') ? s.radius : (a && b ? getDist(a, b) : null);
-        if (size !== null) sizes.set(s.id, size);
+        if (size === null) continue;
+        const e = s.type === 'arc' ? state.joints.get(s.joints[2]) : null;
+        if (s.type === 'arc' && e) { const chord = getDist(b, e); sizes.set(s.id, [size, chord, size > 0 ? chord / size : 0]); }
+        else sizes.set(s.id, [size]);
     }
     return sizes;
 }
 
-// The first shape whose size fell below COLLAPSE_RATIO of its size in `before` (a measureShapeSizes result), or null. A shape the user
-// SIZED on purpose is exempt: a driving distance dimension on exactly its two joints (a line / arc length-or-radius point pair), or a
-// driving radius dimension on the shape itself, is the user's own value (0 or tiny included), so that shape is never judged collapsed.
+// The first shape that collapsed since `before` (a measureShapeSizes result), or null. A shape collapses when its size (line length, circle /
+// arc radius) falls below COLLAPSE_RATIO of what it was, or -- an arc -- when its two ends meet: its chord AND its chord / radius (the sweep
+// as an angle) both fall below COLLAPSE_RATIO (a radius going to 0 shrinks the chord with the same sweep, and a radius growing a lot shrinks
+// the angle with the ends apart: neither is the ends meeting). A size the user SET on purpose is exempt: a driving distance dimension on
+// exactly the two joints that measure it (a line's ends, an arc's centre and start = its radius, an arc's start and end = its chord) or a
+// driving radius dimension on the shape itself (the radius), is the user's own value (0 or tiny included), so it is never judged collapsed.
 export function findCollapsedShape(state, before) {
     const after = measureShapeSizes(state);
     const driving = (state.constraints || []).filter(c => c.type === CONSTRAINT_TYPES.DISTANCE && !c.isDriven && !c.driven);
+    const onPair = (c, p, q) => !c.isRadius && c.joints && c.joints.length === 2 && ((c.joints[0] === p && c.joints[1] === q) || (c.joints[0] === q && c.joints[1] === p));
+    const fell = (was, now, k) => was[k] >= MIN_TRACKED_SIZE && now[k] < was[k] * COLLAPSE_RATIO;
     for (const s of state.shapes || []) {
         const was = before.get(s.id), now = after.get(s.id);
-        if (was === undefined || now === undefined || was < MIN_TRACKED_SIZE || now >= was * COLLAPSE_RATIO) continue;
-        const sized = driving.some(c => (c.isRadius && c.shape === s.id) ||
-            (!c.isRadius && c.joints && c.joints.length === 2 && s.joints && s.joints.length >= 2 &&
-             ((c.joints[0] === s.joints[0] && c.joints[1] === s.joints[1]) || (c.joints[0] === s.joints[1] && c.joints[1] === s.joints[0]))));
-        if (!sized) return s;
+        if (was === undefined || now === undefined) continue;
+        if (fell(was, now, 0) && !driving.some(c => (c.isRadius && c.shape === s.id) || (s.joints && s.joints.length >= 2 && onPair(c, s.joints[0], s.joints[1])))) return s;
+        if (was.length === 3 && now.length === 3 && fell(was, now, 1) && fell(was, now, 2) && !driving.some(c => onPair(c, s.joints[1], s.joints[2]))) return s;
     }
     return null;
 }

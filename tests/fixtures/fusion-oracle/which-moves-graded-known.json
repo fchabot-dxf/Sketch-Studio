@@ -1166,6 +1166,13 @@
    "0,4"
   ]
  },
+ "tangent-circle-circle|FF": {
+  "reason": "task 550: our nearest solve brings the first fillet arc's two ends together (90 -> 0 degrees; before task 550 that zero-sweep collapse was ACCEPTED and happened to read as Fusion's 'deform'); it is now refused by the zero-sweep rule (findCollapsedShape, EA-1). Fusion deforms the arc without collapsing it",
+  "total": 4,
+  "cells": [
+   "0,c"
+  ]
+ },
  "horizontal-line|L": {
   "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
   "total": 4,

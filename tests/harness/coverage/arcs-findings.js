@@ -8,19 +8,19 @@ import { runArcCell, ROWS } from './arcs-rows.js';
 
 export const KNOWN = {
   'EA-1': {
-    severity: 'HIGH',
-    title: 'A zero-sweep collapse is ACCEPTED (nothing checks the sweep, only the radius)',
-    diagnosis: 'constraint-verifier.js:314-324 measureShapeSizes measures an arc by |centre - start| only, so findCollapsedShape (:329-341, used at constraint-manager.js:356 / :495 and dimension-seams.js:74) cannot see start = end. The coincident tool (constraint-tools.js:120-132) has no own-ends check either. Seen: coincident of the arc\'s own start and end on EVERY arc variant (sep and dimmed; refused only when the joints are locked, ERR-CMATH-01); H/V between the ends of a fillet arc; a fillet-radius edit on a 2 degree corner with a point on the arc.',
-    task: 'extend measureShapeSizes / findCollapsedShape to the arc chord (sweep), and refuse the own-ends coincident in the tool',
+    severity: 'MEDIUM',
+    title: 'A zero-sweep collapse is still ACCEPTED after a fillet-radius edit or a drag (refused at constraint creation since task 550)',
+    diagnosis: 'task 550: findCollapsedShape (constraint-verifier.js) measures the ends of an arc (chord and chord / radius), so a constraint or dimension whose solve brings the two ends of an arc together is refused at creation (the coincident of the own ends of an arc: refused on every variant, like Fusion). Not covered: a FILLET radius edit (commitDimensionEdit judges a fillet edit by filletHasCollapsedLine only: f2r10 radius x1.5 / x0.67 with a point on the arc / a tangent circle) and a DRAG of an arc joint (f179r10 end dragged across its start: no refusal while dragging, EA-4 family).',
+    task: 'judge a fillet radius edit by findCollapsedShape as well; decide with Fusion what a drag that closes an arc does',
   },
   // EA-2 (the stored largeArc flag never recomputed: an arc past 180 degrees drawn and exported as the other arc) FIXED in task 550: the large-arc
   // choice is derived from the joints and the direction by geometry.js arcSweepInfo everywhere (renderer, exports, loop paths, bounds). A cell whose
   // drawn path is not the arc the joints say is still classified EA-2 below and fails the test (no KNOWN entry).
   'EA-3': {
-    severity: 'HIGH',
-    title: 'A constraint on a very short (or almost full) arc makes the sweep jump to the complement (0.1 deg -> 359.8 deg and back)',
-    diagnosis: 'the sweep is not a solver quantity: its direction is the stored `sweep` flag and its size is mod((end - start) * dir, 2 PI) (geometry.js:285-288), so a rim joint that moves a hair across the other rim joint turns 0.1 deg into 359.9 deg. The solver (solver/engine.js, definitions.js) has no sweep or orientation term; the nearest-solution step does not know the arc has a short side.',
-    task: 'keep the sweep sign / side as solver state (like the perpendicular branch lock, constraint-manager.js lockPerpendicularBranch) or refuse a solution that wraps',
+    severity: 'MEDIUM',
+    title: 'A constraint on a very short arc can still make the sweep jump to the complement when no solution keeps its side (r0.5 x 0.1 deg tangent to an arc sharing its start)',
+    diagnosis: 'task 550 measured the rest: every other EA-3 cell was a coincident of the own ends of the arc (now refused, EA-1 rule). Our least-change solve keeps the side of an arc by itself in every probe (the Fusion fixed-ends radius sequence, near-180 radius jumps, tests/arc-direction.test.js). An orientation lock in the solve (an arc_side row, .evidence/550/arc-side-lock-attempt.patch) removes this last cell only by REFUSING it, and the same rule then turns 67 passing cells into jitter re-solve failures (EA-6 class) and makes 10 Fusion graded cells and 1 dimension-edit run diverge from Fusion: not shipped, the owner decides.',
+    task: 'decide with Fusion whether a wrap with no same-side solution is refused; then an arc_side lock that refuses only a wrap',
   },
   'EA-4': {
     severity: 'MEDIUM',
@@ -58,12 +58,8 @@ export const KNOWN = {
     diagnosis: 'constraint-manager.js:693-696 and :768 compare with GEOMETRY_TOLERANCE 0.05 (world units): a 0.1 degree arc (chord 0.035), the 180 degree arc (the tool nudges its end by 1e-6) and the 359.9 degree arc are all "close enough". Our DOF count 0, PlaneGCS counts -1.',
     task: 'none (a tolerance choice); noted because 0.05 is larger than the whole 0.1 degree arc',
   },
-  'EA-10': {
-    severity: 'MEDIUM',
-    title: 'An arc is picked (hover / click / snap) from ANYWHERE on its circle, the sweep is ignored',
-    diagnosis: 'snap-detection.js:196-210 findSnap projects the mouse on the arc\'s full circle (no angleInArcSweep test), so a 0.1 degree arc is hit 180 degrees away from itself, and "point on arc" is a point on the whole circle (row point-on-arc-off accepts it).',
-    task: 'gate the arc pick with angleInArcSweep (geometry.js:296) and the point-on-arc row with the sweep (Fusion check first)',
-  },
+  // EA-10 (an arc picked from anywhere on its circle) FIXED in task 550: snap-detection.js hits an arc only on its drawn sweep (arcSweepInfo);
+  // tests/extreme-arcs.test.js asserts it with ui10().
 };
 // round-1 findings the ordinary control arc already shows (docs/CONSTRAINT-AUDIT.md): tolerated
 export const INHERITED = { F4: 'parallel / perpendicular / collinear refused on a shared joint although feasible', F5: 'collinear DOF count on lines meeting at a corner', F6: 'parallel / perpendicular Jacobian: the shared joint column is assigned twice' };
@@ -102,10 +98,10 @@ export function ui10() { const f = uiFacts(variant('s30cw')); return { ok: !f.ar
 
 // the cell repro of an EA id: the first (variant,row,state) that shows it, as a command line the doc quotes
 export const REPRO_CELL = {
-  'EA-1': ['s30cw', 'coincident-own-ends', 'sep'],
+  'EA-1': ['f2r10', 'point-on-arc', 'sep'],
   // EA-3 and EA-5: their first repros (s0.1cw / r0.5s30cw tangent-line sep) pass since task 525 (the who-moves placement moves the line and
   // keeps the arc); the repro is now the first cell that still shows the finding
-  'EA-3': ['s180cw', 'coincident-own-ends', 'sep'],
+  'EA-3': ['r0.5s0.1cw', 'tangent-arc', 'shared'],
   'EA-4': ['s0.1ccw', 'hv-start-end', 'sep'],
   'EA-5': ['r0.5s0.1cw', 'dim-chord', 'sep'],
   'EA-6': ['r0.5s30cw', 'perpendicular-chord', 'sep'],

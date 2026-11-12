@@ -1,5 +1,5 @@
 ﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#ui/coords.js';
-import { projectPointOnSegment, getDist, getArcParams, resolveJoints } from '#core/geometry.js';
+import { projectPointOnSegment, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';
@@ -196,17 +196,24 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
         }
       } else if (s.type === 'arc') {
         let center, radius;
-        // Center-based arc: joint[0] = center, joint[1] = start
+        // Center-based arc: joint[0] = center, joint[1] = start, joint[2] = end
         center = joints.get(s.joints[0]);
         const start = joints.get(s.joints[1]);
+        const end = joints.get(s.joints[2]);
         if (center && start) radius = getDist(center, start);
 
-        if (center && radius > 0) {
+        if (center && end && radius > 0) {
           const dx = worldMouse.x - center.x;
           const dy = worldMouse.y - center.y;
           const len = Math.hypot(dx, dy);
           if (len > 0.0001) {
-            snapPt = { x: center.x + (dx/len)*radius, y: center.y + (dy/len)*radius };
+            // TASK 550 (EA-10): the arc is hit only on its DRAWN sweep (geometry.js arcSweepInfo, the renderer's sweep): the nearest point of the
+            // arc is the mouse's projection on the circle when that falls inside the sweep, else the nearer end -- never the rest of the circle
+            if (angleInArcSweep(arcSweepInfo(center, start, end, { sweep: s.sweep }), Math.atan2(dy, dx))) {
+              snapPt = { x: center.x + (dx/len)*radius, y: center.y + (dy/len)*radius };
+            } else {
+              snapPt = getDist(worldMouse, start) <= getDist(worldMouse, end) ? { x: start.x, y: start.y } : { x: end.x, y: end.y };
+            }
             const sc = worldToScreen(svg, snapPt);
             dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
           }

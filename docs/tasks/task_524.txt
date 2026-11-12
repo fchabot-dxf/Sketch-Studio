@@ -1,0 +1,25 @@
+TASK 524 (Sketch-Studio): fillet on a FIXED (locked) corner that is not the origin deletes the fixed joint.
+Base: origin/main at 85241c7. Worktree D:\APPS\Sketch-Studio.worktrees\task-524-fillet-fixed, branch agents/task-524-fillet-fixed.
+Read first: packages/core/fillet.js around l.260-350 and task 517 in WORK-LOG.md (docs/tasks/task_517.txt).
+
+CAUSE: 517 special-cased the origin: `const atOrigin = cluster.has('j_origin'); const jV = atOrigin ? 'j_origin' : genJ();` and the
+cluster delete skips only 'j_origin'. Any other fixed joint in the corner cluster is deleted with the corner, so the user's lock is
+lost and the drawing gains freedom.
+DO:
+ 1. Fail-first test: rectangle, lock one non-origin corner (the way the UI locks a point: find it), fillet that corner. Today: the
+    fixed joint is gone. Quote the failing output.
+ 2. Fix by GENERALISING the one rule, not by adding a second special case: the corner cluster's fixed joint (the origin is simply
+    one such joint) is kept and becomes the virtual sharp the two trimmed lines are held to. Afterwards the literal 'j_origin' no
+    longer appears in the virtual-sharp / cluster-delete logic of fillet.js (quote the grep); if the origin needs a mention anywhere
+    else in that file, say why.
+ 3. Decide from the code and say in the REPORT: what if the cluster holds two fixed joints (coincident); what about fixed-by-
+    constraint (a `fixed` constraint object, if that exists separately from joint.fixed: grep) versus joint.fixed.
+ 4. Tests: locked non-origin corner filleted: joint exists, still fixed, same position, fillet geometry correct, DOF as expected
+    (compare with the origin case from tests/dimension-fields-and-fillet-517.test.js); undo restores the corner; save/load round
+    trip; the 517 origin tests still pass unchanged; a polygon corner that is locked.
+ 5. Run the audits (`node tests/coverage-properties.test.js`, `coverage-matrix`, `constraint-audit`, `fusion-oracle`): delete any
+    KNOWN entry that now passes.
+DO NOT touch the solver, the fillet radius maths, or the other findings. No hidden globals, no silent catch, no per-case copies.
+STOP if keeping the fixed joint changes the DOF or the result of an existing fillet test (quote it), or changes a saved fixture.
+Never kill a process you did not start. REPORT once, leave nothing running.
+Gate green (`npm run gate`, foreground), commit by path, push the branch, WORK-LOG `## TURN 524`, the AGENTS.md REPORT block.

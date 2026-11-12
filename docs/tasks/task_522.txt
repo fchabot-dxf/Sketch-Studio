@@ -1,0 +1,24 @@
+TASK 522 (Sketch-Studio): test hygiene. (A) two flaky browser tests, (B) the solver-scenarios file cannot fail the gate.
+Base: origin/main at 85241c7. Worktree D:\APPS\Sketch-Studio.worktrees\task-522-test-hygiene, branch agents/task-522-test-hygiene.
+
+A. FLAKES. In the merge gate `tests/prepare-look.test.js` failed with an EPERM while removing its browser profile folder, and
+   `tests/penplotter-stage-undo.test.js` failed once; each passes alone (penplotter 3/3). They cost three 35-minute merge reruns.
+   1. Find the CAUSE of each from the code and by reproducing (run each 10x alone, and 5x while another browser test runs beside it;
+      quote the failure output verbatim). Do not guess: if you cannot reproduce one, say so and report what you measured.
+   2. Expected cause for prepare-look: the profile directory is deleted while the browser process tree still holds it (Windows). The
+      fix belongs in the ONE shared browser helper every test uses to launch/close (find it: grep the launch helper used by both
+      tests), i.e. close = CDP Browser.close, wait for the process tree to exit, then remove the profile. NOT a retry loop or a
+      swallowed error in each test, and no `catch {}`.
+   3. penplotter-stage-undo: find the race (a wait on a fixed delay, a read before the stage settled, a shared port). Fix the cause
+      (wait on the real condition). No added sleeps, no retries.
+   4. Proof: each test 20x green alone and 10x green beside another browser test; quote the counts.
+B. `tests/harness/solver-scenarios.test.js` prints a "SOLVER SCENARIO BACKLOG" table and always exits 0, so a regression in a
+   passing scenario cannot fail the gate. Make it a real test with the KNOWN pattern the audits use (see tests/constraint-audit.test.js):
+   every scenario that passes today must pass (exit 1 otherwise); every scenario that fails today is listed in a KNOWN list with a
+   one-line reason, and the test FAILS LOUDLY when a KNOWN scenario starts passing ("delete its KNOWN entry"). Keep the table.
+   Check scripts/gate.cjs actually runs this file (quote the line); if tests/harness is excluded, say so and STOP before changing
+   what the gate runs. Prove it can fail: break one passing scenario's expectation locally, show exit 1, revert.
+DO NOT touch packages/ (no solver change), no other test files beyond what A needs. Report anything else you find; don't fix it.
+STOP if a flake's cause is in app code rather than test code (report it, with the evidence).
+Never kill a process you did not start. Close every headless browser you started. REPORT once, leave nothing running.
+Gate green (`npm run gate`, foreground), commit by path, push the branch, WORK-LOG `## TURN 522`, the AGENTS.md REPORT block.

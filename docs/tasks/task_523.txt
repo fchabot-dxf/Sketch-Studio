@@ -1,0 +1,28 @@
+TASK 523 (Sketch-Studio): the ARC side of the tangent Jacobian rows is wrong (finding NEW-6). Solver maths.
+Base: origin/main at 85241c7. Worktree D:\APPS\Sketch-Studio.worktrees\task-523-arc-tangent, branch agents/task-523-arc-tangent.
+Read first: docs/COVERAGE-AUDIT.md section "6. NEW-6", tests/jacobian-fd-guard.test.js (task 511: ONE full-derivative Jacobian for
+analysis and solve), packages/core/solver/definitions.js (tangent rows), engine.js, and how 515 made a circle's radius an unknown.
+
+CAUSE (measured in 515, `.evidence/515/arc-tangent-probe.txt` in the 515 worktree, same on main): for line-arc (away from a shared
+rim), circle-arc and arc-arc tangent, the arc's radius is read as a CONSTANT taken from the joints at assembly. An arc's radius is
+the distance centre->rim joint, so it depends on unknowns; the rim (and centre) columns of the row are missing that term and differ
+from finite differences by 0.98. Likely the reason the remaining NEW-6 cells (feasible arc tangents refused, ERR-CSOLVE-01; the
+count varies 3-5 with run order) do not converge.
+DO:
+ 1. Reproduce: a probe that prints analytic vs finite-difference rows for the three arc tangent forms. Quote before.
+ 2. Fix in ONE place: the tangent residual/row for an arc differentiates the radius through the joints it is measured from, so the
+    analytic row equals finite differences. One formulation shared by the three forms (and consistent with the circle form from
+    515), not a patch per case. If an arc has two rim joints, find how the radius is defined today and keep that definition.
+ 3. Extend tests/jacobian-fd-guard.test.js so every tangent form with an arc is covered (max error below the guard's tolerance).
+ 4. Re-run `node tests/coverage-matrix.test.js`, `node tests/coverage-properties.test.js`, `node tests/constraint-audit.test.js`,
+    `node tests/fusion-oracle.test.js`: any KNOWN entry that now passes is DELETED (the tests tell you); regenerate the fusion-oracle
+    KNOWN lists and docs with scripts/fusion-oracle/*-known.mjs / *-doc.mjs if counts move. Report every count before/after.
+ 5. Say whether NEW-6 is gone, smaller, or unchanged, and whether the cold-start non-determinism of that cell remains. If cells
+    remain, diagnose (do not fix) and report.
+ 6. Also MEASURE (do not fix) the "parallel between two rect sides that share a corner" Jacobian error (F6 cell): is it the same
+    family? One paragraph.
+DO NOT: change the saved-file format; add seeds, continuations, iteration bumps or tolerance changes to make cells pass; touch
+placement (who moves) code; hidden globals; silent catch. STOP and report if the correct row changes behaviour for existing users
+beyond convergence (list every behaviour change you see in the audits), or if the fix needs an arc radius unknown (a design change).
+Never kill a process you did not start. REPORT once, leave nothing running.
+Gate green (`npm run gate`, foreground), commit by path, push the branch, WORK-LOG `## TURN 523`, the AGENTS.md REPORT block.

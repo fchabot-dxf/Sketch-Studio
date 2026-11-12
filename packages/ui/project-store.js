@@ -485,6 +485,9 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       changed();
       return d;
     },
+    /** Point the current design at `id` without loading it, or at NOTHING (null): what a page shows when it switches tabs or shows an
+     *  unsaved Untitled (TASK 558: an Untitled is never stored, so no design is current). */
+    async setCurrent(id) { await adapter.setMeta(CURRENT, id || null); changed(); },
     /** A new EMPTY design (in `projectId`, default: the current design's project), which becomes current. */
     async newDesign(name = 'Untitled', { app = null, projectId } = {}) { return createDesign(name, { app, projectId }); },
     /** Copy a design (default: the CURRENT one; a buffer passes the one it is bound to) into a NEW named design in the same

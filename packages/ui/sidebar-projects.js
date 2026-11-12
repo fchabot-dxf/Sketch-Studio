@@ -105,7 +105,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     current: appId, docName: currentName, actions, account, driveControls, status: statusLine,
     onRenameDoc: (name) => act(async () => {
       const id = await currentId();
-      if (!id) throw new Error('Nothing to rename yet — draw something first.');
+      if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
     }, { close: false })(),
     views: {

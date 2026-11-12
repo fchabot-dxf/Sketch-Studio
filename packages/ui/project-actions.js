@@ -19,13 +19,13 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   }
   // (the *Now forms assume the pending edits are already saved)
   async function duplicateNow(id) {
-    if (!id) throw new Error('Nothing to duplicate yet — draw something first.');
+    if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled has no stored design
     const d = await store.duplicate(id);
     notify(`Duplicated as "${d.name}" (find it under Open recent).`, 'info');
     return d;
   }
   async function saveToDriveNow(id) {
-    if (!id) throw new Error('Nothing to save yet — draw something first.');
+    if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558
     const r = await store.cloud.saveToDrive(id);
     notify('Saved to Google Drive', 'info', { href: driveFileUrl(r.fileId), label: 'Open in Drive' });
   }

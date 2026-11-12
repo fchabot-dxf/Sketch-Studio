@@ -1,8 +1,9 @@
-# Document tabs: several designs open at once (task 558, design only)
+# Document tabs: several designs open at once (task 558)
 
 Owner request (2026-11-12): "Can we add tabs for open drawings?" Several designs open at once, switched with tabs, like
-Fusion's document tabs or a browser's tabs. This file is the design (phase 1). No code under `packages/` or `apps/` was
-changed. Every statement about today's code cites `file:line` on main `d128cb8`.
+Fusion's document tabs or a browser's tabs. This file is the design (phase 1, commit f799396), updated with the owner's
+rulings of 2026-11-12 (section 2) and the SAVE RULE (section 3b); slice 1 is built (section 9). Statements about the code
+before slice 1 cite `file:line` on main `d128cb8`.
 
 ---
 
@@ -24,26 +25,29 @@ The tab strip is a thin row ABOVE each app's header, like a browser's tabs or Fu
 Explore / Design / Vcarve / Prepare / Review and Pen Plotter's Design / Toolpath / Export stay where they are, in the
 header below: those are steps WITHIN one design; the new row is WHICH design. Trace has no designs, so it gets no tabs.
 
-Because everything autosaves, closing a tab asks nothing (unless the last save failed). Opening a design that is already
-in a tab just switches to that tab. After a reload the same tabs come back, with the one you were on in front (undo
-history does not survive a reload, as today).
+Saving (your ruling): a new design is NOT stored until you save it the first time and give it a name. Until then it is
+an "Untitled" that lives only in the open page. From that first named save on, it autosaves as today. Closing (or
+reloading) an unsaved Untitled that has something in it asks Save… / Don't save / Cancel; a named design's tab closes
+without asking (it is autosaved), unless its last save failed. Opening a design that is already in a tab just switches to
+that tab. After a reload the named tabs come back, with the one you were on in front (undo history does not survive a
+reload, as today).
 
-What I need from you: the decisions in section 2. Each has my recommended answer; "yes to all recommendations" is a
-complete answer.
+## 2. Owner decisions: RULED 2026-11-12
 
-## 2. Owner decisions (each with a recommended answer)
+Owner ruling 2026-11-12 (through the advisor): **T1-T12 all as recommended, EXCEPT saving**: "Auto save only once I
+actually saved and named." The saving ruling replaces T4's reason and makes T5 moot; it is spelled out in section 3b.
 
-| # | Question | Recommended answer |
-|---|----------|--------------------|
+| # | Question | Ruling (2026-11-12) |
+|---|----------|---------------------|
 | T1 | SketchStudio is "don't touch" by principle (NEXT-SESSION.md, PROJECT PRINCIPLES). May it get the tab strip? | **Yes.** Sketch is where drawings are made; the strip is additive, shell-smoke must stay 12/12. |
 | T2 | Opening a design from Projects / Open recent / Open from file: new tab or the current one? | **New tab** (Fusion does this). Exception: if the current tab is an untouched empty "Untitled", reuse it. |
 | T3 | New design | **Opens a new tab.** |
-| T4 | Close a tab: confirm? | **No confirm** (autosave). Confirm ONLY when that design's last save failed or Drive reports an error for it. |
-| T5 | A tab that was never drawn in (empty Untitled), closed: keep the empty design in Projects? | **Delete it** (no junk "Untitled" rows). Today an empty Untitled is stored as soon as the app starts (finding F1). |
+| T4 | Close a tab: confirm? | A NAMED design: **no confirm** (autosaved), unless its last save failed or Drive reports an error for it. An UNSAVED Untitled with content: **Save… (name it) / Don't save / Cancel** (section 3b). |
+| T5 | A tab that was never drawn in (empty Untitled), closed: keep the empty design in Projects? | **Moot**: an Untitled is never stored (section 3b), so there is nothing to delete. F1 disappears by the same rule. |
 | T6 | Closing the LAST tab | **A fresh empty Untitled tab appears** (an app never shows "nothing"). |
 | T7 | Maximum tabs | **10.** Opening an 11th says "Close a tab first" (memory: each tab keeps up to 100 undo steps, section 4.4). |
 | T8 | Drag to reorder | **Not in v1** (slice 7, later). v1: new tabs open at the right end. |
-| T9 | After a reload | **All tabs come back, the last active in front.** Undo history is not kept across a reload (as today). |
+| T9 | After a reload | **All NAMED tabs come back, the last active in front.** Undo history is not kept across a reload (as today). An unsaved Untitled with content: the browser's leave-page warning (beforeunload) first; it is not restored. |
 | T10 | Cross-app (decision D) | **One set of open designs shared by Sketch, Shaper and Pen Plotter** (like today's shared "current design"). Each app page has its own active tab. |
 | T11 | Shaper's mode / Pen Plotter's stage per tab? | **No:** the stage is the app's, not the design's (v1). Switching tabs keeps you in Prepare if you were in Prepare. |
 | T12 | Where the strip sits (decision B) | **Its own thin row above the app header** (browser / Fusion layout), not inside the header row. |
@@ -160,6 +164,50 @@ All four headers hold the shared sidebar button (`#app-sidebar-host`, from `moun
 hash / URL routing anywhere in `apps/` or `packages/` (grep for `location.hash`, `hashchange`, `pushState`,
 `replaceState`: no hits outside tests); the only `location.search` read is the dev tuning flag
 (`apps/sketchstudio/main.js:111`).
+
+## 3b. Saving: the owner's rule (ruled 2026-11-12)
+
+**"Auto save only once I actually saved and named."** A design is either UNSAVED (an in-memory "Untitled", never written to the
+project store) or NAMED (stored, autosaved). The ONE place that decides is the document buffer
+(`packages/ui/document-buffer.js`, slice 1): it is unbound (`designId() === null`) exactly while the design shown is an unsaved
+Untitled, and an unbound buffer never writes (`poll()` returns first). `needsSavePrompt()` is the one headless decision a close or
+leave prompt asks: `'unsaved'` (an Untitled with content), `'save-failed'` (a named design whose last save failed, or Drive reports a
+failed write for it), or `null` (close without asking).
+
+"Content" = the Untitled's document differs from the one it started as (its serialized signature, host sidecar included). Drawing
+then undoing back to empty is no content.
+
+What is stored when, path by path (slice 1 = built now; slice 4 = the prompts and Ctrl+S, UI):
+
+| Path | Before (main d128cb8) | Now |
+|------|-----------------------|-----|
+| Fresh page, nothing stored | First autosave tick stored an empty "Untitled" (F1) | Nothing stored; an unsaved Untitled; the current pointer stays empty. |
+| Fresh page, a design is current | Loaded and autosaved | Unchanged (a stored design is named: existing users' designs, including a migrated or autosaved "Untitled", keep autosaving). |
+| New design (sidebar, Projects modal toolbar) | Stored an empty "Untitled" at once and made it current | An unsaved Untitled; NOTHING stored; the current pointer is cleared (`store.setCurrent(null)`), so the sidebar shows "Untitled" and the next app opened starts empty. |
+| New tab (slice 3/4 "+") | - | Same as New design, in a new tab. |
+| Save as... on an unsaved Untitled | (did not happen: everything was stored) | THE FIRST NAMED SAVE: stored under that name, made current, autosaves from then on. One design, not a copy. |
+| Save as... on a named design | A named copy, bound from then on | Unchanged. |
+| Ctrl+S on an unsaved Untitled | - | Opens the Save as name prompt (slice 4). On a named design: flush now (slice 4). |
+| Rename (sidebar name) on an unsaved Untitled | Renamed the current design | Refused: "This design is not saved yet. Save it with a name first (Save as…)." Slice 4 makes naming the Untitled its first save. |
+| Duplicate / Save to Google Drive on an unsaved Untitled | "Nothing to ... yet — draw something first." | Same refusal, new text: "This design is not saved yet. Save it with a name first (Save as…)." |
+| Open from Projects / Open recent / Open from file over an unsaved Untitled WITH content | (the Untitled was stored, nothing lost) | Refused ("This design is not saved yet...") until slice 4's Save... / Don't save / Cancel prompt (or a new tab) exists. Over an EMPTY Untitled: it is simply replaced. |
+| Open from file | Stored as a new design named from the file | Unchanged (a file has a name). |
+| Save to file on an unsaved Untitled | Exported the stored (autosaved) design | Exports the in-memory drawing, named "Untitled"; the project store stays untouched. |
+| Drive (Save to Google Drive, Drive default) | Any stored design | Only named designs reach the store, so only they reach Drive. A Drive conflict reloads only the bound named design (unchanged). |
+| Projects modal (task 547) / Open recent | Listed every stored design, including empty Untitleds | An unsaved Untitled is not stored, so it is never listed (`project-manager.js:273-275` lists `store.listRecent` / `listDesigns`). |
+| Ready gate (task 542) | Opens after the initial restore | Unchanged: it opens after `restore()` whether a design was loaded or an unsaved Untitled is shown. |
+| Close a tab: unsaved Untitled with content | - | Prompt Save... (name it) / Don't save / Cancel (slice 4; decision = `needsSavePrompt()`). |
+| Close a tab: named design | - | No prompt, unless `needsSavePrompt()` says `'save-failed'` (T4). |
+| Reload / leave the page with an unsaved Untitled with content | (stored, restored) | The browser's leave-page warning (beforeunload, slice 4); it is not restored. Named tabs are restored (T9, slice 6). |
+| Switch tabs | - | The active NAMED design is saved before it is put aside; an unsaved Untitled stays in its tab, in memory. |
+
+The DDCS Studio lesson "no beforeunload" (`document-buffer.js` header) still holds for named designs; the unsaved Untitled with
+content is the one case that warns.
+
+**Gap until slice 4 (for the advisor):** between slice 1 and slice 4 an unsaved Untitled with content is lost on reload or when the
+page is closed (no beforeunload yet), and when the user leaves for another app through GO TO. Opening another design over it is
+refused (above), so that path loses nothing. Merging slice 1 to main alone exposes users to that gap; merging it together with the
+slice 4 prompts closes it.
 
 ---
 
@@ -320,8 +368,9 @@ an error for the inactive tabs too.
   re-created under a new id after a Drive loss follows `followMoves` (`document-buffer.js:148`).
 - Save as / Duplicate: Save as keeps today's meaning (the CURRENT tab becomes the copy, `document-buffer.js:138`);
   Duplicate does not open anything (`project-actions.js:21-26`). Unchanged.
-- Close: no confirm (T4) unless `store.status(id)` says the save failed; flush that design first (its Drive write too).
-  An untouched empty Untitled is deleted on close (T5). The last tab closed -> a fresh Untitled tab (T6).
+- Close: the caller asks `needsSavePrompt()` first (section 3b): an unsaved Untitled with content -> Save... / Don't save /
+  Cancel; a named design -> no confirm unless its save failed (T4). The buffer saves the closing design first (its Drive
+  write too). T5 is moot (an Untitled is never stored). The last tab closed -> a fresh unsaved Untitled tab (T6).
 - Deleting a design that is open in a tab (Projects modal, Delete): its tab closes (the store already clears the pointer,
   `project-store.js:511-516`).
 - Max 10 tabs (T7).
@@ -329,6 +378,7 @@ an error for the inactive tabs too.
 ### 6.2 Reload and restore
 - The open set is persisted in the store's device-local meta (the same place as the CURRENT pointer: a remote adapter
   keeps meta local, `project-store.js:28`) as `openTabs` = `[designId, ...]` in order; the active tab = CURRENT (T9).
+  Only NAMED designs are listed; an unsaved Untitled is not restored (the leave-page warning came first, section 3b).
 - Boot: `restore()` loads CURRENT exactly as today (the ready gate of task 542 is unchanged, it covers the first
   design); the other tabs are listed by name only and their documents are read on first activation (so boot cost does
   not grow with the tab count). A listed design that no longer exists is dropped silently from the list.
@@ -396,10 +446,10 @@ Every slice: gate green (`npm run gate`), SMOKE 12/12, HEADLESS-LEFT 0, WORK-LOG
 
 | Slice | What | Size | STOP conditions |
 |-------|------|------|-----------------|
-| 1 | Headless tab model in `document-buffer.js`: tab records, `tabs()/openTab/activate/close/newTab`, the `poll()` bound-id fix (4.4 hazard), `session` hook, `reason: 'switch'` in `onRestored`. No UI; `openDesign` unchanged for users. | M | Any host's `onRestored` cannot tell a switch from an open without a second code path -> stop. The poll race cannot be pinned by a failing test BEFORE the fix -> stop and report. |
+| 1 (BUILT) | Headless tab model in `document-buffer.js`: tab records, `tabs()/openTab/activate/closeTab/newTab`, the `poll()` bound-id fix (4.4 hazard), `session` hook, `reason` in `onRestored`; PLUS the save rule (3b) and `needsSavePrompt()`; `store.setCurrent(id)`. No UI. | M | Any host's `onRestored` cannot tell a switch from an open without a second code path -> stop. The poll race cannot be pinned by a failing test BEFORE the fix -> stop and report. |
 | 2 | Host sessions: Pen Plotter declares `session` for `history.js` stacks; each host honours `reason: 'switch'` (no refit, restore view). Shaper: confirm nothing needed (cut plan in snapshots + sidecar). | S-M | A host keeps per-design data that is neither in the sidecar nor declarable as a session -> stop, list it. |
 | 3 | The strip `packages/ui/document-tabs.js` + `documentTabs: true` in `mountProjectSidebar`, SketchStudio first (needs T1). | M | SMOKE not 12/12, or any SketchStudio control moves (screenshot diff of the header row) -> stop. |
-| 4 | Actions: Open / Open recent / Open from file / New open tabs (T2, T3); same design -> switch; close rules (T4-T6); max (T7); sidebar name/status/title from the active tab; flush-all on page hide. | M | A store API change is needed beyond reading meta -> stop and ask. |
+| 4 | Actions: Open / Open recent / Open from file / New open tabs (T2, T3); same design -> switch; close prompts from `needsSavePrompt()` (Save... / Don't save / Cancel), the beforeunload warning for an unsaved Untitled with content, Ctrl+S, rename of an Untitled = its first save; max (T7); sidebar name/status/title from the active tab (an "Untitled, not saved" status); flush-all on page hide. | M | A store API change is needed beyond reading meta -> stop and ask. |
 | 5 | Shaper + Pen Plotter get the strip; live tests in both. | S-M | The strip overlaps or shifts `#mode-nav` (task 522 pinned its position) -> stop. |
 | 6 | Persistence + cross-app (T9, T10): `openTabs` meta, restore at boot, BroadcastChannel sync. | M | The ready gate (542) would have to wait for more than the CURRENT design -> stop. |
 | 7 | (v2, T8) drag to reorder. | S | - |
@@ -412,7 +462,8 @@ Tests (node unless marked live):
 - Autosave target: after switching, the store's A record equals A's last document and B's equals B's (read back from a
   memory adapter); the poll race test: hold `store.save` open, switch, release: A's record is not overwritten by B.
 - Same design twice: opening an open design activates its tab; tab count unchanged.
-- Close: flushes; an untouched Untitled is deleted; a failed-save tab asks (memory adapter that throws).
+- Close: flushes; the last tab leaves a fresh Untitled; `needsSavePrompt` = 'unsaved' / 'save-failed' / null (memory adapter that throws).
+- Save rule: a fresh page stores nothing until a named save; after it, edits autosave; Save as on an Untitled stores one design; New design stores nothing and clears the current pointer.
 - Stale tab: change B in the store behind its back (second store instance on the same adapter), activate B: the store
   version shows, history cleared, status line says so.
 - Host session: Pen Plotter toolpath undo in tab A survives a switch to B and back (live).
@@ -426,12 +477,14 @@ Tests (node unless marked live):
 
 - **F1** On a fresh page with nothing stored, the first autosave tick stores an empty "Untitled" design: `restore()`
   leaves `lastSig` null when there is no design (`document-buffer.js:102-111`), so the first `poll()` differs and calls
-  `store.save` with no target, which creates one (`project-store.js:548-551`, the `!target` branch of `save`). Relevant to T5.
+  `store.save` with no target, which creates one (`project-store.js:548-551`, the `!target` branch of `save`). GONE in slice 1
+  by the save rule (an unbound buffer never writes).
 - **F2** The sidebar name, status and the browser title follow the device-wide CURRENT pointer
   (`sidebar-projects.js:38-45`, refreshed on every store change including other browser tabs via BroadcastChannel,
   `project-store.js:206-213`), while the buffer writes to its own bound design. Two browser tabs on two designs: opening a
   design in one should relabel the other's sidebar and title with the wrong name (code reading; not reproduced live).
 - **F3** Two pages bound to the same design overwrite each other's autosaves (last write wins); no lock or warning
   (code reading of `poll()` + `store.save`).
-- **F4** The `poll()` rebind hazard (4.4): latent today, real once tabs switch often.
+- **F4** The `poll()` rebind hazard (4.4): latent today, real once tabs switch often. FIXED in slice 1 (failing test first:
+  `tests/document-tabs.test.js`, block F4).
 - **F5** The module-level engine store (3.1), already known from 535-1b; measured again here.

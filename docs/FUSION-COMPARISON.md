@@ -76,6 +76,18 @@ Moved AWAY from Fusion (68), two reasons, each a cell that agreed before:
 
 Re-run: `node tests/fusion-oracle.test.js` (offline, a few seconds). Re-record in Fusion: `scripts/fusion-oracle/*` (the runners need a scratch document holding the user parameter `CLAUDE_MARK`; they refuse to run anywhere else).
 
+### After task 521 (a constraint is never satisfied by collapsing a line / arc / circle to a point; merge of origin/main 66d8648): differing cells before -> after
+
+Same Fusion answers, ours re-run, KNOWN files regenerated (`graded-known.mjs`) and the graded section with `graded-doc.mjs`. No Fusion run. Ours used to "satisfy" an impossible constraint by shrinking a line to a point (collinear|LL|6,4: A went from (20,26)-(80,26) to a point); it now refuses, as Fusion does.
+
+| section | all | before | after |
+|---|---|---|---|
+| TOTAL which-moves | all | 212 | 212 |
+| TOTAL graded | all | 1561 | 1549 |
+| TOTAL drawings | all | 129 | 129 |
+
+In the other direction, 15 graded cells where Fusion accepts are now refused by ours (our solve's answer there collapsed a shape): coincident-pp RL 0,4 / RO 0,c / RP 0,4; collinear LS 3,0 / 7,0; horizontal-2pt RL 0,4 / RO 0,c / RP 0,4; midpoint LS m,0 / o,0, ZS 0,0; parallel LC 3,4, LL 3,4 / 3,5, SL 0,4; vertical-2pt LR 3,0 (counted in the totals above).
+
 ## Which geometry moves
 
 Question (owner): when a constraint is added to geometry that does not satisfy it, which entity moves and which stays? Method: each case starts from
@@ -594,20 +606,20 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 
 | constraint / dimension | cells | same as Fusion | Fusion refuses, ours accepts | ours refuses, Fusion accepts |
 |---|---|---|---|---|
-| parallel | 113 | 11 | 21 | 0 |
+| parallel | 113 | 11 | 21 | 4 |
 | perpendicular | 113 | 31 | 0 | 13 |
-| collinear | 113 | 44 | 8 | 0 |
+| collinear | 113 | 52 | 0 | 2 |
 | equal-line-line | 113 | 35 | 0 | 0 |
 | dim-angle | 113 | 20 | 21 | 0 |
-| coincident-pp | 232 | 100 | 4 | 0 |
+| coincident-pp | 232 | 104 | 0 | 3 |
 | dim-aligned | 232 | 60 | 48 | 0 |
 | dim-horizontal | 157 | 45 | 28 | 0 |
 | dim-vertical | 157 | 53 | 30 | 0 |
-| horizontal-2pt | 157 | 68 | 2 | 0 |
-| vertical-2pt | 157 | 58 | 2 | 0 |
+| horizontal-2pt | 157 | 68 | 2 | 3 |
+| vertical-2pt | 157 | 58 | 2 | 1 |
 | pointOnLine | 117 | 42 | 0 | 0 |
 | pointOnCircle | 130 | 56 | 4 | 0 |
-| midpoint | 117 | 48 | 0 | 0 |
+| midpoint | 117 | 48 | 0 | 3 |
 | equal-circle | 100 | 48 | 44 | 0 |
 | tangent-line-circle | 180 | 74 | 0 | 4 |
 | tangent-circle-circle | 100 | 56 | 0 | 7 |
@@ -651,7 +663,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 0 free | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 1 corner | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/X* | b/X* | b/X* | a/X* | a/a |
-| 3 H/V | b/X* | b/X* | b/X* | R/-* | b/X* | b/X* | R/-* | R/-* |
+| 3 H/V | b/X* | b/X* | b/X* | R/-* | b/R* | b/R* | R/-* | R/-* |
 | 4 end fixed | a/X* | a/X* | a/X* | a/X* | b/X* | a/X* | a/X* | a/a |
 | 5 end+length | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 6 H/V+end | b/X* | b/X* | b/X* | R/-* | b/X* | b/X* | R/-* | R/-* |
@@ -659,11 +671,11 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 64 | 6 | a:22 b:33 R:9 | a:5 b:5 X:45 -:9 | one end:35 rotate:20 | stretch:42 one end:42 rotate:16 |
-| LC | 8 | 1 | a:1 b:7 | b:2 X:6 | one end:5 rotate:3 | stretch:8 one end:6 |
+| LL | 64 | 6 | a:22 b:33 R:9 | a:5 b:5 X:43 -:9 R:2 | one end:35 rotate:20 | stretch:40 one end:40 rotate:16 |
+| LC | 8 | 1 | a:1 b:7 | b:2 X:5 R:1 | one end:5 rotate:3 | stretch:7 one end:5 |
 | CL | 8 | 1 | a:5 b:3 | a:2 X:6 | one end:5 rotate:3 | stretch:8 one end:6 |
 | LS | 4 | 0 | a:2 b:2 | b:1 X:3 | rotate:3 one end:1 | scale:4 stretch:2 one end:1 |
-| SL | 4 | 0 | a:2 b:2 | a:1 X:3 | rotate:3 one end:1 | scale:4 stretch:2 one end:1 |
+| SL | 4 | 0 | a:2 b:2 | a:1 X:2 R:1 | rotate:3 one end:1 | scale:3 stretch:2 |
 | LR | 8 | 1 | a:4 R:4 | a:2 X:2 -:4 | rotate:2 one end:2 | stretch:2 deform:2 one end:2 |
 | RL | 8 | 1 | b:4 R:4 | b:2 X:2 -:4 | rotate:2 one end:2 | deform:2 stretch:2 one end:2 |
 | CC | 4 | 0 | a:1 b:3 | X:4 | one end:3 rotate:1 | stretch:4 one end:4 |
@@ -712,17 +724,17 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 1 corner | b/b | X/b* | b/b | X/a* | a/X* | X/X | a/a | a/a |
 | 2 length | b/b | a/b* | b/b | a/a | a/X* | a/X* | a/a | a/a |
 | 3 H/V | b/b | X/b* | b/b | b/b | X/X | X/X | a/X* | a/a |
-| 4 end fixed | b/b | b/b | b/b | R/X* | X/X | X/X | R/X* | R/R |
-| 5 end+length | b/b | X/b* | b/b | R/X* | X/X | X/X | R/X* | R/R |
-| 6 H/V+end | b/b | b/b | b/b | b/b | R/X* | R/X* | R/X* | R/R |
+| 4 end fixed | b/b | b/b | b/b | R/R | X/X | X/X | R/R | R/R |
+| 5 end+length | b/b | X/b* | b/b | R/R | X/X | X/X | R/R | R/R |
+| 6 H/V+end | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
 | 7 full | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 64 | 29 | a:18 b:21 X:11 R:14 | a:10 b:27 X:20 R:7 | rotate:32 one end:12 stretch:11 translate:6 | stretch:32 one end:29 rotate:13 translate:3 |
+| LL | 64 | 36 | a:18 b:21 X:11 R:14 | a:10 b:27 X:13 R:14 | rotate:32 one end:12 stretch:11 translate:6 | stretch:30 one end:17 rotate:13 translate:3 |
 | LC | 8 | 3 | a:1 b:4 X:2 R:1 | b:4 X:3 R:1 | rotate:5 one end:3 stretch:1 | stretch:6 one end:4 |
-| CL | 8 | 2 | a:3 b:2 X:1 R:2 | a:2 b:2 X:3 R:1 | rotate:5 one end:2 | stretch:6 one end:4 |
-| LS | 4 | 0 | a:1 b:3 | b:1 X:3 | rotate:4 | deform:4 stretch:2 one end:1 |
+| CL | 8 | 3 | a:3 b:2 X:1 R:2 | a:2 b:2 X:2 R:2 | rotate:5 one end:2 | stretch:5 one end:3 |
+| LS | 4 | 0 | a:1 b:3 | X:2 R:2 | rotate:4 | deform:2 stretch:1 one end:1 |
 | SL | 4 | 0 | a:3 b:1 | a:1 b:1 X:2 | rotate:4 | stretch:2 deform:2 scale:1 one end:1 |
 | LR | 8 | 3 | a:4 b:1 X:1 R:2 | a:3 b:2 X:1 R:2 | translate:3 rotate:2 one end:1 deform:1 | stretch:3 deform:3 one end:1 |
 | RL | 8 | 5 | a:1 b:4 X:1 R:2 | a:1 b:4 X:1 R:2 | translate:3 rotate:2 deform:1 one end:1 | stretch:2 translate:2 deform:2 one end:1 |
@@ -784,11 +796,11 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | CL | 8 | 2 | a:5 b:3 | a:2 X:6 | stretch:4 one end:3 rotate:1 | stretch:8 one end:6 |
 | LS | 4 | 1 | a:1 b:3 | b:1 X:3 | scale:3 rotate:1 | scale:4 stretch:2 one end:1 |
 | SL | 4 | 1 | a:3 b:1 | a:1 X:3 | scale:3 rotate:1 | scale:4 stretch:2 one end:1 |
-| LR | 8 | 2 | a:4 R:4 | a:3 b:1 X:3 -:1 | stretch:2 one end:2 | stretch:4 deform:4 one end:2 |
+| LR | 8 | 2 | a:4 R:4 | a:2 X:2 -:4 | stretch:2 one end:2 | stretch:2 deform:2 one end:2 |
 | RL | 8 | 2 | b:4 R:4 | b:2 X:2 -:4 | stretch:2 one end:2 | deform:2 stretch:2 one end:2 |
 | CC | 4 | 0 | a:1 b:3 | X:4 | stretch:2 rotate:1 one end:1 | stretch:4 one end:4 |
 | SS | 1 | 0 | b:1 | X:1 | rotate:1 | scale:2 |
-| RR | 4 | 0 | R:4 | a:1 b:1 X:1 -:1 |  | deform:4 |
+| RR | 4 | 0 | R:4 | -:4 |  |  |
 
 #### coincident-pp
 
@@ -806,22 +818,22 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 5 end+length | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R | R/R | b/b |
 | 6 H/V+end | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R | R/R | b/b |
 | 7 full | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R | R/R | b/b |
-| o end at origin | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R | -/- | R/b* |
-| m mid at origin | b/b | a/b* | a/X* | a/X* | a/a | a/a | a/a | a/a | R/a* | b/X* |
+| o end at origin | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R | -/- | R/R |
+| m mid at origin | b/b | a/b* | a/X* | a/X* | a/a | a/a | a/a | a/a | R/R | b/X* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 100 | 33 | a:32 b:41 -:1 R:26 | a:25 b:35 X:15 -:1 R:24 | translate:57 stretch:16 | one end:36 stretch:35 rotate:18 translate:1 |
+| LL | 100 | 35 | a:32 b:41 -:1 R:26 | a:24 b:34 X:15 -:1 R:26 | translate:57 stretch:16 | one end:36 stretch:33 rotate:18 translate:1 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform:6 stretch:2 one end:1 |
 | LO | 12 | 10 | a:3 b:6 R:3 | a:3 b:6 R:3 | translate:8 stretch:1 | translate:6 stretch:2 one end:1 |
 | LA | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform+radius:6 stretch:2 one end:1 |
 | LP | 12 | 10 | a:3 b:6 R:3 | a:3 b:6 R:3 | translate:8 stretch:1 | translate:6 stretch:2 one end:1 |
-| LZ | 6 | 3 | a:2 R:4 | a:3 R:3 | translate:2 | stretch:2 one end:1 |
-| RL | 6 | 0 | a:3 b:3 | a:3 b:1 X:2 | translate:5 stretch:1 | deform:5 stretch:2 one end:1 |
+| LZ | 6 | 4 | a:2 R:4 | a:2 R:4 | translate:2 | one end:1 stretch:1 |
+| RL | 6 | 0 | a:3 b:3 | a:2 b:1 X:2 R:1 | translate:5 stretch:1 | deform:4 stretch:2 one end:1 |
 | RR | 1 | 0 | b:1 | X:1 | translate:1 | deform:2 |
-| RO | 2 | 1 | a:1 b:1 | a:1 b:1 | translate:2 | translate:1 deform:1 |
+| RO | 2 | 1 | a:1 b:1 | b:1 R:1 | translate:2 | translate:1 |
 | RA | 1 | 0 | b:1 | X:1 | translate:1 | deform:1 deform+radius:1 |
-| RP | 2 | 1 | a:1 b:1 | a:1 b:1 | translate:2 | translate:1 deform:1 |
+| RP | 2 | 1 | a:1 b:1 | b:1 R:1 | translate:2 | translate:1 |
 | RZ | 1 | 0 | a:1 | a:1 | translate:1 | deform:1 |
 | OL | 12 | 7 | a:6 b:3 R:3 | a:3 b:4 X:2 R:3 | translate:8 stretch:1 | translate:5 stretch:4 one end:2 |
 | OR | 2 | 0 | a:1 b:1 | b:1 X:1 | translate:2 | deform:2 translate:1 |
@@ -841,7 +853,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | PA | 2 | 0 | a:1 b:1 | b:1 X:1 | translate:2 | deform+radius:2 translate:1 |
 | PP | 4 | 4 | a:1 b:2 R:1 | a:1 b:2 R:1 | translate:3 | translate:3 |
 | PZ | 2 | 2 | a:1 R:1 | a:1 R:1 | translate:1 | translate:1 |
-| ZL | 6 | 3 | b:2 R:4 | b:3 R:3 | translate:2 | stretch:2 one end:1 |
+| ZL | 6 | 4 | b:2 R:4 | b:2 R:4 | translate:2 | one end:1 stretch:1 |
 | ZR | 1 | 0 | b:1 | b:1 | translate:1 | deform:1 |
 | ZO | 2 | 2 | b:1 R:1 | b:1 R:1 | translate:1 | translate:1 |
 | ZA | 1 | 0 | b:1 | b:1 | translate:1 | deform+radius:1 |
@@ -1030,11 +1042,11 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | LA | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform+radius:6 one end:1 translate:1 stretch:1 |
 | LP | 12 | 8 | a:3 b:6 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:8 one end:2 stretch:2 |
 | LZ | 6 | 4 | a:3 R:3 | a:3 -:1 R:2 | translate:2 stretch:1 | one end:1 translate:1 stretch:1 |
-| RL | 6 | 0 | a:3 b:3 | a:3 X:3 | translate:5 stretch:1 | deform:6 one end:1 translate:1 stretch:1 |
+| RL | 6 | 0 | a:3 b:3 | a:2 X:3 R:1 | translate:5 stretch:1 | deform:5 one end:1 translate:1 stretch:1 |
 | RR | 1 | 0 | a:1 | X:1 | translate:1 | deform:2 |
-| RO | 2 | 0 | a:1 b:1 | a:1 X:1 | translate:2 | deform:2 translate:1 |
+| RO | 2 | 0 | a:1 b:1 | X:1 R:1 | translate:2 | deform:1 translate:1 |
 | RA | 1 | 0 | b:1 | X:1 | translate:1 | deform:1 deform+radius:1 |
-| RP | 2 | 0 | a:1 b:1 | a:1 X:1 | translate:2 | deform:2 translate:1 |
+| RP | 2 | 0 | a:1 b:1 | X:1 R:1 | translate:2 | deform:1 translate:1 |
 | RZ | 1 | 0 | a:1 | a:1 | translate:1 | deform:1 |
 | OL | 12 | 8 | a:6 b:3 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:8 one end:2 stretch:2 |
 | OR | 2 | 0 | a:1 b:1 | b:1 X:1 | translate:2 | deform:2 translate:1 |
@@ -1077,7 +1089,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
 | LL | 25 | 4 | a:8 b:13 R:4 | a:6 b:6 X:9 R:4 | translate:21 | one end:20 rotate:10 |
-| LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform:6 one end:2 stretch:1 |
+| LR | 6 | 0 | a:3 b:3 | b:3 X:2 R:1 | translate:5 stretch:1 | deform:5 one end:1 stretch:1 |
 | LO | 12 | 7 | a:3 b:6 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:6 one end:4 stretch:2 |
 | LA | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform+radius:6 one end:2 stretch:1 |
 | LP | 12 | 7 | a:3 b:6 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:6 one end:4 stretch:2 |
@@ -1196,7 +1208,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 |---|---|---|---|---|---|---|
 | LL | 24 | 13 | a:5 b:16 R:3 | a:3 b:9 X:9 R:3 | translate:13 one end:6 stretch:2 | translate:12 one end:10 stretch:8 |
 | LC | 12 | 6 | b:12 | b:6 X:6 | translate:6 one end:6 | one end:8 translate:6 stretch:4 |
-| LS | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | scale:4 stretch:2 deform:2 one end:1 |
+| LS | 6 | 0 | a:3 b:3 | b:2 X:2 R:2 | translate:5 stretch:1 | scale:4 one end:1 stretch:1 |
 | LR | 12 | 4 | a:6 b:3 R:3 | a:3 b:3 X:3 R:3 | translate:7 stretch:2 | deform:6 stretch:4 one end:2 |
 | RL | 4 | 0 | a:1 b:3 | a:1 X:3 | translate:3 one end:1 | deform:4 translate:2 one end:1 |
 | RC | 2 | 0 | b:2 | X:2 | translate:1 one end:1 | deform:2 translate:1 one end:1 |
@@ -1216,7 +1228,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | PR | 4 | 2 | a:2 b:1 R:1 | a:1 b:1 X:1 R:1 | translate:3 | translate:2 deform:2 |
 | ZL | 4 | 4 | b:3 R:1 | b:3 R:1 | translate:2 one end:1 | translate:2 one end:1 |
 | ZC | 2 | 2 | b:2 | b:2 | translate:1 one end:1 | translate:1 one end:1 |
-| ZS | 1 | 0 | b:1 | b:1 | translate:1 | deform:1 |
+| ZS | 1 | 0 | b:1 | R:1 | translate:1 |  |
 | ZR | 2 | 1 | b:1 R:1 | b:1 R:1 | translate:1 | deform:1 |
 
 #### equal-circle

@@ -3,7 +3,7 @@ import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
-import { measureResidual } from './constraint-verifier.js';
+import { measureResidual, measureShapeSizes, findCollapsedShape } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 
@@ -19,6 +19,9 @@ const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.TANGENT, CONSTRAINT_TYPES.POINT_ON_LINE, CONSTRAINT_TYPES.EQUAL,
     CONSTRAINT_TYPES.MIDPOINT
 ]);
+
+// |sin| of the angle below which two lines count as parallel for a perpendicular's creation placement (about 0.06 degree).
+const PARALLEL_START_SIN = 1e-3;
 
 export class ConstraintManager {
     static canAddConstraint(state, type, params, options = {}) {
@@ -308,6 +311,7 @@ export class ConstraintManager {
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
         const _preAdd = snapshotSolverState(state.joints, state.shapes);
+        const _sizesBefore = measureShapeSizes(state);
 
         // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
         this.placeForCreation(state, type, normalized);
@@ -345,6 +349,21 @@ export class ConstraintManager {
             } catch (e) {
                 console.error('[ConstraintManager] Solver error:', e);
             }
+        }
+
+        // A solve that satisfied the new constraint by collapsing a line / arc / circle to a point destroyed geometry: refuse + revert,
+        // for every constraint type (task 521; a shape the user sized on purpose is exempt, see findCollapsedShape).
+        const collapsed = created && typeof created === 'object' ? findCollapsedShape(state, _sizesBefore) : null;
+        if (collapsed) {
+            const ci = state.constraints.indexOf(created);
+            if (ci >= 0) state.constraints.splice(ci, 1);
+            restoreSolverState(state.joints, state.shapes, _preAdd);
+            if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                try { state.engine.solve(opts.solveIterations); } catch (e) { console.error('[ConstraintManager] Solver error:', e); }
+            }
+            notify(`Can't add ${this._friendlyName(type)} — it would collapse a ${collapsed.type} to a point. Reverted.`, 'warning', 3500);
+            dbg.warn('constraints', `[ConstraintManager] ${type} ADD refused + reverted (collapsed ${collapsed.type} ${collapsed.id})`);
+            return null;
         }
 
         // Over-constraining ADD → REFUSE + REVERT. A new DRIVING distance that leaves the sketch
@@ -438,6 +457,7 @@ export class ConstraintManager {
         try {
             // 1. Snapshot the solver state (joint positions and circle radii)
             const saved = snapshotSolverState(state.joints, state.shapes);
+            const sizesBefore = measureShapeSizes(state);
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
             // the real add; the positions are restored below either way.
@@ -471,6 +491,8 @@ export class ConstraintManager {
                 // 4. Analyze trajectory only if we have numeric errors
                 if (errors.length > 0) {
                     hasConflict = this._detectConflict(errors, CONFLICT_THRESHOLD);
+                    // A solve that "converges" by collapsing a shape to a point is not a solution (task 521).
+                    if (!hasConflict && findCollapsedShape(state, sizesBefore)) hasConflict = true;
 
                     // Attach last-sandbox diagnostic for UI/notifications (residual + best failing constraint id when available)
                     try {
@@ -1115,7 +1137,8 @@ export class ConstraintManager {
         }
     }
 
-    // Perpendicular between two EXACTLY parallel lines (u x v = 0): u.v is stationary there, so the solve never leaves the
+    // Perpendicular between two parallel or NEARLY parallel lines (|sin| <= PARALLEL_START_SIN, about 0.06 degree; task 521: from a closer start the
+    // solve alone shrinks both lines to a point instead of turning one) (u x v = 0): u.v is stationary there, so the solve never leaves the
     // start. Choose the branch as Fusion does: the SECOND-picked line turns by the smaller angle to 90 degrees (a parallel
     // pair is a tie) and a tie goes counter-clockwise. The turn pivots on a fixed or shared joint of the second line, else
     // on its midpoint; a second line that cannot move (both ends fixed or shared) is left to the solve. No branch is locked: the
@@ -1131,7 +1154,7 @@ export class ConstraintManager {
         const ux = b.x - a.x, uy = b.y - a.y, vx = d.x - c.x, vy = d.y - c.y;
         const lenU = Math.hypot(ux, uy), lenV = Math.hypot(vx, vy);
         if (lenU < 1e-9 || lenV < 1e-9) return;
-        if (Math.abs(ux * vy - uy * vx) > 1e-9 * lenU * lenV) return;     // not exactly parallel: the general branch lock applies
+        if (Math.abs(ux * vy - uy * vx) > PARALLEL_START_SIN * lenU * lenV) return;     // not (nearly) parallel: the general branch lock applies
         const pinned = (id) => { const j = state.joints.get(id); return !!(j && (j.fixed || id === 'j_origin')) || s1.joints.includes(id); };
         const [idC, idD] = s2.joints;
         let pivot;

@@ -8,6 +8,7 @@
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
+import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 
@@ -38,6 +39,7 @@ export function commitDimensionEdit(state, c, val) {
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
   const shapes = engine.getShapes ? engine.getShapes() : state.shapes;
   const snap = snapshotSolverState(joints, shapes);
+  const sizesBefore = measureShapeSizes(state);
 
   // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero
   // length), and refuse the one singular value where a line would collapse. Snapshot above restores on refusal.
@@ -65,6 +67,16 @@ export function commitDimensionEdit(state, c, val) {
     restoreSolverState(joints, shapes, snap);
     engine.solve(ITER());
     return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
+  }
+  // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
+  // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET radius edit is judged above by
+  // filletHasCollapsedLine instead: its tangent legs legitimately get very short as R approaches the singular value (a short leg is no collapse).
+  const collapsed = filletArc ? null : findCollapsedShape(state, sizesBefore);
+  if (collapsed) {
+    c.value = oldValue;
+    restoreSolverState(joints, shapes, snap);
+    engine.solve(ITER());
+    return { reverted: true, clash: '', reason: `${Number(val).toFixed(2)} would collapse a ${collapsed.type} to a point` };
   }
   if (result && result.converged === false) {
     const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');

@@ -346,6 +346,6 @@ export function classify(c) {
   // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)
   if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual'))) return { v: 'F3' };
   if (has('nullity!=fd')) return { v: 'F6' };
-  if (r === 'parallel' && has('bite')) return { v: 'NEW-8' };
+  if (r === 'coincident' && has('refused-feasible') && shared) return { v: 'NEW-9' };
   return { v: 'UNCLASSIFIED', why: c.issues.join('+') };
 }

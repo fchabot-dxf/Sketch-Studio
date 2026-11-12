@@ -115,6 +115,7 @@ const perpFrom = (dx, dy, setup) => {
     const r = perpFrom(dx, dy);
     assert(r.c, 'NEW-3: perpendicular accepted from a ' + name + ' start');
     assert(Math.abs(r.dot) < 1e-4, 'NEW-3: the lines end up perpendicular (cos ' + r.dot + ') from a ' + name + ' start');
+    if (name === '0.01 degree') { const [la, lb] = [Math.hypot(60, 0), Math.hypot(J(r.S, r.l2.q).x - J(r.S, r.l2.p).x, J(r.S, r.l2.q).y - J(r.S, r.l2.p).y)]; assert(Math.abs(lb - 60) < 1e-3 && Math.abs(Math.hypot(J(r.S, r.l1.q).x - J(r.S, r.l1.p).x, J(r.S, r.l1.q).y - J(r.S, r.l1.p).y) - la) < 1e-3, 'task 521: both lengths unchanged from a near-parallel start (' + lb + ')'); }
   }
   // Fusion rule: the SECOND-picked line turns (counter-clockwise on the tie) about its midpoint; the first line stays
   const r = perpFrom(60, 0);

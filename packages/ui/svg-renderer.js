@@ -56,6 +56,42 @@ export function formatConstraintValue(c, options = {}) {
 }
 
 
+// TASK 543: THE one place an angle dimension's arc is chosen. Two crossing lines make four sectors: two of span s (between the
+// +direction rays of the two lines, and between the -direction rays) and two of span 180 - s. A driving dimension's value is the
+// solver's signed line-to-line angle (CCW pair order, task 511), i.e. the span of the +d1/+d2 sector, so its arc must be one of the
+// two sectors whose span equals the value. The label position picks WHICH of those two (the one it sits in, else the nearer);
+// it never picks a sector of the other span (that arc would read 170 under a label of 10).
+// `value` = the dimension's driving value in degrees, or null for a reference/preview (then the sector the label sits in).
+// d1, d2 = angles (radians) of the two line directions. Returns { start, end } in radians, end - start = the sector's CCW span.
+export function angleDimensionSector(d1, d2, labelAngle, value) {
+  const TAU = Math.PI * 2;
+  const norm = (a) => ((a % TAU) + TAU) % TAU;
+  const ccw = norm(d2 - d1);
+  const first = ccw <= Math.PI ? d1 : d2;                  // the ray the +d1/+d2 sector starts from (CCW)
+  const s = ccw <= Math.PI ? ccw : TAU - ccw;              // that sector's span, 0..PI
+  const sectors = [
+    { start: first, span: s },
+    { start: first + s, span: Math.PI - s },
+    { start: first + Math.PI, span: s },
+    { start: first + Math.PI + s, span: Math.PI - s },
+  ].map((x) => ({ start: x.start, end: x.start + x.span, span: x.span }));
+  let pool = sectors;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const v = value * Math.PI / 180;
+    const useS = Math.abs(s - v) <= Math.abs((Math.PI - s) - v);
+    pool = sectors.filter((x, i) => (i % 2 === 0) === useS);
+  }
+  const l = norm(labelAngle);
+  let best = null, bestScore = Infinity;
+  for (const x of pool) {
+    const mid = x.start + x.span / 2;
+    const off = norm(l - x.start);
+    const score = off <= x.span ? -1 : Math.abs(norm(l - mid + Math.PI) - Math.PI);
+    if (score < bestScore) { bestScore = score; best = x; }
+  }
+  return { start: best.start, end: best.end };
+}
+
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
@@ -1701,26 +1737,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
           const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
           
-          // Determine sector based on mouse position
+          // The sector the creation will measure (its value is the angle between the two line directions) nearest the cursor
           const labelAngle = Math.atan2(mp.y - int.y, mp.x - int.x);
-          const rays = [a1, a1 + Math.PI, a2, a2 + Math.PI].map(a => {
-             let ang = a % (Math.PI * 2);
-             if (ang < 0) ang += Math.PI * 2;
-             return ang;
-          });
-          let lAng = labelAngle % (Math.PI * 2);
-          if (lAng < 0) lAng += Math.PI * 2;
-          
-          rays.sort((a, b) => a - b);
-          let startAngle = rays[rays.length - 1] - Math.PI * 2;
-          let endAngle = rays[0];
-          for (let i = 0; i < rays.length - 1; i++) {
-              if (lAng >= rays[i] && lAng <= rays[i+1]) {
-                  startAngle = rays[i];
-                  endAngle = rays[i+1];
-                  break;
-              }
-          }
+          let creationDeg = Math.abs((a1 - a2) * 180 / Math.PI) % 360;
+          if (creationDeg > 180) creationDeg = 360 - creationDeg;
+          const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, labelAngle, creationDeg);
           
           const sx = int.x + Math.cos(startAngle) * radius;
           const sy = int.y + Math.sin(startAngle) * radius;
@@ -2571,8 +2592,7 @@ switch(c.type){
             const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
             const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
             
-            // Determine which sector the label is in (glyphPos or default)
-            // Use glyphPos to determine sector, but compute actual label position on the arc
+            // Where the label sits (glyphPos / __pos / default) picks which of the arcs that span the value
             let sectorAngle;
             if (c.glyphPos) {
                 sectorAngle = Math.atan2(c.glyphPos.y - int.y, c.glyphPos.x - int.x);
@@ -2581,29 +2601,8 @@ switch(c.type){
             } else {
                 sectorAngle = (a1 + a2) / 2;
             }
-            
-            // Normalize sectorAngle to 0-2PI
-            let sAng = sectorAngle % (Math.PI * 2);
-            if (sAng < 0) sAng += Math.PI * 2;
-            
-            // We have 4 rays from intersection: a1, a1+PI, a2, a2+PI.
-            const rays = [a1, a1 + Math.PI, a2, a2 + Math.PI].map(a => {
-                let ang = a % (Math.PI * 2);
-                if (ang < 0) ang += Math.PI * 2;
-                return ang;
-            });
-            
-            // Sort rays and find the sector containing the label
-            rays.sort((a, b) => a - b);
-            let startAngle = rays[rays.length - 1] - Math.PI * 2;
-            let endAngle = rays[0];
-            for (let i = 0; i < rays.length - 1; i++) {
-                if (sAng >= rays[i] && sAng <= rays[i+1]) {
-                    startAngle = rays[i];
-                    endAngle = rays[i+1];
-                    break;
-                }
-            }
+            const drivingValue = (!(c.isDriven || c.driven) && typeof c.value === 'number') ? c.value : null;
+            const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, sectorAngle, drivingValue);
             
             // Compute label position: bisector of the sector, at arc radius
             const bisect = (startAngle + endAngle) / 2;

@@ -11,8 +11,8 @@
 // Errors are DATA ({ ok:false, code, message, ... }); nothing here throws on user input.
 
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { unitInfo } from '#core/units.js';
-import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName } from '#core/expression.js';
+import { unitInfo, format as formatUnit } from '#core/units.js';
+import { parseInput, evaluate, canonicalize, dependencies, print, validateName, foldName, functionTable } from '#core/expression.js';
 
 // ── DECLARED DECISIONS (docs/PARAMETERS-DESIGN.md owner table). Each switch is ONE constant. ──
 export const AUTO_NAME_PREFIX = 'd';                  // O22  the automatic dimension name is prefix + number; the number is (highest existing dN) + 1,
@@ -406,4 +406,107 @@ export function freezeReferencesTo(state, removedNames, { unit = 'mm' } = {}) {
     }
   }
   return { ok: true, frozen: hit.map((n) => n.name) };
+}
+
+// ── display text (TASK 535 slice 3: the canvas hint, the autocomplete rows and the parameter table all use THESE) ──
+// a base value (mm / degrees) as text in `unit` ('' = a plain count); 1 decimal for lengths and angles like the canvas labels, up to 4 for a count
+export function quantityText(v, unit) {
+  if (!Number.isFinite(v)) return '';
+  const u = unit ? unitInfo(unit) : null;
+  if (!u) return String(Math.round(v * 1e4) / 1e4);
+  if (u.kind === 'length') return formatUnit(v, u.name, { decimals: 1 });
+  return (v / u.f).toFixed(1);
+}
+// the unit a dimension's value is shown in: degrees for an angle, the document unit for a length
+export const dimensionUnit = (c, docUnit) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'deg' : docUnit);
+const withUnit = (text, unit) => (unit ? `${text} ${unit}` : text);
+
+// ── the live hint under the dimension box (docs/PARAMETERS-DESIGN.md section E) ──
+// previewDimensionInput(state, c, text, { unit }) → PURE (no solve, nothing touched).
+//   { ok:false, empty:true }                           nothing typed
+//   { ok:false, hint, code, at? }                      the refusal as data; `hint` is its message
+//   { ok:true, hint, plan, kind:'value'|'create'|'set', name?, others:[dimension names also changed] }
+//     hint: '= 60.0 mm'  |  'creates width = 120.0 mm'  |  'sets width 120.0 -> 150.0 mm, also changes d3, d7'
+// `plan` is the planChange result applyParameterChange commits (ONE path: the box commits THIS plan, it never builds a second one).
+export function previewDimensionInput(state, c, text, { unit = 'mm' } = {}) {
+  if (!isDimension(c)) return { ok: false, code: 'SYNTAX', hint: 'not a dimension' };
+  if (String(text == null ? '' : text).trim() === '') return { ok: false, empty: true, hint: '' };
+  if (!c.name) return { ok: false, code: 'UNKNOWN_NAME', hint: 'this dimension has no name' };
+  const plan = planChange(state, { type: 'setDimension', name: c.name, text: String(text) }, { unit });
+  if (!plan.ok) return { ok: false, code: plan.code, hint: plan.message, at: plan.at, plan };
+  const mine = plan.edits.find((e) => e.c === c);
+  const myValue = mine ? mine.value : c.value;
+  const parsed = parseInput(String(text));
+  if (parsed.ok && parsed.assign) {
+    const key = foldName(parsed.assign.name);
+    const after = plan.paramsAfter.find((p) => foldName(p.name) === key);
+    const evAfter = evaluateAll({ parameters: plan.paramsAfter, constraints: state.constraints }, { unit });
+    const qAfter = evAfter.values && evAfter.values.get(after.name);
+    const newText = withUnit(quantityText(qAfter ? qAfter.v : NaN, after.unit), after.unit);
+    if (plan.created === after.name) return { ok: true, kind: 'create', name: after.name, others: [], plan, value: myValue, hint: `creates ${after.name} = ${newText}` };
+    const before = evaluateAll(state, { unit }).values.get(after.name);
+    const others = plan.affected.filter((n) => n !== c.name);
+    const oldText = quantityText(before ? before.v : NaN, after.unit);
+    return {
+      ok: true, kind: 'set', name: after.name, others, plan, value: myValue,
+      hint: `sets ${after.name} ${oldText} -> ${newText}${others.length ? `, also changes ${others.join(', ')}` : ''}`,
+    };
+  }
+  const shown = dimensionUnit(c, unit);
+  return { ok: true, kind: 'value', others: [], plan, value: myValue, hint: `= ${withUnit(quantityText(myValue, shown), shown)}` };
+}
+
+// ── autocomplete (OWNER REQUIREMENT R3, docs/PARAMETERS-DESIGN.md section E): ONE pure function; the DOM list is a thin view over it ──
+export const MAX_COMPLETIONS = 8;
+const isIdentChar = (ch) => !!ch && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || (ch >= '0' && ch <= '9'));
+const isIdentStart = (ch) => !!ch && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_');
+
+// completionsFor(state, text, caret, { unit, exclude }) → null | { from, to, prefix, items:[{ kind:'parameter'|'dimension'|'function', name, insert, value, unit, detail }] }
+//   The identifier is the run of letters / digits / "_" that ENDS at the caret and starts with a letter. `from`..`to` is what an insert replaces.
+//   Order: user parameters, then driving dimensions (table / constraint order), then the functions; inside a group the names that START with the
+//   typed letters, then the names that merely CONTAIN them. Matching ignores case; `insert` keeps the exact case (a function inserts `name(`).
+//   At most MAX_COMPLETIONS rows. Never offered: a reference dimension (O9: a formula cannot read it), `exclude` (the dimension being edited), and a
+//   name equal to what is typed. When the identifier is the left side of `name =` only user parameters are offered (the others cannot be assigned).
+export function completionsFor(state, text, caret, { unit = 'mm', exclude = [] } = {}) {
+  const s = String(text == null ? '' : text);
+  const to = Math.max(0, Math.min(Number.isInteger(caret) ? caret : s.length, s.length));
+  let from = to;
+  while (from > 0 && isIdentChar(s[from - 1])) from--;
+  if (from === to || !isIdentStart(s[from])) return null;
+  const prefix = s.slice(from, to);
+  let end = to;
+  while (end < s.length && isIdentChar(s[end])) end++;
+  let after = end;
+  while (after < s.length && (s[after] === ' ' || s[after] === '\t')) after++;
+  const leftOfAssign = s.slice(0, from).trim() === '' && s[after] === '=' && s[after + 1] !== '=';
+  const lower = prefix.toLowerCase();
+  const ev = evaluateAll(state || { parameters: [], constraints: [] }, { unit });
+  const values = ev.values || new Map();
+  const skip = new Set(exclude.map(foldName));
+  const candidates = [];
+  for (const p of (state && state.parameters) || []) {
+    const q = values.get(p.name);
+    candidates.push({ kind: 'parameter', name: p.name, insert: p.name, value: q ? quantityText(q.v, p.unit) : '', unit: p.unit || '', detail: '' });
+  }
+  if (!leftOfAssign) {
+    for (const c of (state && state.constraints) || []) {
+      if (!isDimension(c) || isReferenceDimension(c) || !c.name) continue;
+      const q = values.get(c.name);
+      const u = dimensionUnit(c, unit);
+      candidates.push({ kind: 'dimension', name: c.name, insert: c.name, value: q ? quantityText(q.v, u) : '', unit: u, detail: '' });
+    }
+    for (const f of functionTable()) {
+      const args = f.max === Infinity ? 'a; b; ...' : f.min === 1 ? 'x' : 'a; b';
+      candidates.push({ kind: 'function', name: f.name, insert: `${f.name}(`, value: '', unit: '', detail: `${f.name}(${args})` });
+    }
+  }
+  const ranked = [];
+  candidates.forEach((cand, order) => {
+    const at = cand.name.toLowerCase().indexOf(lower);
+    if (at === -1 || skip.has(foldName(cand.name)) || cand.name === prefix) return;
+    ranked.push({ cand, key: [cand.kind === 'function' ? 1 : 0, at === 0 ? 0 : 1, order] });
+  });
+  ranked.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || a.key[2] - b.key[2]);
+  const items = ranked.slice(0, MAX_COMPLETIONS).map((r) => r.cand);
+  return items.length ? { from, to, prefix, items } : null;
 }

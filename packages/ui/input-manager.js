@@ -1246,7 +1246,7 @@ function openContextMenuFor(e, svg, state) {
     const actions = {
         toggleDriving: (c) => {
             const res = toggleDriving(state, c);
-            if (res.refused) showNotification('Cannot make this dimension driving: the sketch already determines it.', 'warning');
+            if (res.refused) showNotification(res.nowDriving ? `Cannot make this a reference dimension: ${res.reason}.` : 'Cannot make this dimension driving: the sketch already determines it.', 'warning');
             if (res.error === 'ERR-DRIVE-02') showNotification('Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.', 'warning');
         },
         deleteSelection: () => handleDelete(state),

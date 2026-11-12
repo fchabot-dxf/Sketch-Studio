@@ -13,7 +13,7 @@ import { seedFilletForRadius, filletHasCollapsedLine, filletLines } from '#core/
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { angleDimensionChoiceFor } from '#ui/angle-dimension.js';
-import { replaceParameters } from '#core/parameters.js';
+import { replaceParameters, usersOf } from '#core/parameters.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
@@ -156,10 +156,12 @@ export function commitDimensionEdits(state, edits, opts = {}) {
 // dimension values go through the batch seam (commitDimensionEdits, reference / determined dimensions refused); only after it succeeds are
 // state.parameters and every dimension's name / expression written. A refusal leaves parameters, expressions, names, values, geometry and radii exactly
 // as they were and drops the undo step it took (discardSnapshotAt), so the history length is unchanged.
+// opts.snapshot === false: take NO undo snapshot here (the caller already holds the one that covers this edit: the FIRST value of a just-placed
+// dimension is covered by its birth snapshot, so placing + typing stays ONE undo step); a refusal then has nothing to drop.
 // Returns { ok:true } | { ok:false, reverted:true, clash, reason, culprit } | the refused plan itself ({ ok:false, code, message }; nothing was touched).
-export function applyParameterChange(state, plan, label = 'change parameter') {
+export function applyParameterChange(state, plan, label = 'change parameter', opts = {}) {
   if (!plan || !plan.ok) return plan || { ok: false, code: 'SYNTAX', message: 'no plan' };
-  const saved = typeof state.saveState === 'function';
+  const saved = opts.snapshot !== false && typeof state.saveState === 'function';
   // saveState drops the OLDEST entry when the history is at its cap and clears the redo branch: a refused change must lose neither
   const evicted = saved && state.history && state.history.length >= state.maxHistory ? state.history[0] : null;
   const redo = saved && state.redoStack ? [...state.redoStack] : null;
@@ -216,13 +218,20 @@ export function isDimensionDetermined(state, c) {
 // Every mode goes through that one test, a radius too (a circle's radius is a solver unknown since task 515, so a second driving
 // radius on the same circle, or an equal to a dimensioned circle, determines it: there is no separate radius swap any more).
 // When promoting, recompute the value from geometry and re-solve.
-// Returns { nowDriving, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
+// TASK 535 rule O11: making a DRIVING dimension a REFERENCE clears its formula (a reference has no formula; its value stays the number it had), and is
+// REFUSED while another formula reads its name (O9: a formula cannot read a reference): reason 'd4 is used by gap, d9', nothing changed.
+// Returns { nowDriving, refused, error, reason? } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting; reason = why it was refused).
 // No DOM, no notifications here.
 export function toggleDriving(state, c) {
-  if (c.isDriven && isDimensionDetermined(state, c)) return { nowDriving: false, refused: true, error: null };
+  if (c.isDriven && isDimensionDetermined(state, c)) return { nowDriving: false, refused: true, error: null, reason: 'the sketch already determines it' };
+  if (!c.isDriven && c.name) {
+    const users = usersOf(state, c.name);
+    if (users.length) return { nowDriving: true, refused: true, error: null, reason: `${c.name} is used by ${users.join(', ')}` };
+  }
 
   c.isDriven = !c.isDriven;
   c.driven = c.isDriven; // keep both flags in sync (solver/renderer read isDriven || driven)
+  if (c.isDriven) delete c.expression; // O11
 
   let error = null;
   if (!c.isDriven) {

@@ -47,6 +47,8 @@ const FUNCTIONS = {
   sin: [1, 1], cos: [1, 1], tan: [1, 1], asin: [1, 1], acos: [1, 1], atan: [1, 1],
 };
 const FUNCTION_NAMES = new Set(Object.keys(FUNCTIONS).map(fold));
+// functionTable() -> [{ name, min, max }] in declaration order: THE list of callable names (the autocomplete reads it, never a second list)
+export const functionTable = () => Object.entries(FUNCTIONS).map(([name, [min, max]]) => ({ name, min, max }));
 const funcKey = (name) => { for (const k of Object.keys(FUNCTIONS)) if (fold(k) === name) return k; return null; };
 
 // ── result helpers ──
@@ -408,7 +410,7 @@ function walk(n, env) {
       const k = foldedConstant(n.name);
       if (k !== undefined) return { v: k, L: 0, A: 0, bare: true, node: n };
       const r = env.lookup ? env.lookup(n.name) : undefined;
-      if (r == null) throw new Bail(fail('UNKNOWN_NAME', `unknown name '${n.name}'`, at, { names: [n.name] }));
+      if (r == null) throw new Bail(fail('UNKNOWN_NAME', `unknown parameter '${n.name}' (type ${n.name} = 30 to create it)`, at, { names: [n.name] }));
       if (typeof r === 'number') return finite({ v: r, L: 0, A: 0, bare: false, node: n }, at);
       if (r.ok === false) throw new Bail(fail(r.code || 'UNKNOWN_NAME', r.message || `'${n.name}' cannot be used here`, at, { names: [n.name] }));
       return finite({ v: r.v, L: r.L || 0, A: r.A || 0, bare: false, node: n }, at);

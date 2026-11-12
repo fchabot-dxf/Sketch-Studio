@@ -248,7 +248,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
 
   const { joints, shapes, constraints } = state;
   const { cluster, lineA, lineB } = cornerInfo;
-  const { tA, tB, centerPt, d } = geom;
+  const { tA, tB, centerPt } = geom;
   const cornerPt0 = { x: cornerInfo.cornerPt.x, y: cornerInfo.cornerPt.y };
   const finalRadius = geom.radius;
 
@@ -322,12 +322,9 @@ export function applyFillet(state, cornerInfo, radius = 5) {
           else if (c.joints[k] === lineB.cornerJoint) c.joints[k] = jTB;
         }
       }
-
-      // A shape-based LENGTH dimension of a trimmed line really does get shorter by d.
-      if (c.type === CONSTRAINT_TYPES.DISTANCE && typeof c.value === 'number' && !c.isRadius) {
-        if (c.shape === lineA.shape.id) c.value = Math.max(0.1, c.value - d);
-        if (c.shape === lineB.shape.id) c.value = Math.max(0.1, c.value - d);
-      }
+      // TASK 535 O12 (like Fusion): a line-length dimension, with or without a formula, is a joint-pair MEASURE (handled above): it is re-linked to
+      // the virtual sharp and keeps its value AND its formula. (A former branch here shortened a DISTANCE that carries `shape` and is no radius;
+      // no dimension has that form, createConstraint only gives `shape` to a radius, so it never ran, and it would have overwritten a formula's value.)
     }
   }
 

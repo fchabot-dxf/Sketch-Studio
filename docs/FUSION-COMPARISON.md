@@ -1797,6 +1797,7 @@ Divergences and verdicts:
 
 <!-- drawings:end -->
 
+<<<<<<< HEAD
 ## Dragging (real mouse, qualitative)
 
 **Method (task 530).** Fusion's API cannot reproduce a constrained drag (task 527: `point.move` / `sketch.move` leave a length-dimensioned point where it is or put it on the wrong branch), so
@@ -1844,3 +1845,64 @@ sibling vector in every case I checked, so I read the 'none' cells as refusals.
 5. **Tangent line end**: with a free circle, Fusion also moves the circle (`C:M.`); ours moves / resizes the circle in a different set of cells (`tangent.*.lineend.diag`).
 Agreement is complete for a rectangle corner (13/13), a circle centre (12/12), the shared corner of two lines (9/9) and every fully constrained cell (nothing moves in either).
 KNOWN list: `tests/fixtures/fusion-oracle/drag-known.json` (regenerate with `node scripts/fusion-oracle/drag-known.mjs`), test `tests/fusion-drag.test.js`.
+=======
+## Editing a dimension (task 528)
+
+Question: when the value of an EXISTING driving dimension is changed, does our `commitDimensionEdit` (packages/ui/dimension-seams.js, the one path the app uses when a value is typed) re-solve the sketch the way Fusion does? Measured in Fusion 2706.1.17 (recorded 2026-11-12), replayed offline by `tests/fusion-dim-edit.test.js` (fixture `tests/fixtures/fusion-oracle/fusion-dim-edit.json`, KNOWN list `fusion-dim-edit-known.json`). Nothing under `packages/` was changed: this is measurement only.
+
+**How Fusion is driven.** `sketchDimension.parameter.expression = '<v> mm'` (or `deg`), in a new unsaved scratch document. The recorded runs: 144 cells x 6 edits = 864. A cell = a hold state of the graded grid (tests/harness/fusion-oracle/graded.js: the same builders and levels: free, H/V, one end fixed, other dimension present, corner shared, origin as one end, fully constrained, fillet arc) with the dimension placed at its measured value. Dimension modes: aligned, horizontal, vertical, line length, angle, radius (circle, arc, fillet arc), point-to-line, line-line (parallel). The graded cells are SAMPLED by a fixed stride (aligned every 5th, horizontal and vertical every 10th, angle every 4th, length and radius all), point-to-line and line-line are 11 and 6 extra cells of the same builders. No diameter dimension: no tool creates one. The edits: x2, x0.5, +1% (angle +0.5 degrees), x20 (angle 179 degrees: may make a neighbour impossible), 0, minus the value. Fusion's side is `scripts/fusion-oracle/run-dim-edit.py`, jobs by `dim-edit-jobs.mjs`, merge by `dim-edit-cli.mjs merge`, KNOWN by `dim-edit-known.mjs`.
+
+**Step 1: does setting the parameter behave like a typed edit?** Measured on three hand cases (a free line with a length dimension; a rectangle with H/V and width and height dimensions; an L of two lines with H/V and two length dimensions plus a diagonal reference):
+- The geometry follows the value: line 50 -> 100 moved the free end (40,30) -> (80,60); rectangle width 50 -> 80 moved the two right corners and kept the left side; height 30 -> 15 moved the top side; the L followed (diagonal reference 50 -> 72.11).
+- The sketch stays valid (`healthState` 0) after every possible value.
+- An impossible value is NOT refused by an exception. The API accepts it, the parameter keeps the typed number, the sketch goes to `healthState` 1 with "Failed to solve. Please try revising dimensions or constraints." and the geometry stays at the last valid shape (0 mm and 1e9 mm on a line length). The next possible value (40 mm) solves again and the health returns to 0. A recorded run counts as "refused" when the health is not 0.
+- Negative values are accepted and are SIGNED: -30 mm on a line from the origin moved its end to (-24,-18) (the other side of the start point), 40 mm after that stayed on the negative side.
+- Setting the value of a REFERENCE dimension is accepted by the API (the value reads back); not examined further.
+- Limit: this is the API route. Whether the Fusion dialog shows a refusal message instead of the error state could not be measured here (no UI driving).
+- Repeatability: all 864 runs were recorded twice; the two recordings are identical (max coordinate difference 0, same refusals).
+
+**Result.** 864 runs: 381 same as Fusion, 483 differ (all KNOWN, 9 classes). "Same" = the same set of moved ends (which END of the dimension moved: a, b, line1, line2, point, line, radius, centre; "+others" = other joints moved), the same refused / not-editable outcome, the dimension reaches its value, the other dimensions keep theirs.
+
+| dimension | runs | same | differ |
+|---|---|---|---|
+| aligned (point-point) | 282 | 131 | 151 |
+| horizontal | 96 | 47 | 49 |
+| vertical | 96 | 47 | 49 |
+| line length | 54 | 26 | 28 |
+| angle | 174 | 22 | 152 |
+| radius (circle, arc, fillet) | 60 | 51 | 9 |
+| point-to-line | 66 | 36 | 30 |
+| line-line | 36 | 21 | 15 |
+
+| edit | same | differ |
+|---|---|---|
+| x2 | 71 | 73 |
+| x0.5 | 72 | 72 |
+| +1% | 71 | 73 |
+| x20 / 179 degrees | 71 | 73 |
+| to 0 | 70 | 74 |
+| to minus the value | 26 | 118 |
+
+| class of difference | runs |
+|---|---|
+| both-operands: Fusion moves ONE operand, ours spreads the change over both | 312 |
+| negative-refused: Fusion accepts a negative value, ours refuses | 90 |
+| neighbours: same operand, Fusion also moves the far end / connected points | 56 |
+| zero-length: Fusion cannot solve a zero length, ours collapses it | 5 |
+| arc-centre: Fusion keeps the arc centre on a radius edit, ours moves it | 5 |
+| fusion-refuses-dimension: Fusion refuses a redundant dimension (angle on a fully constrained rectangle), ours places it driving | 6 |
+| ours-reference: ours places a zero distance to the origin as a reference, Fusion edits it | 6 |
+| negative-radius: Fusion leaves a circle alone, ours stores a negative radius | 2 |
+| zero-refused: zero distance between two points, Fusion allows, ours refuses | 1 |
+
+132 further runs agree on "not editable": Fusion refuses to place the dimension at all (96 over-constrained, 42 "Already has same dimension"), ours places it as a reference.
+
+**The 5 most important differences, in plain words**
+1. **Who moves.** Typing a new value moves ONE thing in Fusion: the second-picked point or line (or the one that is not held) is carried along (a free line moves as a whole). Ours splits the change between the two ends (a free line given length 100 grows from both ends, the start point slides away from where the user put it). 312 of 483 differences. This is the same "least change" behaviour as the creation cases of the graded grid, now on an edit.
+2. **Negative values.** Fusion accepts a negative number (the value is signed: the geometry keeps its side or flips to the other one). Ours refuses (reverts) 90 times, and a negative circle radius is stored as a negative radius on the circle (2 runs: the circle is left with radius -15).
+3. **Zero.** Fusion cannot solve a zero LENGTH (the sketch goes to the error state and the geometry stays); ours accepts 0 for the edited dimension's own line and collapses it to a point (5 runs, the task 521 exemption). For a zero distance between two points Fusion makes them coincide where ours refuses it (1 run).
+4. **Neighbours.** With the same operand moving, Fusion also nudges the far end of the line or the connected points (its solver minimises the movement of all free points); ours moves only the dimensioned point and keeps the rest (56 runs).
+5. **Redundant dimensions.** An angle on two sides of a fully constrained rectangle: Fusion refuses to place it (over-constrained), ours places it driving and the edit moves nothing or is refused (6 runs). The other way round, a zero distance from a point to the origin: Fusion places and edits it, ours turns it into a reference (6 runs). Also on arcs: Fusion keeps the centre on a radius edit, ours moves the centre (5 runs).
+
+Not found different: a radius edit of a circle, a fillet radius edit and the line-length edits of held lines agree with Fusion (the 381 agreeing runs), and the other dimensions of the sketch kept their values in every agreeing run.
+>>>>>>> origin/main

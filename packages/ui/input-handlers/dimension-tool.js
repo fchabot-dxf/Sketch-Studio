@@ -356,7 +356,6 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         dimensionState.lastClickTime = now;
         dimensionState.lastClickedIndex = cIdx;
         if (isDoubleClick) {
-            if (constraint.isDriven || constraint.driven) return true; // Disable editing for driven dimensions
             dimensionState.editingConstraint = constraint; // Track for event listener
             showEditInput(svg, state, constraint);
             return true;

@@ -82,17 +82,17 @@ run('4. dimension already-dimensioned edge → one driver', 'PASS', () => {
   };
 });
 
-// 4b — toggle a reference dim → driving while ANOTHER dim already drives → SWAP (one driver per edge)
-run('4b. toggle ref→driving when another drives → swaps', 'PASS', () => {
+// 4b — toggle a reference dim → driving while ANOTHER dim already drives it → REFUSED, nothing changes (task 516: no swap)
+run('4b. toggle ref→driving when another drives → refused', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
   const d1 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'horizontal' }); // D1 driving
   const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // D2 reference (one-driver rule)
-  const ok = s.setDriving(d2);   // promote D2 → must DEMOTE D1 (swap), never refuse
+  const ok = s.setDriving(d2);   // promote D2 → refused: D1 already determines it
   const drivers = s.drivingDistanceCount(r.corners[0], r.corners[1]);
   return {
-    pass: ok === true && drivers === 1 && s.isDriven(d2) === false && s.isDriven(d1) === true && s.converged === true && s.lastError === null,
-    nums: { drivers, d2nowDriving: !s.isDriven(d2), d1nowReference: s.isDriven(d1), converged: s.converged, lastError: s.lastError || 'none' },
+    pass: ok === true && drivers === 1 && s.isDriven(d2) === true && s.isDriven(d1) === false && s.converged === true && s.lastError === null,
+    nums: { drivers, d2stillReference: s.isDriven(d2), d1stillDriving: !s.isDriven(d1), converged: s.converged, lastError: s.lastError || 'none' },
   };
 });
 
@@ -214,33 +214,33 @@ run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () =
   };
 });
 
-// 13 — TOGGLE seam driven directly: flip a reference → driving with the one-driver-per-edge swap
-run('13. toggleDriving seam — flip + swap', 'PASS', () => {
+// 13 — TOGGLE seam driven directly: a reference whose quantity the sketch already determines CANNOT become driving (task 516, Fusion:
+//      over-constrained). Same joint pair: the horizontal driver already determines the aligned side of the rect.
+run('13. toggleDriving seam — promoting a determined reference is refused', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
   const d1 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'horizontal' }); // driver
-  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // reference (one-driver rule)
-  const res = toggleDriving(s.state, d2); // promote d2 → swap demotes d1
+  const d2 = s.dimension(r.corners[0], r.corners[1], 100, { dimMode: 'aligned' });    // reference (already determined)
+  const res = toggleDriving(s.state, d2);
   s.solve();
   return {
-    pass: res.nowDriving === true && res.swapped === true && d2.isDriven === false && d1.isDriven === true && s.converged === true,
-    nums: { nowDriving: res.nowDriving, swapped: res.swapped, d2drives: !d2.isDriven, d1ref: d1.isDriven, converged: s.converged },
+    pass: res.refused === true && res.nowDriving === false && res.swapped === false && d2.isDriven === true && d1.isDriven === false && s.converged === true,
+    nums: { refused: res.refused, d2StillRef: d2.isDriven, d1StillDrives: !d1.isDriven, converged: s.converged },
   };
 });
 
-// 14 — toggle seam RANK-REDUNDANCY swap: promoting a redundant CROSS-edge reference demotes the determiner
-//      (the toggle-path analogue of #6 — repro: rect right-height driver, promote left-height reference).
-run('14. toggleDriving — rank-redundancy cross-edge swap', 'PASS', () => {
+// 14 — the same refusal across edges: the rect's right-height driver already determines the left height (no swap any more).
+run('14. toggleDriving — a redundant cross-edge reference stays a reference', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 8, 5);
   const right = s.dimension(r.corners[1], r.corners[2], 5); // right height (c2-c3) — driver
   const left = s.dimension(r.corners[0], r.corners[3], 5);  // left height (c1-c4) — redundant → reference
-  toggleDriving(s.state, left);                              // promote left → must DEMOTE right (not 2 drivers)
+  const res = toggleDriving(s.state, left);
   s.solve();
   const heightDrivers = s.drivingDistanceCount(r.corners[0], r.corners[3]) + s.drivingDistanceCount(r.corners[1], r.corners[2]);
   return {
-    pass: left.isDriven === false && right.isDriven === true && heightDrivers === 1 && s.converged === true,
-    nums: { leftDrives: !left.isDriven, rightRef: right.isDriven, heightDrivers, converged: s.converged },
+    pass: res.refused === true && left.isDriven === true && right.isDriven === false && heightDrivers === 1 && s.converged === true,
+    nums: { refused: res.refused, leftRef: left.isDriven, rightDrives: !right.isDriven, heightDrivers, converged: s.converged },
   };
 });
 

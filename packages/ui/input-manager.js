@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES } from '#core/constants.js';
+import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
@@ -398,6 +398,16 @@ export function setupInput(svg, state, opts = {}) {
     } catch (err) { console.error('[ug.snap] attach error', err); }
 }
 
+// The grid intersection nearest the pointer (world gx, gy) and its screen distance from the pointer.
+function nearestGridPoint(svg, e) {
+    const w = screenToWorld(svg, e.clientX, e.clientY);
+    const { GRID_SIZE } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SettingsManager.get('GRID_SIZE') || SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SettingsManager.get('GRID_MAJOR_STEP') || SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
+    const gx = Math.round(w.x / GRID_SIZE) * GRID_SIZE;
+    const gy = Math.round(w.y / GRID_SIZE) * GRID_SIZE;
+    const screenGrid = worldToScreen(svg, { x: gx, y: gy });
+    return { gx, gy, dist: Math.hypot(e.clientX - screenGrid.x, e.clientY - screenGrid.y) };
+}
+
 // Helper: Centralized snap update logic
 function updateSnapTarget(e, svg, state) {
     const isTouch = e.isTouch || e.pointerType === 'touch';
@@ -450,18 +460,21 @@ function updateSnapTarget(e, svg, state) {
 
         // GRID SNAP FALLBACK: If no geometry/constraint snap, check for grid intersection
         if (!target) {
-            const w = screenToWorld(svg, e.clientX, e.clientY);
-            const { GRID_SIZE } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SettingsManager.get('GRID_SIZE') || SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SettingsManager.get('GRID_MAJOR_STEP') || SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
-            const gx = Math.round(w.x / GRID_SIZE) * GRID_SIZE;
-            const gy = Math.round(w.y / GRID_SIZE) * GRID_SIZE;
-            
-            const screenGrid = worldToScreen(svg, { x: gx, y: gy });
-            const dist = Math.hypot(e.clientX - screenGrid.x, e.clientY - screenGrid.y);
-            
-            const gridThreshold = getMagnetThreshold('grid');
-            if (dist <= gridThreshold) {
+            const { gx, gy, dist } = nearestGridPoint(svg, e);
+            if (dist <= getMagnetThreshold('grid')) {
                 target = { type: 'grid', pt: { x: gx, y: gy } };
             }
+        }
+
+        // AXIS SNAP (task 537): the point stays free ALONG the axis, and still obeys the grid there: when a grid line crosses
+        // the axis within the grid magnet's reach, the point lands on that crossing (coordinate across the axis stays exactly 0).
+        if (target && AXIS_SNAP_TARGETS[target.type]) {
+            const { gx, gy } = nearestGridPoint(svg, e);
+            const across = AXIS_SNAP_TARGETS[target.type].across;
+            const onAxis = { x: gx, y: gy }; onAxis[across] = 0;
+            const screenOnAxis = worldToScreen(svg, onAxis);
+            const along = across === 'y' ? Math.abs(e.clientX - screenOnAxis.x) : Math.abs(e.clientY - screenOnAxis.y);
+            if (along <= getMagnetThreshold('grid') && Math.hypot(e.clientX - screenOnAxis.x, e.clientY - screenOnAxis.y) <= getMagnetThreshold('snap')) target = Object.assign({}, target, { pt: onAxis, x: onAxis.x, y: onAxis.y });
         }
 
         if (target) {
@@ -596,7 +609,10 @@ function handlePointerDown(e, svg, state) {
                 hitShape = { shape: state.snapTarget.shape, pt: state.snapTarget.pt };
             }
         }
-        if (!hitJoint && !hitShape) {
+        // A LOCKED axis snap (task 537) is kept as is: it carries the grid-aligned point and the lock a drawing tool's
+        // first point needs (a fresh findSnap below would return the bare, unlocked candidate).
+        const keepLockedAxisSnap = !!(clickSnap && AXIS_SNAP_TARGETS[clickSnap.type]);
+        if (!hitJoint && !hitShape && !keepLockedAxisSnap) {
             const snapBoost = isTouch ? 2.0 : 1.0;
             clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
             if (clickSnap) {

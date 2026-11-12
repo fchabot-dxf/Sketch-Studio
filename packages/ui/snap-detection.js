@@ -1,6 +1,7 @@
 ﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#ui/coords.js';
 import { projectPointOnSegment, getDist, getArcParams, resolveJoints } from '#core/geometry.js';
-import { SNAP } from '#core/constants.js';
+import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
+import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';
 
 // Find joint at screen position
@@ -221,13 +222,31 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
       }
     }
   }
-  // Priority: Joint > Shape (if close enough to joint, joint wins)
+  // Priority: Joint > Shape (if close enough to joint, joint wins) > X / Y axis. The axis is the last real target: any joint
+  // (the origin included), point-on-line or midpoint is a more specific feature and beats it; only the bare grid is below it.
   const JOINT_PRIORITY_RADIUS = 15; 
   if (bestJoint && bestJoint.dist < JOINT_PRIORITY_RADIUS) return bestJoint;
   if(bestJoint && bestShape) return (bestJoint.dist <= bestShape.dist) ? bestJoint : bestShape;
   if(bestJoint) return bestJoint;
   if(bestShape) return bestShape;
-  return null;
+  return findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap);
+}
+
+// The X axis (y = 0) / Y axis (x = 0) snap candidate nearest the pointer, or null. The target point is the pointer's foot on the
+// axis (its coordinate across the axis is exactly 0, the one along it is free). It exists only where the host has the origin joint
+// the constraint hangs on (the axes are drawn by the shared renderer around that same origin) and only while AXIS_SNAP is on.
+function findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap){
+  if(excludeLineSnap || SettingsManager.get('AXIS_SNAP') === false) return null;
+  if(!joints.has(ORIGIN_JOINT_ID) || excluded.includes(ORIGIN_JOINT_ID)) return null;
+  const w = screenToWorld(svg, lastMouse.x, lastMouse.y);
+  let best = null, bestDist = SNAP.AXIS_PX;
+  for(const [type, axis] of Object.entries(AXIS_SNAP_TARGETS)){
+    const pt = { x: w.x, y: w.y }; pt[axis.across] = 0;
+    const sc = worldToScreen(svg, pt);
+    const d = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
+    if(d < bestDist){ bestDist = d; best = { type, targetId: type, x: pt.x, y: pt.y, pt, dist: d }; }
+  }
+  return best;
 }
 
 export function hitConstraintAtScreen(constraints, svg, screenX, screenY, threshold = 14) {

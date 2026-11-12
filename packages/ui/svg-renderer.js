@@ -160,7 +160,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
   const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
-  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', 2), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', 10), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
+  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';

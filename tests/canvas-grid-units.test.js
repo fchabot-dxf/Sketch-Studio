@@ -11,6 +11,13 @@ assert.deepStrictEqual(gridSpacing('cm', { ...S, INCH_GRID_DIVISIONS: 8 }), S);
 assert.deepStrictEqual(gridSpacing('mm', { GRID_SIZE: 3, GRID_MAJOR_STEP: 12 }), { GRID_SIZE: 3, GRID_MAJOR_STEP: 12 });
 assert.deepStrictEqual(GRID_INCH_DIVISIONS, [10, 2, 4, 8, 16]);
 assert.strictEqual(SettingsManager.get('INCH_GRID_DIVISIONS'), 10, 'declared default');
+// TASK 532 (owner): the mm DEFAULT grid is heavy every 100 mm, light every 10 mm (was 10 / 2, kept by anyone with those values stored/set)
+assert.strictEqual(SettingsManager.getDefault('GRID_MAJOR_STEP'), 100);
+assert.strictEqual(SettingsManager.getDefault('GRID_SIZE'), 10);
+assert.deepStrictEqual(gridSpacing('mm', SettingsManager.getDefaults()), { GRID_SIZE: 10, GRID_MAJOR_STEP: 100 });
+// the old default, when SET, is still exactly the old grid
+assert.deepStrictEqual(gridSpacing('mm', { GRID_SIZE: 2, GRID_MAJOR_STEP: 10 }), { GRID_SIZE: 2, GRID_MAJOR_STEP: 10 });
+assert(gridDefsMarkup({ GRID_SIZE: 2, GRID_MAJOR_STEP: 10, scale: (px) => px * 0.2, gridMode: 'lines' }).startsWith('<pattern id="grid" width="2" height="2"'));
 
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 // "round in the chosen system" for major M inches, n divisions: a multiple of M/n below M; M times a power of the LOD ratio above

@@ -24,8 +24,10 @@ const DEFAULT_SETTINGS = {
     SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM || 10,
     GRID_MAGNETISM: SolverConfig.GRID_MAGNETISM || 10,
     GRID_DENSITY: 2,
-    GRID_SIZE: 2,
-    GRID_MAJOR_STEP: 10,
+    // The mm grid's DEFAULTS (task 532, owner: every 100 mm heavy, 10 per heavy). ONE place: the renderer, the snap and the
+    // panel all read these through SettingsManager (a stored value or a template wins; a mm file with 2 / 10 stored is the old grid).
+    GRID_SIZE: 10,
+    GRID_MAJOR_STEP: 100,
     SHOW_GRID: true,
     // Grid style drawn by the shared canvas grid (#ui/canvas-grid.js): 'lines' | 'off' | 'points'. Default 'lines' = the
     // grid SketchStudio always drew. A genuine display preference → persisted locally like the other display settings.

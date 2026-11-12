@@ -22,7 +22,7 @@
 
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
-import { basePer } from '#core/units.js';
+import { basePer, UNITS, format as formatUnit } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -36,6 +36,10 @@ const MINOR_FADE_SPAN = 1;
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
+const LABEL_COLOR = '#64748b';  // mid-grey: darker than the grid lines, lighter than geometry
+
+export const LABEL_PX = 11;          // axis-number text size on screen, constant at any zoom
+export const MIN_LABEL_GAP_PX = 40;  // never more than about one number per this many screen px along an axis
 
 // The backmost rect (attribute ORDER matters for byte-identity with the old index.html markup).
 const RECT_ATTRS = [['id', 'infinite-grid'], ['x', '-50000'], ['y', '-50000'], ['width', '100000'], ['height', '100000'], ['fill', 'url(#grid-heavy)']];
@@ -132,6 +136,38 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lo
     + `<path d="M ${M} 0 L 0 0 0 ${M}" fill="none" stroke="${MAJOR_COLOR}" stroke-width="${majorStroke}"/></pattern>`;
 }
 
+/**
+ * The axis numbers of the grid: one at each displayed HEAVY line along the X axis (y = 0) and the Y axis (x = 0), both
+ * sides of the origin (negatives carry a minus), none at 0. PURE (string). The number is the world coordinate in the file's
+ * unit (world mm via the shared units.js format, its shortest form, the unit suffix stripped: the unit is the document's, shown
+ * once in the Style panel). Sign convention = the app's own coordinates: world y is the SVG y (screenToWorld in coords.js:
+ * y = vb.y + localY * scaleY), so y grows DOWN the screen and the Y-axis numbers below the origin are positive.
+ * Rotated 90 degrees (read top-to-bottom); X numbers sit just below the axis line, Y numbers just right of it, centred on
+ * their grid line. Dense levels skip numbers (every 2nd, 5th, 10th .. heavy line) so they stay >= MIN_LABEL_GAP_PX apart.
+ *   vb: the viewBox { x, y, width, height }; scale(px) → world units; docUnit: 'mm' | 'cm' | 'in'.
+ */
+export function gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit }) {
+  if (!vb || !(vb.width > 0) || !(vb.height > 0)) return '';
+  const { major: M } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
+  const unit = UNITS.includes(docUnit) ? docUnit : 'mm';
+  const majorPx = M / scale(1);
+  // the smallest of 1, 2, 5, 10, 20, 50, ... heavy lines that keeps the gap
+  const steps = []; for (let d = 1; d < 1e12; d *= 10) steps.push(d, 2 * d, 5 * d);
+  const every = steps.find((n) => n * majorPx >= MIN_LABEL_GAP_PX) || steps[steps.length - 1];
+  const step = M * every;
+  const fs = scale(LABEL_PX);
+  const text = (v) => formatUnit(v, unit, { unit: true }).slice(0, -unit.length);
+  const out = [];
+  const each = (from, to, emit) => {
+    for (let i = Math.ceil(from / step); i * step <= to; i++) { if (i !== 0) emit(i * step); }
+  };
+  // X axis: number centred on its vertical grid line, below the axis.
+  each(vb.x, vb.x + vb.width, (x) => out.push(`<text transform="translate(${x} ${scale(5)}) rotate(90)" dominant-baseline="central">${text(x)}</text>`));
+  // Y axis: number centred on its horizontal grid line, right of the axis.
+  each(vb.y, vb.y + vb.height, (y) => out.push(`<text transform="translate(${scale(5) + fs / 2} ${y}) rotate(90)" text-anchor="middle" dominant-baseline="central">${text(y)}</text>`));
+  return `<g id="grid-labels" font-size="${fs}" pointer-events="none" style="user-select:none">${out.join('')}</g>`;
+}
+
 // ── DOM glue ────────────────────────────────────────────────────────────────
 
 let stylesInjected = false;
@@ -141,7 +177,8 @@ function injectStyles() {
   const s = document.createElement('style');
   s.id = 'sk-canvas-grid-styles';
   s.textContent = `#grid path{stroke:var(--sk-grid-minor,${MINOR_COLOR})}#grid circle{fill:var(--sk-grid-minor,${MINOR_COLOR})}`
-    + `#grid-heavy path{stroke:var(--sk-grid-major,${MAJOR_COLOR})}#grid-heavy circle{fill:var(--sk-grid-major,${MAJOR_COLOR})}`;
+    + `#grid-heavy path{stroke:var(--sk-grid-major,${MAJOR_COLOR})}#grid-heavy circle{fill:var(--sk-grid-major,${MAJOR_COLOR})}`
+    + `#grid-labels text{fill:var(--sk-grid-label,${LABEL_COLOR});font-family:inherit}`;
   document.head.appendChild(s);
   stylesInjected = true;
 }
@@ -176,22 +213,28 @@ export function ensureCanvasGrid(svgEl) {
 
 const applied = new WeakMap(); // svgEl → last applied signature (skip the DOM write on idle frames)
 
-/** Mount (if needed) + retune the grid on svgEl for the given spacing/zoom/mode. Returns false if it refused. */
-export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio }) {
+/** Mount (if needed) + retune the grid (and its axis numbers) on svgEl for the given spacing/zoom/mode/unit. Returns false if it refused. */
+export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio, docUnit }) {
   const parts = ensureCanvasGrid(svgEl);
   if (!parts) return false;
   const mode = normalizeGridMode(gridMode);
   const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode, lodRatio });
-  const sig = mode + '|' + markup;
+  // The axis numbers: part of the same grid, so they follow the same mode ('off' draws none) and the same levels.
+  const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+  const labels = mode === 'off' ? '' : gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit });
+  const sig = mode + '|' + markup + '|' + labels;
   if (applied.get(svgEl) !== sig || !parts.defs.firstChild) {
     parts.defs.innerHTML = markup;
     if (mode === 'off') parts.rect.setAttribute('display', 'none'); else parts.rect.removeAttribute('display');
+    let g = svgEl.querySelector('#grid-labels');
+    if (g && g.parentNode) g.parentNode.removeChild(g);
+    if (labels) parts.rect.insertAdjacentHTML('afterend', labels);
     applied.set(svgEl, sig);
   }
   return true;
 }
 
-/** updateCanvasGrid with the mode read live from the declared GRID_MODE setting (what both render ctxs call). */
+/** updateCanvasGrid with the mode and unit read live from the declared GRID_MODE / DOC_UNIT settings (what both render ctxs call). */
 export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
-  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE') });
+  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE'), docUnit: SettingsManager.get('DOC_UNIT') || 'mm' });
 }

@@ -31,11 +31,12 @@ export const SNAP = {
   DRAG_MULT: 1.1,         // Multiplier on JOINT_PX while dragging
   DRAG_THRESHOLD: 2,      // Pixel movement to count as drag (not click)
 
-  // ── Midpoint snap tuning ───────────────────────────────────────────
+  // ── Midpoint inference tuning (the drag's findInference) ────────────
+  // SCREEN pixels, like every SNAP value: findInference converts them to world units with the caller's worldPerPx.
   MIDPOINT: {
-    PCT: 0.02,     // 2% of anchor distance
-    MIN: 1.0,
-    MAX: 4.0,
+    PCT: 0.02,     // 2% of the line's on-screen length
+    MIN: 1.0,      // px
+    MAX: 4.0,      // px
     BIAS: 2        // pixels; prefer midpoint when within this bias vs projected line point
   }
 };

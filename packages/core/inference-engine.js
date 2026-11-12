@@ -1,4 +1,4 @@
-import { INFERENCE_TYPES, ANGLE_SNAP_DEG,  SNAP } from './constants.js';
+import { INFERENCE_TYPES, ANGLE_SNAP_DEG, SNAP, CONSTRAINT_TYPES } from './constants.js';
 
 // Limit parallel/perpendicular inference to nearby references to avoid noisy hints
 const MAX_REF_DIST = 10; // world units; keep hints local but usable
@@ -32,6 +32,9 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
 
   const isDraggingJoint = options && options.draggedType === 'joint';
   const draggedJointId = options && options.draggedId;
+  // World units per screen pixel (the caller's view): the screen-pixel thresholds of SNAP are converted with it. Required for a joint drag.
+  const worldPerPx = options && options.worldPerPx;
+  if (isDraggingJoint && !(worldPerPx > 0)) throw new Error('findInference: a joint drag needs options.worldPerPx (world units per screen pixel)');
 
   // When dragging a joint, check if attached lines are becoming horizontal/vertical first
   if(isDraggingJoint && draggedJointId){
@@ -108,6 +111,12 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
         }
       }
 
+      // A line that already carries a horizontal or vertical constraint takes no H/V inference: the inferred pose (the end straight
+      // across or above the other end) contradicts it (task 548 F2: that collapsed an H line on a fast fling)
+      const hasHV = (options.constraints || []).some(c => (c.type === CONSTRAINT_TYPES.HORIZONTAL || c.type === CONSTRAINT_TYPES.VERTICAL) && Array.isArray(c.joints)
+        && c.joints.includes(attachedLine.joints[0]) && c.joints.includes(attachedLine.joints[1]));
+      if(hasHV) continue;
+
       // FALLBACK: Check if the dragged line is becoming horizontal
       const horizontalDiff = Math.min(Math.abs(dragAngle), Math.abs(Math.abs(dragAngle) - 180));
       if(horizontalDiff < ANGLE_SNAP_DEG){
@@ -133,13 +142,16 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
     if (draggedIsJointEarly && Array.isArray(shapes) && shapes.length > 0) {
       for (const shape of shapes) {
         if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
+          // A line the dragged joint belongs to is not a midpoint target: its own midpoint moves with the joint
+          if (shape.joints.includes(draggedJointId)) continue;
           const a = joints.get(shape.joints[0]);
           const b = joints.get(shape.joints[1]);
           if (!a || !b) continue;
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
           const dmid = Math.hypot(endPt.x - mid.x, endPt.y - mid.y);
           const lineLen = Math.hypot(b.x - a.x, b.y - a.y);
-          const MID_THRESH = Math.max(MIDPOINT.MIN, Math.min(MIDPOINT.MAX, lineLen * MIDPOINT.PCT));
+          // SNAP.MIDPOINT is in screen px: the line's on-screen length gives the 2%, the clamp is in px, the result is world units
+          const MID_THRESH = Math.max(MIDPOINT.MIN, Math.min(MIDPOINT.MAX, (lineLen / worldPerPx) * MIDPOINT.PCT)) * worldPerPx;
           if (dmid <= MID_THRESH) return { type: INFERENCE_TYPES.MIDPOINT, pos: mid, targetId: shape.id, refLine: { id: shape.id, p1: a, p2: b } };
         }
       }

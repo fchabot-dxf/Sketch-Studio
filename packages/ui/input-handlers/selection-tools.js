@@ -809,10 +809,14 @@ export function handleSelectionPointerMove(e, svg, state) {
     // joints, so fixed joints never produce a mouse_spring.
     // A BODY drag (task 538) carries ONE target: the grabbed point of the shape goes to the cursor (shape.dragTarget, read by every
     // solve while the drag lasts: this pass and the app's frame solve); no member joint gets a target.
+    // The target is the engine's (bodyDragTarget): the body point's reachable directions (the body-point form of the joint DOF mask),
+    // the kind's preferred temporary holds (a rim drag keeps the centre when it can); a rim point lies on the cursor's ray from the centre.
     if (state.drag.body) {
         const shape = (state.shapes || []).find(s => s.id === state.drag.body.shape);
-        shape.dragTarget = { param: state.drag.body.param, x: smoothed.x, y: smoothed.y };
-        if (state.engine) state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: { body: state.drag.body, x: smoothed.x, y: smoothed.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
+        const t = state.engine.bodyDragTarget(state.drag.body, smoothed);
+        state.drag.lastTarget = { x: t.x, y: t.y };
+        shape.dragTarget = { param: t.body.param, hold: t.body.hold, x: t.x, y: t.y };
+        state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: { ...t, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
         return true;
     }
     const dx = smoothed.x - state.drag.startWorld.x, dy = smoothed.y - state.drag.startWorld.y;

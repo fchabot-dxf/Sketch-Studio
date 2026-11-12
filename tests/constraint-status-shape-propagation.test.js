@@ -33,31 +33,31 @@
     assert(typeof dofB === 'number' && dofB <= 1, `Expected b.dof <= 1, got ${dofB}`);
   }
 
-  // --- Rigid Shape Rule: dragging a line with any 0-DOF joint must be neutralized ---
+  // --- Body drag of a line with a FIXED end (task 538): the grabbed point (mid) follows the cursor as far as the constraints allow ---
+  // The old rule masked the whole drag when any member joint was 0-DOF (nothing moved); like Fusion, the fixed end now stays and the
+  // free end follows (the line stretches about the fixed end), the target lives on the SHAPE (no joint target), cleared on pointer-up.
   {
-    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select' };
-    // a is fixed; b is free; line L1 joins them
-    state.joints.set('a', { x: 0, y: 0, fixed: true });
-    state.joints.set('b', { x: 10, y: 0, fixed: false });
-    state.shapes.push({ id: 'L1', type: 'line', joints: ['a','b'] });
-
+    const L = await import('./harness/audit/lib.js');
+    const { SolverConfig } = await import('#core/solver-config.js');
+    const { handleSelectionPointerUp } = await import('#ui/input-handlers/selection-tools.js');
+    const S = L.newSketch(), state = S.state;
+    const a = L.point(S, 0, 0), b = L.point(S, 10, 0);
+    state.joints.get(a).fixed = true;
+    const lineId = L.line(S, a, b);
     const svg = { getBoundingClientRect: () => ({ left:0, top:0, width:200, height:200 }), viewBox: { baseVal: { x:0,y:0,width:200,height:200 } }, setPointerCapture: () => {}, releasePointerCapture: () => {} };
-
-    // Start dragging the shape
-    const down = { clientX: 5, clientY: 0, pointerId: 1, target: { closest: () => null, dataset: {} } };
-    const hitShape = { shape: state.shapes[0], pt: { x: 5, y: 0 } };
-    const ok = handleSelectionPointerDown(down, svg, state, null, hitShape, null);
+    state.currentTool = 'select'; state.selectedJoints = new Set(); state.selectedShapes = new Set(); state.selectedConstraints = new Set();
+    const ev = (x, y) => ({ clientX: x, clientY: y, pointerId: 1, target: { closest: () => null, dataset: {} } });
+    const line = state.shapes.find(s => s.id === lineId);
+    const ok = handleSelectionPointerDown(ev(5, 0), svg, state, null, { shape: line, pt: { x: 5, y: 0 } }, null);
     assert(ok === true, 'pointerDown should start shape drag');
-
-    // Attempt to move the line (would normally translate both joints)
-    const move = { clientX: 50, clientY: 20 };
-    handleSelectionPointerMove(move, svg, state);
-
-    // Because 'a' is fixed (0 DOF), the whole shape drag must be masked and dragTargets should remain unchanged
-    const a = state.joints.get('a');
-    const b = state.joints.get('b');
-    assert(a.dragTarget && Math.abs(a.dragTarget.x - 0) < 1e-9 && Math.abs(a.dragTarget.y - 0) < 1e-9, 'Fixed endpoint a should not move');
-    assert(b.dragTarget && Math.abs(b.dragTarget.x - 10) < 1e-9 && Math.abs(b.dragTarget.y - 0) < 1e-9, 'Line member b should be masked when any endpoint is 0-DOF');
+    for (let i = 1; i <= 10; i++) { handleSelectionPointerMove(ev(5, 0.4 * i), svg, state); S.engine.solve(SolverConfig.ITERATIONS || 500); }
+    assert(line.dragTarget && Math.abs(line.dragTarget.param - 0.5) < 1e-12, 'the body target is on the shape, grabbed at t = 0.5');
+    assert(!state.joints.get(a).dragTarget && !state.joints.get(b).dragTarget, 'a body drag sets no joint target');
+    handleSelectionPointerUp(ev(5, 4), svg, state); S.engine.solve(SolverConfig.ITERATIONS || 500);
+    const A = state.joints.get(a), B = state.joints.get(b);
+    assert(A.x === 0 && A.y === 0, 'the fixed end stays');
+    assert(Math.abs(B.y - 8) < 1e-3 && Math.abs(B.x - 10) < 0.5, `the free end follows: the mid point went up 4, so the far end went up 8 (b = ${B.x}, ${B.y})`);
+    assert(!line.dragTarget, 'pointer-up clears the body target');
   }
 
   console.log('constraint-status shape propagation tests passed ✅');

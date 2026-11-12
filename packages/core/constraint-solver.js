@@ -111,6 +111,7 @@ export function createEngine(options = {}){
   }
 
   function jointFreedom() { return solver.jointFreedom(); }
+  function bodyDragTarget(body, cursor) { return solver.bodyDragTarget(body, cursor); }
 
-  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant, jointFreedom };
+  return { init, genJ, getJoints, getShapes, getConstraints, addJoint, addShape, addConstraint, mergeJoints, solve, getSolveStats, isDistanceRedundant, jointFreedom, bodyDragTarget };
 }

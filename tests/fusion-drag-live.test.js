@@ -74,10 +74,11 @@ await (async () => {
     const len1 = Math.hypot(L1[1].x - L1[0].x, L1[1].y - L1[0].y), u1 = { x: (L1[1].x - L1[0].x) / len1, y: (L1[1].y - L1[0].y) / len1 };
     await run('line-free-mid-along', async () => { await drawLine(L1[0], L1[1]); }, (g) => mid(g.lines[0]), (g) => alongOf(g.lines[0], 0.3));
 
-    // 2. a rectangle edge by its body (bottom edge middle), along x
+    // 2. a rectangle edge by its body (bottom edge middle), along x. Task 538: the bottom edge is the lowest HORIZONTAL line (the old pick, the
+    // line with the largest y, tied with the two vertical sides and took the right side: that drag was an edge pulled ACROSS itself)
     await reset();
     const R = { x1: cv.x - 120, y1: cv.y - 80, x2: cv.x + 80, y2: cv.y + 60 };
-    await run('rect-free-edge-along', async () => { await clickEl('#tool-rect'); await click(R.x1, R.y1); await click(R.x2, R.y2); await key('Escape', 'Escape', 27); }, (g) => { const l = g.lines.slice().sort((p, q) => Math.max(q[0][1], q[1][1]) - Math.max(p[0][1], p[1][1]))[0]; return mid(l); }, (g) => { const l = g.lines.find(l => Math.abs(l[0][1] - l[1][1]) < 1.5); return { x: 0.3 * Math.abs(l[1][0] - l[0][0]), y: 0 }; });
+    await run('rect-free-edge-along', async () => { await clickEl('#tool-rect'); await click(R.x1, R.y1); await click(R.x2, R.y2); await key('Escape', 'Escape', 27); }, (g) => { const l = g.lines.filter(l => Math.abs(l[0][1] - l[1][1]) < 1.5).sort((p, q) => q[0][1] - p[0][1])[0]; return mid(l); }, (g) => { const l = g.lines.find(l => Math.abs(l[0][1] - l[1][1]) < 1.5); return { x: 0.3 * Math.abs(l[1][0] - l[0][0]), y: 0 }; });
 
     // 3. a circle by its rim, along x
     await reset();
@@ -104,14 +105,15 @@ await (async () => {
     if (EV) fs.writeFileSync(path.join(EV, 'fusion-drag-live-results.json'), JSON.stringify(results, null, 1));
     // the REAL app's outcome per cell (read from the DOM after a real mouse drag)
     const r = results;
-    assert(r['line-free-mid-along'].movedPoints === 1 && r['line-free-mid-along'].lengthChanged, 'free line by its body: one end follows, the line stretches (not a translate): ' + JSON.stringify(r['line-free-mid-along']));
-    assert(r['rect-free-edge-along'].movedPoints === 4 && r['rect-free-edge-along'].lengthChanged, 'rectangle edge by its body: 4 of 8 drawn points move, a side length changes (stretch)');
-    assert(r['circle-free-rim-along'].movedPoints === 1 && !r['circle-free-rim-along'].radiusChanged, 'circle grabbed on its rim translates (centre moves, radius kept)');
+    // task 538: a body drag pulls the grabbed point (definitions.js BODY_POINTS); each of these three now has Fusion's recorded class
+    assert(r['line-free-mid-along'].movedPoints === 2 && !r['line-free-mid-along'].lengthChanged, 'free line by its body: both ends move, the length is kept (translate, like Fusion): ' + JSON.stringify(r['line-free-mid-along']));
+    assert(r['rect-free-edge-along'].movedPoints === 8 && !r['rect-free-edge-along'].lengthChanged, 'rectangle edge by its body: all 8 drawn points move, no side length changes (translate, like Fusion)');
+    assert(r['circle-free-rim-along'].movedPoints === 0 && r['circle-free-rim-along'].radiusChanged, 'circle grabbed on its rim resizes (centre kept, radius changes, like Fusion)');
     assert(r['arc-free-end-across'].radiusChanged, 'arc grabbed by its end: the radius changes (stretch)');
     assert(r['line-len-end-across'].movedPoints === 2 && !r['line-len-end-across'].lengthChanged, 'length-dimensioned free line by an end: both ends move, the length is kept (rotate)');
     // the node replay (tests/fusion-drag.test.js) must give the same CLASS for the same cells: it adds the app's render-loop solve after every pointer move
     const mode = { 'line-free-mid-along': 'line.free.mid.along', 'rect-free-edge-along': 'rect.free.edge.along', 'circle-free-rim-along': 'circle.free.rim.along', 'arc-free-end-across': 'arc.free.end.across', 'line-len-end-across': 'line.len.end.across' };
-    const want = { 'line-free-mid-along': 'stretch', 'rect-free-edge-along': 'stretch', 'circle-free-rim-along': 'translate', 'arc-free-end-across': 'stretch', 'line-len-end-across': 'rotate' };
+    const want = { 'line-free-mid-along': 'translate', 'rect-free-edge-along': 'translate', 'circle-free-rim-along': 'stretch', 'arc-free-end-across': 'stretch', 'line-len-end-across': 'rotate' };
     for (const [live, id] of Object.entries(mode)) { const cell = buildCells().find(c => c.id === id); assert.strictEqual(runOurs(cell).mode, want[live], `${id}: the node replay class equals the real app's (${want[live]})`); }
     console.log('fusion-drag-live.test.js: ok', JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, `${v.movedPoints}/${v.points} moved${v.lengthChanged ? ', length changed' : ''}${v.radiusChanged ? ', radius changed' : ''}`]))));
   } finally { await cdp.close(); }

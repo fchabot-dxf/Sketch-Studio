@@ -604,22 +604,35 @@ export const Definitions = {
 // THE body point of a shape (task 538): in a BODY drag the mouse spring pulls the point of the shape that was GRABBED, fixed on the
 // shape by ONE number computed once at pointer-down from the hit position (param). One entry per shape kind, declared as data:
 //   param(P, hit)                the parameter of the grabbed point: P = the shape's joint positions [{x,y}] in shape.joints order
-//   point(op, positions)         the body point [x, y] read from the solver positions
+//   point(op, positions)         the body point [x, y] read from the solver positions (op.target = the spring's target, the cursor)
 //   grad(op, positions, rows)    d(point)/d(variables): row 0 = d x, row 1 = d y, ACCUMULATED through addGrad / addRadiusDerivative
-// op = { joints: dense joint indices of the shape (shape.joints order), param, radiusAt / radius / rimJoint (the radius operand,
-// engine._radiusOperand: a circle's radius unknown, an arc's live |rim - centre|) }.
+// op = { joints: dense joint indices of the shape (shape.joints order), param, target: [x, y] (the spring's target), radiusAt / radius /
+// rimJoint (the radius operand, engine._radiusOperand: a circle's radius unknown, an arc's live |rim - centre|) }.
+//   prefersHold                  indices into shape.joints held for the drag WHEN the body point can still follow the cursor with them
+//                                held (engine.bodyDragTarget); released (least change) when it cannot. A temporary hold: solver rows
+//                                only, nothing is written to the document.
 // A kind with no entry has no body point (bezier: its control points are shape data, not solver unknowns): its body drag keeps the
 // joint drag targets of every member (selection-tools.js).
+// The rim point on the TARGET's ray from the centre: P = C + r u, u = (target - C) / |target - C| (the grab angle `param` when the target
+// sits on the centre), r = the circle's radius unknown or the arc's live radius. Its angle follows the cursor (like Fusion), so P - target
+// = (r - |target - C|) u: the spring makes the circle / arc pass through the cursor. dP/dC = I - (r / d)(I - u u^T), dP/dr = u.
+const rimDir = (op, positions) => {
+  const c = op.joints[0], dx = op.target[0] - positions[c*2], dy = op.target[1] - positions[c*2+1], d = Math.hypot(dx, dy);
+  return d > 0 ? { ux: dx / d, uy: dy / d, d } : { ux: Math.cos(op.param), uy: Math.sin(op.param), d: 0 };
+};
 const RIM_POINT = {
-  // the rim point at the grab angle: P = C + r (cos theta, sin theta), r = the circle's radius unknown or the arc's live radius
+  // A rim drag changes the RADIUS and keeps the CENTRE (joints[0]) whenever the constraints allow it (owner 2026-11-12, like Fusion).
+  prefersHold: [0],
   param: (P, hit) => Math.atan2(hit.y - P[0].y, hit.x - P[0].x),
   point: (op, positions) => {
-    const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c);
-    return [positions[c*2] + r * Math.cos(op.param), positions[c*2+1] + r * Math.sin(op.param)];
+    const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c), { ux, uy } = rimDir(op, positions);
+    return [positions[c*2] + r * ux, positions[c*2+1] + r * uy];
   },
   grad: (op, positions, rows) => {
-    const c = op.joints[0], ux = Math.cos(op.param), uy = Math.sin(op.param);
-    addGrad(rows[0], c, 1, 0); addGrad(rows[1], c, 0, 1);
+    const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c), { ux, uy, d } = rimDir(op, positions);
+    const k = d > 0 ? r / d : 0;
+    addGrad(rows[0], c, 1 - k * (1 - ux * ux), k * ux * uy);
+    addGrad(rows[1], c, k * ux * uy, 1 - k * (1 - uy * uy));
     addRadiusDerivative(rows[0], positions, ux, op.radiusAt, op.rimJoint, c);
     addRadiusDerivative(rows[1], positions, uy, op.radiusAt, op.rimJoint, c);
   },
@@ -627,6 +640,7 @@ const RIM_POINT = {
 export const BODY_POINTS = {
   // a fixed fraction t along the line: P = (1 - t) A + t B (t = the hit projected on AB, 0..1)
   line: {
+    prefersHold: [],   // a line translates: nothing held
     param: (P, hit) => {
       const ux = P[1].x - P[0].x, uy = P[1].y - P[0].y, l2 = ux * ux + uy * uy;
       return l2 > 0 ? Math.min(1, Math.max(0, ((hit.x - P[0].x) * ux + (hit.y - P[0].y) * uy) / l2)) : 0.5;

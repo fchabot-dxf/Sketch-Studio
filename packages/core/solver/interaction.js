@@ -28,7 +28,7 @@ export class InteractionSolver {
       value: [ dragTarget.x, dragTarget.y ],
       stiffness: strength
     };
-    if (dragTarget.body) temp.body = { shape: dragTarget.body.shape, param: dragTarget.body.param };
+    if (dragTarget.body) temp.body = { shape: dragTarget.body.shape, param: dragTarget.body.param, hold: dragTarget.body.hold || [] };
 
     // Register temporarily in solver.constraints for the duration of the solve.
     this.solver.constraints.push(temp);

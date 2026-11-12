@@ -98,14 +98,19 @@ export const Definitions = {
       return cross / denom;
     },
     computeJacobian: (params, positions, outRow) => {
-      // Point-on-circle/arc: move only the point along the radial direction.
+      // Point-on-circle/arc: r = |P - C| - R, the full derivative (the centre takes part, so a circle can move to meet its point).
       if (params.onCircle) {
         const pi = params.joints[0], ci = params.joints[1];
         const dx = positions[pi*2] - positions[ci*2];
         const dy = positions[pi*2+1] - positions[ci*2+1];
         const d = Math.hypot(dx, dy) || 1e-12;
         outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
-        outRow[ci*2 + 0] = 0; outRow[ci*2 + 1] = 0;
+        outRow[ci*2 + 0] = -dx / d; outRow[ci*2 + 1] = -dy / d;
+        if (typeof params.rimJoint === 'number') {
+          const ri = params.rimJoint, rx = positions[ri*2] - positions[ci*2], ry = positions[ri*2+1] - positions[ci*2+1], rd = Math.hypot(rx, ry) || 1e-12;
+          outRow[ri*2 + 0] = -rx / rd; outRow[ri*2 + 1] = -ry / rd;
+          outRow[ci*2 + 0] += rx / rd; outRow[ci*2 + 1] += ry / rd;
+        }
         return;
       }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];

@@ -17,19 +17,19 @@ const KNOWN = {
   'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
   'scurve/B no dimension is demoted': 'N-F7 (the 2nd arc radius is judged redundant)',
   'N-F1': 'fillet at the origin deletes j_origin', 'N-F2': 'polygon-tool corners cannot be filleted', 'N-F3': 'dimSign dropped on save / undo',
-  'N-F4': 'reference angle becomes driving after save / undo', 'N-F5': 'collinear on adjacent lines: panel DOF 1 too low',
-  'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)', 'N-U2': 'unexplained (I7)',
+  'N-F4': 'reference angle becomes driving after save / undo',
+  'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
   'roundtrip: documents are identical after save -> load': 'N-F3 (dimSign / dimSignMode dropped) on every drawing with an H/V dimension',
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };
-// drawings whose analytic Jacobian differs from finite differences today (F6 one-sided pointOnLine, N-F5 collinear, N-F7 arc/arc tangent)
-const JAC = { triangle: 'F6', scurve: 'N-F7', 'collinear-concentric': 'N-F5 + F6 (point on arc)', 'axis-symmetry': 'F6', 'every-kind': 'F6' };
+// drawings whose analytic Jacobian differs from finite differences today (N-F7 arc/arc tangent; F6/N-F5 fixed in task 511)
+const JAC = { scurve: 'N-F7' };
 // demoted steps that are round 1's F1 (H and V dimension on one joint pair)
 const DEMOTED = {};   // round 1's F1 is fixed on main (task 510): the bracket's three H+V steps are no longer demoted
 
 // random-property failures that no ablation explains, pinned by seed to their standalone repro (N-U1 / N-U2 in prop-findings.js)
-const PINNED_SEEDS = { I3: { 7090: 'N-U1' }, I7: { 7091: 'N-U2' } };
+const PINNED_SEEDS = { I3: { 7090: 'N-U1' } };
 
 const seen = new Set();
 let failures = 0;

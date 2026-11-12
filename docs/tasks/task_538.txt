@@ -1,0 +1,66 @@
+TASK 538 (Sketch-Studio): dragging a shape by its BODY pulls the point you grabbed. Solver + input, one mechanism.
+Owner 2026-11-12, with a screenshot: an arc whose centre is held (on the Y axis by a vertical-with-origin constraint, 50 below
+the origin by a dimension); its ends are free. "Pulling on this arc should allow to move it up and down by changing the
+radius." Today pulling the arc's body does not do that.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-538-body-drag, branch agents/task-538-body-drag (from origin/main 45f167d).
+Read first: docs/FUSION-COMPARISON.md section "Dragging (real mouse, qualitative)" (task 530: 146 Fusion drag cells; today's
+differences: a free line grabbed by its middle STRETCHES in ours (one end moves) where Fusion TRANSLATES it; a rectangle edge
+likewise; a circle grabbed by its RIM translates in ours where Fusion RESIZES it; arc ends barely follow), tests/fusion-drag.test.js,
+tests/fusion-drag-live.test.js, tests/harness/fusion-oracle/drag-cells.js (the replay = pointer handlers + one frame solve),
+packages/ui/input-handlers/selection-tools.js (handleSelectionPointerDown / Move / Up, DRAG_TYPES JOINT / CLUSTER / LINE, what a
+body drag puts in state.drag and which joints get `dragTarget`), apps/sketchstudio/main.js loop() (the per-frame
+engine.solve), packages/core/solver/engine.js ~l.641-700 (the mouse spring: "auto-detect first joint carrying a dragTarget"),
+the arc model (centre joint + rim joints, radius live through joints[1], task 523) and the circle radius unknown (task 515).
+
+CAUSE (task 530, verified in the real app): for a body drag the pointer handler has no joint to pull; the frame solve attaches
+its spring to the FIRST free joint that carries a dragTarget. So a body drag is really "drag the shape's first free joint":
+a line stretches, a circle translates, an arc with a held centre does not change radius.
+WANTED, ONE mechanism for every shape: the spring pulls THE POINT OF THE SHAPE THAT WAS GRABBED toward the cursor.
+ - line: the grabbed point is a fixed fraction t along it: P = (1-t) A + t B. Residual P - cursor; its Jacobian spreads over A
+   and B by (1-t, t). A free line grabbed in the middle then translates (both ends take the same step), grabbed near an end it
+   turns about the far part: check against the Fusion cells.
+ - circle: the grabbed point is on the rim at the grab angle: P = C + r * dir(theta). With the radius an unknown (515) a free
+   circle grabbed by the rim RESIZES or moves by least change; a circle with a held centre resizes; with a held radius moves.
+ - arc: the same rim point, P = C + |rim - C| * dir(theta) with the arc's live radius (523): an arc with a held centre changes
+   radius (the owner's case: both rim joints move radially, keeping their angles as far as the other constraints allow); a free
+   arc moves by least change.
+ - bezier / polygon / rectangle edges: whatever shape kinds DRAG_TYPES covers today: a rectangle edge is a line; a polygon side
+   is a line; list every kind and say what the grabbed point is for it (if a kind cannot express a body point, it keeps today's
+   behaviour and you say so).
+ Implement as ONE drag-target form in the engine ("body point": shape id + the parameter that fixes the point on the shape),
+ beside the existing joint target, assembled by one function per shape kind declared as DATA (kind -> point and gradient), with
+ rows that ACCUMULATE through addGrad (task 533) and are checked against finite differences in tests/jacobian-fd-guard.test.js.
+ The pointer handler computes the parameter ONCE at pointer-down from the hit position (t along the line, the angle on the
+ rim) and passes the body target; no "first free joint" guess remains for body drags (grep and quote that the auto-detect is
+ only used for joint drags, or is deleted if nothing else needs it: list its callers).
+ The same code path serves the app, the node replay and tests (no test-only path).
+CHECKS:
+ 1. The owner's case as a test (node + a live real-app test with real pointer events, headless): arc, centre held by a
+    vertical-with-origin constraint and a 50 dimension, ends free; pull the body down by 10: the centre does not move, the radius
+    grows by about 10, both ends stay at their angles within tolerance, the arc keeps its sweep sign and does not flip to the
+    complement (EA-3) or collapse; pull back up: returns. Before/after screenshots, cropped legible, md5, .evidence/538/.
+ 2. tests/fusion-drag.test.js: regenerate KNOWN with scripts/fusion-oracle/drag-known.mjs; report cells same as Fusion before
+    (91 of 146) -> after, per class; every class that got WORSE is quoted with 3 cells; if more than a handful of cells that
+    matched Fusion stop matching, STOP and report instead of regenerating.
+ 3. tests/fusion-drag-live.test.js: update its five real-app expectations to the new behaviour only where the new behaviour
+    matches Fusion's recorded class; otherwise STOP on that cell.
+ 4. Joint drags (grabbing an end point, a centre, a shared corner) are UNCHANGED: assert it (the 13/13 rectangle-corner,
+    12/12 circle-centre, 9/9 shared-corner Fusion cells stay same; a recorded before/after of 20 joint-drag cells is identical).
+ 5. Fully constrained shapes still do not move; a body drag never breaks a constraint or a dimension (assert residuals after).
+ 6. All audits stay green (constraint-audit, coverage-matrix, coverage-properties, extreme-arcs, fusion-oracle,
+    fusion-dim-edit); a KNOWN entry that starts passing is deleted as the test instructs; a pass->fail is a STOP.
+ 7. The extreme-arcs audit drags through the solver seam (prop-drag.js dragJoint): report whether any of its cells exercise a
+    body drag (probably none); do not change that audit's meaning.
+DO NOT: change creation placement (task 525), constraint rows other than adding the body-point target, tolerances or iteration
+ counts; no hidden globals; no silent catch; no environment-dependent path.
+STOP and ask if: the body-point spring makes a drag unstable (oscillation, runaway radius: give the numbers); a shape kind
+ needs a special case outside the declared table; touch / mobile drag goes through a different path (list it: fixing it through
+ the shared path is in scope, a copy is not).
+List every behaviour change for existing users (expected: dragging a line / edge by its body moves the whole line; dragging a
+circle or arc by its rim resizes it when its centre is held and moves or resizes by least change otherwise).
+No Fusion, mouse or keyboard; headless browsers only, closed before the REPORT. Check `pwd` before every write: never create a
+file outside your worktree. If node_modules is missing make a junction to D:\APPS\Sketch-Studio\node_modules with PowerShell
+New-Item -ItemType Junction. Tasks 536 (canvas-grid.js) and 537 (snap files, input-manager.js) are in flight: stay out of
+their concerns; before the final gate `git fetch origin` and merge origin/main if it moved. Gate green (`npm run gate`, run
+and wait; numeric-input-self-hiding is a known load flake: alone twice, rerun once), commit by path, push the branch,
+WORK-LOG `## TURN 538`, the AGENTS.md REPORT block. REPORT once, leave nothing running.

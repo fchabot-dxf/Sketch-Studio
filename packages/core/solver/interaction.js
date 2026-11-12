@@ -10,9 +10,10 @@ export class InteractionSolver {
   }
 
   // Attach a temporary spring that will be present only during the solve() call
-  // dragTarget: { jointId, x, y, stiffness }
+  // dragTarget: { jointId, x, y, stiffness } (a JOINT drag) or { body: { shape, param }, x, y, stiffness } (a BODY drag, task 538:
+  // the grabbed point of the shape, declared per shape kind in definitions.js BODY_POINTS)
   attachMouseSpring(dragTarget) {
-    if (!dragTarget || !dragTarget.jointId) return null;
+    if (!dragTarget || (!dragTarget.jointId && !dragTarget.body)) return null;
     const cid = '_mouse_spring_temp';
     const jointId = dragTarget.jointId;
     const defaultStrength = (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4;
@@ -23,10 +24,11 @@ export class InteractionSolver {
     const temp = {
       id: cid,
       type: 'mouse_spring',
-      joints: [ jointId ],
+      joints: dragTarget.body ? [] : [ jointId ],
       value: [ dragTarget.x, dragTarget.y ],
       stiffness: strength
     };
+    if (dragTarget.body) temp.body = { shape: dragTarget.body.shape, param: dragTarget.body.param, hold: dragTarget.body.hold || [] };
 
     // Register temporarily in solver.constraints for the duration of the solve.
     this.solver.constraints.push(temp);

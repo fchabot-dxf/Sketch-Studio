@@ -1,5 +1,5 @@
 import { Algebra } from './algebra.js';
-import { Definitions } from './definitions.js';
+import { Definitions, BODY_POINTS } from './definitions.js';
 import { InteractionSolver } from './interaction.js';
 import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
@@ -22,6 +22,24 @@ export function snapshotSolverState(joints, shapes) {
 export function restoreSolverState(joints, shapes, snap) {
   for (const [id, j] of joints) { const p = snap.pos.get(id); if (p) { j.x = p.x; j.y = p.y; } }
   for (const [s, r] of snap.radii) s.radius = r;
+}
+
+// THE reachable directions of a point p(x) (task 538): its gradient with respect to the unknowns as sparse entries [{ col, gx, gy }]
+// (a joint: the identity on its two columns; a body point: its BODY_POINTS gradient) through the constraint nullspace N (n x k):
+// M = G N, aa = |M_x|^2, bb = |M_y|^2, ab = M_x . M_y. rank 0 = the point cannot move, 1 = only along dir, 2 = freely.
+export function reachableDirections(N, k, grad) {
+  let aa = 0, bb = 0, ab = 0;
+  for (let q = 0; q < k; ++q) {
+    let a = 0, b = 0;
+    for (const g of grad) { const v = N[g.col * k + q]; a += g.gx * v; b += g.gy * v; }
+    aa += a * a; bb += b * b; ab += a * b;
+  }
+  const fx = aa > 1e-10, fy = bb > 1e-10;
+  let rank = 0;
+  if (fx || fy) rank = (aa * bb - ab * ab > 1e-9 * aa * bb) ? 2 : 1;
+  let dir = null;
+  if (rank === 1) { const v = aa >= bb ? [aa, ab] : [ab, bb], l = Math.hypot(v[0], v[1]); dir = [v[0] / l, v[1] / l]; }
+  return { fx, fy, rank, dir };
 }
 
 // Newton-Raphson + Levenberg-Marquardt solver class
@@ -192,6 +210,16 @@ export class NewtonSolver {
     return typeof rim === 'number' ? { rim } : { radius: 0 };
   }
 
+  // THE operand of a BODY drag target (task 538) { shape: id, param }: the shape kind's declared BODY_POINTS entry and its op
+  // (dense joint indices in shape.joints order, the parameter, the radius operand of a circle / arc).
+  _bodyOperand(body, jointIndexMap, target) {
+    const shape = this.shapes.find(s => s && s.id === body.shape);
+    const kind = shape ? BODY_POINTS[shape.type] : undefined;
+    if (!kind) throw new Error(`body drag target: shape ${body.shape} has no declared body point (BODY_POINTS[${shape ? shape.type : 'missing shape'}])`);
+    const rad = this._radiusOperand(shape, jointIndexMap);
+    return { kind, op: { joints: shape.joints.map(id => jointIndexMap.get(id)), param: body.param, target, radiusAt: rad.at, radius: rad.radius, rimJoint: rad.rim } };
+  }
+
   // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack)
   _assemble(x) {
     const n = x.length;
@@ -203,6 +231,8 @@ export class NewtonSolver {
     for (let i = 0; i < this.constraints.length; ++i) {
       const c = this.constraints[i];
       if (c.isDriven || c.driven) { rowsPerConstraint[i] = 0; continue; } // references are FREE — no rows
+      // a BODY drag spring (task 538): its 2 rows plus 2 per temporarily held joint
+      if (c.type === 'mouse_spring' && c.body) { rowsPerConstraint[i] = 2 + 2 * ((c.body.hold && c.body.hold.length) || 0); m += rowsPerConstraint[i]; continue; }
       const def = Definitions[c.type];
       if (def && typeof def.rows === 'number') {
         rowsPerConstraint[i] = def.rows;
@@ -247,7 +277,7 @@ export class NewtonSolver {
     const densePositions = this._positionsFromVector(x);
     const denseLen = densePositions.length;
     // Copy one dense Jacobian row into J row `row`: a joint column sums its cluster members, a radius column is copied.
-    const copyRow = (rowBuf) => {
+    const copyRow = (rowBuf, w = wStruct) => {
       for (let vi = 0; vi < this._freeIds.length; ++vi) {
         const base = vi*2; const repId = this._freeIds[vi];
         const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
@@ -257,10 +287,10 @@ export class NewtonSolver {
           sumX += rowBuf[denseIdx + 0];
           sumY += rowBuf[denseIdx + 1];
         }
-        J[row * n + base + 0] = sumX * wStruct;
-        J[row * n + base + 1] = sumY * wStruct;
+        J[row * n + base + 0] = sumX * w;
+        J[row * n + base + 1] = sumY * w;
       }
-      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * wStruct;
+      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * w;
     };
 
     // --- Drag-time structural weighting ---------------------------------------
@@ -286,7 +316,32 @@ export class NewtonSolver {
       const c = this.constraints[ci];
       if (c.isDriven || c.driven) continue; // skip driven (reference) rows — a reference never affects geometry
 
-      // --- Special-case: temporary mouse-spring added by InteractionSolver ---
+      // --- Temporary mouse-spring added by InteractionSolver, BODY form (task 538): the grabbed point of a shape, P(x) - target,
+      // weighted sqrt(stiffness) (never wStruct), its two rows from the shape kind's declared BODY_POINTS entry (cluster-aware copyRow).
+      if (c.type === 'mouse_spring' && c.body) {
+        const b = this._bodyOperand(c.body, jointIndexMap, c.value);
+        const w = Math.sqrt(c.stiffness || 1e3);
+        const p = b.kind.point(b.op, densePositions);
+        r[row] = w * (p[0] - c.value[0]);
+        r[row+1] = w * (p[1] - c.value[1]);
+        const rows = [new Float64Array(denseLen), new Float64Array(denseLen)];
+        b.kind.grad(b.op, densePositions, rows);
+        copyRow(rows[0], w); row++;
+        copyRow(rows[1], w); row++;
+        // the drag's temporary HOLDS (engine.bodyDragTarget: e.g. a circle's centre): joint - its held position, weighted like a
+        // structural row (wStruct) so the spring moves what is not held.
+        for (const h of (c.body.hold || [])) {
+          const hj = jointIndexMap.get(h.joint);
+          for (let k = 0; k < 2; ++k) {
+            r[row] = wStruct * (densePositions[hj*2 + k] - (k ? h.y : h.x));
+            const hr = new Float64Array(denseLen); hr[hj*2 + k] = 1;
+            copyRow(hr); row++;
+          }
+        }
+        continue;
+      }
+
+      // --- Special-case: temporary mouse-spring added by InteractionSolver (JOINT form) ---
       if (c.type === 'mouse_spring') {
         // two scalar residuals: dx and dy weighted by sqrt(stiffness)
         const jointId = c.joints[0];
@@ -642,7 +697,16 @@ export class NewtonSolver {
   solve(iter = this.config.maxIter, options = {}) {
     let dragOpt = options && options.dragTarget ? options.dragTarget : null;
     if (!dragOpt) {
-      // auto-detect first joint carrying a dragTarget set by UI input handlers
+      // a BODY drag (task 538): the one shape carrying a dragTarget { param, x, y } set by the select tool's pointer handler
+      for (const s of this.shapes) {
+        if (s && s.dragTarget) {
+          dragOpt = { body: { shape: s.id, param: s.dragTarget.param, hold: s.dragTarget.hold }, x: s.dragTarget.x, y: s.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
+          break;
+        }
+      }
+    }
+    if (!dragOpt) {
+      // a JOINT drag: auto-detect first joint carrying a dragTarget set by UI input handlers (a body drag never sets one, task 538)
       for (const [id, j] of this.joints.entries()) {
         if (j && j.dragTarget && !j.fixed) {
           dragOpt = { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
@@ -821,6 +885,14 @@ export class NewtonSolver {
     let springSum2 = 0;
     for (const c of this.constraints) {
       if (!c || c.isDriven || c.driven || c.type !== 'mouse_spring') continue;
+      if (c.body) {
+        // the BODY form: the grabbed point read from the solved positions (the joint map is the dense order of _positionsFromVector)
+        const jointIndexMap = new Map(); let k = 0; for (const [id] of this.joints.entries()) jointIndexMap.set(id, k++);
+        const b = this._bodyOperand(c.body, jointIndexMap, c.value), p = b.kind.point(b.op, this._positionsFromVector(x));
+        const w = Math.sqrt(c.stiffness || 1e3);
+        springSum2 += (w * (p[0] - c.value[0])) ** 2 + (w * (p[1] - c.value[1])) ** 2;
+        continue;
+      }
       const jointId = c.joints && c.joints.length > 0 ? c.joints[0] : null;
       const j = jointId != null ? this.joints.get(jointId) : null;
       if (!j || !c.value) continue;
@@ -843,17 +915,14 @@ export class NewtonSolver {
     return { structuralError, dragReached };
   }
 
-  // GROUND-TRUTH per-joint freedom: the nullspace of the global (non-driven) constraint Jacobian at the
-  // present configuration, built from the same _assemble() rows the solver uses. A joint is immovable (0)
-  // only if no nullspace vector has a component on its x or y; one free direction -> 1; else 2. A circle's radius column likewise:
-  // its id is in radiusFree when a nullspace vector moves the radius.
-  // Returns { freedom: Map(jointId -> 0|1|2), freeX: Set, freeY: Set, radiusFree: Set(circle id), nullity } (nullity = global DOF).
-  jointFreedom() {
+  // THE nullspace of the global (non-driven, spring-free) constraint Jacobian at the present configuration, built from the same
+  // _assemble() rows the solver uses: N (n x k, row-major, column q = one free direction), k = nullity, x0 = the packed unknowns.
+  // Shared by jointFreedom (every joint, every circle radius) and bodyPointFreedom (the grabbed point of a body drag, task 538).
+  // hold: joint ids treated as held (two identity rows each, a body drag's temporary hold); none for jointFreedom.
+  _nullspace(hold = []) {
     const allC = this.constraints;
     const x0 = this._pack();
     const n = x0.length;
-    const freedom = new Map(), freeX = new Set(), freeY = new Set(), radiusFree = new Set();
-    let nullity = 0;
     let N = null, k = 0;
     if (n > 0) {
       let rows;
@@ -863,6 +932,11 @@ export class NewtonSolver {
         rows = this._rowsOf(asm);
       } finally {
         this.constraints = allC;
+      }
+      for (const id of hold) {
+        const vi = this._varIndex.get(id);
+        if (vi === undefined) continue;   // a fixed joint is no unknown: already held
+        for (let a = 0; a < 2; ++a) { const v = new Float64Array(n); v[vi * 2 + a] = 1; rows.push(v); }
       }
       // Row-normalise (rows mix world-unit and unit-less derivatives), then reduced row echelon form.
       const R = [];
@@ -896,7 +970,6 @@ export class NewtonSolver {
       const freeCols = [];
       for (let c = 0; c < n; ++c) if (!isPivot[c]) freeCols.push(c);
       k = freeCols.length;
-      nullity = k;
       // N (n x k): free column f -> e_f on f, -R[row][f] on each pivot column.
       N = new Float64Array(n * k);
       for (let q = 0; q < k; ++q) {
@@ -905,18 +978,44 @@ export class NewtonSolver {
         for (let i = 0; i < pivotCol.length; ++i) N[pivotCol[i] * k + q] = -R[i][f];
       }
     }
+    return { N, k, n, x0 };
+  }
+
+  // THE body drag target for a cursor position (task 538), the body-point form of the joint DOF mask, one rule for every kind
+  // (definitions.js BODY_POINTS): the kind's preferred holds kept
+  // when the body point can still move with them held, else released (least change); then the cursor displacement from the body point
+  // is limited to the point's reachable directions: rank 0 -> the target stays on the point (nothing moves), rank 1 -> projected on
+  // that direction, rank 2 -> the cursor. Returns { body: { shape, param, hold: [{ joint, x, y }] }, x, y } for solve({ dragTarget }).
+  bodyDragTarget(body, cursor) {
+    const shape = this.shapes.find(s => s && s.id === body.shape);
+    const kind = BODY_POINTS[shape.type];
+    const param = body.param, b = { shape: body.shape, param }, at = [cursor.x, cursor.y];
+    let hold = kind.prefersHold.map(i => shape.joints[i]);
+    let f = hold.length ? this.bodyPointFreedom(b, hold, at) : null;
+    if (!f || f.rank === 0) { hold = []; f = this.bodyPointFreedom(b, hold, at); }
+    const p = f.point;
+    let x = cursor.x, y = cursor.y;
+    if (f.rank === 0) { x = p[0]; y = p[1]; }
+    else if (f.rank === 1) { const s = (cursor.x - p[0]) * f.dir[0] + (cursor.y - p[1]) * f.dir[1]; x = p[0] + s * f.dir[0]; y = p[1] + s * f.dir[1]; }
+    return { body: { shape: body.shape, param, hold: hold.map(id => { const j = this.joints.get(id); return { joint: id, x: j.x, y: j.y }; }) }, x, y };
+  }
+
+  // GROUND-TRUTH per-joint freedom: the nullspace of the global (non-driven) constraint Jacobian at the
+  // present configuration (_nullspace). A joint is a point whose gradient is the identity on its two columns (reachableDirections):
+  // immovable (0) only if no nullspace vector has a component on its x or y; one free direction -> 1; else 2. A circle's radius column likewise:
+  // its id is in radiusFree when a nullspace vector moves the radius.
+  // Returns { freedom: Map(jointId -> 0|1|2), freeX: Set, freeY: Set, radiusFree: Set(circle id), nullity } (nullity = global DOF).
+  jointFreedom() {
+    const { N, k } = this._nullspace();
+    const freedom = new Map(), freeX = new Set(), freeY = new Set(), radiusFree = new Set();
+    const nullity = k;
     for (const [id] of this.joints.entries()) {
       const vi = this._varIndex.get(id);
       if (vi === undefined || k === 0) { freedom.set(id, 0); continue; }
-      let aa = 0, bb = 0, ab = 0;
-      const ra = (vi * 2) * k, rb = (vi * 2 + 1) * k;
-      for (let q = 0; q < k; ++q) { const a = N[ra + q], b = N[rb + q]; aa += a * a; bb += b * b; ab += a * b; }
-      const fx = aa > 1e-10, fy = bb > 1e-10;
-      if (fx) freeX.add(id);
-      if (fy) freeY.add(id);
-      let rank = 0;
-      if (fx || fy) rank = (aa * bb - ab * ab > 1e-9 * aa * bb) ? 2 : 1;
-      freedom.set(id, rank);
+      const f = reachableDirections(N, k, [{ col: vi * 2, gx: 1, gy: 0 }, { col: vi * 2 + 1, gx: 0, gy: 1 }]);
+      if (f.fx) freeX.add(id);
+      if (f.fy) freeY.add(id);
+      freedom.set(id, f.rank);
     }
     for (let q = 0; q < this._radiusShapes.length && k > 0; ++q) {
       const base = (this._nJointVars + q) * k;
@@ -924,6 +1023,30 @@ export class NewtonSolver {
       if (rr > 1e-10) radiusFree.add(this._radiusShapes[q].id);
     }
     return { freedom, freeX, freeY, radiusFree, nullity };
+  }
+
+  // The freedom of the BODY point of a body drag (task 538), the body-point form of the joint DOF mask: the body point's gradient
+  // (its spring rows at unit weight, definitions.js BODY_POINTS) through the same nullspace and reachableDirections as a joint.
+  // hold: joint ids held for the drag (bodyDragTarget). Returns { rank: 0|1|2, dir: [x, y] (rank 1), point: [x, y] (the body point now) }.
+  // target: the spring's target (the cursor), which a rim point's direction reads.
+  bodyPointFreedom(body, hold, target) {
+    const { N, k, n, x0 } = this._nullspace(hold);
+    const jointIndexMap = new Map(); let ji = 0; for (const [id] of this.joints.entries()) jointIndexMap.set(id, ji++);
+    const b = this._bodyOperand(body, jointIndexMap, target);
+    const point = b.kind.point(b.op, this._positionsFromVector(x0));
+    if (k === 0) return { rank: 0, dir: null, point };
+    const allC = this.constraints;
+    let G;
+    try {
+      this.constraints = [{ type: 'mouse_spring', body: { shape: body.shape, param: body.param }, value: target, stiffness: 1, joints: [] }];
+      G = this._rowsOf(this._assemble(x0));
+    } finally {
+      this.constraints = allC;
+    }
+    const grad = [];
+    for (let i = 0; i < n; ++i) if (G[0][i] !== 0 || G[1][i] !== 0) grad.push({ col: i, gx: G[0][i], gy: G[1][i] });
+    const f = reachableDirections(N, k, grad);
+    return { rank: f.rank, dir: f.dir, point };
   }
 
   // One-shot rank-deficiency probe at position x. Re-assembles, builds JᵀJ

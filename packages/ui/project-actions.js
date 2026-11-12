@@ -17,19 +17,20 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     const out = await buf().openDesign(id);
     if (!out.restored) throw new Error(out.reason || 'This design could not be opened.');
   }
-  async function duplicateDesign(id) {
-    await buf().flush();
+  // (the *Now forms assume the pending edits are already saved)
+  async function duplicateNow(id) {
     if (!id) throw new Error('Nothing to duplicate yet — draw something first.');
     const d = await store.duplicate(id);
     notify(`Duplicated as "${d.name}" (find it under Open recent).`, 'info');
     return d;
   }
-  async function saveDesignToDrive(id) {
-    await buf().flush();
+  async function saveToDriveNow(id) {
     if (!id) throw new Error('Nothing to save yet — draw something first.');
     const r = await store.cloud.saveToDrive(id);
     notify('Saved to Google Drive', 'info', { href: driveFileUrl(r.fileId), label: 'Open in Drive' });
   }
+  const duplicateDesign = async (id) => { await buf().flush(); return duplicateNow(id); };
+  const saveDesignToDrive = async (id) => { await buf().flush(); return saveToDriveNow(id); };
   const saveDesignToFile = (id) => buf().saveFile(undefined, id);
 
   /** The actions of one design `d` (a store design row); `projects` = the project rows, for "Move to…". */
@@ -59,8 +60,8 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   }
 
   // the CURRENT design of the host's buffer (its id may only exist after the pending edits are saved, hence flush first)
-  const duplicateCurrent = async () => { const b = buf(); await b.flush(); return duplicateDesign(b.designId()); };
-  const saveCurrentToDrive = async () => { const b = buf(); await b.flush(); return saveDesignToDrive(b.designId()); };
+  const duplicateCurrent = async () => { const b = buf(); await b.flush(); return duplicateNow(b.designId()); };
+  const saveCurrentToDrive = async () => { const b = buf(); await b.flush(); return saveToDriveNow(b.designId()); };
   const saveAs = (name) => buf().saveAs(name);
   const newDesign = () => buf().newDesign();
   const openFile = () => buf().openFile();

@@ -91,9 +91,10 @@ function injectStyles() {
  * openProjectManager({ store, actions, toolbar, onClose }) -> { el, close, notify, refresh }
  *   actions : createProjectActions(...) result (designItems / projectItems)
  *   toolbar : [{ id, label, ask?, closes?, run(arg) }]  — New project / New design / Open from file, declared by project-actions.js
+ *   account : the Google account controller (optional): its sign-in state drives the "Drive projects are hidden" note
  *   onClose : called once when the modal closes (focus is already restored)
  */
-export function openProjectManager({ store, actions, toolbar = [], onClose = () => {} }) {
+export function openProjectManager({ store, actions, toolbar = [], account = null, onClose = () => {} }) {
   injectStyles();
   const returnTo = document.activeElement;
   const back = document.createElement('div'); back.className = 'sk-pm-backdrop';
@@ -186,8 +187,9 @@ export function openProjectManager({ store, actions, toolbar = [], onClose = () 
   back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
 
   // ---- left pane ---------------------------------------------------------------------------------------------------
-  function renderSide() {
+  function renderSide(hiddenDrive) {
     side.innerHTML = '';
+    if (hiddenDrive) { const n = document.createElement('div'); n.className = 'sk-pm-note'; n.textContent = 'Your projects on Google Drive are hidden while you are signed out. Sign in again to see them; nothing was changed.'; side.appendChild(n); }
     const row = (key, html, items) => {
       const w = document.createElement('div'); w.className = 'sk-pm-prow';
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-pm-rowbtn' + (sel === key ? ' sel' : ''); b.dataset.pane = key; b.innerHTML = html;
@@ -272,9 +274,13 @@ export function openProjectManager({ store, actions, toolbar = [], onClose = () 
       if (sel !== 'recent' && !projects.some((p) => p.id === sel)) sel = 'recent';
       rows = sel === 'recent' ? await store.listRecent({ limit: 60 }) : await store.listDesigns(sel);
     } catch (e) { fail(e); rows = []; }
-    renderSide(); renderMain();
+    let hiddenDrive = false;
+    try { hiddenDrive = !!(store.cloud && account && !account.state().signedIn && await store.cloud.isEnabled()); } catch (e) { fail(e); }
+    renderSide(hiddenDrive); renderMain();
   }
-  off = store.subscribe(() => { if (!closed) refresh(); });
+  const offStore = store.subscribe(() => { if (!closed) refresh(); });
+  const offAccount = account && account.subscribe ? account.subscribe(() => { if (!closed) refresh(); }) : () => {};
+  off = () => { offStore(); offAccount(); };
 
   // ---- keys: Esc layers (menu, then a question, then the modal); Tab stays inside ------------------------------------
   function onKey(e) {

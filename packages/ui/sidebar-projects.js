@@ -50,7 +50,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
   function openManager() {
     if (manager) return;
     sidebar.close();
-    manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), onClose: () => { manager = null; } });
+    manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, onClose: () => { manager = null; } });
   }
 
   const actions = [

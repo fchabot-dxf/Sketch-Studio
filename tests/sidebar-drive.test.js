@@ -234,11 +234,11 @@ await (async () => {
     await ev(`acct.set({ signedIn: true, lapsed: false })`); await sleep(300);
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=check-result] li').length`), 5, 'the result survives a re-render');
 
-    // 6. the Projects view says why Drive projects are missing while signed out, and nothing else changes
-    await ev(`T.store.enabled = true; T.mount(false); sb.showView('projects')`); await sleep(400);
-    assert(/hidden while you are signed out/.test(await text('.sk-note')), 'the note says why');
-    await ev(`T.mount(true); sb.showView('projects')`); await sleep(400);
-    assert.strictEqual(await has('.sk-note'), false, 'signed in: no such note');
+    // 6. the project manager says why Drive projects are missing while signed out, and nothing else changes
+    await ev(`document.querySelectorAll('[data-pm=close]').forEach((b) => b.click()); T.store.enabled = true; T.mount(false); document.querySelector('[data-action=projects]').click()`); await sleep(500);
+    assert(/hidden while you are signed out/.test(await text('.sk-pm-side .sk-pm-note')), 'the note says why');
+    await ev(`document.querySelectorAll('[data-pm=close]').forEach((b) => b.click()); T.mount(true); document.querySelector('[data-action=projects]').click()`); await sleep(500);
+    assert.strictEqual(await has('.sk-pm-side .sk-pm-note'), false, 'signed in: no such note');
     await shot('8-projects-view-signed-in');
     console.log('sidebar-drive: all checks passed');
   } finally {

@@ -8,6 +8,7 @@
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
+import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
@@ -48,6 +49,7 @@ export function commitDimensionEdit(state, c, val) {
   }
   const oldValue = c.value;
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
+  const sizesBefore = measureShapeSizes(state);
   const snap = new Map();
   if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
 
@@ -78,6 +80,16 @@ export function commitDimensionEdit(state, c, val) {
     if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
     engine.solve(ITER());
     return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
+  }
+  // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
+  // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape).
+  const collapsed = findCollapsedShape(state, sizesBefore);
+  if (collapsed) {
+    c.value = oldValue;
+    if (shapeForRadius) shapeForRadius.radius = oldRadius;
+    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+    engine.solve(ITER());
+    return { reverted: true, clash: '', reason: `${Number(val).toFixed(2)} would collapse a ${collapsed.type} to a point` };
   }
   if (result && result.converged === false) {
     const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');

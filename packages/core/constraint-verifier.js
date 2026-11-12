@@ -303,3 +303,39 @@ export function measureResidual(c, joints, shapes) {
             return 0;
     }
 }
+
+// ---- Degenerate collapse (task 521): no constraint is satisfied by shrinking a shape to a point. ONE shared check, used by every
+// "converged, accept" decision (createConstraint's sandbox + post-add solve, commitDimensionEdit). A solve result in which a line
+// that had length (or an arc / circle that had a radius) now has under COLLAPSE_RATIO of it is not a solution for ANY constraint type.
+export const COLLAPSE_RATIO = 0.01;
+const MIN_TRACKED_SIZE = 1e-6;
+
+// shape id -> its size now (line length, arc / circle radius), for the shapes that have one.
+export function measureShapeSizes(state) {
+    const sizes = new Map();
+    for (const s of state.shapes || []) {
+        if (s.type !== 'line' && s.type !== 'arc' && s.type !== 'circle') continue;
+        const a = state.joints.get(s.joints && s.joints[0]);
+        const b = state.joints.get(s.joints && s.joints[1]);
+        const size = (s.type === 'circle' && typeof s.radius === 'number') ? s.radius : (a && b ? getDist(a, b) : null);
+        if (size !== null) sizes.set(s.id, size);
+    }
+    return sizes;
+}
+
+// The first shape whose size fell below COLLAPSE_RATIO of its size in `before` (a measureShapeSizes result), or null. A shape the user
+// SIZED on purpose is exempt: a driving distance dimension on exactly its two joints (a line / arc length-or-radius point pair), or a
+// driving radius dimension on the shape itself, is the user's own value (0 or tiny included), so that shape is never judged collapsed.
+export function findCollapsedShape(state, before) {
+    const after = measureShapeSizes(state);
+    const driving = (state.constraints || []).filter(c => c.type === CONSTRAINT_TYPES.DISTANCE && !c.isDriven && !c.driven);
+    for (const s of state.shapes || []) {
+        const was = before.get(s.id), now = after.get(s.id);
+        if (was === undefined || now === undefined || was < MIN_TRACKED_SIZE || now >= was * COLLAPSE_RATIO) continue;
+        const sized = driving.some(c => (c.isRadius && c.shape === s.id) ||
+            (!c.isRadius && c.joints && c.joints.length === 2 && s.joints && s.joints.length >= 2 &&
+             ((c.joints[0] === s.joints[0] && c.joints[1] === s.joints[1]) || (c.joints[0] === s.joints[1] && c.joints[1] === s.joints[0]))));
+        if (!sized) return s;
+    }
+    return null;
+}

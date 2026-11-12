@@ -3,7 +3,7 @@ import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
-import { measureResidual } from './constraint-verifier.js';
+import { measureResidual, measureShapeSizes, findCollapsedShape } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
@@ -307,6 +307,7 @@ export class ConstraintManager {
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
         const _preAdd = (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })();
+        const _sizesBefore = measureShapeSizes(state);
 
         // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
         this.placeForCreation(state, type, normalized);
@@ -344,6 +345,21 @@ export class ConstraintManager {
             } catch (e) {
                 console.error('[ConstraintManager] Solver error:', e);
             }
+        }
+
+        // A solve that satisfied the new constraint by collapsing a line / arc / circle to a point destroyed geometry: refuse + revert,
+        // for every constraint type (task 521; a shape the user sized on purpose is exempt, see findCollapsedShape).
+        const collapsed = created && typeof created === 'object' ? findCollapsedShape(state, _sizesBefore) : null;
+        if (collapsed) {
+            const ci = state.constraints.indexOf(created);
+            if (ci >= 0) state.constraints.splice(ci, 1);
+            for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+            if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
+                try { state.engine.solve(opts.solveIterations); } catch (e) { console.error('[ConstraintManager] Solver error:', e); }
+            }
+            notify(`Can't add ${this._friendlyName(type)} — it would collapse a ${collapsed.type} to a point. Reverted.`, 'warning', 3500);
+            dbg.warn('constraints', `[ConstraintManager] ${type} ADD refused + reverted (collapsed ${collapsed.type} ${collapsed.id})`);
+            return null;
         }
 
         // Over-constraining ADD → REFUSE + REVERT. A new DRIVING distance that leaves the sketch
@@ -438,6 +454,7 @@ export class ConstraintManager {
             // 1. Snapshot all joint positions
             const saved = new Map();
             for (const [id, j] of state.joints) saved.set(id, { x: j.x, y: j.y });
+            const sizesBefore = measureShapeSizes(state);
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
             // the real add; the positions are restored below either way.
@@ -471,6 +488,8 @@ export class ConstraintManager {
                 // 4. Analyze trajectory only if we have numeric errors
                 if (errors.length > 0) {
                     hasConflict = this._detectConflict(errors, CONFLICT_THRESHOLD);
+                    // A solve that "converges" by collapsing a shape to a point is not a solution (task 521).
+                    if (!hasConflict && findCollapsedShape(state, sizesBefore)) hasConflict = true;
 
                     // Attach last-sandbox diagnostic for UI/notifications (residual + best failing constraint id when available)
                     try {

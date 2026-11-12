@@ -10,6 +10,7 @@
 //   I4 undo restores the document exactly (every step of the history, JSON-identical)
 //   I5 a refused constraint leaves the geometry (and the constraint list) unchanged
 //   I6 no NaN in joints / constraint values, at any step
+//   I8 no accepted op shrank a line, arc or circle to under 1% of its size (a constraint is never satisfied by collapsing a shape; task 521)
 //   I7 editing a dimension x0.9 then back restores the determined joints within 1e-6, keeps the orientation signature, leaves every driving
 //      constraint satisfied
 // A failure is ATTRIBUTED to a round-1 finding when removing that finding's trigger ops from the case makes the invariant hold again
@@ -18,6 +19,7 @@ import * as L from '../audit/lib.js';
 import inventory from './inventory.js';
 import { mulberry32, docOf, panelDof } from './prop-lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { commitDimensionEdit } from '#ui/dimension-seams.js';
 import { deleteConstraints } from '#core/delete-manager.js';
 import { projectPointOnLine, getDist } from '#core/geometry.js';
@@ -30,6 +32,7 @@ export const INVARIANTS = {
   I5: 'a refused constraint leaves the geometry unchanged',
   I6: 'no NaN',
   I7: 'dimension x0.9 then back restores the determined joints, keeps the orientation signature',
+  I8: 'no accepted op collapses a line / arc / circle to a point',
 };
 // I7 residual tolerance: the verifier's perpendicular / parallel / equal residuals are in length^2 units, so 1e-6 (round 1's) is below the solver's
 // own convergence (structural error < 1e-6 after scaling) on a 40-unit sketch; 1e-3 is still ~1e-6 rad.
@@ -221,6 +224,7 @@ export function runCase(spec, { only } = {}) {
   spec.ops.forEach((op, i) => {
     S.state.saveState(op.k);
     docs.push(snap(S));
+    const sizes0 = measureShapeSizes(S.state);
     const before = L.snapshot(S), nBefore = S.state.constraints.length, res0 = L.residuals(S).max;
     const row = applyOp(S, ctx, op);
     const bk = stats.byKind[op.k] || (stats.byKind[op.k] = { applied: 0, refused: 0, demoted: 0, skipped: 0 });
@@ -228,6 +232,7 @@ export function runCase(spec, { only } = {}) {
     stats.applied++; bk.applied++;
     if (!row.accepted) { stats.refused++; bk.refused++; } else if (row.driven) { stats.demoted++; bk.demoted++; }
     if (want('I1') && row.nullity > row.prevNullity) bad('I1', `nullity ${row.prevNullity} -> ${row.nullity}`, i);
+    if (want('I8') && row.accepted) { const c8 = findCollapsedShape(S.state, sizes0); if (c8) bad('I8', `${op.k} collapsed ${c8.type} ${c8.id} to a point`, i); }
     if (want('I6') && (row.hasNaN || !finiteDoc(S))) bad('I6', 'NaN after the op', i);
     if (want('I5') && !row.accepted && !row.composite) {
       const dev = L.maxDeviation(S, before);   // only for a SOLVED sketch: a solve after the refusal keeps polishing an unsolved one
@@ -298,7 +303,7 @@ const TRIGGERS = {
 // Ablation is only meaningful when the invariant does not depend on the trigger EXISTING: I7 edits a dimension, so removing dimension ops would cure
 // it trivially (F3 is attributed there by the edited dimension's type instead). A failure is attributed to ONE finding when removing that
 // finding's ops cures it, else to the SET of findings present when removing all of them cures it; else it is NEW.
-const ABLATE = { I1: Object.keys(TRIGGERS), I2: Object.keys(TRIGGERS), I3: Object.keys(TRIGGERS), I4: Object.keys(TRIGGERS), I5: Object.keys(TRIGGERS), I6: Object.keys(TRIGGERS), I7: ['F6', 'F2', 'F4', 'F5', 'N-F5'] };
+const ABLATE = { I1: Object.keys(TRIGGERS), I2: Object.keys(TRIGGERS), I3: Object.keys(TRIGGERS), I4: Object.keys(TRIGGERS), I5: Object.keys(TRIGGERS), I6: Object.keys(TRIGGERS), I8: [], I7: ['F6', 'F2', 'F4', 'F5', 'N-F5'] };
 export function attribute(spec, inv, violation) {
   if (inv === 'I7' && /angle=/.test(violation.msg)) return 'F3';
   if (inv === 'I7' && /flips \[[^\]]/.test(violation.msg)) return 'N-F6';

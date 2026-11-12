@@ -2,14 +2,19 @@
 // against the REAL packages/core, and prints a backlog table labelling each CURRENT pass/fail
 // HONESTLY. The 3 known bugs are expected to FAIL today; the table IS the solver fix backlog.
 //
-// This file is a REPORTER, not a gate: it always exits 0 (so it never adds a baseline failure).
-// Fixes come later, one at a time, each guarded by re-running its scenario here.
+// This file is a REAL TEST (task 522): the table below is kept, and the process exits 1 if a scenario that is not in KNOWN fails, or if a
+// KNOWN scenario now passes (delete its KNOWN entry). Fixes are each guarded by re-running their scenario here.
 
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
 import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+
+// Scenarios that FAIL today: scenario number -> one-line reason. When one starts passing the test fails loudly: delete its entry.
+const KNOWN = {
+  12: "task 521 refuses a collapsing edit with { reverted: true, clash: '', reason }, the scenario still asserts a non-empty clash string (stale expectation, the seam itself refuses and reverts)",
+};
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -415,4 +420,15 @@ console.log('  ' + '-'.repeat(w + 22));
 console.log(`  ${rows.filter(r => r.pass).length}/${rows.length} pass. FIX BACKLOG (failing): ${failing.length ? failing.map(n => n.split('.')[0]).join(', ') : 'none'}`);
 console.log('===========================================================================\n');
 
-// Reporter: never fail the suite — the table above is the deliverable. (exit 0)
+// Verdict: every scenario passes, except the KNOWN ones, which must still fail.
+let bad = 0;
+for (const r of rows) {
+  const num = r.name.split('.')[0];
+  const known = Object.hasOwn(KNOWN, num);
+  if (!r.pass && !known) { bad++; console.log(`FAIL  ${r.name}  ${numsStr(r.nums)}`); }
+  else if (r.pass && known) { bad++; console.log(`FAIL  KNOWN entry now PASSES, delete it from KNOWN (${r.name}: ${KNOWN[num]})`); }
+  else if (!r.pass) console.log(`known ${r.name}  [${KNOWN[num]}]`);
+}
+for (const num of Object.keys(KNOWN)) if (!rows.some(r => r.name.split('.')[0] === num)) { bad++; console.log(`FAIL  KNOWN entry ${num} names no scenario`); }
+if (bad) { console.log(`${bad} unexpected result(s)`); process.exit(1); }
+console.log('solver-scenarios: ok');

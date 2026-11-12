@@ -4,7 +4,7 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { commitDimensionEdit } from '#ui/dimension-seams.js';
+import { commitDimensionEdit, dimensionEditLabel } from '#ui/dimension-seams.js';
 import SettingsManager from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
@@ -380,7 +380,7 @@ function handleCommit() {
             uiState.target.isDriven = false;
             uiState.target.driven = false;
             uiState.target.__newlyPlaced = false;
-            if (!isFirstValue && uiState.appState.saveState) uiState.appState.saveState();
+            if (!isFirstValue && uiState.appState.saveState) uiState.appState.saveState(dimensionEditLabel(uiState.target, val));
             uiState.target.__placing = false;
             if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
             // Edit logic lives in the shared headless seam (so the harness drives the EXACT same code).

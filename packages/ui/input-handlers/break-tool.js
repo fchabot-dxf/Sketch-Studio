@@ -56,7 +56,7 @@ export function handleBreakPointerDown(e, ctx, state, viewState) {
   const hit = findClosestLine(world, state, svg, viewState);
   if (!hit) return false;
 
-  try { state.saveState?.(); } catch (_) {}
+  try { state.saveState?.('break'); } catch (_) {}
 
   const result = breakShape(state, hit.shapeId, hit.t);
   if (result) {

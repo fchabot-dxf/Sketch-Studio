@@ -44,7 +44,7 @@ let dimensionState = {
 // Undo helpers to avoid leaving intermediate/distorted states on the stack
 function beginDimUndo(state){
     if (!state) return;
-    try { if (state.beginUndoGroup) state.beginUndoGroup(); } catch(_) {}
+    try { if (state.beginUndoGroup) state.beginUndoGroup('dimension'); } catch(_) {}
     try { if (state.saveState) state.saveState(); } catch(_) {}
 }
 function endDimUndo(state){

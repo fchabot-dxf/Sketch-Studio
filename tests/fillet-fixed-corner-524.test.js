@@ -102,4 +102,64 @@ const cornerOf = (S, r, jid) => {
   assert(L.hasNaN(S) === false, 'no NaN');
   console.log('locked polygon corner filleted: joint kept');
 }
+
+// ---- lines locked (Lock action on selected lines = every joint of each line fixed), then the corner filleted (measured in Fusion:
+// accepted, the trimmed lines stay locked, the arc is free)
+import { selectionLockState } from '#ui/input-manager.js';
+const lineGeom = (S, id) => { const s = S.state.shapes.find(x => x.id === id); const [a, b] = s.joints.map(j => S.state.joints.get(j)); return { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, ang: Math.atan2(b.y - a.y, b.x - a.x) }; };
+for (const lockedSet of ['both', 'one']) {
+  const { S, r, jid } = lockedRect();
+  S.state.joints.get(jid).fixed = false;                       // start from a clean rectangle: only the Lock action below fixes anything
+  const two = r.lines.map(id => S.state.shapes.find(s => s.id === id)).filter(s => s.joints.some(x => x === jid || S.state.constraints.some(c => c.type === 'coincident' && c.joints.includes(jid) && c.joints.includes(x))));
+  assert(two.length === 2, 'two lines at the corner');
+  const toLock = lockedSet === 'both' ? two : [two[0]];
+  const other = lockedSet === 'both' ? null : two[1];
+  S.state.selectedShapes = new Set(toLock.map(s => s.id));
+  S.state.selectedJoints = new Set();
+  const otherBefore0 = other && lineGeom(S, other.id);
+  for (const s of toLock) s.joints.forEach(x => { S.state.joints.get(x).fixed = true; });
+  assert(S.engine.solve(L.ITER).converged, `${lockedSet}: solves locked`);
+  const before = { n: L.nullity(S), free: L.freedom(S).free };
+  const geom0 = Object.fromEntries(toLock.map(s => [s.id, lineGeom(S, s.id)]));
+  const fixedAt0 = Object.fromEntries(toLock.flatMap(s => s.joints.map(x => { const j = S.state.joints.get(x); return [x, { x: j.x, y: j.y }]; })));
+  const corner = findCornerBetweenLines(S.state, two[0], two[1]);
+  assert(corner, `${lockedSet}: corner found`);
+  const res = applyFillet(S.state, corner, 8);
+  assert(res && res.success, `${lockedSet}: fillet accepted: ${res && res.reason}`);
+  assert(S.engine.solve(L.ITER).converged, `${lockedSet}: solves after the fillet`);
+  const after = { n: L.nullity(S), free: L.freedom(S).free };
+  console.log(`[${lockedSet} locked] nullity ${before.n} -> ${after.n}; free before ${JSON.stringify(before.free)}; free after ${JSON.stringify(after.free)}`);
+  const arc = S.state.shapes.find(s => s.type === 'arc');
+  // the lines: trimmed lines of the locked set must not move or turn
+  const freeIds = new Set(after.free.map(f => f.id));
+  for (const s of toLock) {
+    assert(s.joints.every(x => S.state.joints.has(x)), `${lockedSet}: line joints exist`);
+    const g = lineGeom(S, s.id);
+    assert(near(g.ang, geom0[s.id].ang), `${lockedSet}: line ${s.id} direction unchanged`);
+  }
+  // far-end joints (not the tangent end) are still fixed at the same positions
+  for (const [x, p] of Object.entries(fixedAt0)) {
+    const j = S.state.joints.get(x);
+    if (j) assert(j.fixed === true && near(j.x, p.x) && near(j.y, p.y), `${lockedSet}: joint ${x} still fixed at its place`);
+  }
+  // re-solve from a small jitter: directions come back unchanged
+  for (const jidk of S.state.joints.keys()) { const j = S.state.joints.get(jidk); if (!j.fixed) { j.x += 0.7; j.y -= 0.5; } }
+  assert(S.engine.solve(L.ITER).converged, `${lockedSet}: re-solves after a jitter`);
+  for (const s of toLock) assert(near(lineGeom(S, s.id).ang, geom0[s.id].ang, 1e-3), `${lockedSet}: line ${s.id} direction unchanged after the jitter`);
+  assert(after.n === before.n, `${lockedSet}: the fillet adds no freedom (${before.n} -> ${after.n}): the radius is dimensioned, the arc is held by tangents`);
+  assert(JSON.stringify(after.free.map(f => f.id + f.dirs)) === JSON.stringify(before.free.map(f => f.id + f.dirs)), `${lockedSet}: the same joints are free in the same directions as before`);
+  // which trimmed-line joints remain free
+  const tangentEnds = toLock.map(s => s.joints.find(x => !fixedAt0[x]));
+  assert(tangentEnds.every(x => x && !freeIds.has(x)), `${lockedSet}: the new tangent ends are not free (held by the tangent, the radius and the locked far end)`);
+  console.log(`[${lockedSet} locked] tangent-end joints ${JSON.stringify(tangentEnds)} free after: ${tangentEnds.map(x => freeIds.has(x))}`);
+  // Lock state of each trimmed line afterwards (reported, not changed)
+  for (const s of toLock) {
+    S.state.selectedShapes = new Set([s.id]);
+    console.log(`[${lockedSet} locked] selectionLockState(line ${s.id}) = ${JSON.stringify(selectionLockState(S.state))}`);
+  }
+  if (other) {
+    const og = lineGeom(S, other.id);
+    console.log(`[one locked] other line ${other.id} before ${JSON.stringify(otherBefore0)} after ${JSON.stringify(og)}`);
+  }
+}
 console.log('task 524 tests passed');

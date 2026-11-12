@@ -13438,3 +13438,43 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
 - Two coincident fixed joints: the first in joint order is kept as V, the others are coincident with it (same position) and are deleted with the cluster. No separate `fixed` constraint object exists (grep: only `joint.fixed`; `'fixed'` constraint type is only skipped in constraint-status), so joint.fixed is the only lock.
 - Tests: tests/fillet-fixed-corner-524.test.js (fail-first: "the locked joint still exists, fixed, at (70,50): undefined"); 517 tests unchanged and green; the four audits pass, no KNOWN entry became stale.
 - Gate: GATE files=250 pass=250 fail=0, SMOKE 12/12, HEADLESS-LEFT 0 (.evidence/524/gate.log).
+
+## TURN 525 (who moves at creation, like Fusion: ONE classifier, ONE declared table fitted to the recorded Fusion cells)
+WHAT CHANGED
+- packages/core/creation-placement.js (new): holdClass (ONE classifier: shape family + what holds it, from engine.jointFreedom and the
+  constraints on the operand: free, corner, chain, hv, sized, pinned, centred, full; a picked point that cannot move = point:fixed); PLACE
+  (per table key: the two operands in pick order and the mover's placement: one similarity of its body (turn about its held point / single
+  attached end / midpoint, translate, scale about a held centre), or SOLVE_ALONE = the least-change solve of the mover with the anchor frozen
+  (tangents, equal circles, angle dimensions, a perpendicular whose handedness is locked)). A placement is kept only if it satisfies the new
+  constraint and no existing driving constraint gets worse; else the other operand; else the solve starts from the giving operand's pose.
+- packages/core/creation-placement-table.js (new, GENERATED): per key the tiers of hold classes (lowest gives way) and a fitted tie rule.
+  scripts/fusion-oracle/fit-placement-table.mjs derives it from which-moves-graded.json (2438) + which-moves.json (315) through the SAME
+  creationOperands / holdClass the app uses; tests/creation-placement-table.test.js asserts module == fit (2187 one-mover cells, 17 keys).
+- ConstraintManager.placeForCreation only delegates to the table. DELETED (no caller left, grep): _lineEstablishmentScore,
+  anchorEstablishedLine, _lineHasAxisConstraint, _lineIsGeometricallyAxisAligned, placeOnAnchorLine, placePerpendicularFromParallel,
+  PARALLEL_START_SIN. commitDimensionEdit (packages/ui/dimension-seams.js) calls the same ConstraintManager.placeForCreation seam with the
+  edited dimension; when it places, one solve (no value stepping).
+- Harness: which-moves.js runOurs split into buildOurs / actOf / dimActOf (used by the fit). KNOWN lists + FUSION-COMPARISON regenerated
+  by the scripts (reason texts updated); the graded section now prints the table the app reads.
+RESULT (.evidence/525/counts-before.json vs counts-after.json, same script): which-moves 103 -> 285 / 315, graded 889 -> 1988 / 2438,
+drawings 825 -> 826 / 954. Per group (graded same, who-moves agrees): parallel 11->90 (21->92), perpendicular 31->74 (41->112),
+collinear 52->98 (89->105), equal-line-line 35->112, dim-angle 20->78 (20->92), coincident-pp 104->229, dim-aligned 60->113 (119->184),
+dim-horizontal 45->93, dim-vertical 53->89, horizontal-2pt 68->153, vertical-2pt 58->155, pointOnLine 42->117, pointOnCircle 56->122,
+midpoint 48->117, equal-circle 48->52, tangent-line-circle 74->168, tangent-circle-circle 56->92, H/V-line 7->9 each, dim-length 5->8,
+dim-radius 9->10. Remaining 450 graded differences: 204 are Fusion refusals (task 526); the rest per class in which-moves-graded-known.json.
+- The 16 cells task 521 turned into refusals (coincident RL 0,4 / RO 0,c / RP 0,4, collinear LS 3,0 / 7,0, horizontal-2pt RL / RO / RP,
+  midpoint LS m,0 / o,0, ZS 0,0, parallel LC 3,4, LL 3,4 / 3,5, SL 0,4, vertical-2pt LR 3,0): all accepted now and equal to Fusion
+  (.evidence/525/521-refused-cells-after.txt). The 521 collapse check is unchanged.
+- KNOWN entries deleted because they now pass: coverage-matrix NEW-9 (and its classify rule), coverage-properties N-F6 (pinned check).
+STOP CONDITIONS
+- Fixture conflict (reported, not special-cased): the two fixtures disagree on 7 cells of 3 class pairs: coincident-pp line:free vs line:hv
+  (315 A_hv.BA, B_hv.AB move the H/V line; graded LL|0,3 moves the free one), dim-aligned free vs free (315 free.BA vs graded LL|0,0),
+  dim-horizontal / dim-vertical line:hv vs line:free (315 A_hv.AB, B_hv.BA vs graded LL|3,0). The fit keeps the better-supported order;
+  the other cells are KNOWN. Also a single free line made H/V: 315 turns it about its midpoint, graded moves its second end (ours).
+- Perpendicular with a locked handedness: the branched solver row is stationary at exactly 90 degrees, so an exact rigid turn hides one DOF
+  (coverage-matrix perpendicular LR/LS: nullity 0 instead of -1). Ours reaches 90 degrees by the least-change solve of the mover there
+  (who moves right in 112/113, how = stretch where Fusion rotates rigidly: 39 cells). Owner decision: a solver-row task could make the exact turn safe.
+BEHAVIOUR CHANGES for existing users: (1) every constraint and dimension edit in the table moves ONE operand (the table's) instead of both;
+(2) a dimension edit that can be placed solves once instead of in value steps; (3) H/V of one line moves its second end only; (4) a
+point-on-line between free operands slides the line (Fusion) instead of moving the point; (5) a collinear in the 3-joint form (no UI path) is no
+longer pre-placed; (6) when neither operand can move alone the solve starts from the giving operand's placement.

@@ -8,6 +8,7 @@ import { measureResidual, measureShapeSizes, findCollapsedShape } from './constr
 import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
+import { reverseLineInAngleSectors } from './angle-sector.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -146,7 +147,8 @@ export class ConstraintManager {
         // ANGLE: the solver's angle is the SIGNED counter-clockwise angle from line 1 to line 2, while a dimension measures the
         // unsigned interior angle. Store the pair in the order whose signed angle is the measured one, so the stored value is
         // satisfiable at the measured value (a clockwise pair is otherwise unsatisfiable and collapses a line).
-        if (type === CONSTRAINT_TYPES.ANGLE && normalized.shapes && normalized.shapes.length === 2) {
+        // (A caller that names the measured sector (task 553) has named it for ITS pair order: that order is kept.)
+        if (type === CONSTRAINT_TYPES.ANGLE && normalized.shapes && normalized.shapes.length === 2 && !normalized.sector) {
             this.orderAnglePairCCW(state, normalized.shapes);
         }
 
@@ -1122,6 +1124,8 @@ export class ConstraintManager {
                 const temp = s2.joints[0];
                 s2.joints[0] = s2.joints[1];
                 s2.joints[1] = temp;
+                // the line now points the other way: an angle dimension on it keeps its sector (task 553)
+                reverseLineInAngleSectors(state.constraints, s2.id);
             }
         } catch (e) {
             dbg.warn('constraints', '[ConstraintManager] Error aligning parallel lines:', e);

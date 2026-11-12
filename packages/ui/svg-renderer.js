@@ -14,7 +14,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
-import { angleDimensionSector, angleLabelAngle } from '#ui/angle-dimension.js';
+import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
@@ -1719,7 +1719,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
           const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
           const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
           
-          // The sector under the cursor: the label's spot at creation decides what the dimension measures (angle-dimension.js)
+          // The sector under the cursor: the label's spot at creation decides what the dimension measures (#core/angle-sector.js)
           const labelAngle = Math.atan2(mp.y - int.y, mp.x - int.x);
           const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, labelAngle, null);
           
@@ -2585,10 +2585,11 @@ switch(c.type){
             const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
             const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
             
-            // Where the label sits picks which of the arcs that span the value
-            const sectorAngle = angleLabelAngle(c, int, a1, a2);
-            const drivingValue = (!(c.isDriven || c.driven) && typeof c.value === 'number') ? c.value : null;
-            const { start: startAngle, end: endAngle } = angleDimensionSector(a1, a2, sectorAngle, drivingValue);
+            // A DRIVING dimension draws its stored sector (task 553: reflex ones too, it spans the value once solved); a reference
+            // dimension measures the sector its label sits in (task 543)
+            const { start: startAngle, end: endAngle } = (c.isDriven || c.driven)
+              ? angleDimensionSector(a1, a2, angleLabelAngle(c, int, a1, a2), null)
+              : angleSectorArc(angleSectorOf(c), a1, a2);
             
             // Compute label position: bisector of the sector, at arc radius
             const bisect = (startAngle + endAngle) / 2;

@@ -3,7 +3,8 @@
 //  A. the drawn arc spans 10 degrees (read back from the page's own SVG path), between the two line directions, label 10.0
 //  B. a real drag of the label across the vertex into the other sectors never changes what the arc measures (10), moves no geometry,
 //     and one Undo puts the label back
-// With EVIDENCE_DIR set, writes the full-page screenshot and an arc crop there.
+//  C. creation: the drop sector decides the value (task 543); D. typed past 180 (190, 270: the reflex arc, label inside), 0 refused (task 553)
+// With EVIDENCE_DIR set, writes the full-page screenshot and arc crops there.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -113,6 +114,43 @@ await (async () => {
     assert(t3.includes('120.0'), 'C: the wide dimension was edited to 120: ' + t3);
     await shot('arc-created-wide.png');
     console.log('C. wide-sector dimension typed to 120 holds:', t3);
+
+    // ---- D. TASK 553: past 180 like Fusion. A new dimension in the 30 sector typed 190, then 270 in the value box: the sector keeps opening
+    // the same way round, the arc is drawn over the reflex sector (large-arc flag 1) and the label sits inside it; 0 is refused.
+    // The arc's span is read from the page's SVG path alone: its centre from the two ends, the radius and the large-arc flag (sweep flag 1).
+    const anyArc = () => evalJs(`(() => { for (const p of document.querySelectorAll('#svgCanvas path')) { const m = (p.getAttribute('d') || '').match(/^M ([-\\d.e]+) ([-\\d.e]+) A ([-\\d.e]+) [-\\d.e]+ 0 ([01]) 1 ([-\\d.e]+) ([-\\d.e]+)$/); if (m) return JSON.stringify({ sx: +m[1], sy: +m[2], r: +m[3], large: +m[4], ex: +m[5], ey: +m[6] }); } return null; })()`).then((s) => s && JSON.parse(s));
+    const reflexOf = (a, glyph) => {
+      const mx = (a.sx + a.ex) / 2, my = (a.sy + a.ey) / 2, hx = a.ex - a.sx, hy = a.ey - a.sy, h = Math.hypot(hx, hy) / 2;
+      const d = Math.sqrt(Math.max(0, a.r * a.r - h * h)), side = a.large ? -1 : 1;
+      const cx = mx + side * (-hy / (2 * h)) * d, cy = my + side * (hx / (2 * h)) * d, n = (x) => ((x % 360) + 360) % 360;
+      const a0 = Math.atan2(a.sy - cy, a.sx - cx) * 180 / Math.PI, span = n(Math.atan2(a.ey - cy, a.ex - cx) * 180 / Math.PI - a0);
+      return { span, labelInside: n(Math.atan2(glyph.y - cy, glyph.x - cx) * 180 / Math.PI - a0) <= span };
+    };
+    const glyph = () => evalJs(`(() => { const l = document.querySelector('#svgCanvas .dim-label rect'); const c = document.getElementById('svgCanvas'); const m = c.getScreenCTM().inverse(); const r = l.getBoundingClientRect(); const p = c.createSVGPoint(); p.x = r.left + r.width / 2; p.y = r.top + r.height / 2; const w = p.matrixTransform(m); return JSON.stringify({ x: w.x, y: w.y }); })()`).then(JSON.parse);
+    const editTo = async (text) => {
+      const lab = await centerOf('#svgCanvas .dim-label'); await mouse('mouseMoved', lab.x, lab.y, 0);
+      for (let i = 0; i < 2; i++) { await mouse('mousePressed', lab.x, lab.y, 1); await sleep(30); await mouse('mouseReleased', lab.x, lab.y, 0); await sleep(60); }
+      await waitFor(inputOpen, 'the editor to open on a double click', 8000);
+      await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`); await send('Input.insertText', { text }); await key('Enter', 'Enter', 13); await sleep(600);
+    };
+    await clickEl('#btn-undo'); await sleep(300); await clickEl('#btn-undo'); await sleep(300);           // the edit, then the wide dimension
+    assert.strictEqual((await labels()).length, 0, 'D: back to the two lines');
+    await create({ x: corner.x + 300, y: corner.y - 40 }, '190');                                        // the 30 sector, typed 190 at once
+    for (const [text, want] of [['190', 190], ['270', 270]]) {
+      if (text !== '190') await editTo(text);
+      const a = await anyArc(), g = await glyph(), r = reflexOf(a, g), t = (await labels()).pop();
+      console.log(`D. typed ${text}: label ${t}, arc span ${r.span.toFixed(2)}, large-arc ${a.large}, label inside ${r.labelInside}`);
+      await shot(`arc-reflex-${want}.png`, { x: corner.x - 340, y: corner.y - 340, width: 680, height: 680 });
+      assert(t.includes(`${want}.0`), `D: the label reads ${want}: ${t}`);
+      assert(Math.abs(r.span - want) < 0.5 && a.large === 1 && r.labelInside, `D: the arc spans ${r.span.toFixed(2)} (large ${a.large}, label inside ${r.labelInside}), not ${want}`);
+    }
+    const linesNow = () => evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas line.shape-elem')].map(e => [e.getAttribute('x1'), e.getAttribute('y1'), e.getAttribute('x2'), e.getAttribute('y2')]))`);
+    const before0 = await linesNow();
+    await editTo('0');
+    if (await evalJs(inputOpen)) await key('Escape', 'Escape', 27);
+    assert((await labels()).pop().includes('270.0'), 'D: 0 is refused, the value stays 270');
+    assert.strictEqual(await linesNow(), before0, 'D: 0 moved nothing');
+    console.log('D. typed 0: refused, still 270, nothing moved');
   } finally {
     await cdp.close();
   }

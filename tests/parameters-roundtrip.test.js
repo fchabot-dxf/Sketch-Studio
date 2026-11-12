@@ -26,7 +26,7 @@ const MODES = [
   { key: 'line length', mode: 'line length', type: 'distance', params: { joints: ['l1', 'l2'] } },
   { key: 'point-line', mode: 'point-line', type: 'distance', params: { joints: ['p1', 'p2', 'p3'] } },
   { key: 'line-line', mode: 'line-line', type: 'distance', params: { shapes: ['s1', 's2'] } },
-  { key: 'angle', mode: 'angle', type: 'angle', angle: true, params: { shapes: ['s3', 's4'], supplement: true } },
+  { key: 'angle', mode: 'angle', type: 'angle', angle: true, params: { shapes: ['s3', 's4'], sector: { ray1: -1, ray2: 1, turn: -1 } } },
   { key: 'radius circle', mode: 'radius', type: 'distance', params: { shape: 'circ1', isRadius: true } },
   { key: 'radius arc', mode: 'radius', type: 'distance', params: { shape: 'arc1', isRadius: true } },
   { key: 'radius fillet arc', mode: 'radius', type: 'distance', params: { shape: 'fil1', isRadius: true } },
@@ -83,10 +83,13 @@ const expected = build();
 const doc1 = serializeDocument(state, { hosts: { test: { x: 1 } } });
 const json1 = JSON.stringify(doc1);
 {
-  assert(doc1.version === DOCUMENT_VERSION && DOCUMENT_VERSION === 2, 'always the new version (O2)');
+  assert(doc1.version === DOCUMENT_VERSION && DOCUMENT_VERSION === 3, 'always the new version (O2)');
   eq(doc1.geometry.parameters, PARAMS, 'parameters are in the document');
   const originals = state.constraints.filter((x) => x.type === 'distance' || x.type === 'angle').map((c) => JSON.parse(JSON.stringify(c)));
-  assert(originals.filter((o) => o.type === 'angle').every((o) => o.supplement === true), 'an angle dimension keeps its sector flag (supplement) from creation');
+  // TASK 553: a DRIVING angle keeps the sector it was created with; a reference one stores none (it measures the sector under its label)
+  const angles = originals.filter((o) => o.type === 'angle');
+  assert(angles.some((o) => !o.isDriven) && angles.filter((o) => !o.isDriven).every((o) => JSON.stringify(o.sector) === '{"ray1":-1,"ray2":1,"turn":-1}'), 'a driving angle dimension keeps its sector from creation');
+  assert(angles.filter((o) => o.isDriven).every((o) => !('sector' in o)), 'a reference angle dimension stores no sector');
   const res = deserializeDocument(JSON.parse(json1), state); // replaces the whole state
   assert(res.ok, res.reason);
   const json2 = JSON.stringify(serializeDocument(state, { hosts: res.hosts }));
@@ -100,7 +103,7 @@ const json1 = JSON.stringify(doc1);
   for (const o of originals) {
     const back = dims.find((x) => x.name === o.name);
     assert(back, `${o.name} survives`);
-    eq([back.expression, back.isDriven, back.driven, back.value, back.dimMode, back.supplement], [o.expression, o.isDriven, o.driven, o.value, o.dimMode, o.supplement], `${o.name} fields`);
+    eq([back.expression, back.isDriven, back.driven, back.value, back.dimMode, back.sector], [o.expression, o.isDriven, o.driven, o.value, o.dimMode, o.sector], `${o.name} fields`);
   }
   const ev = evaluateAll(state);
   for (const c of state.constraints.filter((x) => x.expression)) assert(near(ev.values.get(c.name).v, c.value), `${c.name}: value == evaluated formula after load`);

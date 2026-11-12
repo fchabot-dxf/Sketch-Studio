@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { createEngine } from '#core/constraint-solver.js';
 
-console.log('Running tests for verifier ANGLE (exactly the solver residual: zero iff theta == value mod 180 deg)...');
+console.log('Running tests for verifier ANGLE (exactly the solver zero set: theta == the sector target mod 360 deg, task 553)...');
 const DEG = Math.PI / 180;
 // u = (1,0) ; v rotated by `deg` from u
 function lines(deg) {
@@ -20,10 +20,14 @@ for (const form of [shapeForm, jointForm]) {
   const tag = form === shapeForm ? 'shapes' : 'joints';
   const { joints, shapes } = lines(60);
   assert.ok(measureResidual(form(60), joints, shapes) < 1e-9, tag + ': value 60 at theta 60 is satisfied');
-  assert.ok(measureResidual(form(240), joints, shapes) < 1e-9, tag + ': the solver also accepts theta == value + 180 (line direction ambiguity)');
-  // the looser old check accepted -value; the solver's residual sin(theta - value) = sin(120 deg) is NOT zero
+  // TASK 553: the sector holds the angle modulo 360: theta == value + 180 is the OTHER pose (it measures 180 deg off), unless the sector
+  // names line 2's opposite ray (then 240 from u to -v is exactly theta 60)
+  assert.ok(Math.abs(measureResidual(form(240), joints, shapes) - Math.PI) < 1e-9, tag + ': value 240 at theta 60 is 180 deg off (no line direction ambiguity)');
+  assert.ok(measureResidual({ ...form(240), sector: { ray1: 1, ray2: -1, turn: 1 } }, joints, shapes) < 1e-9, tag + ': value 240 to the opposite ray of line 2 is theta 60');
+  assert.ok(measureResidual({ ...form(300), sector: { ray1: 1, ray2: 1, turn: -1 } }, joints, shapes) < 1e-9, tag + ': value 300 clockwise is theta 60');
+  // the looser old check accepted -value; the solver's zero set does not: -60 is 120 deg away from theta +60 (modulo 360, task 553)
   const wrongSign = measureResidual(form(-60), joints, shapes);
-  assert.ok(Math.abs(wrongSign - 60 * DEG) < 1e-6, tag + ': value -60 at theta +60 must measure 60 deg (' + (60 * DEG) + '), got ' + wrongSign);
+  assert.ok(Math.abs(wrongSign - 120 * DEG) < 1e-6, tag + ': value -60 at theta +60 must measure 120 deg (' + (120 * DEG) + '), got ' + wrongSign);
   assert.ok(Math.abs(measureResidual(form(90), joints, shapes) - 30 * DEG) < 1e-6, tag + ': value 90 at theta 60 measures 30 deg');
 }
 

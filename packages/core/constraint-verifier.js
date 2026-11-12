@@ -1,6 +1,7 @@
 import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
+import { angleSectorOf, angleSectorTarget } from './angle-sector.js';
 
 export function measureResidual(c, joints, shapes) {
     if (!c) return 0;
@@ -268,10 +269,10 @@ export function measureResidual(c, joints, shapes) {
         }
 
         case CONSTRAINT_TYPES.ANGLE: {
-            // EXACTLY the solver's residual (definitions.js angle): r = cross(u,v)*cos(t) - dot(u,v)*sin(t) = |u||v| sin(theta - t),
-            // theta = signed angle from u to v. It is zero iff theta == t (mod 180 deg) -- the solver accepts the line-direction
-            // ambiguity (t + 180) but NOT -t, which the old verifier also accepted. Reported as an angular error in radians
-            // (min(|d|, pi - |d|) with d = theta - t wrapped to (-pi, pi]) so VERIFIER_TOLERANCE keeps meaning "radians".
+            // EXACTLY the solver's zero set (definitions.js angle): the CCW angle theta from u to v equals the measured sector's target
+            // alpha (angle-sector.js angleSectorTarget: turn * value + 180 when the sector uses opposite rays) MODULO 360 (task 553: the
+            // opposite pose theta = alpha + 180 is no longer a solution). Reported as an angular error in radians (|d|, d = theta - alpha
+            // wrapped to (-pi, pi]) so VERIFIER_TOLERANCE keeps meaning "radians".
             let a, b, p, q;
             if (c.joints && c.joints.length >= 4) {
                 a = joints.get(c.joints[0]); b = joints.get(c.joints[1]); p = joints.get(c.joints[2]); q = joints.get(c.joints[3]);
@@ -289,11 +290,10 @@ export function measureResidual(c, joints, shapes) {
             // satisfied. That is not an angle at all: report the largest angular error so such a solve never counts as converged.
             if (Math.hypot(ux, uy) < 1e-12 || Math.hypot(vx, vy) < 1e-12) return Math.PI / 2;
             const theta = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
-            // TASK 543: a supplementary-sector dimension (c.supplement) is the same row with sin(t) negated: zero iff theta == -t (mod 180)
-            let d = theta - (c.supplement === true ? -1 : 1) * (Number(c.value) || 0) * Math.PI / 180;
+            let d = theta - angleSectorTarget(angleSectorOf(c), c.value);
             while (d <= -Math.PI) d += 2 * Math.PI;
             while (d > Math.PI) d -= 2 * Math.PI;
-            return Math.min(Math.abs(d), Math.PI - Math.abs(d));
+            return Math.abs(d);
         }
 
         case CONSTRAINT_TYPES.MIDPOINT: {

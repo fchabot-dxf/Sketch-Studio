@@ -12,7 +12,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
-import { angleDimensionChoice } from '#ui/angle-dimension.js';
+import { angleSectorUnderLabel } from '#core/angle-sector.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -1001,12 +1001,12 @@ export function updateConstraintOffset(state, c, w) {
                     c.offset = getDist(int, w);
                     // Also store explicit position for sector detection
                     c.glyphPos = w;
-                    // TASK 543: while a NEW angle dimension is being placed, the sector under the label decides what it measures
-                    // (value + supplement). Geometry is untouched: both choices hold the lines where they are.
+                    // TASK 543 / 553: while a NEW angle dimension is being placed, the sector under the label (at most 180 degrees) decides
+                    // what it measures: its span is the value, the sector is stored. Geometry is untouched: every choice holds the lines where they are.
                     if (c.__placing && c.__newlyPlaced && !(c.isDriven || c.driven)) {
-                        const choice = angleDimensionChoice(j1, j2, j3, j4, Math.atan2(w.y - int.y, w.x - int.x));
+                        const choice = angleSectorUnderLabel(Math.atan2(j2.y - j1.y, j2.x - j1.x), Math.atan2(j4.y - j3.y, j4.x - j3.x), Math.atan2(w.y - int.y, w.x - int.x));
                         c.value = choice.value;
-                        if (choice.supplement) c.supplement = true; else delete c.supplement;
+                        c.sector = choice.sector;
                     }
                 }
             }

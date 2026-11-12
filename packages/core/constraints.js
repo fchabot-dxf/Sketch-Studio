@@ -7,6 +7,7 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import { ConstraintManager } from './constraint-manager.js';
 import { SolverConfig } from './solver-config.js';
 import { isDimension, nextDimensionName } from './parameters.js';
+import { angleSectorOf } from './angle-sector.js';
 
 /**
  * Given a constraint and the list of shapes, returns the joints and shapes affected by the constraint.
@@ -142,8 +143,6 @@ function withDimensionState(obj, params) {
     // TASK 535: the dimension's NAME (d1, d2, ... or the user's) and its FORMULA (only when one was typed) travel here, once, for every mode
     if (typeof params.name === 'string' && params.name) obj.name = params.name;
     if (typeof params.expression === 'string' && params.expression) obj.expression = params.expression;
-    // TASK 543: an ANGLE dimension's sector: absent = the value is the pair's CCW angle, true = its supplement (definitions.js angle row)
-    if (params.supplement === true) obj.supplement = true;
     return obj;
 }
 
@@ -269,14 +268,19 @@ export function createConstraint(type, params) {
             if (!params.shapes || params.shapes.length < 2) return null;
             return { type: CONSTRAINT_TYPES.EQUAL, shapes: params.shapes.slice() };
 
-        case CONSTRAINT_TYPES.ANGLE:
+        case CONSTRAINT_TYPES.ANGLE: {
             if (!params.shapes || params.shapes.length !== 2) return null;
-            return withDimensionState({
+            const angle = withDimensionState({
                 type: CONSTRAINT_TYPES.ANGLE,
                 shapes: params.shapes.slice(),
                 value: params.value,
                 offset: params.offset || SolverConfig.ANGLE_OFFSET || 40
             }, params);
+            // TASK 553: a DRIVING angle measures one stored sector (#core/angle-sector.js), the default when none was given; a reference
+            // measures the sector its label sits in and stores none
+            if (!angle.isDriven) angle.sector = angleSectorOf(params);
+            return angle;
+        }
 
         case CONSTRAINT_TYPES.MIDPOINT:
             if (!params.joints || params.joints.length !== 3) return null;

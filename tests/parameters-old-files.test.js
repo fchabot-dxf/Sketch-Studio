@@ -100,8 +100,9 @@ function checkLoad(label, doc, { sameAsInput = false } = {}) {
 
 // ── 4. the version gate and the project-file envelope ──
 {
-  assert(DOCUMENT_VERSION === 2, 'document version 2 (owner ruling O2: always write the new version)');
+  assert(DOCUMENT_VERSION === 3, 'document version 3 (owner ruling O2: always write the new version; 3 = task 553, the angle sector)');
   assert(validateDocument({ version: 1, geometry: {} }).ok && validateDocument({ version: 2, geometry: {} }).ok, 'versions 1 and 2 are accepted');
+  assert(validateDocument({ version: 3, geometry: {} }).ok, 'version 3 (this build) is accepted');
   const newer = validateDocument({ version: DOCUMENT_VERSION + 1, geometry: {} });
   assert(!newer.ok && newer.newer === true, 'a newer document is refused as newer');
   // what a build whose DOCUMENT_VERSION is 1 does with a version-2 file: validateDocument refuses version > its own (the same rule, one number lower)

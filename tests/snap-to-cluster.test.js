@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } = await import('#ui/input-handlers/selection-tools.js');
   const { findSnap } = await import('#ui/snap-detection.js');
@@ -6,7 +7,7 @@
 
   const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), viewBox: { baseVal: { x:0,y:0,width:800,height:600 } }, setPointerCapture: () => {}, releasePointerCapture: () => {} };
 
-  function makeState(){ return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, saveState: () => {}, endUndoGroup: () => {} }; }
+  function makeState(){ return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, ...undoStub(), endUndoGroup: () => {} }; }
 
   // Cluster: A-B-C at same location with two constraints
   const state = makeState();

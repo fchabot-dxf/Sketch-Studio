@@ -514,17 +514,69 @@ Proposed fix: commitDimensionEdit: rotate the second line about its midpoint ont
 ## Which geometry moves: graded
 
 <!-- graded:begin -->
+
 Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-oracle/which-moves-graded.json` (positions before / after in mm, per cell), known differences `which-moves-graded-known.json` (per class: constraint x kind pair; "all" when the whole class differs). The cells are built by `tests/harness/fusion-oracle/graded.js` with the matrix builders (rect tool, polygon tool, fillet tool, arc, circle), the level applied with real constraints, then replayed in Fusion by `scripts/fusion-oracle/run-jobs.py`.
+
 **How to read it.** A = the FIRST pick, B = the SECOND pick (so pick order is the row / column order). Levels of a free-standing line: `0` free, `1` one end coincident with another free line (a chain), `2` length dimension, `3` H or V, `4` one end fixed, `5` end fixed + length, `6` H/V + end fixed, `7` fully constrained by constraints and dimensions only (H/V + length + the two position dimensions from the origin), `o` one end coincident with the origin, `m` midpoint at the origin. Rect side: `0`, `8` the whole rectangle fully constrained by dimensions. Polygon side: `0`. Construction line: `0`, `4`. Circle / arc: `0`, `c` centre fixed, `r` radius dimension, `cr` both; fillet arc: `0`, `c`. Point: `0`, `4` fixed. Origin (`Z`): the origin point. Cell symbol: `a` only the first pick moves, `b` only the second, `X` both, `-` neither, `R` refused. `Fusion/ours`; a trailing `*` = they differ.
+
 **Reductions (the full cross product is about 40 000 cells).** Line-line groups: free-standing line x free-standing line at the 8 levels (10 with `o`, `m` in the point groups), every other line-like kind (construction line `C`, polygon side `S`, rect side `R`) only against a plain line and against itself, at 2 levels (S: 1). A plain line against a non-line operand: levels 0, 3, 4, 7. Point groups: points of a line (end), rect corner, circle / arc centre, free point and the origin; the compound kinds only free. Not covered: bezier (not constrainable in ours: its endpoints are plain joints, covered as points; Fusion cannot express our cubic), polygon side and fillet arc beyond level 0 / `c`, B-kinds crossed with each other beyond the listed pairs, the point-to-line distance dimension (ours projects a helper joint: finding NEW-1), diameter dimension (no creation path), concentric (not in `CONSTRAINT_TYPES`; a coincident of two centres is the same cell). Fusion exposes no DOF count, only `isFullyConstrained` per entity and per sketch: the DOF before / after is therefore **not** recorded for Fusion (ours: nullity, see the 512 matrix).
+
 | constraint / dimension | cells | same as Fusion | Fusion refuses, ours accepts | ours refuses, Fusion accepts |
+|---|---|---|---|---|
+| parallel | 113 | 11 | 21 | 0 |
+| perpendicular | 113 | 31 | 0 | 14 |
+| collinear | 113 | 39 | 0 | 27 |
+| equal-line-line | 113 | 35 | 0 | 0 |
+| dim-angle | 113 | 19 | 21 | 0 |
+| coincident-pp | 232 | 100 | 4 | 0 |
+| dim-aligned | 232 | 60 | 48 | 0 |
+| dim-horizontal | 157 | 45 | 28 | 0 |
+| dim-vertical | 157 | 53 | 30 | 0 |
+| horizontal-2pt | 157 | 68 | 2 | 0 |
+| vertical-2pt | 157 | 58 | 2 | 0 |
+| pointOnLine | 117 | 36 | 0 | 42 |
+| pointOnCircle | 130 | 41 | 4 | 41 |
+| midpoint | 117 | 48 | 0 | 0 |
+| equal-circle | 100 | 80 | 12 | 0 |
+| tangent-line-circle | 180 | 88 | 0 | 8 |
+| tangent-circle-circle | 100 | 44 | 0 | 16 |
+| horizontal-line | 9 | 7 | 0 | 0 |
+| vertical-line | 9 | 7 | 0 | 0 |
+| dim-length | 9 | 5 | 1 | 0 |
+| dim-radius | 10 | 9 | 0 | 0 |
+
 **One rule per constraint** (line x line, Fusion). Rank the 8 (10) levels of the operands; the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. Ranks are not DOF counts: a line with one end fixed (4) is the first to give way (it pivots about the fixed end), then the free-ish ones, direction-held lines (H/V, full) always stay.
+
+| constraint | rank order (lowest moves first) | cells predicted | contradicting cells |
+|---|---|---|---|
+| parallel | {4} < {0,1,5} < {2} < {3,6,7} | 55/55 | - |
+| perpendicular | {4} < {0,1,5} < {2} < {3,6,7} | 55/55 | - |
+| collinear | {0} < {2} < {1,3,5} < {4,6,7} | 39/39 | - |
+| equal-line-line | {0,4} < {3,6} < {1} < {2,5,7} | 55/55 | - |
+| dim-angle | {0,1} < {2,4} < {5} < {3,6,7} | 54/55 | dim-angle|LL|2,4 |
+| coincident-pp | {0,m} < {2,3} < {1} < {4,5,6,7,o} | 73/73 | - |
+| dim-aligned | {0,2} < {1,m} < {3} < {4,5,6,7,o} | 73/75 | dim-aligned|LL|0,2, dim-aligned|LL|1,m |
+| dim-horizontal | {0} < {3} < {2} < {4,7} | 16/21 | dim-horizontal|LL|0,0, dim-horizontal|LL|2,0, dim-horizontal|LL|2,2, dim-horizontal|LL|2,3, dim-horizontal|LL|3,3 |
+| dim-vertical | {0} < {3} < {2} < {4,7} | 17/21 | dim-vertical|LL|0,0, dim-vertical|LL|2,0, dim-vertical|LL|2,2, dim-vertical|LL|2,3 |
+| horizontal-2pt | {0} < {3} < {2} < {4,7} | 20/21 | horizontal-2pt|LL|3,3 |
+| vertical-2pt | {0} < {2,3} < {4,7} | 21/21 | - |
+| pointOnLine | {0,4,m} < {3,o} < {7} | 20/21 | pointOnLine|LL|4,3 |
+| midpoint | {0,4,m} < {3,o} < {7} | 20/21 | midpoint|LL|4,3 |
+
 #### The origin as an operand
+
 Ours identifies the origin as the joint `j_origin` (created by `createEngine`: `{ x: 0, y: 0, fixed: true }`); a constraint names it like any joint (`joints: ['j_origin', ...]`) and the solver skips fixed joints, so it can only be a point of a constraint, never an entity. Fusion's is `sketch.originPoint` (a SketchPoint, `isFixed` true, read-only geometry; `gc.addCoincident(sk.originPoint, p)` is how a constraint reaches it). **172 cells have the origin as A or B (both pick orders)** with every constraint that takes a point (coincident, point-on-line / on circle, midpoint with the origin as the midpoint, H / V between two points, every point-point dimension mode) and the point kinds line end, rect corner, circle / arc centre, free point; plus the levels `o` (a line end coincident with the origin) and `m` (a line centred on the origin by midpoint). **The origin never moved and was never deleted in any of the 2438 cells, in Fusion (`originPoint` read back after every act) and in ours (`j_origin` still in `joints` at 0,0): confirmed** (origin cells alone: ok). The N-F1 bug (a fillet on an origin corner deletes the origin) is not reached by these cells: no cell applies a fillet at the origin, so no cell is marked "caused by N-F1" (it stays a finding of the 512 audit).
+
 Axes: ours has NO axis entities (no X / Y axis line in the sketch model: only the origin joint), so "constrain to an axis" cannot be run in ours. Fusion probe (one call, not stored): `sketch.project(root.xConstructionAxis)` gives a SketchLine; a coincident of a free line end with it moves only that point onto the axis (end (20,20) became (20,0), the other end stayed); parallel to it rotates the free line about its midpoint. A user can still get an axis in ours as an ordinary line through the origin (levels `o` / `7`).
+
 #### parallel
+
 Fusion's rule (fitted on the 55 accepted one-mover cells of the free-standing line pair): rank the levels {4} < {0,1,5} < {2} < {3,6,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 55 of 55 (no contradiction). In words: the operand held least (level 4) is the one that gives way, the most held (3, 6, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
+|---|---|---|---|---|---|---|---|---|
 | 0 free | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 1 corner | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/X* | b/X* | b/X* | a/X* | a/a |
@@ -535,6 +587,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/-* | b/b | b/b | R/-* | R/-* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 64 | 6 | a:22 b:33 R:9 | a:5 b:5 X:45 -:9 | one end:35 rotate:20 | stretch:42 one end:42 rotate:16 |
 | LC | 8 | 1 | a:1 b:7 | b:2 X:6 | one end:5 rotate:3 | stretch:8 one end:6 |
 | CL | 8 | 1 | a:5 b:3 | a:2 X:6 | one end:5 rotate:3 | stretch:8 one end:6 |
@@ -547,8 +600,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | RR | 4 | 0 | R:4 | -:4 |  |  |
 
 #### perpendicular
+
 Fusion's rule (fitted on the 55 accepted one-mover cells of the free-standing line pair): rank the levels {4} < {0,1,5} < {2} < {3,6,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 55 of 55 (no contradiction). In words: the operand held least (level 4) is the one that gives way, the most held (3, 6, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
+|---|---|---|---|---|---|---|---|---|
 | 0 free | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 1 corner | b/X* | b/X* | a/X* | a/X* | b/X* | b/X* | a/X* | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/X* | b/X* | b/X* | a/X* | a/a |
@@ -559,6 +617,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/R | b/b | b/b | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 64 | 15 | a:22 b:33 R:9 | a:5 b:5 X:36 R:18 | one end:35 rotate:20 | one end:34 stretch:33 rotate:15 |
 | LC | 8 | 1 | a:1 b:7 | b:2 X:4 R:2 | one end:5 rotate:3 | stretch:5 one end:5 |
 | CL | 8 | 1 | a:5 b:3 | a:2 X:5 R:1 | one end:5 rotate:3 | stretch:7 one end:5 |
@@ -571,8 +630,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | RR | 4 | 4 | R:4 | R:4 |  |  |
 
 #### collinear
+
 Fusion's rule (fitted on the 39 accepted one-mover cells of the free-standing line pair): rank the levels {0} < {2} < {1,3,5} < {4,6,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 39 of 39 (no contradiction); 11 cells move both operands and are outside the rule. In words: the operand held least (level 0) is the one that gives way, the most held (4, 6, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
+|---|---|---|---|---|---|---|---|---|
 | 0 free | b/b | a/b* | a/b* | a/a | a/R* | a/R* | a/a | a/a |
 | 1 corner | b/b | X/b* | b/b | X/a* | a/R* | X/R* | a/a | a/a |
 | 2 length | b/b | a/b* | b/b | a/a | a/R* | a/R* | a/a | a/a |
@@ -583,6 +647,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 64 | 29 | a:18 b:21 X:11 R:14 | a:9 b:27 R:28 | rotate:32 one end:12 stretch:11 translate:6 | stretch:22 rotate:11 translate:3 |
 | LC | 8 | 1 | a:1 b:4 X:2 R:1 | b:4 R:4 | rotate:5 one end:3 stretch:1 | stretch:4 |
 | CL | 8 | 2 | a:3 b:2 X:1 R:2 | a:2 b:2 R:4 | rotate:5 one end:2 | stretch:4 |
@@ -595,8 +660,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | RR | 4 | 1 | a:1 b:2 R:1 | b:2 R:2 | translate:3 | deform:2 |
 
 #### equal-line-line
+
 Fusion's rule (fitted on the 55 accepted one-mover cells of the free-standing line pair): rank the levels {0,4} < {3,6} < {1} < {2,5,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 55 of 55 (no contradiction). In words: the operand held least (levels 0, 4) is the one that gives way, the most held (2, 5, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
+|---|---|---|---|---|---|---|---|---|
 | 0 free | b/X* | a/X* | a/a | a/X* | b/X* | a/a | a/X* | a/a |
 | 1 corner | b/X* | b/X* | a/a | b/X* | b/X* | a/a | b/X* | a/a |
 | 2 length | b/b | b/b | R/R | b/b | b/b | R/R | b/b | R/R |
@@ -607,6 +677,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | R/R | b/b | b/b | R/R | b/b | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 64 | 21 | a:23 b:32 R:9 | a:15 b:15 X:25 R:9 | one end:55 | stretch:48 one end:32 |
 | LC | 8 | 1 | b:8 | b:2 X:6 | one end:8 | stretch:8 one end:6 |
 | CL | 8 | 1 | a:4 b:4 | a:2 X:6 | one end:8 | stretch:8 one end:6 |
@@ -619,8 +690,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | RR | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
 
 #### dim-angle
+
 Fusion's rule (fitted on the 55 accepted one-mover cells of the free-standing line pair): rank the levels {0,1} < {2,4} < {5} < {3,6,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 54 of 55; contradicting cells: dim-angle|LL|2,4. In words: the operand held least (levels 0, 1) is the one that gives way, the most held (3, 6, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
+|---|---|---|---|---|---|---|---|---|
 | 0 free | b/X* | b/X* | a/X* | a/X* | a/X* | a/X* | a/X* | a/a |
 | 1 corner | b/X* | b/X* | a/X* | a/X* | a/X* | a/X* | a/X* | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/X* | a/X* | a/X* | a/X* | a/a |
@@ -631,6 +707,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/-* | b/b | b/b | R/b* | R/-* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 64 | 10 | a:24 b:31 R:9 | a:6 b:6 X:45 -:7 | one end:20 stretch:20 rotate:15 | one end:44 stretch:42 rotate:16 |
 | LC | 8 | 2 | a:1 b:7 | b:2 X:6 | stretch:4 one end:3 rotate:1 | stretch:8 one end:6 |
 | CL | 8 | 2 | a:5 b:3 | a:2 X:6 | stretch:4 one end:3 rotate:1 | stretch:8 one end:6 |
@@ -643,8 +720,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | RR | 4 | 0 | R:4 | a:1 b:1 X:1 -:1 |  | deform:4 |
 
 #### coincident-pp
+
 Fusion's rule (fitted on the 73 accepted one-mover cells of the free-standing line pair): rank the levels {0,m} < {2,3} < {1} < {4,5,6,7,o} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 73 of 73 (no contradiction); 1 cells move both operands and are outside the rule. In words: the operand held least (levels 0, m) is the one that gives way, the most held (4, 5, 6, 7, o) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full | o end at origin | m mid at origin |
+|---|---|---|---|---|---|---|---|---|---|---|
 | 0 free | b/b | a/b* | a/X* | a/X* | a/a | a/a | a/a | a/a | a/a | b/X* |
 | 1 corner | b/b | b/b | b/X* | b/X* | a/a | a/a | a/a | a/a | a/a | b/X* |
 | 2 length | b/b | a/b* | b/X* | b/X* | a/a | a/a | a/a | a/a | a/a | b/X* |
@@ -657,6 +739,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | m mid at origin | b/b | a/b* | a/X* | a/X* | a/a | a/a | a/a | a/a | R/a* | b/X* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 100 | 33 | a:32 b:41 -:1 R:26 | a:25 b:35 X:15 -:1 R:24 | translate:57 stretch:16 | one end:36 stretch:35 rotate:18 translate:1 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform:6 stretch:2 one end:1 |
 | LO | 12 | 10 | a:3 b:6 R:3 | a:3 b:6 R:3 | translate:8 stretch:1 | translate:6 stretch:2 one end:1 |
@@ -694,8 +777,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 2 | b:1 R:1 | b:1 R:1 | translate:1 | translate:1 |
 
 #### dim-aligned
+
 Fusion's rule (fitted on the 75 accepted one-mover cells of the free-standing line pair): rank the levels {0,2} < {1,m} < {3} < {4,5,6,7,o} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 73 of 75; contradicting cells: dim-aligned|LL|0,2, dim-aligned|LL|1,m; 1 cells move both operands and are outside the rule. In words: the operand held least (levels 0, 2) is the one that gives way, the most held (4, 5, 6, 7, o) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full | o end at origin | m mid at origin |
+|---|---|---|---|---|---|---|---|---|---|---|
 | 0 free | b/X* | a/X* | a/X* | a/X* | a/a | a/a | a/a | a/a | a/a | a/X* |
 | 1 corner | b/X* | b/X* | b/X* | a/X* | a/a | a/a | a/a | a/a | a/a | a/X* |
 | 2 length | b/X* | a/X* | b/X* | a/X* | a/a | a/a | a/a | a/a | a/a | a/X* |
@@ -708,6 +796,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | m mid at origin | b/X* | b/X* | b/X* | a/X* | a/a | a/a | a/a | a/a | a/a | b/X* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 100 | 20 | a:35 b:40 -:1 R:24 | a:25 b:25 X:25 -:25 | stretch:41 translate:20 rotate:14 | one end:40 stretch:40 rotate:20 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:4 stretch:2 | deform:6 stretch:2 one end:1 |
 | LO | 12 | 4 | a:3 b:6 R:3 | a:3 b:3 X:3 -:3 | translate:7 stretch:2 | translate:6 stretch:4 one end:2 |
@@ -745,8 +834,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 1 | b:1 R:1 | b:1 -:1 | translate:1 | translate:1 |
 
 #### dim-horizontal
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0} < {3} < {2} < {4,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 16 of 21; contradicting cells: dim-horizontal|LL|0,0, dim-horizontal|LL|2,0, dim-horizontal|LL|2,2, dim-horizontal|LL|2,3, dim-horizontal|LL|3,3. In words: the operand held least (level 0) is the one that gives way, the most held (4, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 2 length | 3 H/V | 4 end fixed | 7 full |
+|---|---|---|---|---|---|
 | 0 free | a/X* | a/X* | a/X* | a/a | a/a |
 | 2 length | a/X* | a/X* | a/X* | a/a | a/a |
 | 3 H/V | b/X* | a/X* | a/X* | a/a | a/a |
@@ -754,6 +848,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/-* | R/-* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 25 | 4 | a:14 b:7 R:4 | a:6 b:6 X:9 -:4 | translate:11 one end:5 rotate:5 | one end:20 rotate:10 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:4 one end:1 stretch:1 | deform:6 one end:2 stretch:1 |
 | LO | 12 | 5 | a:4 b:5 R:3 | a:3 b:3 X:3 -:3 | translate:6 one end:2 stretch:1 | translate:6 one end:4 stretch:2 |
@@ -791,8 +886,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 1 | b:1 R:1 | b:1 -:1 | translate:1 | translate:1 |
 
 #### dim-vertical
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0} < {3} < {2} < {4,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 17 of 21; contradicting cells: dim-vertical|LL|0,0, dim-vertical|LL|2,0, dim-vertical|LL|2,2, dim-vertical|LL|2,3. In words: the operand held least (level 0) is the one that gives way, the most held (4, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 2 length | 3 H/V | 4 end fixed | 7 full |
+|---|---|---|---|---|---|
 | 0 free | a/X* | a/X* | a/X* | a/a | a/a |
 | 2 length | a/X* | a/X* | a/X* | a/a | a/a |
 | 3 H/V | b/X* | a/X* | b/X* | a/a | a/a |
@@ -800,6 +900,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/-* | R/-* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 25 | 8 | a:13 b:8 R:4 | a:6 b:6 X:9 -:4 | translate:11 one end:5 rotate:5 | one end:10 rotate:10 translate:10 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:4 one end:1 stretch:1 | deform:6 one end:1 translate:1 stretch:1 |
 | LO | 12 | 6 | a:4 b:5 R:3 | a:3 b:3 X:3 -:3 | translate:6 one end:2 stretch:1 | translate:8 one end:2 stretch:2 |
@@ -837,8 +938,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 1 | b:1 R:1 | b:1 -:1 | translate:1 | translate:1 |
 
 #### horizontal-2pt
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0} < {3} < {2} < {4,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 20 of 21; contradicting cells: horizontal-2pt|LL|3,3. In words: the operand held least (level 0) is the one that gives way, the most held (4, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 2 length | 3 H/V | 4 end fixed | 7 full |
+|---|---|---|---|---|---|
 | 0 free | b/X* | a/X* | a/X* | a/a | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/a | a/a |
 | 3 H/V | b/X* | a/X* | a/X* | a/a | a/a |
@@ -846,6 +952,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 25 | 8 | a:10 b:11 R:4 | a:6 b:6 X:9 R:4 | translate:21 | one end:10 rotate:10 translate:10 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform:6 one end:1 translate:1 stretch:1 |
 | LO | 12 | 8 | a:3 b:6 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:8 one end:2 stretch:2 |
@@ -883,8 +990,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 2 | b:1 R:1 | b:1 R:1 | translate:1 | translate:1 |
 
 #### vertical-2pt
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0} < {2,3} < {4,7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 21 of 21 (no contradiction). In words: the operand held least (level 0) is the one that gives way, the most held (4, 7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 2 length | 3 H/V | 4 end fixed | 7 full |
+|---|---|---|---|---|---|
 | 0 free | b/X* | a/X* | a/X* | a/a | a/a |
 | 2 length | b/X* | b/X* | b/X* | a/a | a/a |
 | 3 H/V | b/X* | b/X* | b/X* | a/a | a/a |
@@ -892,6 +1004,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 7 full | b/b | b/b | b/b | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 25 | 4 | a:8 b:13 R:4 | a:6 b:6 X:9 R:4 | translate:21 | one end:20 rotate:10 |
 | LR | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | deform:6 one end:2 stretch:1 |
 | LO | 12 | 7 | a:3 b:6 R:3 | a:3 b:3 X:3 R:3 | translate:8 stretch:1 | translate:6 one end:4 stretch:2 |
@@ -929,8 +1042,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZP | 2 | 2 | b:1 R:1 | b:1 R:1 | translate:1 | translate:1 |
 
 #### pointOnLine
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0,4,m} < {3,o} < {7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 20 of 21; contradicting cells: pointOnLine|LL|4,3. In words: the operand held least (levels 0, 4, m) is the one that gives way, the most held (7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 3 H/V | 4 end fixed | 7 full | o end at origin | m mid at origin |
+|---|---|---|---|---|---|---|
 | 0 free | b/a* | a/a | b/a* | a/a |  |  |
 | 3 H/V | b/a* | b/a* | b/a* | a/a |  |  |
 | 4 end fixed | b/R* | b/R* | b/R* | R/R |  |  |
@@ -939,6 +1057,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | m mid at origin | b/a* | a/a | b/a* | a/a |  |  |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 24 | 6 | a:5 b:16 R:3 | a:12 R:12 | translate:13 one end:6 stretch:2 | stretch:6 one end:4 translate:2 |
 | LC | 12 | 0 | b:12 | a:6 R:6 | translate:6 one end:6 | stretch:4 one end:2 |
 | LS | 6 | 1 | a:3 b:3 | a:3 R:3 | translate:5 stretch:1 | stretch:2 one end:1 |
@@ -965,7 +1084,9 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZR | 2 | 1 | b:1 R:1 | R:2 | translate:1 |  |
 
 #### pointOnCircle
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LO | 24 | 5 | a:6 b:15 R:3 | a:12 R:12 | translate:16 radius:3 stretch:2 | stretch:8 one end:4 |
 | LA | 24 | 7 | a:12 b:9 R:3 | a:12 R:12 | translate:14 stretch:4 scale+radius:3 | stretch:8 one end:4 |
 | LF | 12 | 5 | a:6 b:3 R:3 | a:6 R:6 | translate:5 deform:2 stretch:2 | stretch:4 one end:2 |
@@ -986,8 +1107,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZF | 2 | 1 | b:1 R:1 | R:2 | translate:1 |  |
 
 #### midpoint
+
 Fusion's rule (fitted on the 21 accepted one-mover cells of the free-standing line pair): rank the levels {0,4,m} < {3,o} < {7} (lowest moves first); the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. It predicts 20 of 21; contradicting cells: midpoint|LL|4,3. In words: the operand held least (levels 0, 4, m) is the one that gives way, the most held (7) always stays; two operands at the same rank: the first pick stays and the second is moved.
+
 Grid, line (A) x line (B), `Fusion/ours`:
+
+| A \ B | 0 free | 3 H/V | 4 end fixed | 7 full | o end at origin | m mid at origin |
+|---|---|---|---|---|---|---|
 | 0 free | b/X* | a/X* | b/X* | a/a |  |  |
 | 3 H/V | b/X* | b/X* | b/X* | a/a |  |  |
 | 4 end fixed | b/b | b/b | b/b | R/R |  |  |
@@ -996,6 +1122,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | m mid at origin | b/X* | a/X* | b/X* | a/a |  |  |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LL | 24 | 13 | a:5 b:16 R:3 | a:3 b:9 X:9 R:3 | translate:13 one end:6 stretch:2 | translate:12 one end:10 stretch:8 |
 | LC | 12 | 6 | b:12 | b:6 X:6 | translate:6 one end:6 | one end:8 translate:6 stretch:4 |
 | LS | 6 | 0 | a:3 b:3 | b:3 X:3 | translate:5 stretch:1 | scale:4 stretch:2 deform:2 one end:1 |
@@ -1022,7 +1149,9 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | ZR | 2 | 1 | b:1 R:1 | b:1 R:1 | translate:1 | deform:1 |
 
 #### equal-circle
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | OO | 16 | 12 | -:12 R:4 | -:16 |  |  |
 | OA | 16 | 16 | R:16 | R:16 |  |  |
 | OF | 8 | 8 | R:8 | R:8 |  |  |
@@ -1034,7 +1163,9 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | FF | 4 | 0 | R:4 | -:4 |  |  |
 
 #### tangent-line-circle
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | LO | 16 | 8 | a:8 b:7 R:1 | a:6 b:2 X:6 R:2 | translate:10 stretch:2 one end:2 radius:1 | translate:12 stretch:4 one end:4 |
 | LA | 16 | 7 | a:10 b:5 R:1 | a:6 b:2 X:6 R:2 | translate:8 stretch:4 one end:2 scale+radius:1 | stretch:4 deform+radius:4 deform:4 translate:4 |
 | LF | 8 | 4 | a:5 b:2 R:1 | a:3 b:1 X:3 R:1 | stretch:2 translate:2 deform:2 one end:1 | stretch:4 deform:4 one end:2 |
@@ -1061,7 +1192,9 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | FR | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
 
 #### tangent-circle-circle
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | OO | 16 | 5 | a:5 b:10 R:1 | a:4 b:4 X:4 R:4 | translate:7 translate+radius:4 radius:4 | translate:16 |
 | OA | 16 | 5 | a:12 b:3 R:1 | a:4 b:4 X:4 R:4 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate:8 deform+radius:4 deform:4 |
 | OF | 8 | 4 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:3 translate:2 translate+radius:1 radius:1 | translate:4 deform:4 |
@@ -1073,35 +1206,48 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | FF | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
 
 #### horizontal-line
+
 Single operand: L@0: F one end / - | ours stretch / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | L | 4 | 3 | a:2 R:2 | a:2 R:2 | one end:2 | stretch:1 one end:1 |
 | C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 2 | R:2 | R:2 |  |  |
 
 #### vertical-line
+
 Single operand: L@0: F one end / - | ours stretch / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | L | 4 | 3 | a:2 R:2 | a:2 R:2 | one end:2 | stretch:1 one end:1 |
 | C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 2 | R:2 | R:2 |  |  |
 
 #### dim-length
+
 Single operand: L@0: F one end / - | ours stretch / -; L@3: F one end / - | ours stretch / -; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F deform / - | ours deform / -; R@8: F refused | ours . / - (reference)
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | L | 4 | 2 | a:3 R:1 | a:3 R:1 | one end:3 | stretch:2 one end:1 |
 | C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 1 | a:1 R:1 | a:1 -:1 | deform:1 | deform:1 |
 
 #### dim-radius
+
 Single operand: O@0: F radius / - | ours radius / -; O@c: F radius / - | ours radius / -; O@r: F refused | ours refused; O@cr: F refused | ours refused; A@0: F scale+radius / - | ours deform+radius / -; A@c: F scale+radius / - | ours scale+radius / -; A@r: F refused | ours refused; A@cr: F refused | ours refused; F@0: F refused | ours refused; F@c: F refused | ours refused
+
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
+|---|---|---|---|---|---|---|
 | O | 4 | 4 | a:2 R:2 | a:2 R:2 | radius:2 | radius:2 |
 | A | 4 | 3 | a:2 R:2 | a:2 R:2 | scale+radius:2 | deform+radius:1 scale+radius:1 |
 | F | 2 | 2 | R:2 | R:2 |  |  |
 
 Kind letters: L line, C construction line, S polygon side, R rect side, O circle, A arc, F fillet arc, P point, Z origin. Who-moves letters as above (`a` first pick only, `b` second only, `X` both, `-` none, `R` refused). `how`: translate, rotate (rigid), stretch (a line changes length), `one end` (one endpoint of a line moves: rotate / stretch about the other), scale, deform, radius, `+radius` (the radius changed as well).
+
 <!-- graded:end -->

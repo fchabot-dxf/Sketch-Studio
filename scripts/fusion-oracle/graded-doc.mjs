@@ -12,7 +12,7 @@ const all = cells();
 const sym = (r) => { if (!r.accepted) return 'R'; const x = r.mv.X.m > 0, y = r.mv.Y && r.mv.Y.m > 0; return x && y ? 'X' : x ? 'a' : y ? 'b' : '-'; };
 const LV = { '0': 'free', '1': 'corner', '2': 'length', '3': 'H/V', '4': 'end fixed', '5': 'end+length', '6': 'H/V+end', '7': 'full', o: 'end at origin', m: 'mid at origin', '8': 'rect full', c: 'centre fixed', r: 'radius', cr: 'centre+radius' };
 const out = [];
-const P = (s) => out.push(s);
+const P = (...a) => out.push(...a);
 
 P('<!-- graded:begin -->', '');
 P(`Fusion ${fx.fusion}, recorded ${fx.date}. ${all.length} cells; data \`tests/fixtures/fusion-oracle/which-moves-graded.json\` (positions before / after in mm, per cell), known differences \`which-moves-graded-known.json\` (per class: constraint x kind pair; "all" when the whole class differs). The cells are built by \`tests/harness/fusion-oracle/graded.js\` with the matrix builders (rect tool, polygon tool, fillet tool, arc, circle), the level applied with real constraints, then replayed in Fusion by \`scripts/fusion-oracle/run-jobs.py\`.`, '');

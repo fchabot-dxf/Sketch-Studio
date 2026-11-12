@@ -1802,6 +1802,59 @@ Divergences and verdicts:
 
 <!-- drawings:end -->
 
+## Dragging (real mouse, qualitative)
+
+**Method (task 530).** Fusion's API cannot reproduce a constrained drag (task 527: `point.move` / `sketch.move` leave a length-dimensioned point where it is or put it on the wrong branch), so
+the drag is done with REAL Windows mouse input (`scripts/fusion-oracle/win-mouse.py`, SendInput) into a live Fusion 360 (2706.1.17), only into a new scratch document, only while Fusion is the foreground
+window; the bridge builds the sketch and reads every point back (`drag-batch-setup.py`, `drag-batch-frame.py`, outside driver `drag-batch-run.py`). 146 cells (`tests/harness/fusion-oracle/drag-cells.js`, data in
+`tests/fixtures/fusion-oracle/drag-cells.json`): line, rectangle (H/V + coincident), circle, arc, two lines sharing a corner, line tangent to a circle; holds free / H / length / one end fixed / corner on
+the origin / fully constrained; grab an end point, a body (line mid, rectangle edge, circle rim), a centre or a corner; drag along / across / diagonal, 30 % of the shape size. ONE path for every cell:
+straight line from the grab point to the target, 20 steps over 600 ms, 120 ms settle. Each cell was built and dragged TWICE in Fusion (two independent copies in the same sketch); 4 cells whose two
+runs differ in class are "unstable" and not compared. Ours: the same sketch and the same 20-point cursor path through the app's real pointer code (`handleSelectionPointerDown` / `Move` / `Up` in
+`packages/ui/input-handlers/selection-tools.js`, plus the app's per-frame `engine.solve` from `apps/sketchstudio/main.js`) in node. Fusion's grid Snap could not be switched off (the `ToggleGridSnapCommand` execute left the Sketch Palette checkbox
+checked, also after re-entering the sketch), so it stayed on; the free-line endpoints land on the cursor within about 2 px, the 0.06 cm alternation of phase 1 shows up as sub-tolerance noise only.
+
+**Path dependence (why only the qualitative outcome is compared).** Phase 1, line (0,0)-(10,0), start fixed, length dimensioned 10, drag the end from (10,0) to (13,5): the projection onto the circle is
+(9.34,3.60) but Fusion's result depends on the cursor path: 20 steps / 600 ms gives (6.98656,7.15458) (three runs, spread 2e-4 cm); 2 steps (5.88,8.09); 60 steps / 3 s (7.16,6.98); 200 steps / 4 s did not
+start at all ((10,0)). Same path = same answer to 1e-4, a different path = a different answer, so coordinates are kept for reference only and a class is compared: which points / radii moved (the which-moves
+M / . / r notation), did the dragged point move, were all constraints and dimensions kept, rigid (translate / rotate) or stretch (an undimensioned length or radius changed), nothing moved (refused). Tolerance 0.005 cm.
+
+**Result.** 146 cells: 91 same as Fusion, 51 KNOWN differences, 4 unstable in Fusion (`line.H.end.across`, `line.fix0len.end.diag`, `tangent.free.lineend.across`, `tangent.full.lineend.across`). Fusion
+kept every constraint and dimension in every run (`kept=y` everywhere); so did ours. A "nothing moved" cell in Fusion is either a refusal (fully constrained) or a drag that did not start; the same cell moved in a
+sibling vector in every case I checked, so I read the 'none' cells as refusals.
+
+**Replay correction (checked in the real app).** The first version of the node replay called only the pointer handlers and reported "dragging a body does nothing in ours" (37 cells). That was a replay
+artefact: the real app also runs `engine.solve(SolverConfig.ITERATIONS || 500)` every animation frame (`apps/sketchstudio/main.js` `loop()`), and that frame solve is what moves a body drag (it auto-detects the first
+free joint carrying `joint.dragTarget`; the move handler's own solve puts its spring on the shape id). The replay now runs one such frame solve after every pointer move and after the release. Proof:
+`tests/fusion-drag-live.test.js` (headless browser, real `Input.dispatchMouseEvent`, the same 20-step path, geometry read from the DOM) drags five cells in the real SketchStudio and the replay gives the same class for
+each: free line by its body = stretch (one end follows), rectangle edge by its body = stretch (4 of 8 drawn points move), circle by its rim = translate, arc by its end = stretch (radius changes), length-dimensioned
+free line by an end = rotate (both ends move, length kept). 39 of the 146 "ours" records changed with the correction (all body / arc / dimensioned-line cells; the other 107 are identical).
+
+| class (what was grabbed) | same | differs | unstable |
+| --- | --- | --- | --- |
+| line end | 15 | 2 | 2 |
+| line mid (body) | 6 | 12 | 0 |
+| rectangle corner | 13 | 0 | 0 |
+| rectangle edge (body) | 8 | 4 | 0 |
+| circle centre | 12 | 0 | 0 |
+| circle rim | 6 | 6 | 0 |
+| arc end | 0 | 12 | 0 |
+| arc centre | 6 | 6 | 0 |
+| two lines, free end | 9 | 0 | 0 |
+| two lines, shared corner | 9 | 0 | 0 |
+| tangent: line end | 4 | 3 | 2 |
+| tangent: circle rim | 3 | 6 | 0 |
+
+**The 5 most important differences, in plain words.**
+1. **Dragging a body (line, rectangle edge, circle rim) is not a rigid move in ours** (22 differing cells). Ours moves only the FIRST free joint to the cursor (a free line stretches, one rectangle corner pair follows),
+   or nothing in some hold states; the circle rim translates the circle (Fusion resizes it). Fusion translates a line / rectangle as a whole and resizes the circle.
+2. **Circle rim**: Fusion resizes the circle (radius changes, centre stays); ours has no rim handle, so a rim drag moves the circle. With a radius dimension Fusion moves the whole circle instead (same as ours).
+3. **Arc ends and arc centre**: Fusion resizes the arc (end drag, free), rotates it about the fixed centre (radius dimensioned) or translates it; ours stretches or rotates it and moves a different set of its three joints (12 of 12 end cells and 6 of 12 centre cells differ).
+4. **A free line with a length dimension grabbed by an end**: Fusion drags the whole line along (it translates); ours rotates it (both ends move, length kept).
+5. **Tangent line + circle**: grabbing the circle rim or the line end, ours moves / resizes the circle in a different set of cells than Fusion (9 differing cells).
+Agreement is complete for a rectangle corner (13/13), a circle centre (12/12), both cells of two lines sharing a corner (18/18) and every fully constrained cell (nothing moves in either).
+KNOWN list: `tests/fixtures/fusion-oracle/drag-known.json` (regenerate with `node scripts/fusion-oracle/drag-known.mjs`), tests `tests/fusion-drag.test.js` and `tests/fusion-drag-live.test.js`.
+
 ## Editing a dimension (task 528)
 
 Question: when the value of an EXISTING driving dimension is changed, does our `commitDimensionEdit` (packages/ui/dimension-seams.js, the one path the app uses when a value is typed) re-solve the sketch the way Fusion does? Measured in Fusion 2706.1.17 (recorded 2026-11-12), replayed offline by `tests/fusion-dim-edit.test.js` (fixture `tests/fixtures/fusion-oracle/fusion-dim-edit.json`, KNOWN list `fusion-dim-edit-known.json`). Nothing under `packages/` was changed: this is measurement only.

@@ -7,6 +7,7 @@
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
+import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
@@ -450,7 +451,7 @@ function updateSnapTarget(e, svg, state) {
         // GRID SNAP FALLBACK: If no geometry/constraint snap, check for grid intersection
         if (!target) {
             const w = screenToWorld(svg, e.clientX, e.clientY);
-            const GRID_SIZE = Number(SettingsManager.get('GRID_SIZE') || 2);
+            const { GRID_SIZE } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SettingsManager.get('GRID_SIZE') || SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SettingsManager.get('GRID_MAJOR_STEP') || SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
             const gx = Math.round(w.x / GRID_SIZE) * GRID_SIZE;
             const gy = Math.round(w.y / GRID_SIZE) * GRID_SIZE;
             

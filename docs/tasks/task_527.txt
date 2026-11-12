@@ -1,0 +1,35 @@
+TASK 527 (Sketch-Studio): Fusion as an oracle for DRAGGING. Owner 2026-11-12: "All 3" (drag, dimension edit, tools vs Fusion).
+This is the first of three recording tasks (528 = editing a dimension value, 529 = each tool's result); only ONE seat drives Fusion.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-527-fusion-drag, branch agents/task-527-fusion-drag (from origin/main c0224bc).
+Read first: docs/FUSION-COMPARISON.md, scripts/fusion-oracle/* (how task 518 generated jobs, ran them in Fusion through the MCP
+bridge on port 7654 with run-jobs.py, recorded fixtures, built KNOWN lists and docs), tests/fusion-oracle.test.js, the
+`fusion360-quirks` notes if available, tests/harness/coverage/prop-*.js (how OUR drag is driven in node today).
+
+GOAL: record what Fusion does when a point (or a curve) of a partly constrained sketch is dragged, replay the same drag in our
+solver, and compare offline. The existing fixtures only cover the moment a constraint is created.
+1. FIRST find how to drag through the Fusion API and prove it on 3 hand cases before generating anything: SketchPoint.move /
+   sketch.move(entities, transform) with constraints present (does it solve like a mouse drag, or refuse / move rigidly?). If the
+   API cannot reproduce a constrained drag (e.g. it ignores constraints or always fails), STOP and report what you measured: do
+   not record something that is not a drag. Units are cm in Fusion.
+2. Cases (declare them as DATA, generated from the same inventory the graded which-moves cells use, do not hand-write hundreds):
+   operand kinds line, rectangle (4 lines + its constraints), polygon, circle, arc, slot if we have one, a filleted corner; each in
+   the hold states of the graded grid (free, H/V, length-dimensioned, one end fixed, on the origin, corner shared, tangent to
+   something, fully constrained); drag targets: an end point, a mid curve (the line/arc/circle body), a centre, a rim point;
+   drag vectors: small and large, along and across the constrained direction, and one that cannot be satisfied (expect: refused or
+   clamped: record which). A few hundred cells is the right size.
+3. Record per cell: every point position after, radii, which entities moved (same M / . notation as which-moves), whether Fusion
+   refused or clamped, and whether the dragged point reached the cursor target.
+4. Ours: replay through the SAME code path the app's drag uses (find it; no test-only solver path), same recording format.
+5. tests/fusion-drag.test.js (offline, no Fusion needed, runs in the gate): compares; every class of difference is a KNOWN entry
+   with a one-line reason; a KNOWN that starts passing fails loudly. Scripts to regenerate KNOWN and a "Dragging" section in
+   docs/FUSION-COMPARISON.md with a per-class table (same / different) and the 5 most important differences in plain words.
+   New files only (fusion-drag*.json etc.); do NOT edit the existing which-moves / graded / drawings fixtures or KNOWN lists
+   (task 525 is rewriting who-moves and regenerates those).
+DO NOT change packages/ (this task only measures). Report findings; fix nothing.
+FUSION SAFETY (hard rules): work ONLY in a NEW unsaved document you create; sketches named CLAUDE_TEST_*; never open, modify,
+save or close the owner's documents; delete only what you created; close your test document without saving at the end; never
+click Repair/Reset/sign-in dialogs; if Fusion or the bridge is not reachable, STOP and report (do not launch or kill Fusion).
+No real Google calls. Never kill a process you did not start. REPORT once, leave nothing running.
+STOP if: step 1 fails; Fusion's drag result is not deterministic across two runs of the same cell (report the spread).
+Gate green (`npm run gate`, run it and wait for its exit), commit by path, push the branch, WORK-LOG `## TURN 527`, the AGENTS.md
+REPORT block with counts and the evidence in .evidence/527/.

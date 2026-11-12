@@ -24,12 +24,19 @@ const DEFAULT_SETTINGS = {
     SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM || 10,
     GRID_MAGNETISM: SolverConfig.GRID_MAGNETISM || 10,
     GRID_DENSITY: 2,
-    GRID_SIZE: 2,
-    GRID_MAJOR_STEP: 10,
+    // The mm grid's DEFAULTS (task 532, owner: every 100 mm heavy, 10 per heavy). ONE place: the renderer, the snap and the
+    // panel all read these through SettingsManager (a stored value or a template wins; a mm file with 2 / 10 stored is the old grid).
+    GRID_SIZE: 10,
+    GRID_MAJOR_STEP: 100,
     SHOW_GRID: true,
     // Grid style drawn by the shared canvas grid (#ui/canvas-grid.js): 'lines' | 'off' | 'points'. Default 'lines' = the
     // grid SketchStudio always drew. A genuine display preference → persisted locally like the other display settings.
     GRID_MODE: 'lines',
+    // Minor squares per inch in an INCH file (#ui/canvas-grid.js GRID_INCH_DIVISIONS: 10 | 2 | 4 | 8 | 16; the major stays 1 in).
+    // Default 10 = decimal tenths. Read only when DOC_UNIT is 'in'; a mm file never reads it.
+    INCH_GRID_DIVISIONS: 10,
+    // Major (heavy) line spacing in an INCH file, in inches (any positive number; default 1). minor = this / INCH_GRID_DIVISIONS.
+    INCH_GRID_MAJOR: 1,
 
     // Visual defaults
     LINE_STROKE: 1.0,

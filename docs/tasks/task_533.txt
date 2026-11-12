@@ -1,0 +1,39 @@
+TASK 533 (Sketch-Studio): the Jacobian rows of parallel / perpendicular / angle are wrong when the two lines SHARE a joint
+(finding F6, probably F4, maybe EA-6/EA-7). Solver maths, one cause. Blocks the merge of task 525.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-533-shared-joint-rows, branch agents/task-533-shared-joint-rows (from origin/main 04fc8fa).
+Read first: docs/COVERAGE-AUDIT.md ("Fixed in task 523": the F6 diagnosis; "Extreme arcs (task 531)": EA-6, EA-7 and the F6/F4
+cells), docs/CONSTRAINT-AUDIT.md (F4, F6), tests/jacobian-fd-guard.test.js, packages/core/solver/definitions.js (parallel,
+perpendicular, angle, collinear rows), WORK-LOG turn 404 (the same overwrite bug fixed for `equal`), task 523's
+addRadiusDerivative (it ACCUMULATES with += for exactly this reason).
+
+CAUSE (measured in task 523, `.evidence/523/f6-parallel-probe.txt` in that worktree; reproduce it yourself first):
+`parallel.computeJacobian` ASSIGNS (=) each joint's columns: the u-line part, then the v-line part. When the lines share a joint
+its index appears in both parts, so the second write overwrites the first: "shared corner (L2 starts at L1 end b):
+max |J - fd| = 2.90e+1 at b.x" against 4.11e-8 for separate lines. perpendicular and angle use the same assignment pattern.
+DO:
+ 1. Probe: analytic vs finite differences for parallel, perpendicular, angle (and every other row that takes two shapes or can
+    receive the same joint index twice: collinear, equal, line-line distance, point-on-line with a shared end, tangent with a
+    shared end, midpoint, symmetric: LIST every row definition and say for each whether a repeated index is possible and whether
+    it accumulates), each with separate joints and with every way of sharing a joint. Quote before.
+ 2. Fix the cause in ONE way for all rows: a row's columns ACCUMULATE (+=) per joint contribution, on a row that starts at zero
+    (check how outRow is cleared between rows: quote it). If there is a shared helper for "add this gradient at joint i", use or
+    introduce ONE and use it in every row that can repeat an index; no per-row patches of different shapes.
+ 3. Extend tests/jacobian-fd-guard.test.js: every such row x every joint-sharing pattern (must fail on the old code: show it).
+ 4. Re-run all audits: constraint-audit, coverage-matrix, coverage-properties, extreme-arcs, fusion-oracle, fusion-dim-edit,
+    solver-scenarios. Delete/adjust every KNOWN entry the tests tell you now passes (F6, F4 cells, EA-6/EA-7 if they go);
+    regenerate fusion-oracle KNOWN lists and docs with the scripts if counts move. Counts before -> after for each.
+ 5. EA-6 names "un-normalised rows (definitions.js:277-345)" as a SUSPECTED cause: measure whether it is still there after the
+    fix (the repro `node tests/extreme-arcs.test.js --cell r0.5s30cw perpendicular-chord sep`); diagnose, do NOT normalise rows
+    in this task.
+ 6. Specific cell to report (it blocks 525): with task 525's branch (origin/agents/task-525-who-moves) the control cell
+    `--cell s30cw parallel-chord shared` is accepted with issues ["jacobian","bite"] (J != fd 2.5e+1, jitter re-solve does not
+    come back). You cannot run 525's code here; report what THIS fix does to that cell on main (it is refused on main) and to
+    every other parallel/perpendicular shared-joint cell's jitter ("bite") result.
+DO NOT: change residuals, tolerances, iteration counts, placement code, saved-file format; no hidden globals; no silent catch.
+STOP and report if: the correct rows change behaviour beyond convergence/DOF counts in a way the audits show as a NEW failure
+class (list every behaviour change for existing users: constraints previously refused that are now accepted, DOF counts that
+change); or the DOF count of an existing fixture drawing changes.
+No Fusion, mouse or keyboard. Never kill a process you did not start. REPORT once, leave nothing running.
+If node_modules is missing make a junction to D:\APPS\Sketch-Studio\node_modules. Before the final gate `git fetch origin` and
+merge origin/main if it moved. Gate green (`npm run gate`, run it and wait for its exit), commit by path, push the branch,
+WORK-LOG `## TURN 533`, the AGENTS.md REPORT block.

@@ -96,13 +96,40 @@ await (async () => {
       assert.deepStrictEqual(f.active, ['lines'], host + ': first tab active by default');
       assert(f.templateAboveTabs, host + ': the Template select sits above the tabs');
       assert.deepStrictEqual(f.lines.keys, ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLOW_WIDTH_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'HOVER_COLOR', 'FIXED_JOINT_FILL', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'], host + ' lines tab');
-      assert.deepStrictEqual(f.grid.keys, ['SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'GRID_MAGNETISM', 'GRID_SIZE', 'GRID_MAJOR_STEP'], host + ' grid tab');
+      assert.deepStrictEqual(f.grid.keys, ['SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'GRID_MAGNETISM', 'GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS'], host + ' grid tab');
       assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'GLYPH_STYLE', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY'], host + ' glyphs tab');
       assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');
       assert(!f.lines.hidden && f.grid.hidden && f.glyphs.hidden && f.units.hidden, host + ': only the active tab shows its fields');
       const footBtns = await evalJs(`[...document.querySelectorAll('.sk-style-panel button')].map((b) => b.textContent.trim())`);
       assert(!footBtns.some((t) => /save/i.test(t)), host + ': the Style panel has no Save button: ' + footBtns);
       assert(footBtns.includes('Reset') && footBtns.includes('Close'), host + ': Reset and Close remain: ' + footBtns);
+
+      // TASK 532: showWhen. The metric pair shows for mm/cm files, the inch pair for inch files; a control without showWhen is
+      // unaffected; flipping DOC_UNIT re-draws the REAL grid (pattern spacing) live, and so does each inch setting.
+      const grid = `(async () => {
+        const S = (await import('/packages/core/settings-manager.js')).default;
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const vis = () => ({ unit: S.get('DOC_UNIT'), ...Object.fromEntries(['GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS', 'SHOW_GRID', 'GRID_MODE'].map((k) => [k, !document.querySelector('.sk-style-panel [data-row="' + k + '"]').hidden])) });
+        const w = async () => { await sleep(400); const g = document.querySelector('#grid'); return g ? g.getAttribute('width') : 'NOGRID svgs=' + document.querySelectorAll('svg').length + ' rect=' + !!document.querySelector('#infinite-grid') + ' shown=' + [...document.querySelectorAll('svg')].map((s) => s.id + ':' + s.getBoundingClientRect().width).join(); };
+        const out = {};
+        document.querySelector('.mode-btn[data-mode="design"]')?.click(); await sleep(500);
+        for (const u of ['mm', 'cm', 'in']) { S.set('DOC_UNIT', u, { persist: false }); out['vis_' + u] = vis(); out['w_' + u] = await w(); }
+        out.in10 = out.w_in; S.set('INCH_GRID_DIVISIONS', 8, { persist: false }); out.in8 = await w();
+        S.set('INCH_GRID_MAJOR', 2, { persist: false }); out.in8m2 = await w();
+        S.set('DOC_UNIT', 'mm', { persist: false }); out.mmAgain = await w();
+        S.set('DOC_UNIT', 'in', { persist: false });
+        const sel = document.querySelector('.sk-style-panel [data-key="INCH_GRID_DIVISIONS"]'); sel.value = '16'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        out.stored16 = S.get('INCH_GRID_DIVISIONS'); out.in16 = await w();
+        return out;
+      })()`;
+      const g = await evalJs(grid);
+      const only = (v, on) => ['GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS'].every((k) => v[k] === on.includes(k)) && v.SHOW_GRID && v.GRID_MODE;
+      assert(only(g.vis_mm, ['GRID_MAJOR_STEP', 'GRID_SIZE']) && only(g.vis_cm, ['GRID_MAJOR_STEP', 'GRID_SIZE']), host + ': metric pair for mm/cm: ' + JSON.stringify(g));
+      assert(only(g.vis_in, ['INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS']), host + ': inch pair for inch: ' + JSON.stringify(g));
+      assert(g.w_mm === g.mmAgain, host + ': mm grid back to the same spacing ' + JSON.stringify(g));
+      assert(g.w_in !== g.w_mm && g.in8 !== g.in10 && g.in8m2 !== g.in8 && g.in16 !== g.in8m2, host + ': grid redraws live on unit / divisions / major: ' + JSON.stringify(g));
+      assert.strictEqual(g.stored16, 16, host + ': the select stores a NUMBER');
+      await evalJs(`(async () => { const S = (await import('/packages/core/settings-manager.js')).default; S.set('DOC_UNIT', ${host.includes('shaper') ? "'in'" : "'mm'"}, { persist: false }); })()`);
 
       // keyboard: ArrowRight moves to the next tab and shows its fields
       await evalJs(`document.querySelector('.sk-style-tab[data-tab="lines"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))`);

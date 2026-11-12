@@ -4,7 +4,7 @@
 // Shaper adopts this renderer — they currently assume the SketchStudio index.html DOM. (The grid is no longer one of
 // them: it is created inside the canvas svg by #ui/canvas-grid.js, shared by SketchStudio and any mountSketch host.)
 import { dbg } from '#core/debug.js';
-import { updateGridFromSettings } from '#ui/canvas-grid.js';
+import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
@@ -99,9 +99,9 @@ export const defaultRenderCtx = {
   // (a) Mount + retune the shared canvas grid (#ui/canvas-grid.js — the ONE grid: GRID_MODE lines/off/points, retuned to
   // the current grid sizes / zoom so strokes don't saturate). `svg` is the canvas draw() was handed; the grid's
   // <defs>/<rect> are created inside it (no longer hardcoded in apps/sketchstudio/index.html).
-  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, scale, svg }) {
+  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, svg }) {
     try {
-      updateGridFromSettings({ svgEl: svg, GRID_SIZE, GRID_MAJOR_STEP, scale });
+      updateGridFromSettings({ svgEl: svg, GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale });
     } catch (_) {}
   },
   // (b) Read the engine's last solve stats (written elsewhere by the solver) for the debug/AI-vision residual labels.
@@ -160,8 +160,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
   const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
-  const GRID_SIZE = getNum('GRID_SIZE', 2);
-  const GRID_MAJOR_STEP = getNum('GRID_MAJOR_STEP', 10);
+  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';
@@ -574,7 +573,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
   // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue.
   // Ancillary (P3): the host's render ctx mounts + retunes the shared canvas grid (default ctx → #ui/canvas-grid.js on `svg`).
-  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, scale, svg });
+  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, svg });
 
   // Closed-shape fills: build simple loops from grouped line shapes
   try {

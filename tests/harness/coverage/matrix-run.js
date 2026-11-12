@@ -154,7 +154,10 @@ export async function runCell(row, cols, variant) {
   // collinear on two lines that ALREADY lie on one line (e.g. two horizontal rect sides sharing a corner): the new row is redundant, so
   // the DOF must not change (delta 0, agreed by the independent finite-difference count). PlaneGCS counts -1 there, so it is not used as
   // the oracle for this case (task 511: our count was 1 too LOW before the full-derivative Jacobian and agrees with finite differences now).
-  const preCollinear = row.id === 'collinear' && lineLike(kx) && lineLike(ky) && (() => {
+  // parallel on the same pair is the same case (task 533): both sides are already horizontal, so d(u x v) = |u| dv_y - |v| du_y is a combination
+  // of the two H rows: delta 0, = finite differences; PlaneGCS counts -1 (.evidence/533/rr-shared-oracle-after.txt). Before task 533 our count
+  // was -1 only because the shared corner's column was overwritten (F6).
+  const preCollinear = (row.id === 'collinear' || row.id === 'parallel') && lineLike(kx) && lineLike(ky) && (() => {
     const P = (id) => st.joints.get(id), a = P(X.joints[0]), b = P(X.joints[1]), len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     return Y.joints.slice(0, 2).every(id => Math.abs(((b.x - a.x) * (P(id).y - a.y) - (b.y - a.y) * (P(id).x - a.x)) / len) < 1e-6);
   })();

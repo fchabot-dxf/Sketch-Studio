@@ -1,0 +1,246 @@
+{
+ "line.free.mid.along": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.free.mid.across": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.free.mid.diag": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.H.mid.along": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.H.mid.across": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.H.mid.diag": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.len.end.across": {
+  "class": "line.end: translate -> rotate",
+  "reason": "length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it about the other end or does not move"
+ },
+ "line.len.end.diag": {
+  "class": "line.end: translate -> none",
+  "reason": "length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it about the other end or does not move"
+ },
+ "line.len.mid.along": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.len.mid.across": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.len.mid.diag": {
+  "class": "line.mid: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.fix0.mid.along": {
+  "class": "line.mid: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.fix0.mid.across": {
+  "class": "line.mid: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.fix0.mid.diag": {
+  "class": "line.mid: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.fix0len.mid.across": {
+  "class": "line.mid: rotate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "line.fix0len.mid.diag": {
+  "class": "line.mid: rotate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.free.edge.along": {
+  "class": "rect.edge: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.free.edge.across": {
+  "class": "rect.edge: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.free.edge.diag": {
+  "class": "rect.edge: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.fix0.edge.along": {
+  "class": "rect.edge: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.fix0.edge.diag": {
+  "class": "rect.edge: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.dims.edge.along": {
+  "class": "rect.edge: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.dims.edge.across": {
+  "class": "rect.edge: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "rect.dims.edge.diag": {
+  "class": "rect.edge: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.free.rim.along": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.free.rim.across": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.free.rim.diag": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.rad.rim.along": {
+  "class": "circle.rim: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.rad.rim.across": {
+  "class": "circle.rim: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.rad.rim.diag": {
+  "class": "circle.rim: translate -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.fixc.rim.along": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.fixc.rim.across": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "circle.fixc.rim.diag": {
+  "class": "circle.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "arc.free.end.along": {
+  "class": "arc.end: stretch -> stretch (moved set)",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.free.end.across": {
+  "class": "arc.end: stretch -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.free.end.diag": {
+  "class": "arc.end: stretch -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.free.centre.along": {
+  "class": "arc.centre: translate -> stretch",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.free.centre.across": {
+  "class": "arc.centre: translate -> stretch",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.free.centre.diag": {
+  "class": "arc.centre: translate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.end.along": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.end.across": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.end.diag": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.centre.along": {
+  "class": "arc.centre: translate -> rotate",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.centre.across": {
+  "class": "arc.centre: translate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.rad.centre.diag": {
+  "class": "arc.centre: translate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixc.end.along": {
+  "class": "arc.end: stretch -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixc.end.across": {
+  "class": "arc.end: stretch -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixc.end.diag": {
+  "class": "arc.end: stretch -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixcrad.end.along": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixcrad.end.across": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "arc.fixcrad.end.diag": {
+  "class": "arc.end: rotate -> none",
+  "reason": "an arc joint drags the whole arc cluster (centre + both ends get the same dragTarget) but only the grabbed joint has a spring; ours leaves it unmoved or moves a different set (cause inside the solve not isolated), Fusion resizes / rotates / translates the arc"
+ },
+ "twolines.fixklens.end.diag": {
+  "class": "twolines.end: rotate -> none",
+  "reason": "both lengths dimensioned, corner fixed, diagonal drag: Fusion rotates the line about the corner; ours leaves it where it is"
+ },
+ "tangent.free.lineend.diag": {
+  "class": "tangent.lineend: stretch -> stretch (moved set)",
+  "reason": "line end of a tangent line + circle: ours moves / resizes the circle too (or nothing), Fusion keeps a different set"
+ },
+ "tangent.free.rim.along": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "tangent.free.rim.across": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "tangent.free.rim.diag": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "tangent.fixc.lineend.across": {
+  "class": "tangent.lineend: stretch -> none",
+  "reason": "line end of a tangent line + circle: ours moves / resizes the circle too (or nothing), Fusion keeps a different set"
+ },
+ "tangent.fixc.lineend.diag": {
+  "class": "tangent.lineend: stretch -> stretch (moved set)",
+  "reason": "line end of a tangent line + circle: ours moves / resizes the circle too (or nothing), Fusion keeps a different set"
+ },
+ "tangent.fixc.rim.along": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "tangent.fixc.rim.across": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ },
+ "tangent.fixc.rim.diag": {
+  "class": "tangent.rim: stretch -> none",
+  "reason": "grabbing a shape BODY: handleSelectionPointerMove passes the SHAPE id as the spring joint (state.drag.id), so no joint gets a spring and nothing moves; Fusion moves / resizes it"
+ }
+}

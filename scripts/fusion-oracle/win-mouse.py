@@ -88,7 +88,7 @@ def drag(x1, y1, x2, y2, ms, steps, canvas, settle=120):
     for (x, y) in ((x1, y1), (x2, y2)):
         if not (L <= x <= R and T <= y <= B): abort('point %s outside canvas %s' % ((x, y), canvas))
     t0 = time.time(); move_to(x1, y1); time.sleep(0.15)
-    if cursor() != (x1, y1): abort('cursor did not land at start: %s' % (cursor(),))
+    if max(abs(cursor()[0] - x1), abs(cursor()[1] - y1)) > 2: abort('cursor did not land at start: %s expected %s' % (cursor(), (x1, y1)))
     ok, f, ft = fg_is_fusion()
     if not ok: abort('foreground changed before press: %r' % ft)
     down(); time.sleep(0.12); last = (x1, y1); log = []
@@ -96,7 +96,7 @@ def drag(x1, y1, x2, y2, ms, steps, canvas, settle=120):
         for i in range(1, steps + 1):
             x = round(x1 + (x2 - x1) * i / steps); y = round(y1 + (y2 - y1) * i / steps)
             if in_corner(): up(); abort('cursor in screen corner during drag')
-            if cursor() != last: up(); abort('cursor moved by someone else: %s expected %s' % (cursor(), last))
+            if max(abs(cursor()[0] - last[0]), abs(cursor()[1] - last[1])) > 3: up(); abort('cursor moved by someone else: %s expected %s' % (cursor(), last))
             ok, f, ft = fg_is_fusion()
             if not ok: up(); abort('foreground left Fusion during drag: %r' % ft)
             move_to(x, y); last = (x, y); time.sleep(ms / 1000.0 / steps)

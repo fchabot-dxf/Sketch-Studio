@@ -13478,3 +13478,13 @@ Line, start fixed, length 10 (case 1), end (10,0)->(13,5): NOT the projection (9
 release: identical to no hold. Target (8.66,5) on the circle: (8.43,5.38). Target (0,6): (-5.69,8.22). So Fusion's constrained drag is path dependent
 (event sequence), not "nearest solution to the cursor". Evidence: .evidence/530/ (local).
 Stale display: after setting the camera through the API the on-screen window did not repaint until vp.fit(); always screenshot the window to confirm.
+
+## TURN 530 phase 2 (DRAGGING, real mouse, qualitative; nothing under packages/ touched)
+Advisor go, reduced scope: one fixed path (straight line, 20 steps, 600 ms, 120 ms settle) per cell, qualitative comparison only. 146 cells (tests/harness/fusion-oracle/drag-cells.js,
+data tests/fixtures/fusion-oracle/drag-cells.json), every cell built and dragged TWICE in Fusion as two copies in one sketch (24 slots per sketch, 12 batches + 2 origin sketches, 292 recorded runs,
+about 36 s per 24 drags). Recorded Fusion answers: tests/fixtures/fusion-oracle/drag-fusion.json (Fusion 2706.1.17). Ours: the app's real pointer path in node (handleSelectionPointerDown/Move/Up,
+packages/ui/input-handlers/selection-tools.js; the solver call is the one inside handleSelectionPointerMove). Result: 81 same, 61 KNOWN differences (drag-known.json, 0 unexplained), 4 unstable in Fusion.
+Finding for the owner (not fixed): a BODY drag (line, rectangle edge, circle rim) does nothing in ours: handleSelectionPointerMove attaches the spring to state.drag.id, which is the SHAPE id for a body drag.
+Snap: ToggleGridSnapCommand could not be read (ListControlDefinition, no isChecked) and its execute left the palette Snap checkbox checked, so snap stayed on. Mistake caught: two bridge/driver calls issued in
+parallel once (batch 2 and the final collect of the origin copy b): both batches were redone sequentially before use. Fusion: scratch document closed unsaved, 2 pre-existing Untitled documents remain.
+Tests: tests/fusion-drag.test.js; docs/FUSION-COMPARISON.md section "Dragging (real mouse, qualitative)". Scripts: win-mouse.py (guards: tolerance 2 px), drag-batch-setup/-frame/-run.py, drag-cli.mjs, drag-known.mjs.

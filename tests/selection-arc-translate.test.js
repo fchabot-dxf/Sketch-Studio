@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
   const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('#ui/input-handlers/selection-tools.js');
@@ -7,7 +8,7 @@
   const svg = { setPointerCapture: () => {}, getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }), viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 600 } } };
 
   // Create state with an arc (center + start + end)
-  const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT };
+  const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT, ...undoStub() };
   state.joints.set('c', { x: 100, y: 100 });
   state.joints.set('s', { x: 110, y: 100 });
   state.joints.set('e', { x: 100, y: 110 });

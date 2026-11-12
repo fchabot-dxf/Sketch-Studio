@@ -887,14 +887,16 @@ export function analyzeConstraintStatus({ joints, shapes, constraints }) {
         if (!truth.freeY.has(id) && f !== 2) lockedAxisY.add(id);
     }
 
-    // Shape Logic — all shape types (lines, circles, arcs)
+    // Shape Logic — all shape types (lines, circles, arcs). A circle's radius is a solver unknown too: the circle is fixed /
+    // fully constrained only when its centre is AND its radius is not free (truth.radiusFree).
     for (const s of shapes) {
         if (!s.joints || s.joints.length === 0) continue;
-        
-        const allFixed = s.joints.every(jid => fixedJoints.has(jid));
+        const radiusFree = truth.radiusFree.has(s.id);
+
+        const allFixed = !radiusFree && s.joints.every(jid => fixedJoints.has(jid));
         if (allFixed) fixedShapes.add(s.id);
 
-        const allConstrained = s.joints.every(jid => constrainedJoints.has(jid));
+        const allConstrained = !radiusFree && s.joints.every(jid => constrainedJoints.has(jid));
         if (allConstrained) constrainedShapes.add(s.id);
     }
 

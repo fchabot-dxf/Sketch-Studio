@@ -16,7 +16,7 @@ import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { makeRectFromTwoJoints, makeArc, makePolygon } from '#core/shapes.js';
 import { addConstraint } from '#core/constraints.js';
 import { perpendicularDistance } from '#core/geometry.js';
-import { createNewtonSolver } from '#core/solver/engine.js';
+import { createNewtonSolver, hasRadiusUnknown } from '#core/solver/engine.js';
 import { findCornerBetweenLines, applyFillet } from '#core/fillet.js';
 import { init_planegcs_module, GcsWrapper } from '@salusoft89/planegcs';
 
@@ -99,11 +99,21 @@ export function polygon(S, c, v, n) {
 export const shape = (S, id) => S.state.shapes.find(s => s.id === id);
 
 // ---------------------------------------------------------------- measuring
-export function snapshot(S) { const m = new Map(); for (const [id, j] of S.state.joints) m.set(id, { x: j.x, y: j.y }); return m; }
-export function restore(S, snap) { for (const [id, p] of snap) { const j = S.state.joints.get(id); if (j) { j.x = p.x; j.y = p.y; } } }
+// The geometry is the joints AND every circle radius (a solver unknown since task 515): a snapshot is a Map of joint positions that
+// also carries the circle radii (`.radii`, shape -> radius); restore and maxDeviation cover both.
+export function snapshot(S) {
+  const m = new Map(); for (const [id, j] of S.state.joints) m.set(id, { x: j.x, y: j.y });
+  m.radii = new Map(S.state.shapes.filter(hasRadiusUnknown).map(s => [s, s.radius]));
+  return m;
+}
+export function restore(S, snap) {
+  for (const [id, p] of snap) { const j = S.state.joints.get(id); if (j) { j.x = p.x; j.y = p.y; } }
+  if (snap.radii) for (const [s, r] of snap.radii) s.radius = r;
+}
 export function maxDeviation(S, snap) {
   let d = 0;
   for (const [id, p] of snap) { const j = S.state.joints.get(id); if (!j) return Infinity; d = Math.max(d, Math.hypot(j.x - p.x, j.y - p.y)); if (!Number.isFinite(j.x + j.y)) return NaN; }
+  if (snap.radii) for (const [s, r] of snap.radii) { if (!Number.isFinite(s.radius)) return NaN; d = Math.max(d, Math.abs(s.radius - r)); }
   return d;
 }
 export const hasNaN = (S) => [...S.state.joints.values()].some(j => !Number.isFinite(j.x) || !Number.isFinite(j.y));
@@ -131,6 +141,8 @@ export function freedom(S) {
 }
 export const nullity = (S) => S.engine.jointFreedom().nullity;
 export function movableJoints(S) { let n = 0; for (const [id, j] of S.state.joints) if (!j.fixed && id !== origin) n++; return n; }
+// circles whose radius is a solver unknown (each adds one DOF to the bare count)
+export const radiusUnknowns = (S) => S.state.shapes.filter(hasRadiusUnknown).length;
 
 // Sketch-wide size (max bbox side of the non-origin joints), for the 5% jitter.
 export function drawingSize(S) {
@@ -347,7 +359,8 @@ export async function planegcs() { if (!planegcsMod) planegcsMod = await init_pl
 const radiansOf = (deg) => deg * Math.PI / 180;
 
 // Translate the CURRENT sketch (joints, shapes, constraints) into PlaneGCS primitives. Joints become points, lines lines, an arc a circle with
-// both rim joints on it, a circle shape a circle with its stored (constant) radius. Each of our constraints becomes its natural PlaneGCS one.
+// both rim joints on it, a circle shape a circle whose radius is a free PlaneGCS parameter (as ours is a solver unknown since task 515), started
+// at the stored radius. Each of our constraints becomes its natural PlaneGCS one.
 export function toPlanegcs(S) {
   const prims = [];
   const P = (id) => S.state.joints.get(id);
@@ -361,7 +374,6 @@ export function toPlanegcs(S) {
     if (s.type === 'line') { prims.push({ id: s.id, type: 'line', p1_id: s.joints[0], p2_id: s.joints[1] }); lineIds.add(s.id); }
     else if (s.type === 'circle') {
       prims.push({ id: s.id, type: 'circle', c_id: s.joints[0], radius: s.radius }); circles.set(s.id, s);
-      if (!S.state.constraints.some(c => c && c.type === 'distance' && c.isRadius && c.shape === s.id && !isDriven(c))) prims.push({ id: nid('k_'), type: 'circle_radius', c_id: s.id, radius: s.radius });   // the app treats shape.radius as a constant (a radius dim, when present, says it)
     } else if (s.type === 'arc') {
       const [c, a] = s.joints;
       prims.push({ id: s.id, type: 'circle', c_id: c, radius: Math.hypot(P(a).x - P(c).x, P(a).y - P(c).y) }); circles.set(s.id, s);
@@ -486,7 +498,7 @@ export async function runDrawing(drawing, { oracleOn = true, buildOpts = {} } = 
   //    part of "the geometry"; strip them for the bare count, which must be exactly 2 x movable joints.
   {
     const keep = S.state.constraints.splice(0, S.state.constraints.length);
-    R.A = { joints: S.state.joints.size, movable: movableJoints(S), bareNullity: nullity(S) };
+    R.A = { joints: S.state.joints.size, movable: movableJoints(S), circles: radiusUnknowns(S), bareNullity: nullity(S) };
     S.state.constraints.push(...keep);
     S.engine.solve(ITER);
     R.A.builderNullity = nullity(S); R.A.builderConstraints = S.state.constraints.length;

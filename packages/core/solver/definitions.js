@@ -1,7 +1,11 @@
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
-// positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints'
+// positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
+// unknowns (engine.js hasRadiusUnknown). A row reads a circle's radius as positions[params.radiusAt] (or radiiAt[i]) and writes its
+// derivative to outRow[params.radiusAt]; without radiusAt the radius is the constant params.radius (an arc: live via its rim joints).
 
 function idx(positions, jointIndex) { return jointIndex * 2; }
+// The radius a row uses: the circle's unknown when `at` is a dense index, else the constant.
+const radiusValue = (positions, at, constant) => (typeof at === 'number' ? positions[at] : (Number(constant) || 0));
 
 export const Definitions = {
   // Distance constraint:
@@ -18,6 +22,7 @@ export const Definitions = {
   distance: {
     rows: 1,
     computeError: (params, positions) => {
+      if (typeof params.radiusAt === 'number') return positions[params.radiusAt] - (params.value || 0);   // a circle's radius
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -42,6 +47,7 @@ export const Definitions = {
       return Math.hypot(dx, dy) - (params.value || 0);
     },
     computeJacobian: (params, positions, outRow) => {
+      if (typeof params.radiusAt === 'number') { outRow[params.radiusAt] = 1; return; }
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -85,7 +91,7 @@ export const Definitions = {
       if (params.onCircle) {
         const dx = positions[params.joints[0]*2] - positions[params.joints[1]*2];
         const dy = positions[params.joints[0]*2+1] - positions[params.joints[1]*2+1];
-        return Math.hypot(dx, dy) - (params.radius || 0);
+        return Math.hypot(dx, dy) - radiusValue(positions, params.radiusAt, params.radius);
       }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
       const px = positions[pi*2], py = positions[pi*2+1];
@@ -106,6 +112,7 @@ export const Definitions = {
         const d = Math.hypot(dx, dy) || 1e-12;
         outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
         outRow[ci*2 + 0] = -dx / d; outRow[ci*2 + 1] = -dy / d;
+        if (typeof params.radiusAt === 'number') outRow[params.radiusAt] = -1;
         if (typeof params.rimJoint === 'number') {
           const ri = params.rimJoint, rx = positions[ri*2] - positions[ci*2], ry = positions[ri*2+1] - positions[ci*2+1], rd = Math.hypot(rx, ry) || 1e-12;
           outRow[ri*2 + 0] = -rx / rd; outRow[ri*2 + 1] = -ry / rd;
@@ -366,8 +373,9 @@ export const Definitions = {
         const x2 = positions[i2*2], y2 = positions[i2*2+1];
         const dx = x2 - x1, dy = y2 - y1;
         const dist = Math.hypot(dx, dy) || 1e-12;
-        const r1 = Number(params.radii[0]) || 0;
-        const r2 = Number(params.radii[1]) || 0;
+        const at = params.radiiAt || [];
+        const r1 = radiusValue(positions, at[0], params.radii[0]);
+        const r2 = radiusValue(positions, at[1], params.radii[1]);
         const target = (params.branch === 'internal') ? Math.abs(r1 - r2) : (r1 + r2);
         return dist - target;
       }
@@ -389,7 +397,7 @@ export const Definitions = {
         const px = params.sharedEnd === 'a' ? ax : bx, py = params.sharedEnd === 'a' ? ay : by;
         return ((px - cx) * ux + (py - cy) * uy) / lu;
       }
-      const r = Number(params.radius) || 0;
+      const r = radiusValue(positions, params.radiusAt, params.radius);
       return Math.abs(cross / lu) - r;
     },
     computeJacobian: (params, positions, outRow) => {
@@ -402,6 +410,14 @@ export const Definitions = {
         const r = Math.hypot(dx, dy) || 1e-12;
         outRow[i1*2 + 0] = -dx / r; outRow[i1*2 + 1] = -dy / r;
         outRow[i2*2 + 0] =  dx / r; outRow[i2*2 + 1] =  dy / r;
+        // a circle operand's radius unknown: target r1 + r2 (external) or |r1 - r2| (internal)
+        const at = params.radiiAt || [];
+        if (typeof at[0] === 'number' || typeof at[1] === 'number') {
+          const r1 = radiusValue(positions, at[0], params.radii[0]), r2 = radiusValue(positions, at[1], params.radii[1]);
+          const s = (params.branch === 'internal') ? (r1 - r2 >= 0 ? 1 : -1) : 0;
+          if (typeof at[0] === 'number') outRow[at[0]] += (params.branch === 'internal') ? -s : -1;
+          if (typeof at[1] === 'number') outRow[at[1]] += (params.branch === 'internal') ? s : -1;
+        }
         return;
       }
 
@@ -448,6 +464,7 @@ export const Definitions = {
       outRow[aI*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
       outRow[bI*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
       outRow[bI*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
+      if (typeof params.radiusAt === 'number') outRow[params.radiusAt] = -1;
     }
   },
 
@@ -455,6 +472,12 @@ export const Definitions = {
   equal: {
     rows: 1,
     computeError: (params, positions) => {
+      // A circle operand (engine.js): params.terms = [t1, t2], each { at } (a circle's radius unknown) or { a, b } (|a - b|).
+      if (params.terms) {
+        const size = (t) => (typeof t.at === 'number' ? positions[t.at]
+          : Math.hypot(positions[t.a*2] - positions[t.b*2], positions[t.a*2+1] - positions[t.b*2+1]));
+        return size(params.terms[0]) - size(params.terms[1]);
+      }
       // Prefer explicit joint pairs when present: [a,b,c,d] -> len(a,b) - len(c,d)
       if (params.joints && params.joints.length >= 4) {
         const a = params.joints[0], b = params.joints[1], c = params.joints[2], d = params.joints[3];
@@ -470,6 +493,18 @@ export const Definitions = {
     },
     computeJacobian: (params, positions, outRow) => {
       outRow.fill(0.0);
+      if (params.terms) {
+        // ACCUMULATE: the two terms may share a joint (see below).
+        params.terms.forEach((t, i) => {
+          const sg = i === 0 ? 1 : -1;
+          if (typeof t.at === 'number') { outRow[t.at] += sg; return; }
+          const dx = positions[t.a*2] - positions[t.b*2], dy = positions[t.a*2+1] - positions[t.b*2+1];
+          const l = Math.hypot(dx, dy) || 1e-12;
+          outRow[t.a*2 + 0] += sg * dx / l; outRow[t.a*2 + 1] += sg * dy / l;
+          outRow[t.b*2 + 0] -= sg * dx / l; outRow[t.b*2 + 1] -= sg * dy / l;
+        });
+        return;
+      }
       if (params.joints && params.joints.length >= 4) {
         const a = params.joints[0], b = params.joints[1], c = params.joints[2], d = params.joints[3];
         const ax = positions[a*2], ay = positions[a*2+1];

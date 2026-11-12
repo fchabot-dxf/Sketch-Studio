@@ -449,3 +449,130 @@ Round-1 findings seen again by the random run: F6 (pointOnLine DOF lie), F3 (ang
 ### Limits
 
 Random sketches rarely become fully constrained (1 of 300), so I7's "determined joints" are usually few; the recipe drawings cover the fully constrained case. The PlaneGCS comparison is only as good as the translation: arc/arc tangent at a shared rim is degenerate in PlaneGCS as well (dof 2), so N1 is excluded from the PlaneGCS assertion.
+
+## Extreme arcs (task 531)
+
+A measuring audit of arcs at the edges: very short and almost full sweeps, tiny and huge radii, fillet arcs, under every constraint and dimension an arc takes. Nothing under `packages/` was changed; diagnosis only. Test: `tests/extreme-arcs.test.js` (in the gate, 15 s). Harness: `tests/harness/coverage/arcs-variants.js` (the variants as data, the builders, the arc measurements), `arcs-rows.js` (the rows and the cell runner), `arcs-ui.js` (pick facts), `arcs-findings.js` (EA-n, the classification rule, the repros). The only edit outside the new files: seven helpers of `tests/harness/coverage/matrix-run.js` got an `export` (svgStub, muted, driveConstraintTool, driveDimensionTool, spyOn, spyOff, selfSelection) so the tool drivers are reused, not copied.
+
+### What was built
+
+24 arc variants (data, `arcs-variants.js`). Sign convention: sweep > 0 is the positive-angle direction (stored `sweep` flag true, clockwise on screen), cw / ccw below mean that.
+- **Made by the real arc tool** (its own pointer handlers: centre click, start click, pointer moves round the centre, end click): sweeps 0.1 / 1 / 5 / 30 (the control) / 179 / 180 / 181 / 355 / 359.9 degrees at R 20, both directions for 0.1, 1, 30, 181, 359.9; R 0.5 at 30, 0.1 (chord 0.0009, below VERIFIER_TOLERANCE) and 181 degrees; R 5000 with chord 20 (sweep 0.229, both directions) and R 5000 at 5 degrees.
+- **Made by the real fillet** (findCornerBetweenLines + applyFillet): r 0.5 and r 10 (control) on a 90 degree corner, r 10 on a 179 degree corner (sweep 1) and on a 2 degree corner (sweep 178).
+- 30 rows: tangent to a line / an arc / a circle (partner starts at the arc start), coincident of the start, the end, the centre (concentric), the arc's own two ends, point on arc (the snap path; point inside the sweep and point on the circle outside it), equal to an arc / a circle, midpoint of the chord, horizontal-or-vertical between start-end / centre-end / centre-start / on the chord line (the H/V tool decides the orientation), parallel / perpendicular / collinear of the chord line (a line through the two end joints) with a free line, radius dimension, aligned dimension start-end / centre-start / centre-end, H and V dimensions start-end and centre-end, lock (fix) of the start, end, centre.
+- 4 hold states per row: sep, shared (the partner's point merged into the arc start), locked (every arc joint locked through the real Lock toggle), dimmed (the arc carries a driving radius dimension).
+- Per accepted cell: residual, convergence, DOF delta against the nominal, the finite-difference count and PlaneGCS, analytic Jacobian against finite differences, the arc's radius / signed sweep / flag coherence / drawn path before and after, a 3% jitter re-solve (satisfied; a fully determined sketch returns to the same pose), a radius or dimension edit x1.5 and x0.67 (the row's own dimension, or the driving radius), a small end drag (2, 1.5 world units through the solver seam of the select tool, `prop-drag.js dragJoint`), delete + undo (document identical), save + load (flags, radius, sweep identical). Refusals: PlaneGCS is asked whether the refused constraint was feasible.
+- Totals: 2880 cells = **PASS 1711, N/A (refused, document untouched) 176, NA-BUILD 788 (no such cell: no second shape to share with, a lock row under the locked state, ...), FAIL 205**. The 205 failing cells carry EA-1..EA-9 and the inherited round-1 F4 / F5 / F6 (below); none is unexplained.
+
+### Tolerances in force (quoted from the code, printed by the test)
+
+| tolerance | value | where |
+|---|---|---|
+| joint pick radius SNAP.JOINT_PX | 30 px | constants.js:25 |
+| arc / line / circle pick radius SNAP.LINE_PX | 20 px | constants.js:27 |
+| a joint this close always wins over a shape | 15 px | snap-detection.js:225-226 JOINT_PRIORITY_RADIUS |
+| snap lock SNAP_MAGNETISM | 16 px | solver-config.js:33 |
+| math pre-check "close enough" GEOMETRY_TOLERANCE | 0.05 world | solver-config.js:10 |
+| point snapped to a shape becomes coincident with its end SNAP_WORLD_EPS | 0.1 world | solver-config.js:13 |
+| "satisfied" VERIFIER_TOLERANCE | 0.001 world | solver-config.js:8 |
+| AUTO_COINCIDENT_TOL | 0.01 world | solver-config.js:14 |
+
+At the default zoom 1 world unit = 1 px. The 0.1 degree arc (chord 0.035) and the 359.9 degree arc (end 0.035 from the start) are under GEOMETRY_TOLERANCE and under one pixel; the R 0.5 x 0.1 degree arc (chord 0.00087) is under VERIFIER_TOLERANCE.
+
+### Result: variant x constraint
+
+Each cell is the union of the four hold states. `.` = every state passes (or is a checked refusal), `-` = no such cell, a number = the EA-n finding(s) seen in some state, F4 / F5 / F6 = inherited round-1 findings (the ordinary control arc shows them too).
+
+| row \ variant | s30cw | s30ccw | s0.1cw | s0.1ccw | s1cw | s1ccw | s5cw | s179cw | s180cw | s181cw | s181ccw | s355cw | s359.9cw | s359.9ccw | r0.5s30cw | r0.5s0.1cw | r0.5s181cw | r5000c20cw | r5000c20ccw | r5000s5cw | f90r0.5 | f90r10 | f179r10 | f2r10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| tangent-line | . | . | 2,3 | . | 2,3 | . | 2,3 | 2 | 2 | 2 | 2 | . | . | 2,3 | 5 | 2,3 | 2 | 2,3 | . | . | . | . | 5 | . |
+| tangent-arc | . | . | 2,3 | . | 2,3 | . | 2,3,4 | 2 | 2 | 2 | 2 | . | . | 2,3 | . | 2,3 | 2 | . | . | . | . | . | 5 | . |
+| tangent-circle | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 1 |
+| coincident-start | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| coincident-end | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| coincident-centre | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| coincident-own-ends | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1,3 | 1,2,3 | 1,2,3 | 1,2,3 | 1,2,3 | 1,2,3 | 1 | 1,9 | 1,2,3 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+| point-on-arc | . | . | . | . | . | . | . | 2 | 2 | 2 | 2 | . | . | . | . | . | 2 | . | . | . | . | . | . | 1 |
+| point-on-arc-off | . | . | . | . | . | . | . | 2 | 2 | 2 | 2 | . | . | . | . | . | 2 | . | . | . | . | . | . | 1 |
+| equal-arc | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 2,3 | . | . | 2,3 | . | . | . | 5 | 1 |
+| equal-circle | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | 5 | . | . | . | . | . | . | . | . |
+| midpoint-chord | . | . | . | . | . | . | . | 2 | 2 | . | 2 | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| hv-start-end | . | . | 9 | 2,4,9 | . | 2,4 | . | . | 9 | 2 | . | 2,4 | 2,4,9 | 9 | . | . | . | . | . | . | 8 | 1 | 1 | . |
+| hv-centre-end | . | . | . | 2,4 | . | . | . | 2 | 2,9 | 2 | 2 | . | 2,4 | . | . | 9 | 2 | . | . | . | . | . | 5 | . |
+| hv-centre-start | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . |
+| parallel-chord | . | . | . | . | . | . | . | 2,F6 | 2,F6 | F6 | 2,F6 | . | . | . | 6 | . | 6,F4 | . | . | F4 | F4 | F6 | . | F6 |
+| perpendicular-chord | F6 | F6 | 8 | 8 | 8 | 8 | . | 2,F6 | 2,F6 | F6 | 2,F6 | . | 8 | 8 | 6,8 | . | 6,F6 | 6 | . | . | 6,F4 | F6 | 8 | F6 |
+| collinear-chord | . | . | . | . | . | . | F5 | . | . | . | . | . | . | . | . | 5,7 | 6 | 6 | 6 | . | . | . | . | 5 |
+| hv-chord-line | . | . | 9 | 2,4,9 | . | 2,4 | . | . | 9 | 2 | . | 2,4 | 2,4,9 | 9 | . | . | . | . | . | . | 8 | . | 1 | . |
+| dim-radius | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| dim-chord | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . | . | . | . | . | . | . | . |
+| dim-centre-start | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| dim-centre-end | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| dim-h-chord | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . | . | . | . | . | . | . | . |
+| dim-v-chord | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . | . | . | . | . | . | . | . |
+| dim-h-centre-end | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| dim-v-centre-end | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| lock-start | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . |
+| lock-end | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| lock-centre | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+
+### Findings, most important first
+
+Repro lines are `node tests/extreme-arcs.test.js --cell <variant> <row> <state>` (prints the whole cell record). Counts are failing cells of 2880.
+
+**Is a zero-sweep collapse accepted anywhere? YES (EA-1).** Task 521's check (`measureShapeSizes`) measures an arc by its radius `|centre - start|` only, so an arc whose start and end become one point passes it. Accepted in 45 cells, on all 24 variants: the coincident tool on the arc's own start and end (every arc, state sep and dimmed; only refused when the joints are locked, ERR-CMATH-01), H/V between the two ends of a fillet arc, and a fillet radius edit (x1.5, x0.67) on a 2 degree corner with a point on the arc. This is true of the ordinary 30 degree control arc too.
+
+1. **EA-1 HIGH, 51 cells: zero sweep accepted.** Diagnosis: `constraint-verifier.js:314-324` (arc size = centre-start distance), `:329-341` findCollapsedShape, used at `constraint-manager.js:356`, `:495`, `dimension-seams.js:74`; the coincident tool (`constraint-tools.js:120-132`) has no own-ends check. Proposed task: measure the chord / sweep of an arc in measureShapeSizes and refuse the own-ends coincident. Repro: `node tests/extreme-arcs.test.js --cell s30cw coincident-own-ends sep` -> chord 10.35 -> 0, signedDeg 30 -> 0, accepted.
+2. **EA-2 HIGH, 99 cells: the stored `largeArc` flag is never recomputed.** An arc whose sweep crosses 180 degrees through any solve, edit or drag keeps its creation-time flag, so the renderer draws the other arc (and the exporters, which read the same flag, export it). Diagnosis: flags are set once at `arc-tool.js:232-233`; used by `geometry.js:234-236` (calculateArcPath), `shaper-export.js:49-53`, `loop-geometry.js:111-115`, `export-manager.js:148-166`, `svg-renderer.js:1141-1142`; nothing writes them back. Seen on arcs within a few degrees of 180 (after tangent, midpoint, H/V, perpendicular, a radius edit x1.5 / x0.67, an end drag) and on every arc that wraps (EA-3). Repro: `node tests/extreme-arcs.test.js --cell s179cw hv-centre-end sep` -> the 179 degree arc (largeArc false, sweep true) becomes 180.5 degrees, the flag stays false, path `A 19.9988 19.9988 0 0 1 ...`: the drawn arc is the 179.5 degree one, the implied centre is 0.17 from the stored centre (`.evidence/531/ea2.mjs`). Proposed task: derive largeArc from the live span in one place (calculateArcPath / arcSweepInfo) or write it back after every solve.
+3. **EA-3 HIGH, 33 cells: a constraint on a very short or almost full arc makes the sweep jump to the complement.** The sweep is not a solver quantity: its direction is the stored `sweep` flag and its size `mod((end - start) * dir, 2 PI)` (`geometry.js:285-288`); the solver has no orientation term. A rim joint that moves a hair past the other turns 0.1 degree into 359.8 degrees. Repro: `node tests/extreme-arcs.test.js --cell s0.1cw tangent-line sep` -> signedDeg 0.1 -> 359.7925, R 20 -> 21.70 (also tangent-arc, equal-arc; 0.1 / 1 / 5 / 355 / 359.9 degrees, R 0.5 and R 5000). Proposed task: keep the arc's side as state (like the perpendicular branch lock) or refuse a wrapping solution.
+4. **EA-4 MEDIUM, 19 cells: dragging the end of a short arc past its start gives a ~360 degree arc** (same cause). Repro: `--cell s0.1ccw hv-start-end sep` (the drag step). Whether Fusion does the same is open: replay list.
+5. **EA-5 MEDIUM, 14 cells: the sweep shrinks to under a quarter without being asked** (the solver moves the least in coordinates; a short arc's sweep is the sensitive quantity). Repro: `--cell r0.5s30cw tangent-line sep` -> sweep 30 -> 0.84 degrees, R 0.5 -> 1.28 (the tangent resizes the arc, the task 525 family).
+6. **EA-6 MEDIUM, 15 cells: parallel / perpendicular / collinear of the chord line of a tiny arc is accepted but not satisfied after a jitter re-solve (once not converged at all).** The rows are the un-normalised `u x v` / `u . v` (`solver/definitions.js:277-306`, `:309-345`); the cause is suspected (the row scales with the line lengths), not proven. Repro: `--cell r0.5s30cw perpendicular-chord sep` -> accepted, then no-converge + residual + bite. Proposed task: normalise the rows by |u||v|.
+7. **EA-8 MEDIUM, 10 cells: a feasible constraint is refused (ERR-CSOLVE-01).** PlaneGCS satisfies the same row. `constraint-manager.js:456` (_sandboxVerify), reported at `:295`. Repro: `--cell s0.1cw perpendicular-chord locked` (also 1 and 359.9 degrees, R 0.5, fillet r 0.5 with H/V on its ends). Proposed task: a size-relative sandbox tolerance.
+8. **EA-10 MEDIUM (UI): an arc is picked from anywhere on its circle.** `snap-detection.js:196-210` projects the mouse on the full circle, no `angleInArcSweep` test (geometry.js:296). A 0.1 degree arc is hit 180 degrees away from itself, and "point on arc" is a point on the whole circle (row point-on-arc-off accepts it). Repro: `node tests/extreme-arcs.test.js` prints `known EA-10 ... mouse on the circle OUTSIDE the 30 degree sweep picks: the arc`.
+9. **EA-7 LOW, 3 cells:** Jacobian of collinear against finite differences, 5.7e-3 on a 0.00087 long chord line (`--cell r0.5s0.1cw collinear-chord sep`). Possibly the F6 family; not proven.
+10. **EA-9 LOW, 13 cells:** H/V between two LOCKED arc joints within 0.05 of aligned is accepted as already satisfied (`constraint-manager.js:693-696`, `:768`; GEOMETRY_TOLERANCE 0.05 is larger than the 0.1 degree arc); PlaneGCS counts a conflict, DOF -1 against our 0. Repro: `--cell s0.1cw hv-start-end locked`.
+
+Inherited, already in docs/CONSTRAINT-AUDIT.md and shown by the control arc: F6 (15 cells, parallel / perpendicular Jacobian with a shared joint), F4 (4 cells, refused although feasible on a shared joint), F5 (1 cell).
+
+### What is clean
+
+- **Radius, aligned / H / V dimensions, coincident of start / end / centre, equal to a circle, lock and midpoint of the chord (except near 180) pass on every variant** (a few EA-5 shrinks on the R 0.5 arcs), including R 0.5, R 5000 and the 0.1 degree arcs, with the dimension edits x1.5 / x0.67, jitter, drag, delete + undo and save + load. Save and load keep the flags, radius and sweep of every variant (no `saveload-*` issue in any cell).
+- The ordinary control arcs (30 degree both directions, 90 degree fillet) fail only EA-1 (own ends) and the inherited F4 / F6.
+- R 5000 (nearly straight, chord 20 or 436) passes everything except the wrap under a shared tangent (EA-3) and the chord-line rows (EA-6).
+- A fillet arc behaves like a tool arc except at the extremes of its corner (EA-1 on the 2 degree corner after a radius edit, EA-5 on the 179 degree corner).
+- The renderer path is valid for every variant: no NaN or Infinity (24 of 24). The large-arc flag as BUILT by the arc tool is right at 179 / 180 / 181 / -181 degrees (the tool nudges an exact 180 by 1e-6; a 180 degree arc is ambiguous, the audit tolerates 1e-4 rad).
+- Picking (findSnap, one function for hover, click and select; default zoom): on the sub-tolerance arcs (chord 0.035) of the 225 integer pixels around the END joint 105 pick the end and 120 pick the START (49 / 56 at chord 0.00087): both joints can be picked but a click is a coin flip; no variant leaves a joint unpickable.
+
+### The 20 cells most worth replaying in Fusion
+
+Fusion decides these; we only know what PlaneGCS and finite differences say. (variant row state) - question:
+1. s30cw coincident-own-ends sep - does Fusion refuse the coincident of an arc's own ends?
+2. f90r10 hv-start-end sep - H/V on the ends of a fillet arc.
+3. f2r10 point-on-arc sep, then radius x1.5 - fillet radius too large for the corner.
+4. s0.1cw tangent-line sep - does a 0.1 degree arc become 359.8 degrees?
+5. s0.1cw tangent-line shared
+6. s359.9ccw tangent-line sep
+7. r0.5s0.1cw tangent-arc sep
+8. r5000c20cw tangent-line shared
+9. s0.1ccw hv-start-end sep - mouse drag of the end across the start: flip or wrap?
+10. s1ccw hv-centre-end sep - mouse drag.
+11. s179cw hv-centre-end sep - crossing 180 degrees (the flag).
+12. s179cw midpoint-chord sep
+13. s181cw tangent-arc dimmed, radius x1.5
+14. s180cw tangent-line sep - exactly 180 degrees.
+15. s30cw point-on-arc-off sep - is a point on the circle outside the arc accepted as "on the arc"?
+16. s0.1cw perpendicular-chord locked - refused here, feasible.
+17. r0.5s30cw perpendicular-chord sep - not satisfied here.
+18. s0.1cw hv-start-end locked - tolerance (Fusion's own, much tighter).
+19. s5cw tangent-arc shared - wrap at 5 degrees.
+20. f179r10 hv-start-end sep, then drag the end - collapse by drag.
+
+### Limits and what I did not check
+
+- The drag is the solver seam of the select tool (`prop-drag.js dragJoint`, as task 514): the DOM-bound parts (the UI axis mask `getDragDOF`, the stroke hit target of the SVG path, and the select tool's cluster set that adds the other arc joints when a rim joint is picked, `selection-tools.js:354-360`) are not callable in node. The mouse path may therefore differ from the cell for a free arc.
+- H/V rows are one row each: the tool decides the orientation from the geometry, so the other orientation of a given pair is not reached through the tool (the dimension rows cover H and V explicitly).
+- The partner shapes (line, arc, circle, point) are placed near the arc by a fixed rule (15 / 25 degrees off tangent): another placement can change an individual cell.
+- The Jacobian check uses a threshold scaled with the coordinate size (1e-4 x max(1, max|coordinate| / 100)) because finite differences lose digits at R 5000; below it nothing was flagged.
+- PlaneGCS verdicts on refusals flip with run order in some cells (task 523 saw the same); the EA-8 cells were checked against the oracle in this run only.
+- Fusion was not called (another seat holds it).

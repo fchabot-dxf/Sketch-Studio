@@ -1,0 +1,123 @@
+// tests/canvas-grid-labels-live.test.js — TASK 532: the shared canvas grid shows numbers on the axes in the FILE'S unit, in the real
+// apps (headless CDP): SketchStudio (mm) and Shaper's Design canvas (inch); labels are right, follow zoom, never overlap, vanish
+// with GRID_MODE off, re-label + re-space live when DOC_UNIT / the inch divisions change, stay out of the world group (what is
+// exported / measured), and do not exist in Pen Plotter or Trace. EVIDENCE_DIR=<dir> saves screenshots.
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+
+await (async () => {
+  const cdp = await launchBrowser({ tag: '532lbl' });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const shot = async (name) => {
+    if (!process.env.EVIDENCE_DIR) return;
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, name), Buffer.from(r.data, 'base64'));
+  };
+  try {
+    // inside the page: set a viewBox of the given width (centred on cx, cy), let the frame redraw, read the labels back
+    const probe = `window.__probe = async (svgSel, width, cx = 0, cy = 0) => {
+      const s = document.querySelector(svgSel); const r = s.getBoundingClientRect();
+      const h = width * r.height / r.width;
+      s.setAttribute('viewBox', (cx - width / 2) + ' ' + (cy - h / 2) + ' ' + width + ' ' + h);
+      await new Promise((res) => setTimeout(res, 700));
+      const g = s.querySelector('#grid-labels');
+      const texts = g ? [...g.children] : [];
+      const tr = (t) => /translate\\(([-\\d.e]+) ([-\\d.e]+)\\)/.exec(t.getAttribute('transform')).slice(1).map(Number);
+      return {
+        has: !!g, inWorld: !!(g && g.closest('#world-group')), pe: g && g.getAttribute('pointer-events'),
+        fs: g && Number(g.getAttribute('font-size')), pxScale: width / r.width,
+        heavy: Number(document.querySelector('#grid-heavy').getAttribute('width')), minor: Number(document.querySelector('#grid').getAttribute('width')),
+        items: texts.map((t) => ({ at: tr(t), text: t.textContent, axis: /text-anchor/.test(t.outerHTML) ? 'y' : 'x', box: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(t.getBoundingClientRect()) })),
+      };
+    };`;
+    const checkLabels = (p, unitMm, tag) => {
+      assert(p.has, tag + ': labels exist');
+      assert.strictEqual(p.pe, 'none', tag + ': labels take no pointer events');
+      assert(!p.inWorld, tag + ': labels are outside the world group');
+      assert(Math.abs(p.fs / p.pxScale - 11) < 1e-6, tag + ': constant 11 px on screen: ' + p.fs / p.pxScale);
+      assert(p.items.length > 0, tag + ': some labels');
+      for (const it of p.items) {
+        const along = it.axis === 'x' ? it.at[0] : it.at[1];
+        assert(Math.abs(Number(it.text) * unitMm - along) < 1e-6 * Math.max(1, Math.abs(along)), `${tag}: label "${it.text}" sits at world ${along} (${it.axis})`);
+        assert(Math.abs(along / p.heavy - Math.round(along / p.heavy)) < 1e-6, tag + ': on a heavy line: ' + along);
+        assert(Number(it.text) !== 0 && !/\.\d*0$|[a-z]/i.test(it.text), tag + ': shortest plain number, no zero, no unit: ' + it.text);
+      }
+      for (let i = 0; i < p.items.length; i++) for (let j = i + 1; j < p.items.length; j++) {
+        const a = p.items[i].box, b = p.items[j].box;
+        assert(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5, `${tag}: "${p.items[i].text}" overlaps "${p.items[j].text}"`);
+      }
+    };
+    const S = `(await import('/packages/core/settings-manager.js')).default`;
+    const setS = (k, v) => evalJs(`(async () => { (${S}).set('${k}', ${JSON.stringify(v)}, { persist: false }); })()`);
+
+    // ---- SketchStudio, mm ----
+    await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 5000);
+    await waitFor(`!!document.querySelector('#svgCanvas #infinite-grid')`, 'SketchStudio grid');
+    await evalJs(`localStorage.clear()`);
+    await evalJs(probe);
+    const SS = '#svgCanvas';
+    const seenHeavy = new Set();
+    for (const w of [300, 1200, 5000, 40000, 200000]) {
+      const p = await evalJs(`__probe('${SS}', ${w})`);
+      checkLabels(p, 1, 'ss mm w=' + w);
+      seenHeavy.add(p.heavy);
+      if (w === 1200) { assert.strictEqual(p.heavy, 100, 'default mm heavy line every 100'); assert.strictEqual(p.minor, 10, 'default mm light line every 10'); await shot('ss-mm-1200.png'); }
+      if (w === 5000) await shot('ss-mm-5000.png');
+    }
+    assert(seenHeavy.size >= 3, 'the heavy line coarsens with zoom: ' + [...seenHeavy]);
+    // pan: labels follow
+    const pan = await evalJs(`__probe('${SS}', 1200, 5000, 3000)`);
+    checkLabels(pan, 1, 'ss mm panned');
+    assert(pan.items.some((i) => i.axis === 'x' && i.at[0] > 4000), 'X labels follow the pan');
+    // the Y numbers are the app's world y (svg y, down positive): a label below the origin is positive
+    const ypos = (await evalJs(`__probe('${SS}', 1200)`)).items.filter((i) => i.axis === 'y');
+    assert(ypos.length && ypos.every((i) => Math.sign(Number(i.text)) === Math.sign(i.at[1])), 'Y numbers = world y');
+    // GRID_MODE off removes them; back on restores
+    await setS('GRID_MODE', 'off');
+    assert.strictEqual((await evalJs(`__probe('${SS}', 1200)`)).has, false, 'no labels with the grid off');
+    await setS('GRID_MODE', 'lines');
+    // switching the unit re-labels and re-spaces live
+    await setS('DOC_UNIT', 'in');
+    let pin = await evalJs(`__probe('${SS}', 300)`);
+    checkLabels(pin, 25.4, 'ss in');
+    assert(Math.abs(pin.heavy - 25.4) < 1e-9 && Math.abs(pin.minor - 2.54) < 1e-9, `inch default: heavy 1 in, minor 0.1 in: ${pin.heavy} ${pin.minor}`);
+    await setS('INCH_GRID_DIVISIONS', 8);
+    pin = await evalJs(`__probe('${SS}', 300)`);
+    checkLabels(pin, 25.4, 'ss in/8');
+    assert(Math.abs(pin.minor - 25.4 / 8) < 1e-9, 'minor = 1/8 in');
+    await shot('ss-in8-300.png');
+    await setS('INCH_GRID_MAJOR', 2);
+    pin = await evalJs(`__probe('${SS}', 300)`);
+    checkLabels(pin, 25.4, 'ss in 2in/8');
+    assert(Math.abs(pin.heavy - 50.8) < 1e-9 && Math.abs(pin.minor - 6.35) < 1e-9, 'heavy 2 in, minor 1/4 in');
+    await setS('DOC_UNIT', 'mm');
+    const back = await evalJs(`__probe('${SS}', 1200)`);
+    checkLabels(back, 1, 'ss mm again');
+    assert.strictEqual(back.heavy, 100);
+    await setS('INCH_GRID_DIVISIONS', 10); await setS('INCH_GRID_MAJOR', 1);
+
+    // ---- Shaper (Design canvas; inch by default) ----
+    await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 5000);
+    await waitFor(`!!document.querySelector('.mode-btn[data-mode="design"]')`, 'Shaper ready');
+    await evalJs(`localStorage.clear(); document.querySelector('.mode-btn[data-mode="design"]').click()`);
+    await sleep(800);
+    await evalJs(probe);
+    const sh = await evalJs(`__probe('#design-canvas', 200)`);
+    checkLabels(sh, 25.4, 'shaper in');
+    assert(Math.abs(sh.heavy - 25.4) < 1e-9, 'Shaper (inch file) gets the inch grid');
+    await shot('shaper-design-200.png');
+
+    // ---- hosts that do not use the shared grid ----
+    for (const url of ['/apps/penplotter/index.html', '/apps/trace/index.html']) {
+      await navigate(`http://127.0.0.1:${port}${url}`, 4000);
+      await sleep(1200);
+      assert.strictEqual(await evalJs(`document.querySelectorAll('#grid-labels, #infinite-grid').length`), 0, url + ': no shared-grid labels or rect');
+    }
+    console.log('canvas-grid-labels-live: ok');
+  } finally {
+    await cdp.close();
+  }
+})();

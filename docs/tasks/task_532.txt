@@ -1,0 +1,44 @@
+TASK 532 (Sketch-Studio): the canvas grid shows measurements in the FILE'S units. Owner 2026-11-12: "I'd like the canvas grid
+to have measurement in units of file"; his two choices: (1) NUMBERS ON THE AXES (next to the X and Y axis lines through the
+origin, one at each heavy grid line; they scroll out of view with the origin); (2) in an inch file the grid lines fall on ROUND
+values of the file's unit, and snapping to the grid follows the same spacing.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-532-grid-units, branch agents/task-532-grid-units (from origin/main).
+Read first: packages/ui/canvas-grid.js (the ONE shared grid: gridLevel, levels of detail, the byte-identity notes),
+packages/core/settings-manager.js (GRID_SIZE 2, GRID_MAJOR_STEP 10, GRID_MODE, DOC_UNIT 'mm' base; "switching RE-LABELS, no
+resize"), packages/core/units.js (formatUnit and the conversion: the ONE formatter, reuse it), packages/ui/svg-renderer.js
+(defaultRenderCtx, how the grid is updated per zoom), packages/ui/input-manager.js:453 (grid snap uses GRID_SIZE), how the
+origin / axis lines are drawn, and where DOC_UNIT is switched in the UI (grep; if there is NO way for the user to switch the
+unit yet, say so in the REPORT: the feature must still work from the setting).
+
+DESIGN (declare, one source):
+ A. ONE pure function in canvas-grid.js (or beside gridLevel) gives the grid's spacing in WORLD units for (DOC_UNIT, zoom): for
+    mm exactly today's values (GRID_SIZE 2 / major 10 and today's levels: the mm grid must stay BYTE-IDENTICAL, the existing
+    grid tests must pass unchanged); for inches round inch values (declare the inch base and major as DATA next to the mm ones,
+    e.g. minor 1/8 in or 0.1 in and major 1 in: pick what reads well with the level-of-detail ratio and say why; a unit added
+    later needs only a table row). The grid drawing AND the grid snap (input-manager.js) both read this one function: no second
+    copy of the spacing. Snapping keeps today's rule (base spacing, not the displayed level) unless the code shows otherwise.
+ B. Axis labels: at each displayed MAJOR line, a number next to the X axis and the Y axis, the coordinate from the origin in the
+    file's unit, formatted by the shared formatUnit (no unit suffix on every number: put the unit once, e.g. on the last label or
+    near the origin; decide and say). Labels follow the level of detail (never denser than about one per 40 px; skip labels
+    rather than overlap), keep a constant size on screen at any zoom, use the grid's colour tokens (a --sk-grid-label variable
+    with a fallback, like --sk-grid-minor/major), do not take pointer events, are not exported (SVG/DXF export, thumbnails:
+    grep how the grid itself is excluded and use the same mechanism), and disappear with GRID_MODE 'off'. Y direction: the
+    numbers must match the coordinates the app shows elsewhere (check the sign convention; quote where).
+ C. Hosts: the shared grid is used by SketchStudio and by Shaper's Design canvas (mountSketch grid:true). Labels are part of the
+    shared grid, so both get them (north star: ONE Design tab). Pen Plotter's paper grid and Trace are NOT touched: add a test
+    that no label element exists there.
+ D. If labels need a setting (on/off), declare it in settings-manager like GRID_MODE and surface it where GRID_MODE is surfaced;
+    default ON. Do not add one unless the existing settings panel pattern makes it one line.
+TESTS (fail-first): the spacing function (mm unchanged at several zooms; inch round values at several zooms); snap in an inch
+ file lands on round inch values; labels: right numbers at the right world positions in mm and in inches, follow pan/zoom, no
+ overlap at 5 zoom levels, absent with grid off, absent from exports, absent in Pen Plotter/Trace; switching DOC_UNIT re-labels
+ and re-spaces live. Real-app screenshots (headless), cropped legible, in .evidence/532/: mm at two zooms, inch at two zooms,
+ Shaper Design canvas; md5 of each; re-open each and describe what it shows.
+DO NOT: change geometry or saved files when the unit changes; hidden globals; silent catch; a second formatter or a second
+ spacing table. STOP and ask if: the mm grid cannot stay byte-identical; inch snapping would move existing geometry or change a
+ saved file; the labels cannot be kept out of exports with the existing mechanism; Shaper's look changes beyond the labels.
+List every behaviour change for existing users (expected: labels appear; inch files get an inch grid and inch snapping).
+Other seats: one drives Fusion, one will send real mouse input to the Fusion window: do not use Fusion, the mouse or keyboard;
+headless browsers only, closed before the REPORT. Never kill a process you did not start. REPORT once, leave nothing running.
+Before the final gate `git fetch origin` and merge origin/main if it moved. Gate green (`npm run gate`, run it and wait for its
+exit), commit by path, push the branch, WORK-LOG `## TURN 532`, the AGENTS.md REPORT block.

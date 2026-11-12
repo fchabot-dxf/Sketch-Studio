@@ -11,15 +11,22 @@ import { STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleT
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
 // for the S7c-2c swap. min/max/step carried from the retired settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
 // number + paired range slider. Declared control TYPES: 'checkbox' (boolean), 'select' (an `options: [{value,label}]`
-// enum — generic, e.g. GRID_MODE), and the default number+slider (needs min/max/step).
+// enum — generic, e.g. GRID_MODE; `numeric: true` stores the option as a number), and the default number+slider (needs
+// min/max/step). Any control may declare `showWhen: { key, in: [values] }`: shown only while that setting's value (DOC_UNIT
+// defaults to 'mm') is in the list; no showWhen = always shown.
 const CONTROLS = [
   { tab: 'grid', key: 'SHOW_GRID',               label: 'Show Grid',            type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
   { tab: 'grid', key: 'SNAP_MAGNETISM',          label: 'Snap Magnetism',       min: 2,   max: 40,  step: 1 },
   { tab: 'grid', key: 'GRID_MAGNETISM',          label: 'Grid Magnetism',       min: 2,   max: 40,  step: 1 },
-  { tab: 'grid', key: 'GRID_SIZE',               label: 'Grid Size',            min: 0.5, max: 20,  step: 0.5 },
-  { tab: 'grid', key: 'GRID_MAJOR_STEP',         label: 'Grid Major Step',      min: 1,   max: 50,  step: 1 },
+  // The grid pair, per unit system (showWhen: shown only while DOC_UNIT is one of `in`): metric files = the mm-stored
+  // GRID_MAJOR_STEP / GRID_SIZE; inch files = INCH_GRID_MAJOR (inches) + INCH_GRID_DIVISIONS (squares per heavy line).
+  { tab: 'grid', key: 'GRID_MAJOR_STEP',         label: 'Heavy line every (mm)', min: 1,   max: 500, step: 1,   showWhen: { key: 'DOC_UNIT', in: ['mm', 'cm'] } },
+  { tab: 'grid', key: 'GRID_SIZE',               label: 'Light line every (mm)', min: 0.5, max: 100, step: 0.5, showWhen: { key: 'DOC_UNIT', in: ['mm', 'cm'] } },
+  { tab: 'grid', key: 'INCH_GRID_MAJOR',         label: 'Heavy line every (in)', min: 0.25, max: 24, step: 0.25, showWhen: { key: 'DOC_UNIT', in: ['in'] } },
+  { tab: 'grid', key: 'INCH_GRID_DIVISIONS',     label: 'Squares per heavy line', type: 'select', numeric: true, showWhen: { key: 'DOC_UNIT', in: ['in'] },
+    options: [10, 2, 4, 8, 16].map((n) => ({ value: n, label: String(n) })) },
   { tab: 'lines', key: 'LINE_STROKE',             label: 'Line Stroke',          min: 0.1, max: 5,   step: 0.1 },
   { tab: 'lines', key: 'JOINT_RADIUS',            label: 'Joint Radius',         min: 0.1, max: 12,  step: 0.1 },
   { tab: 'lines', key: 'JOINT_STROKE_MULT',       label: 'Joint Stroke Mult',    min: 0.1, max: 5,   step: 0.1 },
@@ -79,7 +86,7 @@ function injectStyles() {
 .sk-style-tab { padding: 4px 8px; border: 0; border-bottom: 2px solid transparent; background: none; color: inherit; cursor: pointer; font: inherit; }
 .sk-style-tab.sk-active { color: var(--sk-selection, #3B82F6); border-bottom-color: var(--sk-selection, #3B82F6); }
 .sk-style-tabpanel { display: flex; flex-direction: column; gap: 8px; }
-.sk-style-tabpanel[hidden] { display: none; }
+.sk-style-tabpanel[hidden], .sk-style-row[hidden] { display: none; }
 .sk-style-rowtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .sk-style-input { width: 80px; text-align: right; padding: 2px 4px; border-radius: 4px; background: transparent;
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
@@ -188,6 +195,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
 
   function buildControl(spec) {
     const row = document.createElement('div'); row.className = 'sk-style-row';
+    row.dataset.row = spec.key;
     const top = document.createElement('div'); top.className = 'sk-style-rowtop';
     const lab = document.createElement('span'); lab.className = 'sk-style-label'; lab.textContent = spec.label;
     top.appendChild(lab);
@@ -195,13 +203,13 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'sk-style-input'; input.dataset.key = spec.key;
       input.addEventListener('change', () => settings.set(spec.key, !!input.checked, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
-      controlEls[spec.key] = { input };
+      controlEls[spec.key] = { input, row };
     } else if (spec.type === 'select') {
       const input = document.createElement('select'); input.className = 'sk-style-input'; input.dataset.key = spec.key;
       for (const o of spec.options) { const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; input.appendChild(opt); }
-      input.addEventListener('change', () => settings.set(spec.key, input.value, { persist: 'local' }));
+      input.addEventListener('change', () => settings.set(spec.key, spec.numeric ? Number(input.value) : input.value, { persist: 'local' }));
       top.appendChild(input); row.appendChild(top);
-      controlEls[spec.key] = { input };
+      controlEls[spec.key] = { input, row };
     } else {
       const input = document.createElement('input'); input.type = 'number'; input.className = 'sk-style-input'; input.dataset.key = spec.key;
       input.min = String(spec.min); input.max = String(spec.max); input.step = String(spec.step);
@@ -212,7 +220,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       input.addEventListener('change', () => { slider.value = input.value; write(input.value); });
       slider.addEventListener('input', () => { input.value = slider.value; write(slider.value); });
       top.appendChild(input); row.append(top, slider);
-      controlEls[spec.key] = { input, slider };
+      controlEls[spec.key] = { input, slider, row };
     }
     return row;
   }
@@ -221,9 +229,10 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     const all = settings.getAll();
     for (const spec of CONTROLS) {
       const c = controlEls[spec.key]; if (!c) continue;
+      if (spec.showWhen) c.row.hidden = !spec.showWhen.in.includes(all[spec.showWhen.key] || 'mm');
       const v = all[spec.key];
       if (spec.type === 'checkbox') { c.input.checked = !!v; }
-      else if (spec.type === 'select') { c.input.value = spec.options.some((o) => o.value === v) ? v : spec.options[0].value; }
+      else if (spec.type === 'select') { c.input.value = spec.options.some((o) => String(o.value) === String(v)) ? v : spec.options[0].value; }
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
     docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';

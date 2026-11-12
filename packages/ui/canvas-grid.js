@@ -22,6 +22,7 @@
 
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
+import { basePer, UNITS, format as formatUnit } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -35,6 +36,10 @@ const MINOR_FADE_SPAN = 1;
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
+const LABEL_COLOR = '#64748b';  // mid-grey: darker than the grid lines, lighter than geometry
+
+export const LABEL_PX = 11;          // axis-number text size on screen, constant at any zoom
+export const MIN_LABEL_GAP_PX = 40;  // never more than about one number per this many screen px along an axis
 
 // The backmost rect (attribute ORDER matters for byte-identity with the old index.html markup).
 const RECT_ATTRS = [['id', 'infinite-grid'], ['x', '-50000'], ['y', '-50000'], ['width', '100000'], ['height', '100000'], ['fill', 'url(#grid-heavy)']];
@@ -45,9 +50,42 @@ export function gridRectMarkup(mode) {
   return `<rect ${attrs}${normalizeGridMode(mode) === 'off' ? ' display="none"' : ''}/>`;
 }
 
+// The grid spacing of a document unit, as DATA, in that unit. A unit with NO row (mm, cm) uses the GRID_SIZE /
+// GRID_MAJOR_STEP settings (world units = mm: today's 2 / 10, still tunable in the Style panel), so the mm grid is exactly
+// what it always was. A unit added later needs only a row here.
+//   major     — { setting, default }: the major spacing in the unit, read from that declared setting (any positive number).
+//   divisions — { setting, options }: how many minor squares per `major`, read from that declared setting (minor = major/n; snap = minor).
+//   lodRatio  — the level-of-detail step (zoomed out each level multiplies the minor by it), per divisions value; `other`
+//               for any value not listed. Decimal (10): x10 (0.1, 1, 10 in). Binary (2/4/8/16): x2 (1/16, 1/8, 1/4, 1/2,
+//               1, then 2, 4, 8 in; the sequence starts from the chosen major M: M/16 ... M, 2M, 4M ...): every level stays a round number
+//               of the chosen system, and the major follows as max(M, ratio x minor). Chosen over feet-style 6/12 in
+//               because the plain doubling continues the same binary sequence with no special case.
+export const GRID_INCH_DIVISIONS = [10, 2, 4, 8, 16];
+export const GRID_SPACING_BY_UNIT = {
+  in: { major: { setting: 'INCH_GRID_MAJOR', default: 1 }, divisions: { setting: 'INCH_GRID_DIVISIONS', options: GRID_INCH_DIVISIONS }, lodRatio: { 10: 10, other: 2 } },
+};
+
+/**
+ * THE one grid spacing, in WORLD units (mm), for a document unit: { GRID_SIZE, GRID_MAJOR_STEP, lodRatio? }. PURE.
+ * `settings` carries GRID_SIZE / GRID_MAJOR_STEP and any row's divisions setting (INCH_GRID_DIVISIONS). The grid drawing
+ * (svg-renderer.js) and the grid snap (input-manager.js) both read it: no second copy of the spacing. lodRatio is
+ * undefined for a unit with no row (gridLevel then uses major/size, as it always did).
+ */
+export function gridSpacing(docUnit, settings) {
+  const row = GRID_SPACING_BY_UNIT[docUnit];
+  if (!row) return { GRID_SIZE: settings.GRID_SIZE, GRID_MAJOR_STEP: settings.GRID_MAJOR_STEP };
+  const k = basePer(docUnit);
+  const asked = Number(settings[row.divisions.setting]);
+  const n = row.divisions.options.includes(asked) ? asked : row.divisions.options[0];
+  const askedMajor = Number(settings[row.major.setting]);
+  const major = askedMajor > 0 && Number.isFinite(askedMajor) ? askedMajor : row.major.default;
+  return { GRID_SIZE: (major / n) * k, GRID_MAJOR_STEP: major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other };
+}
+
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */
-export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
-  const ratio = GRID_MAJOR_STEP / GRID_SIZE;
+export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
+  // lodRatio (gridSpacing's, for units with a row) = the step between levels; absent = major/size (the mm path, unchanged).
+  const ratio = lodRatio || GRID_MAJOR_STEP / GRID_SIZE;
   const pxPerUnit = 1 / scale(1);
   let factor = 1;
   // ratio <= 1 cannot subdivide into levels; keep the base grid.
@@ -57,7 +95,7 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
   const minor = GRID_SIZE * factor;
   const minorPx = minor * pxPerUnit;
   const fade = Math.min(1, Math.max(0, (minorPx - MIN_MINOR_PX) / (MINOR_FADE_SPAN * MIN_MINOR_PX)));
-  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : minor * ratio, minorPx, fade };
+  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : Math.max(GRID_MAJOR_STEP, minor * ratio), minorPx, fade };
 }
 
 /**
@@ -70,8 +108,8 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale }) {
  * 'lines' (and 'off', which only hides the rect) = the pattern grid. 'points' = a dot at every grid intersection,
  * same levels, heavier at every major.
  */
-export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) {
-  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale });
+export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio }) {
+  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
   // Fully opaque adds no attribute, so the base level stays byte-identical to the original markup.
   const op = (attr) => (fade < 1 ? ` ${attr}="${fade}"` : '');
   if (normalizeGridMode(gridMode) === 'points') {
@@ -98,6 +136,38 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) 
     + `<path d="M ${M} 0 L 0 0 0 ${M}" fill="none" stroke="${MAJOR_COLOR}" stroke-width="${majorStroke}"/></pattern>`;
 }
 
+/**
+ * The axis numbers of the grid: one at each displayed HEAVY line along the X axis (y = 0) and the Y axis (x = 0), both
+ * sides of the origin (negatives carry a minus), none at 0. PURE (string). The number is the world coordinate in the file's
+ * unit (world mm via the shared units.js format, its shortest form, the unit suffix stripped: the unit is the document's, shown
+ * once in the Style panel). Sign convention = the app's own coordinates: world y is the SVG y (screenToWorld in coords.js:
+ * y = vb.y + localY * scaleY), so y grows DOWN the screen and the Y-axis numbers below the origin are positive.
+ * Rotated 90 degrees (read top-to-bottom); X numbers sit just below the axis line, Y numbers just right of it, centred on
+ * their grid line. Dense levels skip numbers (every 2nd, 5th, 10th .. heavy line) so they stay >= MIN_LABEL_GAP_PX apart.
+ *   vb: the viewBox { x, y, width, height }; scale(px) → world units; docUnit: 'mm' | 'cm' | 'in'.
+ */
+export function gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit }) {
+  if (!vb || !(vb.width > 0) || !(vb.height > 0)) return '';
+  const { major: M } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
+  const unit = UNITS.includes(docUnit) ? docUnit : 'mm';
+  const majorPx = M / scale(1);
+  // the smallest of 1, 2, 5, 10, 20, 50, ... heavy lines that keeps the gap
+  const steps = []; for (let d = 1; d < 1e12; d *= 10) steps.push(d, 2 * d, 5 * d);
+  const every = steps.find((n) => n * majorPx >= MIN_LABEL_GAP_PX) || steps[steps.length - 1];
+  const step = M * every;
+  const fs = scale(LABEL_PX);
+  const text = (v) => formatUnit(v, unit, { unit: true }).slice(0, -unit.length);
+  const out = [];
+  const each = (from, to, emit) => {
+    for (let i = Math.ceil(from / step); i * step <= to; i++) { if (i !== 0) emit(i * step); }
+  };
+  // X axis: number centred on its vertical grid line, below the axis.
+  each(vb.x, vb.x + vb.width, (x) => out.push(`<text transform="translate(${x} ${scale(5)}) rotate(90)" dominant-baseline="central">${text(x)}</text>`));
+  // Y axis: number centred on its horizontal grid line, right of the axis.
+  each(vb.y, vb.y + vb.height, (y) => out.push(`<text transform="translate(${scale(5) + fs / 2} ${y}) rotate(90)" text-anchor="middle" dominant-baseline="central">${text(y)}</text>`));
+  return `<g id="grid-labels" font-size="${fs}" pointer-events="none" style="user-select:none">${out.join('')}</g>`;
+}
+
 // ── DOM glue ────────────────────────────────────────────────────────────────
 
 let stylesInjected = false;
@@ -107,7 +177,8 @@ function injectStyles() {
   const s = document.createElement('style');
   s.id = 'sk-canvas-grid-styles';
   s.textContent = `#grid path{stroke:var(--sk-grid-minor,${MINOR_COLOR})}#grid circle{fill:var(--sk-grid-minor,${MINOR_COLOR})}`
-    + `#grid-heavy path{stroke:var(--sk-grid-major,${MAJOR_COLOR})}#grid-heavy circle{fill:var(--sk-grid-major,${MAJOR_COLOR})}`;
+    + `#grid-heavy path{stroke:var(--sk-grid-major,${MAJOR_COLOR})}#grid-heavy circle{fill:var(--sk-grid-major,${MAJOR_COLOR})}`
+    + `#grid-labels text{fill:var(--sk-grid-label,${LABEL_COLOR});font-family:inherit}`;
   document.head.appendChild(s);
   stylesInjected = true;
 }
@@ -142,22 +213,28 @@ export function ensureCanvasGrid(svgEl) {
 
 const applied = new WeakMap(); // svgEl → last applied signature (skip the DOM write on idle frames)
 
-/** Mount (if needed) + retune the grid on svgEl for the given spacing/zoom/mode. Returns false if it refused. */
-export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode }) {
+/** Mount (if needed) + retune the grid (and its axis numbers) on svgEl for the given spacing/zoom/mode/unit. Returns false if it refused. */
+export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio, docUnit }) {
   const parts = ensureCanvasGrid(svgEl);
   if (!parts) return false;
   const mode = normalizeGridMode(gridMode);
-  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode });
-  const sig = mode + '|' + markup;
+  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode, lodRatio });
+  // The axis numbers: part of the same grid, so they follow the same mode ('off' draws none) and the same levels.
+  const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+  const labels = mode === 'off' ? '' : gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit });
+  const sig = mode + '|' + markup + '|' + labels;
   if (applied.get(svgEl) !== sig || !parts.defs.firstChild) {
     parts.defs.innerHTML = markup;
     if (mode === 'off') parts.rect.setAttribute('display', 'none'); else parts.rect.removeAttribute('display');
+    let g = svgEl.querySelector('#grid-labels');
+    if (g && g.parentNode) g.parentNode.removeChild(g);
+    if (labels) parts.rect.insertAdjacentHTML('afterend', labels);
     applied.set(svgEl, sig);
   }
   return true;
 }
 
-/** updateCanvasGrid with the mode read live from the declared GRID_MODE setting (what both render ctxs call). */
-export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale }) {
-  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: SettingsManager.get('GRID_MODE') });
+/** updateCanvasGrid with the mode and unit read live from the declared GRID_MODE / DOC_UNIT settings (what both render ctxs call). */
+export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
+  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE'), docUnit: SettingsManager.get('DOC_UNIT') || 'mm' });
 }

@@ -278,7 +278,7 @@
     .cut-shape-angles .cut-preset { all: unset; box-sizing: border-box; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: var(--sk-prep-chip2); font-size: 11px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-shape-angles .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
     /* PERSIST-2: passive autosave status text, unobtrusive by design (no icon, no color alarm). */
-    .save-status { font: 11px system-ui, sans-serif; color: #6b7280; opacity: 0.8; margin-left: 10px; }
+    .save-status { font: 11px system-ui, sans-serif; color: #6b7280; opacity: 0.8; margin-left: 10px; display: inline-block; width: 2.65em; white-space: nowrap; } /* fixed width = "Saved": "Saving…" overflows into the first tab's padding, so the status never moves #mode-nav (TASK 522) */
     /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
     .mode-nav { display: flex; gap: 4px; align-items: center; }
     .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }

@@ -12,9 +12,7 @@ import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
 import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
 
 // Scenarios that FAIL today: scenario number -> one-line reason. When one starts passing the test fails loudly: delete its entry.
-const KNOWN = {
-  12: "task 521 refuses a collapsing edit with { reverted: true, clash: '', reason }, the scenario still asserts a non-empty clash string (stale expectation, the seam itself refuses and reverts)",
-};
+const KNOWN = {};
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -201,7 +199,7 @@ run('11. app placement keeps cross-edge reference driven', 'PASS', () => {
   };
 });
 
-// 12 — EDIT seam driven directly: over-constraining edit refuses+reverts; a valid edit applies
+// 12 — EDIT seam driven directly: an impossible edit is refused + reverted (since task 521: with a `reason`, geometry restored); a valid edit applies
 run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
@@ -209,13 +207,15 @@ run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () =
   const diagNow = s.edgeLen(r.corners[0], r.corners[2]);
   const diag = s.dimension(r.corners[0], r.corners[2], diagNow);
   s.solve();
+  const before = r.corners.map(j => s.pos(j));
   const bad = commitDimensionEdit(s.state, diag, 50);            // diagonal 50 < width 100 → impossible
+  const restored = r.corners.every((j, i) => Math.hypot(s.pos(j).x - before[i].x, s.pos(j).y - before[i].y) < 1e-6);
   const good = commitDimensionEdit(s.state, diag, diagNow + 20); // satisfiable
   s.solve();
   return {
-    pass: bad.reverted === true && !!bad.clash && good.reverted === false &&
+    pass: bad.reverted === true && typeof bad.reason === 'string' && bad.reason.length > 0 && restored && good.reverted === false &&
           s.isRectangle(r.corners) && s.converged === true && Math.abs(diag.value - (diagNow + 20)) < 1e-6,
-    nums: { badReverted: bad.reverted, badClash: bad.clash || 'none', goodApplied: !good.reverted, diagValue: diag.value, isRect: s.isRectangle(r.corners) },
+    nums: { badReverted: bad.reverted, badReason: bad.reason || 'none', restored, goodApplied: !good.reverted, diagValue: diag.value, isRect: s.isRectangle(r.corners) },
   };
 });
 

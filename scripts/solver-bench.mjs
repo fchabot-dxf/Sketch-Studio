@@ -27,9 +27,6 @@ const quiet = (f) => { const l = console.log, e = console.error, w = console.war
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 const time = (f) => { const t0 = performance.now(); f(); return performance.now() - t0; };
 const driving = (S) => S.state.constraints.filter((c) => c && !L.isDriven(c) && c.type !== 'mouse_spring');
-// makeRectFromTwoJoints names its lines 's' + Date.now() + '_k': two rectangles made in the same millisecond share line ids (found by this
-// bench, reported in WORK-LOG TURN 541). The bench makes each rectangle in its own millisecond so every id is unique.
-const nextMs = () => { const t = Date.now(); while (Date.now() === t) { /* wait for the next millisecond */ } };
 
 const isDim = (c) => c.type === 'distance' && typeof c.value === 'number' && c.value > 0;
 // target: the count of driving constraints; opts.dims: keep adding cells until there are at least this many driving dimensions too
@@ -42,7 +39,6 @@ export function buildSketch(target, opts = {}) {
   quiet(() => {
     while (driving(S).length < target || driving(S).filter(isDim).length < (opts.dims || 0)) {
       const w = 40 + (k % 5) * 6, h = 20 + (k % 3) * 5;
-      nextMs();
       const r = L.rect(S, x, 0, x + w, h);
       const ids = [...new Set(r.lines.flatMap((id) => L.shape(S, id).joints))];
       const at = (px, py) => ids.find((id) => Math.abs(J(id).x - px) < 1e-9 && Math.abs(J(id).y - py) < 1e-9);

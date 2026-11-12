@@ -15,6 +15,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
+import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
 import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from '#ui/input-handlers/live-dimension-input.js';
@@ -395,7 +396,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     // startId has already been created above if missing — reuse the variable
     // (avoids creating duplicate joints when dragging the start on empty canvas).
 
-    const newShapeId = 's' + Date.now();
+    const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
     state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
     lastLineCommitTime = Date.now();
 
@@ -542,7 +543,7 @@ export function finalizeLineFromActive(svg, state) {
         return true;
     }
 
-    const newShapeId = 's' + Date.now();
+    const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
     state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
 
     if (lineState.lockedLength !== null) {

@@ -7,6 +7,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
+import { newShapeId } from '#core/shape-id.js';
 
 let circleState = { lockedRadius: null };
 const localState = { isDragging: false, dragStartScreen: null };
@@ -99,7 +100,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     if (circleState.lockedRadius) r = circleState.lockedRadius;
 
     state.saveState();
-    const shapeId = 's' + Date.now();
+    const shapeId = newShapeId('s');
 
     state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
     
@@ -135,7 +136,7 @@ export function finalizeCircleFromActive(svg, state){
         let r = Math.hypot(previewPt.x - center.x, previewPt.y - center.y);
         if (circleState.lockedRadius) r = circleState.lockedRadius;
         state.saveState();
-        const shapeId = 's' + Date.now();
+        const shapeId = newShapeId('s');
         state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
         // Only add a radius distance constraint if the user explicitly entered a radius
         if (circleState.lockedRadius != null) {

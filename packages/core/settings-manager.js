@@ -23,6 +23,9 @@ const DEFAULT_SETTINGS = {
     SNAP_RADIUS: SolverConfig.SNAP_RADIUS || 30,
     SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM || 10,
     GRID_MAGNETISM: SolverConfig.GRID_MAGNETISM || 10,
+    // Task 537: a point drawn / dragged near the X axis (y = 0) or the Y axis (x = 0) snaps onto it and gets the horizontal /
+    // vertical constraint with the origin joint. true = on (default); false = no axis snap.
+    AXIS_SNAP: true,
     GRID_DENSITY: 2,
     // The mm grid's DEFAULTS (task 532, owner: every 100 mm heavy, 10 per heavy). ONE place: the renderer, the snap and the
     // panel all read these through SettingsManager (a stored value or a template wins; a mm file with 2 / 10 stored is the old grid).

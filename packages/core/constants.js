@@ -25,6 +25,7 @@ export const SNAP = {
   JOINT_PX: SNAP_JOINT_PX,              // Joint snap / selection radius
   INFERENCE_PX: SNAP_JOINT_PX / 2,      // Tighter radius for inference hints (derived)
   LINE_PX: 20,                          // Line proximity detection
+  AXIS_PX: 20,                          // X / Y axis proximity detection (task 537; same reach as a line)
 
   // ── Drag behavior ──────────────────────────────────────────────────
   DRAG_MULT: 1.1,         // Multiplier on JOINT_PX while dragging
@@ -37,6 +38,15 @@ export const SNAP = {
     MAX: 4.0,
     BIAS: 2        // pixels; prefer midpoint when within this bias vs projected line point
   }
+};
+
+// The two AXIS snap targets (task 537). A point near the X axis (y = 0) or the Y axis (x = 0) snaps onto it and is held there by
+// the existing two-point constraint with the origin joint: ONE declaration read by findSnap (#ui), applySnapConstraint (#core)
+// and the drag-lock check (#ui). `across` = the coordinate the snap pins to 0; the other coordinate stays free.
+export const ORIGIN_JOINT_ID = 'j_origin';
+export const AXIS_SNAP_TARGETS = {
+  'axis-x': { constraint: CONSTRAINT_TYPES.HORIZONTAL, across: 'y', label: 'X axis' },
+  'axis-y': { constraint: CONSTRAINT_TYPES.VERTICAL,   across: 'x', label: 'Y axis' }
 };
 
 // Default view configuration

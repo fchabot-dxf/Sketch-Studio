@@ -214,7 +214,7 @@ O (`midpoint(M0,M3)=O`), concentric circle (centre coincident with O) R25, a sec
 Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING REPROS prints the observed behaviour) or
 `node tests/constraint-audit.test.js` (the `known F<n>` lines); the code of each repro is in `tests/harness/audit/findings.js`.
 
-### F6 (BUG, HIGH): the DOF count says "fully constrained" while a degree of freedom is free (one-sided `pointOnLine` Jacobian)
+### F6 (FIXED task 511): the DOF count says "fully constrained" while a degree of freedom is free (one-sided `pointOnLine` Jacobian)
 
 * Observed: triangle with the angle dimension deleted: `nullity=0, finite-difference nullity=1, planegcs dof=1; re-solves from jittered starts
   put C.y at 82.60, 80.85, 74.87 (a free family)`. With `mutual: true` on the pointOnLine the nullity is 1. The analytic Jacobian differs from
@@ -234,7 +234,7 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
 * Proposed task: compare `dimMode` (an H and a V dimension never block each other; H+V+aligned on one pair is the redundant case for
   `isDistanceRedundant` to flag), with a test that both drive and the nullity drops by 2.
 
-### F3 (BUG, HIGH): an angle dimension on two lines whose signed angle is clockwise deforms / collapses the sketch
+### F3 (FIXED task 511): an angle dimension on two lines whose signed angle is clockwise deforms / collapses the sketch
 
 * Observed: `angle at its measured value 125.54: accepted=true converged=true residual=5.5e-8; |AB| 100.00 -> 48.4629`; in the triangle drawing
   (isosceles) the same step collapsed AB to length 0 (`B(0.00,-0.00)`), "converged", and a typed 110 was refused.

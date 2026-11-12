@@ -1,5 +1,5 @@
 // TURN 402: a dimension at a filleted corner keeps meaning the SHARP corner (virtual-sharp joint V,
-// two `mutual` pointOnLine constraints), so editing the fillet radius never changes the overall size.
+// two pointOnLine constraints), so editing the fillet radius never changes the overall size.
 globalThis.document = globalThis.document || { getElementById: () => null };
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m); };
@@ -43,7 +43,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
     assert(V && V.virtualSharp === true, 'V exists as a flagged bare joint');
     assert(!state.shapes.some(s => (s.joints || []).includes(res.virtualSharp)), 'V is not on any shape');
     assert(res.arc.filletSharp === res.virtualSharp, 'arc remembers its virtual sharp');
-    assert(state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === res.virtualSharp && c.mutual).length === 2, 'two mutual pointOnLine on V');
+    assert(state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === res.virtualSharp).length === 2, 'two pointOnLine on V');
     assert(JSON.stringify(measures(state).map(c => c.value)) === JSON.stringify(before), 'measurement values are KEPT (not shrunk by d)');
     assert(measures(state).some(c => c.joints.includes(res.virtualSharp)), 'a measurement dim is relinked to V');
     let sr = engine.solve(500);
@@ -135,7 +135,7 @@ globalThis.document = globalThis.document || { getElementById: () => null };
     }
   }
 
-  // (The `mutual` Jacobian is covered at solver level in packages/core/tests/solver-point-on-line-mutual.test.js;
+  // (The point_on_line Jacobian is covered at solver level in packages/core/tests/solver-point-on-line-full.test.js;
   //  since 403 a radius edit seeds the analytic geometry, so it no longer DEPENDS on the flag to converge.)
 
   // ---- TURN 406: V survives deleting the lines (and the arc) with its overall dims, like Fusion
@@ -200,16 +200,16 @@ globalThis.document = globalThis.document || { getElementById: () => null };
     const { state } = build();
     const corner = findCornerAtPoint(state, { x: 60, y: 40 }, 5);
     state.saveState();
-    applyFillet(state, corner, 8);
+    const resV = applyFillet(state, corner, 8);
     const hasV = () => [...state.joints.values()].some(j => j.virtualSharp);
     assert(hasV(), 'V present after fillet');
     state.undo(); assert(!hasV(), 'undo removes V with the fillet');
     state.redo(); assert(hasV() && state.shapes.some(s => s.filletSharp), 'redo restores V and the arc marker');
     const clone = JSON.parse(JSON.stringify({ joints: [...state.joints.entries()], shapes: state.shapes, constraints: state.constraints }));
-    assert(clone.joints.some(([, j]) => j.virtualSharp) && clone.shapes.some(s => s.filletSharp) && clone.constraints.some(c => c.mutual), 'virtualSharp / filletSharp / mutual survive serialization');
+    assert(clone.joints.some(([, j]) => j.virtualSharp) && clone.shapes.some(s => s.filletSharp) && clone.constraints.some(c => c.type === 'pointOnLine' && c.joint === resV.virtualSharp), 'virtualSharp / filletSharp / V constraints survive serialization');
     const arc = state.shapes.find(s => s.type === 'arc');
     deleteShapes(state, [arc.id]);
-    assert(hasV() && state.constraints.filter(c => c.mutual).length === 2, 'deleting the arc leaves V and its two constraints (gap stays open, like Fusion)');
+    assert(hasV() && state.constraints.filter(c => c.type === 'pointOnLine' && c.joint === resV.virtualSharp).length === 2, 'deleting the arc leaves V and its two constraints (gap stays open, like Fusion)');
     assert(state.shapes.filter(s => s.type === 'line').length === 4, 'the four lines survive');
   }
   console.log('fillet-virtual-sharp test passed ✅');

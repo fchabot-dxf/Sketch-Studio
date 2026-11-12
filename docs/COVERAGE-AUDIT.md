@@ -122,20 +122,20 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
   N/A=12  NA-BUILD=15  PASS=9
 === parallel  [parallel]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  P4PP  P4PP  P4PP  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  P4PP  P4PP  P4PP  nnnn  nnnn  nnnn 
+  PPPP  PPPP  P4PP  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  P4PP  P4PP  nnnn  nnnn  nnnn 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  nnnn  nnnn  P4PP  P4HP  nnnn  nnnn  nnnn  nnnn  nnnn  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn 
+  nnnn  nnnn  PPPP  P4HP  nnnn  nnnn  nnnn  nnnn  nnnn  P6PP  nnnn  nnnn  nnnn  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
   nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn 
-  F4=10  N/A=140  NEW-8=1  PASS=29
+  F4=5  F6=1  N/A=140  NEW-8=1  PASS=33
 === perpendicular  [perpendicular]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  C4PC  C4PC  P4PP  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  C4PC  P4PP  P4PP  nnnn  nnnn  nnnn 
+  CPPC  CPPC  PPPP  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  CPPC  PPPP  P4PP  nnnn  nnnn  nnnn 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  nnnn  nnnn  C4PC  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn 
+  nnnn  nnnn  CPPC  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
   nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn 
-  F4=9  N/A=140  NEW-3=8  PASS=23
+  F4=2  N/A=140  NEW-3=8  PASS=30
 === collinear  [collinear]  expected DOF removed (sep): 2
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
   PPPP  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn 
@@ -143,7 +143,7 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
   nnnn  nnnn  PPPG  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  P6PP  nnnn  nnnn  nnnn  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
   nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn 
-  F6=1  N/A=140  NEW-7=1  PASS=38
+  F6=1  N/A=140  NEW-7=1  PASS=38   (as of task 512; after task 511: PASS=39, F6 and NEW-7 gone from this row)
 === tangent  [tangent]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
   nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP 
@@ -186,20 +186,20 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
   N/A=3  PASS=177
 === dim point-point H  [dim-horizontal]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1 
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  P-P1  P-P1  PPP1  P-P1  PPP1  P-P1 
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  P-PP  P-PP  PPPP  P-PP  PPPP  P-PP 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
-  PnP1  PPP1  PPP1  PPP1  PnP1  PPP1  PPP1  PPP1  P-P1  PPP1  PPP1  P-P1  PPP1  PPP1  PnP1 
-  F1=45  N/A=3  NA-BUILD=6  PASS=126
+  PnPP  PPPP  PPPP  PPPP  PnPP  PPPP  PPPP  PPPP  P-PP  PPPP  PPPP  P-PP  PPPP  PPPP  PnPP 
+  N/A=3  NA-BUILD=6  PASS=171
 === dim point-point V  [dim-vertical]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1 
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  PPP1  P-P1  P-P1  PPP1  P-P1  PPP1  P-P1 
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  P-PP  P-PP  PPPP  P-PP  PPPP  P-PP 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
-  PnP1  PPP1  PPP1  PPP1  PnP1  PPP1  PPP1  PPP1  P-P1  PPP1  PPP1  P-P1  PPP1  PPP1  PnP1 
-  F1=45  N/A=3  NA-BUILD=6  PASS=126
+  PnPP  PPPP  PPPP  PPPP  PnPP  PPPP  PPPP  PPPP  P-PP  PPPP  PPPP  P-PP  PPPP  PPPP  PnPP 
+  N/A=3  NA-BUILD=6  PASS=171
 === dim line length  [dim-length]  expected DOF removed (sep): 1
   L     C     S     R     O     A     F     B     P    
   P-PP  P-PP  P-PP  P-P-  n-nn  n-nn  n-n-  n-n-  n-n- 
@@ -230,20 +230,20 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
   N/A=140  NA-BUILD=25  NEW-5=1  PASS=14
 === dim angle (X then Y)  [dim-angle-xy]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  P4PP  P4PP  PDPP  3D33  nnnn  nnnn  nnnn  nnnn  nnnn  P4PP  PDPP  3D33  nnnn  nnnn  nnnn 
+  PPPP  PPPP  PDPP  3D33  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  PDPP  3D33  nnnn  nnnn  nnnn 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  nnnn  nnnn  -D--  3DDD  nnnn  nnnn  nnnn  nnnn  nnnn  ----  nnnn  nnnn  nnnn  nnnn  nnnn 
+  nnnn  nnnn  -4--  3DDD  nnnn  nnnn  nnnn  nnnn  nnnn  ----  nnnn  nnnn  nnnn  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
   nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn 
-  F3=7  F4=3  N/A=140  NA-BUILD=7  NEW-4=8  PASS=15
+  F3=7  F4=1  N/A=140  NA-BUILD=7  NEW-4=7  PASS=18   (as of task 512; after task 511: F3=0, NEW-4=0, PASS=32)
 === dim angle (Y then X)  [dim-angle-yx]  expected DOF removed (sep): 1
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
-  3D33  3D33  3433  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  3D33  3433  P4PP  nnnn  nnnn  nnnn 
+  3333  3333  3433  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  3333  3433  PPPP  nnnn  nnnn  nnnn 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  nnnn  nnnn  -4--  P4PP  nnnn  nnnn  nnnn  nnnn  nnnn  ----  nnnn  nnnn  nnnn  nnnn  nnnn 
+  nnnn  nnnn  -P--  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  ----  nnnn  nnnn  nnnn  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
   nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn  nnnn 
-  F3=15  F4=6  N/A=140  NA-BUILD=7  NEW-4=3  PASS=9
+  F3=18  F4=2  N/A=140  NA-BUILD=7  PASS=13
 === dim radius  [dim-radius]  expected DOF removed (sep): 1/0
   L     C     S     R     O     A     F     B     P    
   n-nn  n-nn  n-nn  n-n-  P-Pn  P-Pn  n-n-  n-n-  n-n- 
@@ -252,10 +252,12 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
 
 ### Result
 
-3384 cells: **1516 PASS, 1416 N/A by UI (the real tool refused the selection, document untouched), 163 not buildable, 145 FAIL caused by a round-1 finding, 144 FAIL NEW**
-(0 unexplained). Round-1 attribution (cells): F1 90 (an H or V dimension beside an aligned one on the same pair is demoted), F2 4 (equal circle/arc refused),
-F3 22 (clockwise angle pick order moves the drawing), F4 28 (parallel / perpendicular / angle between lines sharing a joint), F6 1 (collinear DOF != finite difference),
-F5 0 (F5's order-dependent refusal did not show; NEW-6 is the same family), F7/F8 not reachable from a single-constraint cell.
+3384 cells: **1625 PASS, 1416 N/A by UI (the real tool refused the selection, document untouched), 163 not buildable, 41 FAIL caused by a round-1 finding, 139 FAIL NEW**
+
+AFTER TASK 511 (F6, F3, full-derivative Jacobian, Fusion collinear/pointOnLine placement; `node scripts/coverage-audit.cjs`): 3384 cells: **1657 PASS**, 1416 N/A, 163 not buildable, 16 FAIL caused by a round-1 finding (F2=4, F4=11, F6=1: a `parallel` between two rect sides that share a corner, whose analytic Jacobian differs from finite differences because the shared joint index repeats in one row), 132 FAIL NEW (NEW-1=112, NEW-3=8, NEW-5=5, NEW-6=6, NEW-8=1). NEW-4 (fixed in 511: the ANGLE branch carries the reference flags) and NEW-7 (its repro passes; the one cell that remained, collinear of two already-collinear rect sides, is redundant: DOF delta 0 agrees with the finite-difference count, PlaneGCS counts -1, expectation updated in matrix-run.js `preCollinear`) are gone from the matrix.
+(0 unexplained; counts as of the merge with main after task 510 and the other fixes on main: the F1 cells are gone, F4 fell from 28 to 10). Round-1 attribution (cells, tolerated not required): F1 0 (fixed), F2 4 (equal circle/arc refused),
+F3 25 (clockwise angle pick order moves the drawing at its own measured value; 3 of these are the dim-angle-yx LL/LC/CC shared-joint cells, which showed F4 no-ops before task 510 and now show the F3 signature: accepted, residual 7e-11, bite 4.8e-9, DOF delta -1 on panel, finite difference and PlaneGCS, only the geometry moves, the same signature as the sep cells of that row while the xy order passes), F4 10 (parallel / perpendicular / angle between lines sharing a joint, the rest),
+F6 2 (collinear DOF != finite difference), F5 0 (F5's order-dependent refusal did not show; NEW-6 is the same family), F7/F8 not reachable from a single-constraint cell.
 
 Everything not listed passed: a refused selection is refused cleanly, accepted constraints converge, the Design panel delta equals the finite-difference and the PlaneGCS delta
 (except F6/NEW-7), the 3% jittered re-solve keeps every constraint, delete brings the nullity back and undo restores the document, in all four variants. In particular coincident,
@@ -294,9 +296,9 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Diagnosis: dimension-tool.js:597-612 makes a helper joint on the line (pointOnLine) and dimensions |P - helper|; nothing makes P-helper perpendicular to the line, so the helper slides and the real perpendicular distance changes while every residual is 0. It also leaves the helper as 1 free DOF in the Design panel.
 * Proposed task: add a perpendicular (or a point-line distance row in definitions.js, as line-line has) so the dimension is the true point-to-line distance; test: lock P and one line end, swing the other end, the distance must hold.
 
-### 5. NEW-4 (MEDIUM): a REFERENCE angle dimension comes back as a DRIVING one after undo (its driven flag is lost; redo restores through the same function, not separately verified)
+### 5. NEW-4 (MEDIUM) [FIXED task 511]: a REFERENCE angle dimension comes back as a DRIVING one after undo (its driven flag is lost; redo restores through the same function, not separately verified)
 
-* Verdict: BUG. Cells: 11 (e.g. dim-angle-xy LS/shared, dim-angle-xy LR/shared, dim-angle-xy CS/shared, dim-angle-xy CR/shared).
+* Verdict: BUG. Cells: 7 (e.g. dim-angle-xy LS/shared, dim-angle-xy LR/shared, dim-angle-xy CS/shared, dim-angle-xy CR/shared).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `reference angle created isDriven=true nullity 6; after delete + undo: isDriven=false nullity 5`
 * Diagnosis: packages/core/constraints.js:275-283 createConstraint(ANGLE) builds {type, shapes, value, offset, glyphPos} and drops isDriven / driven / drivenReason (the distance and line-line branches carry them, :226-250). Undo restores constraints through addConstraintObject -> addConstraint -> createConstraint, so the reference becomes a driver and the DOF drops.
 * Proposed task: carry isDriven / driven / drivenReason in the ANGLE branch like the line-line distance does; test: a reference angle survives saveState + undo with the same nullity.
@@ -315,7 +317,7 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Diagnosis: UNVERIFIED. A rigid polygon (equal sides and radii) has to rotate as a whole about its centre to satisfy the parallel; the Newton step is slow there. One cell of 3384.
 * Proposed task: none yet; fold into the convergence work of NEW-6 if it recurs.
 
-### 8. NEW-7 (LOW): collinear removes 1 DOF in the Design panel (and in the finite-difference count) where PlaneGCS removes 2, for two polygon sides with an aligned dimension between their start joints
+### 8. NEW-7 (LOW) [FIXED task 511]: collinear removes 1 DOF in the Design panel (and in the finite-difference count) where PlaneGCS removes 2, for two polygon sides with an aligned dimension between their start joints
 
 * Verdict: BUG. Cells: 1 (e.g. collinear SS/dimmed).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `collinear polygon sides, pre-dimensioned: panel delta -1, finite-difference delta -1, PlaneGCS delta -2, expected -2`

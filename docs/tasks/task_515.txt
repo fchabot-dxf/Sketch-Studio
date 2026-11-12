@@ -1,0 +1,21 @@
+TASK 515 (Sketch-Studio): a circle's RADIUS becomes a solver unknown, like Fusion (owner ruling: "match Fusion for circles"). Also fixes F2.
+Base: origin/main after 511. Read docs/CONSTRAINT-AUDIT.md O2 and F2.
+Today a circle is one joint (its centre) plus `radius` as shape data: the radius is not in the solver, an undimensioned circle counts as fully
+constrained once its centre is, a radius dimension never changes the DOF, and `equal` on two circles is a silent no-op (F2).
+Fusion: a free circle has 3 DOF (centre x, y and radius); a radius/diameter dimension, equal, tangent and point-on-circle all act on the radius.
+1. The radius of every circle is ONE solver unknown, declared in the solver's variable layout in ONE place (find how joints become positions in
+   engine.js; add the circle radius there, do not add a parallel structure). The shape's `radius` field stays the stored value and is written
+   back from the solve (one source: the solved value; say in the REPORT where the write-back happens).
+2. Radius/diameter dimensions, equal (circle-circle, circle-arc: equal radius), tangent (line-circle, circle-circle, arc-circle) and
+   point-on-circle read that unknown. commitDimensionEdit's radius path drives it through the solver instead of writing shape data
+   directly (remove the direct write; grep its callers).
+3. DOF: jointFreedom()/Design panel and the per-shape free/fully-constrained colour count the radius (free circle 3, centre fixed 1,
+   centre fixed + radius dimension 0). Arcs keep their current 3-joint model (Fusion's arc DOF is 5; ours: say what it is and whether it
+   matches, do NOT change arcs in this task, report it).
+4. Saved files: old documents load unchanged (radius read from the shape as the start value). No migration file format change unless
+   needed; if needed, STOP and ask.
+Tests (fail-first): free circle DOF 3; centre fixed 1; + radius dim 0; equal(c1,c2) then edit c1's radius -> both follow (delete F2's KNOWN entry
+in tests/constraint-audit.test.js and the circle radius items of O2); tangent line-circle with the radius free moves the radius; the plate
+drawing's hole-radius edits pass (edits ok 12/12); round-1 summary table before and after, verbatim. Update docs/CONSTRAINT-AUDIT.md O2/F2 as fixed.
+DO NOT: change arcs, add hidden globals, silent catch, or a second radius store. STOP if a saved fixture's DOF changes in a way you cannot
+explain (quote it). Gate green, commit by path, push, WORK-LOG `## TURN 515`, the usual REPORT block.

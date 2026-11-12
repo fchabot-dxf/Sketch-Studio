@@ -51,6 +51,32 @@ FUSION: broken. Hangs at "Initializing", log `BaseAuth not initialized; cannot f
 if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-11`. Then run the diagonal-dimension test
 (sketch CLAUDE_TEST_O3, delete it after) before sending 516.
 
+### Update (2026-11-11 late, turn 761)
+- Fusion REPAIRED and answering (2706.1.17). 514 merged (d74e1c7). 512: merge gate red on 3 of its own cells
+  (`dim-angle-yx */shared dim-moved-geometry`, probably F3 unmasked by 510's F4 fix): sent back for classification only, then re-merge.
+- FUSION MEASURED, diagonal on a fully constrained square: driving add refused (VCS_SKETCH_OVER_CONSTRAINTS); driven add OK at the
+  measured value; driven -> driving refused while determined; allowed after deleting a side dimension. Confirms task 516 as written.
+- FUSION MEASURED, collinear (L1 (0,0)-(10,1), L2 (15,4)-(25,6)): the FIRST-picked line stays and the second moves onto it; if the
+  second is held more (fixed, or H/V) the second stays; never "meet in the middle". 511 round 3 implements this at creation
+  (anchor by that rule, project the moving line/point), keeping ONE full-derivative Jacobian; not merged until that is in.
+- 518 RUNNING (Sonnet, branch agents/task-518-fusion-oracle): Fusion as oracle. Part 0 "which geometry moves" for EVERY constraint
+  (owner asked), then the audit drawings; answers stored in tests/fixtures/fusion-oracle/, compared offline in the gate,
+  docs/FUSION-COMPARISON.md. Divergences are flagged, the owner decides.
+- Owner rulings: the advisor picks each subagent's model per task (Sonnet default; Opus for solver maths such as 515 and N-F7);
+  push as you go.
+
+### Update (2026-11-11 night, turn 772)
+- MERGED: 512 matrix (51dc923), 511 solver fixes (050b942: F6 one full-derivative Jacobian, F3, F5, N-F5, NEW-7, NEW-4/N-F4 angle
+  flags; collinear + point-on-line placed at creation by Fusion's rule). Matrix now: 1657 PASS, 16 round-1, 132 NEW (112 = NEW-1).
+- 518 (Fusion oracle) pushed part 0 (315 cells) and 0b (2438 graded cells incl. every shape kind and the origin): Fusion moves ONE
+  operand, the more-held stays, tie -> first pick stays; ours moves both. Drawings part still running on agents/task-518-fusion-oracle.
+- RUNNING: 517 (lost dimension fields helper, fillet on origin, fillet on polygon corner) and 520 (NEW-1/2/5 dimension tool, NEW-3
+  perpendicular on parallel lines), in parallel (disjoint files). Specs in docs/tasks/.
+- NEXT: 516 (redundant dimension placed driven; Fusion-confirmed) -> 519 (who-moves like Fusion for every constraint, one placement
+  mechanism, needs 518 merged) -> 515 (circle radius a solver unknown, Opus) -> N-F7, N-F6, NEW-6/F5 family, F8, and the leftover
+  "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
+  chain them in ONE script.
+
 ## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410
 
 **Owner ruling on seats:** the owner launches seats and the advisor tasks them, as before. The advisor may also launch

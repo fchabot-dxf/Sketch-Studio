@@ -1,0 +1,45 @@
+TASK 518 (Sketch-Studio): FUSION AS AN ORACLE for the solver audits (owner: "to go with the new tests, compare with Fusion").
+AUDIT ONLY: no app code changes. Base: origin/main after 514 and 512 are merged (docs/CONSTRAINT-AUDIT.md, docs/COVERAGE-AUDIT.md,
+tests/harness/audit/*, tests/harness/coverage/*). Scope: the SketchStudio solver.
+
+FUSION RULES (a live shared app on the owner's PC): use the mcp__fusion360__fusion_execute tool. If it cannot connect, STOP and report
+(do not launch or repair Fusion yourself). Work ONLY in a NEW document you create (documents.add, never save it, close it at the end without
+saving) or, if that fails, in sketches named CLAUDE_TEST_* that you delete. Never modify, save or close any document that was open before.
+One script call at a time; keep each call under ~60 s (Fusion times out); build a drawing over several calls if needed.
+Fusion API facts already measured (2026-11-11): addTwoPointRectangle does NOT add H/V constraints (add them); adding a driving dimension
+that over-constrains raises VCS_SKETCH_OVER_CONSTRAINTS; addDistanceDimension(..., isDriving=False) makes a driven one; switching a
+driven dimension to driving while determined raises VCS_SKETCH_SOLVING_FAILED; setting a driven parameter's value does not move geometry
+(API quirk, ignore it). Read the fusion360-quirks / fusion360-api skills if you need more API details.
+
+0. WHICH GEOMETRY MOVES (owner: "this is the kind of test you can continue for the other constraints"). The advisor measured
+   collinear (Fusion 2706.1.17, L1 (0,0)-(10,1), L2 (15,4)-(25,6)): both free -> the FIRST-picked line stays, the second moves onto it;
+   pick order swapped -> swapped; the second line H-constrained or fully fixed -> the second stays, the first moves; first line with one
+   fixed end or only a length dimension -> first stays. Never "meet in the middle". (Task 511 implements that rule for collinear and
+   pointOnLine at creation.)
+   Do the same for EVERY other constraint type in inventory.constraintTypes (horizontal, vertical, parallel, perpendicular, equal (line-line,
+   circle-circle, arc-circle), tangent (line-circle, line-arc, circle-circle, arc-arc), coincident (point-point, point-on-curve), midpoint,
+   concentric, symmetric if we have it, angle and every dimension mode when it changes geometry): start geometry deliberately NOT
+   satisfying the constraint, then per situation: both free with pick order A-B, the same with B-A, A fixed (one point / fully), B fixed,
+   A H/V-constrained, B H/V-constrained, A only dimensioned, B only dimensioned, shared joint. Record from Fusion, per entity, the
+   before/after coordinates (radius too) and which stayed (< 1e-6 movement). Then run the SAME cases through our ConstraintManager
+   (node, the audit harness) and tabulate: ours vs Fusion, "same rule?" per cell. State Fusion's rule per constraint in one sentence.
+   Data: tests/fixtures/fusion-oracle/which-moves.json; test: the which-moves block of tests/fusion-oracle.test.js (KNOWN per
+   disagreeing cell); report: docs/FUSION-COMPARISON.md section "Which geometry moves" first, with a proposed fix per differing
+   constraint (where in createConstraint, one place, as 511 did for collinear). Do this part FIRST and push it before step 1.
+1. RECORD FUSION'S ANSWERS. For each round-1 drawing (plate, trapezoid, bracket, triangle, polygon) and each round-2 drawing (n1-n8, skip
+   any whose shape kind Fusion cannot express and say why), rebuild it in Fusion from the SAME recipe data (same start geometry, same
+   constraint order, same dimension values; mm vs Fusion cm stated). Per step record: accepted / refused (error text), isFullyConstrained of
+   the sketch and of each entity, driving/driven of each dimension, and the solved coordinates of every point after the step. Then the
+   step-E dimension edits (0.8x, 1.25x) and step-F (redundant dim, conflicting dim, delete one dim).
+   Also a representative cell per (constraint/dimension row x shape-pair x variant) class from the 512 matrix (state how you picked).
+   Save everything as data: tests/fixtures/fusion-oracle/<drawing>.json (one file per drawing + matrix.json), with Fusion's version
+   (app.version) and the date.
+2. COMPARE OFFLINE. tests/fusion-oracle.test.js (pure node, no Fusion needed, in the gate, < 20 s) replays each recipe through our pipeline
+   (reuse the audit harness) and compares with the recorded answers: accepted/refused, fully-constrained per entity, driving/driven, and
+   solved coordinates (tolerance stated; Fusion may land on another valid branch: then compare the constraint satisfaction, not the
+   coordinates, and say so). Every disagreement is a named KNOWN entry (fails loudly if it starts agreeing).
+3. REPORT docs/FUSION-COMPARISON.md: per drawing a table (step, ours, Fusion, same?), then every divergence with verdict: OUR BUG (link
+   the audit finding if it is one, e.g. F2/O2 circle radius DOF, N-F7), FUSION DIFFERENT BY DESIGN (describe), or UNCLEAR. Divergences are
+   flagged for the owner; do not change our behaviour to match (owner rule: report each difference, the owner decides).
+Gate green, commit by path, push, WORK-LOG `## TURN 518`, the usual REPORT block. Leave Fusion as you found it (list the documents open
+before and after in the REPORT).

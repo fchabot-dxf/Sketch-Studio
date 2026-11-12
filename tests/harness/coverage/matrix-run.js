@@ -149,6 +149,13 @@ export async function runCell(row, cols, variant) {
   const doc0 = docOf(S);
   const nC0 = st.constraints.length, nJ0 = st.joints.size;
   const snap0 = L.snapshot(S);
+  // collinear on two lines that ALREADY lie on one line (e.g. two horizontal rect sides sharing a corner): the new row is redundant, so
+  // the DOF must not change (delta 0, agreed by the independent finite-difference count). PlaneGCS counts -1 there, so it is not used as
+  // the oracle for this case (task 511: our count was 1 too LOW before the full-derivative Jacobian and agrees with finite differences now).
+  const preCollinear = row.id === 'collinear' && lineLike(kx) && lineLike(ky) && (() => {
+    const P = (id) => st.joints.get(id), a = P(X.joints[0]), b = P(X.joints[1]), len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    return Y.joints.slice(0, 2).every(id => Math.abs(((b.x - a.x) * (P(id).y - a.y) - (b.y - a.y) * (P(id).x - a.x)) / len) < 1e-6);
+  })();
   S.msgs.length = 0; spy.calls.length = 0; spyOn();
   let hits;
   try {
@@ -223,9 +230,10 @@ export async function runCell(row, cols, variant) {
   if (!(rec.residual < eps)) rec.issues.push('residual');
   if (row.dim && !rec.driven) { rec.moved = L.maxDeviation(S, snap0); if (!(rec.moved < 1e-3)) rec.issues.push('dim-moved-geometry'); }   // a dimension placed at its measured value must leave the drawing alone
   if (rec.delta !== rec.fdDelta) rec.issues.push('nullity!=fd');
-  if (rec.oracleMapped && rec.delta !== rec.oracleDelta) rec.issues.push('nullity!=oracle');
+  if (rec.oracleMapped && rec.delta !== rec.oracleDelta && !preCollinear) rec.issues.push('nullity!=oracle');
   if (rec.oracleMapped && rec.oracleConflict > 0 && !rec.driven) rec.issues.push('accepted-conflict');
-  if (rec.nominal != null && !rec.driven && rec.delta !== -rec.nominal) {   // nominal is set for the sep variant only
+  if (preCollinear) { if (rec.delta !== 0) rec.issues.push('nominal'); else rec.notes.push('lines already collinear: the row is redundant, DOF unchanged'); }
+  else if (rec.nominal != null && !rec.driven && rec.delta !== -rec.nominal) {   // nominal is set for the sep variant only
     if ((variant !== 'sep' || kx === 'R' || ky === 'R' || (kx === 'F' && ky === 'F')) && rec.delta === rec.fdDelta && (!rec.oracleMapped || rec.delta === rec.oracleDelta) && rec.delta > -rec.nominal) rec.notes.push(`implied: removes ${-rec.delta} of ${rec.nominal}`);
     else rec.issues.push('nominal');
   }
@@ -330,12 +338,11 @@ export function classify(c) {
   if (r === 'equal' && has('refused-feasible')) return { v: 'F2' };
   if (r === 'tangent' && has('refused-feasible')) return { v: 'NEW-6' };
   if ((r === 'dim-horizontal' || r === 'dim-vertical') && has('demoted')) return { v: 'F1' };
-  if (r.startsWith('dim-angle') && has('undo-nullity')) return { v: 'NEW-4' };
-  if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual')) && !shared) return { v: 'F3' };
-  if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };
+  if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };   // shared-joint angle not enforced (F4; tolerated)
+  // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)
+  if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual'))) return { v: 'F3' };
   if (r.startsWith('dim-line-line') && has('demoted')) return { v: 'NEW-5' };
   if (has('nullity!=fd')) return { v: 'F6' };
-  if (r === 'collinear' && (has('nominal') || has('nullity!=oracle'))) return { v: 'NEW-7' };
   if (r === 'parallel' && has('bite')) return { v: 'NEW-8' };
   return { v: 'UNCLASSIFIED', why: c.issues.join('+') };
 }

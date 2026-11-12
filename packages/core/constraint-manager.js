@@ -92,13 +92,16 @@ export class ConstraintManager {
         return this._lineGeometricAxis(state, sid);
     }
 
-    // Establishment score: a V/H constraint (2) outranks mere geometric alignment (1); both stack.
+    // Establishment score: both ends fixed (4) outranks a V/H constraint (2), which outranks mere geometric alignment (1); they stack.
     static _lineEstablishmentScore(state, sid) {
-        return (this._lineHasAxisConstraint(state, sid) ? 2 : 0) + (this._lineIsGeometricallyAxisAligned(state, sid) ? 1 : 0);
+        const sh = state.shapes && state.shapes.find(x => x.id === sid);
+        const fixed = (id) => id === 'j_origin' || !!(state.joints.get(id) && state.joints.get(id).fixed);
+        const bothFixed = !!(sh && Array.isArray(sh.joints) && sh.joints.length >= 2 && fixed(sh.joints[0]) && fixed(sh.joints[1]));
+        return (bothFixed ? 4 : 0) + (this._lineHasAxisConstraint(state, sid) ? 2 : 0) + (this._lineIsGeometricallyAxisAligned(state, sid) ? 1 : 0);
     }
     static anchorEstablishedLine(state, normalized) {
         const [s1, s2] = normalized.shapes;
-        // Anchor the MORE-established line; equal score (incl. both axis-aligned on different axes) keeps order.
+        // Fusion rule: the FIRST-picked line stays unless the second is held more (fixed / H-V); equal score keeps the pick order.
         if (this._lineEstablishmentScore(state, s2) > this._lineEstablishmentScore(state, s1)) {
             normalized.shapes = [s2, s1];
         }
@@ -169,11 +172,18 @@ export class ConstraintManager {
             this.alignParallelOrientation(state, normalized.shapes);
         }
 
-        // COLLINEAR is REFERENCE-based: the solver anchors the FIRST shape (its endpoints are the baseline;
-        // only the other line's points are moved onto it). So order matters. If one line is axis-aligned
-        // (already H/V-constrained) and the other isn't, anchor the established one (make it first) — a bare
-        // vertical line then STAYS vertical and the other rotates onto it, instead of the established line
-        // being dragged toward whichever happened to be selected first (the ~45° symmetric-looking compromise).
+        // ANGLE: the solver's angle is the SIGNED counter-clockwise angle from line 1 to line 2, while a dimension measures the
+        // unsigned interior angle. Store the pair in the order whose signed angle is the measured one, so the stored value is
+        // satisfiable at the measured value (a clockwise pair is otherwise unsatisfiable and collapses a line).
+        if (type === CONSTRAINT_TYPES.ANGLE && normalized.shapes && normalized.shapes.length === 2) {
+            this.orderAnglePairCCW(state, normalized.shapes);
+        }
+
+        // COLLINEAR matches Fusion: the FIRST-picked line is the anchor and stays, unless the second is held more
+        // (both ends fixed, or H/V constrained): then the second is the anchor. The other line's free endpoints are PLACED
+        // on the anchor's infinite line before the solve (placeOnAnchorLine, below), so the solve starts satisfied and the
+        // anchor does not move. The solver's row itself is the full derivative (both lines may move), so it is the placement,
+        // not the Jacobian, that keeps the anchor still.
         if (type === CONSTRAINT_TYPES.COLLINEAR && normalized.shapes && normalized.shapes.length === 2) {
             // Two axis-aligned lines on DIFFERENT axes (one vertical, one horizontal) are perpendicular —
             // making them collinear would force one off its axis. REFUSE up-front (clean pre-add reject):
@@ -291,6 +301,9 @@ export class ConstraintManager {
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
         const _preAdd = (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })();
+
+        // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
+        this.placeForCreation(state, type, normalized);
 
         // Use existing canonical addConstraint path to validate and persist
         const added = constraints.addConstraint(state, type, normalized);
@@ -1079,6 +1092,61 @@ export class ConstraintManager {
         } catch (e) {
             dbg.warn('constraints', '[ConstraintManager] lockTangentBranch error:', e);
         }
+    }
+
+    // Orthogonally project every NON-fixed joint of `ids` onto the infinite line through joints a-b.
+    static placeOnAnchorLine(state, a, b, ids) {
+        const A = state.joints.get(a), B = state.joints.get(b);
+        if (!A || !B) return;
+        const ux = B.x - A.x, uy = B.y - A.y, len2 = ux * ux + uy * uy;
+        if (len2 < 1e-18) return;
+        for (const id of ids) {
+            const j = state.joints.get(id);
+            if (!j || j.fixed || id === 'j_origin') continue;
+            const t = ((j.x - A.x) * ux + (j.y - A.y) * uy) / len2;
+            j.x = A.x + t * ux; j.y = A.y + t * uy;
+        }
+    }
+
+    // CREATION placement (one place) for the constraints whose solver row moves BOTH the point and the line: collinear
+    // (anchor = first shape / first two joints) and pointOnLine (the point moves onto the line, the line stays; a fixed
+    // point leaves the placement to the solve, which then moves the line).
+    static placeForCreation(state, type, normalized) {
+        const lineJoints = (sid) => { const sh = state.shapes.find(x => x.id === sid); return sh && sh.type === 'line' && sh.joints && sh.joints.length >= 2 ? sh.joints : null; };
+        if (type === CONSTRAINT_TYPES.COLLINEAR) {
+            if (normalized.shapes && normalized.shapes.length === 2) {
+                const a = lineJoints(normalized.shapes[0]), m = lineJoints(normalized.shapes[1]);
+                if (a && m) this.placeOnAnchorLine(state, a[0], a[1], m.slice(0, 2));
+            } else if (normalized.joints && normalized.joints.length >= 3) {
+                this.placeOnAnchorLine(state, normalized.joints[0], normalized.joints[1], normalized.joints.slice(2));
+            }
+        } else if (type === CONSTRAINT_TYPES.POINT_ON_LINE && normalized.joint && normalized.shape) {
+            const l = lineJoints(normalized.shape);
+            if (l) this.placeOnAnchorLine(state, l[0], l[1], [normalized.joint]);
+            else {
+                // a circle / arc target: the point moves radially onto the rim, the circle stays
+                const sh = state.shapes.find(x => x.id === normalized.shape);
+                const pj = state.joints.get(normalized.joint), cj = sh && (sh.type === 'circle' || sh.type === 'arc') && sh.joints && state.joints.get(sh.joints[0]);
+                if (pj && cj && !pj.fixed && normalized.joint !== 'j_origin') {
+                    const rj = sh.joints.length >= 2 ? state.joints.get(sh.joints[1]) : null;
+                    const R = typeof sh.radius === 'number' ? sh.radius : (rj ? Math.hypot(rj.x - cj.x, rj.y - cj.y) : 0);
+                    const dx = pj.x - cj.x, dy = pj.y - cj.y, d = Math.hypot(dx, dy);
+                    if (R > 0 && d > 1e-12) { pj.x = cj.x + dx / d * R; pj.y = cj.y + dy / d * R; }
+                }
+            }
+        }
+    }
+
+    // Reorder `shapeIds` in place so the signed angle from line 1 to line 2 is counter-clockwise (cross >= 0).
+    static orderAnglePairCCW(state, shapeIds) {
+        const s1 = state.shapes.find(s => s.id === shapeIds[0]);
+        const s2 = state.shapes.find(s => s.id === shapeIds[1]);
+        if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line') return;
+        const a = state.joints.get(s1.joints[0]), b = state.joints.get(s1.joints[1]);
+        const c = state.joints.get(s2.joints[0]), d = state.joints.get(s2.joints[1]);
+        if (!a || !b || !c || !d) return;
+        const cross = (b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x);
+        if (cross < 0) { const t = shapeIds[0]; shapeIds[0] = shapeIds[1]; shapeIds[1] = t; }
     }
 
     static alignParallelOrientation(state, shapeIds) {

@@ -83,10 +83,6 @@ ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r 
 // ---------------------------------------------------------------------------------------------------------------- the matrix
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
-  'NEW-1': 'point-to-line dimension throws ReferenceError (dimension-tool.js:619)',
-  'NEW-2': 'point-to-line dimension is not a perpendicular distance (the helper slides)',
-  'NEW-3': 'perpendicular refused between exactly parallel lines',
-  'NEW-5': 'line-to-line dimension has a negative value in one click order (dimension-tool.js:437)',
   'NEW-6': 'feasible tangent circle/arc refused when the arc radius must change a lot',
   'NEW-8': 'parallel polygon side vs locked rect top: slow convergence after a jitter',
 };
@@ -114,7 +110,7 @@ for (const v of verdicts.keys()) if (/^NEW-/.test(v) && !(v in KNOWN)) fail(`cel
 for (const v of verdicts.keys()) if (/^F\d$/.test(v) && !ROUND1.has(v)) fail('unknown round-1 id ' + v);
 console.log('round-1 cells tolerated: ' + [...verdicts].filter(([k]) => /^F\d$/.test(k)).sort().map(([k, n]) => k + '=' + n).join(' '));
 
-// repros: ok === true means the app is right; every NEW-1..7 is expected to FAIL today
+// repros: ok === true means the app is right; every NEW-6 and NEW-8 is expected to FAIL today
 for (const f of NEW_FINDINGS) {
   const r = await f.run();
   if (!(f.id in KNOWN)) fail(f.id + ' has a repro but no KNOWN entry');

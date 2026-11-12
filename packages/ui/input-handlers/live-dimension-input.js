@@ -7,7 +7,7 @@ import { SolverConfig } from '#core/solver-config.js';
 // Shaper adopts this — relocation only for now.
 
 import { worldToScreen } from '#ui/coords.js';
-import { getDist, projectPointOnLine, perpendicularDistance } from '#core/geometry.js';
+import { getDist, projectPointOnLine, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -247,6 +247,10 @@ function validateWithSandbox(state, config) {
                     error = Math.abs(Math.abs(d) - target);
                 }
             }
+        } else if (isPointLineDistance(c)) {
+            // Point-to-line: perpendicular distance from P to line AB
+            const pt = state.joints.get(c.joints[0]), la = state.joints.get(c.joints[1]), lb = state.joints.get(c.joints[2]);
+            if (pt && la && lb) error = Math.abs(Math.abs(perpendicularDistance(pt, la, lb)) - target);
         } else if (c.joints && c.joints.length === 2) {
             // Point-Point Distance
             const j1 = state.joints.get(c.joints[0]);

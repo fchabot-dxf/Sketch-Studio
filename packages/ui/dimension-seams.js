@@ -7,7 +7,7 @@
 
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { getDist } from '#core/geometry.js';
+import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
@@ -116,11 +116,15 @@ export function toggleDriving(state, c) {
         others = state.constraints.filter(oc =>
           oc !== c && !oc.isDriven && !oc.driven &&
           oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
+      } else if (isPointLineDistance(c)) {
+        others = state.constraints.filter(oc =>
+          oc !== c && !oc.isDriven && !oc.driven && oc.type === CONSTRAINT_TYPES.DISTANCE && isPointLineDistance(oc) &&
+          oc.joints[0] === c.joints[0] && ((oc.joints[1] === c.joints[1] && oc.joints[2] === c.joints[2]) || (oc.joints[1] === c.joints[2] && oc.joints[2] === c.joints[1])));
       } else if (c.joints && c.joints.length >= 2) {
         const [j1, j2] = c.joints;
         others = state.constraints.filter(oc =>
           oc !== c && !oc.isDriven && !oc.driven &&
-          oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length >= 2 &&
+          oc.type === CONSTRAINT_TYPES.DISTANCE && oc.joints && oc.joints.length === 2 &&
           ((oc.joints[0] === j1 && oc.joints[1] === j2) || (oc.joints[0] === j2 && oc.joints[1] === j1)));
       }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
@@ -158,6 +162,9 @@ export function toggleDriving(state, c) {
     if (c.isRadius && c.shape) {
       const s = state.shapes.find(x => x.id === c.shape);
       if (s && typeof s.radius === 'number') c.value = s.radius;
+    } else if (isPointLineDistance(c)) {
+      const pt = state.joints.get(c.joints[0]), la = state.joints.get(c.joints[1]), lb = state.joints.get(c.joints[2]);
+      if (pt && la && lb) c.value = Math.abs(perpendicularDistance(pt, la, lb));
     } else if (c.joints && c.joints.length >= 2) {
       const j1 = state.joints.get(c.joints[0]);
       const j2 = state.joints.get(c.joints[1]);

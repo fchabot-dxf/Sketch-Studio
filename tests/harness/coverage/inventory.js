@@ -59,7 +59,7 @@ const TOOL_SOLVER_ROLE = {
   arc: 'creates an arc (3 joints + equal radius)', bezier: 'creates bezier shapes (2 joints, control points are data)',
   trim: 'splits / removes segments: rewrites shapes, joints and constraints', break: 'splits a line: new joint, constraints migrate',
   fillet: 'creates an arc + virtual sharp + tangents + radius dim',
-  dim: 'creates distance / angle / radius constraints and the pt-line projection joint',
+  dim: 'creates distance / angle / radius constraints (a point-to-line dimension is one 3-joint distance)',
   coincident: 'coincident', hv: 'horizontal | vertical', parallel: 'parallel', perp: 'perpendicular', collinear: 'collinear',
   tangent: 'tangent', equal: 'equal', midpoint: 'midpoint',
 };
@@ -93,6 +93,8 @@ function creationSites() {
       if (m) return add(valueOfKey(m[1]), file, i + 1);
       m = l.match(/(?:createConstraint|addConstraint)\(\s*[\w.]+,\s*'(\w+)'/);
       if (m) return add(m[1], file, i + 1);
+      m = l.match(/addViaManager\(\s*CONSTRAINT_TYPES\.(\w+)/);   // snap-constraints.js: a snapped joint-on-line (the only site of pointOnLine once the Dimension tool stopped making a helper joint)
+      if (m) return add(valueOfKey(m[1]), file, i + 1);
       if (file.endsWith('/shapes.js') || file.endsWith('/fillet.js')) {
         m = l.match(/\{\s*type:\s*'(\w+)'.*(?:joints|shapes|line|circle|joint)/);
         if (m && Object.values(CONSTRAINT_TYPES).includes(m[1])) add(m[1], file, i + 1);
@@ -158,7 +160,7 @@ function buildDimensionModes() {
   const found = new Set();
   for (let i = dm; i < dm + 32; i++) { const m = L[i - 1].match(/return '(aligned|horizontal|vertical)'/); if (m && !found.has(m[1])) { found.add(m[1]); modes.push({ mode: m[1], kind: 'distance point-point', ...at(DT, i) }); } }
   modes.push({ mode: 'line length', kind: 'distance on one line (dimMode auto)', ...must(DT, /create-line-dim/) });
-  modes.push({ mode: 'point-line', kind: 'distance point to line (projection joint + pointOnLine)', ...must(DT, /create-point-to-line/) });
+  modes.push({ mode: 'point-line', kind: 'distance point to line (one 3-joint distance: perpendicular distance)', ...must(DT, /create-point-to-line/) });
   modes.push({ mode: 'line-line', kind: 'distance between two parallel lines (shapes)', ...must(DT, /create-line-line-distance/) });
   modes.push({ mode: 'angle', kind: 'angle between two lines (shapes), either pick order', ...must(DT, /create-angle'/) });
   modes.push({ mode: 'radius', kind: 'distance isRadius on a circle or an arc', ...must(DT, /isRadius: true,/) });

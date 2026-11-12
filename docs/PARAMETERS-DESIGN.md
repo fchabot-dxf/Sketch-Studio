@@ -56,9 +56,9 @@ writing `name = value` creates the parameter.
 | O7 | Names of the form `d12` | **Reserved for automatic dimension names**: a user parameter cannot be called `d<digits>`; a dimension may be renamed to anything valid | Allow any free name (Fusion refuses only names already taken: measured (API)) |
 | O8 | Function argument separator | **Accept `;` (Fusion, measured (API): `max(a; b)`) AND `,`**; the stored form uses `;` | `;` only, exactly Fusion |
 | O9 | May a formula read a REFERENCE (driven) dimension? | **No in v1** (error "d5 is a reference dimension"): its value is measured from geometry that the formula itself may move, a loop through the solver. Fusion: **to verify in Fusion UI** (the task brief says Fusion allows it) | Yes: evaluate it at its last measured value, documented as order-dependent |
-| O10 | Deleting a DIMENSION that a formula uses | **Freeze**: every formula that used it is replaced by its current number (nothing moves), and a notice lists them; one undo step brings all back. Fusion: **to verify in Fusion UI** | Refuse the delete (and so refuse deleting its geometry) / leave the formula broken (red row) |
+| O10 | Deleting a DIMENSION that a formula uses | **OWNER RULING 2026-11-12 (replaces the earlier "freeze")**: every dimension CREATES a `dN` PARAMETER; deleting a dimension removes it from the drawing but KEEPS its `dN` parameter (with its last expression / value) in the parameter list, so every formula that uses it keeps working; it can then be changed, renamed, or deleted once nothing uses it. `freezeReferencesTo` will be removed in the deletion slice. | (was: freeze each formula to its current number / refuse the delete / leave the formula broken) |
 | O11 | Toggling a dimension that has a formula to REFERENCE | **Allowed; its formula is cleared** (a reference has no formula). **Refused** while another formula uses its name (O9) with "d4 is used by gap, d9" | Keep the formula dormant and restore it when made driving again |
-| O12 | Fillet shortens a line-length dimension that has a formula (packages/core/fillet.js:326-328) | **Formula dropped, the new number kept, notice shown** | Refuse the fillet |
+| O12 | Fillet shortens a line-length dimension that has a formula (packages/core/fillet.js:326-328) | **OWNER RULING 2026-11-12: like Fusion.** Measured in Fusion: a fillet on a line whose length has a formula KEEPS the dimension and its formula, measured to the sharp corner. | (was: formula dropped, the new number kept, notice shown / refuse the fillet) |
 | O13 | The window component | **Reuse the shared `createTabbedDockPanel`** (packages/ui/tabbed-dock-panel.js: floating, draggable, resizable, dockable, remembers position; today it has NO user) with one "Parameters" tab, plus a close button and open/close API | A new shared `#ui/floating-window.js` |
 | O14 | Which hosts show the button | **SketchStudio, Shaper, Pen Plotter: yes. Trace: no** (Trace has no project file: its Design view is a cleanup step, apps/trace/src/edit-view.js:38-42, no document buffer) | All four |
 | O15 | Formulas in the drawing-time boxes (line length, rect W x H while drawing) | **Not in v1** | Same parser there in a later slice |
@@ -93,7 +93,7 @@ writing `name = value` creates the parameter.
 | Saved document | packages/core/document.js: `DOCUMENT_VERSION = 1` :21, `serializeDocument` :30-53, `validateDocument` refuses a newer version :61-68, `deserializeDocument` :80-127 | `geometry.parameters` added; version 2 (A) |
 | Project file | packages/ui/project-file.js: envelope version :17, refuses newer :34, "open -> save again gives the same bytes" :8 | The envelope does not change; only the inner document version |
 | Undo | packages/ui/sketch-state.js: `_captureSnapshot` :64-80, `_restoreSnapshot` :90-121, `cancelUndoGroup` restores INLINE a third copy :228-245, `beginUndoGroup`/`endUndoGroup` :188-215, `addHistoryListener` :125 | `parameters` rides in the snapshot through ONE clone helper (precedent: `cloneProfiles`, imported at :10 and used at :75/:110/:243) |
-| Journal / diagnostic report | packages/core/journal.js:33/55 and packages/ui/diagnostic-log.js:134 both use `serializeDocument` | Parameters appear in them with no extra code |
+| Journal / diagnostic report | packages/core/journal.js:33/55 and packages/ui/diagnostic-log.js:134 both use `serializeDocument` | Slice 1b correction: `serializeDocument` carries them, but the journal's patches are keyed per document PART (`LIST_PARTS` in journal.js), so `parameters` was added there as a part keyed by name (otherwise a replayed report loses them and fails its own hash check) |
 | Autosave and cross-app carry | `createDocumentBuffer` packages/ui/document-buffer.js:43 (serialize :52, load :69): SketchStudio apps/sketchstudio/main.js:189, Shaper apps/shaper/src/main.js:577, Pen Plotter apps/penplotter/src/sketch-stage.js:275. Trace: none | Parameters travel with the geometry |
 | Ribbon | `createToolRibbon({..., profiles})` packages/ui/tool-ribbon.js:137; the opt-in precedent `PROFILE_ACTIONS` :33-36 joined at :262; `INSPECT = [Dim]` :37-39. Hosts: SketchStudio apps/sketchstudio/ui/ui-manager.js:125, Shaper apps/shaper/src/main.js:510, Pen Plotter apps/penplotter/src/sketch-stage.js:294, Trace apps/trace/src/edit-view.js:42 | The button is DECLARED in INSPECT (F) |
 | Pop-ups that exist | Shared: style panel (fixed centred modal, own CSS, packages/ui/style-panel.js:72, factory :112), diagnostic log (full-screen overlay, packages/ui/diagnostic-log.js:168), context menu (packages/ui/context-menu.js), sidebar drawer (packages/ui/app-sidebar.js:138), mobile drawer (packages/ui/mobile-drawer.js), tabbed dock (packages/ui/tabbed-dock-panel.js, NO importer anywhere). App-local: Pen Plotter `ui-dialog.js` (prompt/confirm), Pen Plotter `#docModal`, Shaper `<dialog id="shaper-sync-modal">` (apps/shaper/index.html:396) | There is NO single shared dialog component. O13 |
@@ -318,6 +318,12 @@ delete a parameter, rename a dimension. Renames and comment edits produce no `ed
 ### commitDimensionEdits(state, edits): the batch generalisation
 - `commitDimensionEdit(state, c, val)` becomes `commitDimensionEdits(state, [{ c, value: val }])`: ONE implementation; every
   existing caller and test keeps its exact result (slice 2 proves it by running the existing dimension tests unchanged).
+- PLACEMENT RULE (task 535-2, advisor ruling 2026-11-12), stated once in `commitDimensionEdits`: the creation placement ("who moves", task 525) answers a
+  question about the ONE dimension the user typed. A batch of EXACTLY ONE edit keeps today's per-step placement (bit-identical to the old
+  `commitDimensionEdit`); a batch of MORE than one edit is a re-solve of the sketch at new values (what Fusion does for a parameter change) and does
+  NOT place. A parameter used by exactly one dimension therefore behaves like a single edit. Behaviour note (known consequence): N independent single
+  edits place, the batch does not, so their final poses MAY differ where the placement picks a different operand to give way; measured on a
+  parameter used by two independent rectangles the worst difference was 3.4e-8 (no visible difference), tests/parameters-batch.test.js prints it.
 - ONE combined solve, not N sequential commits: all edited values move TOGETHER along the same stepped walk (step count = the
   largest any single edit needs, capped at the existing 40). Sequential commits were rejected: they are order-dependent (width
   100 -> 50 then gap 40 -> 20 passes through an impossible gap 40 in width 50 and would be refused although the end state is fine).
@@ -333,8 +339,13 @@ delete a parameter, rename a dimension. Renames and comment edits produce no `ed
   (a diagnostic pass, only on refusal: from the restored state, each edit tried alone in table order; "the combination is
   impossible" when none fails alone).
 - Order sensitivity: none (one combined walk, deterministic topological evaluation).
-- Performance target, measured in slice 2: 100 dimensions changed by one parameter on a real drawing in under 500 ms in Node; STOP
-  if over 2 s. Evaluation itself is linear in nodes + edges.
+- Performance (measured in slice 2, Node 24; the 2 s STOP of the slice table is LIFTED by the advisor, the cost is the solver's): 1 / 2 / 10 /
+  30 dimensions changed at once take 2 / 2 / 18 / 80 ms; 100 take about 4-5 s (about 580 ms per combined-walk solve, 7 solves) against 30 ms for a solve at
+  rest. With per-edit placement the same batch took 50.7 s (700 `placeForCreation` calls at about 65 ms), hence the placement rule above. CPU profile
+  of the 100-dimension batch: `gram` (solver/algebra.js) 24.7 s, `copyRow` (engine.js) 9.2 s, `_assemble` 7.2 s, `solve` 6.0 s, `choleskySolve` 3.9 s,
+  i.e. dense J*J^T algebra, cubic in the number of rows. It also slows dragging on large sketches: queued as its own solver performance task (541).
+  KNOWN P-1: "100 dimensions take ~4 s (target 2 s; solver algebra, task 541)": tests/parameters-batch.test.js prints it and FAILS LOUDLY when three
+  consecutive measurements drop under 2 s (then delete this entry and the one in the test). Evaluation itself is linear in nodes + edges.
 - Driven / reference dimensions: read-only rows; never in `edits`; a formula cannot read them in v1 (O9).
 - A dimension whose formula would be set while it is DETERMINED (task 516 rule): it is a reference, so it never takes a formula;
   `showEditInput` already refuses to open (numeric-input-manager.js:271). Toggling a formula dimension to reference: O11.
@@ -372,6 +383,24 @@ delete a parameter, rename a dimension. Renames and comment edits produce no `ed
 - Assignment only at the top level of an input (grammar), never inside an expression.
 - SketchStudio's `#dimInput` must become `type="text"` (apps/sketchstudio/index.html:390), O16. The other hosts' created input is
   already text (numeric-input-manager.js:146).
+
+### Autocomplete (OWNER REQUIREMENT R3, 2026-11-12: DECIDED; built in slice 3, reused by slice 5)
+Owner: "Writing a param name in an input box like `pa` should show results in a box near the cursor: param1, param2."
+- WHERE: every expression input: the dimension box on the canvas (slice 3) and the window's expression cells (slice 5).
+- WHEN: while typing, whenever the caret is inside an identifier (the letters before the caret, up to the last operator / space / `(` / `;`).
+- THE LIST: a small list just under / near the caret. It NEVER hides the input. At most about 8 rows. Each row: the name, its current value and unit
+  (`width  120 mm`, `d3  60 mm`, `holes  4`). Order: user parameters and dimension names (`d1`..) first, then the functions (`sqrt`, `max`, ...).
+  Within each group: names that START with the typed letters first, then names that merely CONTAIN them, each group in table order.
+- CASE (O6 says names are case-sensitive): MATCHING is case-insensitive, the INSERTED name keeps its exact case (recommended and decided: typing `wi`
+  offers `width` and `Width` both, inserting writes the one picked).
+- KEYS: Up / Down move, Enter or Tab insert (the identifier typed so far is replaced by the full name; the caret goes after it), Esc closes the list
+  (a second Esc is the box's own Esc), a mouse click on a row inserts. With no list open, Enter / Tab / Esc keep their normal meaning.
+- ONE SOURCE: the list is produced by ONE pure function (`completionsFor(state, text, caret)` in parameters.js) over the SAME name table the parser
+  and `validateName` use (expression.js `foldName`, the nodes of the dependency graph, the function table of expression.js): no second list of names,
+  and a name that cannot be used in a formula (a reference dimension, O9) is never offered. The DOM list (position, keys) is a thin view over it.
+- Fusion shows a similar list in its expression fields: **to verify in Fusion UI**.
+- Test (slice 3): `completionsFor` table-driven (prefix before contains, case, functions after names, max rows, reference dims absent) + a live test
+  that types `pa` and sees the rows, Down + Enter inserts, Esc closes.
 
 ---
 
@@ -476,10 +505,10 @@ next save it is version 2 with `name` on each dimension and `"parameters": []`.
 |---|---|---|---|---|---|
 | **1a Parser** (invisible) | `expression.js` (tokenize, parse, evaluate, print, errors); units.js table + angle units | packages/core/expression.js (new), packages/core/units.js | expression-parser.test.js | `units.parse` and the evaluator disagree on any accepted string; a unit needs a factor outside units.js | M: ~450 lines + ~300 test rows |
 | **1b Model + persistence** (invisible) | `parameters.js` (names, graph, cycle, planChange, cloneParameters, freezeReferencesTo); `name`/`expression` in withDimensionState; naming in addConstraint; `state.parameters` (sketch-state, harness); document v2; snapshot (3 sites) | packages/core/parameters.js (new), constraints.js, document.js, packages/ui/sketch-state.js, tests/harness/sketch.js | parameters-graph, parameters-roundtrip (data only), parameters-old-files | any existing test changes result; a v1 fixture does not load identical | M: ~400 lines |
-| **2 Batch seam** (invisible) | `commitDimensionEdits`; `commitDimensionEdit` = 1-element case | packages/ui/dimension-seams.js | parameters-batch, all existing dimension tests unchanged | any existing dimension test changes; 100 dims > 2 s; task 525 not merged yet (wait for it) | M: ~150 lines |
-| **3 Canvas** (visible) | box parses formulas and `name = …`; expression prefill; live hint line; `fx:` in formatConstraintValue; SketchStudio `#dimInput` type text; toggleDriving rule O11; fillet rule O12 | numeric-input-manager.js, svg-renderer.js, dimension-seams.js (toggleDriving), fillet.js, apps/sketchstudio/index.html | parameters-canvas-live, property test | shell-smoke < 12/12; a host's box behaves differently from another's; the dead edit path in live-dimension-input.js turns out reachable | M |
+| **2 Batch seam** (invisible) | `commitDimensionEdits`; `commitDimensionEdit` = 1-element case | packages/ui/dimension-seams.js | parameters-batch, all existing dimension tests unchanged | any existing dimension test changes; 100 dims > 30 s (the 2 s STOP was lifted, KNOWN P-1); task 525 not merged yet (wait for it) | M: ~150 lines |
+| **3 Canvas** (visible) | box parses formulas and `name = …`; expression prefill; live hint line; `fx:` in formatConstraintValue; SketchStudio `#dimInput` type text; toggleDriving rule O11; fillet rule O12; **autocomplete R3** (`completionsFor` + the list near the caret, section E) | numeric-input-manager.js, svg-renderer.js, dimension-seams.js (toggleDriving), fillet.js, apps/sketchstudio/index.html | parameters-canvas-live, property test | shell-smoke < 12/12; a host's box behaves differently from another's; the dead edit path in live-dimension-input.js turns out reachable | M |
 | **4 Window, read-only** (visible) | dock close/open API; parameter-table.js rows (both groups, filter, hover / select link); ribbon action + host opt-out (Trace) | tabbed-dock-panel.js, packages/ui/parameter-table.js (new), tool-ribbon.js, apps/trace/src/edit-view.js | parameters-window-live (read-only parts) | the dock change would alter any other host (it has none today: re-check with grep) | M |
-| **5 Window editing** | inline edit of expressions; add / rename / delete / comment of user parameters; rename of dimensions; per-row errors; keyboard; mobile sheet | parameter-table.js | parameters-window-live (full) | an edit path that does not go through planChange + commitDimensionEdits | M-L |
+| **5 Window editing** | inline edit of expressions; add / rename / delete / comment of user parameters; rename of dimensions; per-row errors; keyboard; mobile sheet; **autocomplete R3 in the expression cells** (same `completionsFor`) | parameter-table.js | parameters-window-live (full) | an edit path that does not go through planChange + commitDimensionEdits | M-L |
 | **6 Hardening** | O10 freeze on every dimension-removal site (route through deleteConstraints); Fusion oracle for expressions + KNOWN list; docs | delete-manager.js and the sites the audit finds, scripts/fusion-oracle/, tests/fixtures/fusion-oracle/ | parameters-graph (freeze), oracle test | a removal site cannot be routed through the funnel without a behaviour change | M |
 
 Parallel: 1a and 1b can run together (1b needs only the parser's API stub: agree the signatures first). Slice 2 waits for task 525

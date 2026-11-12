@@ -35,16 +35,40 @@ import { browserFileSeam } from '#ui/project-file.js';
  *     own state to defaults when `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one).
  *   store: a project store (default: the shared IndexedDB one). pollMs: change-check interval (default 1500ms).
  *   onStatusChange(status): optional — 'saving' | 'saved' | 'error', for a passive indicator.
+ *   canvas: the host's Design canvas <svg>. Until the INITIAL restore has settled the buffer ignores the user's pointer / keyboard input on it (a late restore replaces the
+ *     whole state, so an edit started before it lands would hit objects that are about to be thrown away) and carries data-doc-ready="0" on it; it sets data-doc-ready="1"
+ *     when the restore is done (also when there was nothing to restore). `buffer.ready` is the same signal as a promise.
  *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
  * Returns { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, store }.
  */
-export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, doc = globalThis.document, win = globalThis.window } = {}) {
+export function createDocumentBuffer({ state, app, hostName, getHostData, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   let lastSig = null;
   let intervalId = null;
   let boundId = null; // the design this buffer reads from / writes to
   let offConflict = () => {};
+  // THE gate on user input until the initial restore settles (see the `canvas` option). One capture listener per event type on the window.
+  let isReady = false;
+  let openGate = () => {};
+  const ready = new Promise((res) => { openGate = res; });
+  const GATED = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'wheel', 'keydown', 'keyup'];
+  const gate = (e) => {
+    if (isReady) return;
+    const t = e.target;
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    const blocked = e.type.startsWith('key') ? !typing : !!(canvas && t && canvas.contains(t));
+    if (blocked) { e.stopImmediatePropagation(); e.preventDefault(); }
+  };
+  if (canvas) {
+    canvas.dataset.docReady = '0';
+    if (win) for (const t of GATED) win.addEventListener(t, gate, true);
+  }
+  function markReady() {
+    isReady = true;
+    if (canvas) { canvas.dataset.docReady = '1'; if (win) for (const t of GATED) win.removeEventListener(t, gate, true); }
+    openGate();
+  }
   const notify = (s) => { try { onStatusChange && onStatusChange(s); } catch (_) {} };
 
   function currentDoc() {
@@ -76,10 +100,14 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
   }
 
   async function restore() {
-    let design = null;
-    try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch
-    if (!design) return { restored: false, hosts: {} };
-    return load(design);
+    try {
+      let design = null;
+      try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch (unchanged)
+      if (!design) return { restored: false, hosts: {} };
+      return load(design);
+    } finally {
+      markReady(); // input opens once the stored design (if any) has replaced the state AND the host's onRestored has run
+    }
   }
 
   // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
@@ -118,5 +146,5 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, onRest
   /** After store.cloud.moveProjectToDrive / makeProjectLocal: the design this buffer is bound to may have a new id (`designIds` = { old: new }). */
   function followMoves(designIds) { if (boundId && designIds && designIds[boundId]) boundId = designIds[boundId]; }
 
-  return { restore, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId: () => boundId, store };
+  return { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId: () => boundId, store };
 }

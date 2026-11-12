@@ -188,7 +188,7 @@ function initApp(){
   header.el.appendChild(saveStatusEl);
   docBuffer = createDocumentBuffer({
     state,
-    app: 'sketchstudio', // TASK 474: the design records who saved it last
+    app: 'sketchstudio', canvas: svg, // TASK 474: the design records who saved it last
     onRestored: () => { try { engine.solve(500); } catch (_) {} fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view)
     onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });

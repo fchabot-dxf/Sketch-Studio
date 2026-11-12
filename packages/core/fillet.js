@@ -8,6 +8,7 @@ import { makeArc } from './shapes.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
+import { nextDimensionName } from './parameters.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -362,6 +363,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
     isRadius: true,
     isDriven: false,
     driven: false,
+    name: nextDimensionName(constraints), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
     offset: Math.max(finalRadius * 0.6, 6)
   };
   constraints.push(radiusConstraint);

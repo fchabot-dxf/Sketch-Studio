@@ -1,0 +1,54 @@
+TASK 537 (Sketch-Studio): snap to the X axis and the Y axis. Owner 2026-11-12: "also would want to be able to clamp snap to x
+or y axis", clarified: "0y or 0x" (the lines y = 0 and x = 0 through the origin).
+Worktree D:\APPS\Sketch-Studio.worktrees\task-537-axis-snap, branch agents/task-537-axis-snap (from origin/main).
+Read first: the snap system end to end: packages/ui/snap-detection.js (findSnap and its target types, priorities, radii),
+packages/ui/snap-magnet.js, packages/core/snap-constraints.js (applySnapConstraint: "the SINGLE SOURCE OF TRUTH for snap-based
+constraints"), packages/ui/input-manager.js (where a drawn or dragged point is snapped, grid snap at ~l.453, the order grid
+snap vs geometry snap), how the origin snap works today (j_origin; the fix-snap-origin-coincident work), the snap indicator
+rendering, the inference lines if any, the settings that tune snapping (SNAP_RADIUS, SNAP_MAGNETISM) and where they are
+surfaced; docs/FUSION-COMPARISON.md which-moves entries for horizontal-2pt / vertical-2pt with the origin.
+
+WANTED: when a point being drawn or dragged comes within the snap radius of the X axis (y = 0) or the Y axis (x = 0), it snaps
+ONTO that axis (its coordinate across the axis becomes exactly 0; the coordinate ALONG the axis stays free, and still obeys
+grid snap if grid snap is on). Like every other snap of this app, the snap leaves a CONSTRAINT so the point stays on the axis:
+"on the X axis" = the existing horizontal constraint between the point and the origin joint (y equal), "on the Y axis" = the
+existing vertical constraint with the origin. No new constraint type, no axis shape: the origin joint and the existing H/V
+two-point constraints express it (check both exist in that form and how they render: quote).
+DESIGN (declare, one place):
+ 1. Axis targets are two more DECLARED snap target types in findSnap (e.g. 'axis-x', 'axis-y'), with a declared PRIORITY in the
+    existing order: below a joint / the origin point / an endpoint / an intersection (a closer real point wins), above the bare
+    grid; versus point-on-line and midpoint: decide from how the list is ordered today and say why. Near the origin both axes
+    and the origin compete: the origin point wins inside its radius.
+ 2. applySnapConstraint gains the two cases (it is the single source for snap constraints): it adds the H or V constraint with
+    j_origin through the normal ConstraintManager.createConstraint path (so the "who moves" table, the sandbox refusal, the
+    redundancy rules all apply: a refused constraint leaves the point where the user put it, no error dialog; a point already on
+    the axis by other constraints adds nothing).
+ 3. The snap indicator: the same visual language as existing snaps (find it) with something that says WHICH axis (e.g. the
+    axis line highlighted while the snap is active). No new overlay system.
+ 4. "Be able to": ONE declared setting to turn axis snapping on/off (default ON), in settings-manager next to the snap
+    settings and surfaced where the other snap settings are surfaced, IF such a place exists as a declarative list; if snapping
+    has no user-facing settings today, do not build a settings UI: report it and leave the setting declared and default ON.
+ 5. Every tool that snaps gets it through the shared path, not per tool: line, rect, circle, arc, polygon (centre and rim
+    points), bezier, dragging a joint in select. List each tool and prove with a test that it goes through findSnap /
+    applySnapConstraint (if a tool has its own snapping copy, STOP and report it; do not add a second implementation).
+ 6. Hosts: the shared Design canvas (SketchStudio, Shaper Design; Pen Plotter's sketch stage if it uses the same input
+    manager: check). Hosts that do not show the axes must not snap to them: say how each host shows the axes today.
+TESTS (fail-first): findSnap returns the axis target inside the radius and not outside, at several zooms (the radius is in
+ screen px); priority cases (near an endpoint that is near the axis; near the origin; near a line crossing the axis); the
+ created constraint is H / V with the origin, visible as the usual glyph, and survives undo/redo and save/load; a drawn line's
+ second point snapped to the Y axis ends at x = 0 exactly and stays there when the first point is dragged; a refusal case; the
+ setting off = no axis snap; a live real-app test (headless, real pointer events) drawing a line whose end lands on the X axis;
+ before/after screenshots of the snap indicator, cropped legible, md5, in .evidence/537/. Audits stay green with no KNOWN
+ change (this must not alter existing snap behaviour away from the axes: add a test that a point far from both axes snaps
+ exactly as before).
+DO NOT: add an axis shape or a new constraint type; change grid snap; change other snaps' priorities; hidden globals; silent
+ catch (note snap-constraints.js already has try/catch around debug logging: do not copy that pattern).
+STOP and ask if: H/V with the origin cannot be created through the normal path; the priority order is not a single list; a tool
+ snaps through its own copy; the indicator needs a new overlay.
+List every behaviour change for existing users (expected: points near an axis now snap to it and get an H/V-to-origin
+constraint).
+No Fusion, mouse or keyboard; headless browsers only, closed before the REPORT. Check `pwd` before every write: never create a
+file outside your worktree. If node_modules is missing make a junction to D:\APPS\Sketch-Studio\node_modules with PowerShell
+New-Item -ItemType Junction. Before the final gate `git fetch origin` and merge origin/main if it moved. Gate green
+(`npm run gate`, run and wait; numeric-input-self-hiding is a known load flake: alone twice, rerun once), commit by path, push
+the branch, WORK-LOG `## TURN 537`, the AGENTS.md REPORT block. REPORT once, leave nothing running.

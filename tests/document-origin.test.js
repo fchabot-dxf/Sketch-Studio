@@ -29,6 +29,17 @@ const freshState = () => ({ joints: new Map([['j_stale', { x: 5, y: 5 }]]), shap
   assert.deepStrictEqual(state.joints.get(ORIGIN_JOINT_ID), { x: 0, y: 0, fixed: true });
 }
 
+// 2b. every document version this build reads (1, 2, 3 = DOCUMENT_VERSION): with no origin it gets one, with one it keeps it, never two
+for (let v = 1; v <= DOCUMENT_VERSION; v++) {
+  const without = freshState();
+  assert.equal(deserializeDocument({ version: v, geometry: { joints: [['j1', { x: 1, y: 2 }]], shapes: [], constraints: [] } }, without).ok, true, 'version ' + v + ' loads');
+  assert.deepStrictEqual([...without.joints.entries()], [[ORIGIN_JOINT_ID, { x: 0, y: 0, fixed: true }], ['j1', { x: 1, y: 2 }]], 'version ' + v + ' without an origin gets it, first');
+  const withOrigin = freshState();
+  deserializeDocument({ version: v, geometry: { joints: [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ['j1', { x: 1, y: 2 }]], shapes: [], constraints: [] } }, withOrigin);
+  assert.deepStrictEqual([...withOrigin.joints.entries()], [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ['j1', { x: 1, y: 2 }]], 'version ' + v + ' with its origin keeps it, one origin');
+}
+assert.strictEqual(DOCUMENT_VERSION, 3, 'this test covers versions 1..3; extend it when the version moves');
+
 // 3. a document that HAS the origin: kept as stored (its own fields), never duplicated, order unchanged
 {
   const state = freshState();

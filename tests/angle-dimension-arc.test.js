@@ -45,9 +45,14 @@ const within = (arc, value, msg) => assert(arc && Math.abs(arc.span - value) < 0
 
 // 1. the owner's document
 {
-  const geo = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/owner-trapezoid-angle.json', import.meta.url), 'utf8')).geometry;
-  const joints = new Map(geo.joints);
-  const c = geo.constraints.find((k) => k.type === 'angle');
+  // an OLD document (saved before task 553: no stored sector): loaded through the one load path, which converts it (#core/angle-sector.js)
+  const file = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/owner-trapezoid-angle.json', import.meta.url), 'utf8'));
+  assert(!file.geometry.constraints.some((k) => 'sector' in k), 'the fixture is an old document');
+  const st = (() => { const e = createEngine(); e.init(); return createSketchState(e, { x: 0, y: 0, w: 700, h: 320 }); })();
+  assert(deserializeDocument(JSON.parse(JSON.stringify(file)), st).ok, 'the owner document loads');
+  const geo = { shapes: st.shapes };
+  const joints = st.joints;
+  const c = st.constraints.find((k) => k.type === 'angle');
   const arc = arcOf(joints, geo.shapes, c, 120000);
   assert(arc, 'the owner dimension draws an arc');
   within(arc, 10, 'owner document (the label sat in the 170 sector)');

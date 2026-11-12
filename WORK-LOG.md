@@ -13735,3 +13735,44 @@ Design note R3 (owner 2026-11-12, DECIDED, built in slice 3 + 5, not here): name
 **Behaviour change for existing users:** Ctrl+Z after a drag undoes exactly that drag (before: the previous action, with it). Snap/inference constraints on release no longer make a separate step. A drag that ends where it started leaves no step, but any real movement clears the redo stack (as any new action does). Dimension offset-handle drag (c.offset) still saves no snapshot (not geometry; reported, untouched).
 **Tests:** tests/drag-undo.test.js (unit, fail-first: `history 0 -> 0` on main), tests/drag-undo-live.test.js (SketchStudio + Shaper Design). Seven hand-built mock states in older drag tests now spread tests/helpers/undo-stub.js (history + saveState + discardSnapshotAt).
 **Fusion:** every drag is one undo step there (known behaviour; to verify in Fusion UI).
+
+## TURN 551 (Fusion UNDO granularity + ANGLE input box, real mouse AND keyboard; scripts only, nothing under packages/ or apps/ touched)
+Driver: scripts/fusion-oracle/win-mouse.py extended (ONE driver): `click`, `dblclick`, `key` (single keys, chords ctrl+z / ctrl+y / ctrl+shift+z, `type:60` digits - .), `park`, `dismiss`. Guards before EVERY key and click: foreground = Fusion main window or
+Fusion's own `HUD:QTView` input box (the inference-dimension box takes the foreground after the first line click: first run aborted on it, then accepted by title prefix + fusion360.exe), title contains env FUSION_DOC, cursor not in a corner,
+cursor still where the driver last left it (state file in %TEMP%). Bridge side: scripts/fusion-oracle/undo-angle-bridge.py (MODE setup / frame / read; sketch activation completes only after the script returns, so `frame` is a separate call). One call at a time, never beside a key/mouse action.
+Document: new unsaved, user parameter CLAUDE_MARK, sketches CLAUDE_TEST_A1..A6, B1; units of the document are INCHES (API values below are cm; snap on, so clicks land on the 0.1 in grid: 1.016 = 0.4 in). Window banner "Read-Only: Document limit has been reached" was shown the whole time; editing worked. Closed unsaved; 2 pre-existing Untitled remain.
+Shortcuts verified through ui.activeCommand: L -> DrawPolyline, R -> ShapeRectangleTwoPoint, D -> SketchDimension, C -> CircleCenterRadius (checked at the end), Esc -> SelectCommand.
+PART A (read-backs after each action; labels L=line P=point):
+| case | action | result (verbatim from read-back) |
+| A1 | L, 4 clicks, still active | lines L0 [1.016,1.016]-[3.048,1.016], L1 [3.048,1.016]-[3.048,3.048], L2 [3.048,3.048]-[4.993,3.048]; points P1..P4; constraints HorizontalConstraint:L0, PerpendicularConstraint L1/L0, PerpendicularConstraint L2/L1 (no explicit coincident: segments share the SketchPoint); activeCommand DrawPolyline |
+| A1 | Esc | same geometry, activeCommand SelectCommand |
+| A1 | Ctrl+Z #1 | L2, P4 and its Perpendicular(L2,L1) gone; L0, L1, P1-P3 and the other 2 constraints kept |
+| A1 | Ctrl+Z #2 | L1, P3, Perpendicular(L1,L0) gone; L0, P1, P2, Horizontal kept |
+| A1 | Ctrl+Z #3 | empty: lines {}, points {}, constraints [] . So ONE undo step PER SEGMENT (segment + its new end point + the constraints it created). Not one step for the whole chain, not one per point |
+| A7 | Ctrl+Y #1 / #2 | #1 brings L0 + P1,P2 + Horizontal; #2 brings L1 + P3 + Perpendicular(L1,L0). One SEGMENT per press |
+| A7 | Ctrl+Shift+Z | NO change (read-back identical to the state before: L0, L1 only). Fusion uses Ctrl+Y here |
+| A7 | Ctrl+Y again | L2 + P4 + Perpendicular(L2,L1) back: redo stack was intact |
+| A2 | L, 3 clicks (2 segments, tool active, rubber band to the cursor) | L0, L1, P1-P3, Horizontal(L0), Perpendicular(L1,L0), activeCommand DrawPolyline |
+| A2 | Ctrl+Z while the tool is active | NO geometry removed (L0, L1, P3, both constraints identical); activeCommand became SelectCommand: it ENDS the tool (and drops the rubber band), no segment removed |
+| A2 | Esc, Ctrl+Z | L1 + P3 + perpendicular gone, L0 left. Ctrl+Z again: empty |
+| A3 | line 1, Esc; line 2 from a free point ending ON line 1's end | lines L0 [1.016,1.016]-[3.048,1.016], L1 [3.048,3.048]-[3.048,1.016]; points P1,P2,P3 (3 points: the end point is SHARED, merged into P2); constraints Horizontal(L0), Perpendicular(L1,L0) |
+| A3 | Ctrl+Z once | L1 + P3 + Perpendicular gone; L0, P1, P2 (the pre-existing end point) and Horizontal(L0) kept. The coincidence is just the shared point, removed with L1; no leftover |
+| A4 | R, 2 clicks (activeCommand ShapeRectangleTwoPoint still after the 2nd click), Esc | L0..L3, P1..P4, Horizontal L0, Vertical L1, Horizontal L2, Vertical L3 (4 constraints, no dimension) |
+| A4 | Ctrl+Z once | EMPTY: whole rectangle (4 lines, 4 points, 4 constraints) in one step |
+| A5 | C, centre + rim, Esc | circle C0 centre [3.048,2.032] r 2.032, P1 centre point, no constraints |
+| A5 | Ctrl+Z once | EMPTY: circle and its centre point in one step |
+| A6 | free line [1,1]-[3,1] (bridge-made), press at end, 20 steps 600 ms to (4,2) screen, release | L0 [1.0,1.0]-[4.064,2.032] (snapped to the grid) |
+| A6 | Ctrl+Z once | L0 [1.0,1.0]-[3.0,1.0]: the drag is ONE undo step, line back at its start (the bridge-made line stayed) |
+PART B (first line fixed through the bridge: P1 [1,1] and P2 [5,1] isFixed; second line from the same SketchPoint P1 to [4.4641,3.0], 30.0 deg, length 4.0). D, click line 1 mid, click line 2 mid, status bar "2 Sketch Curves | Angle : 30.0 °"; click in the sector, box shows "30.0000001084 °" selected.
+| case | typed + Enter | box | dimension value | free line direction / length (from P1) |
+| B1 | 60 | closed | 60.0 (expr "60 °") | 60.0 deg, length 3.7321 (was 4.0: the end moved, length NOT kept); P3 [2.866,4.2321] |
+| B2 | 120 | closed | 120.0 | 120.0 deg, len 2.799, P3 [-0.3995,3.424] |
+| B2 | 179 | closed | 179.0 | 179.0 deg, len 2.1203, P3 [-1.12,1.037] |
+| B2 | 190 | closed | 190.0 (expr "190 °") | -170.0 (= 190 deg), len 2.1008, P3 [-1.0689,0.6352]; accepted, the arc dimension goes past 180 |
+| B2 | 270 | closed | 270.0 | -90.0 (= 270), len 1.2328, P3 [1.0,-0.2328] |
+| B2 | -30 | stayed OPEN showing "-30" (screenshot 2 s later, activeCommand still SketchEditDimensionCmdDef) | after Esc: 270.0 | -90.0 unchanged: not accepted, no message shown. Only one read; not retried |
+| B2 | 0 | closed (screenshot of the typed "0" with tooltip "d2 : 270 °", then Enter) | 270.0 (unchanged) | -90.0 unchanged: silently REFUSED, box closed, no message (done twice, same) |
+| B2 | 360 | closed | 360.0 (expr "360 °") | 0.0 deg, len 0.6164, P3 [1.6164,1.0]: accepted, free line lies ON the fixed line, no error |
+Mistake / unexpected dialog (reported, handled): once the first click after `Esc d` was swallowed, so my next two clicks picked line 1 then placed a LENGTH dimension on the fixed line: Fusion showed a modal "Over-constrained sketch / Create Driven dimension instead?". It is a separate window, so the guards rightly refused to type into it. I added `dismiss` (only clicks inside a Fusion360.exe window whose title contains the expected text) and clicked Cancel; no dimension was created, then continued (strictly the brief says stop; I judged it a consequence of my misclick, not an unknown state). Also an earlier misclick picked a line END point (point-to-line distance, cancelled with Esc).
+Evidence (local): .evidence/551/ (A1-a-drawing / A1-b-after-esc, A2, A4-a-rect, B1-a-crop (dialog), B1-b/c/d crops (line picked, angle 30.0, value box), B1-e-typed, B1-f-after, B2-box*, B2-<value>.png, B2-m30-later.png (box still open with -30), B2-0-typed-crop / B2-0b-crop, B2-360-crop).
+Gate: not run, scripts only.

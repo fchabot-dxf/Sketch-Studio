@@ -2,7 +2,7 @@
 // SNAP CONSTRAINTS - Automatic constraint creation on snap
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { CONSTRAINT_TYPES } from './constants.js';
+import { CONSTRAINT_TYPES, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from './constants.js';
 import { dbg } from './debug.js';
 import { ConstraintManager } from './constraint-manager.js';
 import { SolverConfig } from './solver-config.js';
@@ -123,6 +123,15 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
             try{
                 return addViaManager(CONSTRAINT_TYPES.MIDPOINT, { joints: [anchorJoints[0], anchorJoints[1], jointId] });
             }catch(e){ return false; }
+
+        case 'axis-x':
+        case 'axis-y': {
+            // Point on the X / Y axis (task 537) -> the horizontal / vertical constraint between the point and the origin joint
+            // (declared in AXIS_SNAP_TARGETS). The normal ConstraintManager path decides: a refusal leaves the point where it is.
+            if (jointId === ORIGIN_JOINT_ID) return false;
+            if (!state.joints || !state.joints.has(ORIGIN_JOINT_ID)) return false;
+            return addViaManager(AXIS_SNAP_TARGETS[snapTarget.type].constraint, { joints: [jointId, ORIGIN_JOINT_ID] });
+        }
 
         case 'grid':
             // Grid snaps are visual-only and should not create constraints. Return false so

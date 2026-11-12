@@ -7,7 +7,7 @@ import { dbg } from '#core/debug.js';
 import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
-import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES } from '#core/constants.js';
+import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
@@ -1782,6 +1782,19 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         const xStroke = scale(2);
         out.push(`<line x1="${p.x-scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x+scale(xSize)}" y2="${p.y+scale(xSize)}" style="stroke:${skv('#2563eb')}" stroke-width="${xStroke}"/>`);
         out.push(`<line x1="${p.x+scale(xSize)}" y1="${p.y-scale(xSize)}" x2="${p.x-scale(xSize)}" y2="${p.y+scale(xSize)}" style="stroke:${skv('#2563eb')}" stroke-width="${xStroke}"/>`);
+      }
+    } else if (AXIS_SNAP_TARGETS[effectiveSnap.type]) {
+      // Axis snap (task 537): the same language as a line snap — the snapped-to line (here the X or Y axis, drawn full
+      // width) highlighted, plus the diamond + X at the snap point — so it says WHICH axis the point will sit on.
+      const onX = AXIS_SNAP_TARGETS[effectiveSnap.type].across === 'y';
+      const hl = onX
+        ? `x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0"`
+        : `x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}"`;
+      out.push(`<line ${hl} data-snap-axis="${effectiveSnap.type}" style="stroke:${skv('#2563eb')}" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
+      if(!isConstraintTool && p){
+        const diamondSize = 6;
+        const diamondStroke = scale(2);
+        out.push(`<rect x="${p.x-scale(diamondSize)}" y="${p.y-scale(diamondSize)}" width="${scale(diamondSize*2)}" height="${scale(diamondSize*2)}" style="fill:${skv('#2563eb')}; stroke:${skv('#2563eb')}" fill-opacity="0.3" stroke-width="${diamondStroke}" transform="rotate(45 ${p.x} ${p.y})"/>`);
       }
     } else if (effectiveSnap.type === 'grid') {
       // Grid snap indicator: Small solid dot

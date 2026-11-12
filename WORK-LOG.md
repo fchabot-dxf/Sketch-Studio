@@ -13616,3 +13616,8 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
   graded 48 (collinear LL 1,5 1,7 4,3 5,3 7,1, CL 4,3; dim-aligned LL 2,4 2,5 2,6 2,7 2,o 4,2 5,2 6,2 7,2 o,2, LA 4,0 7,0 o,0, OA c,0, AL 0,4
   0,7, AO 0,c, AP 0,4, PA 4,0, ZA; dim-horizontal / dim-vertical LL 0,4 0,7 2,4 2,7, LO 0,c, LP 0,4, LZ 0,0, AL, AO, AP, AZ) and which-moves 6
   (dim-horizontal / dim-vertical A_fixfull.BA, B_fix1.AB, B_fixfull.AB). List: .evidence/525/oracle-pass-to-fail-vs-pre525.txt.
+
+## TURN 534
+- Positive Y points UP for the user (like Fusion) through ONE seam: `worldToUserY` / `userToWorldY` in packages/core/units.js. Only site that showed a y: the grid axis numbers (`gridLabelsMarkup`, packages/ui/canvas-grid.js: SketchStudio + Shaper Design). Label positions unchanged (picture does not move); the Y number now reads `worldToUserY(y)`.
+- Inventory: SketchStudio status bar "X: 0 Y: 0" is a static placeholder nothing writes (no live readout); no coordinate input fields; dimension fields prefill Math.abs (unsigned) and angle dims are the unsigned interior angle (no change); Pen Plotter `#coords` (apps/penplotter/src/interaction.js:80) is the plotter's own paper-mm readout (origin top-left, y down) and was NOT touched (its own convention, not the shared canvas); exports/imports untouched (DXF import already negates y; SketchStudio SVG/DXF export has an explicit invertY option, default off; Pen Plotter G-code flipY:true).
+- Tests: tests/units.test.js (seam round-trip, no "-0"); tests/canvas-grid-labels-live.test.js (Y numbers above the origin positive, below negative, SketchStudio + Shaper Design; failed before the fix). Evidence: .evidence/534/{before,after}.

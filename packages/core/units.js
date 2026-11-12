@@ -18,6 +18,12 @@ const TO_MM = { mm: 1, cm: 10, in: 25.4 };
 // world units (mm) in 1 of a document unit (1 for an unknown unit): the ONE conversion factor, for callers that need a length in BASE
 export const basePer = (docUnit) => TO_MM[docUnit] || 1;
 
+// TASK 534 — THE one Y-direction seam. Stored geometry (joints, files, the solver, exports) keeps WORLD y, which grows DOWN the
+// screen (the SVG's own y). The USER sees positive Y pointing UP, as in Fusion. Every place that SHOWS a y to the user (or reads
+// a typed y) goes through this pair; nothing else in the app negates y for display. `0 -` keeps zero a plain +0 (never "-0").
+export const worldToUserY = (y) => 0 - y;
+export const userToWorldY = (y) => 0 - y;
+
 // the valid document units (also the accepted input suffixes)
 export const UNITS = ['mm', 'cm', 'in'];
 

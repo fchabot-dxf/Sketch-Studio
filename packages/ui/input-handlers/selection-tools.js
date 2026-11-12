@@ -16,6 +16,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
+import { BODY_POINTS } from '#core/solver/definitions.js';
 import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
@@ -450,6 +451,11 @@ function handleShapeSelection(e, svg, state, hitShape) {
         lastTarget: { x: hitShape.pt.x, y: hitShape.pt.y },
         pointerId: e.pointerId
     };
+    // TASK 538: the BODY point = the point of the shape that was grabbed, fixed ONCE here by its parameter (t along a line, the angle
+    // on a circle / arc rim) through the shape kind's declared entry (definitions.js BODY_POINTS); the solver's spring pulls that point.
+    // A kind without an entry (bezier) has no body point: its drag keeps the member joint targets below.
+    const bodyKind = BODY_POINTS[hitShape.shape.type];
+    if (bodyKind) state.drag.body = { shape: id, param: bodyKind.param(jointIds.map(jid => state.joints.get(jid)), hitShape.pt) };
     dbg.log('selection', '[selection-tools] shape selected', { id: hitShape.shape.id, selectedCount: state.selectedShapes.size });
     return true;
 }
@@ -644,8 +650,9 @@ export function handleSelectionPointerMove(e, svg, state) {
     let target = wpt;
 
     // 3. Constraint-Aware Input Masking (Rigid Drag)
-    // Apply masking when dragging joints, clusters, or whole shapes/lines
-    if (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER || state.drag.type === DRAG_TYPES.LINE) {
+    // Apply masking when dragging joints, clusters, or whole shapes/lines. Not for a BODY point drag (task 538): the mask reads the
+    // member JOINTS' freedom (a held centre would lock a whole circle), while the body spring moves only what the constraints allow.
+    if ((state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER || state.drag.type === DRAG_TYPES.LINE) && !state.drag.body) {
         // Calculate deltas relative to START position to keep dragging consistent
         const startPos = state.drag.startWorld;
         let dx = target.x - startPos.x;
@@ -800,6 +807,14 @@ export function handleSelectionPointerMove(e, svg, state) {
     // renderer can show them and downstream tests/inspections can see what the
     // mask actually allows. The solver's auto-detect path already skips fixed
     // joints, so fixed joints never produce a mouse_spring.
+    // A BODY drag (task 538) carries ONE target: the grabbed point of the shape goes to the cursor (shape.dragTarget, read by every
+    // solve while the drag lasts: this pass and the app's frame solve); no member joint gets a target.
+    if (state.drag.body) {
+        const shape = (state.shapes || []).find(s => s.id === state.drag.body.shape);
+        shape.dragTarget = { param: state.drag.body.param, x: smoothed.x, y: smoothed.y };
+        if (state.engine) state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: { body: state.drag.body, x: smoothed.x, y: smoothed.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
+        return true;
+    }
     const dx = smoothed.x - state.drag.startWorld.x, dy = smoothed.y - state.drag.startWorld.y;
     console.log('[DRAG] smoothed:', smoothed, 'startWorld:', state.drag.startWorld, 'dx/dy:', dx, dy);
     for (const id of state.drag.jointIds) {
@@ -870,7 +885,11 @@ export function handleSelectionPointerUp(e, svg, state) {
         return true;
     }
     
-    // Cleanup drag targets so joints stop trying to follow the mouse
+    // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538)
+    if (state.drag && state.drag.body) {
+        const shape = (state.shapes || []).find(s => s.id === state.drag.body.shape);
+        if (shape) delete shape.dragTarget;
+    }
     if (state.drag && state.drag.jointIds) {
         for (const id of state.drag.jointIds) {
             const j = state.joints.get(id);

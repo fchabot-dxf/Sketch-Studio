@@ -601,6 +601,50 @@ export const Definitions = {
   }
 };
 
+// THE body point of a shape (task 538): in a BODY drag the mouse spring pulls the point of the shape that was GRABBED, fixed on the
+// shape by ONE number computed once at pointer-down from the hit position (param). One entry per shape kind, declared as data:
+//   param(P, hit)                the parameter of the grabbed point: P = the shape's joint positions [{x,y}] in shape.joints order
+//   point(op, positions)         the body point [x, y] read from the solver positions
+//   grad(op, positions, rows)    d(point)/d(variables): row 0 = d x, row 1 = d y, ACCUMULATED through addGrad / addRadiusDerivative
+// op = { joints: dense joint indices of the shape (shape.joints order), param, radiusAt / radius / rimJoint (the radius operand,
+// engine._radiusOperand: a circle's radius unknown, an arc's live |rim - centre|) }.
+// A kind with no entry has no body point (bezier: its control points are shape data, not solver unknowns): its body drag keeps the
+// joint drag targets of every member (selection-tools.js).
+const RIM_POINT = {
+  // the rim point at the grab angle: P = C + r (cos theta, sin theta), r = the circle's radius unknown or the arc's live radius
+  param: (P, hit) => Math.atan2(hit.y - P[0].y, hit.x - P[0].x),
+  point: (op, positions) => {
+    const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c);
+    return [positions[c*2] + r * Math.cos(op.param), positions[c*2+1] + r * Math.sin(op.param)];
+  },
+  grad: (op, positions, rows) => {
+    const c = op.joints[0], ux = Math.cos(op.param), uy = Math.sin(op.param);
+    addGrad(rows[0], c, 1, 0); addGrad(rows[1], c, 0, 1);
+    addRadiusDerivative(rows[0], positions, ux, op.radiusAt, op.rimJoint, c);
+    addRadiusDerivative(rows[1], positions, uy, op.radiusAt, op.rimJoint, c);
+  },
+};
+export const BODY_POINTS = {
+  // a fixed fraction t along the line: P = (1 - t) A + t B (t = the hit projected on AB, 0..1)
+  line: {
+    param: (P, hit) => {
+      const ux = P[1].x - P[0].x, uy = P[1].y - P[0].y, l2 = ux * ux + uy * uy;
+      return l2 > 0 ? Math.min(1, Math.max(0, ((hit.x - P[0].x) * ux + (hit.y - P[0].y) * uy) / l2)) : 0.5;
+    },
+    point: (op, positions) => {
+      const a = op.joints[0], b = op.joints[1], t = op.param;
+      return [(1 - t) * positions[a*2] + t * positions[b*2], (1 - t) * positions[a*2+1] + t * positions[b*2+1]];
+    },
+    grad: (op, positions, rows) => {
+      const a = op.joints[0], b = op.joints[1], t = op.param;
+      addGrad(rows[0], a, 1 - t, 0); addGrad(rows[0], b, t, 0);
+      addGrad(rows[1], a, 0, 1 - t); addGrad(rows[1], b, 0, t);
+    },
+  },
+  circle: RIM_POINT,
+  arc: RIM_POINT,
+};
+
 // Backwards-compatible aliases for constraint type names (camelCase → snake_case)
 // Many parts of the codebase use camelCase keys (e.g. CONSTRAINT_TYPES.POINT_ON_LINE === 'pointOnLine')
 // while solver Definitions are snake_cased. Provide aliases so engine.lookup works with either.

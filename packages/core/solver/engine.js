@@ -1,5 +1,5 @@
 import { Algebra } from './algebra.js';
-import { Definitions } from './definitions.js';
+import { Definitions, BODY_POINTS } from './definitions.js';
 import { InteractionSolver } from './interaction.js';
 import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
@@ -192,6 +192,16 @@ export class NewtonSolver {
     return typeof rim === 'number' ? { rim } : { radius: 0 };
   }
 
+  // THE operand of a BODY drag target (task 538) { shape: id, param }: the shape kind's declared BODY_POINTS entry and its op
+  // (dense joint indices in shape.joints order, the parameter, the radius operand of a circle / arc).
+  _bodyOperand(body, jointIndexMap) {
+    const shape = this.shapes.find(s => s && s.id === body.shape);
+    const kind = shape ? BODY_POINTS[shape.type] : undefined;
+    if (!kind) throw new Error(`body drag target: shape ${body.shape} has no declared body point (BODY_POINTS[${shape ? shape.type : 'missing shape'}])`);
+    const rad = this._radiusOperand(shape, jointIndexMap);
+    return { kind, op: { joints: shape.joints.map(id => jointIndexMap.get(id)), param: body.param, radiusAt: rad.at, radius: rad.radius, rimJoint: rad.rim } };
+  }
+
   // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack)
   _assemble(x) {
     const n = x.length;
@@ -247,7 +257,7 @@ export class NewtonSolver {
     const densePositions = this._positionsFromVector(x);
     const denseLen = densePositions.length;
     // Copy one dense Jacobian row into J row `row`: a joint column sums its cluster members, a radius column is copied.
-    const copyRow = (rowBuf) => {
+    const copyRow = (rowBuf, w = wStruct) => {
       for (let vi = 0; vi < this._freeIds.length; ++vi) {
         const base = vi*2; const repId = this._freeIds[vi];
         const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
@@ -257,10 +267,10 @@ export class NewtonSolver {
           sumX += rowBuf[denseIdx + 0];
           sumY += rowBuf[denseIdx + 1];
         }
-        J[row * n + base + 0] = sumX * wStruct;
-        J[row * n + base + 1] = sumY * wStruct;
+        J[row * n + base + 0] = sumX * w;
+        J[row * n + base + 1] = sumY * w;
       }
-      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * wStruct;
+      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * w;
     };
 
     // --- Drag-time structural weighting ---------------------------------------
@@ -286,7 +296,22 @@ export class NewtonSolver {
       const c = this.constraints[ci];
       if (c.isDriven || c.driven) continue; // skip driven (reference) rows — a reference never affects geometry
 
-      // --- Special-case: temporary mouse-spring added by InteractionSolver ---
+      // --- Temporary mouse-spring added by InteractionSolver, BODY form (task 538): the grabbed point of a shape, P(x) - target,
+      // weighted sqrt(stiffness) (never wStruct), its two rows from the shape kind's declared BODY_POINTS entry (cluster-aware copyRow).
+      if (c.type === 'mouse_spring' && c.body) {
+        const b = this._bodyOperand(c.body, jointIndexMap);
+        const w = Math.sqrt(c.stiffness || 1e3);
+        const p = b.kind.point(b.op, densePositions);
+        r[row] = w * (p[0] - c.value[0]);
+        r[row+1] = w * (p[1] - c.value[1]);
+        const rows = [new Float64Array(denseLen), new Float64Array(denseLen)];
+        b.kind.grad(b.op, densePositions, rows);
+        copyRow(rows[0], w); row++;
+        copyRow(rows[1], w); row++;
+        continue;
+      }
+
+      // --- Special-case: temporary mouse-spring added by InteractionSolver (JOINT form) ---
       if (c.type === 'mouse_spring') {
         // two scalar residuals: dx and dy weighted by sqrt(stiffness)
         const jointId = c.joints[0];
@@ -642,7 +667,16 @@ export class NewtonSolver {
   solve(iter = this.config.maxIter, options = {}) {
     let dragOpt = options && options.dragTarget ? options.dragTarget : null;
     if (!dragOpt) {
-      // auto-detect first joint carrying a dragTarget set by UI input handlers
+      // a BODY drag (task 538): the one shape carrying a dragTarget { param, x, y } set by the select tool's pointer handler
+      for (const s of this.shapes) {
+        if (s && s.dragTarget) {
+          dragOpt = { body: { shape: s.id, param: s.dragTarget.param }, x: s.dragTarget.x, y: s.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
+          break;
+        }
+      }
+    }
+    if (!dragOpt) {
+      // a JOINT drag: auto-detect first joint carrying a dragTarget set by UI input handlers (a body drag never sets one, task 538)
       for (const [id, j] of this.joints.entries()) {
         if (j && j.dragTarget && !j.fixed) {
           dragOpt = { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
@@ -821,6 +855,14 @@ export class NewtonSolver {
     let springSum2 = 0;
     for (const c of this.constraints) {
       if (!c || c.isDriven || c.driven || c.type !== 'mouse_spring') continue;
+      if (c.body) {
+        // the BODY form: the grabbed point read from the solved positions (the joint map is the dense order of _positionsFromVector)
+        const jointIndexMap = new Map(); let k = 0; for (const [id] of this.joints.entries()) jointIndexMap.set(id, k++);
+        const b = this._bodyOperand(c.body, jointIndexMap), p = b.kind.point(b.op, this._positionsFromVector(x));
+        const w = Math.sqrt(c.stiffness || 1e3);
+        springSum2 += (w * (p[0] - c.value[0])) ** 2 + (w * (p[1] - c.value[1])) ** 2;
+        continue;
+      }
       const jointId = c.joints && c.joints.length > 0 ? c.joints[0] : null;
       const j = jointId != null ? this.joints.get(jointId) : null;
       if (!j || !c.value) continue;

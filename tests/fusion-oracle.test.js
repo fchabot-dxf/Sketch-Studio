@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildScenarios, runOurs, cellOf } from './harness/fusion-oracle/which-moves.js';
+import { buildCells, materialize, fusionMove, oursMove, cellKey, classOf } from './harness/fusion-oracle/graded.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const load = (f) => JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures/fusion-oracle', f), 'utf8'));
@@ -34,6 +35,32 @@ const fail = (m) => failures.push(m);
   }
   for (const id of Object.keys(KNOWN)) if (!fx.results[id]) fail(`which-moves KNOWN entry ${id} has no scenario`);
   console.log(`which-moves: ${scs.length} cells, ${same} same as Fusion, ${known} KNOWN differences (Fusion ${fx.fusion}, recorded ${fx.date})`);
+}
+
+// ------------------------------------------------------------------------------------------------ part 0b: graded which-moves, every shape kind, origin as an operand
+{
+  const gx = load('which-moves-graded.json');
+  const GK = load('which-moves-graded-known.json');    // class (constraint|kinds) -> { reason, total, cells: 'all' | ['levelA,levelB', ...] }
+  if (!gx.fusion || !gx.date) fail('which-moves-graded.json carries no Fusion version / date');
+  const cells = buildCells();
+  let same = 0, diff = 0, originBad = 0;
+  const seen = {};
+  for (const cell of cells) {
+    const fr = gx.cells[cell.id];
+    if (!fr || fr.setupError) { fail(`graded ${cell.id}: no Fusion answer`); continue; }
+    const M = materialize(cell);
+    if (M.na) { fail(`graded ${cell.id}: not applicable now`); continue; }
+    const f = fusionMove(M, { initial: fr.initial, steps: [fr.step] }), o = oursMove(M);
+    // the origin NEVER moves and is never deleted, in Fusion and in ours (N-F1 -- a fillet on an origin corner deletes it -- is not reached: no cell fillets at the origin)
+    if (!o.originOk || (f.accepted && !f.originOk)) { originBad++; fail(`graded ${cell.id}: the origin moved or was deleted (ours ${o.originOk}, Fusion ${f.originOk})`); }
+    const c = cellKey(f, o), k = classOf(cell), lv = cell.levels.join(',');
+    const kn = GK[k], isKnown = !!kn && (kn.cells === 'all' || kn.cells.includes(lv));
+    (seen[k] ||= { total: 0 }).total++;
+    if (c.same) { same++; if (isKnown) fail(`graded ${cell.id}: KNOWN (${kn.reason}) but ours now agrees with Fusion: update the KNOWN entry`); }
+    else { diff++; if (!isKnown) fail(`graded ${cell.id}: NEW divergence. Fusion ${c.fusion} | ours ${c.ours}`); }
+  }
+  for (const [k, v] of Object.entries(GK)) if (!seen[k] || seen[k].total !== v.total) fail(`graded KNOWN class ${k}: ${seen[k] ? seen[k].total : 0} cells now, ${v.total} recorded`);
+  console.log(`which-moves-graded: ${cells.length} cells, ${same} same as Fusion, ${diff} KNOWN differences in ${Object.keys(GK).length} classes, origin never moved (Fusion ${gx.fusion}, recorded ${gx.date})`);
 }
 
 if (failures.length) {

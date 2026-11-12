@@ -22,6 +22,33 @@
 
 RETIRED t400 by owner ruling, see WORK-LOG TURN 400 (Frame Calc removed from Sketch-Studio).
 
+## ▶ HANDOVER (2026-11-11 ~21:10, advisor turn 739) — PC restart; SOLVER FOCUS (owner: "focus on Sketch Studio solver for now")
+
+Workers: Copilot and Antigravity down; the owner approved Sonnet subagents in worktrees `D:\APPS\Sketch-Studio.worktrees\<name>`.
+Task specs live in the advisor scratchpad `C:\Users\danse\AppData\Local\Temp\claude\8d139a0ecc684149\a68d081b-3e78-458c-bc08-7d18f7437837\scratchpad\task_5xx.txt`
+(copy them out if %TEMP% gets cleaned).
+
+MERGED today: 494 recentre (d417b56), 509 Log button in the status bar replacing MODE (f92c3f0), 506 Drive-first (74d7199, two
+review rounds; owner still to run the first real "Check Google Drive connection"), 508 constraint audit (4a24c16,
+docs/CONSTRAINT-AUDIT.md), 510 fixes F1/F4/F7 (a3f6955).
+READY TO MERGE (gate green on branch): `agents/task-514-coverage-properties` (audit only, reviewed; its merge gate was killed by the
+restart: rerun merge.sh) and `agents/task-512-coverage-matrix` (audit only, GATE 237/237; not yet diff-reviewed by the advisor: check
+`git diff --name-only` is tests/docs/scripts only; both write docs/COVERAGE-AUDIT.md: keep both sections).
+IN FLIGHT: 511 (F6 DOF lie + F3 clockwise angle) on `agents/task-511-audit-fixes-b`. Advisor decision given: option (a), the solver
+STEP also uses the full derivative for point_on_line and collinear (one Jacobian, drop the `mutual` opt-in), so the owner's
+fillet-corner dimension drives; behaviour change: a point on a FREE line can move the line. WIP pushed before the restart; resume it.
+QUEUE (in order): 511 -> 517 (N-F4+N-F3 lost dimension fields in one normaliser helper, N-F1 fillet deletes origin, N-F2 fillet on polygon
+corners) -> 516 (redundant dimension placed DRIVEN, cannot be typed; wait for the Fusion check) -> 515 (circle radius a solver unknown like
+Fusion; fixes F2) -> NEW-1/NEW-5/NEW-3/NEW-2 from 512 (point-to-line dim throws `c is not defined` dimension-tool.js:619; line-line dim
+born negative; perpendicular refused on exactly parallel lines; point-to-line dim not perpendicular) -> N-F7 arc-arc tangent at a shared
+rim, N-F5 collinear DOF, N-F6 side flips, F5/NEW-6 sandbox refusals, F8. 513 (real-UI sweep of every app) ON HOLD by owner.
+OWNER RULINGS today: dimensions on an already determined quantity = driven, no badge for redundant geometric constraints; circles
+match Fusion (radius is a DOF); a redundant dimension is placed driven and cannot be typed ("like in Fusion": verify in Fusion first);
+the advisor may launch Fusion himself.
+FUSION: broken. Hangs at "Initializing", log `BaseAuth not initialized; cannot fetch access token`. Owner restarts the PC, then Repair
+if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-11`. Then run the diagonal-dimension test
+(sketch CLAUDE_TEST_O3, delete it after) before sending 516.
+
 ## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410
 
 **Owner ruling on seats:** the owner launches seats and the advisor tasks them, as before. The advisor may also launch

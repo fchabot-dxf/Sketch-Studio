@@ -11,6 +11,7 @@ import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geome
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
@@ -51,13 +52,15 @@ export function commitDimensionEdit(state, c, val) {
   c.value = val;
   // Walk the value in steps of at most STEP_FRACTION of the old value, solving at each: one big jump lets the solver land on
   // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
-  // continuously. A fillet radius edit is already seeded analytically above, so it takes the single solve.
+  // continuously. A fillet radius edit is already seeded analytically above, so it takes the single solve. At each step the
+  // operand that gives way is placed at the step's value by the creation placement (the who-moves table, task 525) before the solve.
   let result;
   const span = Math.abs(val - oldValue);
   const steps = (!filletArc && Number.isFinite(span) && Math.abs(oldValue) > 0)
     ? Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(oldValue) * STEP_FRACTION)))) : 1;
   for (let k = 1; k <= steps; k++) {
     c.value = k === steps ? val : oldValue + (val - oldValue) * (k / steps);
+    if (!filletArc) ConstraintManager.placeForCreation(state, c.type, c);
     result = engine.solve(ITER());
     if (result && result.converged === false) break;
   }

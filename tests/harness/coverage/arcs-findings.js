@@ -107,9 +107,11 @@ export function ui10() { const f = uiFacts(variant('s30cw')); return { ok: !f.ar
 export const REPRO_CELL = {
   'EA-1': ['s30cw', 'coincident-own-ends', 'sep'],
   'EA-2': ['s179cw', 'hv-centre-end', 'sep'],
-  'EA-3': ['s0.1cw', 'tangent-line', 'sep'],
+  // EA-3 and EA-5: their first repros (s0.1cw / r0.5s30cw tangent-line sep) pass since task 525 (the who-moves placement moves the line and
+  // keeps the arc); the repro is now the first cell that still shows the finding
+  'EA-3': ['s180cw', 'coincident-own-ends', 'sep'],
   'EA-4': ['s0.1ccw', 'hv-start-end', 'sep'],
-  'EA-5': ['r0.5s30cw', 'tangent-line', 'sep'],
+  'EA-5': ['r0.5s0.1cw', 'dim-chord', 'sep'],
   'EA-6': ['r0.5s30cw', 'perpendicular-chord', 'sep'],
   'EA-7': ['r0.5s0.1cw', 'collinear-chord', 'sep'],
   'EA-8': ['s0.1cw', 'perpendicular-chord', 'locked'],

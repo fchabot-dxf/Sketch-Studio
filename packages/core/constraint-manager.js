@@ -6,6 +6,7 @@ import { SolverConfig } from './solver-config.js';
 import { measureResidual, measureShapeSizes, findCollapsedShape } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
+import { placeForCreation as placeByTable } from './creation-placement.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -19,9 +20,6 @@ const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.TANGENT, CONSTRAINT_TYPES.POINT_ON_LINE, CONSTRAINT_TYPES.EQUAL,
     CONSTRAINT_TYPES.MIDPOINT
 ]);
-
-// |sin| of the angle below which two lines count as parallel for a perpendicular's creation placement (about 0.06 degree).
-const PARALLEL_START_SIN = 1e-3;
 
 export class ConstraintManager {
     static canAddConstraint(state, type, params, options = {}) {
@@ -42,31 +40,6 @@ export class ConstraintManager {
         }
 
         return { ok: true };
-    }
-    // Reorder a 2-shape COLLINEAR so the more-ESTABLISHED line becomes the anchor (first shape). The
-    // collinear solver/residual hold the first line fixed and move the second onto it, so anchoring the
-    // established line keeps it put (a vertical line stays vertical) and rotates the other onto it.
-    // "Established" = currently axis-aligned, whether by a V/H CONSTRAINT (strong) or just GEOMETRY
-    // (a freehand line whose current angle is ~0°/90°) — the user expects a vertical line not to move.
-    static _lineHasAxisConstraint(state, sid) {
-        const sh = state.shapes && state.shapes.find(x => x.id === sid);
-        if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return false;
-        const [a, b] = sh.joints;
-        return state.constraints.some(c =>
-            (c.type === CONSTRAINT_TYPES.HORIZONTAL || c.type === CONSTRAINT_TYPES.VERTICAL) &&
-            c.joints && c.joints.length >= 2 &&
-            ((c.joints[0] === a && c.joints[1] === b) || (c.joints[0] === b && c.joints[1] === a)));
-    }
-    static _lineIsGeometricallyAxisAligned(state, sid, tolDeg = 1.5) {
-        const sh = state.shapes && state.shapes.find(x => x.id === sid);
-        if (!sh || !Array.isArray(sh.joints) || sh.joints.length < 2) return false;
-        const a = state.joints.get(sh.joints[0]), b = state.joints.get(sh.joints[1]);
-        if (!a || !b) return false;
-        const dx = b.x - a.x, dy = b.y - a.y;
-        if (Math.hypot(dx, dy) < 1e-9) return false; // degenerate line — no orientation
-        const deg = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI); // 0..180
-        const dist = Math.min(deg, Math.abs(deg - 90), Math.abs(deg - 180)); // distance to nearest axis
-        return dist <= tolDeg;
     }
     // Which axis a line currently lies on, geometrically: 'H' (~0/180°), 'V' (~90°), or null (angled).
     static _lineGeometricAxis(state, sid, tolDeg = 1.5) {
@@ -95,21 +68,6 @@ export class ConstraintManager {
             }
         }
         return this._lineGeometricAxis(state, sid);
-    }
-
-    // Establishment score: both ends fixed (4) outranks a V/H constraint (2), which outranks mere geometric alignment (1); they stack.
-    static _lineEstablishmentScore(state, sid) {
-        const sh = state.shapes && state.shapes.find(x => x.id === sid);
-        const fixed = (id) => id === 'j_origin' || !!(state.joints.get(id) && state.joints.get(id).fixed);
-        const bothFixed = !!(sh && Array.isArray(sh.joints) && sh.joints.length >= 2 && fixed(sh.joints[0]) && fixed(sh.joints[1]));
-        return (bothFixed ? 4 : 0) + (this._lineHasAxisConstraint(state, sid) ? 2 : 0) + (this._lineIsGeometricallyAxisAligned(state, sid) ? 1 : 0);
-    }
-    static anchorEstablishedLine(state, normalized) {
-        const [s1, s2] = normalized.shapes;
-        // Fusion rule: the FIRST-picked line stays unless the second is held more (fixed / H-V); equal score keeps the pick order.
-        if (this._lineEstablishmentScore(state, s2) > this._lineEstablishmentScore(state, s1)) {
-            normalized.shapes = [s2, s1];
-        }
     }
 
     // True if EVERY joint a constraint touches (directly via joints, or via its shapes/shape/line/circle)
@@ -189,11 +147,7 @@ export class ConstraintManager {
             this.orderAnglePairCCW(state, normalized.shapes);
         }
 
-        // COLLINEAR matches Fusion: the FIRST-picked line is the anchor and stays, unless the second is held more
-        // (both ends fixed, or H/V constrained): then the second is the anchor. The other line's free endpoints are PLACED
-        // on the anchor's infinite line before the solve (placeOnAnchorLine, below), so the solve starts satisfied and the
-        // anchor does not move. The solver's row itself is the full derivative (both lines may move), so it is the placement,
-        // not the Jacobian, that keeps the anchor still.
+        // COLLINEAR: which line gives way is the creation placement's (placeForCreation, the who-moves table of task 525).
         if (type === CONSTRAINT_TYPES.COLLINEAR && normalized.shapes && normalized.shapes.length === 2) {
             // Two axis-aligned lines on DIFFERENT axes (one vertical, one horizontal) are perpendicular —
             // making them collinear would force one off its axis. REFUSE up-front (clean pre-add reject):
@@ -205,7 +159,6 @@ export class ConstraintManager {
                 dbg.warn('constraints', `[ConstraintManager] collinear refused: perpendicular axis-aligned lines (${axA} vs ${axB})`);
                 return null;
             }
-            this.anchorEstablishedLine(state, normalized);
         }
 
         // Branch lock: PERPENDICULAR records the chosen handedness (+1 / -1) so
@@ -313,7 +266,7 @@ export class ConstraintManager {
         const _preAdd = snapshotSolverState(state.joints, state.shapes);
         const _sizesBefore = measureShapeSizes(state);
 
-        // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
+        // Fusion parity: the operand that gives way is placed on its target BEFORE the solve (placeForCreation, task 525).
         this.placeForCreation(state, type, normalized);
 
         // Use existing canonical addConstraint path to validate and persist
@@ -1123,81 +1076,11 @@ export class ConstraintManager {
         }
     }
 
-    // Orthogonally project every NON-fixed joint of `ids` onto the infinite line through joints a-b.
-    static placeOnAnchorLine(state, a, b, ids) {
-        const A = state.joints.get(a), B = state.joints.get(b);
-        if (!A || !B) return;
-        const ux = B.x - A.x, uy = B.y - A.y, len2 = ux * ux + uy * uy;
-        if (len2 < 1e-18) return;
-        for (const id of ids) {
-            const j = state.joints.get(id);
-            if (!j || j.fixed || id === 'j_origin') continue;
-            const t = ((j.x - A.x) * ux + (j.y - A.y) * uy) / len2;
-            j.x = A.x + t * ux; j.y = A.y + t * uy;
-        }
-    }
-
-    // Perpendicular between two parallel or NEARLY parallel lines (|sin| <= PARALLEL_START_SIN, about 0.06 degree; task 521: from a closer start the
-    // solve alone shrinks both lines to a point instead of turning one) (u x v = 0): u.v is stationary there, so the solve never leaves the
-    // start. Choose the branch as Fusion does: the SECOND-picked line turns by the smaller angle to 90 degrees (a parallel
-    // pair is a tie) and a tie goes counter-clockwise. The turn pivots on a fixed or shared joint of the second line, else
-    // on its midpoint; a second line that cannot move (both ends fixed or shared) is left to the solve. No branch is locked: the
-    // branched residual is stationary at exactly 90 degrees (its row would vanish and hide the removed DOF), u.v is not.
-    static placePerpendicularFromParallel(state, normalized) {
-        if (!normalized.shapes || normalized.shapes.length !== 2) return;
-        const s1 = state.shapes.find(s => s.id === normalized.shapes[0]);
-        const s2 = state.shapes.find(s => s.id === normalized.shapes[1]);
-        if (!s1 || !s2 || s1.type !== 'line' || s2.type !== 'line' || !s1.joints || s1.joints.length < 2 || !s2.joints || s2.joints.length < 2) return;
-        const a = state.joints.get(s1.joints[0]), b = state.joints.get(s1.joints[1]);
-        const c = state.joints.get(s2.joints[0]), d = state.joints.get(s2.joints[1]);
-        if (!a || !b || !c || !d) return;
-        const ux = b.x - a.x, uy = b.y - a.y, vx = d.x - c.x, vy = d.y - c.y;
-        const lenU = Math.hypot(ux, uy), lenV = Math.hypot(vx, vy);
-        if (lenU < 1e-9 || lenV < 1e-9) return;
-        if (Math.abs(ux * vy - uy * vx) > PARALLEL_START_SIN * lenU * lenV) return;     // not (nearly) parallel: the general branch lock applies
-        const pinned = (id) => { const j = state.joints.get(id); return !!(j && (j.fixed || id === 'j_origin')) || s1.joints.includes(id); };
-        const [idC, idD] = s2.joints;
-        let pivot;
-        if (!pinned(idC) && !pinned(idD)) pivot = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
-        else if (pinned(idC) && !pinned(idD)) pivot = c;
-        else if (pinned(idD) && !pinned(idC)) pivot = d;
-        else return;
-        for (const [id, j] of [[idC, c], [idD, d]]) {
-            if (pinned(id)) continue;
-            const rx = j.x - pivot.x, ry = j.y - pivot.y;
-            j.x = pivot.x - ry; j.y = pivot.y + rx;                       // +90 degrees (counter-clockwise)
-        }
-    }
-
-    // CREATION placement (one place) for the constraints whose solver row moves BOTH the point and the line: collinear
-    // (anchor = first shape / first two joints) and pointOnLine (the point moves onto the line, the line stays; a fixed
-    // point leaves the placement to the solve, which then moves the line), and perpendicular from an exactly parallel start.
+    // CREATION placement, the one place (task 525): which operand gives way and where it goes, read from the declared who-moves table
+    // (creation-placement.js + the generated creation-placement-table.js). Called by createConstraint before the solve, by _sandboxVerify, and
+    // by a dimension's value edit (commitDimensionEdit). Returns true when an operand was placed.
     static placeForCreation(state, type, normalized) {
-        const lineJoints = (sid) => { const sh = state.shapes.find(x => x.id === sid); return sh && sh.type === 'line' && sh.joints && sh.joints.length >= 2 ? sh.joints : null; };
-        if (type === CONSTRAINT_TYPES.PERPENDICULAR) {
-            this.placePerpendicularFromParallel(state, normalized);
-        } else if (type === CONSTRAINT_TYPES.COLLINEAR) {
-            if (normalized.shapes && normalized.shapes.length === 2) {
-                const a = lineJoints(normalized.shapes[0]), m = lineJoints(normalized.shapes[1]);
-                if (a && m) this.placeOnAnchorLine(state, a[0], a[1], m.slice(0, 2));
-            } else if (normalized.joints && normalized.joints.length >= 3) {
-                this.placeOnAnchorLine(state, normalized.joints[0], normalized.joints[1], normalized.joints.slice(2));
-            }
-        } else if (type === CONSTRAINT_TYPES.POINT_ON_LINE && normalized.joint && normalized.shape) {
-            const l = lineJoints(normalized.shape);
-            if (l) this.placeOnAnchorLine(state, l[0], l[1], [normalized.joint]);
-            else {
-                // a circle / arc target: the point moves radially onto the rim, the circle stays
-                const sh = state.shapes.find(x => x.id === normalized.shape);
-                const pj = state.joints.get(normalized.joint), cj = sh && (sh.type === 'circle' || sh.type === 'arc') && sh.joints && state.joints.get(sh.joints[0]);
-                if (pj && cj && !pj.fixed && normalized.joint !== 'j_origin') {
-                    const rj = sh.joints.length >= 2 ? state.joints.get(sh.joints[1]) : null;
-                    const R = typeof sh.radius === 'number' ? sh.radius : (rj ? Math.hypot(rj.x - cj.x, rj.y - cj.y) : 0);
-                    const dx = pj.x - cj.x, dy = pj.y - cj.y, d = Math.hypot(dx, dy);
-                    if (R > 0 && d > 1e-12) { pj.x = cj.x + dx / d * R; pj.y = cj.y + dy / d * R; }
-                }
-            }
-        }
+        return placeByTable(state, type, normalized);
     }
 
     // Reorder `shapeIds` in place so the signed angle from line 1 to line 2 is counter-clockwise (cross >= 0).

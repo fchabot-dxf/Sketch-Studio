@@ -84,7 +84,8 @@ ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r 
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
   'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
-  'NEW-9': 'coincident of a line end onto a corner of a rect that shares the line other end: feasible, but our solve collapses the line and the rect, so it is refused (task 521)',
+  // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
+  // the who-moves placement moves one operand and no matrix cell fails it any more.
 };
 // round-1 findings are TOLERATED, not required: a fix task for F1..F6 must not have to edit this file (their cells simply turn PASS).
 const ROUND1 = new Set(['F1', 'F2', 'F3', 'F4', 'F5', 'F6']);

@@ -1,7 +1,7 @@
 // tests/snap-release-slip-live.test.js — TASK 546 (live headless, REAL mouse via CDP): the pointer-up "release jitter" recovery
 // (input-manager handlePointerUp: a snap lost < 200 ms before the release is put back) recovers a SLIP, not a MOVE.
 //   1. press on the snapped origin with the Polygon tool, flick 120 px away and release fast (< 200 ms): the hexagon is drawn with
-//      its corner where the pointer was released. Before task 546 the press point's snap was recovered at the release, the corner
+//      its corner where the pointer was released (a point no snap locks on). Before task 546 the press point's snap was recovered at the release, the corner
 //      landed on the centre (radius 0) and the tool silently drew nothing (tests/polygon-tool-live.test.js failed on it).
 //   2. the recovery still does its job: the Line tool locks its end on the origin, the pointer slips just past the joint snap reach
 //      (the snap is lost) but inside the release distance, and a fast release still ends the line ON the origin.
@@ -141,28 +141,47 @@ await (async () => {
     const empty = await evalJs(`${S}.shapes.length`);
     assert.strictEqual(empty, 0, 'a fresh profile opens an empty Shaper design');
     console.log('origin on screen', JSON.stringify(origin), 'snap lock / release px', JSON.stringify(magnet));
+    // A screen point `r` px from the origin where NO snap locks: outside the lock distance of both axes (the axis snap, task 537) and
+    // farthest from every grid point (the grid snap). Each case releases on such a point, so its release has no snap of its own and
+    // only the recovery can move it.
+    const clearPoint = (r) => evalJs(`Promise.all([import('#ui/coords.js'), import('#ui/canvas-grid.js'), import('#ui/snap-magnet.js'), import('#core/settings-manager.js')]).then(([{ worldToScreen, screenToWorld }, { gridSpacing }, { getMagnetThreshold }, { default: SM }]) => {
+      const svg = document.querySelector('#design-canvas');
+      const { GRID_SIZE } = gridSpacing(SM.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SM.get('GRID_SIZE') || SM.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SM.get('GRID_MAJOR_STEP') || SM.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SM.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SM.get('INCH_GRID_MAJOR') });
+      let best = null;
+      for (let deg = 0; deg < 360; deg++) {
+        const x = Math.round(${origin.x} + ${r} * Math.cos(deg * Math.PI / 180)), y = Math.round(${origin.y} + ${r} * Math.sin(deg * Math.PI / 180));
+        if (Math.min(Math.abs(x - ${origin.x}), Math.abs(y - ${origin.y})) <= ${magnet.lock}) continue;
+        const w = screenToWorld(svg, x, y), g = worldToScreen(svg, { x: Math.round(w.x / GRID_SIZE) * GRID_SIZE, y: Math.round(w.y / GRID_SIZE) * GRID_SIZE });
+        const d = Math.hypot(g.x - x, g.y - y);
+        if (!best || d > best.gridPx) best = { x, y, gridPx: d };
+      }
+      return best && Object.assign(best, { gridMagnet: getMagnetThreshold('grid') });
+    })`).then((p) => { assert(p && p.gridPx > p.gridMagnet, 'a point ' + r + ' px from the origin clear of the grid and axis snaps: ' + JSON.stringify(p)); return p; });
 
-    // ---- 1. Polygon: press ON the origin (a locked snap), flick 120 px away, release fast -> a hexagon with its corner at the release
+    // ---- 1. Polygon: press ON the origin (a locked snap), flick 120 px away to a point with no snap, release fast -> a hexagon with its
+    //         corner at the release point
     await clickEl('#tool-polygon');
     await mouse('mouseMoved', origin.x, origin.y, 0); await sleep(60);
     const lockedAtPress = await evalJs(`(() => { const t = ${S}.snapTarget; return !!(t && t.isLocked && t.targetId === 'j_origin'); })()`);
     assert(lockedAtPress, 'hovering the origin locks its snap before the press');
+    const end = await clearPoint(120);
     await arm();
-    const end = { x: origin.x + 120, y: origin.y + 15 };
     await mouse('mousePressed', origin.x, origin.y, 1);
-    await mouse('mouseMoved', origin.x + 40, origin.y + 5, 1);
+    await mouse('mouseMoved', Math.round((origin.x + end.x) / 2), Math.round((origin.y + end.y) / 2), 1);
     await mouse('mouseMoved', end.x, end.y, 1);
     await mouse('mouseReleased', end.x, end.y, 0); await sleep(300);
     const r1 = await record();
     const down1 = r1.find((r) => r.type === 'pointerdown'), up1 = r1.find((r) => r.type === 'pointerup');
     assert(down1 && up1 && down1.origin, 'the press is on the locked origin snap: ' + JSON.stringify(r1));
+    assert(r1.filter((r) => r.type === 'pointermove').pop().none, 'the release point has no snap of its own: ' + JSON.stringify(r1));
     const flickMs = up1.t - down1.t;
     assert(flickMs < 200, 'the flick ran inside the 200 ms recovery window (press -> release ' + flickMs + ' ms)');
-    const poly = await evalJs(`import('#ui/coords.js').then(({ screenToWorld }) => { const s = ${S}; const sides = s.shapes.filter((x) => !x.isConstruction); const radii = s.shapes.filter((x) => x.isConstruction); const w = screenToWorld(document.querySelector('#design-canvas'), ${end.x}, ${end.y}); const c = radii[0] && s.joints.get(radii[0].joints[0]), v = radii[0] && s.joints.get(radii[0].joints[1]); return { sides: sides.length, radii: radii.length, radius: c && v ? Math.hypot(v.x - c.x, v.y - c.y) : 0, releaseR: c ? Math.hypot(w.x - c.x, w.y - c.y) : 0 }; })`);
+    // the corner (the first radius' far joint) on screen: where the pointer was released, never back on the centre 120 px away
+    const poly = await evalJs(`import('#ui/coords.js').then(({ worldToScreen }) => { const s = ${S}; const sides = s.shapes.filter((x) => !x.isConstruction); const radii = s.shapes.filter((x) => x.isConstruction); const v = radii[0] && s.joints.get(radii[0].joints[1]); const p = v && worldToScreen(document.querySelector('#design-canvas'), v); return { sides: sides.length, radii: radii.length, cornerPxFromRelease: p ? Math.hypot(p.x - ${end.x}, p.y - ${end.y}) : null }; })`);
     console.log('flick from the origin: press -> release', Math.round(flickMs), 'ms', JSON.stringify(poly));
     assert.strictEqual(poly.sides, 6, 'a fast flick from the snapped origin draws the hexagon (6 sides): ' + JSON.stringify(poly));
     assert.strictEqual(poly.radii, 6, '6 construction radii');
-    assert(poly.radius > 0 && Math.abs(poly.radius - poly.releaseR) < 1e-6 * Math.max(1, poly.releaseR), 'the corner is where the pointer was released, not back on the centre: ' + JSON.stringify(poly));
+    assert(poly.cornerPxFromRelease !== null && poly.cornerPxFromRelease < 1, 'the corner is where the pointer was released, not back on the centre: ' + JSON.stringify(poly));
     await clickEl('#btn-undo');
     assert.strictEqual(await evalJs(`${S}.shapes.length`), 0, 'one Undo removes the polygon');
 
@@ -173,20 +192,7 @@ await (async () => {
     // two, and that is where a slip relies on the recovery
     assert(magnet.reach < magnet.release, 'a slip band exists between the joint reach and the release distance: ' + JSON.stringify(magnet));
     const slip = Math.round((magnet.reach + magnet.release) / 2);
-    // ... in the direction that keeps the slip point farthest from every grid point (else the grid snap takes over at the slip)
-    const slipAt = await evalJs(`Promise.all([import('#ui/coords.js'), import('#ui/canvas-grid.js'), import('#ui/snap-magnet.js'), import('#core/settings-manager.js')]).then(([{ worldToScreen, screenToWorld }, { gridSpacing }, { getMagnetThreshold }, { default: SM }]) => {
-      const svg = document.querySelector('#design-canvas');
-      const { GRID_SIZE } = gridSpacing(SM.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SM.get('GRID_SIZE') || SM.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SM.get('GRID_MAJOR_STEP') || SM.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SM.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SM.get('INCH_GRID_MAJOR') });
-      let best = null;
-      for (let deg = 0; deg < 360; deg++) {
-        const x = Math.round(${origin.x} + ${slip} * Math.cos(deg * Math.PI / 180)), y = Math.round(${origin.y} + ${slip} * Math.sin(deg * Math.PI / 180));
-        const w = screenToWorld(svg, x, y), g = worldToScreen(svg, { x: Math.round(w.x / GRID_SIZE) * GRID_SIZE, y: Math.round(w.y / GRID_SIZE) * GRID_SIZE });
-        const d = Math.hypot(g.x - x, g.y - y);
-        if (!best || d > best.gridPx) best = { x, y, gridPx: d };
-      }
-      return Object.assign(best, { gridMagnet: getMagnetThreshold('grid') });
-    })`);
-    assert(slipAt.gridPx > slipAt.gridMagnet, 'a slip point clear of the grid snap: ' + JSON.stringify(slipAt));
+    const slipAt = await clearPoint(slip);
     await mouse('mouseMoved', start.x, start.y, 0); await sleep(60);
     await mouse('mousePressed', start.x, start.y, 1);
     await mouse('mouseMoved', origin.x - 100, origin.y - 60, 1);

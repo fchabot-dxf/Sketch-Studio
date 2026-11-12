@@ -237,9 +237,8 @@ export function createSketchState(engine, view) {
       const info = this._undoGroupInfo;
       if(!this._undoGroupActive || !info || !info.draw) return 'none';
       const start = this.history[info.startIndex];
-      const known = new Set(start.shapes.map(s => s.id));
       this._undoGroupDepth = 1;
-      if(this.shapes.some(s => !known.has(s.id))){ this.endUndoGroup(); return 'kept'; }
+      if(this.shapes.length > start.shapes.length){ this.endUndoGroup(); return 'kept'; } // a draw only ever ADDS shapes (counted, not matched by id: two shapes made in one millisecond share a Date.now() id)
       this._undoGroupInfo = null; this._undoGroupActive = false; this._undoGroupDepth = 0;
       this.history.splice(info.startIndex);
       this._restoreSnapshot(start);

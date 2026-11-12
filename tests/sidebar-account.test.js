@@ -58,6 +58,7 @@ function fakeStore() {
   s.subscribe = (f) => { s.subs.add(f); return () => s.subs.delete(f); };
   s.current = async () => null; s.listRecent = async () => []; s.listDesigns = async () => []; s.listProjects = async () => s.projects;
   s.cloud = {
+    isEnabled: async () => false,
     moveProjectToDrive: async (id) => { s.moves.push(id); if (s.failNext) throw new Error(s.failNext); },
     makeProjectLocal: async (id) => { s.locals.push(id); },
   };

@@ -10,7 +10,7 @@ export function createFakeDrive({ user = { displayName: 'Ada Lovelace', emailAdd
   const tick = () => { clock += 1000; return new Date(clock).toISOString(); };
   const newId = () => 'fakeid-' + (++seq);
   const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
-  const meta = (f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, parents: f.parents, appProperties: f.appProperties, modifiedTime: f.modifiedTime, version: String(f.version), trashed: !!f.trashed });
+  const meta = (f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, parents: f.parents, appProperties: f.appProperties, modifiedTime: f.modifiedTime, createdTime: f.createdTime, version: String(f.version), trashed: !!f.trashed });
   const touch = (f) => { f.version++; f.modifiedTime = tick(); };
 
   function matches(f, q) {
@@ -55,7 +55,7 @@ export function createFakeDrive({ user = { displayName: 'Ada Lovelace', emailAdd
       return json({ files: slice.map(meta), ...(start + pageSize < all.length ? { nextPageToken: String(start + pageSize) } : {}) });
     }
     if (path === '/drive/v3/files' && method === 'POST') {
-      const b = JSON.parse(init.body); const f = { id: b.id || newId(), name: b.name, mimeType: b.mimeType, parents: b.parents || ['root'], appProperties: b.appProperties || {}, version: 1, modifiedTime: tick(), content: '' };
+      const b = JSON.parse(init.body); const f = { id: b.id || newId(), name: b.name, mimeType: b.mimeType, parents: b.parents || ['root'], appProperties: b.appProperties || {}, version: 1, modifiedTime: tick(), createdTime: new Date(clock).toISOString(), content: '' };
       files.set(f.id, f); return json({ id: f.id });
     }
     let m;
@@ -77,7 +77,7 @@ export function createFakeDrive({ user = { displayName: 'Ada Lovelace', emailAdd
     }
     if (path === '/upload/drive/v3/files' && method === 'POST') {
       const { metadata, content } = parseMultipart(init.body, headers['Content-Type']);
-      const f = { id: metadata.id || newId(), name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents || ['root'], appProperties: metadata.appProperties || {}, version: 1, modifiedTime: tick(), content };
+      const f = { id: metadata.id || newId(), name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents || ['root'], appProperties: metadata.appProperties || {}, version: 1, modifiedTime: tick(), createdTime: new Date(clock).toISOString(), content };
       files.set(f.id, f); return json({ id: f.id });
     }
     if ((m = /^\/upload\/drive\/v3\/files\/([^/]+)$/.exec(path)) && method === 'PATCH') {

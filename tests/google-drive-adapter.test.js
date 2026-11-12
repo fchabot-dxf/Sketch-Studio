@@ -194,6 +194,7 @@ const mkRouter = () => {
   const got = await store.get(res.designIds[a.id]);
   assert.deepStrictEqual(got.document.hosts.penplotter, { pens: 3 }, 'the document and its sidecar moved intact');
   await store.save(doc(7, { shaper: { cut: 'inside' } }), { id: res.designIds[a.id], app: 'shaper' });
+  await store.flushDrive(res.designIds[a.id]); // TASK 506: a design on Drive is written THROTTLED in the background; flush = write it now
   const after = await store.get(res.designIds[a.id]);
   assert.deepStrictEqual(Object.keys(after.document.hosts).sort(), ['penplotter', 'shaper'], 'autosave to Drive keeps every sidecar');
   assert.strictEqual(parseProjectFile(drive.files.get(res.designIds[a.id].slice(DRIVE_PREFIX.length)).content).document.geometry.joints[0][1].x, 7, 'the Drive file holds the autosave');

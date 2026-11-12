@@ -20,9 +20,32 @@ import { serializeProjectFile, parseProjectFile, PROJECT_FILE_EXT } from '#ui/pr
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER = 'application/vnd.google-apps.folder';
-const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,version,trashed';
+const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,createdTime,version,trashed';
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
+
+/** The browser link to a Drive file (what the "Open in Drive" link points at). */
+export const driveFileUrl = (fileId) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+
+/** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
+export function driveErrorText(e) {
+  const m = (e && e.message) || String(e);
+  if (m === 'cloud-auth') return 'Google sign-in is needed again';
+  if (m === 'cloud-unavailable') return 'Google could not be reached';
+  if (e instanceof TypeError) return `Google Drive could not be reached (${m})`;
+  const http = /^Drive (\d+)$/.exec(m);
+  if (http) return `Google Drive answered HTTP ${http[1]}`;
+  return m;
+}
+
+// The steps of "Check Google Drive connection", in order, as DATA (the sidebar lists them; the adapter runs them).
+export const CHECK_STEPS = [
+  { id: 'token', label: 'Sign-in token is valid' },
+  { id: 'root', label: `"${GOOGLE.rootFolderName}" folder found or created` },
+  { id: 'write', label: 'Test file written' },
+  { id: 'read', label: 'Test file read back identical' },
+  { id: 'trash', label: 'Test file deleted (trashed)' },
+];
 
 const fileName = (name) => String(name) + PROJECT_FILE_EXT;
 const baseName = (file) => String(file).endsWith(PROJECT_FILE_EXT) ? String(file).slice(0, -PROJECT_FILE_EXT.length) : String(file);
@@ -37,9 +60,14 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
   async function call(url, opts, { allow404 = false } = {}) {
     const r = await account.authedFetch(url, opts);
     if (r.status === 404 && allow404) return null;
-    if (!r.ok) throw new Error('Drive ' + r.status);
+    if (!r.ok) { const e = new Error('Drive ' + r.status); e.status = r.status; throw e; }
     return r;
   }
+  const multipart = (metadata, content, contentType) => {
+    const boundary = 'sk' + Math.random().toString(16).slice(2);
+    const part = (type, text) => `Content-Type: ${type}\r\n\r\n${text}`;
+    return { type: `multipart/related; boundary=${boundary}`, body: `--${boundary}\r\n${part('application/json; charset=UTF-8', JSON.stringify(metadata))}\r\n--${boundary}\r\n${part(contentType, content)}\r\n--${boundary}--` };
+  };
   const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   async function listAll(q, fields) {
     const out = []; let pageToken = '';
@@ -53,19 +81,35 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
   const getMeta = async (id) => { const r = await call(`${API}/files/${id}?fields=${encodeURIComponent(META_FIELDS)}`, undefined, { allow404: true }); const m = r ? await r.json() : null; return m && !m.trashed ? m : null; };
 
   // ---- the app root folder ----
-  async function ensureRoot() {
+  const oldestFirst = (a, b) => (Date.parse(a.createdTime) || 0) - (Date.parse(b.createdTime) || 0) || String(a.id).localeCompare(String(b.id));
+  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null. */
+  async function findRoot() {
     if (rootId) return rootId;
     const cached = await meta.getMeta(ROOT_KEY);
     if (cached) { const m = await getMeta(cached); if (m) return (rootId = cached); }
-    const found = await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id');
-    let id = found[0] && found[0].id;
-    if (!id) id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
-    await meta.setMeta(ROOT_KEY, id);
-    return (rootId = id);
+    const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
+    if (!found.length) return null;
+    await meta.setMeta(ROOT_KEY, found[0].id);
+    return (rootId = found[0].id);
+  }
+  /** The root folder, CREATED when absent (only a write calls this). Two devices creating it at the same moment: the OLDEST folder is the
+   *  root; a device that lost trashes its own just-created one ONLY while it is still empty, never a folder anything was put into. */
+  async function ensureRoot() {
+    const existing = await findRoot();
+    if (existing) return existing;
+    const id = (await (await call(`${API}/files?fields=id`, jsonOpts('POST', { name: config.rootFolderName, mimeType: FOLDER }))).json()).id;
+    const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
+    let chosen = id;
+    if (found.length && found[0].id !== id && found.some((f) => f.id === id)) {
+      const used = (await listAll(`'${id}' in parents and trashed=false`, 'id')).length > 0;
+      if (!used) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); chosen = found[0].id; }
+    }
+    await meta.setMeta(ROOT_KEY, chosen);
+    return (rootId = chosen);
   }
 
   // ---- projects (folders) ----
-  const projectOf = (f) => ({ id: f.id, name: f.name, pinned: !!(f.appProperties && f.appProperties.skPinned === '1'), updatedAt: Number(f.appProperties && f.appProperties.skUpdatedAt) || Date.parse(f.modifiedTime) || 0 });
+  const projectOf = (f) => ({ id: f.id, name: f.name, createdAt: Date.parse(f.createdTime) || 0, pinned: !!(f.appProperties && f.appProperties.skPinned === '1'), updatedAt: Number(f.appProperties && f.appProperties.skUpdatedAt) || Date.parse(f.modifiedTime) || 0 });
   const projectProps = (p) => ({ skKind: 'project', skPinned: p.pinned ? '1' : '0', skUpdatedAt: String(p.updatedAt) });
   async function writeProject(p, existing) {
     if (existing) await call(`${API}/files/${p.id}?fields=id`, jsonOpts('PATCH', { name: p.name, appProperties: projectProps(p) }));
@@ -82,8 +126,9 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
     const text = await (await call(`${API}/files/${m.id}?alt=media`)).text();
     const parsed = parseProjectFile(text); // validates the envelope + document version (a damaged / newer file throws a readable error)
     const base = designMetaOf(m);
-    return { id: m.id, projectId: base.projectId, name: parsed.name || base.name, app: base.app || parsed.app, updatedAt: base.updatedAt, document: parsed.document };
+    return { id: m.id, projectId: base.projectId, name: parsed.name || base.name, app: base.app || parsed.app, updatedAt: base.updatedAt, version: m.version, document: parsed.document };
   }
+  /** Writes the design; resolves the file's Drive `version` AFTER the write (what the next write is compared with). */
   async function writeDesign(d, existingMeta) {
     const content = serializeProjectFile({ app: d.app, name: d.name, document: d.document });
     const props = designProps(d);
@@ -92,19 +137,19 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       await call(`${UPLOAD}/files/${d.id}?uploadType=media&fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
       const q = moved ? `?addParents=${encodeURIComponent(d.projectId)}&removeParents=${encodeURIComponent(existingMeta.parents[0])}&fields=id` : '?fields=id';
       await call(`${API}/files/${d.id}${q}`, jsonOpts('PATCH', { name: fileName(d.name), appProperties: props }));
-      return;
+      return (await getMeta(d.id)).version;
     }
-    const boundary = 'sk' + Math.random().toString(16).slice(2);
-    const metadata = JSON.stringify({ id: d.id, name: fileName(d.name), mimeType: 'application/json', parents: [d.projectId], appProperties: props });
-    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
-    await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+    const m = multipart({ id: d.id, name: fileName(d.name), mimeType: 'application/json', parents: [d.projectId], appProperties: props }, content, 'application/json');
+    await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body });
+    return (await getMeta(d.id)).version;
   }
 
   const adapter = {
     // projects
     async listProjects() {
-      const root = await ensureRoot();
-      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime')).map(projectOf);
+      const root = await findRoot(); // read-only: no root yet = no projects (nothing is created by looking)
+      if (!root) return [];
+      return (await listAll(`'${root}' in parents and mimeType='${FOLDER}' and trashed=false`, 'id,name,appProperties,modifiedTime,createdTime')).map(projectOf);
     },
     async getProject(id) { const m = await getMeta(id); return m ? projectOf(m) : null; },
     async putProject(p) { await writeProject(p, !!(await getMeta(p.id))); },
@@ -123,7 +168,7 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
       return (await listAll(`appProperties has { key='skKind' and value='design' } and trashed=false`, 'id,name,parents,appProperties,modifiedTime')).map(designMetaOf);
     },
     async getDesign(id) { const m = await getMeta(id); return m ? readDesign(m) : null; },
-    async putDesign(d) { await writeDesign(d, await getMeta(d.id)); },
+    async putDesign(d) { return writeDesign(d, await getMeta(d.id)); },
     async putDesignIfAbsent(d) { if (await getMeta(d.id)) return false; await writeDesign(d, null); return true; },
     async updateDesign(id, fn) {
       for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -133,14 +178,43 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
         if (next == null) { if (m1) await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true })); return null; }
         const m2 = await getMeta(id);
         if ((m1 && m2 && m1.version !== m2.version) || (!m1 && m2)) continue; // changed elsewhere while we computed: re-read and recompute
-        await writeDesign(next, m2);
-        return next;
+        const version = await writeDesign(next, m2);
+        return { ...next, version };
       }
       throw new Error('This design is being changed somewhere else. Try again in a moment.');
     },
     async deleteDesign(id) { await call(`${API}/files/${id}?fields=id`, jsonOpts('PATCH', { trashed: true }), { allow404: true }); },
 
+    /** "Check Google Drive connection": token, root folder, write, read back, trash, in order. onStep(steps) after every change; resolves the
+     *  final steps = [{ id, label, state: 'pending'|'running'|'ok'|'failed'|'skipped', status?: HTTP status, detail?: text }]. A failed step skips
+     *  the rest, except the test file is always trashed once it exists. Never throws: a failure is a step. */
+    async checkConnection(onStep = () => {}) {
+      const steps = CHECK_STEPS.map((s) => ({ ...s, state: 'pending' }));
+      const by = Object.fromEntries(steps.map((s) => [s.id, s]));
+      const show = () => onStep(steps.map((s) => ({ ...s })));
+      let fileId = null, failed = false;
+      const run = async (id, fn) => {
+        const step = by[id];
+        if (failed && !(id === 'trash' && fileId)) { step.state = 'skipped'; show(); return; }
+        step.state = 'running'; show();
+        try { await fn(); step.state = 'ok'; step.status = 200; }
+        catch (e) { failed = true; step.state = 'failed'; step.status = e.status; step.detail = driveErrorText(e); }
+        show();
+      };
+      const text = `Sketch Studio connection test ${new Date().toISOString()}`;
+      await run('token', async () => { await call(`${API}/about?fields=user`); });
+      await run('root', async () => { rootId = null; await ensureRoot(); });
+      await run('write', async () => {
+        const m = multipart({ name: 'sketch-studio-connection-test.txt', mimeType: 'text/plain', parents: [await ensureRoot()] }, text, 'text/plain');
+        fileId = (await (await call(`${UPLOAD}/files?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body })).json()).id;
+      });
+      await run('read', async () => { const back = await (await call(`${API}/files/${fileId}?alt=media`)).text(); if (back !== text) throw new Error('The file read back is different from what was written'); });
+      await run('trash', async () => { await call(`${API}/files/${fileId}?fields=id`, jsonOpts('PATCH', { trashed: true })); });
+      return steps;
+    },
+
     // meta stays local to this device
+    listMetaKeys: (prefix) => meta.listMetaKeys(prefix),
     getMeta: (k) => meta.getMeta(k),
     setMeta: (k, v) => meta.setMeta(k, v),
     setMetaIfAbsent: (k, v) => meta.setMetaIfAbsent(k, v),

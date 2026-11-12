@@ -29,17 +29,34 @@
 // the IndexedDB adapter): which design this browser has open is not a property of the shared library. For a remote update*, "atomic"
 // means optimistic concurrency (compare the remote version / etag, re-read and retry), and a design's `updatedAt` is the remote
 // modified time. A remote adapter is only ever INSTALLED by an explicit user choice (signing in does not swap the adapter).
+// TASK 506 (Drive first): the router adapter ALSO places NEW projects / designs on Drive while signed in with the "Save to Google
+// Drive by default" setting on, through three more OPTIONAL hooks the store uses when present:
+//     isRemote(id) -> boolean                          does this id live on the remote? (autosave then goes through the throttled writer below)
+//     newId(kind, projectId?, { local }?)              (extended) a design id follows its project; local:true forces this device
+//     defaultProject({ id, name, now, local }) -> id   the default project: the ONE remote one while preferred, else the fixed local one
+// A remote design autosave is THROTTLED (one write per 5 s), keeps a LOCAL copy (meta driveShadow:<id>) until Drive confirmed it,
+// and retries with backoff (#ui/cloud/drive-writer.js). If Drive was wanted for something NEW and failed, the store falls back to this
+// device and remembers why (status()), so nothing is ever lost and nothing is silent.
+// NO CLOCK DECIDES ANYTHING: every write to / recovery of a Drive design compares Drive's own `version` with the version the local edit was
+// based on (`bases`, persisted as meta driveBase:<id>). Equal = a plain overwrite. Different (another device / tab changed it) = the local
+// content is written as a SEPARATE Drive file "<name> (conflicted copy <date time>)", the Drive version stays the design, and the sidebar
+// says so; the local copy is dropped only after it was written (to the design or to the copy). Optional adapter hook listMetaKeys(prefix)
+// lets the store find unconfirmed local copies left by a closed tab and send them through the same rule at start.
 //
 // The 458 rule is kept per design: a save replaces only the host sidecars it owns and passes every other host through.
 
 import { DOCUMENT_VERSION } from '#core/document.js';
 import { serializeProjectFile, parseProjectFile, projectFileName, browserFileSeam } from '#ui/project-file.js';
 import { createRouterAdapter, CURRENT_DESIGN_KEY } from '#ui/cloud/router-adapter.js';
-import { createDriveAdapter } from '#ui/cloud/drive-adapter.js';
+import { createDriveAdapter, driveErrorText } from '#ui/cloud/drive-adapter.js';
+import { createDriveWriter } from '#ui/cloud/drive-writer.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js';
+import SettingsManager from '#core/settings-manager.js';
 
 const CURRENT = CURRENT_DESIGN_KEY;
 const LEGACY_MIGRATED = 'legacyMigrated';
+const BASE = 'driveBase:';     // meta key: the Drive `version` a design's local edits are based on (what a recovery compares with)
+const SHADOW = 'driveShadow:'; // meta key of the LOCAL copy of a design that lives on Drive and has a write not yet confirmed (the safety net)
 // Fixed ids: a second tab migrating at the same moment is a no-op (putIfAbsent), never a second copy.
 export const DEFAULT_PROJECT_ID = 'my-designs';
 export const DEFAULT_PROJECT_NAME = 'My Designs'; // neutral and user-facing; "Untitled" is kept for the migrated DESIGN itself
@@ -73,6 +90,7 @@ export function createMemoryAdapter() {
     async putDesignIfAbsent(d) { return ifAbsent(designs, d); },
     async updateDesign(id, fn) { return upd(designs, id, fn); },
     async deleteDesign(id) { designs.delete(id); },
+    async listMetaKeys(prefix) { return [...meta.keys()].filter((k) => String(k).startsWith(prefix)); },
     async getMeta(k) { return meta.has(k) ? meta.get(k) : null; },
     async setMeta(k, v) { if (v == null) meta.delete(k); else meta.set(k, v); },
     async setMetaIfAbsent(k, v) { if (meta.has(k) && meta.get(k) != null) return false; meta.set(k, v); return true; },
@@ -145,6 +163,7 @@ export function createIdbAdapter() {
       tx.objectStore('designs').delete(id); tx.objectStore('designIndex').delete(id); await txDone(tx);
     },
 
+    async listMetaKeys(prefix) { const db = await open(); return req2p(db.transaction('meta').objectStore('meta').getAllKeys(IDBKeyRange.bound(prefix, prefix + '￿'))); },
     async getMeta(k) { const db = await open(); const v = await req2p(db.transaction('meta').objectStore('meta').get(k)); return v === undefined ? null : v; },
     async setMeta(k, v) {
       const db = await open(); const tx = db.transaction('meta', 'readwrite');
@@ -180,44 +199,228 @@ export async function readLegacySlot() {
  * createProjectStore({ adapter, legacySource, idFn, now, channel }) -> store. Defaults: IndexedDB adapter, the real legacy
  * slot, random ids, Date.now, a BroadcastChannel for cross-tab change events (all injectable for tests).
  */
-export function createProjectStore({ adapter = createIdbAdapter(), legacySource = readLegacySlot, idFn, now = () => Date.now(), channel } = {}) {
-  const newId = idFn || (adapter.newId ? (kind) => adapter.newId(kind) : ((prefix = 'd') => prefix + '_' + now().toString(36) + Math.random().toString(36).slice(2, 8)));
+export function createProjectStore({ adapter = createIdbAdapter(), legacySource = readLegacySlot, idFn, now = () => Date.now(), channel, setTimer, clearTimer, driveWrites = {} } = {}) {
+  const newId = idFn || (adapter.newId ? (kind, projectId, opts) => adapter.newId(kind, projectId, opts) : ((prefix = 'd') => prefix + '_' + now().toString(36) + Math.random().toString(36).slice(2, 8)));
+  const isRemote = (id) => !!(adapter.isRemote && adapter.isRemote(id));
   const listeners = new Set();
   const bc = channel !== undefined ? channel : (typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('sketch-studio-projects') : null);
   if (bc) bc.onmessage = () => { for (const fn of [...listeners]) { try { fn(); } catch (_) {} } };
   if (adapter.onChange) adapter.onChange(() => { for (const fn of [...listeners]) { try { fn(); } catch (_) {} } }); // a REMOTE change (optional hook)
+  const notifyLocal = () => { for (const fn of [...listeners]) { try { fn(); } catch (_) {} } };
   const changed = () => {
-    for (const fn of [...listeners]) { try { fn(); } catch (_) {} }
+    notifyLocal();
     try { if (bc) bc.postMessage('changed'); } catch (_) {}
   };
+
+  // ---- Drive-first bookkeeping (TASK 506) ----
+  const headers = new Map(); // remote design id -> { projectId, name, app, updatedAt }: the sidebar name / status never re-download a file
+  const rememberHeader = (d) => { if (d && isRemote(d.id)) headers.set(d.id, { projectId: d.projectId, name: d.name, app: d.app, updatedAt: d.updatedAt }); };
+  const bases = new Map();   // remote design id -> the Drive version the local edits are based on
+  const setBase = async (id, version) => { if (version == null) bases.delete(id); else bases.set(id, version); await adapter.setMeta(BASE + id, version == null ? null : version); };
+  /** A design record read from / written to Drive: remember its header and the Drive version it now has. */
+  const adoptRemote = async (d, version = d && d.version) => { if (d && isRemote(d.id)) { rememberHeader(d); await setBase(d.id, version); } };
+  const notices = new Map(); // design id ('' = none open) -> { text }: a one-off explanation the sidebar shows (a conflicted copy, a re-created design)
+  const moved = new Map();   // a remote design id that was re-created under a new id -> the new id (a buffer still bound to the old one follows)
+  const adoptTried = new Set();
+  const conflictListeners = new Set();
+  const copies = new Map();  // remote design id -> { foreign, copyId, name }: the conflicted copy kept for that Drive version (one per version, updated, never duplicated)
+  const locks = new Map();   // remote design id -> tail of the chain of Drive reads / writes of that design (they never overlap)
+  const loads = new Map();   // remote design id -> the loadDesign run in flight (concurrent callers share it)
+  let orphansDone = false;
+  /** Run fn after every earlier Drive read / write of design `id` finished (a read never sees our own write half done). */
+  function withLock(id, fn) {
+    const run = (locks.get(id) || Promise.resolve()).then(fn);
+    const tail = run.then(() => {}, () => {}); // the chain only orders; the caller gets fn's own result / error through `run`
+    locks.set(id, tail);
+    tail.then(() => { if (locks.get(id) === tail) locks.delete(id); });
+    return run;
+  }
+  /** Everything this device keeps about a design that is gone on purpose (deleted, or its project moved / deleted): it can never come back. */
+  async function forgetRemote(id) {
+    writer.cancel(id);
+    await adapter.setMeta(SHADOW + id, null); await setBase(id, null);
+    headers.delete(id); adoptTried.delete(id); copies.delete(id);
+  }
+  let fallback = null;       // { reason }: Drive was wanted for something NEW and failed, so it went to this device instead
+  const noteFallback = (e) => { fallback = { reason: driveErrorText(e) }; notifyLocal(); };
+  if (adapter.cloud && adapter.cloud.onSignInChange) adapter.cloud.onSignInChange(() => { if (adapter.cloud.signedIn()) writer.resume(); }); // held writes go on at once
+  const writer = createDriveWriter({
+    now, ...(setTimer ? { setTimer } : {}), ...(clearTimer ? { clearTimer } : {}), describeError: driveErrorText, ...driveWrites,
+    write: (id, p, isCancelled) => withLock(id, () => writeRemote(id, p, isCancelled)),
+    canWrite: () => !(adapter.cloud && adapter.cloud.signedIn) || adapter.cloud.signedIn(), // signed out: no attempts, no retry timers
+    keepLocal: (id, p) => adapter.setMeta(SHADOW + id, { ...(headers.get(id) || {}), id, app: p.app, updatedAt: p.updatedAt, document: p.document }),
+    dropLocal: (id) => adapter.setMeta(SHADOW + id, null),
+    onStatus: () => notifyLocal(),
+    onWritten: () => { fallback = null; changed(); },
+  });
 
   const cleanName = (name, what = 'design') => { const n = String(name == null ? '' : name).trim(); if (!n) throw new Error(`A ${what} needs a name.`); return n; };
   const mergeHosts = (stored, incoming) => ({ ...incoming, hosts: { ...((stored && stored.hosts) || {}), ...((incoming && incoming.hosts) || {}) } });
   const gone = (what) => new Error(`That ${what} no longer exists.`);
 
-  /** Make sure the default project exists and return its id. */
-  async function defaultProjectId() {
+  /** Make sure the default project exists and return its id (`local: true` = on this device whatever the adapter prefers). */
+  async function defaultProjectId({ local = false } = {}) {
+    if (adapter.defaultProject) return adapter.defaultProject({ id: DEFAULT_PROJECT_ID, name: DEFAULT_PROJECT_NAME, now, local });
     await adapter.putProjectIfAbsent({ id: DEFAULT_PROJECT_ID, name: DEFAULT_PROJECT_NAME, pinned: false, updatedAt: now() });
     return DEFAULT_PROJECT_ID;
   }
+  /** A design record, the way the app should open it. A design on Drive with a local copy not yet confirmed there (its write failed, or the
+   *  tab closed first) opens from that copy and queues the write again: nothing typed is lost. A design that cannot be read at all
+   *  (signed out, offline) opens from its local copy when there is one, else the read error is thrown. */
+  function loadDesign(id) {
+    if (!isRemote(id)) return adapter.getDesign(id);
+    if (loads.has(id)) return loads.get(id).then(clone); // concurrent callers share ONE run (one copy / one re-creation at most)
+    const run = withLock(id, () => loadRemote(id));
+    loads.set(id, run);
+    const done = () => { if (loads.get(id) === run) loads.delete(id); };
+    run.then(done, done);
+    return run;
+  }
+  async function loadRemote(id) {
+    let d = null, err = null;
+    try { d = await adapter.getDesign(id); } catch (e) { err = e; }
+    const shadow = await adapter.getMeta(SHADOW + id); // read AFTER the Drive read: an autosave that landed meanwhile has already replaced it
+    const mine = writer.unconfirmed(id) || (shadow && { app: shadow.app, document: shadow.document, updatedAt: shadow.updatedAt });
+    if (writer.hasPending(id) && mine) { // the writer already owns this design (a queued / in-flight / just-confirmed write): it applies the version rule itself
+      const h = headers.get(id) || {};
+      const sd = { id, projectId: (d && d.projectId) || h.projectId, name: (d && d.name) || h.name || 'Untitled', app: mine.app, updatedAt: mine.updatedAt, document: mine.document };
+      rememberHeader(sd);
+      return sd; // the NEWEST local content, not the (possibly older) kept copy
+    }
+    const content = shadow && { app: shadow.app, document: shadow.document, updatedAt: shadow.updatedAt };
+    const base = await adapter.getMeta(BASE + id);
+    if (err) { // cannot read Drive (offline, signed out, 5xx): open the local copy if there is one; the version is checked when it is written
+      if (!shadow) throw err;
+      const sd = { id, projectId: shadow.projectId, name: shadow.name || 'Untitled', app: shadow.app, updatedAt: shadow.updatedAt, document: shadow.document };
+      rememberHeader(sd); if (base != null) bases.set(id, base); else bases.delete(id);
+      await writer.queue(id, content);
+      return sd;
+    }
+    if (!d) { // gone from Drive (trashed / deleted): permanent. A local copy is saved again as a NEW file; without one there is nothing to open
+      if (!shadow) return null;
+      const nd = await recreate(id, content, shadow);
+      return nd;
+    }
+    if (!shadow) { await adoptRemote(d); writer.seed(id, d.updatedAt); return d; }
+    if (base != null && base === d.version) { // Drive still has the version the unsaved edit was based on: the edit carries on from the local copy
+      await adoptRemote(d);
+      await writer.queue(id, content);
+      return { ...d, app: shadow.app, updatedAt: shadow.updatedAt, document: shadow.document };
+    }
+    await keepConflictedCopy(d, content);  // Drive changed since (or the base is unknown): keep the local edit as a separate file, open Drive's version
+    await adapter.setMeta(SHADOW + id, null);
+    writer.cancel(id);
+    await adoptRemote(d); writer.seed(id, d.updatedAt);
+    return d;
+  }
+  const stamp = () => {
+    const t = new Date(now()), p = (n) => String(n).padStart(2, '0');
+    return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}-${p(t.getMinutes())}`;
+  };
+  /** The local edit of a design Drive has since changed: written as a SEPARATE file next to it, never over it, never dropped. */
+  async function keepConflictedCopy(rec, content) {
+    const prior = copies.get(rec.id);
+    const again = prior && prior.foreign === rec.version; // the SAME Drive version again (a newer local edit): update that copy, never a second one
+    const name = again ? prior.name : `${rec.name} (conflicted copy ${stamp()})`;
+    const copy = { id: again ? prior.copyId : await newId('d', rec.projectId), projectId: rec.projectId, name, app: content.app || rec.app, updatedAt: content.updatedAt, document: mergeHosts(rec.document, content.document) };
+    await adoptRemote(copy, await adapter.putDesign(copy));
+    copies.set(rec.id, { foreign: rec.version, copyId: copy.id, name });
+    notices.set(rec.id, { text: `Another device changed this design. Your unsaved changes were kept as "${name}".` });
+    changed();
+    return copy;
+  }
+  /** A design that no longer exists on Drive, with unsaved content: saved again as a NEW file in the same project (or, when the project is
+   *  gone too, a design on this device); the current pointer follows. `h` = { projectId, name, app }. */
+  async function recreate(id, content, h) {
+    let local = false, pid = h.projectId;
+    if (!pid || !isRemote(pid) || !(await adapter.getProject(pid))) { local = true; pid = await resolveProjectId(undefined, { local: true }); }
+    const nd = { id: await newId('d', pid, { local }), projectId: pid, name: h.name || 'Untitled', app: content.app || h.app || null, updatedAt: content.updatedAt, document: content.document };
+    const version = await adapter.putDesign(nd);
+    await touchProject(pid, content.updatedAt);
+    await adoptRemote(nd, version); if (isRemote(nd.id)) writer.seed(nd.id, nd.updatedAt);
+    moved.set(id, nd.id);
+    if ((await adapter.getMeta(CURRENT)) === id) await adapter.setMeta(CURRENT, nd.id);
+    await adapter.setMeta(SHADOW + id, null); await setBase(id, null); headers.delete(id);
+    notices.set(nd.id, { text: `"${nd.name}" was removed from Google Drive. Your work was saved again as a new ${local ? 'design on this device' : 'file'}.` });
+    changed();
+    return nd;
+  }
+  /** Unconfirmed local copies a closed tab left behind (a design that was never opened again): through the same version rule, once per start. */
+  async function recoverOrphans() {
+    if (orphansDone || !adapter.listMetaKeys || !(adapter.cloud && adapter.cloud.signedIn())) return;
+    orphansDone = true;
+    for (const key of await adapter.listMetaKeys(SHADOW)) {
+      const id = key.slice(SHADOW.length);
+      if (!isRemote(id) || writer.hasPending(id)) continue;
+      const s = await adapter.getMeta(key);
+      if (!s) continue;
+      headers.set(id, { projectId: s.projectId, name: s.name, app: s.app, updatedAt: s.updatedAt });
+      const base = await adapter.getMeta(BASE + id);
+      if (base != null) bases.set(id, base); else bases.delete(id);
+      await writer.queue(id, { app: s.app, document: s.document, updatedAt: s.updatedAt });
+    }
+  }
+  /** A design header { id, projectId, name, app, updatedAt }: the remembered one for a design on Drive (no download), else a read. */
+  async function headerOf(id) {
+    if (isRemote(id) && headers.has(id)) return { id, ...headers.get(id) };
+    const d = await loadDesign(id);
+    return d ? designMeta(d) : null;
+  }
   /** A project that exists: the asked one, else the current design's, else the default (created on demand). */
-  async function resolveProjectId(projectId) {
-    if (projectId && await adapter.getProject(projectId)) return projectId;
-    const curId = await adapter.getMeta(CURRENT);
-    const cur = curId ? await adapter.getDesign(curId) : null;
-    if (cur && await adapter.getProject(cur.projectId)) return cur.projectId;
-    return defaultProjectId();
+  async function resolveProjectId(projectId, { local = false } = {}) {
+    if (!local) {
+      if (projectId && await adapter.getProject(projectId)) return projectId;
+      const curId = await adapter.getMeta(CURRENT);
+      const cur = curId ? await headerOf(curId) : null;
+      if (cur && await adapter.getProject(cur.projectId)) return cur.projectId;
+    }
+    return defaultProjectId({ local });
   }
   const touchProject = (id, at) => adapter.updateProject(id, (p) => (p ? { ...p, updatedAt: at } : null));
 
   async function createDesign(name, { app = null, document = emptyDocument(), projectId, makeCurrent = true, id } = {}) {
-    const pid = await resolveProjectId(projectId);
-    const design = { id: id || await newId('d'), projectId: pid, name: cleanName(name), app, updatedAt: now(), document: clone(document) };
-    await adapter.putDesign(design);
-    await touchProject(pid, design.updatedAt);
-    if (makeCurrent) await adapter.setMeta(CURRENT, design.id);
+    const n = cleanName(name);
+    const build = async (local) => {
+      const pid = await resolveProjectId(projectId, { local });
+      const d = { id: id || await newId('d', pid, { local }), projectId: pid, name: n, app, updatedAt: now(), document: clone(document) };
+      d.version = await adapter.putDesign(d); // a remote adapter resolves the new file's version
+      await touchProject(pid, d.updatedAt);
+      return d;
+    };
+    let design;
+    try { design = await build(false); }
+    catch (e) { // Drive was wanted (the default project / the current project is there) and failed: keep the work on this device and say why
+      if (!adapter.isRemote || (projectId && isRemote(projectId))) throw e; // an explicit Drive project that fails is for the user to see
+      noteFallback(e); design = await build(true);
+    }
+    if (isRemote(design.id)) { fallback = null; await adoptRemote(design); writer.seed(design.id, design.updatedAt); }
+    delete design.version;
+    if (makeCurrent) { notices.clear(); await adapter.setMeta(CURRENT, design.id); }
     changed();
     return clone(design);
+  }
+  /** The write of a design on Drive (what the writer runs): merge into the Drive copy (458: other hosts sidecars pass through). */
+  async function writeRemote(id, p, isCancelled = () => false) {
+    const base = bases.get(id);
+    let saved;
+    try {
+      saved = await adapter.updateDesign(id, (rec) => {
+        if (!rec) throw Object.assign(new Error('missing'), { missing: true });
+        if (rec.version !== base) throw Object.assign(new Error('changed'), { changed: rec }); // not the version this edit was based on
+        return { ...rec, app: p.app || rec.app, updatedAt: p.updatedAt, document: mergeHosts(rec.document, p.document) };
+      });
+    } catch (e) {
+      if (e.changed) { await keepConflictedCopy(e.changed, p); for (const fn of [...conflictListeners]) fn(id); return; } // the copy IS the write: the local copy may go
+      if (e.missing) {
+        if (isCancelled()) return; // deleted on purpose while this write was in flight: it must not come back as a new file
+        const h = headers.get(id);
+        if (!h) throw Object.assign(gone('design'), { permanent: true });
+        await recreate(id, p, h); return;
+      }
+      throw e;
+    }
+    await adoptRemote(saved);
+    await touchProject(saved.projectId, p.updatedAt);
   }
 
   /** Move the pre-474 autosave slot into the design "Untitled" of the default project, once. Nothing is deleted: the slot stays as a backup. */
@@ -227,7 +430,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     if (existing.length === 0) {
       const doc = await legacySource();
       if (doc && typeof doc === 'object') {
-        const pid = await defaultProjectId();
+        const pid = await defaultProjectId({ local: true }); // the old slot is on this device: it stays here (signing in moves nothing)
         const added = await adapter.putDesignIfAbsent({ id: LEGACY_DESIGN_ID, projectId: pid, name: 'Untitled', app: app || null, updatedAt: now(), document: clone(doc) });
         if (added) await adapter.setMetaIfAbsent(CURRENT, LEGACY_DESIGN_ID);
       }
@@ -241,10 +444,23 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     async loadCurrent({ app } = {}) {
       await migrateLegacy(app);
       const id = await adapter.getMeta(CURRENT);
-      return id ? await adapter.getDesign(id) : null;
+      let d = null, unreadable = false;
+      if (id) {
+        try { d = await loadDesign(id); }
+        catch (e) { // on Drive and unreadable right now (signed out, offline, 5xx) with no local copy: TRANSIENT, so the pointer stays and the status says why
+          if (!isRemote(id)) throw e;
+          noteFallback(e); unreadable = true;
+        }
+        if (!d && isRemote(id) && !unreadable) { // read fine and it is not there (trashed / deleted) with no local copy: PERMANENT, the pointer is stale
+          await adapter.setMeta(CURRENT, null);
+          notices.set('', { text: 'The design you had open was removed from Google Drive.' }); notifyLocal();
+        }
+      }
+      await recoverOrphans();
+      return d;
     },
-    async current() { const id = await adapter.getMeta(CURRENT); const d = id ? await adapter.getDesign(id) : null; return d ? designMeta(d) : null; },
-    async get(id) { return adapter.getDesign(id); },
+    async current() { const id = await adapter.getMeta(CURRENT); return id ? headerOf(id) : null; },
+    async get(id) { return loadDesign(id); },
     /** Designs across ALL projects, newest first, no bodies, each with its projectName. listRecent('shaper') or listRecent({ app, limit }). */
     async listRecent(opts) {
       const { app, limit } = typeof opts === 'string' ? { app: opts } : (opts || {});
@@ -263,9 +479,9 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     },
     /** Make design `id` current and return its full record (the app loads the document from it). */
     async open(id) {
-      const d = await adapter.getDesign(id);
+      const d = await loadDesign(id);
       if (!d) throw gone('design');
-      await adapter.setMeta(CURRENT, id);
+      notices.delete(''); await adapter.setMeta(CURRENT, d.id); // d.id differs when a design gone from Drive was saved again under a new id
       changed();
       return d;
     },
@@ -275,24 +491,26 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
      *  project (or `projectId`), which becomes current. */
     async saveAs(name, { app = null, fromId, projectId } = {}) {
       const id = fromId || (await adapter.getMeta(CURRENT));
-      const src = id ? await adapter.getDesign(id) : null;
+      const src = id ? await loadDesign(id) : null;
       return createDesign(name, { app: app || (src && src.app) || null, document: src ? src.document : emptyDocument(), projectId: projectId || (src && src.projectId) });
     },
     async rename(id, name) {
       const n = cleanName(name);
       const d = await adapter.updateDesign(id, (rec) => (rec ? { ...rec, name: n, updatedAt: now() } : null));
       if (!d) throw gone('design');
+      await adoptRemote(d);
       await touchProject(d.projectId, d.updatedAt);
       changed(); return designMeta(d);
     },
     /** Same project, new id, not current. */
     async duplicate(id, name) {
-      const d = await adapter.getDesign(id);
+      const d = await loadDesign(id);
       if (!d) throw gone('design');
       return createDesign(name || d.name + ' copy', { app: d.app, document: d.document, projectId: d.projectId, makeCurrent: false });
     },
     /** Delete a design. Deleting the current one clears the pointer (the app then starts empty). */
     async remove(id) {
+      if (isRemote(id)) await forgetRemote(id); // a pending or in-flight write must not bring it back
       await adapter.deleteDesign(id);
       if ((await adapter.getMeta(CURRENT)) === id) await adapter.setMeta(CURRENT, null);
       changed();
@@ -302,6 +520,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       const at = now();
       const d = await adapter.updateDesign(id, (rec) => (rec ? { ...rec, projectId, updatedAt: at } : null));
       if (!d) throw gone('design');
+      await adoptRemote(d);
       await touchProject(projectId, at);
       changed(); return designMeta(d);
     },
@@ -309,6 +528,23 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
      *  project). Other hosts' sidecars already stored in that design pass through untouched (458). Returns { id }. */
     async save(document, { app = null, id } = {}) {
       let target = id || (await adapter.getMeta(CURRENT));
+      while (target && moved.has(target)) target = moved.get(target); // re-created under a new id: a buffer still bound to the old id follows
+      if (target && isRemote(target)) { // a design on Drive: keep it here first, write it to Drive THROTTLED (drive-writer.js), report through status()
+        if (!bases.has(target) && !adoptTried.has(target)) { // a design moved to Drive by the explicit action: learn its version once; unreadable = the write will keep a copy
+          adoptTried.add(target);
+          let found = true;
+          try { found = !!(await loadDesign(target)); } catch (e) { noteFallback(e); }
+          if (!found) { // gone from Drive and nothing local: the work goes into a new design (the old id redirects), never back into the deleted one
+            const fresh = await createDesign('Untitled', { app, document });
+            moved.set(target, fresh.id);
+            return { id: fresh.id };
+          }
+        }
+        const at = now();
+        await writer.queue(target, { app, document, updatedAt: at });
+        const h = headers.get(target); if (h) headers.set(target, { ...h, app: app || h.app, updatedAt: at });
+        return { id: target };
+      }
       if (!target) {
         const fresh = await createDesign('Untitled', { app, document, makeCurrent: false });
         if (await adapter.setMetaIfAbsent(CURRENT, fresh.id)) { changed(); return { id: fresh.id }; }
@@ -327,7 +563,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     /** Write a design to a file through `seam` (default: the browser picker / download). Resolves { name } or null (cancelled). */
     async exportFile(id, seam = browserFileSeam) {
       const target = id || (await adapter.getMeta(CURRENT));
-      const d = target ? await adapter.getDesign(target) : null;
+      const d = target ? await loadDesign(target) : null;
       if (!d) throw new Error('There is no design to save.');
       return seam.save(serializeProjectFile({ app: d.app, name: d.name, document: d.document }), projectFileName(d.name));
     },
@@ -348,8 +584,12 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       return rows;
     },
     async createProject(name) {
-      const p = { id: await newId('p'), name: cleanName(name, 'project'), pinned: false, updatedAt: now() };
-      await adapter.putProject(p); changed(); return clone(p);
+      const n = cleanName(name, 'project');
+      const make = async (local) => { const p = { id: await newId('p', undefined, { local }), name: n, pinned: false, updatedAt: now() }; await adapter.putProject(p); return p; };
+      let p;
+      try { p = await make(false); } catch (e) { if (!adapter.isRemote) throw e; noteFallback(e); p = await make(true); } // Drive wanted and failed: keep it here, say why
+      if (isRemote(p.id)) fallback = null;
+      changed(); return clone(p);
     },
     async renameProject(id, name) {
       const n = cleanName(name, 'project');
@@ -367,8 +607,28 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     async removeProject(id) {
       const inside = (await adapter.listDesigns()).filter((d) => d.projectId === id).length;
       if (inside > 0) throw new Error(`This project still holds ${inside} design${inside === 1 ? '' : 's'}. Move or delete them first.`);
-      await adapter.deleteProject(id); changed();
+      await adapter.deleteProject(id);
+      if (isRemote(id)) { // deleted on purpose: whatever this device still keeps for designs of that project is dropped, so nothing recreates them
+        const ids = new Set([...headers].filter(([, h]) => h.projectId === id).map(([did]) => did));
+        for (const key of await adapter.listMetaKeys(SHADOW)) { const s = await adapter.getMeta(key); if (s && s.projectId === id) ids.add(key.slice(SHADOW.length)); }
+        for (const did of ids) await forgetRemote(did);
+      }
+      changed();
     },
+
+    /** Where design `id` lives and how its last save went: { where: 'drive' | 'device', state: 'saved' | 'saving' | 'failed', at, reason }.
+     *  The ONE source of the sidebar status line. `reason` is also set for a design on this device that Drive was wanted for and failed. */
+    status(id) {
+      const notice = (notices.get(id || '') || notices.get('') || {}).text || null; // a one-off explanation (conflicted copy, re-created design)
+      if (id && isRemote(id)) return { where: 'drive', ...writer.status(id), notice };
+      const wanted = !!(adapter.cloud && adapter.cloud.driveWanted && adapter.cloud.driveWanted());
+      return { where: 'device', state: 'saved', at: null, reason: wanted && fallback ? fallback.reason : null, notice };
+    },
+    /** fn(id) runs when the Drive copy of design `id` was changed elsewhere and the local edit was kept as a conflicted copy: the buffer
+     *  bound to `id` then reloads the Drive version (it must not write its older state over it). Returns an unsubscribe function. */
+    subscribeConflict(fn) { conflictListeners.add(fn); return () => conflictListeners.delete(fn); },
+    /** Write the pending Drive writes NOW (one design, or all): before an action that reads Drive, and when the tab goes hidden / closes. */
+    async flushDrive(id) { await writer.flush(id); },
 
     /** fn() runs after any change to the projects, designs or the current pointer, in this tab and (BroadcastChannel) in other tabs. */
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
@@ -383,7 +643,23 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       lastError: () => c.lastError(),
       refresh: async () => { const moved = await c.refresh(); if (moved) changed(); return moved; },
       moveProjectToDrive: async (id) => { const r = await c.moveProjectToDrive(id); changed(); return r; },
-      makeProjectLocal: async (id) => { const r = await c.makeProjectLocal(id); changed(); return r; },
+      driveWanted: () => c.driveWanted(),
+      checkConnection: (onStep) => c.checkConnection(onStep),
+      /** "Save to Google Drive": the design `id` into the Drive project "My Designs" without moving its project. Returns { fileId }. */
+      saveToDrive: async (id) => {
+        await writer.flush(id);
+        const d = await loadDesign(id);
+        if (!d) throw gone('design');
+        if (isRemote(id) && writer.status(id).state === 'failed') throw new Error(writer.status(id).reason);
+        const r = await c.saveDesignToDrive(d, { name: DEFAULT_PROJECT_NAME, now });
+        changed(); return r;
+      },
+      makeProjectLocal: async (id) => {
+        await writer.flush(); // unconfirmed edits reach Drive BEFORE the project is copied down
+        const r = await c.makeProjectLocal(id);
+        for (const old of Object.keys(r.designIds)) await forgetRemote(old); // the Drive designs are gone on purpose
+        changed(); return r;
+      },
     };
   }
   return store;
@@ -395,6 +671,9 @@ export function getProjectStore() {
   if (shared) return shared;
   const local = createIdbAdapter();
   let remote = null; // built on first use: a page that never touches Drive never constructs it
-  const router = createRouterAdapter({ local, getRemote: () => remote || (remote = createDriveAdapter({ account: getGoogleAccount(), meta: local })) });
+  const account = getGoogleAccount();
+  // NEW things go to Drive only while signed in AND the "Save to Google Drive by default" setting is on (declared in SettingsManager).
+  const preferDrive = () => account.state().signedIn && SettingsManager.get('DRIVE_DEFAULT') !== false;
+  const router = createRouterAdapter({ local, preferDrive, signedIn: () => account.state().signedIn, subscribeSignIn: (fn) => account.subscribe(fn), getRemote: () => remote || (remote = createDriveAdapter({ account, meta: local })) });
   return (shared = createProjectStore({ adapter: router }));
 }

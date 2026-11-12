@@ -171,7 +171,7 @@ async function closeBrowser(proc, dbgPort) {
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],
       ['Design tab returns', c.designBack === true, c.designBack],
       ['Style opens the shared panel', c.styleOpens === true, c.styleOpens],
-      ['Style panel has 25 controls', c.styleControls === 25, c.styleControls],
+      ['Style panel has 27 controls', c.styleControls === 27, c.styleControls],
       ['Style panel closes (Esc)', c.styleCloses === true, c.styleCloses],
     ];
     let failed = 0;

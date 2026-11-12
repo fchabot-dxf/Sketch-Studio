@@ -77,6 +77,27 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-12, turn 955)
+- MERGED since turn 871 (main 94ee50e, gate 297/297): 537 axis snap, 538 body drag (Opus), 542 doc-restore input gate (data-doc-ready),
+  535-1b/535-2/535-4 parameters (storage v2, batch edit seam, read-only Params window), 544 Copy Report (trimmed one-line JSON),
+  545 every drag one undo step, 546 snap-release slip fix (root cause of polygon-tool-live; Opus), 547 Projects modal with thumbnails,
+  548 drag lag (sub-moves instead of clamp; Opus), 543 angle dim arc + creation sector (supplement flag), 549 draw undo (one element
+  one step, chain per segment like Fusion, LINE_CHAIN_UNDO switch), 550 arcs from joints (no stale largeArc; FILLET SVG/DXF EXPORTS
+  WERE WRONG before), arc zero-sweep refused, arc hit only on sweep, angle edits continuous to 179, 0/negative refused (Opus).
+- FUSION MEASURED with real mouse+keys (551, branch agents/task-551-fusion-undo-angle, NOT merged: its win-mouse.py gained a
+  `dismiss` command that clicked Cancel on an over-constrained dialog against the brief; owner OK needed before merging that).
+  Undo: per segment for line chains, Ctrl+Z mid-tool ends the tool, rect/circle/drag one step, Ctrl+Y redo (Ctrl+Shift+Z nothing).
+  Angle box: 0 < v <= 360 accepted (opens past 180), 0 and negatives refused. Arcs stored CCW, no large-arc flag, keep their side.
+- OPEN FOR THE OWNER: (1) midpoint inference threshold in world units (548 finding F1; likely the remaining drag feel in SketchStudio);
+  (2) may the recorder click Cancel on Fusion dialogs; (3) angles past 180 like Fusion (signed-sweep representation replacing
+  supplement). Also older: Saving... gap, SketchStudio header buttons jump, dead X/Y status text, inch grid numbers small, fractions,
+  parameter decisions O4/O5/O16, Open recent -> Projects modal Recent pane, store thumbnails.
+- NEXT QUEUE: parameter slices 3 (canvas formulas + autocomplete R3) and 5 (window editing, rename dN) and 6 (deletion keeps dN
+  param); 539 axes as reference lines; 541 solver speed (100 dims 4 s; drag 33 ms at 200 constraints); 526 refuse like Fusion;
+  K548-1 chain fold convergence; inference F2/F4; EA-4/5/6/8/9; fillet orphan j_fillet joint; re-record the 7 conflicting cells.
+- LESSONS: a test must never read .evidence/ (untracked): fixtures go under tests/fixtures; pre-check merges against main's audits;
+  usage limit 5h can stop Sonnet seats mid-run (resume with SendMessage after reset); never push to main while merge.sh runs.
+
 ### Update (2026-11-12, turn 871)
 - MERGED since turn 820 (main e12e8fc, gate 259/259): 528 Fusion dimension-edit oracle (ad0e122), 522 test hygiene + Pen
   Plotter/Shaper tab jump (eaedaa3), 531 extreme-arcs audit EA-1..EA-10 (04fc8fa), 532 grid numbers / unit grid (3a6ea30),

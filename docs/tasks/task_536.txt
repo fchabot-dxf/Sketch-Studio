@@ -1,0 +1,41 @@
+TASK 536 (Sketch-Studio): grid axis numbers at a finer step when there is room. Owner 2026-11-12, with a screenshot (mm file,
+heavy every 10, light every 2, GRID_MODE points, numbers -20, -10, 10, 20, 30 about 265 px apart): "on this zoom level I'd like
+to see 5 too: 5 10 15 20".
+Worktree D:\APPS\Sketch-Studio.worktrees\task-536-grid-label-step, branch agents/task-536-grid-label-step (from origin/main).
+Read first: packages/ui/canvas-grid.js (gridSpacing, gridLevel, gridLabelsMarkup, MIN_LABEL_GAP_PX = 40, the "skip every 2nd,
+5th, 10th heavy line" rule), tests/canvas-grid-units.test.js, tests/canvas-grid-labels-live.test.js, task 532/534 in WORK-LOG.
+
+TODAY the numbers sit only on displayed HEAVY lines (and skip some when dense). So when zoomed in they are far apart.
+WANTED: the label step is chosen for READABILITY, not tied to the heavy lines:
+ 1. ONE pure function labelStep(displayed grid level, px per unit, unit data) -> the step between numbers in the file's unit:
+    the SMALLEST step from a declared "nice" sequence whose on-screen spacing is >= a declared target gap (a new constant, e.g.
+    TARGET_LABEL_GAP_PX around 100: with the owner's screenshot (10 units = 265 px) the result must be 5, not 2 and not 10;
+    pick the constant so that holds with margin, and state the px thresholds at which the step changes).
+    The nice sequence is DATA per unit system, next to GRID_SPACING_BY_UNIT: decimal (mm, cm, inches with 10 divisions):
+    1, 2, 5 x 10^n; binary inches (divisions 2/4/8/16): ..., 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8, ... (never a step finer than the
+    displayed light spacing in binary mode; in decimal mode 5 between heavy 10s is wanted even when the light lines are every 2,
+    as in the screenshot, so a label may fall BETWEEN light lines: that is accepted by the owner's request).
+    The step must always divide the labels onto values that include the heavy lines' values when it is coarser than them or
+    equal (no "7, 14, 21"): quote the rule you use.
+ 2. gridLabelsMarkup uses labelStep for both axes; the old skip rule is replaced by it (not kept beside it): afterwards
+    MIN_LABEL_GAP_PX's skip logic is gone or is the same constant used by labelStep (one rule, no second).
+ 3. A number that does not sit on a heavy line gets a short TICK on the axis at its position (same colour token as the labels,
+    about 4 px, constant on screen) so it visibly points at a place; numbers on heavy lines keep today's look. If a tick element
+    cannot be added without touching the byte-identical grid markup tests, put it in the #grid-labels group (it is outside
+    #world-group and not exported) and say so.
+ 4. Everything else from 532/534 stays: both sides of the origin, none at 0, rotated 90 degrees, plain shortest numbers through
+    the shared formatter (0.5, 2.5: check trailing zeros), Y positive up through worldToUserY, constant 11 px, hidden with the
+    grid off, never overlapping (keep the rect-pair overlap test and extend it to the new density), re-labels live on zoom.
+TESTS (fail-first): labelStep table (unit system x px-per-unit -> step) incl. the owner's case (10 units = 265 px -> 5), the
+ thresholds, binary inches, very far out and very far in (no step of 0, no infinite loop, capped number of labels per axis:
+ state the cap); live test in SketchStudio: at the owner's zoom the X axis shows 5, 10, 15, 20 and -5, -10...; no overlap at 8
+ zoom levels in mm and in inch/8; ticks present only where there is no heavy line. Screenshots before/after at the owner's zoom
+ (GRID_MODE points AND lines), cropped legible, md5, in .evidence/536/.
+DO NOT change grid lines, spacing, snapping, settings or the Style panel. No hidden globals, no silent catch.
+STOP if the mm snapshot/lod grid tests change, or labels would appear in a host that has none today (Pen Plotter, Trace).
+List every behaviour change for existing users (expected: more numbers when zoomed in; ticks).
+No Fusion, mouse or keyboard; headless browsers only, closed before the REPORT. Check `pwd` before every write: never create a
+file outside your worktree. If node_modules is missing make a junction to D:\APPS\Sketch-Studio\node_modules with PowerShell
+New-Item -ItemType Junction. Before the final gate `git fetch origin` and merge origin/main if it moved. Gate green
+(`npm run gate`, run and wait; numeric-input-self-hiding is a known load flake: alone twice, rerun once), commit by path, push
+the branch, WORK-LOG `## TURN 536`, the AGENTS.md REPORT block. REPORT once, leave nothing running.

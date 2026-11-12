@@ -82,8 +82,9 @@ export function commitDimensionEdit(state, c, val) {
     return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
   }
   // Any constraint satisfied by collapsing a line / arc / circle to a point is no solution (task 521); the edited dimension's own
-  // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape).
-  const collapsed = findCollapsedShape(state, sizesBefore);
+  // shape is exempt (a typed 0 or tiny value is the user's own, see findCollapsedShape). A FILLET radius edit is judged above by
+  // filletHasCollapsedLine instead: its tangent legs legitimately get very short as R approaches the singular value (a short leg is no collapse).
+  const collapsed = filletArc ? null : findCollapsedShape(state, sizesBefore);
   if (collapsed) {
     c.value = oldValue;
     if (shapeForRadius) shapeForRadius.radius = oldRadius;

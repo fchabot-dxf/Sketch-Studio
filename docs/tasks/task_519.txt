@@ -1,0 +1,25 @@
+TASK 519 (Sketch-Studio): every constraint follows Fusion's "who moves" behaviour at creation (owner ruling). Base: origin/main after 511
+and 518 are merged. Read docs/FUSION-COMPARISON.md sections "Which geometry moves" and "Which geometry moves: graded", and the data in
+tests/fixtures/fusion-oracle/which-moves.json and which-moves-graded.json (2438 + 315 recorded Fusion cells, the offline test
+tests/fusion-oracle.test.js with a KNOWN entry per disagreeing class).
+Measured in Fusion: almost always exactly ONE operand moves; the operand that is held more stays; on a tie the FIRST pick stays and the
+second moves; lines that are H/V or fully constrained always stay; Fusion swings one end or rotates (about the midpoint for a free line),
+ours stretches and moves both ("meet in the middle"). The per-constraint rank tables in the report are FITTED and differ per constraint:
+do NOT copy them into the code as tables.
+1. ONE mechanism, in the one place task 511 created (ConstraintManager.placeForCreation, called from createConstraint after the
+   _preAdd snapshot and before the solve): choose the anchor operand with ONE general "how held" measure derived from the solver itself
+   (remaining freedom of the operand's joints from engine.jointFreedom()/the nullspace, not a hand-made score; replace
+   _lineEstablishmentScore by it if it covers its cases), tie -> first pick is the anchor. Then place the moving operand so the
+   constraint is satisfied by moving as little as Fusion does: per constraint the minimal placement (parallel/perpendicular/angle: rotate
+   the mover, about its fixed end if it has one, else its midpoint; equal line: keep the start, change the length; coincident / point on
+   curve / midpoint: move the point, or translate the mover when the point cannot move alone; tangent: move the line/circle that is the
+   mover; H/V between two points: move the second point; concentric: move the mover's centre; dimensions: the second-picked / less-held
+   end moves). Declare the per-constraint placement as DATA (a table constraint type -> placement function), no scattered branches.
+   If the mover cannot satisfy the constraint alone, leave the rest to the solve (do not refuse what the solver can do).
+2. The solver's rows stay as they are (one full-derivative Jacobian). Dragging afterwards is unchanged.
+3. Test = the recorded Fusion cells. Replace the KNOWN classes that now agree; REPORT a table per constraint: cells matching before -> after,
+   and every remaining class of difference with a one-line reason (Fusion detail we do not model, e.g. a rank oddity; circle radius =
+   task 515; refusals). Do not chase 100%: remaining differences are flagged for the owner.
+4. Round-1/2 audits (constraint-audit, coverage-properties, coverage-matrix) stay green; a KNOWN that starts passing is deleted with evidence.
+STOP and ask if the general "how held" measure contradicts Fusion on more than a small class (quote the class), instead of adding special cases.
+List every behaviour change for existing users. Gate green, commit by path, push, WORK-LOG `## TURN 519`, the usual REPORT block.

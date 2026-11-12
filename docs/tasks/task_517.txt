@@ -2,6 +2,8 @@ TASK 517 (Sketch-Studio): fix coverage-audit findings N-F4 + N-F3 (lost constrai
 a Polygon corner). Base: origin/main after 511. Read docs/COVERAGE-AUDIT.md "Properties" for each; repros in tests/harness/coverage/prop-findings.js.
 Delete each fixed finding's KNOWN entry in tests/coverage-properties.test.js.
 
+NOTE: task 511 already added isDriven/driven/drivenReason to the ANGLE case by hand (N-F4/NEW-4 pass). This task still does the
+  one-helper consolidation below (remove that per-case copy) and N-F3.
 N-F4 + N-F3 (one cause): the constraint normaliser in packages/core/constraints.js (~l.209-284, one `case` per type) rebuilds each constraint
   from a per-type whitelist, so fields the type does not list are dropped on save/load and undo: ANGLE drops isDriven/driven (a reference
   angle becomes DRIVING again), radius drops driven/drivenReason, distances drop dimSign/dimSignMode. Fix in ONE place: the dimension state

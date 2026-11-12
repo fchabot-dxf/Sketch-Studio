@@ -65,6 +65,18 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
 - Owner rulings: the advisor picks each subagent's model per task (Sonnet default; Opus for solver maths such as 515 and N-F7);
   push as you go.
 
+### Update (2026-11-11 night, turn 772)
+- MERGED: 512 matrix (51dc923), 511 solver fixes (050b942: F6 one full-derivative Jacobian, F3, F5, N-F5, NEW-7, NEW-4/N-F4 angle
+  flags; collinear + point-on-line placed at creation by Fusion's rule). Matrix now: 1657 PASS, 16 round-1, 132 NEW (112 = NEW-1).
+- 518 (Fusion oracle) pushed part 0 (315 cells) and 0b (2438 graded cells incl. every shape kind and the origin): Fusion moves ONE
+  operand, the more-held stays, tie -> first pick stays; ours moves both. Drawings part still running on agents/task-518-fusion-oracle.
+- RUNNING: 517 (lost dimension fields helper, fillet on origin, fillet on polygon corner) and 520 (NEW-1/2/5 dimension tool, NEW-3
+  perpendicular on parallel lines), in parallel (disjoint files). Specs in docs/tasks/.
+- NEXT: 516 (redundant dimension placed driven; Fusion-confirmed) -> 519 (who-moves like Fusion for every constraint, one placement
+  mechanism, needs 518 merged) -> 515 (circle radius a solver unknown, Opus) -> N-F7, N-F6, NEW-6/F5 family, F8, and the leftover
+  "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
+  chain them in ONE script.
+
 ## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410
 
 **Owner ruling on seats:** the owner launches seats and the advisor tasks them, as before. The advisor may also launch

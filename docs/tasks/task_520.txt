@@ -1,0 +1,26 @@
+TASK 520 (Sketch-Studio): fix coverage-matrix findings NEW-1, NEW-2, NEW-5, NEW-3 (dimension tool + perpendicular). Base: origin/main (050b942+).
+Read docs/COVERAGE-AUDIT.md "Matrix" -> "New findings" for each (verbatim repro, file:line); repros in tests/harness/coverage/matrix-findings.js.
+Delete each fixed finding's KNOWN entry, repro pin and classify rule in tests/coverage-matrix.test.js / matrix-run.js (the test fails loudly
+if a KNOWN starts passing), and refresh the counts in docs/COVERAGE-AUDIT.md.
+NEW-1 (HIGH): the point-to-line dimension throws `ReferenceError: c is not defined` on every use (packages/ui/input-handlers/dimension-tool.js
+  ~l.619; `c` is declared inside the block at ~l.610) and leaves the undo group open (_undoGroupActive stays true). Fix the scope bug AND
+  make the tool's undo group close on every exit path in one place (try/finally at the group owner), no silent catch.
+NEW-2 (HIGH): the point-to-line dimension is not a perpendicular distance: it is built from a helper joint on the line + a point-point
+  distance, the helper slides (40 -> 22.3 after swinging the line, residual 1.5e-8) and stays a free DOF. Fix the cause: the dimension must
+  constrain the PERPENDICULAR distance point-to-line. Check whether the solver already has such a definition (line-line distance uses one:
+  grep definitions.js for the perpendicular distance row used by distance with `shapes`); reuse it (DECLARE over hand-roll). If a helper
+  joint must remain, it must be fully determined (foot of the perpendicular) and not count as a free DOF. Say which in the REPORT.
+  Fusion reference: a point-to-line dimension is the perpendicular distance, one constraint, removes 1 DOF.
+NEW-5 (HIGH): a line-to-line dimension is born as a reference with a NEGATIVE value (ERR-CSOLVE-02) in one of the two click orders
+  (dimension-tool.js ~l.437 passes the signed perpendicularDistance). The stored value is a positive distance in both click orders, and the
+  side is carried by the existing sign field (dimSign / dimSignMode: read how the other modes do it), not by a negative value.
+NEW-3 (HIGH): perpendicular is refused (ERR-CSOLVE-01) between two EXACTLY parallel lines (e.g. both horizontal); a 0.01 degree tilt
+  solves. Cause: lockPerpendicularBranch skips parallel starts (packages/core/constraint-manager.js ~l.1019) and the u.v residual stalls
+  there. Fix at the cause: from an exactly parallel start choose the branch deterministically (Fusion rotates the SECOND-picked line by the
+  smaller turn; with a tie, counter-clockwise) by the creation placement of task 511 (ConstraintManager.placeForCreation is the one place
+  for creation placement: add perpendicular there for this degenerate start only; the general who-moves work is task 519, do not do it here).
+Tests (fail-first): the four repros become passing assertions; plus real-pointer live tests in SketchStudio for NEW-1/2/5: point-to-line
+dimension by clicking a point then a line and the reverse, typed value drives, swing the line -> the perpendicular distance holds, undo once
+restores; line-line dimension in both click orders is driving and positive. Grep the callers of every function you change.
+DO NOT touch constraints.js or fillet.js (task 517 runs in parallel there). No hidden globals, no silent catch, no copies.
+List every behaviour change for existing users. Gate green, commit by path, push, WORK-LOG `## TURN 520`, the usual REPORT block.

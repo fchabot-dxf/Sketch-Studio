@@ -161,7 +161,8 @@ await (async () => {
     const pm = await rectOf('.cut-type-menu');
     assert.ok(pm.right <= cardR.left, 'the cut-type popover opens to the LEFT of the card');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-menu')).borderTopColor`), 'rgb(44, 101, 255)', 'blue popover border');
-    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-trigger .cut-caret')).transform`), 'matrix(-1, 0, 0, -1, 0, 0)', 'the chevron flips while open');
+    // the chevron rotates with a 0.12s CSS transition: wait for the settled transform, never read it mid-transition
+    await waitFor(`getComputedStyle(document.querySelector('.cut-type-trigger .cut-caret')).transform === 'matrix(-1, 0, 0, -1, 0, 0)'`, 'the chevron flips while open');
     assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.cut-type-opt.is-current')).backgroundColor`), 'rgb(24, 46, 109)', 'the current type row is filled #182E6D');
     await clickEl('.cut-type-trigger'); await waitFor(`document.querySelector('.cut-type-menu').hidden === true`, 'cut-type menu closed');
     assert.strictEqual(await evalJs(`document.querySelector('.cut-type-menu').hidden`), true, 'clicking again closes it');

@@ -13,10 +13,9 @@ import { compareWithFixture } from './harness/audit/fixture-compare.js';
 const KNOWN = {
   'plate/E every dimension edits cleanly': 'F2: the hole radius edit is refused because equal(circle,circle) is checked but never solved',
   'plate/X equal-radius on two circles drags the radius': 'F2',
-  'bracket/B no dimension is demoted': 'F1: the 2nd (V) dimension between the same two joints becomes a reference',
   'triangle/F delete a dimension: nullity rises by exactly 1': 'F6: nullity stays 0 (one-sided pointOnLine Jacobian)',
-  F1: 'H and V dimension on one joint pair', F2: 'equal on circles', F3: 'clockwise angle dimension', F4: 'angle/perpendicular on a shared joint',
-  F5: 'order-dependent tangent refusal', F6: 'DOF lie with non-mutual pointOnLine', F7: 'makeArc same-millisecond id', F8: 'shared-corner outline',
+  F2: 'equal on circles', F3: 'clockwise angle dimension',
+  F5: 'order-dependent tangent refusal', F6: 'DOF lie with non-mutual pointOnLine', F8: 'shared-corner outline',
 };
 // Edits that are MATHEMATICALLY impossible and must be refused cleanly (EXPECTED): the isosceles triangle's angle dimension reads 180 - base angle,
 // so 0.8 x 110 = 88 would need a base angle over 90 degrees (the apex at infinity); the refusal must leave the geometry untouched.
@@ -31,7 +30,7 @@ const NO_EFFECT = {
   polygon: ['axis symmetric about O: midpoint(M0,M3)=O', 'concentric circle radius 25', 'second circle radius 8'],
 };
 // Steps of the recipe the app turns into a reference (the F1 bug), by drawing.
-const DEMOTED = { plate: [], trapezoid: [], bracket: ['chamfer BC up 10', 'slot position: CL y = 20 from A', 'hole y = 90 from A'], triangle: [], polygon: [] };
+const DEMOTED = { plate: [], trapezoid: [], bracket: [], triangle: [], polygon: [] };
 // Finite-difference vs analytic Jacobian: rows whose analytic derivative is incomplete (non-mutual pointOnLine moves only the point).
 const JACOBIAN_ERRORS = { plate: [], trapezoid: [], bracket: [], triangle: ['pointOnLine'], polygon: [] };
 

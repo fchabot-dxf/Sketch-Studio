@@ -13323,3 +13323,10 @@ Owner bug: on a phone the header "Log" toggle (Diagnostic Log, Copy Report) was 
 - G4: removeProject (Drive) drops shadows/bases/headers of its designs (found by header and by shadow.projectId); makeProjectLocal flushes Drive writes first and forgets the moved Drive designs. "On purpose" = we cleared the local copies at the action, so nothing is left to recreate; "Drive lost it unexpectedly" = a local copy still exists, so it is re-created.
 - G5: writer `canWrite` (signed in): signed out = no attempt and no retry timer, status "Google sign-in is needed again"; router `onSignInChange` -> writer.resume(); explicit flush still tries.
 - #7: covered by G2 owner path (writer.unconfirmed()).
+
+## TURN 510 (constraint-audit fixes F1, F4, F7)
+- F1 constraint-manager.js `_edgeHasDrivingDistance`: a distance only blocks another on the same pair when dimMode matches (missing = 'aligned'). H + V on one pair both drive. Only caller: createConstraint (line ~217).
+- F4 solver/engine.js: equal/parallel/perpendicular/angle now pass the two lines' four endpoints positionally (no dedupe); only collinear keeps the unique-joint set (its definition takes a point list). The F4 repro in tests/harness/audit/findings.js was rewritten: the old one typed angle 60 then perpendicular on the same pair (a genuine conflict) and assumed A at the origin; now angle, perpendicular and a makePolygon hexagon adjacent-side angle are separate checks.
+- F7 shapes.js makeArc: id/groupId use a module sequence (`arcSeq`), the same pattern as makePolygon's `polySeq`. Repro: 1000 arcs, 1000 distinct ids and groupIds. The harness `tick()` clock wait in lib.js is removed.
+- Bracket recipe: the 3 "(workaround)" steps removed; dims 10/28/31 drive again: nullity 0, demoted 0 (constr 43 -> 40). KNOWN entries F1, F4, F7 and 'bracket/B no dimension is demoted' deleted; DEMOTED.bracket = [].
+- Evidence: .evidence/510/{before,after,gate}.txt. Gate: GATE files=236 pass=236 fail=0, SMOKE 12/12, HEADLESS-LEFT 0.

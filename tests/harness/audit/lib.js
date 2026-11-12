@@ -75,11 +75,7 @@ export function rect(S, x1, y1, x2, y2) {
   return { top, right, bottom, left, lines: [top, right, bottom, left], c1, c3 };
 }
 // fillet-tool: the two-line pick -> findCornerBetweenLines -> applyFillet (it adds the arc, the virtual sharp V, the tangents and the radius dimension)
-// FINDING (docs/CONSTRAINT-AUDIT.md): makeArc names a shape `s_arc_${Date.now()}`, so two arcs made in one millisecond share an id. A person never fillets twice
-// in a millisecond, so the helper waits for the clock to tick (like the human gap between two clicks) instead of changing app code.
-function tick() { const t = Date.now(); while (Date.now() === t) { /* spin one ms */ } }
 export function fillet(S, lineA, lineB, r) {
-  tick();
   const corner = findCornerBetweenLines(S.state, shape(S, lineA), shape(S, lineB));
   if (!corner) throw new Error('no fillet corner between ' + lineA + ' and ' + lineB);
   const res = applyFillet(S.state, corner, r);
@@ -88,7 +84,6 @@ export function fillet(S, lineA, lineB, r) {
 }
 // arc-tool: makeArc(centre, start, end), shape pushed, its structural constraint through ConstraintManager.createConstraint(source 'arc')
 export function arc(S, c, a, b) {
-  tick();   // see the makeArc same-millisecond id collision note on fillet()
   const built = makeArc(S.state.joints, c, a, b, 'CENTER');
   built.shapes.forEach(s => S.state.shapes.push(s));
   built.constraints.forEach(k => ConstraintManager.createConstraint(S.state, k.type, k, { source: 'arc' }));

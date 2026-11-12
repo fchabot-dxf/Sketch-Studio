@@ -129,7 +129,7 @@ export class ConstraintManager {
     }
 
     // True if the edge/joint-pair (or radius shape) already carries a DRIVING (non-reference)
-    // distance. Used to keep exactly one driving dimension per edge.
+    // distance of the same dimMode. Used to keep exactly one driving dimension per edge and quantity.
     static _edgeHasDrivingDistance(state, params) {
         if (!state || !Array.isArray(state.constraints)) return false;
         return state.constraints.some(c => {
@@ -139,6 +139,8 @@ export class ConstraintManager {
             }
             if (c.joints && c.joints.length >= 2 && params.joints && params.joints.length >= 2) {
                 const [a, b] = c.joints; const [x, y] = params.joints;
+                // Two distances block each other only when they measure the same quantity (a horizontal and a vertical dimension on one pair both drive).
+                if ((c.dimMode || 'aligned') !== (params.dimMode || 'aligned')) return false;
                 return (a === x && b === y) || (a === y && b === x);
             }
             return false;

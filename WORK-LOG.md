@@ -13617,6 +13617,20 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
   0,7, AO 0,c, AP 0,4, PA 4,0, ZA; dim-horizontal / dim-vertical LL 0,4 0,7 2,4 2,7, LO 0,c, LP 0,4, LZ 0,0, AL, AO, AP, AZ) and which-moves 6
   (dim-horizontal / dim-vertical A_fixfull.BA, B_fix1.AB, B_fixfull.AB). List: .evidence/525/oracle-pass-to-fail-vs-pre525.txt.
 
+## TURN 535 (design)
+- PHASE 1 = design only: docs/PARAMETERS-DESIGN.md (Fusion-style parameter table: named user parameters, formulas in dimensions,
+  auto names d1.., a pop-up window). Nothing under packages/ or apps/ changed. Gate: not run, docs only.
+- Grounded in the code at d2e31b7 (file:line per seam): withDimensionState carries `name` + `expression`; addConstraint names
+  dimensions; ONE parser in packages/core/expression.js (no eval), unit table in units.js gains deg/rad; parameters.js (graph,
+  cycles, planChange); commitDimensionEdit generalised to an all-or-nothing batch with ONE combined stepped solve; document v2.
+- Owner requirements R1 (parameter chains) and R2 (`name = value` creates the parameter) designed in as decided; the advisor's
+  Fusion API measurements (2026-11-12) tagged "measured (API)"; the rest "to verify in Fusion UI". 23 owner decisions O1-O23,
+  each with a recommendation. Build plan: slices 1a, 1b, 2 (after task 525), 3, 4, 5, 6.
+- Blockers found: SketchStudio `#dimInput` is type="number" (apps/sketchstudio/index.html:390: no formula, and likely no `0.25in`
+  today); DOC_UNIT is per browser, not per file (handled: units stored in every formula); constraints have no id; three snapshot
+  codec copies; no single constraint-removal funnel; an unreachable second edit path in live-dimension-input.js:418/:319-333;
+  no shared dialog component (the unused tabbed dock recommended); fillet.js:327-328 rewrites a length dimension.
+- Evidence: .evidence/535/code-greps.txt (greps behind the blocker claims).
 ## TURN 534
 - Positive Y points UP for the user (like Fusion) through ONE seam: `worldToUserY` / `userToWorldY` in packages/core/units.js. Only site that showed a y: the grid axis numbers (`gridLabelsMarkup`, packages/ui/canvas-grid.js: SketchStudio + Shaper Design). Label positions unchanged (picture does not move); the Y number now reads `worldToUserY(y)`.
 - Inventory: SketchStudio status bar "X: 0 Y: 0" is a static placeholder nothing writes (no live readout); no coordinate input fields; dimension fields prefill Math.abs (unsigned) and angle dims are the unsigned interior angle (no change); Pen Plotter `#coords` (apps/penplotter/src/interaction.js:80) is the plotter's own paper-mm readout (origin top-left, y down) and was NOT touched (its own convention, not the shared canvas); exports/imports untouched (DXF import already negates y; SketchStudio SVG/DXF export has an explicit invertY option, default off; Pen Plotter G-code flipY:true).
@@ -13636,3 +13650,10 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Tests: tests/axis-snap.test.js (radius at 4 zooms, priority, far-from-axes identical, setting off, no origin host, constraint + refusal, tool source scan); tests/axis-snap-live.test.js (headless real pointer events: line end X / Y axis, line start, rect corner, circle centre, polygon centre, arc centre, select drag; undo / redo; drag the first point; save / load; glyph; setting off; screenshots). tests/style-panel-tabs.test.js list gained AXIS_SNAP.
 - Evidence: .evidence/537/ (before-no-snap.png, after-axis-snap.png, after-glyph.png).
 - Note for task 539 (axes as reference lines, queued): this makes the axes a snap target without a shape; 539 may replace the data source of findAxisSnap.
+## TURN 535-1a
+- Slice 1a of docs/PARAMETERS-DESIGN.md: the expression language, INVISIBLE. New `packages/core/expression.js` (tokenizer, recursive-descent parser to an AST, `name = expr` only at the top level, evaluator with a name-lookup callback and dimensional analysis {v,L,A}, `canonicalize` = the stored text with promoted units, `print`, `dependencies`, `validateName`). Errors are data `{ok:false, code, message, at:{start,end}, names?}`; nothing a user types throws (input length and nesting are capped so recursion is bounded). No eval/Function/regex parser.
+- `packages/core/units.js`: ONE `UNIT_TABLE` (mm cm in " deg rad) + `unitInfo`; `TO_MM` is now derived from it (same values), `parse` / `format` / `basePer` / `UNITS` unchanged (units.test.js and the grid-label tests pass unchanged).
+- Decisions as single constants in expression.js: O6 CASE_SENSITIVE_NAMES, O7 RESERVE_AUTO_DIM_NAMES, O8 ACCEPTED_ARG_SEPARATORS + STORED_ARG_SEPARATOR, O19 ALWAYS_STORE_UNITS, O20 FRACTION_UNIT_IS_ONE_NUMBER; O18 = UNIT_TABLE.
+- Tests: tests/expression.test.js (table rows + 4000 random-AST property cases + plain-node import check).
+- Advisor ruling on floor/ceil/round (Fusion measured): they round in the unit the argument is WRITTEN IN (never the document's or parameter's). Unitless arg = plain rounding; a single literal with a unit (signed / O20 fraction ok) rounds in that unit; any other dimensioned argument = UNIT_MISMATCH naming `floor(gap / 1 mm) * 1 mm`. `ctxScale` removed; property test no longer skips these functions; every measured case is a table row in mm, cm, inch documents; docs/PARAMETERS-DESIGN.md section B updated (name argument: to verify in Fusion UI).
+- No non-test caller yet: slice 1b/2 add them.

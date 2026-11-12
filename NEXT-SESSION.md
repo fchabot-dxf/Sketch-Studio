@@ -77,6 +77,41 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-12, turn 871)
+- MERGED since turn 820 (main e12e8fc, gate 259/259): 528 Fusion dimension-edit oracle (ad0e122), 522 test hygiene + Pen
+  Plotter/Shaper tab jump (eaedaa3), 531 extreme-arcs audit EA-1..EA-10 (04fc8fa), 532 grid numbers / unit grid (3a6ea30),
+  527+530 Fusion real-mouse drag oracle (8ed98d9), 533 every Jacobian row accumulates, F6/F4 gone, Opus (d2e31b7), 534 Y up on
+  the grid numbers (76e6254), 525 who-moves table generated from Fusion, Opus (45f167d), 535 design + slice 1a expression
+  parser (e12e8fc).
+- IN FLIGHT: 535-1b parameter model + saving, document version 2 (agents/task-535-1b, Sonnet); 536 grid numbers at a readable
+  step + ticks (Sonnet); 537 snap to the X / Y axis = H/V with the origin (Sonnet); 538 body drag pulls the grabbed point, arc
+  with a held centre changes radius (Opus). Specs: docs/tasks/task_53x.txt on each branch.
+- QUEUED, OWNER APPROVED ("that's genius"): 539 the two axes become built-in REFERENCE LINES: not hit-testable in select mode,
+  pickable only while a constraint / dimension / snap asks for a target, fixed, endless, never exported, real geometry wins a
+  tie; then the axis snap leaves a true coincident. After 537 (same snap files). Builder lists every target-picking site first.
+- PARAMETER TABLE (docs/PARAMETERS-DESIGN.md): owner chose Fusion-style + a pop-up window; `p2 = p1 + 1`; writing
+  `name = value` in a dimension box or the table creates the parameter. Ruled: O2 new file version ("I don't have any
+  important files"); floor/ceil/round round in the unit the argument is WRITTEN in (measured in Fusion), a name argument is
+  refused. STILL THE OWNER'S: O4 name = value on an existing name, O5 unknown bare name, O10 deleting a dimension formulas use,
+  O12 fillet over a formula, O16 phone keyboard. Slices 2-6 follow 1b (slice 2 = batch commitDimensionEdits).
+- OWNER RULINGS this stretch: mm grid default 100 / 10 (snap 10); inch grid major + divisions 10/2/4/8/16; numbers on the axes
+  (Fusion's look); positive Y up; same-shape operands are never pre-placed (advisor rule in 525).
+- OPEN FOR THE OWNER: "Saving…" gap vs 11 px tab shift; SketchStudio right-hand buttons jump with the save status; the dead
+  "X: 0 Y: 0" status text (make live or remove); single-digit inch grid numbers hard to read sideways; negative dimension
+  values (Fusion accepts, ours refuses, 90 runs); the smaller dimension-edit classes; fractions on grid numbers.
+- OPEN BUGS / FOLLOW-UPS: EA-1 zero-sweep arc accepted, EA-2 stale large-arc flag (drawn AND exported wrong past 180 deg),
+  EA-10 arc picked anywhere on its circle (fix these three first), EA-3..EA-9; perpendicular row is flat at 90 deg (stops
+  1e-3 short: EA-6, and "stretch where Fusion rotates", 39 cells): ONE perpendicular task; 54 oracle cells that matched Fusion
+  before 525 and differ now (WORK-LOG TURN 525, "how the mover moves"); H/V dimension point-alone body needs the N-F6 tangent
+  side lock first; trimmed locked line does not SHOW as locked; re-record in Fusion the 7 conflicting which-moves cells;
+  flaky tests/numeric-input-self-hiding.test.js under load; 526 refuse-like-Fusion (equal arc/circle, redundant constraint)
+  not started; 529 each tool's result vs Fusion not started; NEW-6 2 cells; N-F7; F8.
+- LESSONS: pre-check a branch against main's audits (15 s each) before a 35-min merge gate when main moved under it (caught
+  525 twice); a per-cell verdict diff (main vs branch) finds regressions that "every failure is explained" audits hide; a node
+  replay of a UI path can miss a per-frame solve: prove a surprising finding in the real app before pinning it; seats must
+  check pwd before writes (525 left an empty file in the main checkout, which silently blocked `git pull` after every merge);
+  make junctions with PowerShell, not bash; Fusion's API move is not a drag, real mouse input through win-mouse.py works.
+
 ### Update (2026-11-12, turn 820)
 - MERGED since turn 796: 521 no-collapse (85241c7), 524 fillet keeps a locked corner as the virtual sharp, locked lines stay held like
   Fusion (54d0eb3 + c68fe68), 523 arc tangent rows differentiate the live arc radius, Opus (c0224bc). Gate 250/250 on main c68fe68.

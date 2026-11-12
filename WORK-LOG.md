@@ -13669,3 +13669,5 @@ Timing (first measurement, per-edit placement): 100 dims 50.7 s; no placement: ~
 _assemble 7.2 s, choleskySolve 3.9 s in the profile). 2 s STOP lifted by the advisor; KNOWN P-1 (task 541) printed by tests/parameters-batch.test.js, fails when three
 runs drop under 2 s. Measured now: 1/2/10/30 dims = 2/2/18/73 ms; 100 dims = 4537 / 3950 / 4887 ms. Design doc: section D rule, Performance note, O10 and O12 rows
 (owner rulings 2026-11-12). Existing dimension tests, fusion fixtures and audits unchanged.
+
+Design note R3 (owner 2026-11-12, DECIDED, built in slice 3 + 5, not here): name autocomplete list near the caret in every expression input; recorded in docs/PARAMETERS-DESIGN.md section E (Autocomplete) and the slice 3 / 5 rows.

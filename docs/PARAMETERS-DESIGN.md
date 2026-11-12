@@ -384,6 +384,24 @@ delete a parameter, rename a dimension. Renames and comment edits produce no `ed
 - SketchStudio's `#dimInput` must become `type="text"` (apps/sketchstudio/index.html:390), O16. The other hosts' created input is
   already text (numeric-input-manager.js:146).
 
+### Autocomplete (OWNER REQUIREMENT R3, 2026-11-12: DECIDED; built in slice 3, reused by slice 5)
+Owner: "Writing a param name in an input box like `pa` should show results in a box near the cursor: param1, param2."
+- WHERE: every expression input: the dimension box on the canvas (slice 3) and the window's expression cells (slice 5).
+- WHEN: while typing, whenever the caret is inside an identifier (the letters before the caret, up to the last operator / space / `(` / `;`).
+- THE LIST: a small list just under / near the caret. It NEVER hides the input. At most about 8 rows. Each row: the name, its current value and unit
+  (`width  120 mm`, `d3  60 mm`, `holes  4`). Order: user parameters and dimension names (`d1`..) first, then the functions (`sqrt`, `max`, ...).
+  Within each group: names that START with the typed letters first, then names that merely CONTAIN them, each group in table order.
+- CASE (O6 says names are case-sensitive): MATCHING is case-insensitive, the INSERTED name keeps its exact case (recommended and decided: typing `wi`
+  offers `width` and `Width` both, inserting writes the one picked).
+- KEYS: Up / Down move, Enter or Tab insert (the identifier typed so far is replaced by the full name; the caret goes after it), Esc closes the list
+  (a second Esc is the box's own Esc), a mouse click on a row inserts. With no list open, Enter / Tab / Esc keep their normal meaning.
+- ONE SOURCE: the list is produced by ONE pure function (`completionsFor(state, text, caret)` in parameters.js) over the SAME name table the parser
+  and `validateName` use (expression.js `foldName`, the nodes of the dependency graph, the function table of expression.js): no second list of names,
+  and a name that cannot be used in a formula (a reference dimension, O9) is never offered. The DOM list (position, keys) is a thin view over it.
+- Fusion shows a similar list in its expression fields: **to verify in Fusion UI**.
+- Test (slice 3): `completionsFor` table-driven (prefix before contains, case, functions after names, max rows, reference dims absent) + a live test
+  that types `pa` and sees the rows, Down + Enter inserts, Esc closes.
+
 ---
 
 ## F. The pop-up window
@@ -488,9 +506,9 @@ next save it is version 2 with `name` on each dimension and `"parameters": []`.
 | **1a Parser** (invisible) | `expression.js` (tokenize, parse, evaluate, print, errors); units.js table + angle units | packages/core/expression.js (new), packages/core/units.js | expression-parser.test.js | `units.parse` and the evaluator disagree on any accepted string; a unit needs a factor outside units.js | M: ~450 lines + ~300 test rows |
 | **1b Model + persistence** (invisible) | `parameters.js` (names, graph, cycle, planChange, cloneParameters, freezeReferencesTo); `name`/`expression` in withDimensionState; naming in addConstraint; `state.parameters` (sketch-state, harness); document v2; snapshot (3 sites) | packages/core/parameters.js (new), constraints.js, document.js, packages/ui/sketch-state.js, tests/harness/sketch.js | parameters-graph, parameters-roundtrip (data only), parameters-old-files | any existing test changes result; a v1 fixture does not load identical | M: ~400 lines |
 | **2 Batch seam** (invisible) | `commitDimensionEdits`; `commitDimensionEdit` = 1-element case | packages/ui/dimension-seams.js | parameters-batch, all existing dimension tests unchanged | any existing dimension test changes; 100 dims > 30 s (the 2 s STOP was lifted, KNOWN P-1); task 525 not merged yet (wait for it) | M: ~150 lines |
-| **3 Canvas** (visible) | box parses formulas and `name = …`; expression prefill; live hint line; `fx:` in formatConstraintValue; SketchStudio `#dimInput` type text; toggleDriving rule O11; fillet rule O12 | numeric-input-manager.js, svg-renderer.js, dimension-seams.js (toggleDriving), fillet.js, apps/sketchstudio/index.html | parameters-canvas-live, property test | shell-smoke < 12/12; a host's box behaves differently from another's; the dead edit path in live-dimension-input.js turns out reachable | M |
+| **3 Canvas** (visible) | box parses formulas and `name = …`; expression prefill; live hint line; `fx:` in formatConstraintValue; SketchStudio `#dimInput` type text; toggleDriving rule O11; fillet rule O12; **autocomplete R3** (`completionsFor` + the list near the caret, section E) | numeric-input-manager.js, svg-renderer.js, dimension-seams.js (toggleDriving), fillet.js, apps/sketchstudio/index.html | parameters-canvas-live, property test | shell-smoke < 12/12; a host's box behaves differently from another's; the dead edit path in live-dimension-input.js turns out reachable | M |
 | **4 Window, read-only** (visible) | dock close/open API; parameter-table.js rows (both groups, filter, hover / select link); ribbon action + host opt-out (Trace) | tabbed-dock-panel.js, packages/ui/parameter-table.js (new), tool-ribbon.js, apps/trace/src/edit-view.js | parameters-window-live (read-only parts) | the dock change would alter any other host (it has none today: re-check with grep) | M |
-| **5 Window editing** | inline edit of expressions; add / rename / delete / comment of user parameters; rename of dimensions; per-row errors; keyboard; mobile sheet | parameter-table.js | parameters-window-live (full) | an edit path that does not go through planChange + commitDimensionEdits | M-L |
+| **5 Window editing** | inline edit of expressions; add / rename / delete / comment of user parameters; rename of dimensions; per-row errors; keyboard; mobile sheet; **autocomplete R3 in the expression cells** (same `completionsFor`) | parameter-table.js | parameters-window-live (full) | an edit path that does not go through planChange + commitDimensionEdits | M-L |
 | **6 Hardening** | O10 freeze on every dimension-removal site (route through deleteConstraints); Fusion oracle for expressions + KNOWN list; docs | delete-manager.js and the sites the audit finds, scripts/fusion-oracle/, tests/fixtures/fusion-oracle/ | parameters-graph (freeze), oracle test | a removal site cannot be routed through the funnel without a behaviour change | M |
 
 Parallel: 1a and 1b can run together (1b needs only the parser's API stub: agree the signatures first). Slice 2 waits for task 525

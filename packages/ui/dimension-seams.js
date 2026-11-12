@@ -9,6 +9,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
 import { seedFilletForRadius, filletHasCollapsedLine } from '#core/fillet.js';
+import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 const STEP_FRACTION = 0.1;
@@ -25,31 +26,18 @@ export function dimensionEditLabel(c, val) {
 // non-convergence REFUSE + REVERT to the last valid shape (restore value + positions, re-solve).
 // Returns { reverted, clash } so the caller can surface a message. No DOM, no notifications here.
 export function commitDimensionEdit(state, c, val) {
-  // A CIRCLE's radius dimension has no rim joint for the solver to move (engine.js's isRadius row
-  // requires shape.joints.length >= 2, but circle-tool.js creates a circle with only the center
-  // joint) -- every other consumer (tangent, point-on-circle) already reads shape.radius directly
-  // as the source of truth, so an edit here must move THAT, not rely on the (inert) joint row to do
-  // it. An ARC's isRadius row DOES have a real rim joint (makeArc creates 3: center + 2 rim points)
-  // so the solver already moves it correctly via the Jacobian -- arcs never get a `.radius` field
-  // written anywhere (grepped every `.radius =` site), and every reader falls back to a live
-  // joint-distance computation when it's absent. Writing `.radius` here for an arc would freeze a
-  // stale scalar that those readers would then prefer over live geometry, so this is scoped to
-  // shapes with NO rim joint (the same `< 2` the engine itself already keys off of) -- circles today.
-  const shapeForRadius = (c.isRadius && c.shape && state && state.shapes)
-    ? state.shapes.find(s => s.id === c.shape && (!s.joints || s.joints.length < 2))
-    : null;
-  const oldRadius = shapeForRadius ? shapeForRadius.radius : undefined;
-
+  // Every dimension, a circle's radius included, drives the geometry through the solve: a circle's radius is a solver unknown
+  // (engine.js hasRadiusUnknown), written back to shape.radius by the solve. The snapshot is the whole solver state (joints AND
+  // circle radii), so a refusal restores both.
   const engine = state && state.engine;
   if (!engine || typeof engine.solve !== 'function') {
     c.value = val;
-    if (shapeForRadius) shapeForRadius.radius = val;
     return { reverted: false, clash: '' };
   }
   const oldValue = c.value;
   const joints = engine.getJoints ? engine.getJoints() : state.joints;
-  const snap = new Map();
-  if (joints) joints.forEach((j, id) => snap.set(id, { x: j.x, y: j.y }));
+  const shapes = engine.getShapes ? engine.getShapes() : state.shapes;
+  const snap = snapshotSolverState(joints, shapes);
 
   // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero
   // length), and refuse the one singular value where a line would collapse. Snapshot above restores on refusal.
@@ -59,13 +47,12 @@ export function commitDimensionEdit(state, c, val) {
     if (!seeded.ok) return { reverted: true, clash: '', reason: seeded.reason };
   }
   c.value = val;
-  if (shapeForRadius) shapeForRadius.radius = val;
   // Walk the value in steps of at most STEP_FRACTION of the old value, solving at each: one big jump lets the solver land on
   // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
   // continuously. A fillet radius edit is already seeded analytically above, so it takes the single solve.
   let result;
   const span = Math.abs(val - oldValue);
-  const steps = (!filletArc && !shapeForRadius && Number.isFinite(span) && Math.abs(oldValue) > 0)
+  const steps = (!filletArc && Number.isFinite(span) && Math.abs(oldValue) > 0)
     ? Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(oldValue) * STEP_FRACTION)))) : 1;
   for (let k = 1; k <= steps; k++) {
     c.value = k === steps ? val : oldValue + (val - oldValue) * (k / steps);
@@ -75,15 +62,14 @@ export function commitDimensionEdit(state, c, val) {
   c.value = val;
   if (filletArc && filletHasCollapsedLine(state, filletArc)) {
     c.value = oldValue;
-    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+    restoreSolverState(joints, shapes, snap);
     engine.solve(ITER());
     return { reverted: true, clash: '', reason: `R = ${Number(val).toFixed(2)} collapsed a line to zero length` };
   }
   if (result && result.converged === false) {
     const clash = [...new Set((result.conflicts || []).map(x => x.type).filter(Boolean))].join(', ');
     c.value = oldValue;
-    if (shapeForRadius) shapeForRadius.radius = oldRadius;
-    if (joints) joints.forEach((j, id) => { const s = snap.get(id); if (s) { j.x = s.x; j.y = s.y; } });
+    restoreSolverState(joints, shapes, snap);
     engine.solve(ITER());
     return { reverted: true, clash };
   }
@@ -121,20 +107,13 @@ export function isDimensionDetermined(state, c) {
 
 // Toggle a dimension between DRIVING and reference (FLIP). A reference whose quantity the rest of the sketch still determines
 // cannot become driving (Fusion: over-constrained): the toggle is REFUSED and nothing changes, returned as { refused: true }.
-// A reference radius keeps the one-driver-per-shape swap. When promoting, recompute the value from geometry and re-solve.
-// Returns { nowDriving, swapped, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
+// Every mode goes through that one test, a radius too (a circle's radius is a solver unknown since task 515, so a second driving
+// radius on the same circle, or an equal to a dimensioned circle, determines it: there is no separate radius swap any more).
+// When promoting, recompute the value from geometry and re-solve.
+// Returns { nowDriving, refused, error } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting).
 // No DOM, no notifications here.
 export function toggleDriving(state, c) {
-  let swapped = false;
-  if (c.isDriven) {
-    if (isDimensionDetermined(state, c)) return { nowDriving: false, swapped: false, refused: true, error: null };
-    if (c.type === CONSTRAINT_TYPES.DISTANCE && c.isRadius && c.shape) {
-      const others = state.constraints.filter(oc =>
-        oc !== c && !oc.isDriven && !oc.driven &&
-        oc.type === CONSTRAINT_TYPES.DISTANCE && oc.isRadius && oc.shape === c.shape);
-      if (others.length) { for (const oc of others) { oc.isDriven = true; oc.driven = true; } swapped = true; }
-    }
-  }
+  if (c.isDriven && isDimensionDetermined(state, c)) return { nowDriving: false, refused: true, error: null };
 
   c.isDriven = !c.isDriven;
   c.driven = c.isDriven; // keep both flags in sync (solver/renderer read isDriven || driven)
@@ -172,5 +151,5 @@ export function toggleDriving(state, c) {
       if (result && result.converged === false) error = 'ERR-DRIVE-02';
     }
   }
-  return { nowDriving: !c.isDriven, swapped, refused: false, error };
+  return { nowDriving: !c.isDriven, refused: false, error };
 }

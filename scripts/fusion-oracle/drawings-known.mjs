@@ -15,8 +15,8 @@ export function reasonOf(r) {
     if (/^reference/.test(r.ours) && /^accepted/.test(r.fusion)) return 'ours demotes the dimension to a reference; Fusion keeps it driving';
     return 'outcome differs';
   }
-  if (kind === 'full') return 'per-entity fully-constrained flag differs (circle radius is not a DOF in ours: O2; arcs / points)';
-  if (kind === 'sketchFull') return 'sketch fully-constrained flag differs (circle radius O2, or a refused / redundant step upstream)';
+  if (kind === 'full') return 'per-entity fully-constrained flag differs (arcs / points; a circle radius is a DOF in ours since task 515)';
+  if (kind === 'sketchFull') return 'sketch fully-constrained flag differs (a refused / redundant step upstream)';
   if (kind === 'coords') return "Fusion's solution violates our constraints";
   return 'differs';
 }

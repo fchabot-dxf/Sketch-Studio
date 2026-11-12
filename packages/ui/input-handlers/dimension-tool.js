@@ -13,6 +13,7 @@ import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
+import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
 
 function logDim() { /* logging disabled */ }
@@ -259,8 +260,7 @@ export function anchorPlacingDimension(svg, state) {
         const [j1, j2] = pending.joints;
         const status = analyzeConstraintStatus(state);
         if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
-            const savedPositions = new Map();
-            for (const [id, j] of state.joints) savedPositions.set(id, { x: j.x, y: j.y });
+            const savedPositions = snapshotSolverState(state.joints, state.shapes);
             const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
             state.constraints.push(testConstraint);
             try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
@@ -269,10 +269,7 @@ export function anchorPlacingDimension(svg, state) {
             const dist = (a && b) ? getDist(a, b) : null;
             const idx = state.constraints.indexOf(testConstraint);
             if (idx !== -1) state.constraints.splice(idx, 1);
-            for (const [id, pos] of savedPositions) {
-                const j = state.joints.get(id);
-                if (j) { j.x = pos.x; j.y = pos.y; }
-            }
+            restoreSolverState(state.joints, state.shapes, savedPositions);
 
             if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {
                 pending.isDriven = true;
@@ -518,8 +515,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             // Only set as driven if BOTH joints are fixed (not just one)
             if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
                 // Sandbox test: temporarily add a distance constraint and run the solver
-                const savedPositions = new Map();
-                for (const [id, j] of state.joints) savedPositions.set(id, { x: j.x, y: j.y });
+                const savedPositions = snapshotSolverState(state.joints, state.shapes);
                 const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
                 state.constraints.push(testConstraint);
                 try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
@@ -530,10 +526,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
                 const idx = state.constraints.indexOf(testConstraint);
                 if (idx !== -1) state.constraints.splice(idx, 1);
                 // Restore geometry
-                for (const [id, pos] of savedPositions) {
-                    const j = state.joints.get(id);
-                    if (j) { j.x = pos.x; j.y = pos.y; }
-                }
+                restoreSolverState(state.joints, state.shapes, savedPositions);
 
                 // If the solver couldn't satisfy the constraint, mark as driven; otherwise allow driving
                 if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {

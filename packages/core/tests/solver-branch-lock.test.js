@@ -185,8 +185,10 @@
     solver.solve();
     const c1 = joints.get('c1'), c2 = joints.get('c2');
     const dist = Math.hypot(c2.x - c1.x, c2.y - c1.y);
-    assert(Math.abs(dist - Math.abs(10 - 7)) < 1e-3,
-      `internal tangent: expected dist≈|r1-r2|=3, got dist=${dist} (c2=${c2.x},${c2.y})`);
+    // a circle's radius is a solver unknown (task 515): the branch relation holds for the SOLVED radii
+    const r1 = shapes[0].radius, r2 = shapes[1].radius;
+    assert(Math.abs(dist - Math.abs(r1 - r2)) < 1e-3 && Math.abs(dist - (r1 + r2)) > 1,
+      `internal tangent: expected dist≈|r1-r2|=${Math.abs(r1 - r2)}, got dist=${dist} (c2=${c2.x},${c2.y}, radii ${r1}/${r2})`);
   }
 
   // ─── tangent branch lock: external default still works ──────────────
@@ -207,8 +209,9 @@
     solver.solve();
     const c2 = joints.get('c2');
     const dist = Math.hypot(c2.x, c2.y);
-    assert(Math.abs(dist - (10 + 7)) < 1e-3,
-      `external tangent: expected dist≈r1+r2=17, got dist=${dist}`);
+    const r1 = shapes[0].radius, r2 = shapes[1].radius;   // solved radii (task 515)
+    assert(Math.abs(dist - (r1 + r2)) < 1e-3 && Math.abs(dist - Math.abs(r1 - r2)) > 1,
+      `external tangent: expected dist≈r1+r2=${r1 + r2}, got dist=${dist} (radii ${r1}/${r2})`);
   }
 
   console.log('solver-branch-lock tests passed ✅');

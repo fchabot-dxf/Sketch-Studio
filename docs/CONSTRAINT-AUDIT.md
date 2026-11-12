@@ -40,6 +40,21 @@ triangle   9       13      0        0         0         OK        5/5       3/4 
 polygon    12      21      0        0         0         OK        5/5       6/6       0        0
 ```
 
+AFTER TASK 515 (a circle's radius is a solver unknown, like Fusion; F2 and O2 fixed; `node scripts/constraint-audit.cjs`, verbatim):
+
+```
+drawing    joints  constr  nullity  panelDOF  planegcs  verifier  jittered  edits ok  refused  demoted
+plate      21      42      0        0         0         OK        5/5       12/12     0        0
+trapezoid  19      33      0        0         0         OK        5/5       14/14     0        0
+bracket    24      40      0        0         0         OK        5/5       30/30     0        0
+triangle   9       13      0        0         0         OK        5/5       3/4       0        0
+polygon    12      21      0        0         0         OK        5/5       6/6       0        0
+```
+
+(the bracket's 40 constraints and 0 demoted are task 510's F1 fix; the plate's edits are 12/12 since task 515.) The tables of the five drawings
+below are the original task 508 run: since task 515 every circle adds one DOF until its radius is dimensioned or tied (plate steps 17-20 now read
+nullity 3, 2, 1, 0; the PlaneGCS translation leaves a circle's radius free instead of fixing it at the stored value).
+
 All five drawings reach nullity 0, the Design panel agrees with the nullity, PlaneGCS agrees (dof 0, no conflict, same geometry), the verifier is
 clean and every jittered start returns to the same geometry (no fillet-flip family showed up with the line-tool joint structure).
 "edits ok" is not 100% for two reasons that are explained below: plate 2/12 refused (finding F2) and triangle 1/4 refused (EXPECTED, impossible
@@ -81,8 +96,9 @@ origin, spacing 140 x 70; radius 8 and equal radii on the holes. Final nullity 0
 ```
 
 * Steps 17-20 change nothing (nullity 0 before and after). 17 is the inert circle radius dimension, 18-20 are finding **F2** (equal on circles is
-  a no-op).
-* E: the 10 edits of the width / height / spacing / fillet R all pass; the two hole-radius edits are **REFUSED (equal)**: finding F2.
+  a no-op). FIXED task 515: the four holes' radii are solver unknowns, steps 17-20 take the nullity 4 -> 3 -> 2 -> 1 -> 0.
+* E: the 10 edits of the width / height / spacing / fillet R all pass; the two hole-radius edits are **REFUSED (equal)**: finding F2. Since task 515:
+  12/12 (`distance(R)=12.000 x0.8 ok`, `distance(R)=18.750 x1.25 ok`, both holes' radii follow).
 * X (does a declared constraint bite): `equal-radius on two circles drags the radius: FAIL: h2.radius set to 12, after solve = 12 (h1 = 8); max
   residual 4.00e+0 (equal)`.
 * F: redundant diagonal -> driven (reference); conflicting 1.5x -> driven, stored value 349.86 -> 233.24 (the geometry value replaces the typed
@@ -182,7 +198,8 @@ AB, the circle centre on the construction axis C-M, tangent to AB / BC / CA, rad
 * F: deleting the angle dimension: **nullity 0 -> 0 (expected +1)**. PlaneGCS says dof 1; jittered re-solves land C at y = 82.60 / 80.85 / 74.87.
 * E: angle 110 x0.8 = 88 is refused: EXPECTED (the angle reads 180 - base angle of an isosceles triangle; 88 needs a base angle of 92 degrees, the
   apex at infinity; from 92 up it works, from 90 down it is refused, the geometry is untouched, backDev 1.3e-8).
-* The circle radius is shape data, not a solver unknown (observation O2): the 20 does not appear in the nullity.
+* The circle radius is shape data, not a solver unknown (observation O2): the 20 does not appear in the nullity. FIXED task 515: the radius
+  20 takes the last DOF (the 3rd tangent CA is then the redundant step).
 
 ### 5. POLYGON + SPOKES: regular hexagon (makePolygon), concentric circle, second circle tangent to two edges, midpoint axis
 
@@ -205,7 +222,7 @@ O (`midpoint(M0,M3)=O`), concentric circle (centre coincident with O) R25, a sec
 ```
 
 * Step 6 is redundant with the regular polygon (opposite edge midpoints are symmetric about the centre): accepted, nullity unchanged, not flagged
-  (O1). Steps 8 and 11 are the inert circle radius dimensions (O2).
+  (O1). Steps 8 and 11 are the inert circle radius dimensions (O2). FIXED task 515: each removes the circle's radius DOF.
 * The hexagon's corners are SHARED joints (makePolygon), so an angle or perpendicular between two of its sides would hit finding F4.
 * D 5/5, E 6/6, PlaneGCS dof 0, no conflict.
 
@@ -244,7 +261,13 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
 * Proposed task: measure the signed angle (or sort the pair CCW) when the angle constraint is created, and refuse a result that shortens a line
   to zero; test: both orders of any triangle's two edges give the same interior angle.
 
-### F2 (BUG, HIGH): `equal` on two circles is accepted but does nothing
+### F2 (FIXED task 515): `equal` on two circles is accepted but does nothing
+
+* Fix (task 515, owner ruling "match Fusion for circles"): a circle's radius is ONE solver unknown, declared by `hasRadiusUnknown` in
+  packages/core/solver/engine.js and laid out after the joint unknowns; `_unpack` writes the solved value back to `shape.radius`. `equal` with a
+  circle operand compares the radius unknown with the other shape's size (circle-circle r1 - r2; circle-arc r - |rim - centre|). Repro after:
+  `equal accepted=true nullity=5; after b.radius=12 and a solve: radii 10 / 10, residual 0.00e+0 (-); radius edit refused=false`. Test:
+  tests/circle-radius-dof.test.js (equal(c1,c2) then edit c1 8 -> 11: both 11).
 
 * Observed: `equal accepted=true nullity=4; after b.radius=12 and a solve: radii 8 / 12, residual 4.00e+0 (equal); radius edit refused=true`.
   In the plate the hole-radius edits are refused (`REFUSED (equal)`).
@@ -289,8 +312,11 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
 * **O1 (UNCLEAR)**: redundant (consistent) geometric constraints are accepted silently and not flagged: bracket steps 22-23, triangle step 9,
   polygon step 6. Redundant DIMENSIONS are flagged as references. Pinned in the test (`NO_EFFECT`). Proposed: a redundant-constraint badge
   (PlaneGCS exposes the list; the nullspace gives the same via `isDistanceRedundant`-style rank test).
-* **O2 (UNCLEAR)**: a circle's radius is not a solver unknown, so an undimensioned circle is "fully constrained" once its centre is, and the radius
-  dimension never changes the DOF (steps 17, 33, 10 and 8/11 above). Fusion counts the radius as a DOF.
+* **O2 (FIXED task 515)**: a circle's radius is not a solver unknown, so an undimensioned circle is "fully constrained" once its centre is, and the radius
+  dimension never changes the DOF (steps 17, 33, 10 and 8/11 above). Fusion counts the radius as a DOF. Now: a free circle has 3 DOF, its centre on
+  the origin 1, plus a radius dimension 0 (Design panel, `jointFreedom().radiusFree`, the circle's fully-constrained colour); radius / diameter
+  dimension, equal, tangent (line-circle, circle-circle, arc-circle) and point-on-circle act on the radius. An ARC keeps its 3-joint model: 6
+  coordinates minus its structural equal radius = 5 DOF, which is Fusion's arc (centre 2, radius, 2 angles).
 * **O3 (RESOLVED, task 516)**: a dimension on a quantity the sketch already determines is now placed DRIVEN at its measured value, shown in brackets,
   and no value box opens (it was: typed value accepted, then replaced by the measured one with a toast). Measured in Fusion 2706.1.17: on a fully
   constrained square a driving diagonal is refused (over-constrained), a driven one is accepted at the measured value, driven -> driving is refused
@@ -300,8 +326,8 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
   a message; the old swap of two drivers is gone). A driven dimension never opens the value box (`showEditInput` is the only opener). The old
   typed-then-demoted path stays only as the safety net for a conflict the rank test cannot see (nonlinear, e.g. a diagonal of 50 against a fixed
   width of 100): reachable only by creating a dimension with a preset value (`createConstraint`, sandbox-conflict), not by the pointer path.
-  Tests: tests/dimension-redundant-driven-live.test.js (real pointer), tests/dimension-determined.test.js. A circle's radius is still not a solver
-  unknown here (O2, task 515), so its rank test answers false until that lands.
+  Tests: tests/dimension-redundant-driven-live.test.js (real pointer), tests/dimension-determined.test.js. Since task 515 a circle's radius is a solver
+  unknown (O2), so the same rank test covers a circle radius dimension (e.g. a second circle equal to a dimensioned one).
 * **O4 (EXPECTED)**: triangle angle 110 x0.8 refused: mathematically impossible (see the triangle section); the refusal restores the geometry.
 * **O5 (EXPECTED)**: PlaneGCS lands on another fillet branch from one jittered start of the trapezoid (seed 23, dev 40.6); our solver returned to
   the reference in all 5 starts of all 5 drawings. During the slot recipe PlaneGCS's DOF reads 1-2 below ours between the two arc `midpoint`
@@ -317,9 +343,9 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
 | 1 | F6 | HIGH | BUG | DOF says fully constrained while a DOF is free (one-sided pointOnLine Jacobian) |
 | 2 | F1 | HIGH | BUG | H and V dimension on the same two points: the second is demoted |
 | 3 | F3 | HIGH | BUG | clockwise angle dimension deforms / collapses the sketch at its own value |
-| 4 | F2 | HIGH | BUG | `equal` on circles is a silent no-op; hole radius edits are refused |
+| 4 | F2 | HIGH | FIXED (515) | `equal` on circles is a silent no-op; hole radius edits are refused |
 | 5 | F4 | MEDIUM | BUG | angle / perpendicular on a shared joint (polygon, fillet rim, import) |
 | 6 | F5 | MEDIUM | BUG | feasible tangent refused ERR-CSOLVE-01, order dependent |
 | 7 | F8 | MEDIUM | UNCLEAR | shared-corner outline folds / fails from a jittered start |
 | 8 | F7 | LOW | BUG | makeArc same-millisecond id collision |
-| - | O1, O2, O3 | - | UNCLEAR / EXPECTED | silent redundancy, circle radius not a DOF, typed conflicting value becomes a reference |
+| - | O1, O2, O3 | - | UNCLEAR / FIXED (O2, 515) / EXPECTED | silent redundancy, circle radius not a DOF, typed conflicting value becomes a reference |

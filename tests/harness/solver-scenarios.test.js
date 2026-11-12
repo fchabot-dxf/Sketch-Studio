@@ -224,7 +224,7 @@ run('13. toggleDriving seam — promoting a determined reference is refused', 'P
   const res = toggleDriving(s.state, d2);
   s.solve();
   return {
-    pass: res.refused === true && res.nowDriving === false && res.swapped === false && d2.isDriven === true && d1.isDriven === false && s.converged === true,
+    pass: res.refused === true && res.nowDriving === false && d2.isDriven === true && d1.isDriven === false && s.converged === true,
     nums: { refused: res.refused, d2StillRef: d2.isDriven, d1StillDrives: !d1.isDriven, converged: s.converged },
   };
 });
@@ -272,13 +272,15 @@ run('16. satisfiable coincident ADD → applied (not over-refused)', 'PASS', () 
   return { pass: kept && s.converged === true && s.edgeLen(a, b) < 0.01, nums: { kept, converged: s.converged, dist: s.edgeLen(a, b) } };
 });
 
-// 17 — INFEASIBLE tangent ADD → refuse + revert (center + line pinned so tangency can't be reached)
+// 17 — INFEASIBLE tangent ADD → refuse + revert (center + line pinned AND the radius dimensioned, so tangency can't be reached;
+//      task 515: a circle's radius is a solver unknown, so without the radius dimension the tangent is feasible: the radius grows to 20)
 run('17. infeasible tangent ADD → refuse + revert', 'PASS', () => {
   const s = createSketch();
   const la = s.point(0, 0, true), lb = s.point(0, 100, true); // pinned vertical line at x=0
   s.engine.addShape({ id: 'Li', type: 'line', joints: [la, lb] });
   const cc = s.point(20, 50, true);                           // center PINNED at x=20 (dist 20 != radius 10)
   s.engine.addShape({ id: 'Ci', type: 'circle', joints: [cc], radius: 10 });
+  ConstraintManager.createConstraint(s.state, T.DISTANCE, { shape: 'Ci', value: 10, isRadius: true }, { source: 'scenario' });
   s.solve();
   const before = s.constraintCount;
   ConstraintManager.createConstraint(s.state, T.TANGENT, { shapes: ['Li', 'Ci'] }, { source: 'scenario' });

@@ -5,6 +5,7 @@ import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
 import { measureResidual } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
+import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -302,11 +303,11 @@ export class ConstraintManager {
             }
         }
 
-        // Snapshot positions BEFORE persisting, so a genuinely over-constraining ADD can be handled below:
-        // an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
+        // Snapshot the solver state (joint positions and circle radii) BEFORE persisting, so a genuinely over-constraining ADD can be
+        // handled below: an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
-        const _preAdd = (() => { const m = new Map(); for (const [id, j] of state.joints) m.set(id, { x: j.x, y: j.y }); return m; })();
+        const _preAdd = snapshotSolverState(state.joints, state.shapes);
 
         // Fusion parity: land the moving geometry on its target BEFORE the solve (see placeOnAnchorLine).
         this.placeForCreation(state, type, normalized);
@@ -400,7 +401,7 @@ export class ConstraintManager {
                     const reason = pinned ? 'the geometry is fully fixed' : `conflicts with ${this._friendlyName(mangled.type)}`;
                     const ci = state.constraints.indexOf(created);
                     if (ci >= 0) state.constraints.splice(ci, 1);
-                    for (const [id, j] of state.joints) { const sv = _preAdd.get(id); if (sv) { j.x = sv.x; j.y = sv.y; } }
+                    restoreSolverState(state.joints, state.shapes, _preAdd);
                     if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
                         try { state.engine.solve(opts.solveIterations); } catch (_) {}
                     }
@@ -435,9 +436,8 @@ export class ConstraintManager {
      */
     static _sandboxVerify(state, type, params, _unused) {
         try {
-            // 1. Snapshot all joint positions
-            const saved = new Map();
-            for (const [id, j] of state.joints) saved.set(id, { x: j.x, y: j.y });
+            // 1. Snapshot the solver state (joint positions and circle radii)
+            const saved = snapshotSolverState(state.joints, state.shapes);
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
             // the real add; the positions are restored below either way.
@@ -496,11 +496,8 @@ export class ConstraintManager {
                 const idx = state.constraints.indexOf(tempC);
                 if (idx !== -1) state.constraints.splice(idx, 1);
 
-                // 6. Restore joint positions
-                for (const [id, j] of state.joints) {
-                    const s = saved.get(id);
-                    if (s) { j.x = s.x; j.y = s.y; }
-                }
+                // 6. Restore the solver state
+                restoreSolverState(state.joints, state.shapes, saved);
             }
 
             return hasConflict;

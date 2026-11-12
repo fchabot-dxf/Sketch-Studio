@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('#ui/input-handlers/selection-tools.js');
   const { TOOL_MODES } = await import('#core/constants.js');
@@ -8,7 +9,7 @@
 
   // Helper to create fresh state
   function makeState(){
-    return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, saveState: () => {}, endUndoGroup: () => {} };
+    return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, ...undoStub(), endUndoGroup: () => {} };
   }
 
   // Test 1: Click on a joint near another joint should NOT create a coincident constraint

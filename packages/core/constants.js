@@ -126,6 +126,15 @@ export const DRAG_TYPES = {
   DIMENSION: 'dim'
 };
 
+// TASK 545: the undo step label of every drag that changes geometry (the journal and the undo history show it). A LINE-type drag is
+// the body drag of any shape, so it is named by the SHAPE kind (DRAG_SHAPE_UNDO_LABELS), falling back to DRAG_UNDO_LABELS.line.
+export const DRAG_UNDO_LABELS = {
+  [DRAG_TYPES.JOINT]: 'drag point',
+  [DRAG_TYPES.CLUSTER]: 'drag points',
+  [DRAG_TYPES.LINE]: 'drag shape'
+};
+export const DRAG_SHAPE_UNDO_LABELS = { line: 'drag line', circle: 'drag circle', arc: 'drag arc' };
+
 // Inference types for line drawing
 export const INFERENCE_TYPES = {
   HORIZONTAL: 'horizontal',

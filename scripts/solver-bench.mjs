@@ -1,6 +1,6 @@
 // scripts/solver-bench.mjs -- TASK 541: the solver's speed on large sketches, measured reproducibly (pure node, the real seams).
 //   node scripts/solver-bench.mjs                 every size (50 / 100 / 200 / 400 constraints), every measurement
-//   node scripts/solver-bench.mjs 200 400         only these sizes
+//   node scripts/solver-bench.mjs 200 400         only these sizes (add --batch100 for the 100-dimension batch row too)
 //   node --cpu-prof --cpu-prof-dir=<dir> scripts/solver-bench.mjs 400      profile one size, then:
 //   node scripts/solver-bench.mjs --top <file.cpuprofile> [n]              the n functions with the most self time in that profile
 // A generated sketch is a realistic mix built through the same tool seams the app uses (tests/harness/audit/lib.js: rect tool, fillet tool,
@@ -14,6 +14,7 @@
 //   frame     the app's frame solve that follows each move (engine.solve(SolverConfig.ITERATIONS), apps/sketchstudio/main.js loop())
 //   batch     a batch of up to 100 dimension values (each x1.1) through applyParameterChange (the parameter entry point, one undo step)
 //   freedom   engine.jointFreedom() (the nullspace of the constraint Jacobian) and analyzeConstraintStatus (first call at a new pose)
+//   batch100  (last row) exactly 100 dimension values x1.1 through applyParameterChange, in a sketch grown until it has 100 driving dimensions
 import * as L from '../tests/harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { SolverConfig } from '#core/solver-config.js';

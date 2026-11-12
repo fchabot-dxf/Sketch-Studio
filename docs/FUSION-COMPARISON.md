@@ -11,9 +11,9 @@ Fusion 360 (2706.1.17) answered 315 + 2438 which-moves cells and replayed 13 dra
 
 1. **Who moves when a constraint is added to geometry that does not satisfy it.** Fusion moves the operand that is held LEAST and never meets in the middle: with equal holds the first pick stays and the second is moved (parallel / perpendicular / angle: rotate about its midpoint; equal(line): keep the start, change the length; coincident: translate the whole second line; dimensions: the free end slides). One ranking of the hold levels per constraint predicts 55/55 (parallel, perpendicular, equal), 39/39 (collinear), 73/73 (coincident), 54/55 (angle) of the one-mover cells (section "graded"). Ours moves BOTH operands for most constraints and ignores the pick order for several (coincident, 2-point H/V); collinear / pointOnLine / pointOnCircle placement was task 511: after it most of those cells agree and the rest are relabelled as real remaining differences (table below). Proposed fixes per constraint are in "Which geometry moves" (one place: `placeForCreation` in `createConstraint`, the hook task 511 added; dimension rows: `commitDimensionEdit`).
 2. **Refusals.** Fusion refuses an over-constraining or redundant constraint or dimension (`VCS_SKETCH_OVER_CONSTRAINTS`, "already has the same dimension"); ours keeps a redundant geometric constraint silently (O1) and a redundant / conflicting dimension as a driven reference (O3). The reverse (ours refuses what Fusion accepts): the hole-radius edits (F2), `perpendicular` / `collinear` / `pointOnLine` placements on a held operand (task 511 for the last two), and the S-curve (N-F7).
-3. **Circles.** `equal` on circles is refused in ours (F2) and `tangent` between circles never changes a radius (Fusion resizes the moving circle): both follow from the radius being shape data (O2).
+3. **Circles.** `equal` on circles is refused in ours (F2) and `tangent` between circles never changes a radius (Fusion resizes the moving circle): both follow from the radius being shape data (O2). FIXED by task 515 (a circle's radius is a solver unknown): equal on circles works and a tangent / point-on-circle can resize a circle. What remains is WHO gives way: ours spreads the correction over every free unknown (least change), so a free radius changes too where Fusion translates the moving circle and keeps its radius (see "After task 515").
 4. **The origin** is an operand like any point: in all 2438 graded cells (both pick orders, every point constraint, the levels "end at origin" and "midpoint at origin") it never moved and was never deleted, in Fusion (`sk.originPoint`) and in ours (`j_origin`). Ours has no axis entities, so axis constraints cannot be run in ours.
-5. **Fully-constrained flags.** Fusion reports `isFullyConstrained` per entity and for the sketch (no DOF count); they differ from ours mainly on circles (O2) and on fillet arcs; every row is in the per-drawing tables.
+5. **Fully-constrained flags.** Fusion reports `isFullyConstrained` per entity and for the sketch (no DOF count); they differed from ours mainly on circles (O2, fixed by task 515: the plate's two circle rows now agree) and on fillet arcs; every row is in the per-drawing tables.
 
 The 512 coverage matrix is indexed in `tests/fixtures/fusion-oracle/matrix.json`: 604 classes (constraint / dimension row x kind-pair class x variant sep | shared | locked | dimmed); a representative cell was run in Fusion for 249 of them (how it was picked is in `scripts/fusion-oracle/matrix-index.mjs`); the 355 others are listed with the reason (shared joint outside the line-line rows 122, pair class outside the graded set 108, midpoint of three free points has no Fusion equivalent 64, the point-to-line dimension throws in ours 28, other 33). Kinds skipped in Fusion with the reason: bezier (no equivalent), `equal(arc, circle)` (Fusion's API refuses), concentric / symmetric (not in our constraint list).
 
@@ -48,6 +48,32 @@ The classes marked "pending task 511" before are now labelled "remaining after t
 | TOTAL graded | all | 1525 | 1526 |
 | TOTAL drawings | all | 131 | 131 |
 
+### After task 515 (a circle's radius is a solver unknown; merge of origin/main 6da9d8d + task 516): differing cells before -> after
+
+Same Fusion answers (data), ours re-run; the KNOWN files regenerated with `scripts/fusion-oracle/{which-moves,graded,drawings}-known.mjs` (reason texts of the circle groups updated) and the three sections below with the `*-doc.mjs` scripts. No Fusion run. Only the rows that changed:
+
+| section | constraint / drawing | before | after |
+|---|---|---|---|
+| which-moves | equal-circle-circle | 14 | 6 |
+| which-moves | tangent-circle-circle | 14 | 10 |
+| which-moves | tangent-line-circle | 10 | 14 |
+| which-moves | pointOnCircle | 0 | 1 |
+| which-moves | equal-arc-circle | 0 | 2 |
+| graded | equal-circle | 20 | 52 |
+| graded | tangent-circle-circle | 56 | 44 |
+| graded | tangent-line-circle | 92 | 106 |
+| graded | pointOnCircle | 73 | 74 |
+| drawings | plate | 14 | 12 |
+| TOTAL which-moves | all | 217 | 212 |
+| TOTAL graded | all | 1526 | 1561 |
+| TOTAL drawings | all | 131 | 129 |
+
+Now agree with Fusion (40): which-moves equal-circle-circle 8 (A/B_fixfull, A/B_dim: the free circle takes the held one's radius) and tangent-circle-circle 4 (A/B_fixfull: the free circle resizes); graded tangent-circle-circle 16, pointOnCircle 6, tangent-line-circle 4; plate 2 fully-constrained rows.
+
+Moved AWAY from Fusion (68), two reasons, each a cell that agreed before:
+* **Fusion's API refuses `equal(arc, circle)`; ours now accepts it** (34: graded equal-circle 32, all in the circle/arc class OA; which-moves equal-arc-circle free AB/BA 2). Before 515 both refused (ours by F2). The refusal is Fusion's API ("invalid argument value", see "Not covered"), not a sketch rule; ours makes the circle radius equal to the arc's. Owner decides whether to refuse it like Fusion.
+* **A free circle radius now also changes (least change), where Fusion keeps the moving circle's radius** (34: graded tangent-line-circle 18, pointOnCircle 7, tangent-circle-circle 4; which-moves tangent-line-circle A_fixfull AB/BA and B_fix1 AB/BA 4, pointOnCircle A_fix1 AB 1). E.g. tangent to a fixed line: Fusion `A:.. B:M.` (the circle translates), ours `A:.. B:Mr` (it translates AND resizes); circle centre fixed: Fusion moves the line, ours moves the line and resizes. Before 515 our radius could not change, so these cells matched by construction. This is the who-moves question (one placement mechanism, task 519): Fusion's rule is "the least-held operand moves, a free radius is kept unless resizing is the only way".
+
 Re-run: `node tests/fusion-oracle.test.js` (offline, a few seconds). Re-record in Fusion: `scripts/fusion-oracle/*` (the runners need a scratch document holding the user parameter `CLAUDE_MARK`; they refuse to run anywhere else).
 
 ## Which geometry moves
@@ -72,7 +98,7 @@ them, so only A-B is run for those rows.
 
 <!-- which-moves:begin -->
 
-Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 98 identical, 217 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
+Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 103 identical, 212 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
 
 | constraint / dimension | cells | same as Fusion |
 |---|---|---|
@@ -86,14 +112,14 @@ Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 98 identical, 217 differ (all 
 | collinear | 20 | 16 |
 | equal-line-line | 20 | 0 |
 | pointOnLine | 6 | 6 |
-| pointOnCircle | 5 | 5 |
+| pointOnCircle | 5 | 4 |
 | midpoint | 6 | 2 |
-| equal-circle-circle | 14 | 0 |
+| equal-circle-circle | 14 | 8 |
 | equal-arc-arc | 14 | 4 |
-| equal-arc-circle | 2 | 2 |
-| tangent-line-circle | 16 | 6 |
+| equal-arc-circle | 2 | 0 |
+| tangent-line-circle | 16 | 2 |
 | tangent-line-arc | 16 | 4 |
-| tangent-circle-circle | 14 | 0 |
+| tangent-circle-circle | 14 | 4 |
 | tangent-arc-arc | 14 | 6 |
 | dim-aligned | 18 | 0 |
 | dim-horizontal | 18 | 3 |
@@ -278,7 +304,7 @@ Verdict: AFTER TASK 511: agrees except the cells marked NO.
 | B_hv | A:M B:.. | A:M B:.. | yes |
 | B_dim | A:M B:.. | A:M B:.. | yes |
 
-#### pointOnCircle  (5 of 5 cells the same)
+#### pointOnCircle  (4 of 5 cells the same)
 
 Fusion's rule: The point moves radially onto the rim; the circle stays; a fixed point moves the circle instead.
 
@@ -287,7 +313,7 @@ Verdict: AFTER TASK 511: agrees except the cells marked NO.
 | variant | AB Fusion | AB ours | AB same |
 |---|---|---|---|
 | free | A:M B:.. | A:M B:.. | yes |
-| A_fix1 | A:. B:M. | A:. B:M. | yes |
+| A_fix1 | A:. B:M. | A:. B:Mr | **NO** |
 | B_fix1 | A:M B:.. | A:M B:.. | yes |
 | B_fixfull | A:M B:.. | A:M B:.. | yes |
 | B_dim | A:M B:.. | A:M B:.. | yes |
@@ -309,7 +335,7 @@ Proposed fix: createConstraint, placeForCreation: move the free point to the mid
 | B_hv | A:M B:.. | A:M B:MM | **NO** |
 | B_dim | A:M B:.. | A:M B:MM | **NO** |
 
-#### equal-circle-circle  (0 of 14 cells the same)
+#### equal-circle-circle  (8 of 14 cells the same)
 
 Fusion's rule: The SECOND-picked circle is resized (its centre stays); a circle with a driving radius or fully fixed stays; a circle with a fixed centre is the one that resizes, even when picked first.
 
@@ -319,13 +345,13 @@ Proposed fix: OUR BUG F2 (docs/CONSTRAINT-AUDIT.md): the radius is shape data, n
 
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
-| free | A:.. B:.r | refused | **NO** | A:.r B:.. | refused | **NO** |
-| A_fix1 | A:.r B:.. | refused | **NO** | A:.r B:.. | refused | **NO** |
-| A_fixfull | A:.. B:.r | refused | **NO** | A:.. B:.r | refused | **NO** |
-| A_dim | A:.. B:.r | refused | **NO** | A:.. B:.r | refused | **NO** |
-| B_fix1 | A:.. B:.r | refused | **NO** | A:.. B:.r | refused | **NO** |
-| B_fixfull | A:.r B:.. | refused | **NO** | A:.r B:.. | refused | **NO** |
-| B_dim | A:.r B:.. | refused | **NO** | A:.r B:.. | refused | **NO** |
+| free | A:.. B:.r | A:.r B:.r | **NO** | A:.r B:.. | A:.r B:.r | **NO** |
+| A_fix1 | A:.r B:.. | A:.r B:.r | **NO** | A:.r B:.. | A:.r B:.r | **NO** |
+| A_fixfull | A:.. B:.r | A:.. B:.r | yes | A:.. B:.r | A:.. B:.r | yes |
+| A_dim | A:.. B:.r | A:.. B:.r | yes | A:.. B:.r | A:.. B:.r | yes |
+| B_fix1 | A:.. B:.r | A:.r B:.r | **NO** | A:.. B:.r | A:.r B:.r | **NO** |
+| B_fixfull | A:.r B:.. | A:.r B:.. | yes | A:.r B:.. | A:.r B:.. | yes |
+| B_dim | A:.r B:.. | A:.r B:.. | yes | A:.r B:.. | A:.r B:.. | yes |
 
 #### equal-arc-arc  (4 of 14 cells the same)
 
@@ -345,7 +371,7 @@ Proposed fix: The arc has real joints, so the solver can do it; the change is th
 | B_fixfull | A:MMMr B:.... | A:MMMr B:.... | yes | A:MMMr B:.... | A:MMMr B:.... | yes |
 | B_dim | A:MMMr B:.... | A:MMMr B:MMM. | **NO** | A:MMMr B:.... | A:MMMr B:MMM. | **NO** |
 
-#### equal-arc-circle  (2 of 2 cells the same)
+#### equal-arc-circle  (0 of 2 cells the same)
 
 Fusion's rule: Fusion's API REFUSES equal(arc, circle) with "invalid argument value" (the interactive tool may differ; not measurable through the API).
 
@@ -353,9 +379,9 @@ Verdict: SAME (both refuse) - ours refuses for the F2 reason, Fusion for an API 
 
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
-| free | refused | refused | yes | refused | refused | yes |
+| free | refused | A:MMMr B:.r | **NO** | refused | A:MMMr B:.r | **NO** |
 
-#### tangent-line-circle  (6 of 16 cells the same)
+#### tangent-line-circle  (2 of 16 cells the same)
 
 Fusion's rule: The LINE moves (rotates and translates; pick order is irrelevant) and the circle stays; a pinned or fixed line stays and the circle's centre moves; a circle with a dimensioned radius moves its centre while the line stays.
 
@@ -365,12 +391,12 @@ Proposed fix: placeForCreation: move the line (never the circle) onto tangency, 
 
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
-| free | A:MM B:.. | A:MM B:M. | **NO** | A:MM B:.. | A:MM B:M. | **NO** |
-| A_fix1 | A:.. B:M. | A:.M B:M. | **NO** | A:.. B:M. | A:.M B:M. | **NO** |
-| A_fixfull | A:.. B:M. | A:.. B:M. | yes | A:.. B:M. | A:.. B:M. | yes |
-| A_hv | A:MM B:.. | A:MM B:M. | **NO** | A:MM B:.. | A:MM B:M. | **NO** |
-| A_dim | A:MM B:.. | A:MM B:M. | **NO** | A:MM B:.. | A:MM B:M. | **NO** |
-| B_fix1 | A:MM B:.. | A:MM B:.. | yes | A:MM B:.. | A:MM B:.. | yes |
+| free | A:MM B:.. | A:MM B:Mr | **NO** | A:MM B:.. | A:MM B:Mr | **NO** |
+| A_fix1 | A:.. B:M. | A:.M B:Mr | **NO** | A:.. B:M. | A:.M B:Mr | **NO** |
+| A_fixfull | A:.. B:M. | A:.. B:Mr | **NO** | A:.. B:M. | A:.. B:Mr | **NO** |
+| A_hv | A:MM B:.. | A:MM B:Mr | **NO** | A:MM B:.. | A:MM B:Mr | **NO** |
+| A_dim | A:MM B:.. | A:MM B:Mr | **NO** | A:MM B:.. | A:MM B:Mr | **NO** |
+| B_fix1 | A:MM B:.. | A:MM B:.r | **NO** | A:MM B:.. | A:MM B:.r | **NO** |
 | B_fixfull | A:MM B:.. | A:MM B:.. | yes | A:MM B:.. | A:MM B:.. | yes |
 | B_dim | A:.. B:M. | A:MM B:M. | **NO** | A:.. B:M. | A:MM B:M. | **NO** |
 
@@ -393,7 +419,7 @@ Proposed fix: Same hook as tangent-line-circle. Ours also changes the arc's radi
 | B_fixfull | A:MM B:.... | A:MM B:.... | yes | A:MM B:.... | A:MM B:.... | yes |
 | B_dim | A:MM B:.... | A:MM B:MMM. | **NO** | A:MM B:.... | A:MM B:MMM. | **NO** |
 
-#### tangent-circle-circle  (0 of 14 cells the same)
+#### tangent-circle-circle  (4 of 14 cells the same)
 
 Fusion's rule: The SECOND-picked circle moves AND is re-sized (centre and radius); the first stays; a circle with a dimensioned radius or fixed centre keeps its radius, so the other circle's centre absorbs the change.
 
@@ -403,13 +429,13 @@ Proposed fix: Not a createConstraint fix: our circle radius is shape data (O2 / 
 
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
-| free | A:.. B:Mr | A:M. B:M. | **NO** | A:Mr B:.. | A:M. B:M. | **NO** |
-| A_fix1 | A:.. B:Mr | A:.. B:M. | **NO** | A:.r B:.. | A:.. B:M. | **NO** |
-| A_fixfull | A:.. B:Mr | A:.. B:M. | **NO** | A:.. B:Mr | A:.. B:M. | **NO** |
-| A_dim | A:M. B:.. | A:M. B:M. | **NO** | A:M. B:.. | A:M. B:M. | **NO** |
-| B_fix1 | A:.. B:.r | A:M. B:.. | **NO** | A:Mr B:.. | A:M. B:.. | **NO** |
-| B_fixfull | A:Mr B:.. | A:M. B:.. | **NO** | A:Mr B:.. | A:M. B:.. | **NO** |
-| B_dim | A:.. B:M. | A:M. B:M. | **NO** | A:.. B:M. | A:M. B:M. | **NO** |
+| free | A:.. B:Mr | A:Mr B:Mr | **NO** | A:Mr B:.. | A:Mr B:Mr | **NO** |
+| A_fix1 | A:.. B:Mr | A:.r B:Mr | **NO** | A:.r B:.. | A:.r B:Mr | **NO** |
+| A_fixfull | A:.. B:Mr | A:.. B:Mr | yes | A:.. B:Mr | A:.. B:Mr | yes |
+| A_dim | A:M. B:.. | A:M. B:Mr | **NO** | A:M. B:.. | A:M. B:Mr | **NO** |
+| B_fix1 | A:.. B:.r | A:Mr B:.r | **NO** | A:Mr B:.. | A:Mr B:.r | **NO** |
+| B_fixfull | A:Mr B:.. | A:Mr B:.. | yes | A:Mr B:.. | A:Mr B:.. | yes |
+| B_dim | A:.. B:M. | A:Mr B:M. | **NO** | A:.. B:M. | A:Mr B:M. | **NO** |
 
 #### tangent-arc-arc  (6 of 14 cells the same)
 
@@ -580,11 +606,11 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 | horizontal-2pt | 157 | 68 | 2 | 0 |
 | vertical-2pt | 157 | 58 | 2 | 0 |
 | pointOnLine | 117 | 42 | 0 | 0 |
-| pointOnCircle | 130 | 57 | 4 | 6 |
+| pointOnCircle | 130 | 56 | 4 | 0 |
 | midpoint | 117 | 48 | 0 | 0 |
-| equal-circle | 100 | 80 | 12 | 0 |
-| tangent-line-circle | 180 | 88 | 0 | 8 |
-| tangent-circle-circle | 100 | 44 | 0 | 16 |
+| equal-circle | 100 | 48 | 44 | 0 |
+| tangent-line-circle | 180 | 74 | 0 | 4 |
+| tangent-circle-circle | 100 | 56 | 0 | 7 |
 | horizontal-line | 9 | 7 | 0 | 0 |
 | vertical-line | 9 | 7 | 0 | 0 |
 | dim-length | 9 | 5 | 1 | 0 |
@@ -1132,22 +1158,22 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LO | 24 | 11 | a:6 b:15 R:3 | a:8 b:6 X:4 R:6 | translate:16 radius:3 stretch:2 | translate:10 stretch:8 one end:4 |
+| LO | 24 | 10 | a:6 b:15 R:3 | a:6 b:9 X:6 R:3 | translate:16 radius:3 stretch:2 | stretch:8 translate+radius:5 radius:5 translate:5 |
 | LA | 24 | 7 | a:12 b:9 R:3 | a:6 b:9 X:6 R:3 | translate:14 stretch:4 scale+radius:3 | stretch:8 deform+radius:5 scale+radius:5 deform:5 |
 | LF | 12 | 5 | a:6 b:3 R:3 | a:2 b:3 X:4 R:3 | translate:5 deform:2 stretch:2 | deform:7 stretch:4 one end:2 |
-| RO | 4 | 0 | a:2 b:2 | a:2 X:2 | translate:4 | deform:4 translate:2 |
+| RO | 4 | 0 | a:2 b:2 | a:1 X:3 | translate:4 | deform:4 translate+radius:1 radius:1 translate:1 |
 | RA | 4 | 0 | a:2 b:2 | a:1 X:3 | translate:4 | deform:5 deform+radius:1 scale+radius:1 |
 | RF | 2 | 0 | a:1 b:1 | X:2 | deform:1 translate:1 | deform:4 |
-| OO | 8 | 5 | a:2 b:5 R:1 | a:4 b:2 R:2 | translate:6 radius:1 | translate:6 |
+| OO | 8 | 5 | a:2 b:5 R:1 | a:4 b:3 R:1 | translate:6 radius:1 | translate:5 translate+radius:1 radius:1 |
 | OA | 8 | 6 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 scale+radius:1 | translate:4 deform+radius:1 scale+radius:1 deform:1 |
 | OF | 4 | 4 | a:2 b:1 R:1 | a:2 b:1 R:1 | translate:2 deform:1 | translate:2 deform:1 |
 | AO | 4 | 0 | a:2 b:2 | a:4 | translate:4 | one point (deform)+radius:4 |
 | AA | 4 | 0 | a:3 b:1 | a:4 | translate:4 | one point (deform)+radius:4 |
 | AF | 2 | 0 | a:2 | a:2 | translate:2 | one point (deform)+radius:2 |
-| PO | 8 | 7 | a:4 b:3 R:1 | a:4 b:2 R:2 | translate:6 radius:1 | translate:6 |
+| PO | 8 | 7 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 radius:1 | translate:5 translate+radius:1 radius:1 |
 | PA | 8 | 6 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 scale+radius:1 | translate:4 deform+radius:1 scale+radius:1 deform:1 |
 | PF | 4 | 0 | R:4 | -:4 |  |  |
-| ZO | 4 | 3 | b:3 R:1 | b:2 R:2 | translate:2 radius:1 | translate:2 |
+| ZO | 4 | 3 | b:3 R:1 | b:3 R:1 | translate:2 radius:1 | translate+radius:1 radius:1 translate:1 |
 | ZA | 4 | 2 | b:3 R:1 | b:3 R:1 | translate:2 scale+radius:1 | deform+radius:1 scale+radius:1 deform:1 |
 | ZF | 2 | 1 | b:1 R:1 | b:1 R:1 | translate:1 | deform:1 |
 
@@ -1198,12 +1224,12 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
 | OO | 16 | 12 | -:12 R:4 | -:16 |  |  |
-| OA | 16 | 16 | R:16 | R:16 |  |  |
-| OF | 8 | 8 | R:8 | R:8 |  |  |
-| AO | 16 | 16 | R:16 | R:16 |  |  |
+| OA | 16 | 4 | R:16 | a:2 b:4 X:6 R:4 |  | radius:8 deform+radius:4 scale+radius:4 deform:2 |
+| OF | 8 | 4 | R:8 | X:4 R:4 |  | radius:4 deform:4 |
+| AO | 16 | 4 | R:16 | a:4 b:2 X:6 R:4 |  | radius:8 deform+radius:4 scale+radius:4 deform:2 |
 | AA | 16 | 12 | -:12 R:4 | -:16 |  |  |
 | AF | 8 | 4 | a:4 R:4 | X:4 R:4 | scale+radius:4 | deform:4 deform+radius:2 scale+radius:2 |
-| FO | 8 | 8 | R:8 | R:8 |  |  |
+| FO | 8 | 4 | R:8 | X:4 R:4 |  | deform:4 radius:4 |
 | FA | 8 | 4 | b:4 R:4 | X:4 R:4 | scale+radius:4 | deform:4 deform+radius:2 scale+radius:2 |
 | FF | 4 | 0 | R:4 | -:4 |  |  |
 
@@ -1211,22 +1237,22 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LO | 16 | 8 | a:8 b:7 R:1 | a:6 b:2 X:6 R:2 | translate:10 stretch:2 one end:2 radius:1 | translate:12 stretch:4 one end:4 |
+| LO | 16 | 5 | a:8 b:7 R:1 | a:3 b:3 X:9 R:1 | translate:10 stretch:2 one end:2 radius:1 | translate:8 stretch:4 translate+radius:4 radius:4 |
 | LA | 16 | 7 | a:10 b:5 R:1 | a:6 b:2 X:6 R:2 | translate:8 stretch:4 one end:2 scale+radius:1 | stretch:4 deform+radius:4 deform:4 translate:4 |
 | LF | 8 | 4 | a:5 b:2 R:1 | a:3 b:1 X:3 R:1 | stretch:2 translate:2 deform:2 one end:1 | stretch:4 deform:4 one end:2 |
-| CO | 8 | 3 | a:5 b:3 | a:4 X:4 | translate:4 stretch:2 one end:2 | stretch:4 translate:4 one end:4 |
+| CO | 8 | 1 | a:5 b:3 | a:2 X:6 | translate:4 stretch:2 one end:2 | stretch:4 one end:4 translate+radius:2 radius:2 |
 | CA | 8 | 4 | a:6 b:2 | a:4 X:4 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 deform:2 |
 | CF | 4 | 2 | a:3 b:1 | a:2 X:2 | stretch:2 deform:1 one end:1 | stretch:2 deform:2 one end:2 |
-| SO | 4 | 2 | a:3 b:1 | a:2 X:2 | scale:3 translate:1 | scale:4 translate:2 |
+| SO | 4 | 1 | a:3 b:1 | a:1 X:3 | scale:3 translate:1 | scale:4 translate+radius:1 radius:1 translate:1 |
 | SA | 4 | 2 | a:4 | a:2 X:2 | scale:4 | scale:4 deform+radius:1 deform:1 |
 | SF | 2 | 1 | a:2 | a:1 X:1 | scale:2 | scale:2 deform:1 |
-| RO | 8 | 5 | a:3 b:4 R:1 | a:2 b:2 X:2 R:2 | deform:3 translate:3 radius:1 | deform:4 translate:4 |
+| RO | 8 | 4 | a:3 b:4 R:1 | a:1 b:3 X:3 R:1 | deform:3 translate:3 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
 | RA | 8 | 3 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:4 translate:2 scale+radius:1 | deform:6 deform+radius:2 |
 | RF | 4 | 3 | a:2 b:1 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
-| OL | 16 | 8 | a:7 b:8 R:1 | a:2 b:6 X:6 R:2 | translate:10 stretch:2 one end:2 radius:1 | translate:12 stretch:4 one end:4 |
-| OC | 8 | 3 | a:3 b:5 | b:4 X:4 | translate:4 stretch:2 one end:2 | translate:4 stretch:4 one end:4 |
-| OS | 4 | 2 | a:1 b:3 | b:2 X:2 | scale:3 translate:1 | scale:4 translate:2 |
-| OR | 8 | 5 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:3 translate:3 radius:1 | translate:4 deform:4 |
+| OL | 16 | 5 | a:7 b:8 R:1 | a:3 b:3 X:9 R:1 | translate:10 stretch:2 one end:2 radius:1 | translate:8 translate+radius:4 stretch:4 one end:4 |
+| OC | 8 | 1 | a:3 b:5 | b:2 X:6 | translate:4 stretch:2 one end:2 | stretch:4 one end:4 translate+radius:2 radius:2 |
+| OS | 4 | 1 | a:1 b:3 | b:1 X:3 | scale:3 translate:1 | scale:4 translate+radius:1 radius:1 translate:1 |
+| OR | 8 | 4 | a:4 b:3 R:1 | a:3 b:1 X:3 R:1 | deform:3 translate:3 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
 | AL | 16 | 7 | a:5 b:10 R:1 | a:2 b:6 X:6 R:2 | translate:8 stretch:4 one end:2 scale+radius:1 | deform+radius:4 stretch:4 translate:4 one end:4 |
 | AC | 8 | 4 | a:2 b:6 | b:4 X:4 | stretch:4 translate:2 one end:2 | stretch:4 one end:4 deform+radius:2 deform:2 |
 | AS | 4 | 2 | b:4 | b:2 X:2 | scale:4 | scale:4 deform+radius:1 deform:1 |
@@ -1240,13 +1266,13 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| OO | 16 | 5 | a:5 b:10 R:1 | a:4 b:4 X:4 R:4 | translate:7 translate+radius:4 radius:4 | translate:16 |
-| OA | 16 | 5 | a:12 b:3 R:1 | a:4 b:4 X:4 R:4 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate:8 deform+radius:4 deform:4 |
-| OF | 8 | 4 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:3 translate:2 translate+radius:1 radius:1 | translate:4 deform:4 |
-| AO | 16 | 5 | a:3 b:12 R:1 | a:4 b:4 X:4 R:4 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate:8 deform+radius:4 deform:4 |
+| OO | 16 | 7 | a:5 b:10 R:1 | a:3 b:3 X:9 R:1 | translate:7 translate+radius:4 radius:4 | translate+radius:8 radius:8 translate:8 |
+| OA | 16 | 9 | a:12 b:3 R:1 | a:6 b:2 X:6 R:2 | translate+radius:4 radius:4 translate:4 deform+radius:1 | translate+radius:4 deform+radius:4 deform:4 radius:4 |
+| OF | 8 | 5 | a:4 b:3 R:1 | a:3 b:1 X:3 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
+| AO | 16 | 9 | a:3 b:12 R:1 | a:2 b:6 X:6 R:2 | translate+radius:4 radius:4 translate:4 deform+radius:1 | deform+radius:4 translate+radius:4 radius:4 translate:4 |
 | AA | 16 | 8 | a:5 b:10 R:1 | a:4 b:4 X:4 R:4 | deform:7 deform+radius:4 scale+radius:4 | deform+radius:8 deform:8 |
 | AF | 8 | 5 | a:3 b:4 R:1 | a:2 b:2 X:2 R:2 | deform:5 deform+radius:1 scale+radius:1 | deform:6 deform+radius:2 |
-| FO | 8 | 4 | a:3 b:4 R:1 | a:2 b:2 X:2 R:2 | deform:3 translate:2 translate+radius:1 radius:1 | deform:4 translate:4 |
+| FO | 8 | 5 | a:3 b:4 R:1 | a:1 b:3 X:3 R:1 | deform:3 translate:2 translate+radius:1 radius:1 | deform:4 translate+radius:2 radius:2 translate:2 |
 | FA | 8 | 5 | a:4 b:3 R:1 | a:2 b:2 X:2 R:2 | deform:5 deform+radius:1 scale+radius:1 | deform:6 deform+radius:2 |
 | FF | 4 | 3 | a:1 b:2 R:1 | a:1 b:1 X:1 R:1 | deform:3 | deform:4 |
 
@@ -1306,7 +1332,7 @@ Rows are one per recipe step; `same?` needs the outcome (accepted / reference / 
 
 | drawing | recipe steps | comparisons | same | KNOWN differences |
 |---|---|---|---|---|
-| plate (round 1) | 20 | 96 | 82 | 14 |
+| plate (round 1) | 20 | 96 | 84 | 12 |
 | trapezoid (round 1) | 9 | 54 | 49 | 5 |
 | bracket (round 1) | 30 | 148 | 126 | 22 |
 | triangle (round 1) | 10 | 45 | 34 | 11 |
@@ -1327,28 +1353,28 @@ Rows are one per recipe step; `same?` needs the outcome (accepted / reference / 
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 centre: midpoint(vTL,vBR) = origin | accepted | accepted | yes | same | ............ / ............ ; sketch: nullity 10 / not fully constrained |
-| 2 width  vTL-vTR (horizontal) 200 | accepted | accepted | **NO** | same | ............ / .F.F........ * ; sketch: nullity 9 / not fully constrained |
-| 3 height vTR-vBR (vertical) 120 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 8 / not fully constrained |
-| 4 delete R dim of fillet TR (keep TL) | accepted | accepted | **NO** | same | ..FF.FFF.... / FFFF.FFF.... * ; sketch: nullity 9 / not fully constrained |
-| 5 delete R dim of fillet BR | accepted | accepted | **NO** | same | ...F..FF.... / FFFF..FF.... * ; sketch: nullity 10 / not fully constrained |
-| 6 delete R dim of fillet BL | accepted | accepted | **NO** | same | .......F.... / FFFF...F.... * ; sketch: nullity 11 / not fully constrained |
-| 7 equal radius aTR = aTL | accepted | accepted | **NO** | same | F...F..F.... / FFFFF..F.... * ; sketch: nullity 10 / not fully constrained |
-| 8 equal radius aBR = aTL | accepted | accepted | **NO** | same | FF..FF.F.... / FFFFFF.F.... * ; sketch: nullity 9 / not fully constrained |
-| 9 equal radius aBL = aTL | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 8 / not fully constrained |
-| 10 hole centres c1-c2 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 7 / not fully constrained |
-| 11 hole centres c2-c3 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 6 / not fully constrained |
-| 12 hole centres c3-c4 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 5 / not fully constrained |
-| 13 hole centres c4-c1 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 4 / not fully constrained |
-| 14 holes symmetric: midpoint(c1,c3) = origin | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 2 / not fully constrained |
-| 15 hole spacing c1-c2 (horizontal) 140 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 1 / not fully constrained |
-| 16 hole spacing c2-c3 (vertical) 70 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 0 / not fully constrained |
-| 17 hole radius h1 = 8 | accepted | accepted | yes | same | FFFFFFFFF... / FFFFFFFFF... ; sketch: nullity 0 / not fully constrained |
-| 18 equal radius h2 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFF.. * ; sketch: nullity 0 / not fully constrained |
-| 19 equal radius h3 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFFF. * ; sketch: nullity 0 / not fully constrained |
+| 1 centre: midpoint(vTL,vBR) = origin | accepted | accepted | yes | same | ............ / ............ ; sketch: nullity 14 / not fully constrained |
+| 2 width  vTL-vTR (horizontal) 200 | accepted | accepted | **NO** | same | ............ / .F.F........ * ; sketch: nullity 13 / not fully constrained |
+| 3 height vTR-vBR (vertical) 120 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 12 / not fully constrained |
+| 4 delete R dim of fillet TR (keep TL) | accepted | accepted | **NO** | same | ..FF.FFF.... / FFFF.FFF.... * ; sketch: nullity 13 / not fully constrained |
+| 5 delete R dim of fillet BR | accepted | accepted | **NO** | same | ...F..FF.... / FFFF..FF.... * ; sketch: nullity 14 / not fully constrained |
+| 6 delete R dim of fillet BL | accepted | accepted | **NO** | same | .......F.... / FFFF...F.... * ; sketch: nullity 15 / not fully constrained |
+| 7 equal radius aTR = aTL | accepted | accepted | **NO** | same | F...F..F.... / FFFFF..F.... * ; sketch: nullity 14 / not fully constrained |
+| 8 equal radius aBR = aTL | accepted | accepted | **NO** | same | FF..FF.F.... / FFFFFF.F.... * ; sketch: nullity 13 / not fully constrained |
+| 9 equal radius aBL = aTL | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 12 / not fully constrained |
+| 10 hole centres c1-c2 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 11 / not fully constrained |
+| 11 hole centres c2-c3 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 10 / not fully constrained |
+| 12 hole centres c3-c4 horizontal | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 9 / not fully constrained |
+| 13 hole centres c4-c1 vertical | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 8 / not fully constrained |
+| 14 holes symmetric: midpoint(c1,c3) = origin | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 6 / not fully constrained |
+| 15 hole spacing c1-c2 (horizontal) 140 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 5 / not fully constrained |
+| 16 hole spacing c2-c3 (vertical) 70 | accepted | accepted | yes | same | FFFFFFFF.... / FFFFFFFF.... ; sketch: nullity 4 / not fully constrained |
+| 17 hole radius h1 = 8 | accepted | accepted | yes | same | FFFFFFFFF... / FFFFFFFFF... ; sketch: nullity 3 / not fully constrained |
+| 18 equal radius h2 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFF.. * ; sketch: nullity 2 / not fully constrained |
+| 19 equal radius h3 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFFF. * ; sketch: nullity 1 / not fully constrained |
 | 20 equal radius h4 = h1 | accepted | accepted | **NO** | same | FFFFFFFFF... / FFFFFFFFFFFF * ; sketch: nullity 0 / fully constrained * |
 
-Step E, 12 dimension edits (0.8x, 1.25x): 10 agree (accepted or refused alike); differ: edit x0.8 of dimension 8.000 -> 6.400 (ours refused, Fusion accepted); edit x1.25 of dimension 8.000 -> 10.000 (ours refused, Fusion accepted).
+Step E, 12 dimension edits (0.8x, 1.25x): 12 agree (accepted or refused alike).
 
 Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
 
@@ -1356,7 +1382,6 @@ Divergences and verdicts:
 
 * UNCLEAR: per-entity "fully constrained" differs; circles: a circle's radius is shape data in ours (O2) while Fusion needs a radius dimension; otherwise it follows an upstream refusal difference: step 1 full, step 3 full, step 4 full, step 5 full, step 6 full, step 7 full, step 17 full, step 18 full, step 19 full
 * UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): step 19 sketchFull
-* OUR BUG F2 (equal on circles does nothing; the hole radius edit is refused): edit10 outcome, edit11 outcome
 * FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
 
 #### trapezoid: Trapezoid: slanted sides, centre line, 4 fillets (owner shape) (round 1)
@@ -1392,35 +1417,35 @@ Divergences and verdicts:
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 A at the origin | accepted | accepted | yes | same | ............. / ............. ; sketch: nullity 26 / not fully constrained |
-| 2 AB horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 25 / not fully constrained |
-| 3 CD vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 24 / not fully constrained |
-| 4 DE horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 23 / not fully constrained |
-| 5 EF vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 22 / not fully constrained |
-| 6 FG horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 21 / not fully constrained |
-| 7 HA vertical | accepted | accepted | **NO** | same | ............. / F......F..... * ; sketch: nullity 20 / not fully constrained |
-| 8 AB length 130 | accepted | accepted | **NO** | same | F............ / F......F..... * ; sketch: nullity 19 / not fully constrained |
-| 9 chamfer BC across 10 | accepted | accepted | **NO** | same | F............ / F.F....F..... * ; sketch: nullity 18 / not fully constrained |
-| 10 chamfer BC up 10 | accepted | accepted | **NO** | same | FF........... / FFF....F..... * ; sketch: nullity 17 / not fully constrained |
-| 11 CD length 30 | accepted | accepted | **NO** | same | FFF.......... / FFFF...F..... * ; sketch: nullity 16 / not fully constrained |
-| 12 DE length 100 | accepted | accepted | **NO** | same | FFFF......... / FFFFF..F..... * ; sketch: nullity 15 / not fully constrained |
-| 13 EF length 100 | accepted | accepted | **NO** | same | FFFFF........ / FFFFFF.F..... * ; sketch: nullity 14 / not fully constrained |
-| 14 FG length 30 | accepted | accepted | **NO** | same | FFFFFF....... / FFFFFF.F..... * ; sketch: nullity 13 / not fully constrained |
-| 15 chamfer GH down 10 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 12 / not fully constrained |
-| 16 slot left end: midpoint(a1,b1)=CL | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 11 / not fully constrained |
-| 17 slot right end: midpoint(a2,b2)=CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 10 / not fully constrained |
-| 18 slot top line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 9 / not fully constrained |
-| 19 slot top line tangent to right arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 8 / not fully constrained |
-| 20 slot bottom line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 7 / not fully constrained |
+| 1 A at the origin | accepted | accepted | yes | same | ............. / ............. ; sketch: nullity 27 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 26 / not fully constrained |
+| 3 CD vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 25 / not fully constrained |
+| 4 DE horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 24 / not fully constrained |
+| 5 EF vertical | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 23 / not fully constrained |
+| 6 FG horizontal | accepted | accepted | **NO** | same | ............. / F............ * ; sketch: nullity 22 / not fully constrained |
+| 7 HA vertical | accepted | accepted | **NO** | same | ............. / F......F..... * ; sketch: nullity 21 / not fully constrained |
+| 8 AB length 130 | accepted | accepted | **NO** | same | F............ / F......F..... * ; sketch: nullity 20 / not fully constrained |
+| 9 chamfer BC across 10 | accepted | accepted | **NO** | same | F............ / F.F....F..... * ; sketch: nullity 19 / not fully constrained |
+| 10 chamfer BC up 10 | accepted | accepted | **NO** | same | FF........... / FFF....F..... * ; sketch: nullity 18 / not fully constrained |
+| 11 CD length 30 | accepted | accepted | **NO** | same | FFF.......... / FFFF...F..... * ; sketch: nullity 17 / not fully constrained |
+| 12 DE length 100 | accepted | accepted | **NO** | same | FFFF......... / FFFFF..F..... * ; sketch: nullity 16 / not fully constrained |
+| 13 EF length 100 | accepted | accepted | **NO** | same | FFFFF........ / FFFFFF.F..... * ; sketch: nullity 15 / not fully constrained |
+| 14 FG length 30 | accepted | accepted | **NO** | same | FFFFFF....... / FFFFFF.F..... * ; sketch: nullity 14 / not fully constrained |
+| 15 chamfer GH down 10 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 13 / not fully constrained |
+| 16 slot left end: midpoint(a1,b1)=CL | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 12 / not fully constrained |
+| 17 slot right end: midpoint(a2,b2)=CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 11 / not fully constrained |
+| 18 slot top line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 10 / not fully constrained |
+| 19 slot top line tangent to right arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 9 / not fully constrained |
+| 20 slot bottom line tangent to left arc | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 8 / not fully constrained |
 | 21 slot bottom line tangent to right arc | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
 | 22 slot arcs equal radius | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
-| 23 slot radius 8 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 6 / not fully constrained |
-| 24 slot axis horizontal CL-CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 5 / not fully constrained |
-| 25 slot length CL-CR 50 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 4 / not fully constrained |
-| 26 slot position: CL x = 60 from A | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 3 / not fully constrained |
-| 27 slot position: CL y = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 2 / not fully constrained |
-| 28 hole x = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 1 / not fully constrained |
-| 29 hole y = 90 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 0 / not fully constrained |
+| 23 slot radius 8 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 7 / not fully constrained |
+| 24 slot axis horizontal CL-CR | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 6 / not fully constrained |
+| 25 slot length CL-CR 50 | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 5 / not fully constrained |
+| 26 slot position: CL x = 60 from A | accepted | accepted | yes | same | FFFFFFFF..... / FFFFFFFF..... ; sketch: nullity 4 / not fully constrained |
+| 27 slot position: CL y = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 3 / not fully constrained |
+| 28 hole x = 20 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 2 / not fully constrained |
+| 29 hole y = 90 from A | accepted | accepted | **NO** | same | FFFFFFFFFFFF. / FFFFFFFFF.... * ; sketch: nullity 1 / not fully constrained |
 | 30 hole radius 8 | accepted | accepted | **NO** | same | FFFFFFFFFFFFF / FFFFFFFFF...F * ; sketch: fully constrained / not fully constrained * |
 
 Step E, 30 dimension edits (0.8x, 1.25x): 30 agree (accepted or refused alike).
@@ -1441,14 +1466,14 @@ Divergences and verdicts:
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 A at the origin | accepted | accepted | yes | same | ..... / ..... ; sketch: nullity 8 / not fully constrained |
-| 2 base AB horizontal | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 7 / not fully constrained |
-| 3 equal sides CA = BC | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 6 / not fully constrained |
-| 4 interior angle at A = 70 (the dimension reads the angle between the di | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 5 / not fully constrained |
-| 5 M = midpoint of the base | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 3 / not fully constrained |
-| 6 circle centre on the axis C-M | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 2 / not fully constrained |
-| 7 circle tangent to AB | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 1 / not fully constrained |
-| 8 circle tangent to BC | accepted | accepted | **NO** | same | FFFF. / F.F.. * ; sketch: nullity 0 / not fully constrained |
+| 1 A at the origin | accepted | accepted | yes | same | ..... / ..... ; sketch: nullity 9 / not fully constrained |
+| 2 base AB horizontal | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 8 / not fully constrained |
+| 3 equal sides CA = BC | accepted | accepted | **NO** | same | ..... / F.... * ; sketch: nullity 7 / not fully constrained |
+| 4 interior angle at A = 70 (the dimension reads the angle between the di | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 6 / not fully constrained |
+| 5 M = midpoint of the base | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 4 / not fully constrained |
+| 6 circle centre on the axis C-M | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 3 / not fully constrained |
+| 7 circle tangent to AB | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 2 / not fully constrained |
+| 8 circle tangent to BC | accepted | accepted | **NO** | another valid branch | ..... / F.F.. * ; sketch: nullity 1 / not fully constrained |
 | 9 circle tangent to CA (3rd: consistent by symmetry) | accepted | refused (3 : failed to create offset: VCS_SKETCH_OVER_CONSTRAINTS - S) | **NO** | - | - |
 | 10 circle radius 20 (sets the size) | accepted | accepted | yes | same | FFFFF / FFFFF ; sketch: fully constrained / fully constrained |
 
@@ -1471,16 +1496,16 @@ Divergences and verdicts:
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 centre O at the origin | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 10 / not fully constrained |
-| 2 circumradius O-k0 = 40 | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 9 / not fully constrained |
-| 3 M0 = midpoint of edge e0 (k0,k1) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 7 / not fully constrained |
-| 4 M3 = midpoint of the opposite edge e3 (k3,k4) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 5 / not fully constrained |
-| 5 axis M0-M3 horizontal (rotation) | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 4 / not fully constrained |
-| 6 axis symmetric about O: midpoint(M0,M3)=O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 4 / not fully constrained |
-| 7 concentric circle: centre = O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 2 / not fully constrained |
-| 8 concentric circle radius 25 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 2 / not fully constrained |
-| 9 second circle tangent to edge e1 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 1 / not fully constrained |
-| 10 second circle tangent to edge e2 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 0 / not fully constrained |
+| 1 centre O at the origin | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 12 / not fully constrained |
+| 2 circumradius O-k0 = 40 | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 11 / not fully constrained |
+| 3 M0 = midpoint of edge e0 (k0,k1) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 9 / not fully constrained |
+| 4 M3 = midpoint of the opposite edge e3 (k3,k4) | accepted | accepted | yes | another valid branch | ............... / ............... ; sketch: nullity 7 / not fully constrained |
+| 5 axis M0-M3 horizontal (rotation) | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 6 / not fully constrained |
+| 6 axis symmetric about O: midpoint(M0,M3)=O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 6 / not fully constrained |
+| 7 concentric circle: centre = O | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFF.. / FFFFFFFFFFFFF.. ; sketch: nullity 4 / not fully constrained |
+| 8 concentric circle radius 25 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 3 / not fully constrained |
+| 9 second circle tangent to edge e1 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 2 / not fully constrained |
+| 10 second circle tangent to edge e2 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFF. / FFFFFFFFFFFFFF. ; sketch: nullity 1 / not fully constrained |
 | 11 second circle radius 8 | accepted | accepted | yes | another valid branch | FFFFFFFFFFFFFFF / FFFFFFFFFFFFFFF ; sketch: fully constrained / fully constrained |
 
 Step E, 6 dimension edits (0.8x, 1.25x): 6 agree (accepted or refused alike).
@@ -1556,14 +1581,14 @@ Divergences and verdicts:
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 A at the origin | accepted | accepted | yes | another valid branch | ..... / ..... ; sketch: nullity 19 / not fully constrained |
-| 2 AB horizontal | accepted | accepted | **NO** | another valid branch | ..... / F.... * ; sketch: nullity 18 / not fully constrained |
-| 3 AB length 30 | accepted | accepted | yes | another valid branch | F.... / F.... ; sketch: nullity 17 / not fully constrained |
-| 4 CD collinear with AB | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 15 / not fully constrained |
-| 5 CD length 40 | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 14 / not fully constrained |
-| 6 gap B-C 20 | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 13 / not fully constrained |
-| 7 circle centre 45 right of the origin | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 12 / not fully constrained |
-| 8 circle centre 60 below A (the origin joint pair is taken by the H dim: | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 11 / not fully constrained |
+| 1 A at the origin | accepted | accepted | yes | another valid branch | ..... / ..... ; sketch: nullity 20 / not fully constrained |
+| 2 AB horizontal | accepted | accepted | **NO** | another valid branch | ..... / F.... * ; sketch: nullity 19 / not fully constrained |
+| 3 AB length 30 | accepted | accepted | yes | another valid branch | F.... / F.... ; sketch: nullity 18 / not fully constrained |
+| 4 CD collinear with AB | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 16 / not fully constrained |
+| 5 CD length 40 | accepted | accepted | **NO** | another valid branch | F.... / FF... * ; sketch: nullity 15 / not fully constrained |
+| 6 gap B-C 20 | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 14 / not fully constrained |
+| 7 circle centre 45 right of the origin | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 13 / not fully constrained |
+| 8 circle centre 60 below A (the origin joint pair is taken by the H dim: | accepted | accepted | yes | another valid branch | FF... / FF... ; sketch: nullity 12 / not fully constrained |
 | 9 circle radius 15 | accepted | accepted | yes | another valid branch | FFF.. / FFF.. ; sketch: nullity 11 / not fully constrained |
 | 10 concentric: arc centre = circle centre | accepted | accepted | yes | another valid branch | FFF.. / FFF.. ; sketch: nullity 9 / not fully constrained |
 | 11 arc radius 25 | accepted | accepted | **NO** | another valid branch | FFF.. / FFFF. * ; sketch: nullity 8 / not fully constrained |
@@ -1685,15 +1710,15 @@ Divergences and verdicts:
 
 | step | ours | Fusion | same? | coordinates | fully constrained (per shape, F = yes) ours / Fusion |
 |---|---|---|---|---|---|
-| 1 rect corner c1 at the origin | accepted | accepted | **NO** | another valid branch | ...................... / F..F...............?.. * ; sketch: nullity 27 / not fully constrained |
-| 2 rect width 60 | accepted | accepted | **NO** | another valid branch | F...F................. / FF.FF..............?.. * ; sketch: nullity 26 / not fully constrained |
-| 3 rect height V-c3 43 (V = the filleted TR sharp; the pair c1-c3 is take | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 25 / not fully constrained |
-| 4 hexagon centre 150 right | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 24 / not fully constrained |
-| 5 hexagon centre 20 down | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 23 / not fully constrained |
-| 6 hexagon circumradius 20 | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 22 / not fully constrained |
-| 7 hexagon first radial horizontal | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 21 / not fully constrained |
-| 8 circle centre 40 right | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 20 / not fully constrained |
-| 9 circle centre 90 down | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 19 / not fully constrained |
+| 1 rect corner c1 at the origin | accepted | accepted | **NO** | another valid branch | ...................... / F..F...............?.. * ; sketch: nullity 28 / not fully constrained |
+| 2 rect width 60 | accepted | accepted | **NO** | another valid branch | F...F................. / FF.FF..............?.. * ; sketch: nullity 27 / not fully constrained |
+| 3 rect height V-c3 43 (V = the filleted TR sharp; the pair c1-c3 is take | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 26 / not fully constrained |
+| 4 hexagon centre 150 right | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 25 / not fully constrained |
+| 5 hexagon centre 20 down | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 24 / not fully constrained |
+| 6 hexagon circumradius 20 | accepted | accepted | yes | another valid branch | FFFFF................. / FFFFF..............?.. ; sketch: nullity 23 / not fully constrained |
+| 7 hexagon first radial horizontal | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 22 / not fully constrained |
+| 8 circle centre 40 right | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 21 / not fully constrained |
+| 9 circle centre 90 down | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFF..... / FFFFFFFFFFFFF.F....?.. * ; sketch: nullity 20 / not fully constrained |
 | 10 circle radius 10 | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 19 / not fully constrained |
 | 11 arc centre 100 right | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 18 / not fully constrained |
 | 12 arc centre 90 down | accepted | accepted | **NO** | another valid branch | FFFFFFFFFFFFFFFFFF.... / FFFFFFFFFFFFF.F..F.?.. * ; sketch: nullity 17 / not fully constrained |

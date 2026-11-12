@@ -9,9 +9,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves.json'), 'utf8'));
 // reason class per group. "pending task 511" = collinear / pointOnLine placement that task 511 changes in packages/core.
 const REASON = {
-  'pointOnLine': 'remaining after task 511: a pinned operand / line held differently from Fusion', 'pointOnCircle': 'remaining after task 511: a pinned operand differs from Fusion', 'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion',
-  'equal-circle-circle': 'OUR BUG F2: equal on circles is refused (the radius is not a solver unknown)',
-  'tangent-circle-circle': 'DIFFERENT: ours never changes a radius (shape data); Fusion resizes the moving circle',
+  'pointOnLine': 'remaining after task 511: a pinned operand / line held differently from Fusion', 'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion',
+  // after task 515 a circle's radius is a solver unknown: the least-change solve may now also change a free radius, where Fusion keeps the moving circle's radius
+  'pointOnCircle': 'remaining after tasks 511 + 515: a pinned operand differs from Fusion; since 515 ours may also change the free circle radius (least change)',
+  'equal-circle-circle': 'after task 515: which circle resizes / moves differs from Fusion (ours: least change over both)',
+  'equal-arc-circle': "after task 515: Fusion's API refuses equal(arc, circle); ours accepts it (the circle radius follows the arc)",
+  'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
+  'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
 };
 const known = {};
 for (const sc of buildScenarios()) {

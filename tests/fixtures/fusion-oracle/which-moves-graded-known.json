@@ -2346,7 +2346,7 @@
   ]
  },
  "pointOnCircle|LO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 24,
   "cells": [
    "0,0",
@@ -2357,15 +2357,16 @@
    "3,c",
    "3,r",
    "3,cr",
-   "4,c",
-   "7,c",
-   "o,c",
+   "4,0",
+   "7,0",
+   "o,0",
    "m,0",
+   "m,c",
    "m,r"
   ]
  },
  "pointOnCircle|LA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 24,
   "cells": [
    "0,0",
@@ -2388,7 +2389,7 @@
   ]
  },
  "pointOnCircle|LF": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 12,
   "cells": [
    "0,0",
@@ -2401,31 +2402,31 @@
   ]
  },
  "pointOnCircle|RO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|RA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|RF": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 2,
   "cells": "all"
  },
  "pointOnCircle|OO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 8,
   "cells": [
    "0,0",
    "0,r",
-   "c,c"
+   "c,0"
   ]
  },
  "pointOnCircle|OA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 8,
   "cells": [
    "c,0",
@@ -2433,29 +2434,29 @@
   ]
  },
  "pointOnCircle|AO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|AA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|AF": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 2,
   "cells": "all"
  },
  "pointOnCircle|PO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 8,
   "cells": [
-   "4,c"
+   "4,0"
   ]
  },
  "pointOnCircle|PA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 8,
   "cells": [
    "4,0",
@@ -2463,19 +2464,19 @@
   ]
  },
  "pointOnCircle|PF": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|ZO": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": [
-   "0,c"
+   "0,0"
   ]
  },
  "pointOnCircle|ZA": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 4,
   "cells": [
    "0,0",
@@ -2483,7 +2484,7 @@
   ]
  },
  "pointOnCircle|ZF": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
   "total": 2,
   "cells": [
    "0,0"
@@ -2650,7 +2651,7 @@
   ]
  },
  "equal-circle|OO": {
-  "reason": "OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either",
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
   "total": 16,
   "cells": [
    "r,r",
@@ -2659,8 +2660,54 @@
    "cr,cr"
   ]
  },
+ "equal-circle|OA": {
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "total": 16,
+  "cells": [
+   "0,0",
+   "0,c",
+   "0,r",
+   "0,cr",
+   "c,0",
+   "c,c",
+   "c,r",
+   "c,cr",
+   "r,0",
+   "r,c",
+   "cr,0",
+   "cr,c"
+  ]
+ },
+ "equal-circle|OF": {
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "total": 8,
+  "cells": [
+   "0,0",
+   "0,c",
+   "c,0",
+   "c,c"
+  ]
+ },
+ "equal-circle|AO": {
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "total": 16,
+  "cells": [
+   "0,0",
+   "0,c",
+   "0,r",
+   "0,cr",
+   "c,0",
+   "c,c",
+   "c,r",
+   "c,cr",
+   "r,0",
+   "r,c",
+   "cr,0",
+   "cr,c"
+  ]
+ },
  "equal-circle|AA": {
-  "reason": "OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either",
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
   "total": 16,
   "cells": [
    "r,r",
@@ -2670,7 +2717,17 @@
   ]
  },
  "equal-circle|AF": {
-  "reason": "OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either",
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "total": 8,
+  "cells": [
+   "0,0",
+   "0,c",
+   "c,0",
+   "c,c"
+  ]
+ },
+ "equal-circle|FO": {
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
   "total": 8,
   "cells": [
    "0,0",
@@ -2680,7 +2737,7 @@
   ]
  },
  "equal-circle|FA": {
-  "reason": "OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either",
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
   "total": 8,
   "cells": [
    "0,0",
@@ -2690,26 +2747,29 @@
   ]
  },
  "equal-circle|FF": {
-  "reason": "OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either",
+  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
   "total": 4,
   "cells": "all"
  },
  "tangent-line-circle|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 16,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
    "0,cr",
    "3,0",
+   "3,c",
    "3,r",
    "4,0",
+   "4,c",
    "4,r",
-   "7,c"
+   "7,0"
   ]
  },
  "tangent-line-circle|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 16,
   "cells": [
    "0,0",
@@ -2724,7 +2784,7 @@
   ]
  },
  "tangent-line-circle|LF": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2734,18 +2794,20 @@
   ]
  },
  "tangent-line-circle|CO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
    "0,cr",
    "4,0",
+   "4,c",
    "4,r"
   ]
  },
  "tangent-line-circle|CA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2755,7 +2817,7 @@
   ]
  },
  "tangent-line-circle|CF": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
@@ -2763,15 +2825,16 @@
   ]
  },
  "tangent-line-circle|SO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
+   "0,c",
    "0,r"
   ]
  },
  "tangent-line-circle|SA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
@@ -2779,23 +2842,24 @@
   ]
  },
  "tangent-line-circle|SF": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 2,
   "cells": [
    "0,0"
   ]
  },
  "tangent-line-circle|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
+   "0,c",
    "0,r",
-   "8,c"
+   "8,0"
   ]
  },
  "tangent-line-circle|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2806,20 +2870,23 @@
   ]
  },
  "tangent-line-circle|RF": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0"
   ]
  },
  "tangent-line-circle|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 16,
   "cells": [
    "0,0",
    "0,3",
    "0,4",
-   "c,7",
+   "0,7",
+   "c,0",
+   "c,3",
+   "c,4",
    "r,0",
    "r,3",
    "r,4",
@@ -2827,35 +2894,39 @@
   ]
  },
  "tangent-line-circle|OC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
    "0,4",
+   "c,0",
+   "c,4",
    "r,0",
    "r,4",
    "cr,0"
   ]
  },
  "tangent-line-circle|OS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
+   "c,0",
    "r,0"
   ]
  },
  "tangent-line-circle|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
-   "c,8",
+   "0,8",
+   "c,0",
    "r,0"
   ]
  },
  "tangent-line-circle|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 16,
   "cells": [
    "0,0",
@@ -2870,7 +2941,7 @@
   ]
  },
  "tangent-line-circle|AC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2880,7 +2951,7 @@
   ]
  },
  "tangent-line-circle|AS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
@@ -2888,7 +2959,7 @@
   ]
  },
  "tangent-line-circle|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2899,7 +2970,7 @@
   ]
  },
  "tangent-line-circle|FL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 8,
   "cells": [
    "0,0",
@@ -2909,7 +2980,7 @@
   ]
  },
  "tangent-line-circle|FC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0",
@@ -2917,82 +2988,71 @@
   ]
  },
  "tangent-line-circle|FS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 2,
   "cells": [
    "0,0"
   ]
  },
  "tangent-line-circle|FR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
   "total": 4,
   "cells": [
    "0,0"
   ]
  },
  "tangent-circle-circle|OO": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 16,
   "cells": [
    "0,0",
    "0,c",
    "0,r",
-   "0,cr",
-   "c,0",
-   "c,c",
-   "c,cr",
-   "r,0",
-   "r,r",
-   "cr,0",
-   "cr,c"
-  ]
- },
- "tangent-circle-circle|OA": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
-  "total": 16,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "0,cr",
    "c,0",
    "c,c",
    "c,r",
-   "c,cr",
+   "r,0",
+   "r,c",
+   "r,r"
+  ]
+ },
+ "tangent-circle-circle|OA": {
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "total": 16,
+  "cells": [
+   "0,0",
+   "0,r",
+   "c,0",
+   "c,r",
    "r,0",
    "r,r",
    "cr,c"
   ]
  },
  "tangent-circle-circle|OF": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 8,
   "cells": [
    "0,0",
-   "0,c",
-   "c,c",
+   "c,0",
    "r,0"
   ]
  },
  "tangent-circle-circle|AO": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 16,
   "cells": [
    "0,0",
    "0,c",
    "0,r",
-   "c,0",
-   "c,c",
    "c,cr",
    "r,0",
    "r,c",
-   "r,r",
-   "cr,0",
-   "cr,c"
+   "r,r"
   ]
  },
  "tangent-circle-circle|AA": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 16,
   "cells": [
    "0,0",
@@ -3006,7 +3066,7 @@
   ]
  },
  "tangent-circle-circle|AF": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 8,
   "cells": [
    "0,0",
@@ -3015,17 +3075,16 @@
   ]
  },
  "tangent-circle-circle|FO": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 8,
   "cells": [
    "0,0",
-   "0,r",
-   "c,0",
-   "c,c"
+   "0,c",
+   "0,r"
   ]
  },
  "tangent-circle-circle|FA": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 8,
   "cells": [
    "0,0",
@@ -3034,7 +3093,7 @@
   ]
  },
  "tangent-circle-circle|FF": {
-  "reason": "DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle",
+  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
   "total": 4,
   "cells": [
    "0,0"

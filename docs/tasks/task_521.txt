@@ -1,0 +1,19 @@
+TASK 521 (Sketch-Studio): a constraint must never be "satisfied" by collapsing a line to a point (found by task 519). Base: origin/main.
+Repro (recorded graded cell collinear|LL|6,4, tests/fixtures/fusion-oracle/which-moves-graded.json; trace by task 519): line A is H/V
+constrained with one end fixed, line B has one end fixed; collinear(A, B) is impossible (Fusion refuses). Ours accepts: since task 520
+_sandboxVerify starts from the placed pose (B's free end projected on A's line), and the solve then satisfies collinear by collapsing A to
+zero length: "after: A j1(20.000,26.000,FIXED) j2(20.000,26.000)" (A's free end was at 80,26). Sandbox errors from the placed pose
+"[0.049,0,0] -> conflict: false". This DESTROYS geometry.
+Cause to fix in ONE place: a solve result in which a line that had length before now has (near) zero length is not a valid solution for ANY
+constraint type. Task 511 did this for ANGLE only (constraint-verifier.js: a zero-length line returns the largest angular error). Generalise
+at the right altitude: find where createConstraint / _sandboxVerify / the post-add solve decide "converged, accept" and where
+commitDimensionEdit decides the same, and add ONE shared degenerate-collapse check (a line shape whose length fell below a relative
+tolerance of its pre-solve length, and an arc/circle whose radius did the same) that turns the result into a refusal with the geometry
+restored. Reuse the existing snapshot/restore (_preAdd). Remove the ANGLE-only special case if the general check covers it (one source).
+A user-typed dimension of 0 or a deliberately tiny length must still behave as today (say how you tell them apart).
+Tests (fail-first): the collinear|LL|6,4 case is refused and both lines are unchanged; perpendicular, parallel, equal, tangent, coincident,
+pointOnLine, midpoint variants built to be infeasible-except-by-collapse are refused with geometry unchanged; 300-seed random run
+(tests/coverage-properties) shows no accepted op that shortened a line below the tolerance. Update the pinned KNOWN of that cell in
+tests/fixtures/fusion-oracle (it should now agree: Fusion refuses, ours refuses) and any audit KNOWN that changes, with evidence.
+DO NOT touch engine.js/definitions.js internals (task 515 is changing them) or placeForCreation's who-moves logic. No hidden globals, no
+silent catch. List behaviour changes. Gate green (output to a file), commit by path, push, WORK-LOG `## TURN 521`, REPORT once.

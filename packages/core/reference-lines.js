@@ -81,3 +81,10 @@ export const sceneShapes = (shapes) => (shapes instanceof SceneShapes ? shapes :
 export function findShapeById(shapes, id) {
   return (shapes && shapes.find(s => s && s.id === id)) || referenceShape(id) || null;
 }
+
+// The two points (world) of a reserved line, from the declaration alone (the origin and the end): for the code that needs the
+// geometry of an axis without any joint container (the pointer pick, the highlight).
+export function referenceEnds(shape) {
+  const a = shape && AXIS_SNAP_TARGETS[shape.axis];
+  return a ? [{ x: 0, y: 0 }, { x: a.end.x, y: a.end.y }] : null;
+}

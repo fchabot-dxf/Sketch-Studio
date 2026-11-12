@@ -7,6 +7,7 @@ import { dbg } from '#core/debug.js';
 import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
+import { REFERENCE_SHAPES } from '#core/reference-lines.js';
 import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -679,6 +680,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   out.push(`<line x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0" stroke="#ef4444" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
   // Y axis (vertical, green)  
   out.push(`<line x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}" stroke="#22c55e" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
+
+  // Reference lines (task 539): an axis is lit ONLY while a tool is asking for a target and it is hovered, or it is the pending
+  // first target (the tool put its id in the selected set). Never lit in any other mode: it is not selectable geometry there.
+  for (const ref of REFERENCE_SHAPES) {
+    const lit = (hoveredShape === ref.id && !hoveredConstraint && !hoveredJoint) || (selectedShapes && selectedShapes.has(ref.id));
+    if (!lit) continue;
+    const hl = ref.axis === 'axis-x'
+      ? `x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0"`
+      : `x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}"`;
+    out.push(`<line ${hl} data-ref-axis="${ref.id}" style="stroke:${skv('#2563eb')}" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
+  }
 
   // Debug overlay: show joint fixed status and ids
   const showDebugOverlay = !!SettingsManager.get('SHOW_DEBUG_OVERLAY');

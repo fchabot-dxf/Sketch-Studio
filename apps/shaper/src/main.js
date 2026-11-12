@@ -576,7 +576,7 @@ function ensureSketch() {
   };
   docBuffer = createDocumentBuffer({
     state: designController.state,
-    app: 'shaper', onRestored: applyRestored,
+    app: 'shaper', canvas: document.getElementById('design-canvas'), onRestored: applyRestored,
     hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   });

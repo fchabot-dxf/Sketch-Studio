@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
@@ -723,7 +723,7 @@ export function handleSelectionPointerMove(e, svg, state) {
         }
     }
 
-    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || state.activeSnap.type === 'grid')) {
+    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
         // Normalize snap point (some snap objects use .pt, others use x/y or id/targetId)
         let snapPt = null;
         try{

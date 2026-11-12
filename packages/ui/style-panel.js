@@ -19,6 +19,7 @@ const CONTROLS = [
   { tab: 'grid', key: 'GRID_MODE',               label: 'Grid Style',           type: 'select',
     options: [{ value: 'lines', label: 'Grid' }, { value: 'off', label: 'None' }, { value: 'points', label: 'Draft points' }] },
   { tab: 'grid', key: 'SNAP_MAGNETISM',          label: 'Snap Magnetism',       min: 2,   max: 40,  step: 1 },
+  { tab: 'grid', key: 'AXIS_SNAP',               label: 'Snap to X / Y axis',   type: 'checkbox' },
   { tab: 'grid', key: 'GRID_MAGNETISM',          label: 'Grid Magnetism',       min: 2,   max: 40,  step: 1 },
   // The grid pair, per unit system (showWhen: shown only while DOC_UNIT is one of `in`): metric files = the mm-stored
   // GRID_MAJOR_STEP / GRID_SIZE; inch files = INCH_GRID_MAJOR (inches) + INCH_GRID_DIVISIONS (squares per heavy line).

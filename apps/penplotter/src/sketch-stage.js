@@ -274,7 +274,7 @@ export function mountSketchStage(view, ctx = {}) {
   // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
   docBuffer = createDocumentBuffer({
     state: controller.state,
-    app: 'penplotter',
+    app: 'penplotter', canvas: designCanvas,
     onRestored: ({ hosts }) => {
       try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {}
       if (hosts && hosts.penplotter) applyPlotterDoc(hosts.penplotter); else resetPlotterDoc();

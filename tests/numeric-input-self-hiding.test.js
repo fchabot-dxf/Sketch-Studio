@@ -48,6 +48,7 @@ await (async () => {
       await waitFor(host.readyExpr, `${host.name} to load`);
       await evalJs(host.enterExpr);
       await waitFor(`(() => { const { svg, state, engine } = (${host.ctxExpr})(); return !!state && !!engine && svg.getBoundingClientRect().width > 0; })()`, `${host.name} Design canvas to show`);
+      await waitFor(`document.getElementById('design-canvas').dataset.docReady === '1'`, `${host.name} to finish restoring its stored design`); // TASK 542: a late restore replaces the state under an open edit
 
       // 1. All runtime numeric inputs must have computed display === 'none'
       const displays = await evalJs(`(() => {

@@ -37,6 +37,7 @@ const MAX_NEST = 200;                                // nesting of "(" and prefi
 
 // ── declared tables ──
 const fold = (s) => (CASE_SENSITIVE_NAMES ? s : s.toLowerCase());
+export { fold as foldName }; // TASK 535-1b: parameters.js keys its name tables the same way
 const CONSTANTS = { PI: Math.PI };
 const CONSTANT_NAMES = new Set(Object.keys(CONSTANTS).map(fold));
 const foldedConstant = (name) => { for (const k of Object.keys(CONSTANTS)) if (fold(k) === name) return CONSTANTS[k]; return undefined; };

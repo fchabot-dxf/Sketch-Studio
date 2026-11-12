@@ -27,7 +27,8 @@ function build(mode, driven) {
   const params = MODES[mode](S);
   if (driven) { params.isDriven = true; params.driven = true; params.drivenReason = 'redundant'; }
   // the visual / lock fields every dimension may carry
-  Object.assign(params, { offset: 37, glyphPos: { x: 3, y: 4 }, labelPos: { x: 5, y: 6 }, __pos: { x: 7, y: 8 }, labelAngle: 0.5 });
+  // TASK 535: every dimension the app creates has a name (addConstraint gives it; this test builds the constraint by hand, so it names it)
+  Object.assign(params, { name: 'd1', offset: 37, glyphPos: { x: 3, y: 4 }, labelPos: { x: 5, y: 6 }, __pos: { x: 7, y: 8 }, labelAngle: 0.5 });
   if (params.dimMode === 'horizontal' || params.dimMode === 'vertical') Object.assign(params, { dimSign: -1, dimSignMode: params.dimMode });
   const c = createConstraint(params.type, params);
   assert(c, `${mode}: createConstraint accepted`);
@@ -40,7 +41,7 @@ for (const mode of modes) {
   for (const driven of [false, true]) {
     const tag = `${mode} ${driven ? 'reference' : 'driving'}`;
     const { S, c, params } = build(mode, driven);
-    for (const k of ['offset', 'glyphPos', 'labelPos', '__pos', 'labelAngle', 'dimSign', 'dimSignMode', 'drivenReason']) {
+    for (const k of ['name', 'offset', 'glyphPos', 'labelPos', '__pos', 'labelAngle', 'dimSign', 'dimSignMode', 'drivenReason']) {
       if (params[k] !== undefined) assert(canon(c[k]) === canon(params[k]), `${tag}: ${k} kept by createConstraint (${canon(c[k])})`);
     }
     assert(c.isDriven === driven && c.driven === driven, `${tag}: isDriven/driven = ${driven}`);

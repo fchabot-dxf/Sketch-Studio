@@ -39,6 +39,7 @@ export function createSketch() {
     joints: engine.getJoints(),
     shapes: engine.getShapes(),
     constraints: engine.getConstraints(),
+    parameters: [], // TASK 535: the document's user parameters (the same field createSketchState has)
     engine,
     genJ: engine.genJ,
   };

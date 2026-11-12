@@ -17,10 +17,10 @@
 //     truncated: null | { droppedSteps }     set when the oldest steps were folded into `base` to respect the size cap
 //   }
 //
-// A PATCH is JSON-safe and keyed per document part: { joints, shapes, constraints, sketches, groups, profiles, vcarves, activeSketchId }
+// A PATCH is JSON-safe and keyed per document part: { joints, shapes, constraints, sketches, groups, profiles, parameters, vcarves, activeSketchId }
 // — only the parts that changed are present. A list part is { removed:[indexInOld], changed:[[indexInOld, newItem]], added:[[indexInNew,
 // item]] } (or { replace: list } / { unset: true } for a reorder or a part that appears/vanishes). Items are matched by KEY: joints and
-// shapes by id, sketches/groups/profiles/vcarves by id when they have one, and CONSTRAINTS (which have NO stable id in this code base)
+// shapes by id, sketches/groups/profiles/vcarves by id when they have one, parameters by name, and CONSTRAINTS (which have NO stable id in this code base)
 // by their content (canonical JSON) — so editing a dimension's value shows as one constraint removed + one added. activeSketchId is
 // { to: value }. applyPatch is the exact inverse of diffSnapshots.
 //
@@ -46,6 +46,7 @@ const LIST_PARTS = [
   ['sketches', (item) => (item && item.id != null ? str(item.id) : null)],
   ['groups', (item) => (item && item.id != null ? str(item.id) : null)],
   ['profiles', (item) => (item && item.id != null ? str(item.id) : null)],
+  ['parameters', (item) => (item && item.name != null ? str(item.name) : null)], // TASK 535: user parameters, keyed by name
   ['vcarves', (item) => (item && item.id != null ? str(item.id) : null)],
 ];
 

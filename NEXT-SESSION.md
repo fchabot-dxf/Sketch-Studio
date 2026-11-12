@@ -77,6 +77,26 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-12, turn 796)
+- MERGED since turn 772: 517 (a853dfe), 520 (9feea55), 518 Fusion oracle (6da9d8d), 516 (aced80c), 515 circle radius unknown,
+  Opus (66d8648). Gate 248/248 on main.
+- IN FLIGHT: 521 (agents/task-521-no-collapse, built, gate green on its base): no op accepted if a shape collapses below 1% (84/300
+  random cases did before). Sent back to merge main (515), restore radii, and turn near-parallel perpendicular like exactly parallel.
+- STOPPED, OWNER DECISION: 519 who-moves (agents/task-519-who-moves, WORK-LOG design only). No single "how held" measure fits
+  Fusion (the same line pair is ordered differently per constraint). Options: (a) less-DOF operand stays; (b) first pick stays unless the
+  second cannot satisfy alone (advisor recommends: simple, predictable, 48/55 parallel+perp, 47/55 equal); (c) declared per-constraint
+  orders fitted to Fusion. Evidence in that worktree .evidence/519/.
+- OTHER OWNER DECISIONS OPEN: equal(arc, circle): ours now accepts, Fusion refuses; redundant geometric constraint: ours accepts
+  silently, Fusion refuses; collinear on two free lines etc. handled by 511.
+- QUEUE after 521: who-moves (per the decision; includes "free circle resizes too" and "solver shrinks lines for perpendicular");
+  the 15 feasible cells now refused by the collapse check; arc-side tangent Jacobian error (0.98 vs finite differences, NEW-6);
+  parallel RR/shared Jacobian error; N-F7 arc-arc tangent at a shared rim; N-F6; F8; fillet on a non-origin FIXED corner deletes the
+  joint (517); solver-scenarios test file cannot fail the gate (prints a backlog line): make it fail; prepare-look /
+  penplotter-stage-undo EPERM profile-cleanup flakes; prop-random.js still hand-builds the old point-to-line helper form;
+  dimension-tool hasDrivingDistanceForShape now redundant with the rank test; 513 real-UI sweep of every app (on hold).
+- LESSONS: one merge.sh at a time (chain on the previous log's "gate exit"); audit branches go stale fast: have the builder merge main
+  and refresh KNOWN lists before the merge gate; tell seats to REPORT once and leave nothing running (520 re-sent its report 5 times).
+
 ## ▶ HANDOVER (2026-11-07, advisor) — state after turns 399–410
 
 **Owner ruling on seats:** the owner launches seats and the advisor tasks them, as before. The advisor may also launch

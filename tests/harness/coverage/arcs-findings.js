@@ -40,14 +40,14 @@ export const KNOWN = {
   'EA-6': {
     severity: 'MEDIUM',
     title: 'parallel / perpendicular / collinear of the CHORD line of a tiny arc: accepted, but not satisfied after a jitter re-solve (and once not converged at all)',
-    diagnosis: 'solver/definitions.js:277-306 (parallel) and :309-345 (perpendicular) rows are the un-normalised u x v / u . v (length-squared units), so the row scales with the line lengths (a 0.26 long chord line of an R 0.5 arc against an 8 long line); suspected cause of the stall, NOT proven. Measured: `r0.5s30cw perpendicular-chord sep` is accepted and the re-solve reports no-converge + residual.',
+    diagnosis: 'solver/definitions.js:277-306 (parallel) and :309-345 (perpendicular) rows are the un-normalised u x v / u . v (length-squared units), so the row scales with the line lengths (a 0.26 long chord line of an R 0.5 arc against an 8 long line); suspected cause of the stall, NOT proven. Measured: `r0.5s30cw perpendicular-chord sep` is accepted and the re-solve reports no-converge + residual. Task 533 measured the perpendicular cells: the tool locks the branch, the row u x v - |u||v| has a DOUBLE root at the target (r ~ |u||v| d^2 / 2, zero gradient), so the solve stops at r = 1e-6 with d = sqrt(2e-6 / (|u||v|)) = 1.162e-3 rad > VERIFIER_TOLERANCE; normalising by |u||v| would not fix that. The parallel / collinear cells (a simple root) are not diagnosed.',
     task: 'normalise the parallel / perpendicular rows by |u||v| (the Jacobian guard test already compares them with finite differences)',
   },
   'EA-7': {
     severity: 'LOW',
     title: 'Analytic Jacobian of collinear differs from finite differences on a near-zero-length chord line',
-    diagnosis: 'solver/definitions.js:228 collinear, chord line 0.00087 long (`r0.5s0.1cw collinear-chord`): 5.7e-3 off. Possibly the F6 family (a row whose analytic derivative is wrong where its lines are tiny); not proven.',
-    task: 'fold into the F6 Jacobian fix',
+    diagnosis: 'solver/definitions.js:228 collinear, chord line 0.00087 long (`r0.5s0.1cw collinear-chord`): 5.7e-3 off. Not the F6 family: unchanged by the task 533 shared-joint fix (this sep cell repeats no joint index).',
+    task: 'measure the finite-difference step against the 0.00087 chord before calling it a Jacobian error',
   },
   'EA-8': {
     severity: 'MEDIUM',

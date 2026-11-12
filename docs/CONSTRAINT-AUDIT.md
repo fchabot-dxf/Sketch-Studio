@@ -284,6 +284,12 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
   3 joints where `definitions.angle/perpendicular/parallel` read 4 (`joints[3]` undefined -> NaN row). Corners are shared in `makePolygon`, in
   fillet rims, in DXF/SVG imports and after a weld; the line tool makes coincident pairs, which is why the drawings built that way work.
 * Proposed task: pass the four endpoints positionally (as `equal` already does) for angle / perpendicular / parallel; test on a polygon corner.
+* Task 533: with the endpoints positional, the shared corner repeated one joint index inside the row, and parallel / perpendicular / angle
+  ASSIGNED each joint's columns, so the second line's partial overwrote the first (`|J - fd|` up to 14 on a shared corner, 10 for the same line
+  twice). Every row now accumulates through one helper, `addGrad` (definitions.js). Coverage matrix F4 11 -> 0 (7 feasible shared-corner
+  parallel / perpendicular cells were refused and are accepted now, 4 shared angle cells now keep the angle after a jitter), extreme arcs F4 4 -> 0;
+  the random properties still attribute F4 to 8 cases (I2 1, I3 3, I5 2, I7 2: their trigger is any perpendicular / angle between lines that share
+  a joint or a coincident cluster), not re-examined here.
 
 ### F5 (BUG, MEDIUM): a feasible tangent is refused `ERR-CSOLVE-01` depending on the order
 
@@ -344,7 +350,7 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
 | 2 | F1 | HIGH | BUG | H and V dimension on the same two points: the second is demoted |
 | 3 | F3 | HIGH | BUG | clockwise angle dimension deforms / collapses the sketch at its own value |
 | 4 | F2 | HIGH | FIXED (515) | `equal` on circles is a silent no-op; hole radius edits are refused |
-| 5 | F4 | MEDIUM | BUG | angle / perpendicular on a shared joint (polygon, fillet rim, import) |
+| 5 | F4 | MEDIUM | FIXED (510, 533) | angle / perpendicular on a shared joint (polygon, fillet rim, import); 533: the shared joint's Jacobian columns accumulate |
 | 6 | F5 | MEDIUM | BUG | feasible tangent refused ERR-CSOLVE-01, order dependent |
 | 7 | F8 | MEDIUM | UNCLEAR | shared-corner outline folds / fails from a jittered start |
 | 8 | F7 | LOW | BUG | makeArc same-millisecond id collision |

@@ -362,6 +362,57 @@ Cell counts (`node tests/coverage-matrix.test.js`): 3384 cells: **1788 PASS**, 1
 
 F6 measured (not fixed): a `parallel` between two lines that share a corner joint (the F6 rect-side cell). Probe (L1 a-b, L2 b-c): `shared corner (L2 starts at L1 end b): max |J - fd| = 2.90e+1 at b.x` (b.x analytic 1.000, finite difference 30.000), against `separate (L2 = c-d): max |J - fd| = 4.11e-8`. Cause: `Definitions.parallel.computeJacobian` ASSIGNS the four joints' columns (`outRow[bI*2] = vy`, then `outRow[cI*2] = uy`), so when c === b the v part overwrites the u part instead of adding to it: the same overwrite bug turn 404 fixed for `equal`. Not the arc-radius family (that one was a missing dependency). `perpendicular` and `angle` assign their columns the same way, a likely cause of the F4 shared-joint cells (not measured). tests/jacobian-fd-guard.test.js does not catch it: its cases use distinct joints.
 
+## Fixed in task 533 (F6 / F4: a row that names the same joint twice ACCUMULATES)
+
+Cause, measured on every row (`.evidence/533/probe-shared-joints.mjs`, engine._assemble against central finite differences): 57 of 106 row x
+sharing patterns were wrong before, 0 after. Every row that ASSIGNED a joint's columns lost all but the last partial when its joint list
+repeated an index: parallel / perpendicular (plain and branch +-1) / angle with the two lines sharing any end or being the same line
+(up to `1.40e+1`), the line-line distance and the point-to-line distance / pointOnLine whose point is an end of its own line (`9.58e-1`),
+tangent line-circle / line-arc whose line ends on the centre, H / V / coincident / H-V dimension given one joint twice, midpoint with the
+midpoint on an end, collinear given `[a, b, a]`. Already right: equal (turn 404), the tangent shared-rim form, every arc radius term
+(addRadiusDerivative), collinear from shapes (it dedupes). Fix: ONE helper in `solver/definitions.js`, `addGrad(outRow, joint, gx, gy)`
+(`+=` on the joint's two columns), used by EVERY row for every joint column (addRadiusDerivative uses it too); every row starts at zero
+(engine._assemble allocates a fresh zero-filled row per constraint, `rowBuf.fill(0.0)` / `outRows[k].fill(0.0)`), so a distinct-joint row is
+bit-identical. The two private zeroings (equal's `outRow.fill`, the tangent shared-rim block) are gone. Guard: tests/jacobian-fd-guard.test.js
+now runs 82 shared-joint cases (every two-line row x b=c, b=d, a=c, a=d, the same line, the same line reversed; and the point / centre /
+same-joint cases); on the old definitions it fails `58 of 82 shared-joint rows differ from finite differences`.
+
+Counts before -> after (same commands, old vs new definitions):
+* coverage-matrix: PASS 1789 -> **1801**, F4 11 -> 0, F6 1 -> 0, NEW-6 2, NEW-9 2, 0 unexplained. Cell changes (`.evidence/533/matrix-cells-diff.txt`):
+  parallel CR / CS / LR / LS / SR shared and perpendicular CR / LR shared were REFUSED (PlaneGCS: feasible) and are now accepted, DOF -1 = finite
+  differences = PlaneGCS; dim-angle-xy / -yx CS / LS shared now keep the angle after a jittered re-solve; parallel RR shared (two horizontal rect
+  sides sharing a corner): DOF -1 -> 0, now equal to finite differences (0); PlaneGCS still counts -1, the same PlaneGCS miscount as collinear on
+  that pair, so `preCollinear` in matrix-run.js now covers parallel too (proof: the row is a combination of the two H rows,
+  `.evidence/533/rr-shared-oracle-after.txt`: `panel nullity 6, finite-difference nullity 6, PlaneGCS dof 5 (redundant 0`).
+* extreme-arcs: PASS 1711 -> **1721**, FAIL 205 -> 195; F6 15 -> 0, F4 4 -> 0, EA-6 15 -> 17, EA-1 51 -> 52, EA-2 99 -> 98, the rest unchanged
+  (`.evidence/533/arcs-cells-diff.txt`, 21 cells). Accepted now, refused before: f90r0.5 parallel-chord and perpendicular-chord shared,
+  r0.5s181cw parallel-chord shared, r5000c20ccw perpendicular-chord shared (was a clean refusal), r5000s5cw parallel-chord shared. Refused now,
+  accepted before: s30cw perpendicular-chord shared (PlaneGCS: infeasible, refused cleanly). The jitter bite of every accepted parallel /
+  perpendicular shared cell (`.evidence/533/shared-chord-bite-table.txt`): under the 1e-3 tolerance in all of them except EA-6: f90r0.5
+  perpendicular (2.3e+0, newly accepted), r0.5s181cw parallel (4.0e-3, newly accepted) and perpendicular (1.3e+0 -> 3.0e-1), r5000c20ccw
+  perpendicular (6.7e-2, newly accepted); r5000c20cw perpendicular left EA-6 (4.1e+0 -> 2.8e-5). Other verdicts: f2r10 parallel-chord shared now
+  shows EA-1 (a radius edit x1.5 / x0.67 collapses the sweep; before, only the Jacobian issue was recorded), s180cw perpendicular keeps EA-2
+  but no longer shows drag-stale-large-arc, s181cw perpendicular now shows EA-2 (drag-stale-large-arc). The task 525
+  control cell `s30cw parallel-chord shared` is refused on main before and after (ERR-CSOLVE-01, PlaneGCS infeasible).
+* coverage-properties: I2 285 -> **299** of 300 (F6 14 -> 0), I3 294 -> 296 (F6 2 -> 0), I7 293 -> 294 (F6 2 -> 1), I1 292 unchanged (F6 8:
+  the pointOnLine trigger, not this family), unexplained 0. Ops: refused 400 -> 399, demoted to reference 119 -> 117
+  (`.evidence/533/prop-ops-outcome-diff.txt`): seed 7071 op 7 perpendicular and 7079 op 7 parallel refused -> driving; 7160 ops 5 and 9 (H/V and
+  aligned dimensions) reference -> driving; 7191 op 6 collinear driving -> refused (a different start: the earlier ops solve differently; PlaneGCS
+  finds it feasible, our solve collapses line 5, the NEW-9 / task 521 refusal, `.evidence/533/prop-7191-oracle-after.txt`). In every one of
+  these final states panel = finite differences = PlaneGCS (before: 7191 11 / 12 / 12, 7160 0 / 2 / 2).
+* constraint-audit, fusion-oracle (315 / 2438 graded / 954 drawing rows), fusion-dim-edit (864 runs), solver-scenarios: output identical.
+* Fixture DOF: every recorded drawing (13, nullity after every recipe step) and owner-trapezoid.document.json identical
+  (`.evidence/533/fixture-dof-before.txt` = `-after.txt`).
+
+EA-6 after the fix (`node tests/extreme-arcs.test.js --cell r0.5s30cw perpendicular-chord sep`, unchanged by it: a sep cell repeats no joint):
+measured in `.evidence/533/ea6-diagnose-after.txt`. The tool locks the branch (`"branch":1`), so the row is `u x v - |u||v|`, which has a DOUBLE
+root at the target: r ~ |u||v| d^2 / 2 for an angle error d, its gradient vanishes there (`rankDeficient true`). The solve stops with r at the
+1e-6 tolerance, i.e. d = sqrt(2e-6 / (|u||v|)) = 1.163e-3 for |chord| 0.1847 x |line| 7.999; measured `u.v/(|u||v|) -1.162e-3`, above
+VERIFIER_TOLERANCE 1e-3, and four more 500-iteration solves do not move it. So for the perpendicular cells the un-normalised scale is not the
+cause: normalising by |u||v| would leave d = sqrt(2e-6) = 1.41e-3 at every size (worse here). The parallel / collinear EA-6 cells (`u x v`, a
+simple root) are not explained by this and were not diagnosed. EA-7 (`r0.5s0.1cw collinear-chord sep`) is unchanged by the fix (no repeated
+joint), so it is not the F6 family.
+
 ## Observations that are not failures
 
 * **O3 silent redundancy**: a parallel between two rect tops (both already horizontal), an equal between two fillet arcs (both already R-dimensioned) are accepted with no
@@ -462,7 +513,7 @@ A measuring audit of arcs at the edges: very short and almost full sweeps, tiny 
 - 30 rows: tangent to a line / an arc / a circle (partner starts at the arc start), coincident of the start, the end, the centre (concentric), the arc's own two ends, point on arc (the snap path; point inside the sweep and point on the circle outside it), equal to an arc / a circle, midpoint of the chord, horizontal-or-vertical between start-end / centre-end / centre-start / on the chord line (the H/V tool decides the orientation), parallel / perpendicular / collinear of the chord line (a line through the two end joints) with a free line, radius dimension, aligned dimension start-end / centre-start / centre-end, H and V dimensions start-end and centre-end, lock (fix) of the start, end, centre.
 - 4 hold states per row: sep, shared (the partner's point merged into the arc start), locked (every arc joint locked through the real Lock toggle), dimmed (the arc carries a driving radius dimension).
 - Per accepted cell: residual, convergence, DOF delta against the nominal, the finite-difference count and PlaneGCS, analytic Jacobian against finite differences, the arc's radius / signed sweep / flag coherence / drawn path before and after, a 3% jitter re-solve (satisfied; a fully determined sketch returns to the same pose), a radius or dimension edit x1.5 and x0.67 (the row's own dimension, or the driving radius), a small end drag (2, 1.5 world units through the solver seam of the select tool, `prop-drag.js dragJoint`), delete + undo (document identical), save + load (flags, radius, sweep identical). Refusals: PlaneGCS is asked whether the refused constraint was feasible.
-- Totals: 2880 cells = **PASS 1711, N/A (refused, document untouched) 176, NA-BUILD 788 (no such cell: no second shape to share with, a lock row under the locked state, ...), FAIL 205**. The 205 failing cells carry EA-1..EA-9 and the inherited round-1 F4 / F5 / F6 (below); none is unexplained.
+- Totals: 2880 cells = **PASS 1711, N/A (refused, document untouched) 176, NA-BUILD 788 (no such cell: no second shape to share with, a lock row under the locked state, ...), FAIL 205**. The 205 failing cells carry EA-1..EA-9 and the inherited round-1 F4 / F5 / F6 (below); none is unexplained. After task 533 (shared-joint rows accumulate): PASS 1721, N/A 176, NA-BUILD 788, FAIL 195 (EA-1=52 EA-2=98 EA-3=33 EA-4=19 EA-5=14 EA-6=17 EA-7=3 EA-8=10 EA-9=13 F5=1; F4 and F6 0).
 
 ### Tolerances in force (quoted from the code, printed by the test)
 
@@ -500,8 +551,8 @@ Each cell is the union of the four hold states. `.` = every state passes (or is 
 | hv-start-end | . | . | 9 | 2,4,9 | . | 2,4 | . | . | 9 | 2 | . | 2,4 | 2,4,9 | 9 | . | . | . | . | . | . | 8 | 1 | 1 | . |
 | hv-centre-end | . | . | . | 2,4 | . | . | . | 2 | 2,9 | 2 | 2 | . | 2,4 | . | . | 9 | 2 | . | . | . | . | . | 5 | . |
 | hv-centre-start | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 5 | . |
-| parallel-chord | . | . | . | . | . | . | . | 2,F6 | 2,F6 | F6 | 2,F6 | . | . | . | 6 | . | 6,F4 | . | . | F4 | F4 | F6 | . | F6 |
-| perpendicular-chord | F6 | F6 | 8 | 8 | 8 | 8 | . | 2,F6 | 2,F6 | F6 | 2,F6 | . | 8 | 8 | 6,8 | . | 6,F6 | 6 | . | . | 6,F4 | F6 | 8 | F6 |
+| parallel-chord | . | . | . | . | . | . | . | 2 | 2 | . | 2 | . | . | . | 6 | . | 6 | . | . | . | . | . | . | 1 |
+| perpendicular-chord | . | . | 8 | 8 | 8 | 8 | . | . | 2 | 2 | . | . | 8 | 8 | 6,8 | . | 6 | . | 6 | . | 6 | . | 8 | . |
 | collinear-chord | . | . | . | . | . | . | F5 | . | . | . | . | . | . | . | . | 5,7 | 6 | 6 | 6 | . | . | . | . | 5 |
 | hv-chord-line | . | . | 9 | 2,4,9 | . | 2,4 | . | . | 9 | 2 | . | 2,4 | 2,4,9 | 9 | . | . | . | . | . | . | 8 | . | 1 | . |
 | dim-radius | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
@@ -527,13 +578,13 @@ Repro lines are `node tests/extreme-arcs.test.js --cell <variant> <row> <state>`
 3. **EA-3 HIGH, 33 cells: a constraint on a very short or almost full arc makes the sweep jump to the complement.** The sweep is not a solver quantity: its direction is the stored `sweep` flag and its size `mod((end - start) * dir, 2 PI)` (`geometry.js:285-288`); the solver has no orientation term. A rim joint that moves a hair past the other turns 0.1 degree into 359.8 degrees. Repro: `node tests/extreme-arcs.test.js --cell s0.1cw tangent-line sep` -> signedDeg 0.1 -> 359.7925, R 20 -> 21.70 (also tangent-arc, equal-arc; 0.1 / 1 / 5 / 355 / 359.9 degrees, R 0.5 and R 5000). Proposed task: keep the arc's side as state (like the perpendicular branch lock) or refuse a wrapping solution.
 4. **EA-4 MEDIUM, 19 cells: dragging the end of a short arc past its start gives a ~360 degree arc** (same cause). Repro: `--cell s0.1ccw hv-start-end sep` (the drag step). Whether Fusion does the same is open: replay list.
 5. **EA-5 MEDIUM, 14 cells: the sweep shrinks to under a quarter without being asked** (the solver moves the least in coordinates; a short arc's sweep is the sensitive quantity). Repro: `--cell r0.5s30cw tangent-line sep` -> sweep 30 -> 0.84 degrees, R 0.5 -> 1.28 (the tangent resizes the arc, the task 525 family).
-6. **EA-6 MEDIUM, 15 cells: parallel / perpendicular / collinear of the chord line of a tiny arc is accepted but not satisfied after a jitter re-solve (once not converged at all).** The rows are the un-normalised `u x v` / `u . v` (`solver/definitions.js:277-306`, `:309-345`); the cause is suspected (the row scales with the line lengths), not proven. Repro: `--cell r0.5s30cw perpendicular-chord sep` -> accepted, then no-converge + residual + bite. Proposed task: normalise the rows by |u||v|.
+6. **EA-6 MEDIUM, 15 cells: parallel / perpendicular / collinear of the chord line of a tiny arc is accepted but not satisfied after a jitter re-solve (once not converged at all).** The rows are the un-normalised `u x v` / `u . v` (`solver/definitions.js:277-306`, `:309-345`); the cause is suspected (the row scales with the line lengths), not proven. Repro: `--cell r0.5s30cw perpendicular-chord sep` -> accepted, then no-converge + residual + bite. Proposed task: normalise the rows by |u||v|. **Measured in task 533** (section "Fixed in task 533"): for the perpendicular cells the cause is the DOUBLE root of the branch-locked row `u x v - |u||v|` (r ~ |u||v| d^2 / 2: the solve stops at r = 1e-6 with d = 1.162e-3 rad, predicted 1.163e-3); normalising would not fix it. 17 cells after task 533.
 7. **EA-8 MEDIUM, 10 cells: a feasible constraint is refused (ERR-CSOLVE-01).** PlaneGCS satisfies the same row. `constraint-manager.js:456` (_sandboxVerify), reported at `:295`. Repro: `--cell s0.1cw perpendicular-chord locked` (also 1 and 359.9 degrees, R 0.5, fillet r 0.5 with H/V on its ends). Proposed task: a size-relative sandbox tolerance.
 8. **EA-10 MEDIUM (UI): an arc is picked from anywhere on its circle.** `snap-detection.js:196-210` projects the mouse on the full circle, no `angleInArcSweep` test (geometry.js:296). A 0.1 degree arc is hit 180 degrees away from itself, and "point on arc" is a point on the whole circle (row point-on-arc-off accepts it). Repro: `node tests/extreme-arcs.test.js` prints `known EA-10 ... mouse on the circle OUTSIDE the 30 degree sweep picks: the arc`.
-9. **EA-7 LOW, 3 cells:** Jacobian of collinear against finite differences, 5.7e-3 on a 0.00087 long chord line (`--cell r0.5s0.1cw collinear-chord sep`). Possibly the F6 family; not proven.
+9. **EA-7 LOW, 3 cells:** Jacobian of collinear against finite differences, 5.7e-3 on a 0.00087 long chord line (`--cell r0.5s0.1cw collinear-chord sep`). Possibly the F6 family; not proven. Task 533: unchanged by the shared-joint fix (the cell repeats no joint), so not the F6 family.
 10. **EA-9 LOW, 13 cells:** H/V between two LOCKED arc joints within 0.05 of aligned is accepted as already satisfied (`constraint-manager.js:693-696`, `:768`; GEOMETRY_TOLERANCE 0.05 is larger than the 0.1 degree arc); PlaneGCS counts a conflict, DOF -1 against our 0. Repro: `--cell s0.1cw hv-start-end locked`.
 
-Inherited, already in docs/CONSTRAINT-AUDIT.md and shown by the control arc: F6 (15 cells, parallel / perpendicular Jacobian with a shared joint), F4 (4 cells, refused although feasible on a shared joint), F5 (1 cell).
+Inherited, already in docs/CONSTRAINT-AUDIT.md and shown by the control arc: F6 (15 cells, parallel / perpendicular Jacobian with a shared joint), F4 (4 cells, refused although feasible on a shared joint), F5 (1 cell). After task 533: F6 0, F4 0, F5 1.
 
 ### What is clean
 

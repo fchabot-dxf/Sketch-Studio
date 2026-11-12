@@ -45,8 +45,8 @@ const CASES = {
 
 // One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on
 // each circle radius column and on each joint's x/y columns, so a radius case can also assert its radius column is really in the row.
-function guard(label, c) {
-  const solver = createNewtonSolver(joints(), [{ ...c }], SH(), { maxIter: 1 });
+function guard(label, c, extraShapes = []) {
+  const solver = createNewtonSolver(joints(), [{ ...c }], [...SH(), ...extraShapes], { maxIter: 1 });
   const x0 = solver._pack(), n = x0.length;
   const asm = solver._assemble(x0);
   let worst = 0;
@@ -101,4 +101,56 @@ for (const [label, c, uses] of RADIUS_CASES) {
   for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius/rim column is ${col[id]} (expected it in the row)`);
   checked++;
 }
-console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius and arc rim columns included.`);
+// A row that names the SAME joint more than once (task 533, F6): two lines sharing a corner in every way, the same line twice, a point
+// that is an end of its own line, a line ending on a circle / arc centre, arcs sharing a rim or a centre, a two-joint row given one
+// joint twice. Each occurrence adds its own partial (definitions.js addGrad); the old rows ASSIGNED, so the last write overwrote the
+// others (parallel b === c: |J - fd| = 11).
+const LX = (p, q) => [{ id: 'LX', type: 'line', joints: [p, q] }];
+const ARC3 = (c, s, e) => [{ id: 'A3', type: 'arc', joints: [c, s, e] }];
+const SHARE = { 'L2 starts at L1 end (b=c)': ['b', 'd'], 'L2 ends at L1 end (b=d)': ['c', 'b'], 'L2 starts at L1 start (a=c)': ['a', 'd'],
+  'L2 ends at L1 start (a=d)': ['c', 'a'], 'the same line twice': ['a', 'b'], 'the same line reversed': ['b', 'a'] };
+const TWO_LINE_ROWS = [
+  ['parallel', { type: 'parallel' }], ['perpendicular', { type: 'perpendicular' }],
+  ['perpendicular branch +1', { type: 'perpendicular', branch: 1 }], ['perpendicular branch -1', { type: 'perpendicular', branch: -1 }],
+  ['angle 90', { type: 'angle', value: 90 }], ['angle 30', { type: 'angle', value: 30 }], ['equal', { type: 'equal' }],
+  ['collinear', { type: 'collinear' }], ['distance line-line', { type: 'distance', value: 4 }],
+];
+const SHARED_CASES = [];
+for (const [pattern, ends] of Object.entries(SHARE)) {
+  for (const [row, c] of TWO_LINE_ROWS) {
+    SHARED_CASES.push([`${row}, ${pattern}`, { ...c, shapes: ['L1', 'LX'] }, LX(...ends)]);
+    if (row === 'distance line-line') SHARED_CASES.push([`${row} (reversed operands), ${pattern}`, { ...c, shapes: ['LX', 'L1'] }, LX(...ends)]);
+  }
+}
+SHARED_CASES.push(
+  ['pointOnLine, the point is the line start', { type: 'pointOnLine', joint: 'a', shape: 'L1' }],
+  ['pointOnLine, the point is the line end', { type: 'pointOnLine', joint: 'b', shape: 'L1' }],
+  ['distance point-line, the point is the line start', { type: 'distance', joints: ['a', 'a', 'b'], value: 3 }],
+  ['distance point-line, the point is the line end', { type: 'distance', joints: ['b', 'a', 'b'], value: 3 }],
+  ['pointOnLine (circle), the point is the centre', { type: 'pointOnLine', joint: 'm', shape: 'C1' }],
+  ['pointOnLine (arc), the point is the radius rim', { type: 'pointOnLine', joint: 'as', shape: 'A1' }],
+  ['tangent line-circle, the line ends on the centre', { type: 'tangent', line: 'LX', circle: 'C1' }, LX('m', 'c')],
+  ['tangent line-arc, the line ends on the centre', { type: 'tangent', line: 'LX', circle: 'A1' }, LX('ac', 'd')],
+  ['tangent line-arc, the line starts on the start rim', { type: 'tangent', line: 'LX', circle: 'A1' }, LX('as', 'd')],
+  ['tangent arc-arc, a shared rim', { type: 'tangent', shapes: ['A1', 'A3'] }, ARC3('bc', 'as', 'be')],
+  ['tangent arc-arc, centre on the other rim', { type: 'tangent', shapes: ['A1', 'A3'] }, ARC3('as', 'bs', 'be')],
+  ['tangent arc-arc internal, a shared centre', { type: 'tangent', shapes: ['A1', 'A3'], branch: 'internal' }, ARC3('ac', 'bs', 'be')],
+  ['equal arc-arc, a shared centre', { type: 'equal', shapes: ['A1', 'A3'] }, ARC3('ac', 'bs', 'be')],
+  ['horizontal, one joint twice', { type: 'horizontal', joints: ['a', 'a'] }],
+  ['vertical, one joint twice', { type: 'vertical', joints: ['a', 'a'] }],
+  ['coincident, one joint twice', { type: 'coincident', joints: ['a', 'a'] }],
+  ['distance (horizontal dimension), one joint twice', { type: 'distance', joints: ['a', 'a'], value: 0, dimMode: 'horizontal' }],
+  ['distance (vertical dimension), one joint twice', { type: 'distance', joints: ['a', 'a'], value: 0, dimMode: 'vertical' }],
+  ['midpoint, the midpoint is an end', { type: 'midpoint', joints: ['a', 'b', 'a'] }],
+  ['midpoint, both ends one joint', { type: 'midpoint', joints: ['a', 'a', 'm'] }],
+  ['collinear (joints), the point is the base start', { type: 'collinear', joints: ['a', 'b', 'a'] }],
+  ['equal (joints), a shared end', { type: 'equal', joints: ['a', 'b', 'a', 'c'] }],
+);
+// Run every shared case and report ALL that differ before failing, so a regression names every row it breaks.
+const sharedBad = [];
+for (const [label, c, extra] of SHARED_CASES) {
+  try { guard('shared joint: ' + label, c, extra); } catch (e) { sharedBad.push(e.message); }
+  checked++;
+}
+assert.ok(sharedBad.length === 0, `${sharedBad.length} of ${SHARED_CASES.length} shared-joint rows differ from finite differences:\n  ` + sharedBad.join('\n  '));
+console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius and arc rim columns included, ${SHARED_CASES.length} of them with a joint shared inside the row.`);

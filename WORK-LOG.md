@@ -13692,3 +13692,15 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Existing test edited: tests/dimension-fields-and-fillet-517.test.js builds a dimension by hand and pushes it without a name; the load now names it, so the test names it (`name: 'd1'`) and checks `name` survives with the other fields. No other existing test changed.
 - Tests (new): parameters-graph (chains depth 1..40, diamond, self/2/3 cycles with path, order, rename, delete, freeze, planChange affected lists, names), parameters-roundtrip (every inventory dimension mode x driving/reference, byte-stable save-load-save x3, undo/redo/cancelUndoGroup/journal), parameters-old-files (owner-trapezoid v1 file + 13 audit/coverage drawings written as v1: loaded content equals input but for `name`; v2 without parameters; version gate; project-file envelope). One-off: the owner-trapezoid loaded by origin/main code and by this branch give byte-identical documents once `name` is dropped (.evidence/535-1b/).
 - Behaviour changes for existing users: saved files carry version 2 and a `name` on every dimension (and `parameters: []`); nothing visible. An older build refuses a version-2 file (accepted by the owner).
+
+## TURN 535-2 (slice 2, batch seam)
+Added `commitDimensionEdits(state, edits, opts)` and `applyParameterChange(state, plan, label)` in packages/ui/dimension-seams.js; `commitDimensionEdit` is the
+one-element case (one path). PLACEMENT RULE (advisor ruling): a batch of exactly one edit places per step (bit-identical to main), a batch of several does not
+place (re-solve at new values). Batch vs two single edits on a parameter used by two independent rectangles: worst geometry difference 3.37e-8.
+applyParameterChange at the history cap: a refused change restores the evicted oldest entry and the redo branch (test at the cap). Collapse-in-a-batch test added.
+Timing (first measurement, per-edit placement): 100 dims 50.7 s; no placement: ~4 s (about 580 ms per walk solve, dense solver algebra: gram 24.7 s, copyRow 9.2 s,
+_assemble 7.2 s, choleskySolve 3.9 s in the profile). 2 s STOP lifted by the advisor; KNOWN P-1 (task 541) printed by tests/parameters-batch.test.js, fails when three
+runs drop under 2 s. Measured now: 1/2/10/30 dims = 2/2/18/73 ms; 100 dims = 4537 / 3950 / 4887 ms. Design doc: section D rule, Performance note, O10 and O12 rows
+(owner rulings 2026-11-12). Existing dimension tests, fusion fixtures and audits unchanged.
+
+Design note R3 (owner 2026-11-12, DECIDED, built in slice 3 + 5, not here): name autocomplete list near the caret in every expression input; recorded in docs/PARAMETERS-DESIGN.md section E (Autocomplete) and the slice 3 / 5 rows.

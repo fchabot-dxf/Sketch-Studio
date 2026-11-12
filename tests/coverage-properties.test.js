@@ -26,7 +26,7 @@ const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, s
 // drawings whose analytic Jacobian differs from finite differences today (F6 one-sided pointOnLine, N-F5 collinear, N-F7 arc/arc tangent)
 const JAC = { triangle: 'F6', scurve: 'N-F7', 'collinear-concentric': 'N-F5 + F6 (point on arc)', 'axis-symmetry': 'F6', 'every-kind': 'F6' };
 // demoted steps that are round 1's F1 (H and V dimension on one joint pair)
-const DEMOTED = { bracket: 3 };
+const DEMOTED = {};   // round 1's F1 is fixed on main (task 510): the bracket's three H+V steps are no longer demoted
 
 // random-property failures that no ablation explains, pinned by seed to their standalone repro (N-U1 / N-U2 in prop-findings.js)
 const PINNED_SEEDS = { I3: { 7090: 'N-U1' }, I7: { 7091: 'N-U2' } };

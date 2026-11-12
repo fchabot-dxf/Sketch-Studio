@@ -291,8 +291,17 @@ Repro for every finding: `node scripts/constraint-audit.cjs` (section FINDING RE
   (PlaneGCS exposes the list; the nullspace gives the same via `isDistanceRedundant`-style rank test).
 * **O2 (UNCLEAR)**: a circle's radius is not a solver unknown, so an undimensioned circle is "fully constrained" once its centre is, and the radius
   dimension never changes the DOF (steps 17, 33, 10 and 8/11 above). Fusion counts the radius as a DOF.
-* **O3 (EXPECTED)**: a conflicting value typed on an already-determined pair (1.5x) is accepted as a reference and its stored value is replaced
-  by the geometry's (349.86 -> 233.24); the geometry is untouched. Flagged, healthy, but the typed number disappears (a toast says so).
+* **O3 (RESOLVED, task 516)**: a dimension on a quantity the sketch already determines is now placed DRIVEN at its measured value, shown in brackets,
+  and no value box opens (it was: typed value accepted, then replaced by the measured one with a toast). Measured in Fusion 2706.1.17: on a fully
+  constrained square a driving diagonal is refused (over-constrained), a driven one is accepted at the measured value, driven -> driving is refused
+  while the sketch determines it, and works after a side dimension is deleted. One rule for every mode (aligned/horizontal/vertical, point-to-line,
+  line-line, angle, radius), one test (`isDimensionDetermined` in dimension-seams.js = the engine rank test `isDistanceRedundant`): placement
+  (ConstraintManager for distances, the value box `showEditInput` for every mode) and the right-click Driving toggle (`toggleDriving`, refused with
+  a message; the old swap of two drivers is gone). A driven dimension never opens the value box (`showEditInput` is the only opener). The old
+  typed-then-demoted path stays only as the safety net for a conflict the rank test cannot see (nonlinear, e.g. a diagonal of 50 against a fixed
+  width of 100): reachable only by creating a dimension with a preset value (`createConstraint`, sandbox-conflict), not by the pointer path.
+  Tests: tests/dimension-redundant-driven-live.test.js (real pointer), tests/dimension-determined.test.js. A circle's radius is still not a solver
+  unknown here (O2, task 515), so its rank test answers false until that lands.
 * **O4 (EXPECTED)**: triangle angle 110 x0.8 refused: mathematically impossible (see the triangle section); the refusal restores the geometry.
 * **O5 (EXPECTED)**: PlaneGCS lands on another fillet branch from one jittered start of the trapezoid (seed 23, dev 40.6); our solver returned to
   the reference in all 5 starts of all 5 drawings. During the slot recipe PlaneGCS's DOF reads 1-2 below ours between the two arc `midpoint`

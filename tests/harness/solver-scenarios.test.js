@@ -2,14 +2,17 @@
 // against the REAL packages/core, and prints a backlog table labelling each CURRENT pass/fail
 // HONESTLY. The 3 known bugs are expected to FAIL today; the table IS the solver fix backlog.
 //
-// This file is a REPORTER, not a gate: it always exits 0 (so it never adds a baseline failure).
-// Fixes come later, one at a time, each guarded by re-running its scenario here.
+// This file is a REAL TEST (task 522): the table below is kept, and the process exits 1 if a scenario that is not in KNOWN fails, or if a
+// KNOWN scenario now passes (delete its KNOWN entry). Fixes are each guarded by re-running their scenario here.
 
 import { createSketch } from './sketch.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES as T } from '#core/constants.js';
 import { updateConstraintOffset } from '#ui/input-handlers/dimension-tool.js';
 import { commitDimensionEdit, toggleDriving } from '#ui/dimension-seams.js';
+
+// Scenarios that FAIL today: scenario number -> one-line reason. When one starts passing the test fails loudly: delete its entry.
+const KNOWN = {};
 
 const rows = [];
 function record(name, pass, expected, nums) {
@@ -196,7 +199,7 @@ run('11. app placement keeps cross-edge reference driven', 'PASS', () => {
   };
 });
 
-// 12 — EDIT seam driven directly: over-constraining edit refuses+reverts; a valid edit applies
+// 12 — EDIT seam driven directly: an impossible edit is refused + reverted (since task 521: with a `reason`, geometry restored); a valid edit applies
 run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () => {
   const s = createSketch();
   const r = s.rect(0, 0, 100, 60);
@@ -204,13 +207,15 @@ run('12. commitDimensionEdit seam — refuse+revert + valid apply', 'PASS', () =
   const diagNow = s.edgeLen(r.corners[0], r.corners[2]);
   const diag = s.dimension(r.corners[0], r.corners[2], diagNow);
   s.solve();
+  const before = r.corners.map(j => s.pos(j));
   const bad = commitDimensionEdit(s.state, diag, 50);            // diagonal 50 < width 100 → impossible
+  const restored = r.corners.every((j, i) => Math.hypot(s.pos(j).x - before[i].x, s.pos(j).y - before[i].y) < 1e-6);
   const good = commitDimensionEdit(s.state, diag, diagNow + 20); // satisfiable
   s.solve();
   return {
-    pass: bad.reverted === true && !!bad.clash && good.reverted === false &&
+    pass: bad.reverted === true && typeof bad.reason === 'string' && bad.reason.length > 0 && restored && good.reverted === false &&
           s.isRectangle(r.corners) && s.converged === true && Math.abs(diag.value - (diagNow + 20)) < 1e-6,
-    nums: { badReverted: bad.reverted, badClash: bad.clash || 'none', goodApplied: !good.reverted, diagValue: diag.value, isRect: s.isRectangle(r.corners) },
+    nums: { badReverted: bad.reverted, badReason: bad.reason || 'none', restored, goodApplied: !good.reverted, diagValue: diag.value, isRect: s.isRectangle(r.corners) },
   };
 });
 
@@ -415,4 +420,15 @@ console.log('  ' + '-'.repeat(w + 22));
 console.log(`  ${rows.filter(r => r.pass).length}/${rows.length} pass. FIX BACKLOG (failing): ${failing.length ? failing.map(n => n.split('.')[0]).join(', ') : 'none'}`);
 console.log('===========================================================================\n');
 
-// Reporter: never fail the suite — the table above is the deliverable. (exit 0)
+// Verdict: every scenario passes, except the KNOWN ones, which must still fail.
+let bad = 0;
+for (const r of rows) {
+  const num = r.name.split('.')[0];
+  const known = Object.hasOwn(KNOWN, num);
+  if (!r.pass && !known) { bad++; console.log(`FAIL  ${r.name}  ${numsStr(r.nums)}`); }
+  else if (r.pass && known) { bad++; console.log(`FAIL  KNOWN entry now PASSES, delete it from KNOWN (${r.name}: ${KNOWN[num]})`); }
+  else if (!r.pass) console.log(`known ${r.name}  [${KNOWN[num]}]`);
+}
+for (const num of Object.keys(KNOWN)) if (!rows.some(r => r.name.split('.')[0] === num)) { bad++; console.log(`FAIL  KNOWN entry ${num} names no scenario`); }
+if (bad) { console.log(`${bad} unexpected result(s)`); process.exit(1); }
+console.log('solver-scenarios: ok');

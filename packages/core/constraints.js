@@ -278,6 +278,9 @@ export function createConstraint(type, params) {
                     offset: params.offset || SolverConfig.ANGLE_OFFSET || 40,
                     glyphPos: params.glyphPos
                 };
+                // carry the reference flags (+ reason) like the distance branches, so a reference angle stays a reference through undo
+                if (params.isDriven || params.driven) { angleObj.isDriven = true; angleObj.driven = true; }
+                if (params.drivenReason) angleObj.drivenReason = params.drivenReason;
                 if (params.labelPos) angleObj.labelPos = { ...params.labelPos };
                 return angleObj;
             }

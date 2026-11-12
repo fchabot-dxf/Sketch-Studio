@@ -86,10 +86,8 @@ const KNOWN = {
   'NEW-1': 'point-to-line dimension throws ReferenceError (dimension-tool.js:619)',
   'NEW-2': 'point-to-line dimension is not a perpendicular distance (the helper slides)',
   'NEW-3': 'perpendicular refused between exactly parallel lines',
-  'NEW-4': 'reference angle becomes driving after undo (constraints.js:275)',
   'NEW-5': 'line-to-line dimension has a negative value in one click order (dimension-tool.js:437)',
   'NEW-6': 'feasible tangent circle/arc refused when the arc radius must change a lot',
-  'NEW-7': 'collinear DOF count differs from PlaneGCS (polygon sides, pre-dimensioned)',
   'NEW-8': 'parallel polygon side vs locked rect top: slow convergence after a jitter',
 };
 // round-1 findings are TOLERATED, not required: a fix task for F1..F6 must not have to edit this file (their cells simply turn PASS).

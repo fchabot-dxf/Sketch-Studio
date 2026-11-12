@@ -17,7 +17,6 @@ const KNOWN = {
   'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
   'scurve/B no dimension is demoted': 'N-F7 (the 2nd arc radius is judged redundant)',
   'N-F1': 'fillet at the origin deletes j_origin', 'N-F2': 'polygon-tool corners cannot be filleted', 'N-F3': 'dimSign dropped on save / undo',
-  'N-F4': 'reference angle becomes driving after save / undo',
   'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
   'roundtrip: documents are identical after save -> load': 'N-F3 (dimSign / dimSignMode dropped) on every drawing with an H/V dimension',
 };

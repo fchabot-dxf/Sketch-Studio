@@ -198,6 +198,7 @@ const parse = (k) => {
   return { kind: 'moves', moved: m[1] === '.' ? [] : m[1].split('+'), others: !!m[2] };
 };
 export const RULES = [
+  { id: 'angle-box-refused', reason: 'an angle dimension typed 0 or a negative value (also x2 / x0.5 of an angle placed at 0, which types 0 again: Fusion moves nothing): this recording (Fusion API, parameter.expression) accepts it, but the Fusion dimension BOX refuses it (task 551, real mouse and keys: -30 not accepted, 0 silently refused); ours refuses it like the box (task 550, "an angle must be more than 0 degrees")', test: (c, e, f, o) => c === 'dim-angle' && (e === 'zero' || e === 'negative' || ((e === 'grow2' || e === 'shrink05') && f.moved.length === 0)) && o.kind === 'refused' && f.kind === 'moves' },
   { id: 'negative-refused', reason: 'a negative value: Fusion accepts it (the dimension is signed, the geometry keeps or flips its side); ours refuses it and reverts', test: (c, e, f, o) => e === 'negative' && o.kind === 'refused' && f.kind === 'moves' },
   { id: 'negative-radius', reason: 'a negative radius: Fusion keeps the circle as it is (the parameter reads the negative value); ours stores a negative radius on the circle', test: (c, e, f, o, ot) => c === 'dim-radius' && e === 'negative' && f.kind === 'moves' && /value not reached/.test(ot) },
   { id: 'zero-refused', reason: 'a zero distance between two points: Fusion makes them coincide; ours refuses it (it would collapse a line to a point, task 521)', test: (c, e, f, o) => e === 'zero' && f.kind === 'moves' && o.kind === 'refused' },

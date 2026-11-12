@@ -54,6 +54,15 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   if (!edits.length) return { reverted: false, clash: '' };
   const labelOf = (e, i) => e.name || e.c.name || `dimension ${i + 1}`;
   const whyOf = (r) => r.reason || (r.clash ? `conflicts with ${r.clash}` : 'did not converge');
+  // TASK 550: an ANGLE dimension takes a value above 0 (Fusion's dimension box, measured with real keys: 0 and negative values are refused;
+  // the sector keeps opening the same way round as the value grows, see the walk below). Refused before anything changes.
+  for (let i = 0; i < edits.length; i++) {
+    const e = edits[i];
+    if (e.c.type === CONSTRAINT_TYPES.ANGLE && !(Number(e.value) > 0)) {
+      const why = 'an angle must be more than 0 degrees';
+      return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
+    }
+  }
   if (opts.refuseReference) {
     for (let i = 0; i < edits.length; i++) {
       const c = edits[i].c;
@@ -83,11 +92,14 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     // the mirrored tangent branch of a fillet (arc reversed / outside its corner), while small steps follow the solution
     // continuously. A fillet radius edit is already seeded analytically above, so it is not stepped (it takes its value at once). At each
     // step the operand that gives way is placed at the step's value by the creation placement (the who-moves table, task 525) before the solve.
+    // The step is a fraction of the OLD value, or of the NEW one when the old value is 0 (TASK 550: an angle edited from 0, two parallel lines,
+    // to 179 turned in one jump and the angle row, satisfied modulo 180 degrees, landed on the reversed line at 1 degree; in steps of 17.9
+    // degrees the line turns continuously to exactly 179, like Fusion).
     let steps = 1;
     list.forEach((e, i) => {
       if (fillets[i]) return;
-      const old = e.c.value, span = Math.abs(e.value - old);
-      if (Number.isFinite(span) && Math.abs(old) > 0) steps = Math.max(steps, Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (Math.abs(old) * STEP_FRACTION)))));
+      const old = e.c.value, span = Math.abs(e.value - old), ref = Math.abs(old) > 0 ? Math.abs(old) : Math.abs(e.value);
+      if (Number.isFinite(span) && ref > 0) steps = Math.max(steps, Math.min(MAX_EDIT_STEPS, Math.max(1, Math.ceil(span / (ref * STEP_FRACTION)))));
     });
     const from = list.map(e => e.c.value);
     // THE PLACEMENT RULE: "who moves" answers a question about the ONE dimension the user typed, so a batch of exactly ONE edit places per step

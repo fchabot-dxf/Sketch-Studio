@@ -37,6 +37,17 @@ Same Fusion answers (data), ours re-run on main after 511 (full-derivative Jacob
 
 The classes marked "pending task 511" before are now labelled "remaining after task 511" where a difference is left (collinear: which line gives way or a refusal; pointOnLine / pointOnCircle with a held operand); the cells that now agree were removed from the KNOWN files.
 
+### After tasks 517 + 520 (merge of origin/main 9feea55): differing cells before -> after
+
+517 (fillet keeps the origin / works on polygon corners) and 520 (point-to-line dimension is one distance constraint, line-line dimension always positive, perpendicular accepted on exactly parallel lines, the second pick turns +90 deg CCW). The oracle harness never built a point-to-line dimension, so nothing there changed. Only the rows that changed:
+
+| section | constraint / drawing | before | after |
+|---|---|---|---|
+| graded | collinear | 68 | 69 |
+| TOTAL which-moves | all | 217 | 217 |
+| TOTAL graded | all | 1525 | 1526 |
+| TOTAL drawings | all | 131 | 131 |
+
 Re-run: `node tests/fusion-oracle.test.js` (offline, a few seconds). Re-record in Fusion: `scripts/fusion-oracle/*` (the runners need a scratch document holding the user parameter `CLAUDE_MARK`; they refuse to run anywhere else).
 
 ## Which geometry moves
@@ -558,8 +569,8 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 | constraint / dimension | cells | same as Fusion | Fusion refuses, ours accepts | ours refuses, Fusion accepts |
 |---|---|---|---|---|
 | parallel | 113 | 11 | 21 | 0 |
-| perpendicular | 113 | 31 | 0 | 14 |
-| collinear | 113 | 45 | 7 | 0 |
+| perpendicular | 113 | 31 | 0 | 13 |
+| collinear | 113 | 44 | 8 | 0 |
 | equal-line-line | 113 | 35 | 0 | 0 |
 | dim-angle | 113 | 20 | 21 | 0 |
 | coincident-pp | 232 | 100 | 4 | 0 |
@@ -660,7 +671,7 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | LR | 8 | 5 | a:4 R:4 | a:2 X:2 R:4 | rotate:2 one end:2 | stretch:2 deform:2 one end:2 |
 | RL | 8 | 5 | b:4 R:4 | b:2 X:1 R:5 | rotate:2 one end:2 | stretch:2 deform:1 one end:1 |
 | CC | 4 | 0 | a:1 b:3 | X:4 | one end:3 rotate:1 | stretch:4 one end:4 |
-| SS | 1 | 0 | b:1 | R:1 | rotate:1 |  |
+| SS | 1 | 0 | b:1 | X:1 | rotate:1 | scale:2 |
 | RR | 4 | 4 | R:4 | R:4 |  |  |
 
 #### collinear
@@ -677,12 +688,12 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 3 H/V | b/b | X/b* | b/b | b/b | X/X | X/X | a/X* | a/a |
 | 4 end fixed | b/b | b/b | b/b | R/X* | X/X | X/X | R/X* | R/R |
 | 5 end+length | b/b | X/b* | b/b | R/X* | X/X | X/X | R/X* | R/R |
-| 6 H/V+end | b/b | b/b | b/b | b/b | R/R | R/X* | R/X* | R/R |
+| 6 H/V+end | b/b | b/b | b/b | b/b | R/X* | R/X* | R/X* | R/R |
 | 7 full | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 64 | 30 | a:18 b:21 X:11 R:14 | a:10 b:27 X:19 R:8 | rotate:32 one end:12 stretch:11 translate:6 | stretch:32 one end:27 rotate:13 translate:3 |
+| LL | 64 | 29 | a:18 b:21 X:11 R:14 | a:10 b:27 X:20 R:7 | rotate:32 one end:12 stretch:11 translate:6 | stretch:32 one end:29 rotate:13 translate:3 |
 | LC | 8 | 3 | a:1 b:4 X:2 R:1 | b:4 X:3 R:1 | rotate:5 one end:3 stretch:1 | stretch:6 one end:4 |
 | CL | 8 | 2 | a:3 b:2 X:1 R:2 | a:2 b:2 X:3 R:1 | rotate:5 one end:2 | stretch:6 one end:4 |
 | LS | 4 | 0 | a:1 b:3 | b:1 X:3 | rotate:4 | deform:4 stretch:2 one end:1 |

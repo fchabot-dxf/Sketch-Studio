@@ -1,0 +1,36 @@
+TASK 531 (Sketch-Studio): audit EXTREME ARCS under every constraint. Owner 2026-11-12: "is there a test for very short arc
+segments, can they behave as expected under different constraints". Today there is none: the audits use ordinary arcs, and the
+collapse check (task 521, constraint-verifier.js measureShapeSizes) measures an arc's RADIUS only, not its sweep.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-531-short-arcs, branch agents/task-531-short-arcs (from origin/main).
+Read first: docs/CONSTRAINT-AUDIT.md, docs/COVERAGE-AUDIT.md, tests/harness/audit/lib.js (PlaneGCS + finite-difference oracles,
+the branch signs incl. "A: arc sweep sign"), tests/harness/coverage/inventory.js, matrix-run.js, prop-*.js,
+tests/coverage-matrix.test.js (the KNOWN pattern), packages/core/shapes.js makeArc, the arc tool and the fillet arc.
+
+MEASURING task: change nothing under packages/. New files only (tests/extreme-arcs.test.js, tests/harness/coverage/arcs-*.js,
+a section "Extreme arcs" in docs/COVERAGE-AUDIT.md appended at the end). Reuse the existing harness helpers; do not copy them.
+1. Arc variants, declared as DATA: sweep 0.1 deg, 1 deg, 5 deg, 30 deg (control), 179/180/181 deg, 355 deg, 359.9 deg; radius
+   tiny (0.5), ordinary (20), huge (5000: nearly straight, chord 20); chord shorter than the app's snap / pick tolerance (find the
+   tolerances: quote them); CW and CCW; made by the arc tool (makeArc) and as a FILLET arc (tiny fillet radius, and a fillet on
+   a nearly straight corner 179 deg and a very sharp corner 2 deg).
+2. Under each constraint and dimension the inventory lists for an arc (tangent line-arc / arc-arc / circle-arc at a shared end and
+   away from it, coincident of its ends, point on arc, concentric, equal with an arc / a circle, radius dimension, dimensions on
+   its end points and its centre, H/V between its ends or centre, midpoint if supported, fix/lock, collinear/parallel of a line
+   through its ends where meaningful), in the hold states sep / shared / locked / dimmed of the matrix.
+3. Per cell check and record: accepted or refused and the error; residual; DOF before/after vs the finite-difference count and
+   vs PlaneGCS; analytic Jacobian vs finite differences; did the SWEEP keep its sign and stay within a factor (did a 1 deg arc
+   become 359 deg, or flip CW/CCW, or shrink to zero sweep with start = end); did the radius stay sane; a jitter re-solve returns
+   to the same pose; save/load and undo round trip; a small drag of an end (through the app's real drag path) keeps the arc an
+   arc; dimension edit x1.5 and x0.67 on the radius.
+4. Also the UI-facing facts, in node if reachable: can a 0.1 deg / sub-tolerance arc be picked (hit test) at all, does the
+   renderer get a valid path (no NaN, large-arc flag right at 180/181 deg).
+5. Output: tests/extreme-arcs.test.js in the gate: passing cells must pass; each class of failure = a KNOWN entry (id EA-1...,
+   severity, one-line diagnosis with file:line, proposed task) that fails loudly when it starts passing. The doc section: a table
+   variant x constraint (pass / EA-n), and the findings in plain words, most important first, each with a verbatim repro line.
+   Say explicitly whether a zero-sweep collapse is accepted anywhere (the 521 check does not cover it).
+Fusion is NOT available to you (another seat holds it): do not call it. Compare with PlaneGCS and finite differences only; list
+the 20 cells most worth replaying in Fusion later.
+STOP if the harness cannot build an arc variant without changing packages/ (report which and why).
+Diagnose, do not fix. Never kill a process you did not start. REPORT once, leave nothing running.
+Before the final gate `git fetch origin` and merge origin/main if it moved (task 525 will land; refresh your KNOWN entries then).
+Gate green (`npm run gate`, run it and wait for its exit), commit by path, push the branch, WORK-LOG `## TURN 531`, the AGENTS.md
+REPORT block with the cell counts and the evidence in .evidence/531/.

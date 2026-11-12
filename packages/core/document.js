@@ -17,8 +17,11 @@
 import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
+import { cloneParameters, replaceParameters } from '#core/parameters.js';
 
-export const DOCUMENT_VERSION = 1;
+// 2 (TASK 535, owner ruling O2): the version that carries dimension names, dimension formulas and geometry.parameters. Always written;
+// a version-1 file still loads (parameters absent -> none, every dimension is named on load) but an older build refuses a version-2 file.
+export const DOCUMENT_VERSION = 2;
 
 /**
  * serializeDocument(state, { hosts }) → a plain, JSON-safe object.
@@ -44,6 +47,7 @@ export function serializeDocument(state, { hosts } = {}) {
       activeSketchId: state.activeSketchId,
       groups: Array.isArray(state.groups) ? state.groups.map((g) => ({ ...g })) : undefined,
       profiles: Array.isArray(state.profiles) ? cloneProfiles(state.profiles) : undefined,
+      parameters: Array.isArray(state.parameters) ? cloneParameters(state.parameters) : undefined,
       vcarves: Array.isArray(state.vcarves)
         ? state.vcarves.map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined }))
         : undefined,
@@ -112,6 +116,7 @@ export function deserializeDocument(doc, state) {
     state.profiles.length = 0;
     state.profiles.push(...cloneProfiles(g.profiles || []));
   }
+  if (Array.isArray(state.parameters)) replaceParameters(state.parameters, g.parameters);
   if (Array.isArray(state.vcarves)) {
     state.vcarves.length = 0;
     state.vcarves.push(...(g.vcarves || []).map((v) => ({ ...v, vbit: v.vbit ? { ...v.vbit } : undefined })));

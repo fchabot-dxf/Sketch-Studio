@@ -8,6 +8,7 @@ import { removeOrphanJoints } from '#core/joints.js';
 import { dbg } from '#core/debug.js';
 import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
 import { cloneProfiles } from '#core/profile-model.js';
+import { cloneParameters, replaceParameters } from '#core/parameters.js'; // TASK 535: the document's user parameters ride every snapshot
 
 // TASK 466: THE undo depth, declared once and shared by every app (one shared state). It was 5, far too shallow for a CAD tool.
 // Measured snapshot cost (headless Edge): the owner's 8x11 dewalt SVG imported in Shaper (1693 shapes, 33 cuts) = 384 KB JSON /
@@ -48,6 +49,7 @@ export function createSketchState(engine, view) {
     isConstructionMode: false,
     groups: [],
     profiles: [],
+    parameters: [], // TASK 535: user parameters { name, unit, expression, comment? }, one list per document (no non-test producer yet)
     vcarves: [],
     // TASK 463: OPTIONAL generic host hook so a host's own undoable data rides in the SAME snapshots (one history, no second
     // stack): { capture() -> JSON-safe data, restore(data) }. Shaper uses it for its cut plan. null = nothing extra.
@@ -73,6 +75,7 @@ export function createSketchState(engine, view) {
         groups: Array.isArray(this.groups) ? this.groups.map(g => ({...g})) : undefined,
         // COMBINE slice 1: combined profiles
         profiles: Array.isArray(this.profiles) ? cloneProfiles(this.profiles) : undefined,
+        parameters: Array.isArray(this.parameters) ? cloneParameters(this.parameters) : undefined, // TASK 535
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
         vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined,
         host: this.hostSnapshot ? this.hostSnapshot.capture() : undefined // TASK 463: the host's own undoable data
@@ -111,6 +114,7 @@ export function createSketchState(engine, view) {
       } else if (Array.isArray(this.profiles)) {
         this.profiles.length = 0;
       }
+      if(Array.isArray(this.parameters)) replaceParameters(this.parameters, snapshot.parameters); // TASK 535
       if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       if (this.hostSnapshot && snapshot.host !== undefined) this.hostSnapshot.restore(snapshot.host); // TASK 463
       // Clear selections and active tool state
@@ -146,6 +150,7 @@ export function createSketchState(engine, view) {
       this.activeSketchId = fresh.activeSketchId;
       this.groups.length = 0;
       this.profiles.length = 0;
+      this.parameters.length = 0; // TASK 535
       this.vcarves.length = 0;
       this.selectedJoints.clear();
       this.selectedConstraints.clear();
@@ -242,6 +247,7 @@ export function createSketchState(engine, view) {
           this.profiles.length = 0;
           this.profiles.push(...cloneProfiles(snapshot.profiles));
         }
+        if(Array.isArray(this.parameters)) replaceParameters(this.parameters, snapshot.parameters); // TASK 535
         if(snapshot.vcarves && Array.isArray(this.vcarves)){ this.vcarves.length = 0; this.vcarves.push(...snapshot.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined}))); } // VCARVE-3b
       } else {
         // No prior snapshot - clear store

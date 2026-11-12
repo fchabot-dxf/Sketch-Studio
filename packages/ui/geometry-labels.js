@@ -60,6 +60,7 @@ export function constraintGeometryText(c, shapes, label) {
   const js = Array.isArray(c.joints) ? c.joints : [];
   if (c.type === 'coincident' || js.length < 2) return js.map(joint).join(sep);
   if (js.length === 2) return segment(js[0], js[1]);
+  if (js.length === 3 && c.type === 'distance') return `${joint(js[0])}${sep}${segment(js[1], js[2])}`;   // a point-to-line dimension: the point, then the line
   if (js.length === 3 && c.type === 'midpoint') return `${joint(js[2])} on ${segment(js[0], js[1])}`;
   if (js.length === 4) return `${segment(js[0], js[1])}${sep}${segment(js[2], js[3])}`;
   return js.map(joint).join(', ');

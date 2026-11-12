@@ -266,30 +266,30 @@ buildable pair; the fillet arc, polygon side, rect side and bezier endpoints beh
 
 ## New findings (ranked)
 
-Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro is in `tests/harness/coverage/matrix-findings.js` (`node scripts/coverage-audit.cjs` prints it).
+Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro is in `tests/harness/coverage/matrix-findings.js` (`node scripts/coverage-audit.cjs` prints it). The ones marked FIXED have had their pin deleted (see "Fixed in task 520" below).
 
-### 1. NEW-1 (HIGH): the point-to-line dimension throws ReferenceError on every use (and leaves its undo group open)
+### 1. NEW-1 (HIGH) [FIXED task 520]: the point-to-line dimension throws ReferenceError on every use (and leaves its undo group open)
 
 * Verdict: BUG. Cells: 112 (e.g. dim-point-line LL/sep, dim-point-line LL/shared, dim-point-line LL/locked, dim-point-line LL/dimmed).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `second click (joint, then line): ReferenceError: c is not defined; constraints created: pointOnLine, distance=40.000; undo group left open: true`
 * Diagnosis: packages/ui/input-handlers/dimension-tool.js:619 calls finalizeDimBirth(c, state) AFTER the block that declares `const c` (line 610): `c` is out of scope. The constraints are already created when it throws, but endDimUndo never runs.
 * Proposed task: declare c before the if (a && b && firstJ) block, or move finalizeDimBirth inside it; add a node test that drives joint-then-line and asserts no throw and one undo step.
 
-### 2. NEW-5 (HIGH): a line-to-line dimension made with the Dimension tool is born as a REFERENCE (ERR-CSOLVE-02) with a NEGATIVE value, in one of the two click orders
+### 2. NEW-5 (HIGH) [FIXED task 520]: a line-to-line dimension made with the Dimension tool is born as a REFERENCE (ERR-CSOLVE-02) with a NEGATIVE value, in one of the two click orders
 
 * Verdict: BUG. Cells: 5 (e.g. dim-line-line LL/sep, dim-line-line LC/sep, dim-line-line CC/sep, dim-line-line RR/sep).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `click line 1 then line 2: value -75.89 driven=true (sandbox-conflict [ERR-CSOLVE-02]); click line 2 then line 1: value 75.89 driven=false`
 * Diagnosis: dimension-tool.js:437 passes value: perpendicularDistance(j1a, j2a, j2b), which is SIGNED (geometry.js:122-130 uses a normal vector); definitions.js:32 compares Math.abs(signed) - value, so a negative value is a conflict and the sandbox demotes it. Which order breaks depends on which side line 2 is on.
 * Proposed task: pass Math.abs(...) (the solver already uses |signed|); test: both click orders on any two parallel lines give a driving, positive dimension.
 
-### 3. NEW-3 (HIGH): perpendicular is refused (ERR-CSOLVE-01) between two EXACTLY parallel lines (angle 0 or 180), e.g. two lines that are both horizontal
+### 3. NEW-3 (HIGH) [FIXED task 520]: perpendicular is refused (ERR-CSOLVE-01) between two EXACTLY parallel lines (angle 0 or 180), e.g. two lines that are both horizontal
 
 * Verdict: BUG. Cells: 8 (e.g. perpendicular LL/sep, perpendicular LL/dimmed, perpendicular LC/sep, perpendicular LC/dimmed).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `first line horizontal; second line direction (60,0) parallel: accepted=false; (60,0.01) 0.01 deg: accepted=true; (60,30) 27 deg: accepted=true`
 * Diagnosis: constraint-manager.js:1019-1020 lockPerpendicularBranch skips the branch lock when |sin theta| < 0.1, so definitions.js:288 falls back to r = u.v. From an EXACTLY parallel start cross(u,v) = 0 is a stationary point of that residual: 500 iterations stay at the start (residual pi/2; the forced add does not converge either). A 0.01 degree tilt already solves, so the failure is only the exact-parallel case, which is the common one (lines with H or V constraints, snapped lines). PlaneGCS solves the same constraint.
 * Proposed task: give the branchless perpendicular a starting rotation (pick the branch from the sign of cross, or +1 when it is 0) instead of skipping; test: perpendicular on two parallel horizontal lines is accepted and solves.
 
-### 4. NEW-2 (HIGH): the point-to-line dimension does not hold a perpendicular distance: the helper joint slides along the line
+### 4. NEW-2 (HIGH) [FIXED task 520]: the point-to-line dimension does not hold a perpendicular distance: the helper joint slides along the line
 
 * Verdict: BUG. Cells: 22 (e.g. dim-point-line LL/sep, dim-point-line LC/sep, dim-point-line LS/sep, dim-point-line LO/sep).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `perpendicular distance 40.000 when dimensioned; after swinging the line end it is 22.283 with max residual 1.5e-8 (the dimension reads satisfied)`
@@ -323,6 +323,15 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `collinear polygon sides, pre-dimensioned: panel delta -1, finite-difference delta -1, PlaneGCS delta -2, expected -2`
 * Diagnosis: UNVERIFIED root: collinear is one-sided (constraint-manager.js anchors the first line; the solver only moves the second line points), so the DOF the panel reads may not be the DOF of the geometric constraint. Same family as F6.
 * Proposed task: check the one-sided collinear rows in jointFreedom the way F6 proposes for pointOnLine, then re-run this cell.
+
+## Fixed in task 520 (NEW-1, NEW-2, NEW-3, NEW-5)
+
+Cell counts after the fixes (`node tests/coverage-matrix.test.js`): 3384 cells: **1783 PASS**, 1416 N/A, 163 not buildable, 16 FAIL caused by a round-1 finding (F2=4, F4=11, F6=1), 6 FAIL NEW (NEW-6=5, NEW-8=1), 0 unexplained. The repros of NEW-1, NEW-2, NEW-3, NEW-5 became passing assertions in `tests/dimension-point-line.test.js` (node) and `tests/dimension-point-line-live.test.js` (real pointer, SketchStudio); their `KNOWN` entries, repro pins and classify rules are deleted.
+
+* NEW-1: `handleDimensionPointerDown` is now a wrapper that closes any undo group the click opened on every exit (return or throw, nothing caught); the scope bug is gone with the rewrite below.
+* NEW-2: a point-to-line dimension is now ONE `distance` constraint stored with three joints `[point, line end A, line end B]` (the arity is the declaration, like a joint-form collinear / equal). The solver reuses the existing line-line row (`distance.__lineLine`: |perpendicular distance from P to line AB| - value), no helper joint and no pointOnLine, so it removes exactly 1 DOF and holds when the line swings. The verifier, the renderer, the live value check, `toggleDriving` and the conflict pre-checks understand the form (`isPointLineDistance` in geometry.js).
+* NEW-5: the line-line value is `Math.abs(perpendicularDistance(...))`; the side is not stored (the solver row is |signed|, as before).
+* NEW-3: `ConstraintManager.placeForCreation` rotates the second-picked line 90 degrees counter-clockwise (pivot: a fixed or shared joint of that line, else its midpoint) when the start is EXACTLY parallel; `_sandboxVerify` starts from the same placed pose, so the check judges the real add. No branch is locked afterwards: the branched residual is stationary at 90 degrees (its Jacobian row is zero there and would hide the removed DOF).
 
 ## Observations that are not failures
 

@@ -166,11 +166,11 @@ await (async () => {
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=sign-in]').length`), 1, 'exactly ONE sign-in door');
     await shot('1-signed-out');
 
-    // 2. signed in: the action sits next to Save to file, the toggle is ON by default and persists when changed
+    // 2. signed in: the action sits before Open from file, the toggle is ON by default and persists when changed
     await ev(`T.mount(true)`); await sleep(300);
     assert.strictEqual(await has('[data-action=save-drive]'), true);
-    const order = await ev(`[...document.querySelectorAll('[data-section=actions] [data-action]')].map((b) => b.dataset.action).filter((a) => a === 'save-file' || a === 'save-drive' || a === 'open-file')`);
-    assert.deepStrictEqual(order, ['save-file', 'save-drive', 'open-file'], 'next to Save to file');
+    const order = await ev(`[...document.querySelectorAll('[data-section=actions] [data-action]')].map((b) => b.dataset.action).filter((a) => a === 'save-drive' || a === 'open-file')`);
+    assert.deepStrictEqual(order, ['save-drive', 'open-file'], 'Save to file is no longer in the menu');
     assert.strictEqual(await text('[data-action=save-drive]'), 'Save to Google Drive');
     assert.strictEqual(await ev(`document.querySelector('[data-account=drive-default]').checked`), true, 'default ON');
     assert.strictEqual(await text('[data-account=drive-default-row]'), 'Save to Google Drive by default');
@@ -234,11 +234,11 @@ await (async () => {
     await ev(`acct.set({ signedIn: true, lapsed: false })`); await sleep(300);
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=check-result] li').length`), 5, 'the result survives a re-render');
 
-    // 6. the Projects view says why Drive projects are missing while signed out, and nothing else changes
-    await ev(`T.store.enabled = true; T.mount(false); sb.showView('projects')`); await sleep(400);
-    assert(/hidden while you are signed out/.test(await text('.sk-note')), 'the note says why');
-    await ev(`T.mount(true); sb.showView('projects')`); await sleep(400);
-    assert.strictEqual(await has('.sk-note'), false, 'signed in: no such note');
+    // 6. the project manager says why Drive projects are missing while signed out, and nothing else changes
+    await ev(`document.querySelectorAll('[data-pm=close]').forEach((b) => b.click()); T.store.enabled = true; T.mount(false); document.querySelector('[data-action=projects]').click()`); await sleep(500);
+    assert(/hidden while you are signed out/.test(await text('.sk-pm-side .sk-pm-note')), 'the note says why');
+    await ev(`document.querySelectorAll('[data-pm=close]').forEach((b) => b.click()); T.mount(true); document.querySelector('[data-action=projects]').click()`); await sleep(500);
+    assert.strictEqual(await has('.sk-pm-side .sk-pm-note'), false, 'signed in: no such note');
     await shot('8-projects-view-signed-in');
     console.log('sidebar-drive: all checks passed');
   } finally {

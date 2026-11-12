@@ -74,11 +74,12 @@ window.T = {
     window.sb = sb; window.acct = account; return true;
   },
   mountProjects(st) {
+    document.querySelectorAll('[data-pm=close]').forEach((b) => b.click());
     if (window.sb) window.sb.destroy(); document.getElementById('host').innerHTML = '';
     const account = fakeAccount(st, { name: 'Ada Lovelace', email: 'ada@example.com', picture: '', initials: 'AL' });
     const store = fakeStore();
     const sb = mountProjectSidebar({ appId: 'shaper', getBuffer: () => null, store, account });
-    document.getElementById('host').appendChild(sb.el); sb.open(); sb.showView('projects');
+    document.getElementById('host').appendChild(sb.el); sb.open(); document.querySelector('[data-action=projects]').click();
     window.sb = sb; window.acct = account; window.store = store; return true;
   },
   // the REAL controller with fakes: the server routes 404 (unconfigured / localhost) so sign-in goes through the GIS popup
@@ -245,42 +246,42 @@ await (async () => {
     const srv = await ev(`(() => { const b = document.querySelector('[data-account=sign-in]'); const n = real.popups.length; b.click(); return { popups: real.popups.length - n, gis: real.gisCalls.length }; })()`);
     assert.strictEqual(srv.popups, 1, 'server configured: the sign-in popup opens synchronously'); assert.strictEqual(srv.gis, 0);
 
-    // 7. Projects view: Drive entries are HIDDEN when signed out
+    // 7. Project manager: Drive entries are HIDDEN when signed out
     await ev(`T.mountProjects({ signedIn: false, lapsed: false })`);
     await sleep(400);
-    const menus = async () => ev(`(() => { const out = {}; for (const w of document.querySelectorAll('.sk-row-wrap')) { w.querySelector('.sk-row-menu').click(); const m = w.nextElementSibling; out[w.querySelector('.sk-project').dataset.project] = [...m.querySelectorAll('button')].map((b) => b.textContent); } return out; })()`);
+    const menus = async () => ev(`(() => { const out = {}; for (const w of document.querySelectorAll('.sk-pm-prow')) { const nm = w.querySelector('[data-project]'); if (!nm) continue; w.querySelector('.sk-pm-more').click(); out[nm.dataset.project] = [...document.querySelectorAll('.sk-pm-menu button')].map((b) => b.textContent); } return out; })()`);
     const off = await menus();
     assert(!JSON.stringify(Object.values(off)).match(/Drive|local/i), 'signed out: no Use Google Drive / Make local entries: ' + JSON.stringify(off));
 
     // 8. signed in: entries appear, the Drive project carries the cloud marker, a move shows a confirm saying what happens, nothing runs before OK
     await ev(`T.mountProjects({ signedIn: true, lapsed: false })`);
     await sleep(400);
-    assert.strictEqual(await ev(`[...document.querySelectorAll('.sk-project')].map((b) => !!b.querySelector('[data-cloud=drive]'))`).then((a) => JSON.stringify(a)), '[false,true]', 'only the Drive project has the cloud marker');
+    assert.strictEqual(await ev(`[...document.querySelectorAll('.sk-pm-rowbtn')].filter((b) => b.querySelector('[data-project]')).map((b) => !!b.querySelector('[data-cloud=drive]'))`).then((a) => JSON.stringify(a)), '[false,true]', 'only the Drive project has the cloud marker');
     const on = await menus();
     assert(on.p1.includes('Use Google Drive') && !on.p1.includes('Make local'), JSON.stringify(on));
     assert(on['drive:p2'].includes('Make local') && !on['drive:p2'].includes('Use Google Drive'), JSON.stringify(on));
-    await ev(`[...document.querySelectorAll('.sk-menu-item')].find((b) => b.textContent === 'Use Google Drive').click()`);
-    const conf = await ev(`(() => { const c = document.querySelector('.sk-sidebar-confirm'); return c && c.textContent; })()`);
+    await ev(`document.querySelector('[data-project="p1"]').closest('.sk-pm-prow').querySelector('.sk-pm-more').click(); document.querySelector('.sk-pm-menu [data-menu=use-drive]').click()`);
+    const conf = await ev(`(() => { const c = document.querySelector('.sk-pm-ask:not([hidden])'); return c && c.textContent; })()`);
     assert(conf && /copied to your Google Drive/.test(conf) && /checked/.test(conf) && /removed/.test(conf), 'the confirm says copy, verify, then remove the local copy: ' + conf);
     assert(!/sync/i.test(conf));
     assert.deepStrictEqual(await ev(`store.moves`), [], 'nothing moves before the user confirms');
     await shot('4-drive-confirm');
-    await ev(`document.querySelector('.sk-sidebar-confirm .cancel').click()`);
+    await ev(`document.querySelector('.sk-pm-ask .cancel').click()`);
     await sleep(300);
     assert.deepStrictEqual(await ev(`store.moves`), [], 'Cancel moves nothing');
     // OK moves exactly that project; a failure shows the store's message in the drawer
     await ev(`store.failNext = 'Could not verify the copy on Drive.'`);
     await menus();
-    await ev(`[...document.querySelectorAll('.sk-menu-item')].find((b) => b.textContent === 'Use Google Drive').click()`);
-    await ev(`document.querySelector('.sk-sidebar-confirm .ok').click()`);
+    await ev(`document.querySelector('[data-project="p1"]').closest('.sk-pm-prow').querySelector('.sk-pm-more').click(); document.querySelector('.sk-pm-menu [data-menu=use-drive]').click()`);
+    await ev(`document.querySelector('.sk-pm-ask .ok').click()`);
     await sleep(400);
     assert.deepStrictEqual(await ev(`store.moves`), ['p1']);
-    assert.strictEqual(await ev(`(document.querySelector('.sk-sidebar-msg.error') || {}).textContent`), 'Could not verify the copy on Drive.', "the store's message shows in the drawer");
+    assert.strictEqual(await ev(`(document.querySelector('.sk-pm-msg.error') || {}).textContent`), 'Could not verify the copy on Drive.', "the store's message shows in the manager");
     // Make local on the Drive project asks first too
     await menus();
-    await ev(`[...document.querySelectorAll('.sk-menu-item')].find((b) => b.textContent === 'Make local').click()`);
-    assert(/copied from Google Drive to this device/.test(await ev(`document.querySelector('.sk-sidebar-confirm').textContent`)));
-    await ev(`document.querySelector('.sk-sidebar-confirm .ok').click()`);
+    await ev(`document.querySelector('[data-project="drive:p2"]').closest('.sk-pm-prow').querySelector('.sk-pm-more').click(); document.querySelector('.sk-pm-menu [data-menu=make-local]').click()`);
+    assert(/copied from Google Drive to this device/.test(await ev(`document.querySelector('.sk-pm-ask').textContent`)));
+    await ev(`document.querySelector('.sk-pm-ask .ok').click()`);
     await sleep(300);
     assert.deepStrictEqual(await ev(`store.locals`), ['drive:p2']);
 

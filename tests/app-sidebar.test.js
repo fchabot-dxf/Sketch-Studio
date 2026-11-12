@@ -34,9 +34,9 @@ await (async () => {
     const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
 
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
-      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download'] },
-      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'save-file', 'open-file', 'download-svg', 'download-dxf'] },
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'download'] },
+      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'download'] },
+      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'download-svg', 'download-dxf'] },
       { id: 'trace', path: '/apps/trace/index.html', actions: ['download-svg', 'download-dxf'] },
     ];
     // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──

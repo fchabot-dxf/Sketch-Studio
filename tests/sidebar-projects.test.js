@@ -193,36 +193,34 @@ await (async () => {
     assert.strictEqual(await title(), 'Door A — Shaper', 'and the title follows');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, 'the drawer closes after an open');
 
-    // ── Projects: new project, pin, browse, drill, move, back ──
-    await openSb(); await clickEl('[data-action="projects"]'); await sleep(500);
-    await clickEl('[data-action="new-project"]'); await sleep(150);
+    // ── Projects (the project manager modal, TASK 547): new project, pin, browse, move, delete refusal ──
+    await openSb(); await clickEl('[data-action="projects"]'); await sleep(600);
+    await clickEl('[data-pm="new-project"]'); await sleep(150);
     await key('a', 'KeyA', 65, 2); await typeText('Kitchen'); await key('Enter', 'Enter', 13); await sleep(600);
-    const names = () => evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-project .sk-row-name')].map((n) => n.textContent)`);
+    const names = () => evalJs(`[...document.querySelectorAll('.sk-pm-side [data-project]')].map((n) => n.textContent)`);
     assert.ok((await names()).includes('Kitchen') && (await names()).includes('My Designs'), 'the new project is listed');
+    const rowOf = (name) => `[...document.querySelectorAll('.sk-pm-side .sk-pm-prow')].find((w) => w.textContent.includes('${name}'))`;
     // pin Kitchen via its row menu: pinned goes first
-    const kitchenSel = await evalJs(`(() => { const b = [...document.querySelectorAll('.sk-sidebar-view .sk-project')].find((x) => x.textContent.includes('Kitchen')); b.id = 'tk'; return '#tk'; })()`);
-    await evalJs(`document.querySelector('${kitchenSel}').parentElement.querySelector('.sk-row-menu').click()`); await sleep(150);
-    await clickEl('.sk-row-menulist [data-menu="pin"]'); await sleep(600);
+    await evalJs(`${rowOf('Kitchen')}.querySelector('.sk-pm-more').click()`); await sleep(150);
+    await clickEl('.sk-pm-menu [data-menu="pin"]'); await sleep(600);
     assert.strictEqual((await names())[0], 'Kitchen', 'a pinned project is listed first');
     await shot('479-projects-view');
-    // drill into My Designs -> its designs; open the menu of DoorB and move it to Kitchen
-    await evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-project')].find((x) => x.textContent.includes('My Designs')).click()`); await sleep(500);
-    const designNames = () => evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-design .sk-row-name')].map((n) => n.textContent)`);
+    // My Designs -> its designs; open the menu of DoorB and move it to Kitchen
+    await evalJs(`${rowOf('My Designs')}.querySelector('.sk-pm-rowbtn').click()`); await sleep(500);
+    const designNames = () => evalJs(`[...document.querySelectorAll('.sk-pm-tile [data-name]')].map((n) => n.textContent)`);
     assert.deepStrictEqual((await designNames()).sort(), ['Door A', 'DoorB'], 'a project shows its designs');
     await shot('479-project-designs');
-    await evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-design')].find((x) => x.textContent.includes('DoorB')).parentElement.querySelector('.sk-row-menu').click()`); await sleep(150);
-    await clickEl('.sk-row-menulist [data-menu="move"]'); await sleep(200);
-    await evalJs(`[...document.querySelectorAll('.sk-row-menulist.sk-move [data-move-to]')].find((x) => x.textContent === 'Kitchen').click()`); await sleep(700);
+    await evalJs(`[...document.querySelectorAll('.sk-pm-tile')].find((x) => x.textContent.includes('DoorB')).querySelector('.sk-pm-more').click()`); await sleep(150);
+    await clickEl('.sk-pm-menu [data-menu="move"]'); await sleep(200);
+    await evalJs(`[...document.querySelectorAll('.sk-pm-ask [data-choice]')].find((x) => x.textContent === 'Kitchen').click()`); await sleep(700);
     assert.deepStrictEqual(await designNames(), ['Door A'], 'DoorB left My Designs');
-    await clickEl('.sk-back-projects'); await sleep(400); // back to the projects list
-    await evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-project')].find((x) => x.textContent.includes('Kitchen')).click()`); await sleep(500);
+    await evalJs(`${rowOf('Kitchen')}.querySelector('.sk-pm-rowbtn').click()`); await sleep(500);
     assert.deepStrictEqual(await designNames(), ['DoorB'], 'and is in Kitchen');
-    // delete refusal: Kitchen still holds a design -> the store's reason shows in the drawer, the project stays
-    await clickEl('.sk-back-projects'); await sleep(300);
-    await evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-project')].find((x) => x.textContent.includes('Kitchen')).parentElement.querySelector('.sk-row-menu').click()`); await sleep(150);
-    await clickEl('.sk-row-menulist [data-menu="delete"]'); await sleep(200);
-    await clickEl('.sk-sidebar-confirm .ok'); await sleep(600);
-    const msg = await evalJs(`(document.querySelector('.sk-sidebar-msg.error') || {}).textContent || ''`);
+    // delete refusal: Kitchen still holds a design -> the store's reason shows in the manager, the project stays
+    await evalJs(`${rowOf('Kitchen')}.querySelector('.sk-pm-more').click()`); await sleep(150);
+    await clickEl('.sk-pm-menu [data-menu="delete"]'); await sleep(200);
+    await clickEl('.sk-pm-ask .ok'); await sleep(600);
+    const msg = await evalJs(`(document.querySelector('.sk-pm-msg.error') || {}).textContent || ''`);
     assert.ok(/still holds 1 design/.test(msg), 'delete of a non-empty project shows the store reason: ' + msg);
     assert.ok((await names()).includes('Kitchen'), 'and the project is still there');
     await shot('479-delete-refused');

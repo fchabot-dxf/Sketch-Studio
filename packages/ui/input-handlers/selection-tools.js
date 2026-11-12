@@ -677,6 +677,38 @@ export function handleSelectionPointerMove(e, svg, state) {
     // 2. Standard Dragging (Joints/Lines)
     const wpt = screenToWorld(svg, e.clientX, e.clientY);
 
+    // Track whether we've moved far enough during the drag to consider it a real drag
+    try{
+        if (selectionState.dragStartScreen) {
+            const dxs = e.clientX - selectionState.dragStartScreen.x;
+            const dys = e.clientY - selectionState.dragStartScreen.y;
+            const moved = Math.hypot(dxs, dys);
+            if (moved > 5) selectionState.isDragging = true;
+        }
+    }catch(_){ }
+
+    // Drag step (TASK 548): a JOINT drag never moves its target more than MAX_DRAG_STEP world units in one go (a lag spike, focus loss or a
+    // fast flick is a huge jump). A longer pointer jump is walked as straight sub-moves of at most that length from the last pointer
+    // position, each through the whole step below (mask, inference, target, solve) as a pointer event there would be, solved to convergence
+    // (no frame solve runs between sub-moves); the last sub-move is the pointer itself, so the joint is under the cursor (or at the closest
+    // reachable pose) in THIS event. The step used to clamp the target to MAX_DRAG_STEP from the joint instead, so the joint trailed the
+    // cursor and stayed behind when the cursor stopped.
+    const maxStep = SolverConfig.MAX_DRAG_STEP;
+    const from = state.drag.lastPointer || state.drag.startWorld;
+    const jump = Math.hypot(wpt.x - from.x, wpt.y - from.y);
+    const n = (maxStep > 0 && state.drag.id && state.joints.has(state.drag.id)) ? Math.max(1, Math.ceil(jump / maxStep)) : 1;
+    for (let k = 1; k < n; k++) dragToward(e, svg, state, { x: from.x + (wpt.x - from.x) * k / n, y: from.y + (wpt.y - from.y) * k / n }, false);
+    dragToward(e, svg, state, wpt, true);
+    state.drag.lastPointer = wpt;
+    return true;
+}
+
+// One step of a geometry drag toward the world point wpt: the DOF mask, snap or inference, the drag target and the solver pass.
+// atPointer: wpt is the pointer itself. The snap found for this pointer event applies only there, and the solver pass is the quick one
+// (the app's frame solve follows it); a sub-move of the drag step is not at the pointer and is solved to convergence (SolverConfig.ITERATIONS).
+function dragToward(e, svg, state, wpt, atPointer) {
+    const iters = atPointer ? (SolverConfig.QUICK_SOLVE || 8) : (SolverConfig.ITERATIONS || 500);
+
     // Default target: raw mouse position
     let target = wpt;
 
@@ -718,20 +750,10 @@ export function handleSelectionPointerMove(e, svg, state) {
 
     let smoothed = target;
 
-    // Track whether we've moved far enough during the drag to consider it a real drag
-    try{
-        if (selectionState.dragStartScreen) {
-            const dxs = e.clientX - selectionState.dragStartScreen.x;
-            const dys = e.clientY - selectionState.dragStartScreen.y;
-            const moved = Math.hypot(dxs, dys);
-            if (moved > 5) selectionState.isDragging = true;
-        }
-    }catch(_){ }
-
     // UNIFIED BEHAVIOR: Prefer the 'isLocked' flag computed by input-manager, but fall back to a local proximity check
     // so tests that set state.activeSnap directly (without running input-manager) still get expected lock behavior.
     let activeIsLocked = false;
-    if (state.activeSnap) {
+    if (atPointer && state.activeSnap) {
         // Use explicit flag if present
         if (typeof state.activeSnap.isLocked === 'boolean') activeIsLocked = state.activeSnap.isLocked;
         else {
@@ -810,26 +832,6 @@ export function handleSelectionPointerMove(e, svg, state) {
         }
     }
 
-    // Drag step cap: when the cursor jumps far in a single frame (lag, focus
-    // loss, fast flick), the solver gets a huge target displacement and can
-    // overshoot. Clamp the proposed target to MAX_DRAG_STEP world units from
-    // the dragged joint's current position. The joint catches up over the
-    // next few frames if constraints allow.
-    try {
-        const maxStep = SolverConfig.MAX_DRAG_STEP;
-        if (maxStep && maxStep > 0 && state.drag && state.drag.id) {
-            const j = state.joints && state.joints.get(state.drag.id);
-            if (j) {
-                const sdx = smoothed.x - j.x, sdy = smoothed.y - j.y;
-                const stepLen = Math.hypot(sdx, sdy);
-                if (stepLen > maxStep) {
-                    const k = maxStep / stepLen;
-                    smoothed = { x: j.x + sdx * k, y: j.y + sdy * k };
-                }
-            }
-        }
-    } catch (_) { /* fail-open */ }
-
     state.drag.lastTarget = smoothed;
 
     // NATIVE SOLVER DRAG: Set drag targets on joints instead of forcing positions
@@ -847,8 +849,8 @@ export function handleSelectionPointerMove(e, svg, state) {
         const t = state.engine.bodyDragTarget(state.drag.body, smoothed);
         state.drag.lastTarget = { x: t.x, y: t.y };
         shape.dragTarget = { param: t.body.param, hold: t.body.hold, x: t.x, y: t.y };
-        state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: { ...t, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
-        return true;
+        state.engine.solve(iters, { dragTarget: { ...t, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 } });
+        return;
     }
     const dx = smoothed.x - state.drag.startWorld.x, dy = smoothed.y - state.drag.startWorld.y;
     console.log('[DRAG] smoothed:', smoothed, 'startWorld:', state.drag.startWorld, 'dx/dy:', dx, dy);
@@ -867,11 +869,9 @@ export function handleSelectionPointerMove(e, svg, state) {
         const primary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
         if (state.engine && primary) {
             const dt = { jointId: primary, x: smoothed.x, y: smoothed.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
-            try { state.engine.solve(SolverConfig.QUICK_SOLVE || 8, { dragTarget: dt }); } catch (_) { /* fail-open */ }
+            try { state.engine.solve(iters, { dragTarget: dt }); } catch (_) { /* fail-open */ }
         }
     } catch (_) { }
-
-    return true;
 }
 
 /**

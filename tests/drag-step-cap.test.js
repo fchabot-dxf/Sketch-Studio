@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
   const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('#ui/input-handlers/selection-tools.js');
@@ -12,7 +13,7 @@
 
   // Test 1: a far cursor jump gets clamped to MAX_DRAG_STEP
   {
-    const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT };
+    const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT, ...undoStub() };
     state.joints.set('a', { x: 0, y: 0 });
     const hitJoint = { id: 'a', j: state.joints.get('a') };
     handleSelectionPointerDown({ clientX: 0, clientY: 0, pointerId: 1, target: { closest: () => null } }, svg, state, hitJoint, null, null);
@@ -31,7 +32,7 @@
 
   // Test 2: a small cursor move is NOT clamped (passes through unchanged)
   {
-    const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT };
+    const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT, ...undoStub() };
     state.joints.set('a', { x: 0, y: 0 });
     const hitJoint = { id: 'a', j: state.joints.get('a') };
     handleSelectionPointerDown({ clientX: 0, clientY: 0, pointerId: 1, target: { closest: () => null } }, svg, state, hitJoint, null, null);
@@ -48,7 +49,7 @@
     const original = SolverConfig.MAX_DRAG_STEP;
     SolverConfig.MAX_DRAG_STEP = 25;
     try {
-      const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT };
+      const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT, ...undoStub() };
       state.joints.set('a', { x: 0, y: 0 });
       const hitJoint = { id: 'a', j: state.joints.get('a') };
       handleSelectionPointerDown({ clientX: 0, clientY: 0, pointerId: 1, target: { closest: () => null } }, svg, state, hitJoint, null, null);
@@ -66,7 +67,7 @@
     const original = SolverConfig.MAX_DRAG_STEP;
     SolverConfig.MAX_DRAG_STEP = 0;
     try {
-      const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT };
+      const state = { joints: new Map(), shapes: [], currentTool: TOOL_MODES.SELECT, ...undoStub() };
       state.joints.set('a', { x: 0, y: 0 });
       const hitJoint = { id: 'a', j: state.joints.get('a') };
       handleSelectionPointerDown({ clientX: 0, clientY: 0, pointerId: 1, target: { closest: () => null } }, svg, state, hitJoint, null, null);

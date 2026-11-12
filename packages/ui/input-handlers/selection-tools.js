@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, DRAG_TYPES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, DRAG_TYPES, DRAG_UNDO_LABELS, DRAG_SHAPE_UNDO_LABELS, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
 import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
@@ -417,6 +417,36 @@ export function handleJointSelection(e, svg, state, hitJoint) {
 }
 
 /**
+ * TASK 545: a drag that changes geometry is ONE undo step. The snapshot is taken ONCE per drag, at its first pointer move (before the
+ * solver moves anything), through saveState; a press with no move saves nothing. A snap / inference constraint added on release joins
+ * the same step (ensureDragUndo is a no-op once the drag has its snapshot).
+ */
+function dragUndoLabel(state) {
+    const d = state.drag;
+    if (d.type === DRAG_TYPES.LINE) {
+        const shape = (state.shapes || []).find(s => s.id === d.id);
+        return (shape && DRAG_SHAPE_UNDO_LABELS[shape.type]) || DRAG_UNDO_LABELS[DRAG_TYPES.LINE];
+    }
+    return DRAG_UNDO_LABELS[d.type];
+}
+function ensureDragUndo(state) {
+    if (!state.drag || state.drag.undoLen !== undefined) return;
+    state.saveState(dragUndoLabel(state));
+    state.drag.undoLen = state.history.length;
+}
+// A drag that ended exactly where it started (same joints, shapes and constraint count as its snapshot) leaves no step.
+function settleDragUndo(state) {
+    const len = state.drag && state.drag.undoLen;
+    if (len === undefined || state.history.length !== len) return;
+    const snap = state.history[len - 1];
+    const same = snap.constraints.length === state.constraints.length
+        && snap.joints.size === state.joints.size
+        && [...snap.joints].every(([id, p]) => { const j = state.joints.get(id); return j && j.x === p.x && j.y === p.y; })
+        && JSON.stringify(snap.shapes) === JSON.stringify(state.shapes);
+    if (same) state.discardSnapshotAt(len);
+}
+
+/**
  * Handle shape selection
  */
 function handleShapeSelection(e, svg, state, hitShape) {
@@ -642,7 +672,8 @@ export function handleSelectionPointerMove(e, svg, state) {
     }
 
     if (state.currentTool !== TOOL_MODES.SELECT) return false;
-    
+    ensureDragUndo(state); // TASK 545: the first move of a geometry drag takes its ONE undo snapshot, before anything moves
+
     // 2. Standard Dragging (Joints/Lines)
     const wpt = screenToWorld(svg, e.clientX, e.clientY);
 
@@ -949,8 +980,7 @@ export function handleSelectionPointerUp(e, svg, state) {
                   if (snap.type !== 'grid') {
                       try{ dbg.log('selection', '[selection-tools] creating snap-based constraint (from state.activeSnap)', { dragIds: state.drag && state.drag.jointIds, snap, lockedTo: state.drag && state.drag.lockedTo }); }catch(_){ }
                       try{
-                          state.beginUndoGroup('drag snap constraint');
-                          state.saveState('drag snap constraint');
+                          ensureDragUndo(state);
                           const dragged = state.drag.jointIds || [];
                           const primary = state.drag.id;
                           // Filter primary out of excludeJoints to avoid blocking the constraint if applySnapConstraint checks source against exclude list
@@ -1012,15 +1042,14 @@ export function handleSelectionPointerUp(e, svg, state) {
                               }
                           }catch(_){ }
 
-                          try{ state.endUndoGroup(); }catch(_){ }
-                      }catch(_){ try{ state.endUndoGroup(); }catch(_){ } }
+                      }catch(_){ }
                   }
                 } else {
                   try{ dbg.log('selection', '[selection-tools] skipping snap-on-release — no active locked snap (no visual lock present)'); }catch(_){ }
                   // Apply inference constraints even when no snap lock was present (commit on release)
                   try{
                       if (state.inference && canApplyInference(state, state.drag && state.drag.id, state.inference, { full: true })) {
-                          try{ state.beginUndoGroup('drag inference constraint'); state.saveState('drag inference constraint'); }catch(_){ }
+                          ensureDragUndo(state);
                           const primary = state.drag && state.drag.id;
                           const dir = state.inference.type;
                           const shapesToConstrain = state.shapes.filter(s => s.type === 'line' && Array.isArray(s.joints) && s.joints.includes(primary));
@@ -1067,7 +1096,6 @@ export function handleSelectionPointerUp(e, svg, state) {
                               }
                           }
 
-                          try{ state.endUndoGroup(); }catch(_){ }
                       }
                   } catch(_){ }
                 }
@@ -1077,7 +1105,7 @@ export function handleSelectionPointerUp(e, svg, state) {
             if (!state.activeSnap) {
                 try{
                     if (state.inference && canApplyInference(state, state.drag && state.drag.id, state.inference, { full: true })) {
-                        try{ state.beginUndoGroup('drag inference constraint'); state.saveState('drag inference constraint'); }catch(_){ }
+                        ensureDragUndo(state);
                         const primary = state.drag && state.drag.id;
                         const dir = state.inference.type;
                         const shapesToConstrain = state.shapes.filter(s => s.type === 'line' && Array.isArray(s.joints) && s.joints.includes(primary));
@@ -1121,7 +1149,6 @@ export function handleSelectionPointerUp(e, svg, state) {
                                 try{ ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [anchors[0], anchors[1], primary] }, { source: 'inference', autoSolve: true }); }catch(_){ }
                             }
                         }
-                        try{ state.endUndoGroup(); }catch(_){ }
                     }
                 } catch(_) { }
             }
@@ -1130,6 +1157,7 @@ export function handleSelectionPointerUp(e, svg, state) {
             try{ dbg.log('selection', '[selection-tools] pointerUp treated as click — skipping snap-on-release (drag distance below threshold)'); }catch(_){ }
         }
     }
+    settleDragUndo(state);
     // Clear any temporary drag snap preview state
     try{ delete state.activeSnap; }catch(_){ }
     if (state.drag && state.drag.pointerId) {

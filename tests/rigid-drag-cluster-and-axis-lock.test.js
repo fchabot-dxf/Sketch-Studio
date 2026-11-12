@@ -1,3 +1,4 @@
+import { undoStub } from './helpers/undo-stub.js';
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove } = await import('#ui/input-handlers/selection-tools.js');
   const { ConstraintManager } = await import('#core/constraint-manager.js');
@@ -6,7 +7,7 @@
 
   // --- Case 1: Cluster contains a 0-DOF joint (propagate full lock to cluster) ---
   {
-    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select' };
+    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, ...undoStub(), currentTool: 'select' };
     // j_origin (anchored) + b coincident to origin + c coincident to b (cluster)
     state.joints.set('j_origin', { x: 0, y: 0, fixed: true });
     state.joints.set('b', { x: 0, y: 0, fixed: false });
@@ -33,7 +34,7 @@
 
   // --- Case 2: Horizontal constraint should lock vertical movement (lockY) ---
   {
-    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select' };
+    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, ...undoStub(), currentTool: 'select' };
     state.joints.set('a', { x: 0, y: 0, fixed: false });
     state.joints.set('b', { x: 10, y: 0, fixed: false });
     // Add Horizontal constraint between a and b (floating assembly)
@@ -56,7 +57,7 @@
 
   // --- Case 3: Anchored vertical line should lock X (corner cluster d1, slide in Y) ---
   {
-    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, saveState: () => {}, currentTool: 'select' };
+    const state = { joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), selectedShapes: new Set(), beginUndoGroup: () => {}, endUndoGroup: () => {}, ...undoStub(), currentTool: 'select' };
     // Origin anchored vertical line: origin (fixed) and v1 are vertically aligned
     state.joints.set('j_origin', { x: 0, y: 0, fixed: true });
     state.joints.set('v1', { x: 0, y: 10, fixed: false });

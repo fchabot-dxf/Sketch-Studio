@@ -12,8 +12,33 @@
 
 export const BASE = 'mm'; // 1 world unit = 1 mm
 
-// mm per 1 of each unit
-const TO_MM = { mm: 1, cm: 10, in: 25.4 };
+// TASK 535 (slice 1a) — THE one unit table. Every conversion factor in the app lives here (the expression parser reads it too).
+// kind 'length' → f = mm per 1 of the unit (base mm); kind 'angle' → f = degrees per 1 of the unit (base deg).
+// { alias: 'in' } is an alternative spelling of another entry. Names are matched case-insensitively (see unitInfo).
+// Decision O18 (units accepted: mm cm in " deg rad) is THIS table: add or remove an entry to flip it.
+export const UNIT_TABLE = {
+  mm: { kind: 'length', f: 1 },
+  cm: { kind: 'length', f: 10 },
+  in: { kind: 'length', f: 25.4 },
+  '"': { alias: 'in' },
+  deg: { kind: 'angle', f: 1 },
+  rad: { kind: 'angle', f: 180 / Math.PI },
+};
+
+// unitInfo(name) → { name (canonical, alias resolved), kind, f } or null for an unknown unit
+export function unitInfo(name) {
+  if (typeof name !== 'string') return null;
+  let key = name.toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(UNIT_TABLE, key)) return null;
+  if (UNIT_TABLE[key].alias) key = UNIT_TABLE[key].alias;
+  const e = UNIT_TABLE[key];
+  return { name: key, kind: e.kind, f: e.f };
+}
+
+// mm per 1 of each LENGTH unit (derived from UNIT_TABLE: not a second table)
+const TO_MM = Object.fromEntries(
+  Object.entries(UNIT_TABLE).filter(([, e]) => e.kind === 'length').map(([k, e]) => [k, e.f])
+);
 
 // world units (mm) in 1 of a document unit (1 for an unknown unit): the ONE conversion factor, for callers that need a length in BASE
 export const basePer = (docUnit) => TO_MM[docUnit] || 1;

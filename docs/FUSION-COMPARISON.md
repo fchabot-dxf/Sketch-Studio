@@ -110,12 +110,12 @@ them, so only A-B is run for those rows.
 
 <!-- which-moves:begin -->
 
-Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 287 identical, 28 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
+Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 286 identical, 29 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
 
 | constraint / dimension | cells | same as Fusion |
 |---|---|---|
-| horizontal-line | 6 | 5 |
-| vertical-line | 6 | 5 |
+| horizontal-line | 6 | 6 |
+| vertical-line | 6 | 6 |
 | horizontal-2pt | 6 | 6 |
 | vertical-2pt | 6 | 6 |
 | coincident-pp | 18 | 18 |
@@ -136,12 +136,12 @@ Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 287 identical, 28 differ (all 
 | dim-aligned | 18 | 17 |
 | dim-horizontal | 18 | 8 |
 | dim-vertical | 18 | 8 |
-| dim-length | 6 | 5 |
+| dim-length | 6 | 3 |
 | dim-radius-circle | 4 | 4 |
-| dim-radius-arc | 4 | 3 |
+| dim-radius-arc | 4 | 2 |
 | dim-angle | 18 | 18 |
 
-#### horizontal-line  (5 of 6 cells the same)
+#### horizontal-line  (6 of 6 cells the same)
 
 Fusion's rule: The unpinned end(s) move; a free line rotates about its midpoint (length kept); a pinned end stays; already horizontal or fully fixed is refused.
 
@@ -149,14 +149,14 @@ Verdict: SAME.
 
 | variant | A Fusion | A ours | A same |
 |---|---|---|---|
-| free | A:MM | A:.M | **NO** |
+| free | A:MM | A:MM | yes |
 | A_fix1 | A:.M | A:.M | yes |
 | A_fix2 | A:M. | A:M. | yes |
 | A_fixfull | refused | refused | yes |
 | A_hv | refused | refused | yes |
 | A_dim | A:MM | A:MM | yes |
 
-#### vertical-line  (5 of 6 cells the same)
+#### vertical-line  (6 of 6 cells the same)
 
 Fusion's rule: As horizontal: the unpinned end(s) move, a free line rotates about its midpoint, a pinned end stays.
 
@@ -164,7 +164,7 @@ Verdict: SAME.
 
 | variant | A Fusion | A ours | A same |
 |---|---|---|---|
-| free | A:MM | A:.M | **NO** |
+| free | A:MM | A:MM | yes |
 | A_fix1 | A:.M | A:.M | yes |
 | A_fix2 | A:M. | A:M. | yes |
 | A_fixfull | refused | refused | yes |
@@ -527,7 +527,7 @@ Proposed fix: Same as dim-horizontal.
 | B_hv | A:.M B:.. | A:MM B:.. | **NO** | A:.. B:MM | A:.. B:MM | yes |
 | B_dim | A:.M B:.. | A:MM B:.. | **NO** | A:.. B:MM | A:.. B:MM | yes |
 
-#### dim-length  (5 of 6 cells the same)
+#### dim-length  (3 of 6 cells the same)
 
 Fusion's rule: The START end stays and the END slides along the line (direction kept); a pinned end stays; fully fixed or already dimensioned is refused ("over constrained" / "already has the same dimension").
 
@@ -537,11 +537,11 @@ Proposed fix: commitDimensionEdit: for a lone line length keep joints[0], move j
 
 | variant | A Fusion | A ours | A same |
 |---|---|---|---|
-| free | A:.M | A:.M | yes |
+| free | A:.M | A:MM | **NO** |
 | A_fix1 | A:.M | A:.M | yes |
 | A_fix2 | A:M. | A:M. | yes |
 | A_fixfull | refused | A:.. (reference) | **NO** |
-| A_hv | A:.M | A:.M | yes |
+| A_hv | A:.M | A:MM | **NO** |
 | A_dim | refused | refused | yes |
 
 #### dim-radius-circle  (4 of 4 cells the same)
@@ -557,7 +557,7 @@ Verdict: SAME.
 | A_fixfull | refused | refused | yes |
 | A_dim | refused | refused | yes |
 
-#### dim-radius-arc  (3 of 4 cells the same)
+#### dim-radius-arc  (2 of 4 cells the same)
 
 Fusion's rule: The arc's centre stays and its two ends move (radius changes); a pinned centre is the same.
 
@@ -567,7 +567,7 @@ Proposed fix: commitDimensionEdit: keep the arc centre fixed on a free arc. Ours
 
 | variant | A Fusion | A ours | A same |
 |---|---|---|---|
-| free | A:.MMr | A:.MMr | yes |
+| free | A:.MMr | A:MMMr | **NO** |
 | A_fix1 | A:.MMr | A:.MMr | yes |
 | A_fixfull | refused | A:.... (reference) | **NO** |
 | A_dim | refused | refused | yes |
@@ -623,10 +623,10 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 | equal-circle | 100 | 52 | 44 | 0 |
 | tangent-line-circle | 180 | 168 | 0 | 0 |
 | tangent-circle-circle | 100 | 100 | 0 | 0 |
-| horizontal-line | 9 | 9 | 0 | 0 |
-| vertical-line | 9 | 9 | 0 | 0 |
-| dim-length | 9 | 8 | 1 | 0 |
-| dim-radius | 10 | 10 | 0 | 0 |
+| horizontal-line | 9 | 7 | 0 | 0 |
+| vertical-line | 9 | 7 | 0 | 0 |
+| dim-length | 9 | 5 | 1 | 0 |
+| dim-radius | 10 | 9 | 0 | 0 |
 
 **One rule per constraint** (line x line, Fusion). Rank the 8 (10) levels of the operands; the operand with the LOWER rank is the one that moves, a tie means the SECOND pick moves. Ranks are not DOF counts: a line with one end fixed (4) is the first to give way (it pivots about the fixed end), then the free-ish ones, direction-held lines (H/V, full) always stay.
 
@@ -1312,45 +1312,45 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 #### horizontal-line
 
-Single operand: L@0: F one end / - | ours one end / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours one end / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
+Single operand: L@0: F one end / - | ours stretch / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| L | 4 | 4 | a:2 R:2 | a:2 R:2 | one end:2 | one end:2 |
-| C | 2 | 2 | a:2 | a:2 | one end:2 | one end:2 |
+| L | 4 | 3 | a:2 R:2 | a:2 R:2 | one end:2 | stretch:1 one end:1 |
+| C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 2 | R:2 | R:2 |  |  |
 
 #### vertical-line
 
-Single operand: L@0: F one end / - | ours one end / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours one end / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
+Single operand: L@0: F one end / - | ours stretch / -; L@3: F refused | ours refused; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F refused | ours refused; R@8: F refused | ours refused
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| L | 4 | 4 | a:2 R:2 | a:2 R:2 | one end:2 | one end:2 |
-| C | 2 | 2 | a:2 | a:2 | one end:2 | one end:2 |
+| L | 4 | 3 | a:2 R:2 | a:2 R:2 | one end:2 | stretch:1 one end:1 |
+| C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 2 | R:2 | R:2 |  |  |
 
 #### dim-length
 
-Single operand: L@0: F one end / - | ours one end / -; L@3: F one end / - | ours one end / -; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours one end / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F deform / - | ours deform / -; R@8: F refused | ours . / - (reference)
+Single operand: L@0: F one end / - | ours stretch / -; L@3: F one end / - | ours stretch / -; L@4: F one end / - | ours one end / -; L@7: F refused | ours refused; C@0: F one end / - | ours stretch / -; C@4: F one end / - | ours one end / -; S@0: F scale / - | ours scale / -; R@0: F deform / - | ours deform / -; R@8: F refused | ours . / - (reference)
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| L | 4 | 4 | a:3 R:1 | a:3 R:1 | one end:3 | one end:3 |
-| C | 2 | 2 | a:2 | a:2 | one end:2 | one end:2 |
+| L | 4 | 2 | a:3 R:1 | a:3 R:1 | one end:3 | stretch:2 one end:1 |
+| C | 2 | 1 | a:2 | a:2 | one end:2 | stretch:1 one end:1 |
 | S | 1 | 1 | a:1 | a:1 | scale:1 | scale:1 |
 | R | 2 | 1 | a:1 R:1 | a:1 -:1 | deform:1 | deform:1 |
 
 #### dim-radius
 
-Single operand: O@0: F radius / - | ours radius / -; O@c: F radius / - | ours radius / -; O@r: F refused | ours refused; O@cr: F refused | ours refused; A@0: F scale+radius / - | ours scale+radius / -; A@c: F scale+radius / - | ours scale+radius / -; A@r: F refused | ours refused; A@cr: F refused | ours refused; F@0: F refused | ours refused; F@c: F refused | ours refused
+Single operand: O@0: F radius / - | ours radius / -; O@c: F radius / - | ours radius / -; O@r: F refused | ours refused; O@cr: F refused | ours refused; A@0: F scale+radius / - | ours deform+radius / -; A@c: F scale+radius / - | ours scale+radius / -; A@r: F refused | ours refused; A@cr: F refused | ours refused; F@0: F refused | ours refused; F@c: F refused | ours refused
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
 | O | 4 | 4 | a:2 R:2 | a:2 R:2 | radius:2 | radius:2 |
-| A | 4 | 4 | a:2 R:2 | a:2 R:2 | scale+radius:2 | scale+radius:2 |
+| A | 4 | 3 | a:2 R:2 | a:2 R:2 | scale+radius:2 | deform+radius:1 scale+radius:1 |
 | F | 2 | 2 | R:2 | R:2 |  |  |
 
 Kind letters: L line, C construction line, S polygon side, R rect side, O circle, A arc, F fillet arc, P point, Z origin. Who-moves letters as above (`a` first pick only, `b` second only, `X` both, `-` none, `R` refused). `how`: translate, rotate (rigid), stretch (a line changes length), `one end` (one endpoint of a line moves: rotate / stretch about the other), scale, deform, radius, `+radius` (the radius changed as well).
@@ -1723,7 +1723,7 @@ Divergences and verdicts:
 | 6 right wall vB-vC 40 | accepted | accepted | **NO** | another valid branch | F....F...F / FF..FF...F * ; sketch: nullity 3 / not fully constrained |
 | 7 left wall vA-vE 40 | accepted | accepted | **NO** | another valid branch | F....F...F / FF..FF...F * ; sketch: nullity 2 / not fully constrained |
 | 8 roof sides equal: /vC vD/ = /vD vE/ | accepted | accepted (skipped: the arc keeps its radius structurally in Fusion) | yes | - | - |
-| 9 apex 30 below vE | accepted | accepted | **NO** | another valid branch | FFFFFFFFFF / FF..FF...F * ; sketch: fully constrained / not fully constrained * |
+| 9 apex 30 below vE | accepted | accepted | **NO** | same | FFFFFFFFFF / FF..FF...F * ; sketch: fully constrained / not fully constrained * |
 
 Step E, 18 dimension edits (0.8x, 1.25x): 18 agree (accepted or refused alike).
 
@@ -1917,49 +1917,47 @@ Not found different: a radius edit of a circle, a fillet radius edit and the lin
 
 #### After task 525 (who moves from the declared table)
 
-The numbers above are task 528's measurement on main (2026-11-12). Task 525 makes `commitDimensionEdit` place the operand that gives way (the who-moves table, `packages/core/creation-placement.js`) at every value step before the solve. Same test, same fixture: **864 runs: 644 same as Fusion, 220 differ (all KNOWN, 11 classes)**, from 381 / 483. Per run, main's KNOWN class -> now (`.evidence/525/dim-edit-compare-r3.txt` on the task branch):
+The numbers above are task 528's measurement on main (2026-11-12). Task 525 makes `commitDimensionEdit` place the operand that gives way (the who-moves table, `packages/core/creation-placement.js`) at every value step before the solve; a dimension between two points of ONE shape (a line's length, an arc's radius, centre to end) is not pre-placed (no anchor between two points of one shape). Same test, same fixture: **864 runs: 672 same as Fusion, 192 differ (all KNOWN, 11 classes)**, from 381 / 483. Per run, main's KNOWN class -> now (`.evidence/525/dim-edit-compare-r6.txt` on the task branch):
 
 | class on main -> class now | runs |
 |---|---|
-| same -> same | 351 |
+| same -> same | 371 |
 | both-operands -> same | 244 |
-| neighbours -> same | 44 |
-| arc-centre -> same | 4 |
+| neighbours -> same | 56 |
 | zero-refused -> same | 1 |
-| both-operands -> both-operands | 34 |
+| both-operands -> both-operands | 46 |
 | negative-refused -> negative-refused | 90 |
-| fusion-refuses-dimension, ours-reference, zero-length, negative-radius, arc-centre (unchanged) | 6, 6, 5, 2, 1 |
-| same -> start-geometry (NEW, re-check in Fusion) | 20 |
-| both-operands -> start-geometry | 13 |
-| neighbours -> start-geometry | 12 |
+| fusion-refuses-dimension, ours-reference, zero-length, arc-centre, negative-radius (unchanged) | 6, 6, 5, 5, 2 |
 | same -> point-alone (NEW) | 10 |
 | both-operands -> point-alone | 10 |
 | both-operands -> other-operand | 10 |
+| both-operands -> fusion-angle-supplement (NEW) | 1 |
 | both-operands -> angle-short (NEW) | 1 |
 
 | dimension | runs | same | differ |
 |---|---|---|---|
-| aligned (point-point) | 282 | 210 | 72 |
+| aligned (point-point) | 282 | 238 | 44 |
 | horizontal | 96 | 67 | 29 |
-| vertical | 96 | 55 | 41 |
-| line length | 54 | 38 | 16 |
+| vertical | 96 | 67 | 29 |
+| line length | 54 | 26 | 28 |
 | angle | 174 | 166 | 8 |
-| radius (circle, arc, fillet) | 60 | 55 | 5 |
-| point-to-line | 66 | 32 | 34 |
+| radius (circle, arc, fillet) | 60 | 51 | 9 |
+| point-to-line | 66 | 36 | 30 |
 | line-line | 36 | 21 | 15 |
 
 | edit | same | differ |
 |---|---|---|
-| x2 | 118 | 26 |
-| x0.5 | 118 | 26 |
-| +1% | 118 | 26 |
-| x20 / 179 degrees | 116 | 28 |
+| x2 | 125 | 19 |
+| x0.5 | 125 | 19 |
+| +1% | 125 | 19 |
+| x20 / 179 degrees | 123 | 21 |
 | to 0 | 124 | 20 |
 | to minus the value | 50 | 94 |
 
 New classes (RULES in `tests/harness/fusion-oracle/dim-edit.js`):
-- **start-geometry (45 runs, RE-CHECK IN FUSION).** Since task 525 the cell's level setup moves one operand (an H/V on a line keeps its first end), so OUR start geometry differs from the one Fusion recorded (e.g. dim-aligned|LP|7,0: our line at y = 20, Fusion's recorded line at y = 27.5), and the target is twice OUR measured value (196.98 there). Fusion did reach its OWN doubled value: health 0, valueAdd 95.6883, value read back 191.3766, the point moved (110,60) -> (200,92.5). The harness therefore reads Fusion as "value not reached"; ours reaches the target with every other constraint kept. On main ours fell short too, so 20 of these runs matched. Re-record these cells in Fusion from the task 525 start geometry.
-- **point-alone (20 runs).** H / V dimension: Fusion moves the picked line end alone (the line stretches); ours translates the line (the giving operand's whole body).
+- **point-alone (20 runs; 10 of them were same on main: dim-horizontal / dim-vertical LP 0,4, all five edits).** H / V dimension: Fusion moves the picked line end alone (the line stretches); ours translates the line (the giving operand's whole body).
+- **fusion-angle-supplement (1 run).** dim-angle|LL|1,4#huge20: the Fusion parameter reads 179 (health 0), but its lines end at the supplementary angle by the unsigned measure (line1 shrinks from 61.8 to 2.1 long and turns; the lines are 1.1 degrees apart), so the harness reads "value not reached"; ours turns line1 to 179 degrees.
 - **angle-short (1 run).** dim-angle|SS|0,0#huge20: two parallel polygon sides, 0 -> 179 degrees: ours turns the same side but does not read 179 (the angle row holds modulo 180 degrees); Fusion reaches it.
+- A "start-geometry" class (45 runs) existed in round 3 of task 525, while the placement also moved one end of a single line (an H / V on one line in the cells' level setup), which changed our start geometry against the recorded one; with no placement between two points of one shape the start geometry matches again and those runs agree with Fusion.
 
 Proposed follow-up (tried in task 525, reverted): moving only the picked POINT when the first pick gives way for an H / V dimension. It fixes point-alone and helps the other oracles (which-moves 287 -> 299, graded 1996 -> 2011, this test 644 -> 654 same), but it re-opens coverage-properties N-F6 (a tangent circle flips sides on a horizontal dimension edit). It needs the N-F6 branch lock (the tangent side recorded at creation) first.

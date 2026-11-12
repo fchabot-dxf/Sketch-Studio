@@ -1,6 +1,4 @@
 {
- "horizontal-line.free.A": "after task 525: a free line made H: Fusion turns it about its midpoint here, but moves only its second end in the graded cell horizontal-line|L|0 (ours: the second end)",
- "vertical-line.free.A": "after task 525: a free line made V: Fusion turns it about its midpoint here, but moves only its second end in the graded cell vertical-line|L|0 (ours: the second end)",
  "equal-line-line.shared.BA": "after task 525: Fusion moves both lines (shared joint, second line picked first): outside the one-mover table",
  "equal-arc-circle.free.AB": "Fusion's API refuses equal(arc, circle); ours accepts it (task 526)",
  "equal-arc-circle.free.BA": "Fusion's API refuses equal(arc, circle); ours accepts it (task 526)",
@@ -25,6 +23,9 @@
  "dim-vertical.B_fixfull.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
  "dim-vertical.B_hv.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
  "dim-vertical.B_dim.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
- "dim-length.A_fixfull.A": "Fusion refuses a dimension on a fully fixed line; ours adds it as a reference (task 526)",
- "dim-radius-arc.A_fixfull.A": "Fusion refuses a dimension on a fully fixed arc; ours adds it as a reference (task 526)"
+ "dim-length.free.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
+ "dim-length.A_fixfull.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
+ "dim-length.A_hv.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
+ "dim-radius-arc.free.A": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve moves the centre too where Fusion keeps it; on a fully fixed arc Fusion refuses the dimension, ours adds it as a reference (task 526)",
+ "dim-radius-arc.A_fixfull.A": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve moves the centre too where Fusion keeps it; on a fully fixed arc Fusion refuses the dimension, ours adds it as a reference (task 526)"
 }

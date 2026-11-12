@@ -83,8 +83,7 @@ export function holdClass(state, fr, op) {
 
 // ---------------------------------------------------------------------------------------------------------- 3. the placements
 // The mover's body, by mode: 'shape' = its shape(s) and everything that shares a joint with them; 'component' = also what is coincident
-// with one of its joints (a rect-tool rectangle, a polyline). Never crossing into the anchor (so a point whose shape holds the anchor is
-// its own body: the second end of a line for H / V or the length of that line).
+// with one of its joints (a rect-tool rectangle, a polyline). Never crossing into the anchor.
 function bodyOf(state, op, anchorJoints, mode) {
   const coincident = mode === 'component' ? state.constraints.filter(c => isDriving(c) && c.type === T.COINCIDENT && Array.isArray(c.joints)) : [];
   const joints = new Set(), shapes = [];
@@ -221,15 +220,6 @@ export const PLACE = {
   'dim-aligned': { body: 'component', operands: (s, c) => jointsOp(c), place: (state, M, A, c) => atDistance(state, M, A, c) },
   'dim-horizontal': { body: 'component', operands: (s, c) => jointsOp(c), place: (state, M, A, c) => atDistance(state, M, A, c) },
   'dim-vertical': { body: 'component', operands: (s, c) => jointsOp(c), place: (state, M, A, c) => atDistance(state, M, A, c) },
-  // the two ends of ONE line (H / V, length): the line is the anchor's shape, so the mover's body is its second end alone
-  'horizontal-line': { operands: (s, c) => jointsOp(c), place: (state, M, A) => toRow(state, M, A) },
-  'vertical-line': { operands: (s, c) => jointsOp(c), place: (state, M, A) => toColumn(state, M, A) },
-  'dim-length': { operands: (s, c) => jointsOp(c), place: (state, M, A, c) => atDistance(state, M, A, c) },
-  // radius: the circle / arc scales about its centre (the centre is the anchor)
-  'dim-radius': {
-    operands: (s, c) => { const sh = shapeOf(s, c.shape); return sh ? [{ kind: 'joint', id: sh.joints[0] }, { kind: 'shape', id: sh.id }] : null; },
-    place: (state, M, A, c) => { const sh = shapeOf(state, M.op.id); if (M.op.kind !== 'shape' || !isCirc(sh)) return null; const r = radiusOf(state, sh); return r < EPS_POS ? null : motion(pos(state, A.id), c.value / r, 0); },
-  },
   // angle: the mover alone takes the new angle by least change (Fusion stretches a free line, swings a pinned one)
   'dim-angle': { operands: (s, c) => shapesOp(c), place: () => SOLVE_ALONE },
   // point on a line: the point moves onto the line (its foot), or the line moves through the point (slides along its normal, or turns
@@ -317,16 +307,12 @@ export function placementKey(state, type, c) {
     case T.EQUAL: return isLine(shp(0)) && isLine(shp(1)) ? 'equal-line-line' : isCirc(shp(0)) && isCirc(shp(1)) ? 'equal-circle' : null;
     case T.COINCIDENT: return Array.isArray(c.joints) && c.joints.length === 2 ? 'coincident-pp' : null;
     case T.HORIZONTAL: case T.VERTICAL:
-      if (!Array.isArray(c.joints) || c.joints.length !== 2) return null;
-      return type + (lineOfPair(state, c.joints[0], c.joints[1]) ? '-line' : '-2pt');     // the two ends of ONE line, or two points
+      return Array.isArray(c.joints) && c.joints.length === 2 ? type + '-2pt' : null;
     case T.POINT_ON_LINE: { const s = c.shape ? shapeOf(state, c.shape) : null; return isLine(s) ? 'pointOnLine' : isCirc(s) ? 'pointOnCircle' : null; }
     case T.DISTANCE: {
       if (!isDriving(c) || typeof c.value !== 'number') return null;
-      if (c.isRadius) return isCirc(c.shape ? shapeOf(state, c.shape) : null) ? 'dim-radius' : null;
-      if (!Array.isArray(c.joints) || c.joints.length !== 2) return null;       // point-to-line and line-line distances: no placement
-      const mode = c.dimMode || 'aligned';
-      if (mode !== 'aligned') return 'dim-' + mode;
-      return lineOfPair(state, c.joints[0], c.joints[1]) ? 'dim-length' : 'dim-aligned';
+      if (c.isRadius || !Array.isArray(c.joints) || c.joints.length !== 2) return null;       // radius, point-to-line, line-line: no pair to place
+      return 'dim-' + (c.dimMode || 'aligned');
     }
     case T.ANGLE: return isDriving(c) && typeof c.value === 'number' && isLine(shp(0)) && isLine(shp(1)) ? 'dim-angle' : null;
     case T.MIDPOINT: return Array.isArray(c.joints) && c.joints.length === 3 && lineOfPair(state, c.joints[0], c.joints[1]) ? 'midpoint' : null;
@@ -340,12 +326,20 @@ export function placementKey(state, type, c) {
   }
 }
 
-// The creation as the table sees it: { key, ops: [first pick, second pick] } or null.
+// The shapes an operand belongs to: a shape is itself; a picked point belongs to every shape that has it as a joint.
+const shapesOfOperand = (state, op) => (op.kind === 'shape' ? [op.id] : state.shapes.filter(s => Array.isArray(s.joints) && s.joints.includes(op.id)).map(s => s.id));
+
+// The creation as the table sees it: { key, ops: [first pick, second pick] } or null. "Who moves" is a question between two DIFFERENT
+// bodies: when both operands belong to the SAME shape (two points of one line / arc / circle: H / V of a line, its length, an arc's centre
+// and end, a radius), there is no anchor and no giver: nothing is placed and the constraint goes to the solve from the untouched pose.
 export function creationOperands(state, type, c) {
   const key = placementKey(state, type, c);
   const spec = key && PLACE[key];
   const ops = spec ? spec.operands(state, c) : null;
-  return ops ? { key, ops } : null;
+  if (!ops) return null;
+  const first = new Set(shapesOfOperand(state, ops[0]));
+  if (shapesOfOperand(state, ops[1]).some(id => first.has(id))) return null;
+  return { key, ops };
 }
 
 // ---------------------------------------------------------------------------------------------------------- 2. reading the table

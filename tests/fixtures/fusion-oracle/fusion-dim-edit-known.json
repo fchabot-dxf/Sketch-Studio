@@ -1,52 +1,8 @@
 {
- "start-geometry": {
-  "reason": "RE-CHECK IN FUSION. Since task 525 our start geometry differs from the recorded one (the level setup moves one operand: an H/V on a line keeps its first end, e.g. line at y=20 where Fusion recorded y=27.5), so the target (twice OUR measured value) is not Fusion's: Fusion reached its own doubled value with health 0 (dim-aligned|LP|7,0#grow2: valueAdd 95.6883, value read back 191.3766, point moved (110,60) -> (200,92.5)) and reads 'value not reached' here; ours reaches the target with every other constraint kept (on main ours fell short too, so these runs matched)",
+ "fusion-angle-supplement": {
+  "reason": "an angle edited to 179 degrees: the Fusion parameter reads 179 (health 0) but its lines end at the supplementary angle by the unsigned measure (dim-angle|LL|1,4#huge20: line1 shrinks from 61.8 to 2.1 long and turns, the lines are 1.1 degrees apart), so it reads \"value not reached\"; ours turns line1 to 179 degrees",
   "runs": [
-   "dim-angle|LL|1,4#huge20",
-   "dim-aligned|LL|3,0#grow2",
-   "dim-aligned|LL|3,0#shrink05",
-   "dim-aligned|LL|3,0#tiny",
-   "dim-aligned|LL|3,0#huge20",
-   "dim-aligned|LL|3,5#grow2",
-   "dim-aligned|LL|3,5#shrink05",
-   "dim-aligned|LL|3,5#tiny",
-   "dim-aligned|LL|3,5#huge20",
-   "dim-aligned|LL|6,0#grow2",
-   "dim-aligned|LL|6,0#shrink05",
-   "dim-aligned|LL|6,0#tiny",
-   "dim-aligned|LL|6,0#huge20",
-   "dim-aligned|LL|7,0#grow2",
-   "dim-aligned|LL|7,0#shrink05",
-   "dim-aligned|LL|7,0#tiny",
-   "dim-aligned|LL|7,0#huge20",
-   "dim-aligned|LP|7,0#grow2",
-   "dim-aligned|LP|7,0#shrink05",
-   "dim-aligned|LP|7,0#tiny",
-   "dim-aligned|LP|7,0#huge20",
-   "dim-aligned|RL|0,7#grow2",
-   "dim-aligned|RL|0,7#shrink05",
-   "dim-aligned|RL|0,7#tiny",
-   "dim-aligned|RL|0,7#huge20",
-   "dim-aligned|PL|0,3#grow2",
-   "dim-aligned|PL|0,3#shrink05",
-   "dim-aligned|PL|0,3#tiny",
-   "dim-aligned|PL|0,3#huge20",
-   "dim-vertical|LL|7,0#grow2",
-   "dim-vertical|LL|7,0#shrink05",
-   "dim-vertical|LL|7,0#tiny",
-   "dim-vertical|LL|7,0#huge20",
-   "dim-vertical|RL|0,7#grow2",
-   "dim-vertical|RL|0,7#shrink05",
-   "dim-vertical|RL|0,7#tiny",
-   "dim-vertical|RL|0,7#huge20",
-   "dim-vertical|PL|0,3#grow2",
-   "dim-vertical|PL|0,3#shrink05",
-   "dim-vertical|PL|0,3#tiny",
-   "dim-vertical|PL|0,3#huge20",
-   "dim-point-line|PL|0,7#grow2",
-   "dim-point-line|PL|0,7#shrink05",
-   "dim-point-line|PL|0,7#tiny",
-   "dim-point-line|PL|0,7#huge20"
+   "dim-angle|LL|1,4#huge20"
   ]
  },
  "angle-short": {
@@ -212,19 +168,21 @@
    "dim-vertical|LL|3,0#zero"
   ]
  },
- "zero-length": {
-  "reason": "a zero value: Fusion cannot solve it (the sketch goes to an error state, the geometry stays); ours accepts 0 for the edited dimension and collapses the length",
-  "runs": [
-   "dim-length|L|0#zero",
-   "dim-length|L|3#zero",
-   "dim-length|L|4#zero",
-   "dim-length|C|0#zero",
-   "dim-length|C|4#zero"
-  ]
- },
  "both-operands": {
   "reason": "Fusion moves ONE operand of the dimension (the second picked, or the one that is not held); ours spreads the change over both ends / both lines (least change)",
   "runs": [
+   "dim-length|L|0#grow2",
+   "dim-length|L|0#shrink05",
+   "dim-length|L|0#tiny",
+   "dim-length|L|0#huge20",
+   "dim-length|L|3#grow2",
+   "dim-length|L|3#shrink05",
+   "dim-length|L|3#tiny",
+   "dim-length|L|3#huge20",
+   "dim-length|C|0#grow2",
+   "dim-length|C|0#shrink05",
+   "dim-length|C|0#tiny",
+   "dim-length|C|0#huge20",
    "dim-length|R|0#grow2",
    "dim-length|R|0#shrink05",
    "dim-length|R|0#tiny",
@@ -261,6 +219,16 @@
    "dim-line-line|LL|4,0#zero"
   ]
  },
+ "zero-length": {
+  "reason": "a zero value: Fusion cannot solve it (the sketch goes to an error state, the geometry stays); ours accepts 0 for the edited dimension and collapses the length",
+  "runs": [
+   "dim-length|L|0#zero",
+   "dim-length|L|3#zero",
+   "dim-length|L|4#zero",
+   "dim-length|C|0#zero",
+   "dim-length|C|4#zero"
+  ]
+ },
  "negative-radius": {
   "reason": "a negative radius: Fusion keeps the circle as it is (the parameter reads the negative value); ours stores a negative radius on the circle",
   "runs": [
@@ -271,6 +239,10 @@
  "arc-centre": {
   "reason": "arc radius: Fusion keeps the arc centre and moves the end points; ours moves the centre as well (least change over the whole arc)",
   "runs": [
+   "dim-radius|A|0#grow2",
+   "dim-radius|A|0#shrink05",
+   "dim-radius|A|0#tiny",
+   "dim-radius|A|0#huge20",
    "dim-radius|A|0#zero"
   ]
  }

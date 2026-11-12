@@ -25,6 +25,9 @@ const REASON = {
   'equal-circle': "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   'tangent-line-circle': 'after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet',
   'dim-length': 'Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)',
+  'horizontal-line': 'same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end',
+  'vertical-line': 'same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end',
+  'dim-radius': 'same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve deforms the arc where Fusion scales it about its centre',
 };
 // a tangent class with an ARC operand (A arc, F fillet arc): after task 523 the arc radius takes part in the least-change solve
 const ARC_TANGENT = "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)";

@@ -1166,11 +1166,61 @@
    "0,4"
   ]
  },
+ "horizontal-line|L": {
+  "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
+  "total": 4,
+  "cells": [
+   "0"
+  ]
+ },
+ "horizontal-line|C": {
+  "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
+  "total": 2,
+  "cells": [
+   "0"
+  ]
+ },
+ "vertical-line|L": {
+  "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
+  "total": 4,
+  "cells": [
+   "0"
+  ]
+ },
+ "vertical-line|C": {
+  "reason": "same shape (the two ends of one line): since task 525 no pre-placement between two points of one shape, the solve moves both ends (as before 525); Fusion moves one end",
+  "total": 2,
+  "cells": [
+   "0"
+  ]
+ },
+ "dim-length|L": {
+  "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
+  "total": 4,
+  "cells": [
+   "0",
+   "3"
+  ]
+ },
+ "dim-length|C": {
+  "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
+  "total": 2,
+  "cells": [
+   "0"
+  ]
+ },
  "dim-length|R": {
   "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
   "total": 2,
   "cells": [
    "8"
+  ]
+ },
+ "dim-radius|A": {
+  "reason": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve deforms the arc where Fusion scales it about its centre",
+  "total": 4,
+  "cells": [
+   "0"
   ]
  }
 }

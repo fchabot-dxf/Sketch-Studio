@@ -13595,3 +13595,24 @@ Finding that survives: a body drag in ours is NOT rigid (it moves the first free
 - Behaviour changes: 7 feasible shared-corner parallel / perpendicular matrix cells and 5 extreme-arc shared chord cells are accepted where they were refused; 1 arc cell (s30cw perpendicular-chord shared, PlaneGCS infeasible) is refused where it was accepted; random properties: 2 ops refused -> driving, 2 dimensions reference -> driving, 1 collinear driving -> refused (seed 7191, different start; our solve collapses a line, NEW-9 family). DOF counts on shared-joint rows now equal finite differences.
 - matrix-run.js: `preCollinear` also covers parallel (two horizontal rect sides sharing a corner: the row is a combination of the two H rows, delta 0 = finite differences, PlaneGCS counts -1 as it does for collinear there).
 - EA-6 measured (not fixed): perpendicular cells are the DOUBLE root of the branch-locked row u x v - |u||v| (stops at r = 1e-6, angle 1.162e-3 rad, predicted 1.163e-3); normalising would not fix it. EA-7 unchanged (not this family). Docs: COVERAGE-AUDIT "Fixed in task 533", extreme-arcs table rows regenerated; CONSTRAINT-AUDIT F4.
+- Round 5 (advisor ruling, Option A first form): RULE at the operand seam (creation-placement.js creationOperands): "who moves" is between two
+  DIFFERENT shapes; when both operands belong to the SAME shape (two points of one line / arc / circle) nothing is placed and there is no forced
+  start-pose fallback: the solve starts from the untouched pose, as on main. The single-shape keys (horizontal-line, vertical-line, dim-length,
+  dim-radius) are gone. Merged origin/main d2e31b7 (533 per-joint Jacobian rows, 530 drag oracle, 532 grid).
+- Extreme arcs, per-cell verdicts main placement code vs branch (.evidence/525/arc-verdicts-diff2.txt): 2880 cells, 84 differ: 35 better, 41
+  shifted, 8 worse; the 30 hv-centre-end regressions are back to main; same-shape cells differing from main: 0 (f90r0.5 hv-start-end sep differed
+  in one run only, N/A on both side by side: PlaneGCS refusal flake). The 8 accepted (newly accepted constraints exposing existing findings):
+  s181cw tangent-line dimmed PASS->EA-2; r0.5s181cw tangent-line dimmed PASS->EA-2; r0.5s30cw parallel-chord shared N/A->EA-6;
+  r0.5s0.1cw parallel-chord sep / locked / dimmed N/A->EA-6; f179r10 parallel-chord sep N/A->EA-6; f179r10 tangent-line sep PASS->EA-5 (the
+  table moved the LINE; the fillet arc stays at creation, -1 deg R 10; the shrink is the harness's later drag step, -1 -> -0.034 deg).
+  EA-3 / EA-5 repros pass (placement keeps the arc); new repros s180cw coincident-own-ends sep (EA-3), r0.5s0.1cw dim-chord sep (EA-5).
+  extreme-arcs: FAIL=167 N/A=132 NA-BUILD=788 PASS=1793 (task 531: 205 / 176 / 788 / 1711). Doc: COVERAGE-AUDIT "After task 525".
+- Coverage matrix, per-cell: 3384 cells, 2 differ, both better (coincident LR / CR shared UNCLASSIFIED -> PASS), 0 worse.
+- Oracles: which-moves 286 / 315 (29 KNOWN), graded 1988 / 2438 (450 KNOWN, 141 classes), drawings 829 / 954, fusion-dim-edit 672 / 864
+  (192 KNOWN, 11 classes: start-geometry gone, its 45 runs agree now that the level setup's H on one line is not pre-placed; fusion-angle-supplement
+  1 run, a fact from the data), fusion-drag 91 / 146 (unchanged). The cells that went back to KNOWN this round (H/V-line, dim-length, dim-radius
+  singles) were KNOWN on main before 525 too. coverage-properties N-U1 now passes (entry deleted, 2 runs).
+- Cells that agreed with Fusion before task 525 (253b792 KNOWN lists) and differ now (present since round 1, not changed by this round):
+  graded 48 (collinear LL 1,5 1,7 4,3 5,3 7,1, CL 4,3; dim-aligned LL 2,4 2,5 2,6 2,7 2,o 4,2 5,2 6,2 7,2 o,2, LA 4,0 7,0 o,0, OA c,0, AL 0,4
+  0,7, AO 0,c, AP 0,4, PA 4,0, ZA; dim-horizontal / dim-vertical LL 0,4 0,7 2,4 2,7, LO 0,c, LP 0,4, LZ 0,0, AL, AO, AP, AZ) and which-moves 6
+  (dim-horizontal / dim-vertical A_fixfull.BA, B_fix1.AB, B_fixfull.AB). List: .evidence/525/oracle-pass-to-fail-vs-pre525.txt.

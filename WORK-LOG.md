@@ -13459,6 +13459,12 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
   - docs/COVERAGE-AUDIT.md: NEW-6 updated (5 -> 3; remaining: lockTangentBranch locks external on equal concentric circles; an arc centred on another arc's rim collapses; the run-order flip is PlaneGCS's verdict), tangent grid refreshed, "Fixed in task 523" section with the F6 parallel shared-joint overwrite diagnosis (not fixed), N-F7 row updated.
   - Final: jacobian-fd-guard 29 cases, coverage-matrix passed (PASS=1788, NEW-6=3, NEW-9=2), coverage-properties passed (5 KNOWN), constraint-audit passed (1 KNOWN), fusion-oracle OK (which-moves 99 same / 216 KNOWN, graded 848 / 1590, drawings 829 / 125). Gate: `GATE files=249 pass=249 fail=0`, `SMOKE 12/12`, `HEADLESS-LEFT 0`, exit 0.
 
+## TURN 527 (STOPPED at step 1, nothing under packages/ touched)
+Measured in a new unsaved Fusion document (closed unsaved) whether SketchPoint.move / sketch.move reproduce a constrained mouse drag.
+They do not: with a length dimension, a (0,5) or small-step move leaves the point unchanged (a drag rotates it), and (3,5) lands at
+(9.8126,-1.9269), a wrong-branch point (deterministic). Unconstrained / H-only moves behave plausibly. Fully constrained: silent no-op.
+Per the task, no fixtures recorded. Evidence: .evidence/527/step1-measurements.txt (local). Only a real mouse drag (UI automation) could
+serve as the oracle: owner decision needed.
 ## TURN 528 — Fusion as an oracle for EDITING A DIMENSION VALUE (measuring only; nothing under packages/ changed)
 - Step 1 (gate, passed): in a new unsaved scratch document, setting `sketchDimension.parameter.expression` re-solves like a typed edit on 3 hand cases (free line length 50 -> 100: end (40,30) -> (80,60); rectangle width/height; an L with a reference diagonal). An impossible value (0, 1e9) raises NO exception: the parameter keeps the number, `healthState` becomes 1 ("Failed to solve"), the geometry stays; the next valid value solves again. Negative values are accepted and signed (end -> (-24,-18)). Recorded as "refused" = health not 0.
 - 864 runs (144 cells x 6 edits: x2, x0.5, +1%, x20 / 179 degrees, 0, negative) of aligned / horizontal / vertical / line length / angle / radius / point-to-line / line-line dimensions over the graded hold states (stride-sampled); Fusion 2706.1.17 through `scripts/fusion-oracle/run-dim-edit.py` (reuses the Job class of run-jobs.py). Every run recorded twice: identical (max coordinate spread 0, same refusals).
@@ -13471,10 +13477,46 @@ ROUND 2 (advisor follow-up: land 515 on top of 518 + 516):
 ## TURN 532
 Canvas grid in the file's unit (owner 2026-11-12). packages/ui/canvas-grid.js: ONE pure `gridSpacing(docUnit, settings)` + data table `GRID_SPACING_BY_UNIT` (inch row: major from INCH_GRID_MAJOR (default 1 in), divisions from INCH_GRID_DIVISIONS 10/2/4/8/16 (default 10), per-divisions level-of-detail ratio x10 decimal / x2 binary); mm/cm use GRID_SIZE / GRID_MAJOR_STEP in mm. `gridLevel` takes the optional lodRatio (mm path unchanged). The grid drawing (svg-renderer.js) and the grid snap (input-manager.js) both read gridSpacing. `gridLabelsMarkup`: numbers on the X and Y axes at displayed heavy lines (Fusion's look: rotated, no unit, shortest form via units.js format, no 0, skip when denser than 40 px, 11 px constant, `--sk-grid-label`). Style panel: declarative `showWhen: {key, in}` on a control spec; metric pair for mm/cm, inch pair for in. Owner: mm DEFAULT grid now heavy 100 / light 10 (settings-manager DEFAULT_SETTINGS, the one place). Tests: canvas-grid-units, canvas-grid-labels-live (real apps, headless), style-panel-tabs (showWhen, live redraw).
 Gate round 1 found two things, both fixed: shell-smoke pinned 25 Style controls (now 27: the grid pair per unit system, +2 rows); tests/shaper-persist.test.js drew its SketchStudio line before the restored drawing was framed (TASK 494 fitToDrawing runs after an async IndexedDB restore): the new lighter default grid made frames faster and exposed that race (old default 3/3 pass, new 1/3); the test now waits for the framed view (viewBox width > 100), 3/3 pass.
+## TURN 530 (phase 1 TRIAL only; nothing under packages/ touched; phase 2 not started)
+Real mouse drag into Fusion 360, driven from an OUTSIDE script (scripts/fusion-oracle/win-mouse.py: ctypes SendInput, per-monitor DPI aware) between
+bridge calls (drag-trial-setup.py builds the case, enters sketch edit mode, frames the view, prints the screen pixel of the point and target;
+drag-trial-read.py reads positions back). Not tried from inside the bridge: a bridge script blocks Fusion's UI thread while it runs (task_530 a), and
+the outside method works, so one method kept. Test document: new unsaved, user parameter CLAUDE_MARK, sketch CLAUDE_TEST_DRAG; closed unsaved at the end
+(2 pre-existing Untitled documents untouched, still open).
+Mapping: screen px = viewport px + (-2560, 695) here (the Fusion window sits on a second monitor at negative x); 95 px/cm at viewExtents 9; checked
+on screenshots (origin and line end drawn exactly at the predicted pixel). viewToScreen() beyond the first points is NOT linear (viewToScreen(2560,858)
+gave y=1035, not 1553): use modelToViewSpace + the offset, verify on a screenshot.
+Free line (case 2) drag (8,1)->(11,6), 3 runs: (11.0, 6.0035) x3 (0.33 px). Pixel-to-model accuracy about 0.01 cm / px.
+Rectangle (case 3, corner (0,0) fixed, H/V, coincident) corner (8,5)->(12,6), 3 runs: (11.938,5.951) / (11.9965,6.0035) / (11.938,5.951): bimodal, 0.06 cm.
+Line, start fixed, length 10 (case 1), end (10,0)->(13,5): NOT the projection (9.34,3.60). 20 steps/600 ms: (6.98656,7.15458) x2, (6.98632,7.15481)
+(repeatable to 2e-4); 2 steps: (5.88,8.09); 60 steps/3 s: (7.16,6.98); 200 steps/4 s: no movement at all ((10,0), drag not started); 2000 ms hold before
+release: identical to no hold. Target (8.66,5) on the circle: (8.43,5.38). Target (0,6): (-5.69,8.22). So Fusion's constrained drag is path dependent
+(event sequence), not "nearest solution to the cursor". Evidence: .evidence/530/ (local).
+Stale display: after setting the camera through the API the on-screen window did not repaint until vp.fit(); always screenshot the window to confirm.
+
+## TURN 530 phase 2 (DRAGGING, real mouse, qualitative; nothing under packages/ touched)
+Advisor go, reduced scope: one fixed path (straight line, 20 steps, 600 ms, 120 ms settle) per cell, qualitative comparison only. 146 cells (tests/harness/fusion-oracle/drag-cells.js,
+data tests/fixtures/fusion-oracle/drag-cells.json), every cell built and dragged TWICE in Fusion as two copies in one sketch (24 slots per sketch, 12 batches + 2 origin sketches, 292 recorded runs,
+about 36 s per 24 drags). Recorded Fusion answers: tests/fixtures/fusion-oracle/drag-fusion.json (Fusion 2706.1.17). Ours: the app's real pointer path in node (handleSelectionPointerDown/Move/Up,
+packages/ui/input-handlers/selection-tools.js; the solver call is the one inside handleSelectionPointerMove). Result: 81 same, 61 KNOWN differences (drag-known.json, 0 unexplained), 4 unstable in Fusion.
+Finding for the owner (not fixed): a BODY drag (line, rectangle edge, circle rim) does nothing in ours: handleSelectionPointerMove attaches the spring to state.drag.id, which is the SHAPE id for a body drag.
+Snap: ToggleGridSnapCommand could not be read (ListControlDefinition, no isChecked) and its execute left the palette Snap checkbox checked, so snap stayed on. Mistake caught: two bridge/driver calls issued in
+parallel once (batch 2 and the final collect of the origin copy b): both batches were redone sequentially before use. Fusion: scratch document closed unsaved, 2 pre-existing Untitled documents remain.
+Tests: tests/fusion-drag.test.js; docs/FUSION-COMPARISON.md section "Dragging (real mouse, qualitative)". Scripts: win-mouse.py (guards: tolerance 2 px), drag-batch-setup/-frame/-run.py, drag-cli.mjs, drag-known.mjs.
 ### TURN 522 round 2
 - Pen Plotter + Shaper header: `#save-status` (written only by each app's onStatusChange closure: apps/penplotter/src/sketch-stage.js:284, apps/shaper/src/main.js:581, apps/sketchstudio/main.js:193; texts "", "Saving…", "Saved") sat before `#mode-nav` and changed width (0 / 40.1 / 29.0 px), moving the stage tabs. Fix in each app's own CSS (the two headers share no markup): `.save-status` is `display:inline-block; width:2.65em; white-space:nowrap` (the width of "Saved", the resting text, so the rest look is unchanged to 0.2 px); "Saving…" overflows into the first tab's padding. New test tests/header-status-no-shift.test.js (failed before, passes after). SketchStudio appends its status at the END of the header: its Design/Export tabs do not move, but its right-hand action buttons shift ~40 px (measured 1433 / 1393 / 1404 px); not changed (Studio untouched), reported. Trace has no #save-status.
 - penplotter-stage-undo after the fix: 20/20 alone, 15/15 beside a prepare-look loop.
 - solver-scenarios scenario 12 now asserts refused + reverted + non-empty reason + geometry restored; KNOWN is empty (mechanism kept). 23/23.
+
+## TURN 530 phase 2, round 2 (replay artefact found and fixed; checked in the REAL app)
+The advisor asked to prove the "body drag does nothing in ours" finding in the real app. It was a REPLAY ARTEFACT. tests/fusion-drag-live.test.js (headless browser, real Input.dispatchMouseEvent, the same
+20-step path, geometry read from the DOM) drags in the real SketchStudio: free line by its body -> one end follows, line stretches; rectangle edge by its body -> 4 of 8 points move, a side length changes; circle by
+its rim -> circle translates; arc by its end -> radius changes; length-dimensioned free line by an end -> both ends move, length kept (rotate). Cause: the real app solves every animation frame
+(apps/sketchstudio/main.js loop(): engine.solve(SolverConfig.ITERATIONS || 500)); that frame solve auto-detects the first free joint with joint.dragTarget and is what moves a body drag; the move handler's own
+solve has its spring on the shape id. The replay (tests/harness/fusion-oracle/drag-cells.js runOurs) now runs one such frame solve after every pointer move and after the release (FRAMES_PER_MOVE = 1; 1, 2 and 3
+frames gave the same classes on the 7 cells tried). Re-run of all 146 cells: "ours" changed in 39 of 146 (107 identical); now 91 same, 51 KNOWN (was 81 / 61), 4 unstable. KNOWN regenerated, doc section corrected
+(replay-correction paragraph, table, 5 differences). Evidence: .evidence/530/app/ (before/after screenshot of each of the 5 cells, fusion-drag-live-results.json, old-ours.json / new-ours.json in .evidence/530/).
+Finding that survives: a body drag in ours is NOT rigid (it moves the first free joint only: a free line stretches), while Fusion translates it; circle rim translates in ours, Fusion resizes.
 ## TURN 531 (extreme arcs audit; measuring, nothing under packages/ changed)
 - New: tests/extreme-arcs.test.js (in the gate, ~15 s), tests/harness/coverage/arcs-variants.js / arcs-rows.js / arcs-ui.js / arcs-findings.js; docs/COVERAGE-AUDIT.md section "Extreme arcs (task 531)". matrix-run.js: seven helpers got `export` (no behaviour change).
 - 24 arc variants (real arc tool and real fillet) x 30 rows x 4 hold states = 2880 cells: PASS 1711, N/A 176, NA-BUILD 788, FAIL 205, all explained: EA-1..EA-9 (+ EA-10 UI) and inherited F4/F5/F6.

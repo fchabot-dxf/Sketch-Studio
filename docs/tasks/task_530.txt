@@ -1,0 +1,28 @@
+TASK 530 (Sketch-Studio): Fusion as an oracle for DRAGGING, with REAL mouse input. Continues the stopped task 527 (read
+docs/tasks/task_527.txt and `## TURN 527` in WORK-LOG.md: the API's point.move / sketch.move is NOT a drag). Owner 2026-11-12: OK.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-527-fusion-drag, branch agents/task-527-fusion-drag. Merge origin/main first.
+
+METHOD: through the Fusion MCP bridge (Python inside Fusion): build the sketch, enter sketch edit mode, fit the view, get the
+SCREEN position of the point to drag (viewport.modelToViewSpace + viewToScreen; check the DPI scaling: verify by reading back
+where a click lands) and of the target. The drag itself = real Windows mouse input (SendInput / mouse_event: press, several
+intermediate moves over >= 300 ms, release). Then read every position back through the bridge.
+PHASE 1 (TRIAL, do this and then STOP and REPORT; do not go on to phase 2 without the advisor's go):
+ a. Try sending the input from INSIDE the bridge script (ctypes). Fusion's UI thread is probably blocked while the script runs,
+    so the events may only be processed afterwards or dropped: measure. Else send it from an OUTSIDE script (python/PowerShell)
+    between two bridge calls. Keep ONE method.
+ b. Three hand cases: (1) line, start fixed, length 10 dimensioned, drag the free end by (3,5): expected to ROTATE to about
+    (9.34,3.60) cm-scaled as appropriate; (2) free line, drag one end; (3) rectangle with H/V + coincident constraints and one
+    corner fixed, drag the opposite corner. Each run 3 times: report positions and the spread (repeatability).
+ c. Report: the method, the time per drag, the pixel-to-model accuracy, anything that can steal focus, how to abort (a hotkey or
+    moving the mouse to a screen corner must stop the run: build that in), and what the owner must not do while it runs.
+PHASE 2 (after the go): cases as DATA as in task_527.txt item 2 (a few hundred cells), record as item 3, ours replayed through the
+ app's real drag path (item 4), tests/fusion-drag.test.js + KNOWN + regenerate script + "Dragging" section in
+ docs/FUSION-COMPARISON.md (item 5). New files only; do not edit the existing fixtures/KNOWN lists. Do NOT change packages/.
+MOUSE SAFETY (hard rules): the input goes ONLY to the Fusion window, and only while Fusion is the foreground window showing YOUR
+ test document in sketch mode: check the foreground window title/handle before EVERY drag and abort the run if it is not (never
+ click anywhere else, never type); click only inside the canvas area; no keyboard input except Esc to Fusion; restore nothing,
+ close nothing that is not yours. If a dialog appears, STOP the run and report (do not click it).
+FUSION SAFETY: only a NEW unsaved document you create, sketches CLAUDE_TEST_*, never touch other documents, close yours without
+ saving, never Repair/Reset/sign-in, do not launch or kill Fusion. Never kill a process you did not start.
+The owner cannot use the PC during a run: the advisor tells him before each run. Do not start a run on your own schedule.
+Gate green before the final report of phase 2, commit by path, push the branch, WORK-LOG `## TURN 530`, the AGENTS.md REPORT block.

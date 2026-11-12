@@ -18,10 +18,13 @@ import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js';
+import { legacyAngleSector } from '#core/angle-sector.js';
 
 // 2 (TASK 535, owner ruling O2): the version that carries dimension names, dimension formulas and geometry.parameters. Always written;
 // a version-1 file still loads (parameters absent -> none, every dimension is named on load) but an older build refuses a version-2 file.
-export const DOCUMENT_VERSION = 2;
+// 3 (TASK 553): driving angle dimensions store their measured `sector` (#core/angle-sector.js). An older build would drop it and re-solve
+// such an angle modulo 180, so it refuses a version-3 file by the same newer-version rule; version 1 and 2 files load and are converted.
+export const DOCUMENT_VERSION = 3;
 
 /**
  * serializeDocument(state, { hosts }) → a plain, JSON-safe object.
@@ -97,7 +100,8 @@ export function deserializeDocument(doc, state) {
 
   state.constraints.length = 0;
   for (const c of (g.constraints || [])) {
-    const proto = { ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined };
+    // TASK 553: an angle dimension saved by an older build (no `sector`) is converted here, the one load path, from the loaded geometry
+    const proto = legacyAngleSector({ ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined }, state.joints, state.shapes);
     addConstraintObject(state, proto);
   }
 

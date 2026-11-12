@@ -117,8 +117,8 @@ await (async () => {
     // ── 3. a SketchStudio save in between does NOT drop the Shaper sidecar (TASK 458): draw a line there, let it save, come back ──
     await nav(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`);
     await waitFor(`!!document.getElementById('svgCanvas')`, 'the SketchStudio canvas');
-    // the restored drawing is framed asynchronously (TASK 494 fitToDrawing after the IndexedDB restore): draw only once the view is framed, or the clicks land in the pre-fit view (a race a faster frame exposed)
-    await waitFor(`document.getElementById('svgCanvas').viewBox.baseVal.width > 100`, 'the restored drawing to be framed');
+    // the restored drawing is framed (TASK 494 fitToDrawing) in the buffer's onRestored, which runs before it marks the canvas ready (TASK 542): draw only then, or the clicks land in the pre-fit view
+    await waitFor(`document.getElementById('svgCanvas').dataset.docReady === '1'`, 'the restored drawing to be framed');
     const box = await evalJs(`(() => { const r = document.getElementById('svgCanvas').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'l', code: 'KeyL', windowsVirtualKeyCode: 76, text: 'l' }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'l', code: 'KeyL', windowsVirtualKeyCode: 76 });
     await click(box.x - 150, box.y + 100); await click(box.x + 150, box.y + 100);

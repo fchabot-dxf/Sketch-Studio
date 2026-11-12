@@ -13516,3 +13516,13 @@ longer pre-placed; (6) when neither operand can move alone the solve starts from
   the picked line end alone and ours translates the whole line. Moving the FIRST pick's point alone for H/V dimensions fixed those 10 runs (and
   the 315 / graded H/V dim cells: 287 -> 299, 1996 -> 2011) but re-opened coverage-properties N-F6 (a tangent circle flips sides on a horizontal
   dimension edit), so it was not kept. Graded / 315 / drawings unchanged by round 2: 1996 / 287 / 829.
+- Round 3 (advisor ruling Q3/Q4): fusion-dim-edit KNOWN regenerated with scripts/fusion-oracle/dim-edit-known.mjs after three RULES in
+  tests/harness/fusion-oracle/dim-edit.js (classifyDiff now also passes Fusion's text): start-geometry (45 runs, RE-CHECK IN FUSION), point-alone
+  (20), angle-short (1). Fact behind start-geometry, from the recorded data (.evidence/525/dim-edit-unreached-facts.txt): Fusion health [0,""],
+  dim-aligned|LP|7,0#grow2 valueAdd 95.6883, value read back 191.3766 (= its own x2), point (110,60) -> (200,92.5); OUR start line is at y=20
+  where Fusion recorded y=27.5 (the level setup's H on the line now moves only its second end), so the target is 196.98 (twice OUR measured
+  98.4886) and Fusion reads "value not reached". 5 cells (x2, x0.5, +1%, x20): dim-aligned LL 3,5 / LP 7,0 / RL 0,7, dim-vertical RL 0,7,
+  dim-point-line PL 0,7. The same family covers 25 more runs (13 were both-operands, 12 neighbours on main).
+- fusion-dim-edit: 381 same / 483 KNOWN in 9 classes (main) -> 644 same / 220 KNOWN in 11 classes. Doc: "After task 525" subsection under
+  "Editing a dimension (task 528)" (class transitions, per dimension, per edit, the new classes, the point-alone follow-up). Tried and reverted:
+  the first pick's point alone for H/V dimensions (315 287 -> 299, graded 1996 -> 2011, dim-edit 654 same) re-opens N-F6; needs the N-F6 branch lock.

@@ -1861,3 +1861,52 @@ Question: when the value of an EXISTING driving dimension is changed, does our `
 5. **Redundant dimensions.** An angle on two sides of a fully constrained rectangle: Fusion refuses to place it (over-constrained), ours places it driving and the edit moves nothing or is refused (6 runs). The other way round, a zero distance from a point to the origin: Fusion places and edits it, ours turns it into a reference (6 runs). Also on arcs: Fusion keeps the centre on a radius edit, ours moves the centre (5 runs).
 
 Not found different: a radius edit of a circle, a fillet radius edit and the line-length edits of held lines agree with Fusion (the 381 agreeing runs), and the other dimensions of the sketch kept their values in every agreeing run.
+
+#### After task 525 (who moves from the declared table)
+
+The numbers above are task 528's measurement on main (2026-11-12). Task 525 makes `commitDimensionEdit` place the operand that gives way (the who-moves table, `packages/core/creation-placement.js`) at every value step before the solve. Same test, same fixture: **864 runs: 644 same as Fusion, 220 differ (all KNOWN, 11 classes)**, from 381 / 483. Per run, main's KNOWN class -> now (`.evidence/525/dim-edit-compare-r3.txt` on the task branch):
+
+| class on main -> class now | runs |
+|---|---|
+| same -> same | 351 |
+| both-operands -> same | 244 |
+| neighbours -> same | 44 |
+| arc-centre -> same | 4 |
+| zero-refused -> same | 1 |
+| both-operands -> both-operands | 34 |
+| negative-refused -> negative-refused | 90 |
+| fusion-refuses-dimension, ours-reference, zero-length, negative-radius, arc-centre (unchanged) | 6, 6, 5, 2, 1 |
+| same -> start-geometry (NEW, re-check in Fusion) | 20 |
+| both-operands -> start-geometry | 13 |
+| neighbours -> start-geometry | 12 |
+| same -> point-alone (NEW) | 10 |
+| both-operands -> point-alone | 10 |
+| both-operands -> other-operand | 10 |
+| both-operands -> angle-short (NEW) | 1 |
+
+| dimension | runs | same | differ |
+|---|---|---|---|
+| aligned (point-point) | 282 | 210 | 72 |
+| horizontal | 96 | 67 | 29 |
+| vertical | 96 | 55 | 41 |
+| line length | 54 | 38 | 16 |
+| angle | 174 | 166 | 8 |
+| radius (circle, arc, fillet) | 60 | 55 | 5 |
+| point-to-line | 66 | 32 | 34 |
+| line-line | 36 | 21 | 15 |
+
+| edit | same | differ |
+|---|---|---|
+| x2 | 118 | 26 |
+| x0.5 | 118 | 26 |
+| +1% | 118 | 26 |
+| x20 / 179 degrees | 116 | 28 |
+| to 0 | 124 | 20 |
+| to minus the value | 50 | 94 |
+
+New classes (RULES in `tests/harness/fusion-oracle/dim-edit.js`):
+- **start-geometry (45 runs, RE-CHECK IN FUSION).** Since task 525 the cell's level setup moves one operand (an H/V on a line keeps its first end), so OUR start geometry differs from the one Fusion recorded (e.g. dim-aligned|LP|7,0: our line at y = 20, Fusion's recorded line at y = 27.5), and the target is twice OUR measured value (196.98 there). Fusion did reach its OWN doubled value: health 0, valueAdd 95.6883, value read back 191.3766, the point moved (110,60) -> (200,92.5). The harness therefore reads Fusion as "value not reached"; ours reaches the target with every other constraint kept. On main ours fell short too, so 20 of these runs matched. Re-record these cells in Fusion from the task 525 start geometry.
+- **point-alone (20 runs).** H / V dimension: Fusion moves the picked line end alone (the line stretches); ours translates the line (the giving operand's whole body).
+- **angle-short (1 run).** dim-angle|SS|0,0#huge20: two parallel polygon sides, 0 -> 179 degrees: ours turns the same side but does not read 179 (the angle row holds modulo 180 degrees); Fusion reaches it.
+
+Proposed follow-up (tried in task 525, reverted): moving only the picked POINT when the first pick gives way for an H / V dimension. It fixes point-alone and helps the other oracles (which-moves 287 -> 299, graded 1996 -> 2011, this test 644 -> 654 same), but it re-opens coverage-properties N-F6 (a tangent circle flips sides on a horizontal dimension edit). It needs the N-F6 branch lock (the tangent side recorded at creation) first.

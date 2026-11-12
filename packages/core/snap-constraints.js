@@ -126,11 +126,12 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
 
         case 'axis-x':
         case 'axis-y': {
-            // Point on the X / Y axis (task 537) -> the horizontal / vertical constraint between the point and the origin joint
-            // (declared in AXIS_SNAP_TARGETS). The normal ConstraintManager path decides: a refusal leaves the point where it is.
+            // Point on the X / Y axis (task 537, switched by task 539): a POINT-ON-LINE with the built-in reference line (AXIS_SNAP_TARGETS shapeId),
+            // not a horizontal / vertical with the origin joint (those stay valid in saved files). The normal ConstraintManager path decides:
+            // a refusal leaves the point where it is. The origin is on both axes already.
             if (jointId === ORIGIN_JOINT_ID) return false;
             if (!state.joints || !state.joints.has(ORIGIN_JOINT_ID)) return false;
-            return addViaManager(AXIS_SNAP_TARGETS[snapTarget.type].constraint, { joints: [jointId, ORIGIN_JOINT_ID] });
+            return addViaManager(CONSTRAINT_TYPES.POINT_ON_LINE, { joint: jointId, shape: AXIS_SNAP_TARGETS[snapTarget.type].shapeId });
         }
 
         case 'grid':

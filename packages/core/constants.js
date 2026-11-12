@@ -45,11 +45,11 @@ export const SNAP = {
 // and the drag-lock check (#ui). `across` = the coordinate the snap pins to 0; the other coordinate stays free.
 export const ORIGIN_JOINT_ID = 'j_origin';
 // Task 539: the SAME two axes are the built-in REFERENCE LINES (#core/reference-lines.js). `shapeId` / `endJointId` / `end` declare the
-// reserved fixed line through j_origin that constraints and dimensions reference; `constraint` is the old 537 snap form, kept for the
-// horizontal / vertical-with-origin constraints already in saved files.
+// reserved fixed line through j_origin that constraints and dimensions reference; the snap leaves a point-on-line with it (task 539;
+// the horizontal / vertical-with-origin constraints task 537 made stay valid in saved files).
 export const AXIS_SNAP_TARGETS = {
-  'axis-x': { constraint: CONSTRAINT_TYPES.HORIZONTAL, across: 'y', label: 'X axis', shapeId: 'ref_axis_x', endJointId: 'j_ref_x', end: { x: 1, y: 0 } },
-  'axis-y': { constraint: CONSTRAINT_TYPES.VERTICAL,   across: 'x', label: 'Y axis', shapeId: 'ref_axis_y', endJointId: 'j_ref_y', end: { x: 0, y: 1 } }
+  'axis-x': { across: 'y', label: 'X axis', shapeId: 'ref_axis_x', endJointId: 'j_ref_x', end: { x: 1, y: 0 } },
+  'axis-y': { across: 'x', label: 'Y axis', shapeId: 'ref_axis_y', endJointId: 'j_ref_y', end: { x: 0, y: 1 } }
 };
 
 // Default view configuration

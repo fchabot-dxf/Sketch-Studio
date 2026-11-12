@@ -1,361 +1,171 @@
 {
  "parallel|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant parallel (task 526); a corner line against an H/V line pinned at one end: Fusion turns it rigidly and drags its partner, ours swings it about the corner",
   "total": 64,
   "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,5",
-   "0,6",
-   "0,7",
-   "1,0",
-   "1,1",
-   "1,2",
-   "1,3",
-   "1,4",
-   "1,5",
    "1,6",
-   "1,7",
-   "2,0",
-   "2,1",
-   "2,2",
-   "2,3",
-   "2,4",
-   "2,5",
-   "2,6",
-   "3,0",
-   "3,1",
-   "3,2",
    "3,3",
-   "3,4",
-   "3,5",
    "3,6",
    "3,7",
-   "4,0",
-   "4,1",
-   "4,2",
-   "4,3",
-   "4,4",
-   "4,5",
-   "4,6",
-   "5,0",
-   "5,1",
-   "5,2",
-   "5,3",
-   "5,4",
-   "5,5",
-   "5,6",
-   "6,0",
    "6,1",
-   "6,2",
    "6,3",
-   "6,4",
-   "6,5",
    "6,6",
    "6,7",
-   "7,0",
-   "7,1",
    "7,3",
    "7,6",
    "7,7"
   ]
  },
- "parallel|LC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "4,0",
-   "4,4",
-   "7,0"
-  ]
- },
- "parallel|CL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "4,0",
-   "4,3",
-   "4,4"
-  ]
- },
- "parallel|LS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
- "parallel|SL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
  "parallel|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant parallel (task 526); a corner line against an H/V line pinned at one end: Fusion turns it rigidly and drags its partner, ours swings it about the corner",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,8",
    "3,0",
    "3,8",
-   "4,0",
    "7,0",
    "7,8"
   ]
  },
  "parallel|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant parallel (task 526); a corner line against an H/V line pinned at one end: Fusion turns it rigidly and drags its partner, ours swings it about the corner",
   "total": 8,
   "cells": [
-   "0,0",
    "0,3",
-   "0,4",
    "0,7",
-   "8,0",
    "8,3",
    "8,7"
   ]
  },
- "parallel|CC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
  "parallel|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant parallel (task 526); a corner line against an H/V line pinned at one end: Fusion turns it rigidly and drags its partner, ours swings it about the corner",
   "total": 4,
   "cells": "all"
  },
  "perpendicular|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 64,
   "cells": [
    "0,0",
    "0,1",
    "0,2",
    "0,3",
-   "0,4",
-   "0,5",
    "0,6",
    "0,7",
    "1,0",
    "1,1",
    "1,2",
    "1,3",
-   "1,4",
-   "1,5",
    "1,6",
    "1,7",
    "2,0",
    "2,1",
-   "2,2",
-   "2,3",
-   "2,4",
-   "2,5",
-   "2,6",
    "3,0",
    "3,1",
-   "3,2",
-   "3,4",
-   "3,5",
-   "4,0",
-   "4,1",
-   "4,2",
-   "4,3",
-   "4,4",
-   "4,5",
-   "4,6",
    "5,0",
    "5,1",
-   "5,2",
-   "5,3",
-   "5,4",
-   "5,5",
-   "5,6",
    "6,0",
    "6,1",
-   "6,2",
-   "6,4",
-   "6,5",
    "7,0",
    "7,1"
   ]
  },
  "perpendicular|LC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 8,
   "cells": [
    "0,0",
-   "0,4",
    "3,0",
-   "3,4",
-   "4,0",
-   "4,4",
    "7,0"
   ]
  },
  "perpendicular|CL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 8,
   "cells": [
    "0,0",
    "0,3",
-   "0,4",
-   "0,7",
-   "4,0",
-   "4,3",
-   "4,4"
+   "0,7"
   ]
  },
  "perpendicular|LS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 4,
-  "cells": "all"
+  "cells": [
+   "0,0",
+   "3,0",
+   "7,0"
+  ]
  },
  "perpendicular|SL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 4,
-  "cells": "all"
+  "cells": [
+   "0,3",
+   "0,4",
+   "0,7"
+  ]
  },
  "perpendicular|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 8,
   "cells": [
    "0,0",
-   "0,8",
-   "4,0"
+   "0,8"
   ]
  },
  "perpendicular|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 8,
   "cells": [
    "0,0",
-   "0,4",
    "8,0"
   ]
  },
  "perpendicular|CC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
   "total": 4,
-  "cells": "all"
- },
- "perpendicular|SS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "collinear|LL": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 64,
   "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,5",
-   "0,6",
-   "0,7",
-   "1,0",
-   "1,1",
-   "1,3",
-   "1,4",
-   "1,6",
-   "2,0",
-   "2,1",
-   "2,4",
-   "2,5",
-   "3,0",
-   "3,1",
-   "3,6",
-   "3,7",
-   "4,0",
-   "4,1",
-   "5,0",
-   "5,1",
-   "6,0",
-   "6,1",
-   "7,0"
+   "0,0"
   ]
  },
- "collinear|LC": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 8,
+ "collinear|LL": {
+  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
+  "total": 64,
   "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "4,0",
-   "7,0"
+   "1,1",
+   "1,3",
+   "1,5",
+   "1,7",
+   "3,1",
+   "4,3",
+   "5,1",
+   "5,3",
+   "7,1"
   ]
  },
  "collinear|CL": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
+  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "4,0"
+   "4,3"
   ]
  },
- "collinear|LS": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 4,
-  "cells": "all"
- },
- "collinear|SL": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 4,
-  "cells": "all"
- },
  "collinear|LR": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
+  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,8",
-   "3,0",
-   "3,8",
    "7,0"
   ]
  },
  "collinear|RL": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
+  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,7",
-   "8,0"
+   "0,7"
   ]
- },
- "collinear|CC": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,4",
-   "4,0"
-  ]
- },
- "collinear|SS": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
-  "total": 1,
-  "cells": "all"
  },
  "collinear|RR": {
-  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
+  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
   "total": 4,
   "cells": [
    "0,0",
@@ -363,186 +173,29 @@
    "8,0"
   ]
  },
- "equal-line-line|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 64,
-  "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,5",
-   "0,6",
-   "0,7",
-   "1,0",
-   "1,1",
-   "1,2",
-   "1,3",
-   "1,4",
-   "1,5",
-   "1,6",
-   "1,7",
-   "2,0",
-   "2,1",
-   "2,3",
-   "3,0",
-   "3,1",
-   "3,2",
-   "3,3",
-   "3,4",
-   "3,5",
-   "3,6",
-   "3,7",
-   "4,0",
-   "4,1",
-   "4,3",
-   "4,4",
-   "4,6",
-   "5,0",
-   "5,1",
-   "5,3",
-   "6,0",
-   "6,1",
-   "6,3",
-   "6,4",
-   "6,6",
-   "7,0",
-   "7,1",
-   "7,3"
-  ]
- },
- "equal-line-line|LC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "4,0",
-   "4,4",
-   "7,0"
-  ]
- },
- "equal-line-line|CL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "4,0",
-   "4,3",
-   "4,4"
-  ]
- },
- "equal-line-line|LS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "3,0",
-   "4,0"
-  ]
- },
- "equal-line-line|SL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4"
-  ]
- },
- "equal-line-line|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,8",
-   "3,0",
-   "3,8",
-   "4,0"
-  ]
- },
- "equal-line-line|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "8,0",
-   "8,3"
-  ]
- },
- "equal-line-line|CC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
  "equal-line-line|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: two rect sides: Fusion deforms one rect, ours both",
   "total": 4,
   "cells": [
    "0,0"
   ]
  },
  "dim-angle|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 64,
   "cells": [
    "0,0",
    "0,1",
    "0,2",
-   "0,3",
-   "0,4",
-   "0,5",
-   "0,6",
    "1,0",
    "1,1",
    "1,2",
-   "1,3",
-   "1,4",
-   "1,5",
-   "1,6",
    "2,0",
    "2,1",
-   "2,2",
-   "2,3",
-   "2,4",
-   "2,5",
-   "2,6",
-   "3,0",
-   "3,1",
-   "3,2",
    "3,3",
-   "3,4",
-   "3,5",
    "3,6",
    "3,7",
-   "4,0",
-   "4,1",
-   "4,2",
-   "4,3",
-   "4,4",
-   "4,5",
-   "4,6",
-   "5,0",
-   "5,1",
-   "5,2",
-   "5,3",
-   "5,4",
-   "5,5",
-   "5,6",
-   "6,0",
-   "6,1",
-   "6,2",
    "6,3",
-   "6,4",
-   "6,5",
    "6,6",
    "6,7",
    "7,3",
@@ -551,93 +204,83 @@
   ]
  },
  "dim-angle|LC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "4,0",
-   "4,4"
+   "0,0"
   ]
  },
  "dim-angle|CL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "4,0",
-   "4,3",
-   "4,4"
+   "0,0"
   ]
  },
  "dim-angle|LS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 4,
   "cells": [
-   "0,0",
-   "3,0",
-   "4,0"
+   "0,0"
   ]
  },
  "dim-angle|SL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 4,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,4"
+   "0,0"
   ]
  },
  "dim-angle|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 8,
   "cells": [
-   "0,0",
    "3,0",
    "3,8",
-   "4,0",
    "7,0",
    "7,8"
   ]
  },
  "dim-angle|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 8,
   "cells": [
-   "0,0",
    "0,3",
-   "0,4",
    "0,7",
    "8,3",
    "8,7"
   ]
  },
  "dim-angle|CC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 4,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-angle|SS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 1,
   "cells": "all"
  },
  "dim-angle|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)",
   "total": 4,
   "cells": "all"
  },
  "coincident-pp|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: the 315 and the graded fixture disagree on a free line against an H/V line (the table follows the 315 majority); a line centred on the origin against a free line",
   "total": 100,
   "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
+   "0,3",
+   "3,2",
+   "m,0"
+  ]
+ },
+ "dim-aligned|LL": {
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
+  "total": 100,
+  "cells": [
    "0,3",
    "0,4",
    "0,5",
@@ -645,9 +288,6 @@
    "0,7",
    "0,o",
    "0,m",
-   "1,0",
-   "1,1",
-   "1,2",
    "1,3",
    "1,4",
    "1,5",
@@ -655,9 +295,6 @@
    "1,7",
    "1,o",
    "1,m",
-   "2,0",
-   "2,1",
-   "2,2",
    "2,3",
    "2,4",
    "2,5",
@@ -668,251 +305,9 @@
    "3,0",
    "3,1",
    "3,2",
-   "3,3",
-   "3,4",
-   "3,5",
-   "3,6",
-   "3,7",
-   "3,o",
-   "3,m",
    "4,0",
    "4,1",
    "4,2",
-   "4,3",
-   "5,0",
-   "5,1",
-   "5,2",
-   "5,3",
-   "6,0",
-   "6,1",
-   "6,2",
-   "6,3",
-   "7,0",
-   "7,1",
-   "7,2",
-   "7,3",
-   "o,0",
-   "o,1",
-   "o,2",
-   "o,3",
-   "m,0",
-   "m,1",
-   "m,2",
-   "m,3",
-   "m,m"
-  ]
- },
- "coincident-pp|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "coincident-pp|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,c",
-   "3,c"
-  ]
- },
- "coincident-pp|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "coincident-pp|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,4",
-   "3,4"
-  ]
- },
- "coincident-pp|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": [
-   "0,0",
-   "3,0"
-  ]
- },
- "coincident-pp|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "coincident-pp|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0,c"
-  ]
- },
- "coincident-pp|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0,4"
-  ]
- },
- "coincident-pp|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "c,0",
-   "c,3"
-  ]
- },
- "coincident-pp|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "coincident-pp|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "coincident-pp|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "coincident-pp|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0,c"
-  ]
- },
- "coincident-pp|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0,4"
-  ]
- },
- "coincident-pp|AZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "4,0",
-   "4,3"
-  ]
- },
- "coincident-pp|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "coincident-pp|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "coincident-pp|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "coincident-pp|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": [
-   "0,0",
-   "0,3"
-  ]
- },
- "coincident-pp|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "coincident-pp|ZA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-aligned|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 100,
-  "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,5",
-   "0,6",
-   "0,7",
-   "0,o",
-   "0,m",
-   "1,0",
-   "1,1",
-   "1,2",
-   "1,3",
-   "1,4",
-   "1,5",
-   "1,6",
-   "1,7",
-   "1,o",
-   "1,m",
-   "2,0",
-   "2,1",
-   "2,2",
-   "2,3",
-   "2,m",
-   "3,0",
-   "3,1",
-   "3,2",
-   "3,3",
-   "3,4",
-   "3,5",
-   "3,6",
-   "3,7",
-   "3,o",
-   "3,m",
-   "4,0",
-   "4,1",
-   "4,3",
    "4,4",
    "4,5",
    "4,6",
@@ -920,7 +315,7 @@
    "4,o",
    "5,0",
    "5,1",
-   "5,3",
+   "5,2",
    "5,4",
    "5,5",
    "5,6",
@@ -928,7 +323,7 @@
    "5,o",
    "6,0",
    "6,1",
-   "6,3",
+   "6,2",
    "6,4",
    "6,5",
    "6,6",
@@ -936,7 +331,7 @@
    "6,o",
    "7,0",
    "7,1",
-   "7,3",
+   "7,2",
    "7,4",
    "7,5",
    "7,6",
@@ -944,7 +339,7 @@
    "7,o",
    "o,0",
    "o,1",
-   "o,3",
+   "o,2",
    "o,4",
    "o,5",
    "o,6",
@@ -952,464 +347,349 @@
    "o,o",
    "m,0",
    "m,1",
-   "m,2",
-   "m,3",
-   "m,m"
+   "m,2"
   ]
  },
  "dim-aligned|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-aligned|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 12,
   "cells": [
-   "0,0",
    "0,c",
-   "3,0",
-   "3,c",
    "4,c",
    "7,c",
-   "o,c",
-   "m,0"
+   "o,c"
   ]
  },
  "dim-aligned|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
   "cells": [
-   "0,0",
    "3,0",
+   "4,0",
+   "7,0",
+   "o,0",
    "m,0"
   ]
  },
  "dim-aligned|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 12,
   "cells": [
-   "0,0",
    "0,4",
-   "3,0",
-   "3,4",
    "4,4",
    "7,4",
-   "o,4",
-   "m,0"
+   "o,4"
   ]
  },
  "dim-aligned|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
   "cells": [
    "0,0",
-   "3,0",
    "4,0",
    "7,0",
    "o,0"
   ]
  },
  "dim-aligned|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
-  "cells": "all"
- },
- "dim-aligned|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-aligned|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-aligned|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-aligned|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "dim-aligned|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 1,
   "cells": "all"
  },
  "dim-aligned|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
    "c,0",
-   "c,3",
    "c,4",
    "c,7",
    "c,o"
   ]
  },
- "dim-aligned|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-aligned|OO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 4,
   "cells": [
-   "0,0",
    "c,c"
   ]
  },
  "dim-aligned|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
-   "0,0"
+   "c,0"
   ]
  },
  "dim-aligned|OP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 4,
   "cells": [
-   "0,0",
    "c,4"
   ]
  },
  "dim-aligned|OZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
    "c,0"
   ]
  },
  "dim-aligned|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
   "cells": [
-   "0,0",
    "0,3",
+   "0,4",
+   "0,7",
    "0,o",
    "0,m"
   ]
  },
  "dim-aligned|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 1,
   "cells": "all"
  },
  "dim-aligned|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
-   "0,0"
+   "0,c"
   ]
  },
- "dim-aligned|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-aligned|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
-   "0,0"
+   "0,4"
   ]
  },
  "dim-aligned|AZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 1,
   "cells": "all"
  },
  "dim-aligned|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
    "4,0",
-   "4,3",
    "4,4",
    "4,7",
    "4,o"
   ]
  },
- "dim-aligned|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-aligned|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 4,
   "cells": [
-   "0,0",
    "4,c"
   ]
  },
  "dim-aligned|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
-   "0,0"
+   "4,0"
   ]
  },
  "dim-aligned|PP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 4,
   "cells": [
-   "0,0",
    "4,4"
   ]
  },
  "dim-aligned|PZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
    "4,0"
   ]
  },
  "dim-aligned|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 6,
   "cells": [
    "0,0",
-   "0,3",
    "0,4",
    "0,7",
    "0,o"
   ]
  },
- "dim-aligned|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-aligned|ZO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
    "0,c"
   ]
  },
+ "dim-aligned|ZA": {
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
+  "total": 1,
+  "cells": "all"
+ },
  "dim-aligned|ZP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a dimension between held points (task 526); the moving line: Fusion stretches or turns it, ours translates it; an arc centre: Fusion moves the centre alone (the arc resizes), ours translates the arc",
   "total": 2,
   "cells": [
    "0,4"
   ]
  },
  "dim-horizontal|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 25,
   "cells": [
    "0,0",
    "0,2",
    "0,3",
+   "0,4",
+   "0,7",
    "2,0",
    "2,2",
    "2,3",
+   "2,4",
+   "2,7",
    "3,0",
-   "3,2",
-   "3,3",
-   "3,4",
-   "3,7",
-   "4,0",
-   "4,2",
-   "4,3",
    "4,4",
    "4,7",
-   "7,0",
-   "7,2",
-   "7,3",
    "7,4",
    "7,7"
   ]
  },
  "dim-horizontal|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-horizontal|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
    "0,0",
-   "3,0",
-   "3,c",
+   "0,c",
    "4,c",
    "7,c",
-   "o,c",
-   "m,0"
+   "o,c"
   ]
  },
  "dim-horizontal|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": "all"
- },
- "dim-horizontal|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
   "cells": [
    "0,0",
    "3,0",
-   "3,4",
-   "4,4",
-   "7,4",
-   "o,4",
    "m,0"
   ]
  },
+ "dim-horizontal|LP": {
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
+  "total": 12,
+  "cells": [
+   "0,0",
+   "0,4",
+   "3,0",
+   "4,4",
+   "7,4",
+   "o,4"
+  ]
+ },
  "dim-horizontal|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
   "cells": [
-   "3,0",
+   "0,0",
    "4,0",
    "o,0"
   ]
  },
- "dim-horizontal|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "dim-horizontal|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-horizontal|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "dim-horizontal|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-horizontal|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "dim-horizontal|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-horizontal|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "c,0",
-   "c,3",
    "c,4",
    "c,7",
    "c,o"
   ]
  },
- "dim-horizontal|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-horizontal|OO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "c,c"
   ]
  },
- "dim-horizontal|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-horizontal|OP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "c,4"
   ]
  },
  "dim-horizontal|OZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "c,0"
   ]
  },
  "dim-horizontal|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m"
-  ]
+  "cells": "all"
  },
  "dim-horizontal|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 1,
   "cells": "all"
  },
  "dim-horizontal|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": [
-   "0,0"
-  ]
+  "cells": "all"
  },
  "dim-horizontal|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 1,
   "cells": "all"
  },
  "dim-horizontal|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": [
-   "0,0"
-  ]
+  "cells": "all"
+ },
+ "dim-horizontal|AZ": {
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
+  "total": 1,
+  "cells": "all"
  },
  "dim-horizontal|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "4,0",
-   "4,3",
    "4,4",
    "4,7",
    "4,o"
   ]
  },
- "dim-horizontal|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-horizontal|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
    "0,0",
@@ -1417,254 +697,195 @@
   ]
  },
  "dim-horizontal|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-horizontal|PP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "4,4"
   ]
  },
  "dim-horizontal|PZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "4,0"
   ]
  },
  "dim-horizontal|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
   "cells": [
-   "0,0",
-   "0,3",
    "0,4",
    "0,o"
   ]
  },
- "dim-horizontal|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-horizontal|ZO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "0,c"
   ]
  },
- "dim-horizontal|ZA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-horizontal|ZP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "0,4"
   ]
  },
  "dim-vertical|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 25,
   "cells": [
    "0,0",
    "0,2",
    "0,3",
+   "0,4",
+   "0,7",
    "2,0",
    "2,2",
    "2,3",
+   "2,4",
+   "2,7",
    "3,0",
-   "3,2",
    "3,3",
-   "4,0",
-   "4,2",
    "4,4",
    "4,7",
-   "7,0",
-   "7,2",
    "7,4",
    "7,7"
   ]
  },
  "dim-vertical|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-vertical|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
    "0,0",
-   "3,0",
+   "0,c",
    "4,c",
    "7,c",
-   "o,c",
-   "m,0"
+   "o,c"
   ]
  },
  "dim-vertical|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": "all"
- },
- "dim-vertical|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
   "cells": [
    "0,0",
    "3,0",
-   "4,4",
-   "7,4",
-   "o,4",
    "m,0"
   ]
  },
+ "dim-vertical|LP": {
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
+  "total": 12,
+  "cells": [
+   "0,0",
+   "0,4",
+   "3,0",
+   "4,4",
+   "7,4",
+   "o,4"
+  ]
+ },
  "dim-vertical|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
   "cells": [
+   "0,0",
    "4,0",
    "7,0",
    "o,0"
   ]
  },
- "dim-vertical|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
  "dim-vertical|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-vertical|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "dim-vertical|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "dim-vertical|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "dim-vertical|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 1,
   "cells": "all"
  },
  "dim-vertical|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "c,0",
    "c,4",
    "c,7",
    "c,o"
   ]
  },
- "dim-vertical|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-vertical|OO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "c,c"
   ]
  },
- "dim-vertical|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-vertical|OP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "c,4"
   ]
  },
  "dim-vertical|OZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "c,0"
   ]
  },
  "dim-vertical|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m"
-  ]
+  "cells": "all"
  },
  "dim-vertical|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 1,
   "cells": "all"
  },
  "dim-vertical|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": [
-   "0,0"
-  ]
+  "cells": "all"
  },
  "dim-vertical|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 1,
   "cells": "all"
  },
  "dim-vertical|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": [
-   "0,0"
-  ]
+  "cells": "all"
+ },
+ "dim-vertical|AZ": {
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
+  "total": 1,
+  "cells": "all"
  },
  "dim-vertical|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "4,0",
    "4,4",
    "4,7",
    "4,o"
   ]
  },
- "dim-vertical|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
  "dim-vertical|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
    "0,0",
@@ -1672,974 +893,124 @@
   ]
  },
  "dim-vertical|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "dim-vertical|PP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 4,
   "cells": [
-   "0,0",
    "4,4"
   ]
  },
  "dim-vertical|PZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "4,0"
   ]
  },
  "dim-vertical|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 6,
   "cells": [
-   "0,0",
    "0,4",
    "0,7",
    "0,o"
   ]
  },
- "dim-vertical|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-vertical|ZO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "0,c"
   ]
  },
- "dim-vertical|ZA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
  "dim-vertical|ZP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); the moving line: Fusion moves the picked point alone or turns the line, ours translates it",
   "total": 2,
   "cells": [
    "0,4"
   ]
  },
  "horizontal-2pt|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526); two H/V lines or two rects: Fusion moves the first pick",
   "total": 25,
   "cells": [
-   "0,0",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,7",
-   "2,0",
-   "2,2",
-   "2,3",
-   "2,4",
-   "2,7",
-   "3,0",
-   "3,2",
-   "3,3",
-   "4,0",
-   "4,2",
-   "7,0",
-   "7,2"
-  ]
- },
- "horizontal-2pt|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "horizontal-2pt|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,c",
-   "3,0",
-   "m,0"
-  ]
- },
- "horizontal-2pt|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "horizontal-2pt|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "m,0"
+   "3,3"
   ]
  },
  "horizontal-2pt|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526); two H/V lines or two rects: Fusion moves the first pick",
   "total": 6,
   "cells": [
-   "0,0",
    "o,0"
   ]
  },
- "horizontal-2pt|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
  "horizontal-2pt|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526); two H/V lines or two rects: Fusion moves the first pick",
   "total": 1,
   "cells": "all"
- },
- "horizontal-2pt|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "c,0"
-  ]
- },
- "horizontal-2pt|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|OO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "horizontal-2pt|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|OP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "horizontal-2pt|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "horizontal-2pt|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|AZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "4,0"
-  ]
- },
- "horizontal-2pt|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "horizontal-2pt|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "horizontal-2pt|PP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
  },
  "horizontal-2pt|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526); two H/V lines or two rects: Fusion moves the first pick",
   "total": 6,
   "cells": [
-   "0,0",
    "0,o"
-  ]
- },
- "horizontal-2pt|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "horizontal-2pt|ZA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 25,
-  "cells": [
-   "0,0",
-   "0,2",
-   "0,3",
-   "0,4",
-   "0,7",
-   "2,0",
-   "2,2",
-   "2,3",
-   "2,4",
-   "2,7",
-   "3,0",
-   "3,2",
-   "3,3",
-   "3,4",
-   "3,7",
-   "4,0",
-   "4,2",
-   "4,3",
-   "7,0",
-   "7,2",
-   "7,3"
-  ]
- },
- "vertical-2pt|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "vertical-2pt|LO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,c",
-   "3,0",
-   "3,c",
-   "m,0"
-  ]
- },
- "vertical-2pt|LA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "vertical-2pt|LP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "m,0"
   ]
  },
  "vertical-2pt|LZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526)",
   "total": 6,
   "cells": [
-   "0,0",
-   "3,0",
    "o,0"
   ]
  },
- "vertical-2pt|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "vertical-2pt|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|RO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|RA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|RP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|RZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "c,0",
-   "c,3"
-  ]
- },
- "vertical-2pt|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|OO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "vertical-2pt|OA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|OP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "vertical-2pt|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "vertical-2pt|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|AO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|AA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|AP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|AZ": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,m",
-   "4,0",
-   "4,3"
-  ]
- },
- "vertical-2pt|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|PO": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "vertical-2pt|PA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "vertical-2pt|PP": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
  "vertical-2pt|ZL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses a redundant H/V (task 526)",
   "total": 6,
   "cells": [
-   "0,0",
-   "0,3",
    "0,o"
   ]
  },
- "vertical-2pt|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "vertical-2pt|ZA": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "pointOnLine|LL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 24,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "3,0",
-   "3,3",
-   "3,4",
-   "3,7",
-   "4,0",
-   "4,3",
-   "7,0",
-   "7,3",
-   "o,0",
-   "o,3",
-   "m,0",
-   "m,3",
-   "m,4"
-  ]
- },
- "pointOnLine|LC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "4,0",
-   "7,0",
-   "o,0",
-   "m,0",
-   "m,4"
-  ]
- },
- "pointOnLine|LS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 6,
-  "cells": "all"
- },
- "pointOnLine|LR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,8",
-   "3,0",
-   "3,8",
-   "4,0",
-   "7,0",
-   "o,0",
-   "m,0"
-  ]
- },
- "pointOnLine|RL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": "all"
- },
- "pointOnLine|RC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": "all"
- },
- "pointOnLine|RS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 1,
-  "cells": "all"
- },
- "pointOnLine|RR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": "all"
- },
- "pointOnLine|OL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 8,
-  "cells": [
-   "0,4",
-   "c,0",
-   "c,3"
-  ]
- },
- "pointOnLine|OC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": [
-   "0,4",
-   "c,0"
-  ]
- },
- "pointOnLine|OS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": [
-   "c,0"
-  ]
- },
- "pointOnLine|OR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": [
-   "c,0"
-  ]
- },
- "pointOnLine|AL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": "all"
- },
- "pointOnLine|AC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": "all"
- },
- "pointOnLine|AS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 1,
-  "cells": "all"
- },
- "pointOnLine|AR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": "all"
- },
- "pointOnLine|PL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 8,
-  "cells": [
-   "4,0",
-   "4,3"
-  ]
- },
- "pointOnLine|PC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": [
-   "4,0"
-  ]
- },
- "pointOnLine|PS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": [
-   "4,0"
-  ]
- },
- "pointOnLine|PR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": [
-   "4,0"
-  ]
- },
- "pointOnLine|ZL": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,3"
-  ]
- },
- "pointOnLine|ZC": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "pointOnLine|ZS": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 1,
-  "cells": "all"
- },
- "pointOnLine|ZR": {
-  "reason": "remaining after task 511: held-operand cases differ from Fusion",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "pointOnCircle|LO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 24,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "0,cr",
-   "3,0",
-   "3,c",
-   "3,r",
-   "3,cr",
-   "4,0",
-   "7,0",
-   "o,0",
-   "m,0",
-   "m,c",
-   "m,r"
-  ]
- },
- "pointOnCircle|LA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 24,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "0,cr",
-   "3,0",
-   "3,c",
-   "3,r",
-   "3,cr",
-   "4,0",
-   "4,r",
-   "7,0",
-   "7,r",
-   "o,0",
-   "o,r",
-   "m,0",
-   "m,c",
-   "m,r"
-  ]
- },
  "pointOnCircle|LF": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
+  "reason": "after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand",
   "total": 12,
   "cells": [
-   "0,0",
-   "0,c",
-   "3,0",
-   "3,c",
-   "o,0",
-   "m,0",
-   "m,c"
+   "o,0"
   ]
- },
- "pointOnCircle|RO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 4,
-  "cells": "all"
- },
- "pointOnCircle|RA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 4,
-  "cells": "all"
  },
  "pointOnCircle|RF": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
+  "reason": "after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand",
   "total": 2,
-  "cells": "all"
- },
- "pointOnCircle|OO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 8,
   "cells": [
-   "0,0",
-   "0,r",
-   "c,0"
+   "0,0"
   ]
- },
- "pointOnCircle|OA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 8,
-  "cells": [
-   "c,0",
-   "c,r"
-  ]
- },
- "pointOnCircle|AO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 4,
-  "cells": "all"
  },
  "pointOnCircle|AA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
+  "reason": "after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand",
   "total": 4,
-  "cells": "all"
- },
- "pointOnCircle|AF": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 2,
-  "cells": "all"
- },
- "pointOnCircle|PO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 8,
   "cells": [
-   "4,0"
-  ]
- },
- "pointOnCircle|PA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 8,
-  "cells": [
-   "4,0",
-   "4,r"
+   "0,0"
   ]
  },
  "pointOnCircle|PF": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
+  "reason": "after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand",
   "total": 4,
   "cells": "all"
- },
- "pointOnCircle|ZO": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "pointOnCircle|ZA": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,r"
-  ]
  },
  "pointOnCircle|ZF": {
-  "reason": "remaining after tasks 511 + 515: held-operand cases differ from Fusion; since 515 ours may also change a free circle radius (least change), Fusion translates the circle",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "midpoint|LL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 24,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "3,0",
-   "3,3",
-   "3,4",
-   "3,7",
-   "m,0",
-   "m,3",
-   "m,4"
-  ]
- },
- "midpoint|LC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,4",
-   "3,0",
-   "3,4",
-   "m,0",
-   "m,4"
-  ]
- },
- "midpoint|LS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 6,
-  "cells": "all"
- },
- "midpoint|LR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 12,
-  "cells": [
-   "0,0",
-   "0,8",
-   "3,0",
-   "3,8",
-   "4,0",
-   "7,0",
-   "o,0",
-   "m,0"
-  ]
- },
- "midpoint|RL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
- "midpoint|RC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|RS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "midpoint|RR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|OL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4"
-  ]
- },
- "midpoint|OC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,4"
-  ]
- },
- "midpoint|OS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|OR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "c,0"
-  ]
- },
- "midpoint|AL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": "all"
- },
- "midpoint|AC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|AS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "midpoint|AR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|PL": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4"
-  ]
- },
- "midpoint|PC": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,4"
-  ]
- },
- "midpoint|PS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": "all"
- },
- "midpoint|PR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "4,0"
-  ]
- },
- "midpoint|ZS": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 1,
-  "cells": "all"
- },
- "midpoint|ZR": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand",
   "total": 2,
   "cells": [
    "0,0"
   ]
  },
  "equal-circle|OO": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 16,
   "cells": [
    "r,r",
@@ -2649,7 +1020,7 @@
   ]
  },
  "equal-circle|OA": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 16,
   "cells": [
    "0,0",
@@ -2667,7 +1038,7 @@
   ]
  },
  "equal-circle|OF": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 8,
   "cells": [
    "0,0",
@@ -2677,7 +1048,7 @@
   ]
  },
  "equal-circle|AO": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 16,
   "cells": [
    "0,0",
@@ -2695,7 +1066,7 @@
   ]
  },
  "equal-circle|AA": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 16,
   "cells": [
    "r,r",
@@ -2705,17 +1076,15 @@
   ]
  },
  "equal-circle|AF": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 8,
   "cells": [
    "0,0",
-   "0,c",
-   "c,0",
-   "c,c"
+   "0,c"
   ]
  },
  "equal-circle|FO": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 8,
   "cells": [
    "0,0",
@@ -2725,423 +1094,121 @@
   ]
  },
  "equal-circle|FA": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 8,
   "cells": [
    "0,0",
-   "0,c",
-   "c,0",
-   "c,c"
+   "c,0"
   ]
  },
  "equal-circle|FF": {
-  "reason": "after task 515: which circle resizes / moves differs from Fusion (ours: least change over both); equal(circle, arc) is refused by Fusion's API, ours accepts it",
+  "reason": "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   "total": 4,
   "cells": "all"
  },
  "tangent-line-circle|LO": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 16,
   "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "0,cr",
-   "3,0",
-   "3,c",
-   "3,r",
-   "4,0",
-   "4,c",
-   "4,r",
-   "7,0"
-  ]
- },
- "tangent-line-circle|LA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 16,
-  "cells": [
-   "0,0",
-   "0,r",
-   "3,0",
-   "3,r",
-   "4,0",
-   "4,r",
-   "7,0",
-   "7,c",
-   "7,r"
+   "0,cr"
   ]
  },
  "tangent-line-circle|LF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 8,
   "cells": [
-   "0,0",
    "3,0",
    "3,c",
    "4,0"
   ]
  },
  "tangent-line-circle|CO": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "0,cr",
-   "4,0",
-   "4,c",
-   "4,r"
-  ]
- },
- "tangent-line-circle|CA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,r",
-   "4,0",
-   "4,r"
+   "0,cr"
   ]
  },
  "tangent-line-circle|CF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 4,
   "cells": [
-   "0,0",
    "4,0"
   ]
  },
- "tangent-line-circle|SO": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r"
-  ]
- },
- "tangent-line-circle|SA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "0,r"
-  ]
- },
- "tangent-line-circle|SF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "tangent-line-circle|RO": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "8,0"
-  ]
- },
- "tangent-line-circle|RA": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,r",
-   "8,0",
-   "8,c",
-   "8,r"
-  ]
- },
- "tangent-line-circle|RF": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
  "tangent-line-circle|OL": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 16,
   "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "c,0",
-   "c,3",
-   "c,4",
-   "r,0",
-   "r,3",
-   "r,4",
    "cr,0"
   ]
  },
  "tangent-line-circle|OC": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 8,
   "cells": [
-   "0,0",
-   "0,4",
-   "c,0",
-   "c,4",
-   "r,0",
-   "r,4",
    "cr,0"
   ]
  },
- "tangent-line-circle|OS": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "c,0",
-   "r,0"
-  ]
- },
- "tangent-line-circle|OR": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,8",
-   "c,0",
-   "r,0"
-  ]
- },
- "tangent-line-circle|AL": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 16,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,4",
-   "0,7",
-   "c,7",
-   "r,0",
-   "r,3",
-   "r,4",
-   "r,7"
-  ]
- },
- "tangent-line-circle|AC": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,4",
-   "r,0",
-   "r,4"
-  ]
- },
- "tangent-line-circle|AS": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "r,0"
-  ]
- },
- "tangent-line-circle|AR": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,8",
-   "c,8",
-   "r,0",
-   "r,8"
-  ]
- },
  "tangent-line-circle|FL": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 8,
   "cells": [
-   "0,0",
    "0,3",
    "0,4",
    "c,3"
   ]
  },
  "tangent-line-circle|FC": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
+  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
   "total": 4,
   "cells": [
-   "0,0",
    "0,4"
   ]
  },
- "tangent-line-circle|FS": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 2,
-  "cells": [
-   "0,0"
-  ]
- },
- "tangent-line-circle|FR": {
-  "reason": "after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius",
-  "total": 4,
-  "cells": [
-   "0,0"
-  ]
- },
- "tangent-circle-circle|OO": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 16,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "c,0",
-   "c,c",
-   "c,r",
-   "r,0",
-   "r,c",
-   "r,r"
-  ]
- },
  "tangent-circle-circle|OA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
   "total": 16,
   "cells": [
-   "0,0",
-   "0,r",
-   "c,0",
-   "c,r",
-   "r,0",
-   "r,r",
    "cr,c"
   ]
  },
- "tangent-circle-circle|OF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "c,0",
-   "r,0"
-  ]
- },
  "tangent-circle-circle|AO": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
   "total": 16,
   "cells": [
-   "0,0",
-   "0,c",
-   "0,r",
-   "c,cr",
-   "r,0",
-   "r,c",
-   "r,r"
+   "c,cr"
   ]
  },
  "tangent-circle-circle|AA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
   "total": 16,
   "cells": [
-   "0,0",
    "0,c",
-   "0,r",
    "c,c",
    "c,cr",
-   "r,0",
-   "r,r",
    "cr,c"
   ]
  },
  "tangent-circle-circle|AF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
+  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
   "total": 8,
   "cells": [
-   "0,0",
-   "c,c",
-   "r,0"
-  ]
- },
- "tangent-circle-circle|FO": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,c",
-   "0,r"
-  ]
- },
- "tangent-circle-circle|FA": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,r",
    "c,c"
   ]
  },
- "tangent-circle-circle|FF": {
-  "reason": "after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle",
-  "total": 4,
+ "tangent-circle-circle|FA": {
+  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
+  "total": 8,
   "cells": [
-   "0,0"
-  ]
- },
- "horizontal-line|L": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0"
-  ]
- },
- "horizontal-line|C": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0"
-  ]
- },
- "vertical-line|L": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0"
-  ]
- },
- "vertical-line|C": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0"
-  ]
- },
- "dim-length|L": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0",
-   "3"
-  ]
- },
- "dim-length|C": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 2,
-  "cells": [
-   "0"
+   "c,c"
   ]
  },
  "dim-length|R": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
+  "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
   "total": 2,
   "cells": [
    "8"
-  ]
- },
- "dim-radius|A": {
-  "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
-  "total": 4,
-  "cells": [
-   "0"
   ]
  }
 }

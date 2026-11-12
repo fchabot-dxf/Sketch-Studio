@@ -17,7 +17,7 @@ const KNOWN = {
   'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
   'scurve/B no dimension is demoted': 'N-F7 (the 2nd arc radius is judged redundant)',
 
-  'N-F6': 'orientation flips on a dimension edit', 'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
+  'N-F7': 'arc/arc tangent at a shared rim is degenerate', 'N-U1': 'unexplained (I3)',
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };

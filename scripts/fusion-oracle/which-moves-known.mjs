@@ -7,15 +7,18 @@ import { buildScenarios, runOurs, cellOf } from '../../tests/harness/fusion-orac
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves.json'), 'utf8'));
-// reason class per group. "pending task 511" = collinear / pointOnLine placement that task 511 changes in packages/core.
+// reason class per group after task 525 (who moves at creation from the declared table). "Task 526" = Fusion refuses what ours accepts.
 const REASON = {
-  'pointOnLine': 'remaining after task 511: a pinned operand / line held differently from Fusion', 'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion',
-  // after task 515 a circle's radius is a solver unknown: the least-change solve may now also change a free radius, where Fusion keeps the moving circle's radius
-  'pointOnCircle': 'remaining after tasks 511 + 515: a pinned operand differs from Fusion; since 515 ours may also change the free circle radius (least change)',
-  'equal-circle-circle': 'after task 515: which circle resizes / moves differs from Fusion (ours: least change over both)',
-  'equal-arc-circle': "after task 515: Fusion's API refuses equal(arc, circle); ours accepts it (the circle radius follows the arc)",
-  'tangent-circle-circle': 'after task 515: ours resizes AND moves both circles by least change; Fusion resizes / moves only the moving circle',
-  'tangent-line-circle': 'after task 515: ours may also change the free circle radius (least change); Fusion moves the line or translates the circle keeping its radius',
+  'horizontal-line': 'after task 525: a free line made H: Fusion turns it about its midpoint here, but moves only its second end in the graded cell horizontal-line|L|0 (ours: the second end)',
+  'vertical-line': 'after task 525: a free line made V: Fusion turns it about its midpoint here, but moves only its second end in the graded cell vertical-line|L|0 (ours: the second end)',
+  'equal-line-line': 'after task 525: Fusion moves both lines (shared joint, second line picked first): outside the one-mover table',
+  'equal-arc-circle': "Fusion's API refuses equal(arc, circle); ours accepts it (task 526)",
+  'tangent-arc-arc': 'after task 525: the centre-fixed arc should resize, but its least-change solve does not converge alone (the NEW-6 family), so ours moves the other arc',
+  'dim-aligned': 'after task 525: the 315 and the graded fixture disagree on two free lines (here the first pick moves, in dim-aligned|LL|0,0 the second)',
+  'dim-horizontal': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',
+  'dim-vertical': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',
+  'dim-length': 'Fusion refuses a dimension on a fully fixed line; ours adds it as a reference (task 526)',
+  'dim-radius-arc': 'Fusion refuses a dimension on a fully fixed arc; ours adds it as a reference (task 526)',
 };
 const known = {};
 for (const sc of buildScenarios()) {

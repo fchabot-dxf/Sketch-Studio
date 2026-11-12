@@ -62,7 +62,6 @@
  "scurve/recipe/10/sketchFull": "sketch fully-constrained flag differs (a refused / redundant step upstream)",
  "scurve/edit0/outcome": "OURS REFUSES what Fusion accepts",
  "scurve/edit3/outcome": "OURS REFUSES what Fusion accepts",
- "scurve/edit4/outcome": "OURS REFUSES what Fusion accepts",
  "scurve/redundant/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "scurve/conflict/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "slot/recipe/8/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",

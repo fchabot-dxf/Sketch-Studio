@@ -119,7 +119,54 @@ export function snapOurs(S, built) {
 }
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-export function runOurs(sc) {
+// The scenario's geometric act (not a dimension) as the type + params our tools pass, or null for a dimension act.
+export function actOf(sc, built) {
+  const a = sc.act;
+  const J = (ref) => built[ref[0]].joints[ref[1]];
+  switch (a.op) {
+    case 'hv2': return { type: a.d === 'H' ? 'horizontal' : 'vertical', params: { joints: a.pts.map(J) } };
+    case 'hv': return { type: a.d === 'H' ? 'horizontal' : 'vertical', params: { joints: built[a.order[0]].joints.slice(0, 2) } };
+    case 'parallel': return { type: 'parallel', params: { shapes: a.order.map(n => built[n].shape) } };
+    case 'perp': return { type: 'perpendicular', params: { shapes: a.order.map(n => built[n].shape) } };
+    case 'collinear': return { type: 'collinear', params: { shapes: a.order.map(n => built[n].shape) } };
+    case 'equal': return { type: 'equal', params: { shapes: a.order.map(n => built[n].shape) } };
+    case 'tangent': {
+      const [f, s] = a.order.map(n => built[n]);
+      if (f.k === 'line' || s.k === 'line') { const l = f.k === 'line' ? f : s, c = f.k === 'line' ? s : f; return { type: 'tangent', params: { line: l.shape, circle: c.shape } }; }
+      return { type: 'tangent', params: { shapes: [f.shape, s.shape] } };
+    }
+    case 'coincident': return { type: 'coincident', params: { joints: a.pts.map(J) } };
+    case 'pointon': return { type: 'pointOnLine', params: { joint: J(a.pt), shape: built[a.curve].shape } };
+    case 'midpoint': { const l = built[a.curve]; return { type: 'midpoint', params: { joints: [l.joints[0], l.joints[1], J(a.pt)] } }; }
+    default: return null;
+  }
+}
+
+// The scenario's dimension act: { type, params (placed at the MEASURED value, as the Dimension tool does), target (the typed value) }, or null.
+export function dimActOf(sc, built, S) {
+  const a = sc.act;
+  const J = (ref) => built[ref[0]].joints[ref[1]];
+  const rad = (n) => { const e = built[n]; return e.k === 'circle' ? L.shape(S, e.shape).radius : dist(posOfJ(S, e.joints[0]), posOfJ(S, e.joints[1])); };
+  switch (a.op) {
+    case 'dist': {
+      const [p, q] = a.pts.map(J), P = posOfJ(S, p), Q = posOfJ(S, q);
+      const m = a.mode === 'aligned' ? dist(P, Q) : a.mode === 'horizontal' ? Math.abs(Q[0] - P[0]) : Math.abs(Q[1] - P[1]);
+      return { type: 'distance', params: { joints: [p, q], value: m, dimMode: a.mode }, target: m * a.scale };
+    }
+    case 'len': { const j = built[a.order[0]].joints; const m = dist(posOfJ(S, j[0]), posOfJ(S, j[1])); return { type: 'distance', params: { joints: j.slice(0, 2), value: m, dimMode: 'aligned' }, target: m * a.scale }; }
+    case 'radius': return { type: 'distance', params: { shape: built[a.order[0]].shape, value: rad(a.order[0]), isRadius: true }, target: rad(a.order[0]) * a.scale };
+    case 'angle': {
+      const [f, s] = a.order.map(n => built[n].joints.map(j => posOfJ(S, j)));
+      const ang = (l) => Math.atan2(l[1][1] - l[0][1], l[1][0] - l[0][0]);
+      let v = Math.abs((ang(f) - ang(s)) * 180 / Math.PI); if (v > 180) v = 360 - v;   // the Dimension tool's own measure
+      return { type: 'angle', params: { shapes: a.order.map(n => built[n].shape), value: v }, target: v + a.delta };
+    }
+    default: return null;
+  }
+}
+
+// The scenario's geometry and prep in OUR sketch, before the act.
+export function buildOurs(sc) {
   const S = L.newSketch();
   const st = S.state;
   const built = {};
@@ -154,6 +201,11 @@ export function runOurs(sc) {
     else if (p.op === 'rad') mk('distance', { shape: built[p.e].shape, value: radiusOf(p.e), isRadius: true });
   }
   S.engine.solve(L.ITER);
+  return { S, st, built, rec, mk, placeAndEdit };
+}
+
+export function runOurs(sc) {
+  const { S, st, built, rec, mk, placeAndEdit } = buildOurs(sc);
   rec.before = snapOurs(S, built);
   const a = sc.act;
   const nC0 = st.constraints.length;
@@ -161,37 +213,12 @@ export function runOurs(sc) {
   let ret;
   const muted = (f) => { const e = console.error, w = console.warn; console.error = () => {}; console.warn = () => {}; try { return f(); } finally { console.error = e; console.warn = w; } };
   muted(() => {
-    switch (a.op) {
-      case 'hv2': ret = mk(a.d === 'H' ? 'horizontal' : 'vertical', { joints: a.pts.map(J) }); break;
-      case 'hv': ret = mk(a.d === 'H' ? 'horizontal' : 'vertical', { joints: built[a.order[0]].joints.slice(0, 2) }); break;
-      case 'parallel': ret = mk('parallel', { shapes: a.order.map(n => built[n].shape) }); break;
-      case 'perp': ret = mk('perpendicular', { shapes: a.order.map(n => built[n].shape) }); break;
-      case 'collinear': ret = mk('collinear', { shapes: a.order.map(n => built[n].shape) }); break;
-      case 'equal': ret = mk('equal', { shapes: a.order.map(n => built[n].shape) }); break;
-      case 'tangent': {
-        const [f, s] = a.order.map(n => built[n]);
-        if (f.k === 'line' || s.k === 'line') { const l = f.k === 'line' ? f : s, c = f.k === 'line' ? s : f; ret = mk('tangent', { line: l.shape, circle: c.shape }); }
-        else ret = mk('tangent', { shapes: [f.shape, s.shape] });
-        break;
-      }
-      case 'coincident': ret = mk('coincident', { joints: a.pts.map(J) }); break;
-      case 'pointon': ret = mk('pointOnLine', { joint: J(a.pt), shape: built[a.curve].shape }); break;
-      case 'midpoint': { const l = built[a.curve]; ret = mk('midpoint', { joints: [l.joints[0], l.joints[1], J(a.pt)] }); break; }
-      case 'dist': {
-        const [p, q] = a.pts.map(J), P = posOfJ(S, p), Q = posOfJ(S, q);
-        const m = a.mode === 'aligned' ? dist(P, Q) : a.mode === 'horizontal' ? Math.abs(Q[0] - P[0]) : Math.abs(Q[1] - P[1]);
-        ret = placeAndEdit({ joints: [p, q], value: m, dimMode: a.mode }, m * a.scale); break;
-      }
-      case 'len': { const j = built[a.order[0]].joints; const m = dist(posOfJ(S, j[0]), posOfJ(S, j[1])); ret = placeAndEdit({ joints: j.slice(0, 2), value: m, dimMode: 'aligned' }, m * a.scale); break; }
-      case 'radius': ret = placeAndEdit({ shape: built[a.order[0]].shape, value: radiusOf(a.order[0]), isRadius: true }, radiusOf(a.order[0]) * a.scale); break;
-      case 'angle': {
-        const [f, s] = a.order.map(n => built[n].joints.map(j => posOfJ(S, j)));
-        const ang = (l) => Math.atan2(l[1][1] - l[0][1], l[1][0] - l[0][0]);
-        let v = Math.abs((ang(f) - ang(s)) * 180 / Math.PI); if (v > 180) v = 360 - v;   // the Dimension tool's own measure
-        ret = placeAndEdit({ shapes: a.order.map(n => built[n].shape), value: v }, v + a.delta, 'angle'); rec.dim0_deg = v; break;
-      }
-      default: throw new Error('act ' + a.op);
-    }
+    const geo = actOf(sc, built);
+    if (geo) { ret = mk(geo.type, geo.params); return; }
+    const d = dimActOf(sc, built, S);
+    if (!d) throw new Error('act ' + a.op);
+    ret = placeAndEdit(d.params, d.target, d.type);
+    if (d.type === 'angle') rec.dim0_deg = d.params.value;
   });
   rec.accepted = !!ret;
   const created = st.constraints.slice(nC0).filter(c => c);

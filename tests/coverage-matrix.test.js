@@ -84,7 +84,8 @@ ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r 
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
   'NEW-6': 'feasible tangent between arcs refused when an arc radius must change a lot (the circle/arc cells were fixed by task 515)',
-  'NEW-9': 'coincident of a line end onto a corner of a rect that shares the line other end: feasible, but our solve collapses the line and the rect, so it is refused (task 521)',
+  // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
+  // the who-moves placement moves one operand and no matrix cell fails it any more.
 };
 // round-1 findings are TOLERATED, not required: a fix task for F1..F6 must not have to edit this file (their cells simply turn PASS).
 const ROUND1 = new Set(['F1', 'F2', 'F3', 'F4', 'F5', 'F6']);
@@ -110,7 +111,7 @@ for (const v of verdicts.keys()) if (/^NEW-/.test(v) && !(v in KNOWN)) fail(`cel
 for (const v of verdicts.keys()) if (/^F\d$/.test(v) && !ROUND1.has(v)) fail('unknown round-1 id ' + v);
 console.log('round-1 cells tolerated: ' + [...verdicts].filter(([k]) => /^F\d$/.test(k)).sort().map(([k, n]) => k + '=' + n).join(' '));
 
-// repros: ok === true means the app is right; every NEW-6 and NEW-9 is expected to FAIL today
+// repros: ok === true means the app is right; every NEW-6 is expected to FAIL today
 for (const f of NEW_FINDINGS) {
   const r = await f.run();
   if (!(f.id in KNOWN)) fail(f.id + ' has a repro but no KNOWN entry');

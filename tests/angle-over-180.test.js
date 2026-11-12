@@ -120,4 +120,17 @@ for (const pickFreeFirst of [false, true]) {
     assert(a && Math.abs(a.span - want) < 1e-6 && a.labelInside, `label at ${labelDeg}: the ${want} sector under it is drawn`);
   }
 }
-console.log('angle-over-180: Fusion sequence 30 -> 60 -> 120 -> 170 -> 179 -> 190 -> 270 -> 360 (both pick orders): line directions as Fusion, continuous walk, reflex arcs with the label inside, save/load; 0 / -30 / 400 refused; creation sectors unchanged.');
+// a parallel added later turns a dimensioned line's joints round (constraint-manager alignParallelOrientation): the angle names that line's
+// other ray, so it keeps measuring the same sector and is still satisfied (without that the sector would point 180 degrees away)
+{
+  const S = L.newSketch();
+  const p = (x, y) => L.point(S, x, y);
+  const a = L.line(S, p(0, 0), p(100, 0)), b = L.line(S, p(0, 10), p(80, 60)), d = L.line(S, p(200, 200), p(120, 150));
+  const c = quiet(() => ConstraintManager.createConstraint(S.state, 'angle', { shapes: [a, b], value: L.measure(S, { type: 'angle', shapes: [a, b] }) }, { source: 'dimension' }));
+  const joints0 = L.shape(S, b).joints.join(), v0 = c.value;
+  assert(quiet(() => ConstraintManager.createConstraint(S.state, 'parallel', { shapes: [d, b] }, { source: 'test' })), 'parallel added');
+  assert.notStrictEqual(L.shape(S, b).joints.join(), joints0, 'the parallel turned line 2 round (its joints swapped)');
+  assert.deepStrictEqual(c.sector, { ray1: 1, ray2: -1, turn: 1 }, 'the angle now names line 2\'s other ray');
+  assert(c.value === v0 && measureResidual(c, S.state.joints, S.state.shapes) < 1e-9, 'and still holds its value');
+}
+console.log('angle-over-180: Fusion sequence 30 -> 60 -> 120 -> 170 -> 179 -> 190 -> 270 -> 360 (both pick orders): line directions as Fusion, continuous walk, reflex arcs with the label inside, save/load; 0 / -30 / 400 refused; creation sectors unchanged; a later parallel that turns a line round keeps the sector.');

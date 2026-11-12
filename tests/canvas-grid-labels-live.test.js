@@ -41,7 +41,9 @@ await (async () => {
       assert(p.items.length > 0, tag + ': some labels');
       for (const it of p.items) {
         const along = it.axis === 'x' ? it.at[0] : it.at[1];
-        assert(Math.abs(Number(it.text) * unitMm - along) < 1e-6 * Math.max(1, Math.abs(along)), `${tag}: label "${it.text}" sits at world ${along} (${it.axis})`);
+        // TASK 534: the Y numbers are the USER's y (positive UP): the label placed at world y reads -y
+        const shown = it.axis === 'x' ? along : -along;
+        assert(Math.abs(Number(it.text) * unitMm - shown) < 1e-6 * Math.max(1, Math.abs(along)), `${tag}: label "${it.text}" sits at world ${along} (${it.axis})`);
         assert(Math.abs(along / p.heavy - Math.round(along / p.heavy)) < 1e-6, tag + ': on a heavy line: ' + along);
         assert(Number(it.text) !== 0 && !/\.\d*0$|[a-z]/i.test(it.text), tag + ': shortest plain number, no zero, no unit: ' + it.text);
       }
@@ -72,9 +74,10 @@ await (async () => {
     const pan = await evalJs(`__probe('${SS}', 1200, 5000, 3000)`);
     checkLabels(pan, 1, 'ss mm panned');
     assert(pan.items.some((i) => i.axis === 'x' && i.at[0] > 4000), 'X labels follow the pan');
-    // the Y numbers are the app's world y (svg y, down positive): a label below the origin is positive
+    // TASK 534: positive Y points UP: a Y number ABOVE the origin (smaller world y on screen) is positive, below is negative
     const ypos = (await evalJs(`__probe('${SS}', 1200)`)).items.filter((i) => i.axis === 'y');
-    assert(ypos.length && ypos.every((i) => Math.sign(Number(i.text)) === Math.sign(i.at[1])), 'Y numbers = world y');
+    assert(ypos.some((i) => i.at[1] < 0) && ypos.some((i) => i.at[1] > 0), 'Y numbers on both sides of the origin');
+    assert(ypos.every((i) => Math.sign(Number(i.text)) === -Math.sign(i.at[1])), 'Y numbers = user y (up positive)');
     // GRID_MODE off removes them; back on restores
     await setS('GRID_MODE', 'off');
     assert.strictEqual((await evalJs(`__probe('${SS}', 1200)`)).has, false, 'no labels with the grid off');
@@ -108,6 +111,8 @@ await (async () => {
     const sh = await evalJs(`__probe('#design-canvas', 200)`);
     checkLabels(sh, 25.4, 'shaper in');
     assert(Math.abs(sh.heavy - 25.4) < 1e-9, 'Shaper (inch file) gets the inch grid');
+    const shY = sh.items.filter((i) => i.axis === 'y');
+    assert(shY.some((i) => i.at[1] < 0) && shY.every((i) => Math.sign(Number(i.text)) === -Math.sign(i.at[1])), 'Shaper Design: Y numbers above the origin are positive');
     await shot('shaper-design-200.png');
 
     // ---- hosts that do not use the shared grid ----

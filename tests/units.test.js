@@ -1,4 +1,4 @@
-import { parse, format, BASE, UNITS } from '#core/units.js';
+import { parse, format, BASE, UNITS, worldToUserY, userToWorldY } from '#core/units.js';
 
 (async () => {
   const assert = (c, m) => { if (!c) throw new Error(m || 'Assertion failed'); };
@@ -51,6 +51,11 @@ import { parse, format, BASE, UNITS } from '#core/units.js';
   // ── round-trip (same unit, display precision) ──
   assert(parse(format(5, 'mm'), 'mm') === 5, 'round-trip 5mm');
   assert(close(parse(format(127, 'in'), 'in'), 127, 0.1), 'round-trip 127mm via inch display');
+
+  // ── TASK 534: the one Y-up display seam (world y grows down the screen; the user's y grows up) ──
+  assert(worldToUserY(100) === -100 && worldToUserY(-100) === 100, 'worldToUserY negates');
+  assert(Object.is(worldToUserY(0), 0) && Object.is(userToWorldY(0), 0), 'zero stays +0 (no "-0")');
+  for (const y of [0, 1.5, -37.25, 1e6]) assert(userToWorldY(worldToUserY(y)) === y && worldToUserY(userToWorldY(y)) === y, 'round-trip ' + y);
 
   console.log('units tests passed ✅');
 })().catch((e) => { console.error('units tests failed ❌', e); process.exit(1); });

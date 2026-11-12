@@ -18,12 +18,12 @@ export const DRIVE_RETRY_BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
 export function createDriveWriter({
   write, keepLocal, dropLocal, describeError = (e) => (e && e.message) || String(e), onStatus = () => {}, onWritten = () => {},
   now = () => Date.now(), setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (t) => clearTimeout(t),
-  intervalMs = DRIVE_WRITE_INTERVAL_MS, backoffMs = DRIVE_RETRY_BACKOFF_MS,
+  intervalMs = DRIVE_WRITE_INTERVAL_MS, backoffMs = DRIVE_RETRY_BACKOFF_MS, canWrite = () => true,
 } = {}) {
   const entries = new Map();
   const ent = (id) => {
     let e = entries.get(id);
-    if (!e) { e = { pending: null, running: null, nextAt: 0, failures: 0, timer: null, permanent: false, confirmedAt: null, status: { state: 'saved', at: null, reason: null } }; entries.set(id, e); }
+    if (!e) { e = { pending: null, running: null, nextAt: 0, failures: 0, timer: null, permanent: false, cancelled: false, confirmedAt: null, status: { state: 'saved', at: null, reason: null } }; entries.set(id, e); }
     return e;
   };
   const setStatus = (id, e, status) => {
@@ -34,8 +34,12 @@ export function createDriveWriter({
 
   const isPermanent = (err) => !!(err && (err.permanent || err.status === 404 || err.status === 410));
   function arm(id, e) {
-    if (e.running || !e.pending || e.permanent) return;
+    if (e.cancelled || e.running || !e.pending || e.permanent) return;
     clearTimer(e.timer); e.timer = null;
+    if (!canWrite()) { // signed out: no attempt, no retry timer (resume() or flush() go on from here); the status says why
+      setStatus(id, e, { state: 'failed', at: e.status.at, reason: describeError(new Error('cloud-auth')) });
+      return;
+    }
     const wait = e.nextAt - now();
     if (wait <= 0) { attempt(id, e); return; }
     e.timer = setTimer(() => { e.timer = null; attempt(id, e); }, wait);
@@ -44,21 +48,26 @@ export function createDriveWriter({
   function attempt(id, e) {
     if (e.running || !e.pending) return e.running || Promise.resolve();
     clearTimer(e.timer); e.timer = null;
-    const payload = e.pending; e.pending = null;
+    const payload = e.pending; e.pending = null; e.inflight = payload;
     setStatus(id, e, { state: 'saving', at: e.status.at, reason: null });
     e.running = (async () => {
       try {
-        await write(id, payload);
+        await write(id, payload, () => e.cancelled);
+        if (e.cancelled) return; // the design was deleted meanwhile: nothing more to do for it
         e.failures = 0; e.nextAt = now() + intervalMs; e.confirmedAt = payload.updatedAt;
-        if (!e.pending) await dropLocal(id);
+        if (!e.pending) {
+          await dropLocal(id);
+          if (e.pending && !e.cancelled) await keepLocal(id, e.pending); // a newer edit arrived during the drop: its local copy must survive it
+        }
         setStatus(id, e, { state: e.pending ? 'saving' : 'saved', at: now(), reason: null });
         onWritten(id);
       } catch (err) {
+        if (e.cancelled) return; // deleted while the write was in flight: never retried, never brought back
         if (!e.pending) e.pending = payload; // a newer payload that arrived meanwhile supersedes it; otherwise this one is retried
         e.failures++; e.nextAt = now() + backoffMs[Math.min(e.failures, backoffMs.length) - 1];
         if (isPermanent(err)) e.permanent = true;
         setStatus(id, e, { state: 'failed', at: e.status.at, reason: describeError(err) });
-      } finally { e.running = null; }
+      } finally { e.running = null; e.inflight = null; }
       arm(id, e);
     })();
     return e.running;
@@ -72,8 +81,13 @@ export function createDriveWriter({
       e.pending = payload;
       if (e.status.state !== 'failed') setStatus(id, e, { state: 'saving', at: e.status.at, reason: null });
       await keepLocal(id, payload);
+      if (e.cancelled) { await dropLocal(id); return; } // deleted while the local copy was being kept
       arm(id, e);
     },
+    /** The newest payload not yet confirmed on Drive (queued or in flight), or null. */
+    unconfirmed(id) { const e = entries.get(id); return (e && (e.pending || e.inflight)) || null; },
+    /** Sign-in state changed (signed in again): go on with every held write at once. */
+    resume() { for (const [id, e] of entries) { if (e.pending && !e.permanent) { e.nextAt = 0; arm(id, e); } } },
     /** Write now (all designs, or just `id`). */
     async flush(id) {
       const ids = id ? [id] : [...entries.keys()];
@@ -86,7 +100,7 @@ export function createDriveWriter({
     /** A design was loaded / created: when it was last known saved on Drive (shown in the status line). */
     seed(id, at) { const e = ent(id); e.permanent = false; if (!e.pending && !e.running) e.status = { state: 'saved', at, reason: null }; },
     /** The design is gone (deleted): never write it again. */
-    cancel(id) { const e = entries.get(id); if (!e) return; clearTimer(e.timer); entries.delete(id); },
+    cancel(id) { const e = entries.get(id); if (!e) return; e.cancelled = true; e.pending = null; clearTimer(e.timer); e.timer = null; entries.delete(id); },
     status(id) { const e = entries.get(id); return e ? { ...e.status } : { state: 'saved', at: null, reason: null }; },
     hasPending(id) { const e = entries.get(id); return !!(e && (e.pending || e.running)); },
   };

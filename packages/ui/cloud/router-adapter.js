@@ -24,7 +24,7 @@ const localId = (kind) => (kind === 'p' ? 'p' : 'd') + '_' + Date.now().toString
 
 /** createRouterAdapter({ local, getRemote, preferDrive }): getRemote() returns the Drive adapter (created lazily: nothing is built or called
  *  until Drive is used). preferDrive() -> boolean: should NEW projects / designs be created on Drive (signed in + the setting on)? */
-export function createRouterAdapter({ local, getRemote, preferDrive = () => false, signedIn = () => false }) {
+export function createRouterAdapter({ local, getRemote, preferDrive = () => false, signedIn = () => false, subscribeSignIn = () => () => {} }) {
   let remoteError = null;
   let driveDefault = null; // the IN-FLIGHT lookup of the Drive default project (concurrent callers share it; never cached after: the account may change)
   const driveEnabled = async () => !!(await local.getMeta(DRIVE_ENABLED)) || preferDrive();
@@ -155,6 +155,8 @@ export function createRouterAdapter({ local, getRemote, preferDrive = () => fals
       driveWanted: () => preferDrive(),
       /** Is an account signed in (whatever the default setting says)? Unconfirmed local copies are only sent while it is. */
       signedIn: () => signedIn(),
+      /** fn() runs when the sign-in state changes (the store then resumes the Drive writes it held while signed out). */
+      onSignInChange: (fn) => subscribeSignIn(fn),
       /** "Save to Google Drive": put ONE design into the Drive project "My Designs" (created when absent), WITHOUT moving its local project.
        *  A local design keeps ONE Drive copy (remembered per design, updated on a repeat); one that already lives on Drive needs no copy.
        *  `design` = the full record. Returns { fileId }. A snapshot: later autosaves of a local design do not follow it. */

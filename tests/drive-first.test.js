@@ -44,7 +44,7 @@ const accountFor = (drive) => ({
 /** One DEVICE: its own local adapter + router + store over a (shared) fake Drive. */
 function device(drive, { local = createMemoryAdapter(), prefer = () => state.signedIn && state.prefer } = {}) {
   const remote = createDriveAdapter({ account: accountFor(drive), meta: local });
-  const router = createRouterAdapter({ local, getRemote: () => remote, preferDrive: prefer });
+  const router = createRouterAdapter({ local, getRemote: () => remote, preferDrive: prefer, signedIn: () => state.signedIn });
   const store = createProjectStore({ adapter: router, now: () => clock, channel: null, setTimer, clearTimer });
   return { store, local, router, drive };
 }

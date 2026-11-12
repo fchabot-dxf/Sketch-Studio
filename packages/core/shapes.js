@@ -222,6 +222,7 @@ export function clampPolygonSides(n) {
 }
 
 let polySeq = 0;
+let arcSeq = 0;
 /**
  * Create a REGULAR polygon from a centre joint and a first corner joint (TASK 483). Plain geometry, no parametric shape kind:
  *   - N `line` shapes between N corner joints that are SHARED by neighbouring sides (the first corner is `vertexId`);
@@ -271,9 +272,10 @@ export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstr
  * Arcs store 3 joints but interpret them based on subType.
  */
 export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=false) {
-    const groupId = `arc_${Date.now()}`;
+    const seq = Date.now() + '_' + (++arcSeq);   // digits first, like makePolygon: unique even within one millisecond
+    const groupId = `arc_${seq}`;
     const shape = {
-        id: `s_arc_${Date.now()}`,
+        id: `s_arc_${seq}`,
         type: 'arc',
         subType,
         joints: [p1, p2, p3],

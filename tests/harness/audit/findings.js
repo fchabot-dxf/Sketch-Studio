@@ -49,15 +49,29 @@ export const FINDINGS = [
     id: 'F4', severity: 'MEDIUM', title: 'angle / perpendicular between two lines that SHARE a joint (fillet rims, polygon corners, imports, welds): angle is a no-op, perpendicular is refused',
     diagnosis: "engine.js dedupes the shape joints ([...new Set]) for angle/perpendicular/parallel, so a shared corner leaves 3 joints where definitions.js reads 4 (joints[3] undefined -> NaN row). Only 'equal' is exempt from the dedupe.",
     run() {
-      const S = L.newSketch();
-      const A = L.point(S, 0, 0), B = L.point(S, 100, 0), C = L.point(S, 40, 70);
-      const l1 = L.line(S, A, B), l2 = L.line(S, A, C);
-      S.engine.solve(500);
-      const n0 = L.nullity(S);
-      const ang = L.applyStep(S, { type: 'angle', shapes: [l1, l2], value: 60 }, {});
-      const deg = Math.atan2(J(S, C).y, J(S, C).x) * 180 / Math.PI;
-      const perp = L.applyStep(S, { type: 'perpendicular', shapes: [l1, l2] }, {});
-      return { ok: Math.abs(deg - 60) < 1e-3 && perp.accepted, observed: `angle 60 typed: nullity ${n0} -> ${ang.nullity} (counted as a constraint) but AC is at ${deg.toFixed(2)} deg (${ang.notes.join(';') || 'no note'}); perpendicular accepted=${perp.accepted} errors=${perp.errors.join(',')}` };
+      const tri = () => {
+        const S = L.newSketch();
+        const A = L.point(S, 0, 0), B = L.point(S, 100, 0), C = L.point(S, 40, 70);
+        const l1 = L.line(S, A, B), l2 = L.line(S, A, C);
+        S.engine.solve(500);
+        return { S, l1, l2 };
+      };
+      // (1) angle dimension typed on two lines sharing corner A: the lines end up at the typed angle
+      const a = tri(); const n0 = L.nullity(a.S);
+      const ang = L.applyStep(a.S, { type: 'angle', shapes: [a.l1, a.l2], value: 60 }, {});
+      const got = L.measure(a.S, { type: 'angle', shapes: [a.l1, a.l2] });
+      // (2) perpendicular on the shared corner: accepted, solved, the lines meet at 90 degrees
+      const p = tri();
+      const perp = L.applyStep(p.S, { type: 'perpendicular', shapes: [p.l1, p.l2] }, {});
+      const pm = L.measure(p.S, { type: 'angle', shapes: [p.l1, p.l2] });
+      // (3) a regular hexagon (makePolygon: adjacent sides share a corner): an angle dimension between two adjacent sides is solved
+      const h = L.newSketch(); const c = L.point(h, 0, 0), v = L.point(h, 50, 0);
+      const hex = L.polygon(h, c, v, 6); h.engine.solve(500);
+      const sides = hex.shapes.filter(s => !s.isConstruction).map(s => s.id);
+      const hv = L.measure(h, { type: 'angle', shapes: [sides[0], sides[1]] });
+      const hang = L.applyStep(h, { type: 'angle', shapes: [sides[0], sides[1]], value: hv, direct: true }, {});
+      const ok = Math.abs(got - 60) < 1e-3 && perp.accepted && Math.abs(pm - 90) < 1e-2 && perp.converged && hang.accepted && hang.converged && hang.residual < 1e-6 && !hang.hasNaN;
+      return { ok, observed: `angle 60 typed: nullity ${n0} -> ${ang.nullity}, measured ${got.toFixed(3)} deg (${ang.notes.join(';') || 'no note'}); perpendicular accepted=${perp.accepted} errors=${perp.errors.join(',')} measured ${pm.toFixed(3)} deg; hexagon adjacent-side angle ${hv.toFixed(3)}: accepted=${hang.accepted} converged=${hang.converged} residual=${hang.residual.toExponential(1)}` };
     },
   },
   {
@@ -91,14 +105,14 @@ export const FINDINGS = [
     id: 'F7', severity: 'LOW', title: 'makeArc names a shape s_arc_<Date.now()>: two arcs made in the same millisecond share an id',
     diagnosis: 'shapes.js makeArc: id = `s_arc_${Date.now()}` (groupId likewise); applyFillet and any scripted/import path that makes two arcs in one tick collides (planegcs refuses the duplicate; the app silently aliases them).',
     run() {
-      const joints = new Map(); let n = 0; const ids = new Set(); let dup = false;
-      for (let i = 0; i < 200 && !dup; i++) {
+      const joints = new Map(); let n = 0; const ids = new Set(), groups = new Set(); let dup = false;
+      for (let i = 0; i < 1000 && !dup; i++) {
         const c = 'c' + n++, a = 'a' + n++, b = 'b' + n++;
         joints.set(c, { x: 0, y: 0 }); joints.set(a, { x: 1, y: 0 }); joints.set(b, { x: 0, y: 1 });
-        const id = makeArc(joints, c, a, b).shapes[0].id;
-        if (ids.has(id)) dup = true; ids.add(id);
+        const sh = makeArc(joints, c, a, b).shapes[0];
+        if (ids.has(sh.id) || groups.has(sh.groupId)) dup = true; ids.add(sh.id); groups.add(sh.groupId);
       }
-      return { ok: !dup, observed: dup ? 'two makeArc calls produced the same shape id' : 'no duplicate in 200 arcs' };
+      return { ok: !dup && ids.size === 1000 && groups.size === 1000, observed: dup ? 'two makeArc calls produced the same shape id or groupId' : `${ids.size} distinct ids and ${groups.size} distinct groupIds in 1000 arcs` };
     },
   },
   {

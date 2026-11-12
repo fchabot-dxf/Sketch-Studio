@@ -19,7 +19,6 @@ export const RECIPE = [
   { label: 'AB length 130', type: 'distance', joints: ['A', 'B'], value: 130, dimMode: 'horizontal' },
   { label: 'chamfer BC across 10', type: 'distance', joints: ['B', 'C'], value: 10, dimMode: 'horizontal' },
   { label: 'chamfer BC up 10', type: 'distance', joints: ['B', 'C'], value: 10, dimMode: 'vertical' },
-  { label: 'chamfer BC up 10 via A-C (workaround)', type: 'distance', joints: ['A', 'C'], value: 10, dimMode: 'vertical', why: 'the step above was demoted to a reference (BUG-1)' },
   { label: 'CD length 30', type: 'distance', joints: ['C', 'D'], value: 30, dimMode: 'vertical' },
   { label: 'DE length 100', type: 'distance', joints: ['E', 'D'], value: 100, dimMode: 'horizontal' },
   { label: 'EF length 100', type: 'distance', joints: ['E', 'F'], value: 100, dimMode: 'vertical' },
@@ -38,11 +37,9 @@ export const RECIPE = [
   { label: 'slot length CL-CR 50', type: 'distance', joints: ['CL', 'CR'], value: 50, dimMode: 'horizontal' },
   { label: 'slot position: CL x = 60 from A', type: 'distance', joints: [origin, 'CL'], value: 60, dimMode: 'horizontal' },
   { label: 'slot position: CL y = 20 from A', type: 'distance', joints: [origin, 'CL'], value: 20, dimMode: 'vertical' },
-  { label: 'slot y = 20 via CL-E (workaround)', type: 'distance', joints: ['CL', 'E'], value: 20, dimMode: 'vertical', why: 'the step above was demoted to a reference (BUG-1)' },
   // -- hole
   { label: 'hole x = 20 from A', type: 'distance', joints: [origin, 'hc'], value: 20, dimMode: 'horizontal' },
   { label: 'hole y = 90 from A', type: 'distance', joints: [origin, 'hc'], value: 90, dimMode: 'vertical' },
-  { label: 'hole y = 50 above F (workaround)', type: 'distance', joints: ['hc', 'F'], value: 50, dimMode: 'vertical', why: 'the step above was demoted to a reference (BUG-1)' },
   { label: 'hole radius 8', type: 'distance', shape: 'hole', isRadius: true, value: 8 },
 ];
 

@@ -101,6 +101,22 @@ for (const [label, c, uses] of RADIUS_CASES) {
   for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius/rim column is ${col[id]} (expected it in the row)`);
   checked++;
 }
+// The angle row's measured SECTOR (task 553, #core/angle-sector.js): every ray / turn combination, values past 180, and poses on both sides
+// of 90 degrees from the target (where the row is |u||v| sin(theta - alpha), and beyond, where it continues as 2 sgn |u||v| - S so it pulls
+// back to the target, not to its modulo-180 twin). L1 runs at 16.7 degrees, L2 at 29.7: theta = 13.0.
+const ANGLE_SECTOR_CASES = [];
+for (const ray1 of [1, -1]) for (const ray2 of [1, -1]) for (const turn of [1, -1]) for (const value of [30, 100, 190, 270, 350]) {
+  ANGLE_SECTOR_CASES.push([`angle ${value}, sector ${ray1}/${ray2}/${turn}`, { type: 'angle', shapes: ['L1', 'L2'], value, sector: { ray1, ray2, turn } }]);
+}
+let farRows = 0;
+for (const [label, c] of ANGLE_SECTOR_CASES) {
+  const alpha = c.sector.turn * c.value + (c.sector.ray1 !== c.sector.ray2 ? 180 : 0), off = Math.abs((((13.0 - alpha) % 360) + 540) % 360 - 180);
+  if (off > 90) farRows++;
+  assert.ok(off > 1 && off < 179, `${label}: keep the case off the target and off its opposite (${off})`);
+  guard(label + ` (${off.toFixed(0)} deg from the target)`, c);
+  checked++;
+}
+assert.ok(farRows >= 10, `the far side of the angle row is covered (${farRows} cases)`);
 // A row that names the SAME joint more than once (task 533, F6): two lines sharing a corner in every way, the same line twice, a point
 // that is an end of its own line, a line ending on a circle / arc centre, arcs sharing a rim or a centre, a two-joint row given one
 // joint twice. Each occurrence adds its own partial (definitions.js addGrad); the old rows ASSIGNED, so the last write overwrote the
@@ -112,7 +128,9 @@ const SHARE = { 'L2 starts at L1 end (b=c)': ['b', 'd'], 'L2 ends at L1 end (b=d
 const TWO_LINE_ROWS = [
   ['parallel', { type: 'parallel' }], ['perpendicular', { type: 'perpendicular' }],
   ['perpendicular branch +1', { type: 'perpendicular', branch: 1 }], ['perpendicular branch -1', { type: 'perpendicular', branch: -1 }],
-  ['angle 90', { type: 'angle', value: 90 }], ['angle 30', { type: 'angle', value: 30 }], ['equal', { type: 'equal' }],
+  ['angle 90', { type: 'angle', value: 90 }], ['angle 30', { type: 'angle', value: 30 }],
+  ['angle 200', { type: 'angle', value: 200 }], ['angle 300 clockwise to the opposite ray', { type: 'angle', value: 300, sector: { ray1: 1, ray2: -1, turn: -1 } }],
+  ['equal', { type: 'equal' }],
   ['collinear', { type: 'collinear' }], ['distance line-line', { type: 'distance', value: 4 }],
 ];
 const SHARED_CASES = [];

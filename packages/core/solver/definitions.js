@@ -1,3 +1,5 @@
+import { angleSectorOf } from '../angle-sector.js';
+
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
 // unknowns (engine.js hasRadiusUnknown).
@@ -33,7 +35,24 @@ const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
   }
 };
 
-const angleSign = (params) => (params.supplement === true ? -1 : 1);
+// THE angle row (task 553): the measured SECTOR (#core/angle-sector.js: rays of line 1 and line 2 + the way it turns) holds the CCW angle
+// alpha from u (line 1's direction) to v (line 2's) at  turn * value + (ray1 != ray2 ? 180 : 0)  modulo 360. With k = ray1 * ray2 = +-1:
+//   S = |u||v| sin(theta - alpha) = k (cross cos t - turn dot sin t),   C = |u||v| cos(theta - alpha) = k (dot cos t + turn cross sin t)
+// (t = value in radians; written with cos t / sin t of the VALUE so a sector-less or task-543 row is the same floating-point row as before,
+// up to its sign). Where C >= 0 (within 90 degrees of the target) the residual is S: exactly the row of every build before this one, so a
+// solve near the answer is unchanged. Where C < 0 that row would pull to the OPPOSITE ray (theta = alpha + 180, the modulo-180 twin); the
+// residual continues monotonically instead,  r = 2 sgn(S) |u||v| - S  (|r| grows from |u||v| at 90 degrees to 2|u||v| at 180), so the only
+// zero is theta == alpha: a 190 degree dimension is not satisfied by the 10 or 170 degree pose. Continuous (C1) at C = 0; it jumps only at
+// the exactly opposite pose, which is no solution either way.
+const angleRow = (params, ux, uy, vx, vy) => {
+  const { ray1, ray2, turn } = angleSectorOf(params);
+  const k = ray1 * ray2;
+  const t = ((Number(params.value) || 0) * Math.PI) / 180;
+  const ct = Math.cos(t), st = turn * Math.sin(t);
+  const cross = ux * vy - uy * vx, dot = ux * vx + uy * vy;
+  const S = k * (cross * ct - dot * st), C = k * (dot * ct + cross * st);
+  return { k, ct, st, S, C, far: C < 0, sgn: S < 0 ? -1 : 1, lu: Math.hypot(ux, uy), lv: Math.hypot(vx, vy) };
+};
 
 export const Definitions = {
   // Distance constraint:
@@ -537,16 +556,12 @@ export const Definitions = {
     }
   },
 
-  // TASK 543: params.supplement === true measures the SUPPLEMENTARY sector (180 - theta, theta = the CCW angle u -> v the pair is
-  // stored with): the sign of sin(t) flips, so the row is zero iff theta == -t (mod 180) instead of theta == t. Absent = unchanged.
-  // Angle: enforce the angle between two line segments equals params.value (degrees).
+  // Angle: the angle dimension between two line segments, value in degrees, in its measured sector (angleRow above, task 553).
   //
-  // Lines are direction-symmetric (flipping a line by 180° is geometrically the
-  // same line), so we pick a residual that's invariant under that flip:
-  //   r = cross(u, v) · cos(t) − dot(u, v) · sin(t)     where t = value · π/180
-  // Zero iff the angle from u to v is t mod π. Special cases:
-  //   t = 0°  → r = cross(u, v)         (same as parallel)
-  //   t = 90° → r = −dot(u, v)          (same as perpendicular, no branch lock)
+  // Near the answer the row is r = k (cross(u, v) · cos(t) − turn · dot(u, v) · sin(t)) = |u||v| sin(theta − alpha), t = value · π/180.
+  // Special cases there:
+  //   t = 0°  → r = k cross(u, v)         (same as parallel)
+  //   t = 90° → r = −k turn dot(u, v)     (same as perpendicular, no branch lock)
   // Un-normalized — the residual scales with |u|·|v|, but the Jacobian is exact.
   angle: {
     rows: 1,
@@ -555,11 +570,8 @@ export const Definitions = {
       const bx = positions[params.joints[1]*2], by = positions[params.joints[1]*2+1];
       const cx = positions[params.joints[2]*2], cy = positions[params.joints[2]*2+1];
       const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
-      const ux = bx - ax, uy = by - ay;
-      const vx = dx - cx, vy = dy - cy;
-      const t = ((Number(params.value) || 0) * Math.PI) / 180;
-      const ct = Math.cos(t), st = angleSign(params) * Math.sin(t);
-      return (ux * vy - uy * vx) * ct - (ux * vx + uy * vy) * st;
+      const g = angleRow(params, bx - ax, by - ay, dx - cx, dy - cy);
+      return g.far ? 2 * g.sgn * g.lu * g.lv - g.S : g.S;
     },
     computeJacobian: (params, positions, outRow) => {
       const aI = params.joints[0], bI = params.joints[1], cI = params.joints[2], dI = params.joints[3];
@@ -569,15 +581,23 @@ export const Definitions = {
       const dx = positions[dI*2], dy = positions[dI*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      const t = ((Number(params.value) || 0) * Math.PI) / 180;
-      const ct = Math.cos(t), st = angleSign(params) * Math.sin(t);
-      // r = cross·ct − dot·st
+      const g = angleRow(params, ux, uy, vx, vy);
+      const { k, ct, st } = g;
+      // S = k (cross·ct − dot·st)
       // ∂cross/∂(ux,uy) = (vy, −vx); ∂dot/∂(ux,uy) = (vx, vy)
       // ∂cross/∂(vx,vy) = (−uy, ux); ∂dot/∂(vx,vy) = (ux, uy)
-      const drdux =  vy * ct - vx * st;
-      const drduy = -vx * ct - vy * st;
-      const drdvx = -uy * ct - ux * st;
-      const drdvy =  ux * ct - uy * st;
+      let drdux = k * ( vy * ct - vx * st);
+      let drduy = k * (-vx * ct - vy * st);
+      let drdvx = k * (-uy * ct - ux * st);
+      let drdvy = k * ( ux * ct - uy * st);
+      if (g.far) {
+        // r = 2 sgn(S) |u||v| − S:  ∂(|u||v|)/∂u = |v| u/|u|,  ∂(|u||v|)/∂v = |u| v/|v|
+        const lu = g.lu || 1e-12, lv = g.lv || 1e-12, w = 2 * g.sgn;
+        drdux = w * lv * ux / lu - drdux;
+        drduy = w * lv * uy / lu - drduy;
+        drdvx = w * lu * vx / lv - drdvx;
+        drdvy = w * lu * vy / lv - drdvy;
+      }
       addGrad(outRow, aI, -drdux, -drduy);
       addGrad(outRow, bI,  drdux,  drduy);
       addGrad(outRow, cI, -drdvx, -drdvy);

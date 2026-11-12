@@ -1,11 +1,31 @@
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
-// unknowns (engine.js hasRadiusUnknown). A row reads a circle's radius as positions[params.radiusAt] (or radiiAt[i]) and writes its
-// derivative to outRow[params.radiusAt]; without radiusAt the radius is the constant params.radius (an arc: live via its rim joints).
+// unknowns (engine.js hasRadiusUnknown).
+//
+// THE radius operand of a row (one formulation for point-on-circle and every tangent form): a CIRCLE's radius is its unknown,
+// positions[at] (params.radiusAt, or radiiAt[i]); an ARC's radius is LIVE, |rim - centre| measured from its joints (params.rimJoint,
+// or rimJoints[i], with the row's centre joint), so the rim and centre columns carry its derivative; otherwise the constant
+// params.radius (or radii[i]).
 
 function idx(positions, jointIndex) { return jointIndex * 2; }
-// The radius a row uses: the circle's unknown when `at` is a dense index, else the constant.
-const radiusValue = (positions, at, constant) => (typeof at === 'number' ? positions[at] : (Number(constant) || 0));
+// The radius a row uses: the circle's unknown, the arc's |rim - centre|, else the constant.
+const radiusValue = (positions, at, constant, rim, centre) => {
+  if (typeof at === 'number') return positions[at];
+  if (typeof rim === 'number' && typeof centre === 'number') {
+    return Math.hypot(positions[rim*2] - positions[centre*2], positions[rim*2+1] - positions[centre*2+1]);
+  }
+  return Number(constant) || 0;
+};
+// ACCUMULATE coef * d(radius)/d(variable) into outRow for the same operand (a constant radius has no columns).
+const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
+  if (typeof at === 'number') { outRow[at] += coef; return; }
+  if (typeof rim === 'number' && typeof centre === 'number') {
+    const rx = positions[rim*2] - positions[centre*2], ry = positions[rim*2+1] - positions[centre*2+1];
+    const rd = Math.hypot(rx, ry) || 1e-12;
+    outRow[rim*2 + 0] += coef * rx / rd; outRow[rim*2 + 1] += coef * ry / rd;
+    outRow[centre*2 + 0] -= coef * rx / rd; outRow[centre*2 + 1] -= coef * ry / rd;
+  }
+};
 
 export const Definitions = {
   // Distance constraint:
@@ -91,7 +111,7 @@ export const Definitions = {
       if (params.onCircle) {
         const dx = positions[params.joints[0]*2] - positions[params.joints[1]*2];
         const dy = positions[params.joints[0]*2+1] - positions[params.joints[1]*2+1];
-        return Math.hypot(dx, dy) - radiusValue(positions, params.radiusAt, params.radius);
+        return Math.hypot(dx, dy) - radiusValue(positions, params.radiusAt, params.radius, params.rimJoint, params.joints[1]);
       }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
       const px = positions[pi*2], py = positions[pi*2+1];
@@ -112,12 +132,7 @@ export const Definitions = {
         const d = Math.hypot(dx, dy) || 1e-12;
         outRow[pi*2 + 0] = dx / d; outRow[pi*2 + 1] = dy / d;
         outRow[ci*2 + 0] = -dx / d; outRow[ci*2 + 1] = -dy / d;
-        if (typeof params.radiusAt === 'number') outRow[params.radiusAt] = -1;
-        if (typeof params.rimJoint === 'number') {
-          const ri = params.rimJoint, rx = positions[ri*2] - positions[ci*2], ry = positions[ri*2+1] - positions[ci*2+1], rd = Math.hypot(rx, ry) || 1e-12;
-          outRow[ri*2 + 0] = -rx / rd; outRow[ri*2 + 1] = -ry / rd;
-          outRow[ci*2 + 0] += rx / rd; outRow[ci*2 + 1] += ry / rd;
-        }
+        addRadiusDerivative(outRow, positions, -1, params.radiusAt, params.rimJoint, ci);
         return;
       }
       const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
@@ -373,9 +388,9 @@ export const Definitions = {
         const x2 = positions[i2*2], y2 = positions[i2*2+1];
         const dx = x2 - x1, dy = y2 - y1;
         const dist = Math.hypot(dx, dy) || 1e-12;
-        const at = params.radiiAt || [];
-        const r1 = radiusValue(positions, at[0], params.radii[0]);
-        const r2 = radiusValue(positions, at[1], params.radii[1]);
+        const at = params.radiiAt || [], rim = params.rimJoints || [];
+        const r1 = radiusValue(positions, at[0], params.radii[0], rim[0], i1);
+        const r2 = radiusValue(positions, at[1], params.radii[1], rim[1], i2);
         const target = (params.branch === 'internal') ? Math.abs(r1 - r2) : (r1 + r2);
         return dist - target;
       }
@@ -397,7 +412,7 @@ export const Definitions = {
         const px = params.sharedEnd === 'a' ? ax : bx, py = params.sharedEnd === 'a' ? ay : by;
         return ((px - cx) * ux + (py - cy) * uy) / lu;
       }
-      const r = radiusValue(positions, params.radiusAt, params.radius);
+      const r = radiusValue(positions, params.radiusAt, params.radius, params.rimJoint, cI);
       return Math.abs(cross / lu) - r;
     },
     computeJacobian: (params, positions, outRow) => {
@@ -410,14 +425,12 @@ export const Definitions = {
         const r = Math.hypot(dx, dy) || 1e-12;
         outRow[i1*2 + 0] = -dx / r; outRow[i1*2 + 1] = -dy / r;
         outRow[i2*2 + 0] =  dx / r; outRow[i2*2 + 1] =  dy / r;
-        // a circle operand's radius unknown: target r1 + r2 (external) or |r1 - r2| (internal)
-        const at = params.radiiAt || [];
-        if (typeof at[0] === 'number' || typeof at[1] === 'number') {
-          const r1 = radiusValue(positions, at[0], params.radii[0]), r2 = radiusValue(positions, at[1], params.radii[1]);
-          const s = (params.branch === 'internal') ? (r1 - r2 >= 0 ? 1 : -1) : 0;
-          if (typeof at[0] === 'number') outRow[at[0]] += (params.branch === 'internal') ? -s : -1;
-          if (typeof at[1] === 'number') outRow[at[1]] += (params.branch === 'internal') ? s : -1;
-        }
+        // each operand's radius (a circle's unknown or an arc's |rim - centre|): target r1 + r2 (external) or |r1 - r2| (internal)
+        const at = params.radiiAt || [], rim = params.rimJoints || [];
+        const r1 = radiusValue(positions, at[0], params.radii[0], rim[0], i1), r2 = radiusValue(positions, at[1], params.radii[1], rim[1], i2);
+        const internal = params.branch === 'internal', s = r1 - r2 >= 0 ? 1 : -1;
+        addRadiusDerivative(outRow, positions, internal ? -s : -1, at[0], rim[0], i1);
+        addRadiusDerivative(outRow, positions, internal ? s : -1, at[1], rim[1], i2);
         return;
       }
 
@@ -464,7 +477,7 @@ export const Definitions = {
       outRow[aI*2 + 1] = sgn * ((ux - wx) / lu + cross * (uy / lu3));
       outRow[bI*2 + 0] = sgn * ((-wy) / lu + cross * (-ux / lu3));
       outRow[bI*2 + 1] = sgn * ((wx) / lu + cross * (-uy / lu3));
-      if (typeof params.radiusAt === 'number') outRow[params.radiusAt] = -1;
+      addRadiusDerivative(outRow, positions, -1, params.radiusAt, params.rimJoint, cI);
     }
   },
 

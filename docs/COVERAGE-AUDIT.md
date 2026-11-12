@@ -148,10 +148,10 @@ LEGEND  variants per cell in this order: sep shared locked dimmed
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
   nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP 
   CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP   
-  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  PPPP  PFPP  PPPP  nnnn  nnnn 
+  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn 
   OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP   
-  PPPP  PFPF  PPPP  nnnn  nnnn  PFPF  PPPF  nnnn  nnnn  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn 
-  N/A=108  NEW-6=6  PASS=66
+  PFPP  PPPP  PPPP  nnnn  nnnn  PFPP  PPPP  nnnn  nnnn  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn 
+  N/A=108  NEW-6=2  PASS=70
 === equal  [equal]  expected DOF removed (sep): 1/0
   LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF   
   PPPP  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn  nnnn  nnnn  PPPP  PPPP  PPPP  nnnn  nnnn  nnnn 
@@ -303,7 +303,7 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
 * Diagnosis: packages/core/constraints.js:275-283 createConstraint(ANGLE) builds {type, shapes, value, offset, glyphPos} and drops isDriven / driven / drivenReason (the distance and line-line branches carry them, :226-250). Undo restores constraints through addConstraintObject -> addConstraint -> createConstraint, so the reference becomes a driver and the DOF drops.
 * Proposed task: carry isDriven / driven / drivenReason in the ANGLE branch like the line-line distance does; test: a reference angle survives saveState + undo with the same nullity.
 
-### 6. NEW-6 (LOW): a feasible tangent between a circle and an arc (or two arcs) is refused when the arc radius has to change a lot; PlaneGCS solves it
+### 6. NEW-6 (LOW) [radius cells FIXED tasks 515 + 523]: a feasible tangent between a circle and an arc (or two arcs) is refused when the arc radius has to change a lot; PlaneGCS solves it
 
 * Verdict: BUG. Cells: 6 (e.g. tangent RA/shared, tangent OA/shared, tangent OA/dimmed, tangent AA/shared).
 * Repro (verbatim, `node scripts/coverage-audit.cjs`): `tangent circle/arc, centres dimensioned 151 apart: accepted=false errors=ERR-CSOLVE-01 oracleFeasible=true`
@@ -314,6 +314,20 @@ Each is pinned as a `KNOWN` entry in `tests/coverage-matrix.test.js`; the repro 
   doing it: the ARC side of the tangent rows (line-arc away from a shared rim, circle-arc, arc-arc) reads the arc radius as a constant taken from
   the joints at assembly, so its rim columns differ from finite differences by 0.98 (`.evidence/515/arc-tangent-probe.txt`, same on origin/main):
   a likely cause of the remaining NEW-6 cells; arcs were out of scope for 515.
+* Task 523: confirmed and fixed. Every tangent form with an arc read the arc radius as a constant (`line-arc {line,circle}: rows 1, max |J - fd| = 9.81e-1 at as.x`, the
+  same for circle-arc, arc-circle, arc-arc, both branches). definitions.js now has ONE radius operand (`radiusValue` / `addRadiusDerivative`: a circle's unknown, an
+  arc's live |rim - centre| through its first rim joint, or a constant) shared by point-on-circle and every tangent form, declared once in engine.js
+  (`_radiusOperand`); every arc tangent form now equals finite differences (max 2.5e-9, tests/jacobian-fd-guard.test.js). Cells 5 -> 3 in the test run
+  (`scripts/coverage-audit.cjs`: 4 -> 2): the dimmed cells (AA/dimmed, AF/dimmed, the repro) are accepted and the repro was deleted from matrix-findings.js.
+  The KNOWN entry stays for two other families (diagnosed, not fixed):
+  * tangent OO/shared: two concentric circles of equal radius (15). `ConstraintManager.lockTangentBranch` locks 'external' when the radii are equal ("Equal radii ->
+    tInt = 0 (concentric); always pick external"); external needs r1 + r2 = 0, reachable only by a collapse or a negative radius (refused). The internal branch is
+    already satisfied, which is what PlaneGCS finds.
+  * tangent AA/shared: arc Y is centred ON arc X's first rim (the shared variant merges Y's centre into X's joints[1]). |C1C2| = r1, so the nearest solution of
+    either branch is rY = 0 (Y collapses, refused by task 521's rule); the non-degenerate solution (internal, rY = 2 rX) is far from the pose.
+  * Run order: SA/shared and RA/shared (an arc centred on the end of a polygon / rect side) show as NEW-6 when the tangent row runs alone and PASS in the full
+    matrix. OUR answer is the same in both orders (refused, ERR-CSOLVE-01); only the PlaneGCS oracle verdict flips (oracleFeasible true alone, false in the
+    full run). The geometry (the line passes through the arc's centre) is infeasible without collapsing the arc.
 
 ### 7. NEW-8 (LOW): parallel between a polygon side and a LOCKED rect top converges slowly
 
@@ -342,6 +356,12 @@ Cell counts after the fixes (`node tests/coverage-matrix.test.js`): 3384 cells: 
 * NEW-5: the line-line value is `Math.abs(perpendicularDistance(...))`; the side is not stored (the solver row is |signed|, as before).
 * NEW-3: `ConstraintManager.placeForCreation` rotates the second-picked line 90 degrees counter-clockwise (pivot: a fixed or shared joint of that line, else its midpoint) when the start is EXACTLY parallel; `_sandboxVerify` starts from the same placed pose, so the check judges the real add. No branch is locked afterwards: the branched residual is stationary at 90 degrees (its Jacobian row is zero there and would hide the removed DOF).
 
+## Fixed in task 523 (NEW-6 radius cells: the arc side of the tangent rows)
+
+Cell counts (`node tests/coverage-matrix.test.js`): 3384 cells: **1788 PASS**, 1416 N/A, 163 not buildable, 12 FAIL caused by a round-1 finding (F4=11, F6=1), 5 FAIL NEW (NEW-6=3, NEW-9=2), 0 unexplained (before: PASS=1786, NEW-6=5). Properties: the S-curve's tangent rows now equal finite differences, its panel DOF equals the finite-difference nullity and its second arc radius dimension is no longer demoted (3 N-F7 KNOWN entries deleted; the S-curve still has nullity 1 and does not return from a 2% jitter: the double root of N-F7 remains). Who moves (docs/FUSION-COMPARISON.md "After task 523"): an arc's radius now takes part in the least-change solve, so a tangent to an arc may resize it where Fusion keeps it; KNOWN as placement, task 525.
+
+F6 measured (not fixed): a `parallel` between two lines that share a corner joint (the F6 rect-side cell). Probe (L1 a-b, L2 b-c): `shared corner (L2 starts at L1 end b): max |J - fd| = 2.90e+1 at b.x` (b.x analytic 1.000, finite difference 30.000), against `separate (L2 = c-d): max |J - fd| = 4.11e-8`. Cause: `Definitions.parallel.computeJacobian` ASSIGNS the four joints' columns (`outRow[bI*2] = vy`, then `outRow[cI*2] = uy`), so when c === b the v part overwrites the u part instead of adding to it: the same overwrite bug turn 404 fixed for `equal`. Not the arc-radius family (that one was a missing dependency). `perpendicular` and `angle` assign their columns the same way, a likely cause of the F4 shared-joint cells (not measured). tests/jacobian-fd-guard.test.js does not catch it: its cases use distinct joints.
+
 ## Observations that are not failures
 
 * **O3 silent redundancy**: a parallel between two rect tops (both already horizontal), an equal between two fillet arcs (both already R-dimensioned) are accepted with no
@@ -350,7 +370,7 @@ Cell counts after the fixes (`node tests/coverage-matrix.test.js`): 3384 cells: 
 * `toggleDriving` (`dimension-seams.js:109-122`) demotes the other driver on a pair by joint pair only (no `dimMode`), the same family as F1; no matrix cell exercises it (the driving / reference toggle is a deferred edit feature).
 * PlaneGCS needed two extra mappings (collinear = both end points on the other line; tangent_cc) and a "collapsed line is not a solution" rule to give honest feasibility
   verdicts; without them it reported collapsing a rect top onto a slanted locked line as feasible.
-* One matrix cell is not deterministic across a cold start (a tangent pair of the NEW-6 family flips between PASS and NEW-6); the test only requires at least one NEW-6 cell.
+* One matrix cell is not deterministic across a cold start (a tangent pair of the NEW-6 family flips between PASS and NEW-6); the test only requires at least one NEW-6 cell. Task 523: it is the PlaneGCS oracle's verdict that flips (SA/RA shared), not our answer (see NEW-6).
 
 ## Proposed tasks (in this order)
 
@@ -416,7 +436,7 @@ Not done. `mcp__fusion360__fusion_execute` answered "Cannot connect to Fusion 36
 |---|---|---|---|---|---|
 | 1 | N-F1 | HIGH | FIXED (task 517). Fillet on a corner AT the origin deletes `j_origin`. Repro: closed triangle with a corner on (0,0), fillet it: origin gone. | `packages/core/fillet.js:328-331` (deletes the whole corner cluster; the cluster includes every joint within 1e-4, `fillet.js:50-58`) | applyFillet: keep j_origin, re-link to it |
 | 2 | N-F4 | HIGH | FIXED (task 517). A REFERENCE angle dimension becomes DRIVING again after save / load or undo. | `packages/core/constraints.js:272-284` (ANGLE whitelist has no isDriven/driven; radius lacks driven/drivenReason, `:209-221`; DISTANCE has them) | carry the flags |
-| 3 | N-F7 | HIGH | Tangent between two arcs sharing a rim joint (S-curve) is degenerate: nullity 1 vs finite-difference 2, radius dim demoted, 0/3 jittered restarts return, analytic Jacobian differs from fd. | `packages/core/solver/definitions.js:355-373` (\|C1C2\| = r1+r2 at its extremum; radii constants in the Jacobian) | shared-rim form cross(C1-Q, C2-Q) = 0, like the line case's `sharedEnd` |
+| 3 | N-F7 | HIGH | Tangent between two arcs sharing a rim joint (S-curve) is degenerate: nullity 1, 0/3 jittered restarts return. (Task 523 fixed the analytic Jacobian, which now equals fd: panel 1, analytic 1, fd 1; the radius dimension is no longer demoted.) | `packages/core/solver/definitions.js` tangent circle-circle (\|C1C2\| = r1+r2 at its extremum) | shared-rim form cross(C1-Q, C2-Q) = 0, like the line case's `sharedEnd` |
 | 4 | N-F5 | MEDIUM | Collinear on two lines that meet at a corner: panel DOF one too low (panel 4, fd 5); deleting it raises panel DOF by 2, true contribution 1. 26 of 300 random cases. | `packages/core/solver/definitions.js:233-247` (one-sided Jacobian), same family as F6 | symmetric Jacobian or drop the degenerate row |
 | 5 | N-F2 | MEDIUM | FIXED (task 517). Fillet cannot be applied to any corner of a Polygon-tool polygon. | `packages/core/fillet.js:92` (3 lines on a corner: the construction radial counts) with `shapes.js:260` | ignore construction lines when counting |
 | 6 | N-F6 | MEDIUM | Editing a dimension can move a tangent circle to the other side of its line or invert an under-constrained arc (5 of 300 cases). | `packages/core/constraint-manager.js:197-203` (tangent branch lock intentionally off) | lock the side / sweep sign |

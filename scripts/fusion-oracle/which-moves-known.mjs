@@ -13,7 +13,6 @@ const REASON = {
   'vertical-line': 'after task 525: a free line made V: Fusion turns it about its midpoint here, but moves only its second end in the graded cell vertical-line|L|0 (ours: the second end)',
   'equal-line-line': 'after task 525: Fusion moves both lines (shared joint, second line picked first): outside the one-mover table',
   'equal-arc-circle': "Fusion's API refuses equal(arc, circle); ours accepts it (task 526)",
-  'tangent-arc-arc': 'after task 525: the centre-fixed arc should resize, but its least-change solve does not converge alone (the NEW-6 family), so ours moves the other arc',
   'dim-aligned': 'after task 525: the 315 and the graded fixture disagree on two free lines (here the first pick moves, in dim-aligned|LL|0,0 the second)',
   'dim-horizontal': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',
   'dim-vertical': 'after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)',

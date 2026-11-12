@@ -1114,7 +1114,7 @@
   ]
  },
  "tangent-line-circle|LF": {
-  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "3,0",
@@ -1130,7 +1130,7 @@
   ]
  },
  "tangent-line-circle|CF": {
-  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
    "4,0"
@@ -1151,7 +1151,7 @@
   ]
  },
  "tangent-line-circle|FL": {
-  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 8,
   "cells": [
    "0,3",
@@ -1160,48 +1160,10 @@
   ]
  },
  "tangent-line-circle|FC": {
-  "reason": "after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet",
+  "reason": "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)",
   "total": 4,
   "cells": [
    "0,4"
-  ]
- },
- "tangent-circle-circle|OA": {
-  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
-  "total": 16,
-  "cells": [
-   "cr,c"
-  ]
- },
- "tangent-circle-circle|AO": {
-  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
-  "total": 16,
-  "cells": [
-   "c,cr"
-  ]
- },
- "tangent-circle-circle|AA": {
-  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
-  "total": 16,
-  "cells": [
-   "0,c",
-   "c,c",
-   "c,cr",
-   "cr,c"
-  ]
- },
- "tangent-circle-circle|AF": {
-  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
-  "total": 8,
-  "cells": [
-   "c,c"
-  ]
- },
- "tangent-circle-circle|FA": {
-  "reason": "after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change",
-  "total": 8,
-  "cells": [
-   "c,c"
   ]
  },
  "dim-length|R": {

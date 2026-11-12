@@ -83,7 +83,7 @@ ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r 
 // ---------------------------------------------------------------------------------------------------------------- the matrix
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
-  'NEW-6': 'feasible tangent between arcs refused when an arc radius must change a lot (the circle/arc cells were fixed by task 515)',
+  'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
   // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
   // the who-moves placement moves one operand and no matrix cell fails it any more.
 };
@@ -111,7 +111,7 @@ for (const v of verdicts.keys()) if (/^NEW-/.test(v) && !(v in KNOWN)) fail(`cel
 for (const v of verdicts.keys()) if (/^F\d$/.test(v) && !ROUND1.has(v)) fail('unknown round-1 id ' + v);
 console.log('round-1 cells tolerated: ' + [...verdicts].filter(([k]) => /^F\d$/.test(k)).sort().map(([k, n]) => k + '=' + n).join(' '));
 
-// repros: ok === true means the app is right; every NEW-6 is expected to FAIL today
+// repros: ok === true means the app is right; every repro is expected to FAIL today (NEW-6's was deleted by task 523: it passes)
 for (const f of NEW_FINDINGS) {
   const r = await f.run();
   if (!(f.id in KNOWN)) fail(f.id + ' has a repro but no KNOWN entry');

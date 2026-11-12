@@ -111,7 +111,7 @@ export const FINDINGS = [
   },
   {
     id: 'N-F7', severity: 'HIGH', title: 'Tangent between two arcs that share a rim joint (an S-curve, a slot, an arc fillet chain) is degenerate: the sketch is NOT fully constrained and no longer recovers from a nudge',
-    where: 'packages/core/solver/definitions.js:355-373 (tangent circle-circle: |C1C2| - (r1 + r2)) + engine.js tangent branch (radii read from the rim joints as CONSTANTS in the Jacobian)',
+    where: 'packages/core/solver/definitions.js tangent circle-circle: |C1C2| - (r1 + r2) (task 523: the arc radii are now differentiated through their rim joints, so the row equals finite differences; the double root below remains)',
     diagnosis: "With the rim joint Q shared, |C1Q| = r1 and |C2Q| = r2 are structural, and 'tangent' is |C1C2| = r1 + r2: the triangle inequality at its extremum (C1, Q, C2 collinear). The gradient of that row vanishes there (a double root), the analytic Jacobian treats r1, r2 as constants (finite differences do not: err 1.0), and the radius dimension of the 2nd arc is judged redundant and demoted. A line-to-arc tangent at the rim uses the endpoint form (perpendicularity) and is fine; the arc-arc one needs the same: (C1 - Q) x (C2 - Q) = 0.",
     task: 'definitions.tangent: when the two circles share a rim joint use the endpoint form cross(C1-Q, C2-Q) = 0 (planegcs tangent_aa / the shared-end branch the line case already has).',
     async run() {

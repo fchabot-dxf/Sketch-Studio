@@ -24,9 +24,11 @@ const REASON = {
   'pointOnCircle': 'after task 525: Fusion refuses (task 526); a fillet arc / two arcs: Fusion translates or deforms the other operand',
   'equal-circle': "after task 525: Fusion refuses equal(arc, circle), equal with a fillet arc and two dimensioned radii (task 526); an arc against a fillet arc: Fusion scales the arc about its centre, ours resizes it by least change",
   'tangent-line-circle': 'after task 525: who moves agrees; an H/V line, or a circle with centre and radius held: Fusion translates the line, ours moves it by least change (it stretches); a pinned line against a fillet arc: Fusion deforms the fillet',
-  'tangent-circle-circle': 'after task 525: two arcs with their centres fixed: Fusion scales one arc, ours refuses (the NEW-6 family); an arc against a centre-fixed arc: Fusion scales it, ours resizes by least change',
   'dim-length': 'Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)',
 };
+// a tangent class with an ARC operand (A arc, F fillet arc): after task 523 the arc radius takes part in the least-change solve
+const ARC_TANGENT = "arc resizes at tangent creation; placement, task 525 (since task 523 an arc's radius is live through its rim joint and takes part in the least-change solve; Fusion keeps the arc; a free circle radius may change too, task 515)";
+const reasonOf = (k) => { const [g, kinds] = k.split('|'); return (g.startsWith('tangent') && /[AF]/.test(kinds || '')) ? ARC_TANGENT : REASON[g]; };
 const byClass = {};
 for (const c of cells()) {
   const k = classOf(c.cell);
@@ -36,8 +38,7 @@ for (const c of cells()) {
 const known = {};
 for (const [k, v] of Object.entries(byClass)) {
   if (!v.diff.length) continue;
-  const g = k.split('|')[0];
-  known[k] = { reason: REASON[g] || 'PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)', total: v.total, cells: v.diff.length === v.total ? 'all' : v.diff };
+  known[k] = { reason: reasonOf(k) || 'PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)', total: v.total, cells: v.diff.length === v.total ? 'all' : v.diff };
 }
 fs.writeFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves-graded-known.json'), JSON.stringify(known, null, 1));
 const nd = Object.values(known).reduce((a, v) => a + (v.cells === 'all' ? v.total : v.cells.length), 0);

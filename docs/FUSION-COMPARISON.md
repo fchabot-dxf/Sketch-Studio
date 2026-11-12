@@ -9,13 +9,33 @@ Units: our mm; Fusion's API is cm (x10 on the way out). Divergences are reported
 
 Fusion 360 (2706.1.17) answered 315 + 2438 which-moves cells and replayed 13 drawings (954 comparison rows) with the same recipes as our audits. Divergences are **reported, not changed**: the owner decides each one.
 
-1. **Who moves when a constraint is added to geometry that does not satisfy it.** Fusion moves the operand that is held LEAST and never meets in the middle: with equal holds the first pick stays and the second is moved (parallel / perpendicular / angle: rotate about its midpoint; equal(line): keep the start, change the length; coincident: translate the whole second line; dimensions: the free end slides). One ranking of the hold levels per constraint predicts 55/55 (parallel, perpendicular, equal), 39/39 (collinear), 73/73 (coincident), 54/55 (angle) of the one-mover cells (section "graded"). Ours moves BOTH operands for most constraints and ignores the pick order for several (coincident, 2-point H/V); collinear / pointOnLine placement is task 511 (marked pending). Proposed fixes per constraint are in "Which geometry moves" (one place: `placeForCreation` in `createConstraint`, the hook task 511 added; dimension rows: `commitDimensionEdit`).
+1. **Who moves when a constraint is added to geometry that does not satisfy it.** Fusion moves the operand that is held LEAST and never meets in the middle: with equal holds the first pick stays and the second is moved (parallel / perpendicular / angle: rotate about its midpoint; equal(line): keep the start, change the length; coincident: translate the whole second line; dimensions: the free end slides). One ranking of the hold levels per constraint predicts 55/55 (parallel, perpendicular, equal), 39/39 (collinear), 73/73 (coincident), 54/55 (angle) of the one-mover cells (section "graded"). Ours moves BOTH operands for most constraints and ignores the pick order for several (coincident, 2-point H/V); collinear / pointOnLine / pointOnCircle placement was task 511: after it most of those cells agree and the rest are relabelled as real remaining differences (table below). Proposed fixes per constraint are in "Which geometry moves" (one place: `placeForCreation` in `createConstraint`, the hook task 511 added; dimension rows: `commitDimensionEdit`).
 2. **Refusals.** Fusion refuses an over-constraining or redundant constraint or dimension (`VCS_SKETCH_OVER_CONSTRAINTS`, "already has the same dimension"); ours keeps a redundant geometric constraint silently (O1) and a redundant / conflicting dimension as a driven reference (O3). The reverse (ours refuses what Fusion accepts): the hole-radius edits (F2), `perpendicular` / `collinear` / `pointOnLine` placements on a held operand (task 511 for the last two), and the S-curve (N-F7).
 3. **Circles.** `equal` on circles is refused in ours (F2) and `tangent` between circles never changes a radius (Fusion resizes the moving circle): both follow from the radius being shape data (O2).
 4. **The origin** is an operand like any point: in all 2438 graded cells (both pick orders, every point constraint, the levels "end at origin" and "midpoint at origin") it never moved and was never deleted, in Fusion (`sk.originPoint`) and in ours (`j_origin`). Ours has no axis entities, so axis constraints cannot be run in ours.
 5. **Fully-constrained flags.** Fusion reports `isFullyConstrained` per entity and for the sketch (no DOF count); they differ from ours mainly on circles (O2) and on fillet arcs; every row is in the per-drawing tables.
 
 The 512 coverage matrix is indexed in `tests/fixtures/fusion-oracle/matrix.json`: 604 classes (constraint / dimension row x kind-pair class x variant sep | shared | locked | dimmed); a representative cell was run in Fusion for 249 of them (how it was picked is in `scripts/fusion-oracle/matrix-index.mjs`); the 355 others are listed with the reason (shared joint outside the line-line rows 122, pair class outside the graded set 108, midpoint of three free points has no Fusion equivalent 64, the point-to-line dimension throws in ours 28, other 33). Kinds skipped in Fusion with the reason: bezier (no equivalent), `equal(arc, circle)` (Fusion's API refuses), concentric / symmetric (not in our constraint list).
+
+### After task 511 (merge of origin/main d703ebb+): differing cells before -> after
+
+Same Fusion answers (data), ours re-run on main after 511 (full-derivative Jacobian, angle pair stored CCW, collinear and point-on-line / circle placed at creation by Fusion's rule, reference angle keeps its flag) and 512's classification fix. Only the rows that changed are listed.
+
+| section | constraint / drawing | differing before | differing after |
+|---|---|---|---|
+| which-moves (315 cells) | collinear | 6 | 4 |
+| which-moves (315 cells) | pointOnCircle | 1 | 0 |
+| which-moves (315 cells) | pointOnLine | 1 | 0 |
+| graded (2438 cells) | collinear | 74 | 68 |
+| graded (2438 cells) | dim-angle | 94 | 93 |
+| graded (2438 cells) | pointOnCircle | 89 | 73 |
+| graded (2438 cells) | pointOnLine | 81 | 75 |
+| drawings (954 rows) | triangle | 12 | 11 |
+| TOTAL which-moves | all | 221 | 217 |
+| TOTAL graded | all | 1554 | 1525 |
+| TOTAL drawings | all | 132 | 131 |
+
+The classes marked "pending task 511" before are now labelled "remaining after task 511" where a difference is left (collinear: which line gives way or a refusal; pointOnLine / pointOnCircle with a held operand); the cells that now agree were removed from the KNOWN files.
 
 Re-run: `node tests/fusion-oracle.test.js` (offline, a few seconds). Re-record in Fusion: `scripts/fusion-oracle/*` (the runners need a scratch document holding the user parameter `CLAUDE_MARK`; they refuse to run anywhere else).
 
@@ -41,7 +61,7 @@ them, so only A-B is run for those rows.
 
 <!-- which-moves:begin -->
 
-Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 94 identical, 221 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
+Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 98 identical, 217 differ (all KNOWN in tests/fixtures/fusion-oracle/which-moves-known.json). Data: tests/fixtures/fusion-oracle/which-moves.json (before / after coordinates in mm of every entity, per cell).
 
 | constraint / dimension | cells | same as Fusion |
 |---|---|---|
@@ -52,10 +72,10 @@ Fusion 2706.1.17, recorded 2026-11-11; 315 cells, 94 identical, 221 differ (all 
 | coincident-pp | 18 | 0 |
 | parallel | 20 | 4 |
 | perpendicular | 20 | 4 |
-| collinear | 20 | 14 |
+| collinear | 20 | 16 |
 | equal-line-line | 20 | 0 |
-| pointOnLine | 6 | 5 |
-| pointOnCircle | 5 | 4 |
+| pointOnLine | 6 | 6 |
+| pointOnCircle | 5 | 5 |
 | midpoint | 6 | 2 |
 | equal-circle-circle | 14 | 0 |
 | equal-arc-arc | 14 | 4 |
@@ -192,23 +212,23 @@ Proposed fix: Same hook as parallel (target direction = first line rotated 90 de
 | B_dim | A:MM B:.. | A:MM B:MM | **NO** | A:MM B:.. | A:MM B:MM | **NO** |
 | shared | A:.. B:.M | A:MM B:MM | **NO** | A:M. B:.. | A:MM B:MM | **NO** |
 
-#### collinear  (14 of 20 cells the same)
+#### collinear  (16 of 20 cells the same)
 
 Fusion's rule: The FIRST-picked line stays, the second lands on it; a fixed, H/V-constrained or dimensioned line stays whichever order.
 
-Verdict: PENDING TASK 511 (placement at creation); recheck after it merges.
+Verdict: AFTER TASK 511: most cells agree; the remaining differences are listed in the table.
 
 | variant | AB Fusion | AB ours | AB same | BA Fusion | BA ours | BA same |
 |---|---|---|---|---|---|---|
 | free | A:.. B:MM | A:.. B:MM | yes | A:MM B:.. | A:MM B:.. | yes |
-| A_fix1 | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | refused | pending 511 |
-| A_fixfull | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | refused | pending 511 |
+| A_fix1 | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | A:.M B:MM | **NO** |
+| A_fixfull | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | A:.. B:MM | yes |
 | A_hv | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | A:.. B:MM | yes |
-| A_dim | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | A:MM B:.. | pending 511 |
-| B_fix1 | A:MM B:.. | refused | pending 511 | A:MM B:.. | A:MM B:.. | yes |
-| B_fixfull | A:MM B:.. | refused | pending 511 | A:MM B:.. | A:MM B:.. | yes |
+| A_dim | A:.. B:MM | A:.. B:MM | yes | A:.. B:MM | A:MM B:.. | **NO** |
+| B_fix1 | A:MM B:.. | A:MM B:.M | **NO** | A:MM B:.. | A:MM B:.. | yes |
+| B_fixfull | A:MM B:.. | A:MM B:.. | yes | A:MM B:.. | A:MM B:.. | yes |
 | B_hv | A:MM B:.. | A:MM B:.. | yes | A:MM B:.. | A:MM B:.. | yes |
-| B_dim | A:MM B:.. | A:.. B:MM | pending 511 | A:MM B:.. | A:MM B:.. | yes |
+| B_dim | A:MM B:.. | A:.. B:MM | **NO** | A:MM B:.. | A:MM B:.. | yes |
 | shared | A:.. B:.M | A:.. B:.M | yes | A:M. B:.. | A:M. B:.. | yes |
 
 #### equal-line-line  (0 of 20 cells the same)
@@ -232,31 +252,31 @@ Proposed fix: placeForCreation: set the second line's length to the first's by m
 | B_dim | A:.M B:.. | A:MM B:.. | **NO** | A:.M B:.. | A:MM B:.. | **NO** |
 | shared | A:.. B:.M | A:MM B:MM | **NO** | A:MM B:M. | A:MM B:MM | **NO** |
 
-#### pointOnLine  (5 of 6 cells the same)
+#### pointOnLine  (6 of 6 cells the same)
 
 Fusion's rule: The point moves onto the line and the line stays; only when the point is fixed does the line move (translated). (Fusion's API wants the point first.)
 
-Verdict: PENDING TASK 511 (the pointOnLine rows); the rest agrees.
+Verdict: AFTER TASK 511: agrees except the cells marked NO.
 
 | variant | AB Fusion | AB ours | AB same |
 |---|---|---|---|
 | free | A:M B:.. | A:M B:.. | yes |
-| A_fix1 | A:. B:MM | refused | pending 511 |
+| A_fix1 | A:. B:MM | A:. B:MM | yes |
 | B_fix1 | A:M B:.. | A:M B:.. | yes |
 | B_fixfull | A:M B:.. | A:M B:.. | yes |
 | B_hv | A:M B:.. | A:M B:.. | yes |
 | B_dim | A:M B:.. | A:M B:.. | yes |
 
-#### pointOnCircle  (4 of 5 cells the same)
+#### pointOnCircle  (5 of 5 cells the same)
 
 Fusion's rule: The point moves radially onto the rim; the circle stays; a fixed point moves the circle instead.
 
-Verdict: PENDING TASK 511 (it also changed the on-circle placement).
+Verdict: AFTER TASK 511: agrees except the cells marked NO.
 
 | variant | AB Fusion | AB ours | AB same |
 |---|---|---|---|
 | free | A:M B:.. | A:M B:.. | yes |
-| A_fix1 | A:. B:M. | refused | pending 511 |
+| A_fix1 | A:. B:M. | A:. B:M. | yes |
 | B_fix1 | A:M B:.. | A:M B:.. | yes |
 | B_fixfull | A:M B:.. | A:M B:.. | yes |
 | B_dim | A:M B:.. | A:M B:.. | yes |
@@ -539,17 +559,17 @@ Fusion 2706.1.17, recorded 2026-11-11. 2438 cells; data `tests/fixtures/fusion-o
 |---|---|---|---|---|
 | parallel | 113 | 11 | 21 | 0 |
 | perpendicular | 113 | 31 | 0 | 14 |
-| collinear | 113 | 39 | 0 | 27 |
+| collinear | 113 | 45 | 7 | 0 |
 | equal-line-line | 113 | 35 | 0 | 0 |
-| dim-angle | 113 | 19 | 21 | 0 |
+| dim-angle | 113 | 20 | 21 | 0 |
 | coincident-pp | 232 | 100 | 4 | 0 |
 | dim-aligned | 232 | 60 | 48 | 0 |
 | dim-horizontal | 157 | 45 | 28 | 0 |
 | dim-vertical | 157 | 53 | 30 | 0 |
 | horizontal-2pt | 157 | 68 | 2 | 0 |
 | vertical-2pt | 157 | 58 | 2 | 0 |
-| pointOnLine | 117 | 36 | 0 | 42 |
-| pointOnCircle | 130 | 41 | 4 | 41 |
+| pointOnLine | 117 | 42 | 0 | 0 |
+| pointOnCircle | 130 | 57 | 4 | 6 |
 | midpoint | 117 | 48 | 0 | 0 |
 | equal-circle | 100 | 80 | 12 | 0 |
 | tangent-line-circle | 180 | 88 | 0 | 8 |
@@ -651,27 +671,27 @@ Grid, line (A) x line (B), `Fusion/ours`:
 
 | A \ B | 0 free | 1 corner | 2 length | 3 H/V | 4 end fixed | 5 end+length | 6 H/V+end | 7 full |
 |---|---|---|---|---|---|---|---|---|
-| 0 free | b/b | a/b* | a/b* | a/a | a/R* | a/R* | a/a | a/a |
-| 1 corner | b/b | X/b* | b/b | X/a* | a/R* | X/R* | a/a | a/a |
-| 2 length | b/b | a/b* | b/b | a/a | a/R* | a/R* | a/a | a/a |
-| 3 H/V | b/b | X/b* | b/b | b/b | X/R* | X/R* | a/R* | a/R* |
-| 4 end fixed | b/b | b/b | b/b | R/R | X/R* | X/R* | R/R | R/R |
-| 5 end+length | b/b | X/b* | b/b | R/R | X/R* | X/R* | R/R | R/R |
-| 6 H/V+end | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
+| 0 free | b/b | a/b* | a/b* | a/a | a/X* | a/X* | a/a | a/a |
+| 1 corner | b/b | X/b* | b/b | X/a* | a/X* | X/X | a/a | a/a |
+| 2 length | b/b | a/b* | b/b | a/a | a/X* | a/X* | a/a | a/a |
+| 3 H/V | b/b | X/b* | b/b | b/b | X/X | X/X | a/X* | a/a |
+| 4 end fixed | b/b | b/b | b/b | R/X* | X/X | X/X | R/X* | R/R |
+| 5 end+length | b/b | X/b* | b/b | R/X* | X/X | X/X | R/X* | R/R |
+| 6 H/V+end | b/b | b/b | b/b | b/b | R/R | R/X* | R/X* | R/R |
 | 7 full | b/b | b/b | b/b | b/b | R/R | R/R | R/R | R/R |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 64 | 29 | a:18 b:21 X:11 R:14 | a:9 b:27 R:28 | rotate:32 one end:12 stretch:11 translate:6 | stretch:22 rotate:11 translate:3 |
-| LC | 8 | 1 | a:1 b:4 X:2 R:1 | b:4 R:4 | rotate:5 one end:3 stretch:1 | stretch:4 |
-| CL | 8 | 2 | a:3 b:2 X:1 R:2 | a:2 b:2 R:4 | rotate:5 one end:2 | stretch:4 |
-| LS | 4 | 0 | a:1 b:3 | b:4 | rotate:4 | scale:2 deform:2 |
-| SL | 4 | 0 | a:3 b:1 | a:2 b:1 R:1 | rotate:4 | scale:2 stretch:1 |
-| LR | 8 | 2 | a:4 b:1 X:1 R:2 | a:2 b:2 R:4 | translate:3 rotate:2 one end:1 deform:1 | stretch:2 deform:2 |
-| RL | 8 | 4 | a:1 b:4 X:1 R:2 | b:4 R:4 | translate:3 rotate:2 deform:1 one end:1 | stretch:2 translate:2 |
-| CC | 4 | 0 | a:1 b:2 X:1 | b:2 R:2 | rotate:3 one end:2 | stretch:2 |
-| SS | 1 | 0 | b:1 | b:1 | translate:1 | deform:1 |
-| RR | 4 | 1 | a:1 b:2 R:1 | b:2 R:2 | translate:3 | deform:2 |
+| LL | 64 | 30 | a:18 b:21 X:11 R:14 | a:10 b:27 X:19 R:8 | rotate:32 one end:12 stretch:11 translate:6 | stretch:32 one end:27 rotate:13 translate:3 |
+| LC | 8 | 3 | a:1 b:4 X:2 R:1 | b:4 X:3 R:1 | rotate:5 one end:3 stretch:1 | stretch:6 one end:4 |
+| CL | 8 | 2 | a:3 b:2 X:1 R:2 | a:2 b:2 X:3 R:1 | rotate:5 one end:2 | stretch:6 one end:4 |
+| LS | 4 | 0 | a:1 b:3 | b:1 X:3 | rotate:4 | deform:4 stretch:2 one end:1 |
+| SL | 4 | 0 | a:3 b:1 | a:1 b:1 X:2 | rotate:4 | stretch:2 deform:2 scale:1 one end:1 |
+| LR | 8 | 3 | a:4 b:1 X:1 R:2 | a:3 b:2 X:1 R:2 | translate:3 rotate:2 one end:1 deform:1 | stretch:3 deform:3 one end:1 |
+| RL | 8 | 5 | a:1 b:4 X:1 R:2 | a:1 b:4 X:1 R:2 | translate:3 rotate:2 deform:1 one end:1 | stretch:2 translate:2 deform:2 one end:1 |
+| CC | 4 | 1 | a:1 b:2 X:1 | b:2 X:2 | rotate:3 one end:2 | stretch:3 one end:3 |
+| SS | 1 | 0 | b:1 | X:1 | translate:1 | scale:1 deform:1 |
+| RR | 4 | 1 | a:1 b:2 R:1 | a:1 b:2 R:1 | translate:3 | deform:3 |
 
 #### equal-line-line
 
@@ -717,16 +737,16 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | 3 H/V | b/X* | b/X* | b/X* | R/-* | b/X* | b/X* | R/-* | R/-* |
 | 4 end fixed | b/X* | b/X* | b/X* | a/X* | b/X* | a/X* | a/X* | a/a |
 | 5 end+length | b/X* | b/X* | b/X* | a/X* | b/X* | b/X* | a/X* | a/a |
-| 6 H/V+end | b/X* | b/X* | b/X* | R/-* | b/X* | b/X* | R/-* | R/a* |
-| 7 full | b/b | b/b | b/b | R/-* | b/b | b/b | R/b* | R/-* |
+| 6 H/V+end | b/X* | b/X* | b/X* | R/-* | b/X* | b/X* | R/-* | R/-* |
+| 7 full | b/b | b/b | b/b | R/-* | b/b | b/b | R/-* | R/-* |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 64 | 10 | a:24 b:31 R:9 | a:6 b:6 X:45 -:7 | one end:20 stretch:20 rotate:15 | one end:44 stretch:42 rotate:16 |
+| LL | 64 | 10 | a:24 b:31 R:9 | a:5 b:5 X:45 -:9 | one end:20 stretch:20 rotate:15 | stretch:42 one end:42 rotate:16 |
 | LC | 8 | 2 | a:1 b:7 | b:2 X:6 | stretch:4 one end:3 rotate:1 | stretch:8 one end:6 |
 | CL | 8 | 2 | a:5 b:3 | a:2 X:6 | stretch:4 one end:3 rotate:1 | stretch:8 one end:6 |
 | LS | 4 | 1 | a:1 b:3 | b:1 X:3 | scale:3 rotate:1 | scale:4 stretch:2 one end:1 |
-| SL | 4 | 0 | a:3 b:1 | a:1 X:3 | scale:3 rotate:1 | scale:3 stretch:2 one end:1 deform:1 |
+| SL | 4 | 1 | a:3 b:1 | a:1 X:3 | scale:3 rotate:1 | scale:4 stretch:2 one end:1 |
 | LR | 8 | 2 | a:4 R:4 | a:3 b:1 X:3 -:1 | stretch:2 one end:2 | stretch:4 deform:4 one end:2 |
 | RL | 8 | 2 | b:4 R:4 | b:2 X:2 -:4 | stretch:2 one end:2 | deform:2 stretch:2 one end:2 |
 | CC | 4 | 0 | a:1 b:3 | X:4 | stretch:2 rotate:1 one end:1 | stretch:4 one end:4 |
@@ -1064,61 +1084,61 @@ Grid, line (A) x line (B), `Fusion/ours`:
 | A \ B | 0 free | 3 H/V | 4 end fixed | 7 full | o end at origin | m mid at origin |
 |---|---|---|---|---|---|---|
 | 0 free | b/a* | a/a | b/a* | a/a |  |  |
-| 3 H/V | b/a* | b/a* | b/a* | a/a |  |  |
-| 4 end fixed | b/R* | b/R* | b/R* | R/R |  |  |
-| 7 full | b/R* | b/R* | b/R* | R/R |  |  |
-| o end at origin | b/R* | b/R* | b/R* | R/R |  |  |
-| m mid at origin | b/a* | a/a | b/a* | a/a |  |  |
+| 3 H/V | b/X* | b/X* | b/X* | a/a |  |  |
+| 4 end fixed | b/b | b/b | b/b | R/R |  |  |
+| 7 full | b/b | b/b | b/b | R/R |  |  |
+| o end at origin | b/b | b/b | b/b | R/R |  |  |
+| m mid at origin | b/X* | a/X* | b/X* | a/a |  |  |
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LL | 24 | 6 | a:5 b:16 R:3 | a:12 R:12 | translate:13 one end:6 stretch:2 | stretch:6 one end:4 translate:2 |
-| LC | 12 | 0 | b:12 | a:6 R:6 | translate:6 one end:6 | stretch:4 one end:2 |
-| LS | 6 | 1 | a:3 b:3 | a:3 R:3 | translate:5 stretch:1 | stretch:2 one end:1 |
-| LR | 12 | 7 | a:6 b:3 R:3 | a:6 R:6 | translate:7 stretch:2 | one end:2 translate:2 stretch:2 |
-| RL | 4 | 0 | a:1 b:3 | a:4 | translate:3 one end:1 | deform:4 |
-| RC | 2 | 0 | b:2 | a:2 | translate:1 one end:1 | deform:2 |
-| RS | 1 | 0 | a:1 | a:1 | translate:1 | deform:1 |
-| RR | 2 | 0 | a:1 b:1 | a:2 | translate:2 | deform:2 |
-| OL | 8 | 4 | a:3 b:4 R:1 | a:4 R:4 | translate:5 one end:2 | translate:4 |
-| OC | 4 | 1 | a:1 b:3 | a:2 R:2 | translate:2 one end:2 | translate:2 |
-| OS | 2 | 1 | a:1 b:1 | a:1 R:1 | translate:2 | translate:1 |
-| OR | 4 | 3 | a:2 b:1 R:1 | a:2 R:2 | translate:3 | translate:2 |
-| AL | 4 | 0 | a:1 b:3 | a:4 | translate:3 one end:1 | deform+radius:4 |
-| AC | 2 | 0 | b:2 | a:2 | translate:1 one end:1 | deform+radius:2 |
-| AS | 1 | 0 | a:1 | a:1 | translate:1 | deform+radius:1 |
-| AR | 2 | 0 | a:2 | a:2 | translate:2 | deform+radius:2 |
-| PL | 8 | 5 | a:4 b:3 R:1 | a:4 R:4 | translate:6 one end:1 | translate:4 |
-| PC | 4 | 2 | a:2 b:2 | a:2 R:2 | translate:3 one end:1 | translate:2 |
-| PS | 2 | 1 | a:1 b:1 | a:1 R:1 | translate:2 | translate:1 |
-| PR | 4 | 3 | a:2 b:1 R:1 | a:2 R:2 | translate:3 | translate:2 |
-| ZL | 4 | 1 | b:3 R:1 | R:4 | translate:2 one end:1 |  |
-| ZC | 2 | 0 | b:2 | R:2 | translate:1 one end:1 |  |
-| ZS | 1 | 0 | b:1 | R:1 | translate:1 |  |
-| ZR | 2 | 1 | b:1 R:1 | R:2 | translate:1 |  |
+| LL | 24 | 7 | a:5 b:16 R:3 | a:6 b:9 X:6 R:3 | translate:13 one end:6 stretch:2 | stretch:18 one end:9 |
+| LC | 12 | 3 | b:12 | a:2 b:6 X:4 | translate:6 one end:6 | stretch:9 one end:7 |
+| LS | 6 | 0 | a:3 b:3 | a:1 b:3 X:2 | translate:5 stretch:1 | scale:4 stretch:2 one end:1 deform:1 |
+| LR | 12 | 4 | a:6 b:3 R:3 | a:4 b:3 X:2 R:3 | translate:7 stretch:2 | deform:5 stretch:4 one end:2 |
+| RL | 4 | 0 | a:1 b:3 | a:1 X:3 | translate:3 one end:1 | deform:4 stretch:2 one end:1 |
+| RC | 2 | 0 | b:2 | X:2 | translate:1 one end:1 | deform:2 stretch:1 one end:1 |
+| RS | 1 | 0 | a:1 | X:1 | translate:1 | deform:1 scale:1 |
+| RR | 2 | 0 | a:1 b:1 | a:1 X:1 | translate:2 | deform:3 |
+| OL | 8 | 5 | a:3 b:4 R:1 | a:4 b:3 R:1 | translate:5 one end:2 | translate:4 stretch:2 one end:1 |
+| OC | 4 | 2 | a:1 b:3 | a:2 b:2 | translate:2 one end:2 | translate:2 stretch:1 one end:1 |
+| OS | 2 | 1 | a:1 b:1 | a:1 b:1 | translate:2 | translate:1 scale:1 |
+| OR | 4 | 3 | a:2 b:1 R:1 | a:2 b:1 R:1 | translate:3 | translate:2 deform:1 |
+| AL | 4 | 0 | a:1 b:3 | a:1 X:3 | translate:3 one end:1 | deform+radius:4 rotate:1 translate:1 one end:1 |
+| AC | 2 | 0 | b:2 | X:2 | translate:1 one end:1 | deform+radius:2 rotate:1 one end:1 |
+| AS | 1 | 0 | a:1 | X:1 | translate:1 | deform+radius:1 scale:1 |
+| AR | 2 | 0 | a:2 | a:1 X:1 | translate:2 | deform+radius:2 deform:1 |
+| PL | 8 | 6 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 one end:1 | translate:4 stretch:2 one end:1 |
+| PC | 4 | 3 | a:2 b:2 | a:2 b:2 | translate:3 one end:1 | translate:2 stretch:1 one end:1 |
+| PS | 2 | 1 | a:1 b:1 | a:1 b:1 | translate:2 | translate:1 scale:1 |
+| PR | 4 | 3 | a:2 b:1 R:1 | a:2 b:1 R:1 | translate:3 | translate:2 deform:1 |
+| ZL | 4 | 2 | b:3 R:1 | b:3 R:1 | translate:2 one end:1 | stretch:2 one end:1 |
+| ZC | 2 | 1 | b:2 | b:2 | translate:1 one end:1 | stretch:1 one end:1 |
+| ZS | 1 | 0 | b:1 | b:1 | translate:1 | deform:1 |
+| ZR | 2 | 1 | b:1 R:1 | b:1 R:1 | translate:1 | deform:1 |
 
 #### pointOnCircle
 
 | kinds (A,B) | cells | same | Fusion who-moves | ours who-moves | how Fusion moves it | how ours moves it |
 |---|---|---|---|---|---|---|
-| LO | 24 | 5 | a:6 b:15 R:3 | a:12 R:12 | translate:16 radius:3 stretch:2 | stretch:8 one end:4 |
-| LA | 24 | 7 | a:12 b:9 R:3 | a:12 R:12 | translate:14 stretch:4 scale+radius:3 | stretch:8 one end:4 |
-| LF | 12 | 5 | a:6 b:3 R:3 | a:6 R:6 | translate:5 deform:2 stretch:2 | stretch:4 one end:2 |
-| RO | 4 | 0 | a:2 b:2 | a:4 | translate:4 | deform:4 |
-| RA | 4 | 0 | a:2 b:2 | a:4 | translate:4 | deform:4 |
-| RF | 2 | 0 | a:1 b:1 | a:2 | deform:1 translate:1 | deform:2 |
-| OO | 8 | 3 | a:2 b:5 R:1 | a:4 R:4 | translate:6 radius:1 | translate:4 |
-| OA | 8 | 5 | a:4 b:3 R:1 | a:4 R:4 | translate:6 scale+radius:1 | translate:4 |
-| OF | 4 | 3 | a:2 b:1 R:1 | a:2 R:2 | translate:2 deform:1 | translate:2 |
+| LO | 24 | 11 | a:6 b:15 R:3 | a:8 b:6 X:4 R:6 | translate:16 radius:3 stretch:2 | translate:10 stretch:8 one end:4 |
+| LA | 24 | 7 | a:12 b:9 R:3 | a:6 b:9 X:6 R:3 | translate:14 stretch:4 scale+radius:3 | stretch:8 deform+radius:5 scale+radius:5 deform:5 |
+| LF | 12 | 5 | a:6 b:3 R:3 | a:2 b:3 X:4 R:3 | translate:5 deform:2 stretch:2 | deform:7 stretch:4 one end:2 |
+| RO | 4 | 0 | a:2 b:2 | a:2 X:2 | translate:4 | deform:4 translate:2 |
+| RA | 4 | 0 | a:2 b:2 | a:1 X:3 | translate:4 | deform:5 deform+radius:1 scale+radius:1 |
+| RF | 2 | 0 | a:1 b:1 | X:2 | deform:1 translate:1 | deform:4 |
+| OO | 8 | 5 | a:2 b:5 R:1 | a:4 b:2 R:2 | translate:6 radius:1 | translate:6 |
+| OA | 8 | 6 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 scale+radius:1 | translate:4 deform+radius:1 scale+radius:1 deform:1 |
+| OF | 4 | 4 | a:2 b:1 R:1 | a:2 b:1 R:1 | translate:2 deform:1 | translate:2 deform:1 |
 | AO | 4 | 0 | a:2 b:2 | a:4 | translate:4 | one point (deform)+radius:4 |
 | AA | 4 | 0 | a:3 b:1 | a:4 | translate:4 | one point (deform)+radius:4 |
 | AF | 2 | 0 | a:2 | a:2 | translate:2 | one point (deform)+radius:2 |
-| PO | 8 | 5 | a:4 b:3 R:1 | a:4 R:4 | translate:6 radius:1 | translate:4 |
-| PA | 8 | 5 | a:4 b:3 R:1 | a:4 R:4 | translate:6 scale+radius:1 | translate:4 |
+| PO | 8 | 7 | a:4 b:3 R:1 | a:4 b:2 R:2 | translate:6 radius:1 | translate:6 |
+| PA | 8 | 6 | a:4 b:3 R:1 | a:4 b:3 R:1 | translate:6 scale+radius:1 | translate:4 deform+radius:1 scale+radius:1 deform:1 |
 | PF | 4 | 0 | R:4 | -:4 |  |  |
-| ZO | 4 | 1 | b:3 R:1 | R:4 | translate:2 radius:1 |  |
-| ZA | 4 | 1 | b:3 R:1 | R:4 | translate:2 scale+radius:1 |  |
-| ZF | 2 | 1 | b:1 R:1 | R:2 | translate:1 |  |
+| ZO | 4 | 3 | b:3 R:1 | b:2 R:2 | translate:2 radius:1 | translate:2 |
+| ZA | 4 | 2 | b:3 R:1 | b:3 R:1 | translate:2 scale+radius:1 | deform+radius:1 scale+radius:1 deform:1 |
+| ZF | 2 | 1 | b:1 R:1 | b:1 R:1 | translate:1 | deform:1 |
 
 #### midpoint
 
@@ -1278,7 +1298,7 @@ Rows are one per recipe step; `same?` needs the outcome (accepted / reference / 
 | plate (round 1) | 20 | 96 | 82 | 14 |
 | trapezoid (round 1) | 9 | 54 | 49 | 5 |
 | bracket (round 1) | 30 | 148 | 126 | 22 |
-| triangle (round 1) | 10 | 45 | 33 | 12 |
+| triangle (round 1) | 10 | 45 | 34 | 11 |
 | polygon (round 1) | 11 | 54 | 51 | 3 |
 | scurve (round 2) | 11 | 54 | 41 | 13 |
 | slot (round 2) | 11 | 46 | 40 | 6 |
@@ -1423,7 +1443,7 @@ Divergences and verdicts:
 
 Step E, 4 dimension edits (0.8x, 1.25x): 3 agree (accepted or refused alike); differ: edit x0.8 of dimension 110.000 -> 88.000 (ours refused, Fusion accepted).
 
-Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours fully constrained, Fusion not fully constrained *.
+Step F: redundant dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; conflict dimension: ours reference, Fusion refused (3 : VCS_SKETCH_OVER_CONSTRAINTS - Sketch geometry is over co) *; delete one dimension: ours accepted, Fusion accepted; delete one dimension: fully constrained afterwards?: ours nullity 1, Fusion not fully constrained.
 
 Divergences and verdicts:
 
@@ -1431,7 +1451,6 @@ Divergences and verdicts:
 * UNCLEAR / O1: a redundant geometric constraint: Fusion refuses it as over-constrained, ours accepts it silently (audit O1: "the app flags redundant dimensions but not redundant constraints"): step 8 outcome
 * UNCLEAR: the angle dimension reads 180 - base angle in ours (the 0.8x value is geometrically impossible there); Fusion measures the other side, so the same number is feasible: edit0 outcome
 * FUSION DIFFERENT BY DESIGN: Fusion refuses an over-constraining dimension (VCS_SKETCH_OVER_CONSTRAINTS); ours keeps it as a driven reference (O3: the owner's ruling on references decides): redundant outcome, conflict outcome
-* UNCLEAR: same cause as the per-entity flags (O2 circle radius, or an upstream refusal difference): delete sketchFull
 
 #### polygon: Hexagon + concentric circle + tangent circle + midpoint axis (round 1)
 

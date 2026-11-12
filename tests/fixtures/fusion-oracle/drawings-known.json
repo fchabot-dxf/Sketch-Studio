@@ -51,7 +51,6 @@
  "triangle/edit0/outcome": "OURS REFUSES what Fusion accepts",
  "triangle/redundant/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "triangle/conflict/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
- "triangle/delete/sketchFull": "sketch fully-constrained flag differs (circle radius O2, or a refused / redundant step upstream)",
  "polygon/redundant/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "polygon/conflict/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "polygon/delete/sketchFull": "sketch fully-constrained flag differs (circle radius O2, or a refused / redundant step upstream)",

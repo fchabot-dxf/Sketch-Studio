@@ -8,7 +8,7 @@ import { cellKey, classOf } from '../../tests/harness/fusion-oracle/graded.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REASON = {
-  'collinear': 'pending task 511', 'pointOnLine': 'pending task 511', 'pointOnCircle': 'pending task 511',
+  'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion', 'pointOnLine': 'remaining after task 511: held-operand cases differ from Fusion', 'pointOnCircle': 'remaining after task 511: held-operand cases differ from Fusion',
   'equal-circle': 'OUR BUG F2 (circle radius is not a solver unknown): equal on circles refused / no effect; tangent circle radii never change either',
   'tangent-circle-circle': 'DIFFERENT: ours never resizes a circle (shape data, O2); Fusion resizes the moving circle',
 };

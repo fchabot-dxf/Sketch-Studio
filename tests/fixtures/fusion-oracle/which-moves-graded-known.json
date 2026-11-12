@@ -255,7 +255,7 @@
   "cells": "all"
  },
  "collinear|LL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 64,
   "cells": [
    "0,0",
@@ -270,7 +270,6 @@
    "1,1",
    "1,3",
    "1,4",
-   "1,5",
    "1,6",
    "2,0",
    "2,1",
@@ -278,38 +277,36 @@
    "2,5",
    "3,0",
    "3,1",
-   "3,4",
-   "3,5",
    "3,6",
    "3,7",
    "4,0",
    "4,1",
-   "4,4",
-   "4,5",
+   "4,3",
+   "4,6",
    "5,0",
    "5,1",
-   "5,4",
-   "5,5",
+   "5,3",
+   "5,6",
    "6,0",
    "6,1",
+   "6,5",
+   "6,6",
    "7,0"
   ]
  },
  "collinear|LC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 8,
   "cells": [
    "0,0",
    "0,4",
    "3,0",
-   "3,4",
    "4,0",
-   "4,4",
    "7,0"
   ]
  },
  "collinear|CL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 8,
   "cells": [
    "0,0",
@@ -317,53 +314,55 @@
    "0,4",
    "0,7",
    "4,0",
-   "4,4"
+   "4,3"
   ]
  },
  "collinear|LS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 4,
   "cells": "all"
  },
  "collinear|SL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 4,
   "cells": "all"
  },
  "collinear|LR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 8,
   "cells": [
    "0,0",
    "0,8",
    "3,0",
    "3,8",
-   "4,0",
    "7,0"
   ]
  },
  "collinear|RL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 8,
   "cells": [
    "0,0",
-   "0,4",
    "0,7",
    "8,0"
   ]
  },
  "collinear|CC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 4,
-  "cells": "all"
+  "cells": [
+   "0,0",
+   "0,4",
+   "4,0"
+  ]
  },
  "collinear|SS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 1,
   "cells": "all"
  },
  "collinear|RR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: which line gives way (or a refusal) differs from Fusion",
   "total": 4,
   "cells": [
    "0,0",
@@ -594,7 +593,11 @@
  "dim-angle|SL": {
   "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
   "total": 4,
-  "cells": "all"
+  "cells": [
+   "0,0",
+   "0,3",
+   "0,4"
+  ]
  },
  "dim-angle|LR": {
   "reason": "PLACEMENT / HOW: which geometry moves differs (docs/FUSION-COMPARISON.md, Which geometry moves: graded)",
@@ -2158,7 +2161,7 @@
   "cells": "all"
  },
  "pointOnLine|LL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 24,
   "cells": [
    "0,0",
@@ -2168,178 +2171,181 @@
    "3,0",
    "3,3",
    "3,4",
+   "3,7",
    "4,0",
    "4,3",
-   "4,4",
    "7,0",
    "7,3",
-   "7,4",
    "o,0",
    "o,3",
-   "o,4",
    "m,0",
+   "m,3",
    "m,4"
   ]
  },
  "pointOnLine|LC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 12,
-  "cells": "all"
- },
- "pointOnLine|LS": {
-  "reason": "pending task 511",
-  "total": 6,
   "cells": [
    "0,0",
+   "0,4",
    "3,0",
+   "3,4",
    "4,0",
    "7,0",
-   "o,0"
+   "o,0",
+   "m,0",
+   "m,4"
   ]
  },
+ "pointOnLine|LS": {
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
+  "total": 6,
+  "cells": "all"
+ },
  "pointOnLine|LR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 12,
   "cells": [
    "0,0",
    "0,8",
+   "3,0",
+   "3,8",
    "4,0",
    "7,0",
-   "o,0"
+   "o,0",
+   "m,0"
   ]
  },
  "pointOnLine|RL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnLine|RC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnLine|RS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 1,
   "cells": "all"
  },
  "pointOnLine|RR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnLine|OL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
    "0,4",
    "c,0",
-   "c,3",
-   "c,4"
+   "c,3"
   ]
  },
  "pointOnLine|OC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
    "0,4",
-   "c,0",
-   "c,4"
+   "c,0"
   ]
  },
  "pointOnLine|OS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": [
    "c,0"
   ]
  },
  "pointOnLine|OR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
    "c,0"
   ]
  },
  "pointOnLine|AL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnLine|AC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnLine|AS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 1,
   "cells": "all"
  },
  "pointOnLine|AR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnLine|PL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
    "4,0",
-   "4,3",
-   "4,4"
+   "4,3"
   ]
  },
  "pointOnLine|PC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
-   "4,0",
-   "4,4"
+   "4,0"
   ]
  },
  "pointOnLine|PS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": [
    "4,0"
   ]
  },
  "pointOnLine|PR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
    "4,0"
   ]
  },
  "pointOnLine|ZL": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
    "0,0",
-   "0,3",
-   "0,4"
+   "0,3"
   ]
  },
  "pointOnLine|ZC": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
-  "cells": "all"
+  "cells": [
+   "0,0"
+  ]
  },
  "pointOnLine|ZS": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 1,
   "cells": "all"
  },
  "pointOnLine|ZR": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": [
    "0,0"
   ]
  },
  "pointOnCircle|LO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 24,
   "cells": [
    "0,0",
@@ -2350,21 +2356,15 @@
    "3,c",
    "3,r",
    "3,cr",
-   "4,0",
    "4,c",
-   "4,r",
-   "7,0",
    "7,c",
-   "7,r",
-   "o,0",
    "o,c",
-   "o,r",
    "m,0",
    "m,r"
   ]
  },
  "pointOnCircle|LA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 24,
   "cells": [
    "0,0",
@@ -2376,129 +2376,113 @@
    "3,r",
    "3,cr",
    "4,0",
-   "4,c",
    "4,r",
    "7,0",
-   "7,c",
    "7,r",
    "o,0",
-   "o,c",
-   "o,r"
+   "o,r",
+   "m,0",
+   "m,c",
+   "m,r"
   ]
  },
  "pointOnCircle|LF": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 12,
   "cells": [
    "0,0",
    "0,c",
    "3,0",
    "3,c",
-   "4,0",
-   "7,0",
-   "o,0"
+   "o,0",
+   "m,0",
+   "m,c"
   ]
  },
  "pointOnCircle|RO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|RA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|RF": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnCircle|OO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
    "0,0",
    "0,r",
-   "c,0",
-   "c,c",
-   "c,r"
+   "c,c"
   ]
  },
  "pointOnCircle|OA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
    "c,0",
-   "c,c",
    "c,r"
   ]
  },
- "pointOnCircle|OF": {
-  "reason": "pending task 511",
-  "total": 4,
-  "cells": [
-   "c,0"
-  ]
- },
  "pointOnCircle|AO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|AA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|AF": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": "all"
  },
  "pointOnCircle|PO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
-   "4,0",
-   "4,c",
-   "4,r"
+   "4,c"
   ]
  },
  "pointOnCircle|PA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 8,
   "cells": [
    "4,0",
-   "4,c",
    "4,r"
   ]
  },
  "pointOnCircle|PF": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": "all"
  },
  "pointOnCircle|ZO": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
-   "0,0",
-   "0,c",
-   "0,r"
+   "0,c"
   ]
  },
  "pointOnCircle|ZA": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 4,
   "cells": [
    "0,0",
-   "0,c",
    "0,r"
   ]
  },
  "pointOnCircle|ZF": {
-  "reason": "pending task 511",
+  "reason": "remaining after task 511: held-operand cases differ from Fusion",
   "total": 2,
   "cells": [
    "0,0"

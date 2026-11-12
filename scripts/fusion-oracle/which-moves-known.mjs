@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/fusion-oracle/which-moves.json'), 'utf8'));
 // reason class per group. "pending task 511" = collinear / pointOnLine placement that task 511 changes in packages/core.
 const REASON = {
-  'pointOnLine': 'pending task 511', 'pointOnCircle': 'pending task 511', 'collinear': 'pending task 511',
+  'pointOnLine': 'remaining after task 511: a pinned operand / line held differently from Fusion', 'pointOnCircle': 'remaining after task 511: a pinned operand differs from Fusion', 'collinear': 'remaining after task 511: which line gives way (or a refusal) differs from Fusion',
   'equal-circle-circle': 'OUR BUG F2: equal on circles is refused (the radius is not a solver unknown)',
   'tangent-circle-circle': 'DIFFERENT: ours never changes a radius (shape data); Fusion resizes the moving circle',
 };

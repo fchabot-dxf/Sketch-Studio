@@ -22,7 +22,7 @@
 
 import { dbg } from '#core/debug.js';
 import SettingsManager from '#core/settings-manager.js';
-import { basePer, UNITS, format as formatUnit } from '#core/units.js';
+import { basePer, UNITS, format as formatUnit, worldToUserY } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -138,10 +138,11 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lo
 
 /**
  * The axis numbers of the grid: one at each displayed HEAVY line along the X axis (y = 0) and the Y axis (x = 0), both
- * sides of the origin (negatives carry a minus), none at 0. PURE (string). The number is the world coordinate in the file's
+ * sides of the origin (negatives carry a minus), none at 0. PURE (string). The number is the coordinate in the file's
  * unit (world mm via the shared units.js format, its shortest form, the unit suffix stripped: the unit is the document's, shown
- * once in the Style panel). Sign convention = the app's own coordinates: world y is the SVG y (screenToWorld in coords.js:
- * y = vb.y + localY * scaleY), so y grows DOWN the screen and the Y-axis numbers below the origin are positive.
+ * once in the Style panel). Sign convention (TASK 534): X as stored; Y is the USER's y, positive UP like Fusion: the label sits at
+ * its world y (the SVG y, which grows DOWN the screen, screenToWorld in coords.js) and reads worldToUserY(y) from units.js, the one
+ * Y seam, so the numbers above the origin are positive and below are negative; the picture does not move.
  * Rotated 90 degrees (read top-to-bottom); X numbers sit just below the axis line, Y numbers just right of it, centred on
  * their grid line. Dense levels skip numbers (every 2nd, 5th, 10th .. heavy line) so they stay >= MIN_LABEL_GAP_PX apart.
  *   vb: the viewBox { x, y, width, height }; scale(px) → world units; docUnit: 'mm' | 'cm' | 'in'.
@@ -164,7 +165,7 @@ export function gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, 
   // X axis: number centred on its vertical grid line, below the axis.
   each(vb.x, vb.x + vb.width, (x) => out.push(`<text transform="translate(${x} ${scale(5)}) rotate(90)" dominant-baseline="central">${text(x)}</text>`));
   // Y axis: number centred on its horizontal grid line, right of the axis.
-  each(vb.y, vb.y + vb.height, (y) => out.push(`<text transform="translate(${scale(5) + fs / 2} ${y}) rotate(90)" text-anchor="middle" dominant-baseline="central">${text(y)}</text>`));
+  each(vb.y, vb.y + vb.height, (y) => out.push(`<text transform="translate(${scale(5) + fs / 2} ${y}) rotate(90)" text-anchor="middle" dominant-baseline="central">${text(worldToUserY(y))}</text>`));
   return `<g id="grid-labels" font-size="${fs}" pointer-events="none" style="user-select:none">${out.join('')}</g>`;
 }
 

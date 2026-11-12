@@ -1,0 +1,35 @@
+TASK 534 (Sketch-Studio): positive Y points UP for the user, like Fusion. Owner 2026-11-12: "Yes pos y up".
+Seen after task 532: the grid's Y-axis numbers read 100, 200 BELOW the origin and -100, -200 above (world y grows down the
+screen, as in SVG). Fusion shows positive Y upward.
+Worktree D:\APPS\Sketch-Studio.worktrees\task-534-y-up, branch agents/task-534-y-up (from origin/main 3a6ea30).
+
+THIS IS A DISPLAY CONVENTION, NOT A GEOMETRY CHANGE: stored joints, saved files, the solver, and every drawing keep their
+world coordinates exactly; nothing is mirrored on screen; a file saved before opens looking the same.
+1. INVENTORY FIRST (write it in the REPORT, before coding): every place a Y coordinate, a vertical signed value or a direction is
+   SHOWN to or TYPED by the user, in every host of the shared canvas (SketchStudio, Shaper Design, Pen Plotter sketch stage,
+   Trace if it shows coordinates): the status-bar X/Y readout, the grid axis numbers (packages/ui/canvas-grid.js
+   gridLabelsMarkup), any coordinate / position fields or numeric inputs, tooltips, the debug/diagnostic readouts users see,
+   signed vertical dimensions (dimSign / dimSignMode: does a "vertical" dimension show a sign?), angle display direction
+   (CCW-positive with Y up: check what an angle dimension shows today and whether Y-up changes which way is positive: if it
+   would, STOP on that point and report, do not flip angles), arc CW/CCW naming shown to the user, nudge/arrow-key moves if any.
+   And every place a Y LEAVES or ENTERS the app: SVG / DXF export and import, Shaper and Pen Plotter output (G-code, plotter
+   coordinates), clipboard, Fusion-related export. For each say: which way is Y today, and is it already converted.
+2. ONE seam: a single pair of pure functions (in packages/core, e.g. beside units.js) "world y -> user y" and back, the only
+   place the sign lives. Every DISPLAY and typed-INPUT site from the inventory uses it. No second negation anywhere
+   (afterwards: grep for the literal patterns you replaced and quote that no ad-hoc `-y` display code remains).
+3. Exports/imports: do NOT change what is written or read in this task unless the inventory shows one that is plainly
+   inconsistent with Y-up for the user (e.g. a DXF that comes out mirrored in Fusion): then STOP and report it with evidence
+   instead of changing it: CNC output must not flip silently.
+4. Tests (fail-first): grid numbers above the origin are positive, below negative (SketchStudio and Shaper Design, real app,
+   headless); the status readout shows a positive Y when the pointer is above the origin; a typed coordinate (if any input
+   exists) round-trips; saved-file bytes unchanged by the change (save the same drawing before/after: identical); exports
+   byte-identical before/after for one drawing per export format; screenshots before/after of the grid numbers, cropped
+   legible, md5, in .evidence/534/.
+DO NOT: touch the solver, geometry, stored data, the viewBox / screen mapping (the picture must not move); hidden globals;
+silent catch; per-site negations.
+STOP and ask if: a displayed value's meaning is ambiguous (list it); angles or CW/CCW would change; any export would change;
+a host (Pen Plotter paper coordinates) has its own convention that conflicts.
+List every behaviour change for existing users. No Fusion, mouse or keyboard; headless browsers only, closed before the REPORT.
+If node_modules is missing make a junction to D:\APPS\Sketch-Studio\node_modules. Before the final gate `git fetch origin` and
+merge origin/main if it moved. Gate green (`npm run gate`, run and wait for its exit), commit by path, push the branch,
+WORK-LOG `## TURN 534`, the AGENTS.md REPORT block. REPORT once, leave nothing running.

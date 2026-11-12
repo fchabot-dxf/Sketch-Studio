@@ -13514,3 +13514,9 @@ solve has its spring on the shape id. The replay (tests/harness/fusion-oracle/dr
 frames gave the same classes on the 7 cells tried). Re-run of all 146 cells: "ours" changed in 39 of 146 (107 identical); now 91 same, 51 KNOWN (was 81 / 61), 4 unstable. KNOWN regenerated, doc section corrected
 (replay-correction paragraph, table, 5 differences). Evidence: .evidence/530/app/ (before/after screenshot of each of the 5 cells, fusion-drag-live-results.json, old-ours.json / new-ours.json in .evidence/530/).
 Finding that survives: a body drag in ours is NOT rigid (it moves the first free joint only: a free line stretches), while Fusion translates it; circle rim translates in ours, Fusion resizes.
+## TURN 531 (extreme arcs audit; measuring, nothing under packages/ changed)
+- New: tests/extreme-arcs.test.js (in the gate, ~15 s), tests/harness/coverage/arcs-variants.js / arcs-rows.js / arcs-ui.js / arcs-findings.js; docs/COVERAGE-AUDIT.md section "Extreme arcs (task 531)". matrix-run.js: seven helpers got `export` (no behaviour change).
+- 24 arc variants (real arc tool and real fillet) x 30 rows x 4 hold states = 2880 cells: PASS 1711, N/A 176, NA-BUILD 788, FAIL 205, all explained: EA-1..EA-9 (+ EA-10 UI) and inherited F4/F5/F6.
+- Zero-sweep collapse IS accepted (EA-1, 45 cells, all variants): coincident of an arc's own ends, H/V on fillet ends, fillet radius edit on a 2 degree corner. Stored largeArc never recomputed (EA-2, 99 cells). Sweep wraps 0.1 <-> 359.8 (EA-3/EA-4).
+- Dimensions, coincident, equal-to-circle, lock, midpoint are clean on every variant incl. R 0.5 and R 5000; save/load keeps flags.
+- Evidence: .evidence/531/ (gate.log, table.md, ea2.mjs). Gate before merging origin/main: GATE files=251 pass=251 fail=0, SMOKE 12/12.

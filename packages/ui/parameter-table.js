@@ -7,8 +7,8 @@
 //                                                  two seams the side panel uses), and the row of a canvas-hovered / canvas-selected dimension is lit.
 // Lengths are formatted by the shared units formatter in the document unit; angles in degrees. All text is set with textContent.
 
-import { format as formatUnit, unitInfo } from '#core/units.js';
-import { evaluateAll, isDimension, isReferenceDimension } from '#core/parameters.js';
+import { format as formatUnit } from '#core/units.js';
+import { evaluateAll, isDimension, isReferenceDimension, quantityText } from '#core/parameters.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 import { toggleConstraintSelection } from '#ui/design-info-panel.js';
@@ -19,14 +19,6 @@ export const DIMENSION_EMPTY_TEXT = 'No dimensions yet. Use the Dim tool to add 
 const isAngle = (c) => c.type === CONSTRAINT_TYPES.ANGLE;
 const kindLabelOf = (c) => (isAngle(c) ? 'Angle' : c.isRadius || c.type === 'radius' ? 'Radius' : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter' : 'Distance');
 
-// a base value (mm / degrees) as text in `unit` ('' = a plain count); 1 decimal for lengths and angles like the canvas labels, up to 4 for a count
-function quantityText(v, unit) {
-  if (!Number.isFinite(v)) return '';
-  const u = unit ? unitInfo(unit) : null;
-  if (!u) return String(Math.round(v * 1e4) / 1e4);
-  if (u.kind === 'length') return formatUnit(v, u.name, { decimals: 1 });
-  return (v / u.f).toFixed(1);
-}
 const dimensionValueText = (c, unit) => (isAngle(c) ? Number(c.value).toFixed(1) : formatUnit(c.value, unit, { decimals: 1 }));
 
 /**

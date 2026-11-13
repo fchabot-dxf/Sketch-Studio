@@ -123,6 +123,30 @@ function fitKey(obs, tie) {
 const predictFirst = (e, f, s) => { const rf = e.tiers.findIndex(t => t.includes(f)), rs = e.tiers.findIndex(t => t.includes(s)); return rf >= 0 && rs >= 0 && rf !== rs ? rf < rs : e.tie === 'first'; };
 export const agrees = (e, o) => predictFirst(e, o.f, o.s) === (o.m === 'first');
 
+// Keys NO Fusion cell has been recorded for: a DECLARED rule, written into the table as data (cells 0, `rule` says why), so the app reads
+// every key one way (creation-placement.js firstGivesWay). A key that later gets recorded cells is fitted instead (the fit wins).
+// symmetric (task 563, not measured in Fusion): the SECOND pick mirrors onto the first unless it is HELD MORE. "Held more" = a larger hold
+// weight, the sum of the HOLD_WEIGHT of the features in its hold class (holdClass: hv, centred, pinned, sized, corner | chain); a class that
+// cannot move at all (family:full, point:fixed) ranks above every other. The tiers list every class holdClass can produce, by weight.
+const HOLD_WEIGHT = { hv: 1, centred: 1, pinned: 2, sized: 1, corner: 1, chain: 2 };
+const CANNOT_MOVE = 99;
+function holdWeightTiers() {
+  const optional = ['hv', 'centred', 'pinned', 'sized'];   // holdClass's feature order; then at most one of corner / chain
+  const weight = new Map([['point:free', 0], ['point:fixed', CANNOT_MOVE]]);
+  for (const family of ['arc', 'bezier', 'circle', 'line']) {
+    weight.set(family + ':full', CANNOT_MOVE);
+    for (let m = 0; m < 1 << optional.length; m++) for (const attach of [null, 'corner', 'chain']) {
+      const f = optional.filter((_, i) => m & (1 << i));
+      if (attach) f.push(attach);
+      weight.set(family + ':' + (f.length ? f.join('+') : 'free'), f.reduce((w, x) => w + HOLD_WEIGHT[x], 0));
+    }
+  }
+  return [...new Set(weight.values())].sort((a, b) => a - b).map(l => [...weight].filter(([, w]) => w === l).map(([c]) => c).sort());
+}
+export const DECLARED_RULES = {
+  symmetric: { rule: 'declared, task 563: no Fusion cells recorded; the second pick mirrors onto the first unless it is held more (a larger hold weight)', tie: 'second', tiers: holdWeightTiers(), cells: 0, agree: 0, differ: [] },
+};
+
 export function fitTable(obs = [...gradedObservations(), ...scenarioObservations()]) {
   const byKey = {};
   for (const o of obs) (byKey[o.key] ||= []).push(o);
@@ -133,6 +157,7 @@ export function fitTable(obs = [...gradedObservations(), ...scenarioObservations
     const best = fits[1].miss.length < fits[0].miss.length ? fits[1] : fits[0];
     table[key] = { tie: best.e.tie, tiers: best.e.tiers, cells: byKey[key].length, agree: byKey[key].length - best.miss.length, differ: best.miss };
   }
+  for (const [key, rule] of Object.entries(DECLARED_RULES)) if (!table[key]) table[key] = rule;
   return table;
 }
 
@@ -149,6 +174,7 @@ export function tableSource(table, gx, sx) {
     + `// and tests/fixtures/fusion-oracle/which-moves.json (Fusion ${sx.fusion}, recorded ${sx.date}). Do not edit by hand: re-run the script (a test\n// checks this file equals its output).\n`
     + '// Per table key: tiers of hold classes (creation-placement.js holdClass), LOWEST tier gives way first; the same tier is a tie and the\n'
     + '// SECOND pick gives way. cells = one-mover Fusion cells of the key, agree = cells the tiers predict, differ = the cells they do not.\n'
+    + '// A key with `rule` has no recorded Fusion cell: its tiers are the declared rule of the script (DECLARED_RULES), not a fit.\n'
     + `export const WHO_MOVES = ${JSON.stringify(table, null, 1)};\n`;
 }
 

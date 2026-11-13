@@ -2,6 +2,7 @@ import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPo
 import { CONSTRAINT_TYPES } from './constants.js';
 import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
 import { angleSectorOf, angleSectorTarget } from './angle-sector.js';
+import { symmetricResidual } from './symmetric.js';
 
 export function measureResidual(c, joints, shapes) {
     if (!c) return 0;
@@ -302,6 +303,14 @@ export function measureResidual(c, joints, shapes) {
             if (!p1 || !p2 || !mid) return 0;
             return Math.hypot(mid.x - (p1.x + p2.x) / 2, mid.y - (p1.y + p2.y) / 2);
         }
+
+        // task 563: the largest |q - mirror(p)| over the mirrored pairs (+ the radius difference of the circle form): the solver rows' zero set
+        case CONSTRAINT_TYPES.SYMMETRIC:
+            return symmetricResidual(c, joints, shapes, (s) => {
+                if (typeof s.radius === 'number') return s.radius;
+                const center = joints.get(s.joints[0]), rim = joints.get(s.joints[1]);
+                return center && rim ? getDist(center, rim) : 0;
+            });
 
         default:
             return 0;

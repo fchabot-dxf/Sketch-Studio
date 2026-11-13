@@ -61,7 +61,7 @@ const TOOL_SOLVER_ROLE = {
   fillet: 'creates an arc + virtual sharp + tangents + radius dim',
   dim: 'creates distance / angle / radius constraints (a point-to-line dimension is one 3-joint distance)',
   coincident: 'coincident', hv: 'horizontal | vertical', parallel: 'parallel', perp: 'perpendicular', collinear: 'collinear',
-  tangent: 'tangent', equal: 'equal', midpoint: 'midpoint',
+  tangent: 'tangent', equal: 'equal', midpoint: 'midpoint', symmetric: 'symmetric (two points, two lines or two circles / arcs about a line)',
 };
 function buildTools() {
   const groups = ['CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup);

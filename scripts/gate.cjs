@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // scripts/gate.cjs — the ONE test runner, in tiers (TASK 568).
-//   node scripts/gate.cjs [--tier quick|live|full] [--jobs N] [--list]     (npm run gate / gate:quick / gate:live)
+//   node scripts/gate.cjs [--tier quick|live|full|merge] [--base REF] [--head REF] [--plan] [--jobs N] [--list]     (npm run gate / gate:quick / gate:live)
 //   quick = every test that launches no browser, run wide in parallel. For builders while they iterate. No lock.
 //   live  = the browser tests + shell-smoke, run side by side at LIVE_JOBS. Takes the machine-wide lock.
 //   full  = quick + live + the headless-left check. What the gate has always covered (default). Takes the lock.
+//   merge = quick + shell-smoke + only the live tests AFFECTED by the branch's changes (see AFFECTED below). Takes the lock.
+//           node scripts/gate.cjs --tier merge [--base origin/main] [--head HEAD]  (npm run gate:merge -- --base origin/main)
+//           --plan prints the picked live tests and why, then exits.
 // Exit 0 only if no file failed, smoke is 12/12 (live/full) and no headless browser is left (live/full).
 //
 // HOW A FILE'S TIER IS KNOWN (declared once, here): a test is `live` when its relative-import closure reaches
@@ -28,6 +31,20 @@ const LAUNCHER = 'tests/helpers/cdp-browser.js';
 // A file that starts a browser WITHOUT going through the launcher carries its own spawn flags: it is a launcher too.
 const BROWSER_SPAWN_MARKER = 'remote-debugging-port';
 
+// AFFECTED (the `merge` tier), declared once: the changed files are `git diff --name-only <merge-base(base,head)> <head>`
+// (committed work only: commit before you run it). A live test is picked when its own file, or any file reachable from it,
+// is changed. Reachable = static import graph (relative imports, #core/#ui/#app aliases, `import()` with a literal) plus every
+// string literal naming an existing repo file (.js .html .css .json .svg: how the tests load the apps), and for an .html file
+// its <script src>, <link href> and inline module imports. A change to EVERY_TEST_TRIGGERS (something all tests lean on) picks every live test.
+const EVERY_TEST_TRIGGERS = [
+  'package.json',
+  'scripts/gate.cjs',
+  'scripts/shell-smoke.cjs',
+  'packages/core/document.js',
+  /^tests\/helpers\//,
+];
+const ALIASES = { '#core/': 'packages/core/', '#ui/': 'packages/ui/', '#app/': 'apps/sketchstudio/' };
+
 const FILE_LIMIT_MS = 90000;
 // Concurrency per tier. node tests: cores - 2. live: 6, the fastest of 1/2/4/6 with zero failures (TASK 568 measurement, WORK-LOG TURN 568).
 const QUICK_JOBS = Math.max(1, os.cpus().length - 2);
@@ -43,15 +60,21 @@ function parseArgs(argv) {
   let tier = 'full';
   let jobs = null;
   let list = false;
+  let plan = false;
+  let base = 'origin/main';
+  let head = 'HEAD';
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--tier') tier = argv[++i];
     else if (argv[i] === '--list') list = true;
+    else if (argv[i] === '--plan') plan = true;
+    else if (argv[i] === '--base') base = argv[++i];
+    else if (argv[i] === '--head') head = argv[++i];
     else if (argv[i] === '--jobs') jobs = parseInt(argv[++i], 10);
     else throw new Error(`gate: unknown argument ${argv[i]}`);
   }
-  if (!['quick', 'live', 'full'].includes(tier)) throw new Error(`gate: --tier must be quick|live|full, got ${tier}`);
+  if (!['quick', 'live', 'full', 'merge'].includes(tier)) throw new Error(`gate: --tier must be quick|live|full|merge, got ${tier}`);
   if (jobs !== null && !(jobs >= 1)) throw new Error('gate: --jobs must be a positive integer');
-  return { tier, jobs, list };
+  return { tier, jobs, list, plan, base, head };
 }
 
 // ---------------------------------------------------------------- discovery + tier classification
@@ -99,6 +122,69 @@ function classify(files) {
   const tiers = { quick: [], live: [] };
   for (const f of files) tiers[reachesLauncher(f) ? 'live' : 'quick'].push(f);
   return tiers;
+}
+
+// ---------------------------------------------------------------- merge tier: which live tests does the change affect
+const FILE_LITERAL_RE = /['"`]([A-Za-z0-9_@#./-]+\.(?:js|mjs|cjs|html|css|json|svg))['"`]/g;
+const HTML_REF_RE = /(?:src|href)\s*=\s*["']([^"'#?]+)["']/g;
+
+function existingFile(rel) {
+  const abs = path.join(REPO_ROOT, rel);
+  return fs.existsSync(abs) && fs.statSync(abs).isFile() ? rel.split(path.sep).join('/') : null;
+}
+
+function resolveRef(fromFile, spec) {
+  if (/^[a-z]+:\/\//i.test(spec)) return null; // a CDN url
+  for (const [alias, dir] of Object.entries(ALIASES)) {
+    if (spec.startsWith(alias)) return existingFile(path.posix.join(dir, spec.slice(alias.length)));
+  }
+  if (spec.startsWith('./') || spec.startsWith('../')) return existingFile(path.posix.join(path.posix.dirname(fromFile), spec));
+  return existingFile(spec.replace(/^\/+/, ''));
+}
+
+function refsOf(file) {
+  const src = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+  const out = new Set();
+  const specs = [];
+  for (const m of src.matchAll(FILE_LITERAL_RE)) specs.push(m[1]);
+  if (file.endsWith('.html')) for (const m of src.matchAll(HTML_REF_RE)) specs.push(m[1]);
+  for (const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/g)) specs.push(m[1]);
+  for (const spec of specs) {
+    const r = resolveRef(file, spec) || (!/\.\w+$/.test(spec) ? resolveRef(file, spec + '.js') : null);
+    if (r && r !== file) out.add(r);
+  }
+  return out;
+}
+
+function reachable(file) {
+  const seen = new Set([file]);
+  const stack = [file];
+  while (stack.length) for (const r of refsOf(stack.pop())) if (!seen.has(r)) { seen.add(r); stack.push(r); }
+  return seen;
+}
+
+function changedFiles(base, head) {
+  const git = (args) => {
+    const r = spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true });
+    if (r.status !== 0) throw new Error(`gate: git ${args.join(' ')} failed: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const mergeBase = git(['merge-base', base, head]);
+  return git(['diff', '--name-only', mergeBase, head]).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+}
+
+// -> { picked: [{ file, why: [changed files] }], everything: changedFile | null, changed }
+function affectedLive(liveFiles, base, head) {
+  const changed = changedFiles(base, head);
+  const trigger = changed.find(c => EVERY_TEST_TRIGGERS.some(t => (t instanceof RegExp ? t.test(c) : t === c)));
+  if (trigger) return { picked: liveFiles.map(file => ({ file, why: [trigger] })), everything: trigger, changed };
+  const changedSet = new Set(changed);
+  const picked = [];
+  for (const file of liveFiles) {
+    const why = [...reachable(file)].filter(f => changedSet.has(f));
+    if (why.length) picked.push({ file, why });
+  }
+  return { picked, everything: null, changed };
 }
 
 // ---------------------------------------------------------------- machine-wide lock
@@ -239,14 +325,22 @@ function headlessCheck(smokePid) {
 
 // ---------------------------------------------------------------- main
 async function main() {
-  const { tier, jobs, list } = parseArgs(process.argv.slice(2));
+  const { tier, jobs, list, plan, base, head } = parseArgs(process.argv.slice(2));
   const tiers = classify(findTestFiles());
   if (list) { // --list: print each file with its tier and exit (nothing runs, no lock)
     for (const t of ['quick', 'live']) for (const f of tiers[t]) console.log(`${t} ${f}`);
     return;
   }
-  const wantQuick = tier === 'quick' || tier === 'full';
-  const wantLive = tier === 'live' || tier === 'full';
+  const wantQuick = tier !== 'live';
+  const wantLive = tier !== 'quick'; // merge: only the affected live files + shell-smoke
+  let liveFiles = tiers.live;
+  if (tier === 'merge') {
+    const a = affectedLive(tiers.live, base, head);
+    liveFiles = a.picked.map(p => p.file);
+    console.log(`MERGE changed=${a.changed.length} files vs ${base}...${head}; ${a.everything ? `${a.everything} is an every-test trigger: ALL ${liveFiles.length} live tests` : `${liveFiles.length} of ${tiers.live.length} live tests affected`}`);
+    if (!a.everything) for (const p of a.picked) console.log(`  PICKED ${p.file}  <- ${p.why.slice(0, 3).join(', ')}${p.why.length > 3 ? ` (+${p.why.length - 3})` : ''}`);
+    if (plan) return;
+  }
   const started = Date.now();
 
   if (wantLive) acquireLock(tier);
@@ -261,7 +355,7 @@ async function main() {
   try {
     if (wantQuick) results.push(...await runPool(tiers.quick, 'quick', jobs || QUICK_JOBS, timings, true));
     if (wantLive) {
-      results.push(...await runPool(tiers.live, 'live', jobs || LIVE_JOBS, timings, true));
+      results.push(...await runPool(liveFiles, 'live', jobs || LIVE_JOBS, timings, true));
       smoke = runSmoke();
       counts = headlessCheck(smoke.pid);
     }

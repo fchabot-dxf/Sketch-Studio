@@ -2032,7 +2032,9 @@ order), so the rims followed the radius equality, not the drag. Now (one place, 
 carrying a drag target, one spring per solver variable (coincident joints are one point), and the select tool gives a target only to the joints the drag CARRIES
 (`state.drag.carried`): the grabbed point's coincident cluster, plus both rims for an arc grabbed by its centre. Unchanged: one HELD rim makes it task 582's pivot (the
 rims are not carried, the radius is kept, the free end follows the constraints); a held centre locks the drag; a centre-point rectangle's group is masked with its centre
-but not carried (as before, only the centre is pulled).
+but not carried (as before, only the centre is pulled). Changed by the same cause: a BEZIER grabbed by its body (no body point declared, so its drag keeps member
+targets on all four control points) moved only its FIRST control point (the one spring); it now translates whole (`.evidence/584/probe-clusters-*.txt`: control
+points 2-4 (20, 30) / (40, 30) / (50, 10) stayed, now each moves by (6, -4) with the first). Fusion: not measured.
 
 | oracle class | same / KNOWN before | after |
 |---|---|---|

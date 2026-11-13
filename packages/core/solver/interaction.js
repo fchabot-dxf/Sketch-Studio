@@ -11,7 +11,7 @@ export class InteractionSolver {
 
   // Attach the temporary springs of a drag, present only during the solve() call.
   // dragTargets: one spring or a list (TASK 584: a drag that CARRIES several joints, e.g. an arc grabbed by its centre with both rims,
-  // pulls each toward its own target, engine._dragSprings). A spring is { jointId, x, y, stiffness } (a JOINT drag) or
+  // pulls each toward its own target, engine._jointDragSprings). A spring is { jointId, x, y, stiffness } (a JOINT drag) or
   // { body: { shape, param }, x, y, stiffness } (a BODY drag, task 538: the grabbed point of the shape, declared per shape kind in
   // definitions.js BODY_POINTS)
   attachMouseSpring(dragTargets) {

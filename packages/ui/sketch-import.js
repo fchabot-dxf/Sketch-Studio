@@ -7,6 +7,7 @@
 //   importIntoSketch(text, fileName, controller, options) -> { ok, message, imported, sketch, format, fitted }
 //     the parser is picked by the file extension, else by the sniffed content (looksLikeDxf); `controller.state` is the #core state and
 //     `controller.svg` its canvas: TASK 570: the view is fitted to the IMPORTED shapes (the app's own fitToDrawing, here and nowhere else;
+//     options.frame (optional) = () => { shapes, joints } the host wants framed instead of the imported shapes (TASK 573).
 //     `fitted` = the view was set now, false when the canvas has no size yet: the fit is then armed for its first size).
 //     The snapshot of the import's undo step also carries the host's data (state.hostSnapshot declared `asked`: Pen Plotter), so ONE undo
 //     puts back what afterImport changed.
@@ -140,7 +141,9 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   if (!options.keepDescIds) for (const s of shapes) delete s.descId;
 
   // TASK 570: frame the imported shapes (not the whole drawing): the same fit a restored drawing gets, through a view of the state that holds only them.
-  const fitted = fitToDrawing(controller.svg, Object.create(st, { shapes: { value: shapes } }));
+  // TASK 573: a host may declare WHAT is framed instead: options.frame() -> { shapes, joints } (e.g. Pen Plotter: its paper rectangle). Still ONE fit.
+  const framed = options.frame ? options.frame() : { shapes };
+  const fitted = fitToDrawing(controller.svg, Object.create(st, Object.fromEntries(Object.entries(framed).map(([k, v]) => [k, { value: v }]))));
 
   const detail = skipped.map((s) => `${s.tag} ${s.reason} ×${s.count}`).join('; ');
   const message = `Imported ${shapes.length} shapes → ${sketch.name} @ ${label}${assumed ? ' (assumed)' : ''}` +

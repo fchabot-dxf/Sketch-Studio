@@ -40,9 +40,18 @@ function afterImport({ format, descs, shapes, root }, paperSet) {
   return null;
 }
 
+// TASK 573: an import in Pen Plotter frames the whole PAPER (the sheet is the working area), not just the imported art: the shared importer's
+// one fit is told to frame the paper rectangle (four lines on four corner joints), whether or not the import changed the paper size.
+function paperFrame() {
+  const { w, h } = state.doc;
+  const joints = new Map([['paper-a', { x: 0, y: 0 }], ['paper-b', { x: w, y: 0 }], ['paper-c', { x: w, y: h }], ['paper-d', { x: 0, y: h }]]);
+  const ids = [...joints.keys()];
+  return { joints, shapes: ids.map((id, i) => ({ id: 'paper-' + i, type: 'line', joints: [id, ids[(i + 1) % 4]] })) };
+}
+
 /** Import `text` (an SVG or a DXF) into controller's #core sketch. Returns the shared result plus `docSet` (the paper size was changed). */
 export function importFileToCore(text, fileName, controller) {
   let docSet = false;
-  const res = importIntoSketch(text, fileName, controller, { idPrefix: 'imp', silentTags: SILENT_TAGS, inheritPaint, afterImport: (ctx) => afterImport(ctx, () => { docSet = true; }) });
+  const res = importIntoSketch(text, fileName, controller, { idPrefix: 'imp', frame: paperFrame, silentTags: SILENT_TAGS, inheritPaint, afterImport: (ctx) => afterImport(ctx, () => { docSet = true; }) });
   return { ...res, docSet };
 }

@@ -41,6 +41,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
+import { createClipboard, clipboardKeyAction, isTextEditingTarget } from '#ui/clipboard.js'; // TASK 559: Ctrl+C / Ctrl+X / Ctrl+V
 
 // Apply some visual settings to CSS variables at startup and when changed
 function applyVisualSettings(settings) {
@@ -1062,10 +1063,23 @@ export function undoRedoKeyAction(e) {
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : (msg) => { try { showNotification(msg); } catch (_) {} };
+    const clipboard = createClipboard({ state, notify: notifyFn, unit: () => SettingsManager.get('DOC_UNIT') || 'mm' });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
         // CRITICAL: If the target is an INPUT, the dimension input, or a TEXTAREA, do not process global shortcuts
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.id === 'dimInput')) return;
+
+        // TASK 559: Ctrl/Cmd+C / X / V act on the canvas selection. A text control (isTextEditingTarget, the guard above for the common ones) and
+        // selected page text keep the browser's own copy / paste. Not mid-draw: a paste is its own undo step.
+        const clipAction = clipboardKeyAction(e);
+        if (clipAction) {
+            if (isTextEditingTarget(e.target)) return;
+            if (clipAction === 'copy' && typeof window !== 'undefined' && String(window.getSelection && window.getSelection()).length > 0) return;
+            e.preventDefault();
+            if (typeof state.isUndoGroupOpen === 'function' && state.isUndoGroupOpen()) return;
+            clipboard[clipAction]().catch((err) => notifyFn('Clipboard ' + clipAction + ' failed: ' + (err && err.message ? err.message : err), 'error'));
+            return;
+        }
 
         // Profile actions (Ctrl+Shift+C / Ctrl+Shift+U) opt-in
         if (profilesEnabled && (e.ctrlKey || e.metaKey) && e.shiftKey) {
@@ -1247,7 +1261,7 @@ function openContextMenuFor(e, svg, state) {
     const actions = {
         toggleDriving: (c) => {
             const res = toggleDriving(state, c);
-            if (res.refused) showNotification('Cannot make this dimension driving: the sketch already determines it.', 'warning');
+            if (res.refused) showNotification(res.nowDriving ? `Cannot make this a reference dimension: ${res.reason}.` : 'Cannot make this dimension driving: the sketch already determines it.', 'warning');
             if (res.error === 'ERR-DRIVE-02') showNotification('Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.', 'warning');
         },
         deleteSelection: () => handleDelete(state),

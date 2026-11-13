@@ -30,6 +30,11 @@ export const formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT
  * Lengths format in the document unit (SettingsManager DOC_UNIT); angles are never unit-converted.
  */
 export function formatConstraintValue(c, options = {}) {
+  const text = constraintValueText(c, options);
+  // TASK 535: a dimension driven by a formula (and not being placed) shows Fusion's mark in front of its value: 'fx: 60.0'
+  return text && c && typeof c.expression === 'string' && c.expression !== '' && !(c.isDriven || c.driven) && !(typeof options === 'object' && options.isPlacing) ? `fx: ${text}` : text;
+}
+function constraintValueText(c, options) {
   if (!c) return '';
   const val = (typeof options === 'number') ? options :
     (typeof options.value === 'number') ? options.value :

@@ -56,7 +56,7 @@ for (const unit of ['mm', 'in']) {
     assert(!r.error, `${what}: its formula evaluates (${r.error})`);
     eq(r.unit, isAngle ? 'deg' : unit, `${what}: unit column`);
     // THE canvas formatter agrees: value text == the canvas label with its brackets / R prefix / degree sign removed
-    const canvas = formatConstraintValue(c).replace(/^[RØ] /, '').replace(/^\((.*)\)$/, '$1').replace('°', '');
+    const canvas = formatConstraintValue(c).replace(/^fx: /, '').replace(/^[RØ] /, '').replace(/^\((.*)\)$/, '$1').replace('°', '');
     const shown = r.value.replace(/^\((.*)\)$/, '$1');
     eq(shown, canvas, `${what}: value text = canvas label`);
     if (c.isDriven) { assert(/^\(.*\)$/.test(r.value), `${what}: reference value in brackets: ${r.value}`); eq(r.expression, '(reference)', `${what}: expression`); }

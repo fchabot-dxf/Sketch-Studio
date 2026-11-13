@@ -2,6 +2,7 @@ import { measureResidual } from './constraint-verifier.js';
 import { SolverConfig } from './solver-config.js';
 import { createNewtonSolver } from './solver/engine.js';
 import { sceneJoints, sceneShapes } from './reference-lines.js';
+import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from './constants.js';
 
 
 // Embedded store (was store.js)
@@ -19,7 +20,7 @@ function _initStore(){
   shapes.length = 0;
   constraints.length = 0;
   jid = 0;
-  joints.set('j_origin', { x: 0, y: 0, fixed: true });
+  joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
 }
 
 export function createEngine(options = {}){

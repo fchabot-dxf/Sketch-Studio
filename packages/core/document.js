@@ -18,6 +18,7 @@ import { addConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js';
+import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { legacyAngleSector } from '#core/angle-sector.js';
 
 // 2 (TASK 535, owner ruling O2): the version that carries dimension names, dimension formulas and geometry.parameters. Always written;
@@ -90,6 +91,9 @@ export function deserializeDocument(doc, state) {
   const g = doc.geometry || {};
 
   state.joints.clear();
+  // TASK 554: every sketch has its origin. Set first, so a document without one (the store's empty "New design", a design saved from
+  // it, an older file) loads with it; a stored origin replaces this copy below, keeping its own fields and its place (first).
+  state.joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
   for (const entry of (g.joints || [])) {
     const [id, j] = Array.isArray(entry) ? entry : [entry.id, entry];
     if (id != null && j) state.joints.set(id, { ...j });

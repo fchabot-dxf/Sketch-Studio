@@ -1,3 +1,4 @@
+// gate: exclusive
 // TASK 531 -- EXTREME ARCS audit (measuring; diagnose, do not fix). 24 arc variants (very short / long sweeps, tiny and huge radius, fillet arcs) x every
 // constraint and dimension an arc takes x the hold states sep / shared / locked / dimmed, each cell through the real tool handlers (tests/harness/coverage/arcs-*.js).
 // Passing cells must pass; every class of failure is a KNOWN entry (EA-n, tests/harness/coverage/arcs-findings.js) that fails loudly when it stops failing.

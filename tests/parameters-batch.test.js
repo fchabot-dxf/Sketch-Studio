@@ -1,3 +1,4 @@
+// gate: exclusive
 // TASK 535 slice 2 -- the BATCH SEAM (docs/PARAMETERS-DESIGN.md section D): commitDimensionEdits applies N dimension value changes as ONE operation,
 // and applyParameterChange applies a planChange result (parameters + expressions + values) all-or-nothing in ONE undo step.
 // INVISIBLE: no UI, no typed expression anywhere; this test is the only producer. Drawings are generated through the real tool seams

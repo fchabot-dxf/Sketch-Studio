@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/relief-model.test.js — TASK 459: the 3D Review terrace model (pure #core, no WebGL).
 import assert from 'node:assert';
 import { buildRelief, reliefDepth, DEFAULT_STOCK, meshArea, createReliefCache } from '#core/relief-model.js';

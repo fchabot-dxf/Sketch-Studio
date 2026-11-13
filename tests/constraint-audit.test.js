@@ -1,3 +1,4 @@
+// gate: exclusive
 // TASK 508 -- CONSTRAINT AUDIT. Five medium drawings (plate, trapezoid, bracket, triangle+circle, polygon+spokes) are built from scratch
 // through the same core APIs the tools use, constrained step by step with a data recipe, then verified, edited, abused and checked against
 // an independent oracle (FreeCAD's PlaneGCS + a finite-difference Jacobian). Report: docs/CONSTRAINT-AUDIT.md. Re-run the tables with

@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/solver-perf-guard.test.js -- TASK 541: a LOOSE guard on the solver's speed on large sketches (scripts/solver-bench.mjs builds the
 // sketches and runs the real seams). Each limit is 3x the time measured when task 541 made the solver sparse (Node 24, the owner's PC), so
 // machine load does not flake it and only a real slowdown (a dense matrix back in the loop, an O(n^2) pass per row) fails it. Each time

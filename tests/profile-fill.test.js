@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/profile-fill.test.js — TASK 502: Fusion white canvas, PROFILE_FILL tint of closed loops, locked-line green.
 import assert from 'node:assert';
 

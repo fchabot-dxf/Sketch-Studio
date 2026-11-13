@@ -1,4 +1,4 @@
-// tests/dimension-delete-live.test.js — TASK 485: deleting a DIMENSION removes only its constraint, never geometry (real pointer + real Delete key + the panel).
+// tests/dimension-delete-live.test.js — TASK 485: deleting a DIMENSION removes only its constraint, never geometry. TASK 576: the label routes (click + Delete, Undo, a line selected first, a mixed selection) moved to tests/dimension-delete-select-node.test.js; this browser test keeps the ONE route through the Design info panel (a line selected first, then the constraint's ROW clicked, then the real Delete key), a page hook the node kit does not mount.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -90,22 +90,6 @@ await (async () => {
     };
     for (let i = 0; i < KINDS.length; i++) {
       const K = KINDS[i];
-      // A: the dimension label alone: real click + real Delete key
-      await seed(); await sleep(500);
-      await click(await labelPt(i)); assert.strictEqual(jc(await counts()).selCons, 1, K + ': the label click selects the dimension');
-      await key('Delete', 'Delete', 46);
-      onlyTheDimension(jc(await counts()), K + ' / label + Delete');
-      // D: Undo restores the dimension in ONE step (the geometry is untouched)
-      await key('z', 'KeyZ', 90, 2);
-      const undone = jc(await counts());
-      assert.strictEqual(undone.constraints, base.constraints, K + ': one Ctrl+Z gives the dimension back'); assert.strictEqual(undone.shapes, base.shapes); assert.strictEqual(undone.pos, base.pos);
-      // B: a line selected FIRST, then the dimension label clicked: the line must NOT stay selected, so Delete removes only the dimension
-      await seed(); await sleep(500);
-      await click(await W2S(...GEO.L2)); assert.strictEqual(jc(await counts()).selShapes, 1, K + ': the line is selected');
-      await click(await labelPt(i));
-      const mid = jc(await counts()); assert.strictEqual(mid.selShapes, 0, K + ': clicking a dimension drops the earlier geometry selection'); assert.strictEqual(mid.selCons, 1);
-      await key('Delete', 'Delete', 46);
-      onlyTheDimension(jc(await counts()), K + ' / line then label + Delete');
       // C: the Design panel list: a line selected first, then the constraint's ROW clicked, then Delete
       await seed(); await sleep(500);
       const rowPt = await panelRow(i); // (found BEFORE the line is selected: the lookup clears the selection sets)
@@ -116,13 +100,6 @@ await (async () => {
       onlyTheDimension(jc(await counts()), K + ' / panel row + Delete');
       console.log('ok:', K);
     }
-    // E: a MIXED selection (line + dimension, Shift-click) removes both: that part is intended
-    await seed(); await sleep(500);
-    await click(await W2S(...GEO.L2)); await click(await labelPt(0), true);
-    const mixed = jc(await counts()); assert.strictEqual(mixed.selShapes, 1); assert.strictEqual(mixed.selCons, 1, 'Shift extends the selection');
-    await key('Delete', 'Delete', 46);
-    const after = jc(await counts());
-    assert.strictEqual(after.shapes, base.shapes - 1, 'the selected line is removed with it'); assert.ok(after.constraints <= base.constraints - 1);
     console.log('dimension-delete-live: ok');
   } finally {
     await cdp.close();

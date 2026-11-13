@@ -94,13 +94,12 @@ const SK_VAR = {
   '#0891b2': '--sk-perpendicular-stroke',
   'white': '--sk-joint-fill',
   '#7aa7e0': '--sk-profile-fill',
-  '#f59e0b': '--sk-glyph-hover',
-  '#b45309': '--sk-glyph-selected',
 };
 // TASK 588: the geometry a constraint binds is lit in the GLYPH colours (sketcher.css --sk-glyph-hover / --sk-glyph-selected), never in the
 // geometry blues: blue means the geometry itself is hovered or selected, and only that.
-const GLYPH_HOVER_COLOR = '#f59e0b';
-const GLYPH_SELECTED_COLOR = '#b45309';
+// (the tokens themselves, not hex keys of SK_VAR: their warm yellow is also the crossing-marquee fill's hex, which must not follow them)
+const GLYPH_HOVER_COLOR = 'var(--sk-glyph-hover, #eab308)';
+const GLYPH_SELECTED_COLOR = 'var(--sk-glyph-selected, #ca8a04)';
 export function skv(color) {
   if (typeof color !== 'string') return color;
   const v = SK_VAR[color];
@@ -550,6 +549,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     // A: Bottom layer — selection/hover solid disc
     // Selected glyphs get stronger, larger feedback (disc + subtle outline). Hovered glyphs get slightly stronger disc.
+    // TASK 588: the 'fusion' style (no badge, a 20 px outlined icon) gets a warm halo of its own behind the icon, denser than the badge's
+    // (it lies on white, not around a coloured disc): the outline tint alone was too faint to see.
+    if(FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
+      out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 6)}" style="fill:${skv(isSelected ? GLYPH_SELECTED_COLOR : GLYPH_HOVER_COLOR)}" fill-opacity="${isSelected ? 0.5 : 0.4}" stroke="none"/>`);
+      if (isSelected) out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 8)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(2)}" stroke-opacity="0.8"/>`);
+    }
     if(!FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
       if (isSelected) {
         out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv(GLYPH_SELECTED_COLOR)}" fill-opacity="0.28" stroke="none"/>`);

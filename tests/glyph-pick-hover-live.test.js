@@ -4,7 +4,7 @@
 // only when the pointer is ON the glyph as drawn (+ 3 px), and HOVER = CLICK (hover-manager selectPick).
 //  1. fusion glyph style (the icon, 10 px radius): the line 15 px from the glyph centre hovers BLUE and a click selects the LINE; a double
 //     click there selects the rectangle's chain.
-//  2. the glyph hovered: the glyph and the lines its constraint binds light in the glyph-hover colour (--sk-glyph-hover), no line in blue
+//  2. the glyph hovered: the glyph (a filled warm halo behind the icon) and the lines its constraint binds light in the glyph-hover colour (--sk-glyph-hover), no line in blue
 //     (--sk-selection); a click selects the CONSTRAINT: the glyph and its lines in --sk-glyph-selected, no blue.
 //  3. badge glyph style (the 32 px disc): the line 21 px from the glyph centre (off the disc, in the old 24 px reach) selects the LINE.
 // The V glyph sits close beside its line, as in the owner's drawing: GLYPH_OFFSET_PX 16 puts it about 14 px off the line (svg-renderer's fan).
@@ -39,10 +39,12 @@ await (async () => {
       for (const e of document.querySelectorAll('#svgCanvas line.shape-elem')) ls[e.dataset.shapeId] = tok(e.getAttribute('style'));
       const g = document.querySelector('#svgCanvas g.constraint-glyph[data-ctype="vertical"][data-cj0="r2"]');
       const t = g && (g.getAttribute('transform') || '').match(/translate\\(([-0-9.e]+),([-0-9.e]+)\\)/);
-      const prev = g && g.previousElementSibling;
-      const glyphToks = g ? [...new Set((g.outerHTML + (prev && prev.tagName === 'circle' ? prev.outerHTML : '')).match(/--sk-glyph-(hover|selected)/g) || [])] : [];
+      // the halo: the filled circle(s) drawn right before the glyph, at its centre (the fusion style's hover / selected halo)
+      const halo = []; for (let e = g && g.previousElementSibling; e && e.tagName === 'circle'; e = e.previousElementSibling) halo.push(e.outerHTML);
+      const glyphToks = g ? [...new Set((g.outerHTML + halo.join('')).match(/--sk-glyph-(hover|selected)/g) || [])] : [];
+      const haloToks = [...new Set(halo.filter((h) => h.includes('fill:var(--sk-glyph')).join('').match(/--sk-glyph-(hover|selected)/g) || [])];
       const lineX = (() => { const e = document.querySelector('#svgCanvas line.shape-elem[data-shape-id="rE2"]'); return +e.getAttribute('x1'); })();
-      return JSON.stringify({ ls, glyph: t ? [+t[1], +t[2]] : null, glyphToks, lineX, m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
+      return JSON.stringify({ ls, glyph: t ? [+t[1], +t[2]] : null, glyphToks, haloToks, lineX, m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
     const toS = (g, x, y) => ({ x: g.m[0] * x + g.m[2] * y + g.m[4], y: g.m[1] * x + g.m[3] * y + g.m[5] });
     const blueLines = (g) => Object.keys(g.ls).filter((id) => g.ls[id] === '--sk-selection' || g.ls[id] === '--sk-hover').sort();
     const linesIn = (g, token) => Object.keys(g.ls).filter((id) => g.ls[id] === token).sort();
@@ -103,15 +105,17 @@ await (async () => {
       await clearSel(g);
       await mouse('mouseMoved', G.x, G.y, 0); await sleep(300);
       s = await geo();
-      out.push(`2. glyph hovered: glyph tokens [${s.glyphToks.join(' ')}], lines in glyph-hover [${linesIn(s, '--sk-glyph-hover').join(' ')}], blue [${blueLines(s).join(' ')}]`);
+      out.push(`2. glyph hovered: glyph tokens [${s.glyphToks.join(' ')}], halo [${s.haloToks.join(' ')}], lines in glyph-hover [${linesIn(s, '--sk-glyph-hover').join(' ')}], blue [${blueLines(s).join(' ')}]`);
       assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-hover'], 'the hovered glyph is lit in the glyph-hover colour');
+      assert.deepStrictEqual(s.haloToks, ['--sk-glyph-hover'], 'behind it a filled glyph-hover halo (not only the outline tint)');
       assert.deepStrictEqual(linesIn(s, '--sk-glyph-hover'), BOUND, 'the lines its constraint binds glow in the glyph-hover colour');
       assert.deepStrictEqual(blueLines(s), [], 'no line is blue');
       await shot('588-hover-glyph.png', G);
       await mouse('mousePressed', G.x, G.y, 1, 1); await sleep(60); await mouse('mouseReleased', G.x, G.y, 0, 1); await sleep(200);
       await away(g); s = await geo();
-      out.push(`   click on it: glyph tokens [${s.glyphToks.join(' ')}], lines in glyph-selected [${linesIn(s, '--sk-glyph-selected').join(' ')}], blue [${blueLines(s).join(' ')}]`);
+      out.push(`   click on it: glyph tokens [${s.glyphToks.join(' ')}], halo [${s.haloToks.join(' ')}], lines in glyph-selected [${linesIn(s, '--sk-glyph-selected').join(' ')}], blue [${blueLines(s).join(' ')}]`);
       assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-selected'], 'the click selects the constraint: its glyph shows selected');
+      assert.deepStrictEqual(s.haloToks, ['--sk-glyph-selected'], 'behind it a filled glyph-selected halo');
       assert.deepStrictEqual(linesIn(s, '--sk-glyph-selected'), BOUND, 'its lines in the glyph-selected colour');
       assert.deepStrictEqual(blueLines(s), [], 'no blue on its lines');
       await shot('588-selected-glyph.png', G);

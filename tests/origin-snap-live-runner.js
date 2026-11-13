@@ -10,7 +10,7 @@
 //   HOST  'sketchstudio' | 'shaper'      AXIS  'on' | 'off' (the AXIS_SNAP setting)
 //   ZOOMS wheel steps applied (about the origin) before each level, e.g. '0,4,-8' = default, 4 in, then 8 out (= 4 out of the default);
 //         rows report the net steps from the default (0 / 4 / -4)
-//   AWAY  '1' = also check axis snap AWAY from the origin (a line end near the X axis gets horizontal(end, j_origin) when on, nothing when off)
+//   AWAY  '1' = also check axis snap AWAY from the origin (a line end near the X axis gets pointOnLine(end, ref_axis_x) when on, nothing when off)
 
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -259,15 +259,15 @@ await (async () => {
       const awayShown = await snapShown();
       await click(o.x + 200, o.y + 9); await esc();
       const d = await readDoc(); const J = jmap(d);
-      const h = d.constraints.filter((c) => c.type === 'horizontal' && (c.joints || []).includes('j_origin'));
+      const h = d.constraints.filter((c) => c.type === 'pointOnLine' && c.shape === 'ref_axis_x'); // task 539: the axis snap is a point-on-line with the built-in X axis
       const end = d.shapes[0] && d.shapes[0].joints[1];
       console.log('AWAY', JSON.stringify({ axis: AXIS, shown: awayShown, h: h.length, end: J[end] }));
       if (AXIS === 'on') {
         assert.strictEqual(awayShown, 'axis-x:axis-x', 'away from the origin the X axis snap is shown');
-        assert(h.length === 1 && h[0].joints.includes(end) && J[end].y === 0, 'the line end sits on the X axis with horizontal(end, j_origin): ' + JSON.stringify({ h, end: J[end] }));
+        assert(h.length === 1 && h[0].joint === end && J[end].y === 0, 'the line end sits on the X axis with pointOnLine(end, ref_axis_x): ' + JSON.stringify({ h, end: J[end] }));
       } else {
         assert.notStrictEqual(awayShown, 'axis-x:axis-x', 'axis snap off: no X axis snap');
-        assert.strictEqual(h.length, 0, 'axis snap off: no horizontal constraint with the origin');
+        assert.strictEqual(h.length, 0, 'axis snap off: no point-on-line with the X axis');
       }
     }
 

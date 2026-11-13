@@ -246,6 +246,7 @@ dimension labels, the `#dimInput` box) through the app's own world to screen.
 - **dimension-delete-live**: the label routes (A click + Delete, D Undo, B line then label, E mixed Shift selection) moved to node (Shaper). Route C (a line
   selected first, then the constraint's ROW in the Design info panel, then Delete) stays in `tests/dimension-delete-live.test.js`: the info panel is a page hook
   the kit does not mount. The old "node twin" `tests/dimension-delete.test.js` covers only `deleteSelection`, not these selection routes, so it was not a replacement.
+  The info panel refreshes only when its signature (counts, values, selected constraints) changes, so route C used to find fresh rows only because the label routes ran before it; the trimmed file now selects a label and clicks empty canvas after each re-seed (found by the first gate:merge: `panel row for constraint 0 exists`).
 
 ### Same asserts, old vs new
 

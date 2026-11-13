@@ -91,7 +91,7 @@ await (async () => {
     for (let i = 0; i < KINDS.length; i++) {
       const K = KINDS[i];
       // C: the Design panel list: a line selected first, then the constraint's ROW clicked, then Delete
-      await seed(); await sleep(500);
+      await seed(); await sleep(500); await click(await labelPt(i)); await click(await W2S(60, -40)); // the info panel refreshes only when its signature (counts, values, selected constraints) changes, and a re-seed changes none: select a label, then empty canvas, so the rows are rebuilt for the new constraint objects (the label routes that used to precede this did it)
       const rowPt = await panelRow(i); // (found BEFORE the line is selected: the lookup clears the selection sets)
       await click(await W2S(...GEO.L2)); assert.strictEqual(jc(await counts()).selShapes, 1, K + ': the line is selected');
       await click(rowPt);

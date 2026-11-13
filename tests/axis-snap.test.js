@@ -19,8 +19,8 @@
   const find = (joints, shapes, svg, m, ...rest) => findSnap(joints, shapes, svg, m, ...rest);
 
   assert(SettingsManager.get('AXIS_SNAP') === true, 'AXIS_SNAP defaults to ON');
-  assert(AXIS_SNAP_TARGETS['axis-x'].constraint === CONSTRAINT_TYPES.HORIZONTAL && AXIS_SNAP_TARGETS['axis-x'].across === 'y', 'axis-x = horizontal, pins y');
-  assert(AXIS_SNAP_TARGETS['axis-y'].constraint === CONSTRAINT_TYPES.VERTICAL && AXIS_SNAP_TARGETS['axis-y'].across === 'x', 'axis-y = vertical, pins x');
+  assert(AXIS_SNAP_TARGETS['axis-x'].shapeId === 'ref_axis_x' && AXIS_SNAP_TARGETS['axis-x'].across === 'y', 'axis-x = the X reference line, pins y');
+  assert(AXIS_SNAP_TARGETS['axis-y'].shapeId === 'ref_axis_y' && AXIS_SNAP_TARGETS['axis-y'].across === 'x', 'axis-y = the Y reference line, pins x');
 
   // inside the radius and not outside, at several zooms (the radius is in SCREEN px)
   for (const zoom of [0.25, 1, 4, 20]) {
@@ -82,23 +82,27 @@
   assert(find(new Map(), [], svg, { x: 600, y: 405 }) === null, 'no j_origin = no axis snap');
   assert(find(mkJoints(), [], svg, { x: 600, y: 405 }, ['j_origin']) === null, 'origin excluded = no axis snap');
 
-  // applySnapConstraint: the existing H / V constraint with the origin, through the normal path
+  // applySnapConstraint (task 539): a POINT-ON-LINE with the built-in axis line, through the normal path
   {
     const mkState = () => { const joints = mkJoints(); joints.set('p', { x: 120, y: 0.3 }); joints.set('q', { x: 5, y: 90 }); return { joints, shapes: [], constraints: [] }; };
     let st = mkState();
     assert(applySnapConstraint(st, 'p', { type: 'axis-x', pt: { x: 120, y: 0 } }, {}) === true, 'axis-x snap creates a constraint');
-    assert(st.constraints.length === 1 && st.constraints[0].type === CONSTRAINT_TYPES.HORIZONTAL && st.constraints[0].joints.includes('p') && st.constraints[0].joints.includes('j_origin'), 'horizontal with j_origin: ' + JSON.stringify(st.constraints));
+    assert(st.constraints.length === 1 && st.constraints[0].type === CONSTRAINT_TYPES.POINT_ON_LINE && st.constraints[0].joint === 'p' && st.constraints[0].shape === 'ref_axis_x', 'point-on-line with the X axis: ' + JSON.stringify(st.constraints));
     applySnapConstraint(st, 'p', { type: 'axis-x', pt: { x: 120, y: 0 } }, {});
-    assert(st.constraints.filter((c) => c.type === CONSTRAINT_TYPES.HORIZONTAL).length === 1, 'no duplicate constraint');
+    assert(st.constraints.filter((c) => c.type === CONSTRAINT_TYPES.POINT_ON_LINE).length === 1, 'no duplicate constraint');
     st = mkState();
     assert(applySnapConstraint(st, 'q', { type: 'axis-y', pt: { x: 0, y: 90 } }, {}) === true, 'axis-y snap creates a constraint');
-    assert(st.constraints.length === 1 && st.constraints[0].type === CONSTRAINT_TYPES.VERTICAL && st.constraints[0].joints.includes('q') && st.constraints[0].joints.includes('j_origin'), 'vertical with j_origin');
-    // refusal: q is already held vertical to the origin; also holding it horizontal would pin it onto the origin: refused, nothing added
+    assert(st.constraints.length === 1 && st.constraints[0].type === CONSTRAINT_TYPES.POINT_ON_LINE && st.constraints[0].joint === 'q' && st.constraints[0].shape === 'ref_axis_y', 'point-on-line with the Y axis');
+    // a point snapped to both axes is on both lines (the origin): two point-on-line constraints, no refusal
     st = mkState();
     applySnapConstraint(st, 'q', { type: 'axis-y', pt: { x: 0, y: 90 } }, {});
-    const n = st.constraints.length;
-    const refused = applySnapConstraint(st, 'q', { type: 'axis-x', pt: { x: 0, y: 0 } }, {});
-    assert(refused === false && st.constraints.length === n, 'a conflicting axis snap is refused and adds nothing; got ' + refused);
+    const second = applySnapConstraint(st, 'q', { type: 'axis-x', pt: { x: 0, y: 0 } }, {});
+    assert(second === true && st.constraints.length === 2 && st.constraints.every((c) => c.type === CONSTRAINT_TYPES.POINT_ON_LINE), 'both axes: two point-on-line constraints; got ' + second + ' ' + JSON.stringify(st.constraints));
+    // an OLD file's horizontal / vertical-with-origin constraint (task 537) stays valid and is not converted
+    { const old = { joints: mkJoints(), shapes: [], constraints: [] }; old.joints.set('r', { x: 50, y: 0 });
+      old.constraints.push({ type: CONSTRAINT_TYPES.HORIZONTAL, joints: ['r', 'j_origin'] });
+      applySnapConstraint(old, 'p2', { type: 'axis-x', pt: { x: 1, y: 0 } }, {});
+      assert(old.constraints[0].type === CONSTRAINT_TYPES.HORIZONTAL && old.constraints[0].joints.join() === 'r,j_origin', 'the old constraint is untouched'); }
     assert(applySnapConstraint(st, 'j_origin', { type: 'axis-x' }, {}) === false, 'the origin is not snapped to its own axis');
     assert(applySnapConstraint({ joints: new Map([['p', { x: 1, y: 1 }]]), shapes: [], constraints: [] }, 'p', { type: 'axis-x' }, {}) === false, 'no origin = nothing');
   }

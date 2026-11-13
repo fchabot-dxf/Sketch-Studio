@@ -1,3 +1,4 @@
+// gate: exclusive
 // TASK 512 -- coverage audit, part 1: (1) the inventory (SketchStudio solver scope) must still match the code, (2) every inventory item is covered by
 // the constraint x geometry MATRIX (or explicitly deferred), (3) the matrix runs through the real tool handlers and every cell is PASS, N/A (the tool refuses
 // the selection: checked), tolerated round-1 (F1-F6, docs/CONSTRAINT-AUDIT.md) or a pinned NEW finding. Report: docs/COVERAGE-AUDIT.md.

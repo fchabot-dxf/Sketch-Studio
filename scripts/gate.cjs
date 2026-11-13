@@ -7,6 +7,11 @@
 //   merge = quick + shell-smoke + only the live tests AFFECTED by the branch's changes (see AFFECTED below). Takes the lock.
 //           node scripts/gate.cjs --tier merge [--base origin/main] [--head HEAD]  (npm run gate:merge -- --base origin/main)
 //           --plan prints the picked live tests and why, then exits.
+// EXCLUSIVE tests (TASK 579): a test whose pass/fail depends on wall time (a ms limit, a per-frame budget, a runtime budget) declares it with a first-column
+//   comment line `// gate: exclusive` in its own file. Such a test keeps its tier but does not run in the parallel batch: after the batch of its tier
+//   it runs ALONE, one at a time, with nothing else from this gate running, while this gate holds the machine-wide lock (so another worktree's live run
+//   cannot load the CPU under it either). quick takes the lock for that exclusive part only (and releases it right after); live/full/merge already hold it.
+//   Each prints `EXCLUSIVE <file> <seconds>`. Why a marker and not a list here: the declaration stays next to the test whose limit needs it.
 // Exit 0 only if no file failed, smoke is 12/12 (live/full) and no headless browser is left (live/full).
 //
 // HOW A FILE'S TIER IS KNOWN (declared once, here): a test is `live` when its relative-import closure reaches
@@ -118,11 +123,15 @@ function reachesLauncher(file) {
   return walk(file);
 }
 
+const EXCLUSIVE_MARKER_RE = /^\/\/ gate: exclusive\s*$/m;
+const isExclusive = (file) => EXCLUSIVE_MARKER_RE.test(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
+
 function classify(files) {
   const tiers = { quick: [], live: [] };
   for (const f of files) tiers[reachesLauncher(f) ? 'live' : 'quick'].push(f);
   return tiers;
 }
+const splitExclusive = (files) => ({ parallel: files.filter(f => !isExclusive(f)), exclusive: files.filter(isExclusive) });
 
 // ---------------------------------------------------------------- merge tier: which live tests does the change affect
 const FILE_LITERAL_RE = /['"`]([A-Za-z0-9_@#./-]+\.(?:js|mjs|cjs|html|css|json|svg))['"`]/g;
@@ -321,6 +330,24 @@ async function runPool(files, tier, jobs, timings, longestFirst) {
   return results;
 }
 
+// the exclusive tests of one tier, one at a time, nothing else of this gate running; under the machine-wide lock (taken here only if the tier did not already)
+async function runExclusive(files, tier, results, lockSeconds) {
+  if (!files.length) return;
+  const tookLock = !heldLock;
+  if (tookLock) acquireLock(tier);
+  const t0 = Date.now();
+  try {
+    for (const file of files) {
+      const r = await runFile(file, tier);
+      results.push(r);
+      console.log(`EXCLUSIVE ${r.file} ${(r.ms / 1000).toFixed(1)}`);
+      if (!r.ok) console.log(`FAIL ${r.file} (${(r.ms / 1000).toFixed(1)}s)`);
+    }
+  } finally {
+    if (tookLock) { releaseLock(); lockSeconds.push(`${tier}=${((Date.now() - t0) / 1000).toFixed(0)}s`); }
+  }
+}
+
 // ---------------------------------------------------------------- shell-smoke + leftover headless browsers
 function runSmoke() {
   const res = spawnSync(process.execPath, [path.join('scripts', 'shell-smoke.cjs')], {
@@ -359,7 +386,7 @@ async function main() {
   const { tier, jobs, list, plan, base, head } = parseArgs(process.argv.slice(2));
   const tiers = classify(findTestFiles());
   if (list) { // --list: print each file with its tier and exit (nothing runs, no lock)
-    for (const t of ['quick', 'live']) for (const f of tiers[t]) console.log(`${t} ${f}`);
+    for (const t of ['quick', 'live']) for (const f of tiers[t]) console.log(`${t} ${f}${isExclusive(f) ? ' exclusive' : ''}`);
     return;
   }
   const wantQuick = tier !== 'live';
@@ -383,10 +410,17 @@ async function main() {
   let smoke = null;
   let counts = null;
   const timings = loadTimings();
+  const lockSeconds = []; // quick: how long the exclusive part held the lock
   try {
-    if (wantQuick) results.push(...await runPool(tiers.quick, 'quick', jobs || QUICK_JOBS, timings, true));
+    if (wantQuick) {
+      const q = splitExclusive(tiers.quick);
+      results.push(...await runPool(q.parallel, 'quick', jobs || QUICK_JOBS, timings, true));
+      await runExclusive(q.exclusive, 'quick', results, lockSeconds);
+    }
     if (wantLive) {
-      results.push(...await runPool(liveFiles, 'live', jobs || LIVE_JOBS, timings, true));
+      const l = splitExclusive(liveFiles);
+      results.push(...await runPool(l.parallel, 'live', jobs || LIVE_JOBS, timings, true));
+      await runExclusive(l.exclusive, 'live', results, lockSeconds);
       smoke = runSmoke();
       counts = headlessCheck(smoke.pid);
     }
@@ -405,6 +439,7 @@ async function main() {
   const jobsText = [wantQuick ? `quick=${jobs || QUICK_JOBS}` : null, wantLive ? `live=${jobs || LIVE_JOBS}` : null].filter(Boolean).join(',');
   console.log(`GATE tier=${tier} jobs=${jobsText} files=${results.length} pass=${results.length - failed.length} fail=${failed.length} elapsed=${((Date.now() - started) / 1000).toFixed(0)}s`);
   for (const f of failed) console.log(`FAIL ${f.file}`);
+  if (lockSeconds.length) console.log(`LOCK held for the exclusive tests only: ${lockSeconds.join(' ')}`);
   for (const k of KNOWN_FAILURES) if (!failed.some(f => f.file === k)) console.log(`KNOWN-NOW-PASSING ${k}`);
   if (smoke) {
     console.log(`SMOKE ${smoke.score}`);

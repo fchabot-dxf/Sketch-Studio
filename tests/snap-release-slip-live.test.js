@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/snap-release-slip-live.test.js — TASK 546 (live headless, REAL mouse via CDP): the pointer-up "release jitter" recovery
 // (input-manager handlePointerUp: a snap lost < 200 ms before the release is put back) recovers a SLIP, not a MOVE.
 //   1. press on the snapped origin with the Polygon tool, flick 120 px away and release fast (< 200 ms): the hexagon is drawn with

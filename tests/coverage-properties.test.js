@@ -1,3 +1,4 @@
+// gate: exclusive
 // TASK 514 -- SOLVER COVERAGE AUDIT, part 2: new drawings, randomised properties, drag, save / undo / journal round trip. Report:
 // docs/COVERAGE-AUDIT.md "Properties"; tables: `node scripts/coverage-properties.cjs`. AUDIT ONLY: no app code changes.
 //

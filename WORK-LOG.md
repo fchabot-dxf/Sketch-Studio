@@ -14017,6 +14017,12 @@ Proof: each of numeric-input-self-hiding, draw-undo-live-esc, axis-snap-live-sha
   md5). Final gate on 7e7df3b: `GATE files=332 pass=331 fail=1` (tests/sidebar-projects.test.js), `SMOKE 12/12`, `HEADLESS-LEFT 0`. That file is
   not touched by this branch (git diff origin/main..HEAD: 0 sidebar / project files); alone it passes 7 of 9 runs, the failing assertion is "the
   refusal message is shown in the drawer" (a timing flake on main, reported, not fixed).
+- Merge of origin/main d058485 (task 555, Dimension tool picks like Fusion): conflict in reference-lines.js resolved into ONE declared map,
+  REFERENCE_PICK_STEP = { dim: 555's dimensionAsksSecondTarget (pending joint, or a line's preview with __asksSecondPick), symmetric: the third
+  pick }; referenceLinesPickable reads REFERENCE_PICK_TOOLS (always) or that map (one step). After it: symmetric 136, symmetric-glyph, jacobian-fd-guard
+  187, coverage-matrix, coverage-properties, creation-placement-table, dimension-pick-sequence, reference-lines-solve, dimension-pick-live studio +
+  shaper, fusion-drag-live, symmetric-live studio + shaper all pass (.evidence/563/merge-555/). Gate on 88396c7: `GATE files=335 pass=335 fail=0`,
+  `SMOKE 12/12`, `HEADLESS-LEFT 0`.
 - FOUND, not fixed: the other constraint tools (parallel, perpendicular, coincident, ...) create NO undo step of their own (probe: parallel through the
   tool, history stays 0, Ctrl+Z then also removes the step before it); a right-click on any glyph lying over geometry opens the geometry menu (a
   joint / shape wins the pick; seen live on a point glyph lying on its own line).

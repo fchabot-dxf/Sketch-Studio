@@ -36,7 +36,7 @@ await (async () => {
     await evalJs(CREATE_NAMED_DESIGN('sketchstudio', 'Alpha'));
     await evalJs(CREATE_NAMED_DESIGN('sketchstudio', 'Beta'));
     await navigate(url('sketchstudio'), 10000);
-    await waitFor(`!!document.querySelector('.sk-doctabs') && !document.querySelector('.sk-doctabs').hidden`, 'the strip');
+    await waitFor(`!!document.querySelector('.sk-doctabs')`, 'the strip');
     await waitFor(`document.querySelector('.sk-doctab-name') && document.querySelector('.sk-doctab-name').textContent === 'Beta'`, 'the restored design as the first tab');
     assert.deepStrictEqual(await names(), ['Beta']);
     // the strip is its own row immediately above the header; hiding it moves NO header control sideways or resizes one
@@ -47,6 +47,8 @@ await (async () => {
     await evalJs(`document.querySelector('.sk-doctabs').hidden = false`); await sleep(100);
     assert.deepStrictEqual(withStrip, without, 'every header control keeps its x, width and height');
 
+    // the row's height is fixed: 1 tab or 10, the page below does not move (and not when the tabs first appear)
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 32, 'the strip row is 32 px tall with one tab');
     // "+" opens an Untitled tab; a click on a tab switches
     await clickEl('.sk-doctab-new');
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled']);
@@ -73,6 +75,7 @@ await (async () => {
     // the 11th tab (T7)
     for (let i = 0; i < 8; i++) await clickEl('.sk-doctab-new');
     assert.strictEqual((await names()).length, 10);
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 32, 'still 32 px with ten tabs');
     await clickEl('.sk-doctab-new');
     assert.strictEqual((await names()).length, 10, 'no 11th tab');
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');

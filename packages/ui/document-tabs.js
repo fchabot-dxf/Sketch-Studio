@@ -20,10 +20,9 @@ function injectStyles() {
   if (document.getElementById('sk-doctabs-styles')) { stylesInjected = true; return; }
   const s = document.createElement('style'); s.id = 'sk-doctabs-styles';
   s.textContent = `
-.sk-doctabs { display: flex; align-items: flex-end; gap: 2px; padding: 4px 8px 0; box-sizing: border-box; flex: 0 0 auto;
+.sk-doctabs { display: flex; align-items: flex-end; gap: 2px; padding: 4px 8px 0; box-sizing: border-box; flex: 0 0 auto; height: 32px;
   background: var(--sk-doctabs-bg, var(--sk-header-sep, #e2e8f0)); border-bottom: 1px solid var(--sk-header-sep, #cbd5e1);
   color: var(--sk-header-fg, #334155); font: 12px system-ui, sans-serif; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.sk-doctabs[hidden] { display: none; }
 .sk-doctabs::-webkit-scrollbar { display: none; }
 .sk-doctabs * { box-sizing: border-box; }
 .sk-doctab { display: inline-flex; align-items: center; flex: 0 0 auto; max-width: 220px; margin-bottom: -1px; border: 1px solid transparent; border-bottom: 0;
@@ -42,7 +41,7 @@ function injectStyles() {
 .sk-doctab-x:hover, .sk-doctab-new:hover { background: var(--sk-header-hover, rgba(0,0,0,0.08)); opacity: 1; }
 .sk-doctab-main:focus-visible, .sk-doctab-x:focus-visible, .sk-doctab-new:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; }
 .sk-doctabs-msg { flex: 0 0 auto; margin: 0 8px 5px auto; padding-left: 12px; font-size: 11px; color: #b45309; white-space: nowrap; }
-@media (pointer: coarse) { .sk-doctab-main, .sk-doctab-x, .sk-doctab-new { min-height: 44px; min-width: 44px; justify-content: center; } }
+@media (pointer: coarse) { .sk-doctabs { height: 49px; } .sk-doctab-main, .sk-doctab-x, .sk-doctab-new { min-height: 44px; min-width: 44px; justify-content: center; } }
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -51,7 +50,7 @@ function injectStyles() {
 export function createDocumentTabs({ getBuffer, store, actions, onChange = () => {}, doc = globalThis.document, pollMs = 500 } = {}) {
   injectStyles();
   const el = doc.createElement('div');
-  el.className = 'sk-doctabs'; el.hidden = true; // shown at the first refresh, once the host's buffer exists (no empty row flashes in)
+  el.className = 'sk-doctabs'; // the row has its fixed height from the first paint (nothing below it moves when the tabs appear); the tabs are drawn once the stored design has restored
   el.setAttribute('role', 'tablist'); el.setAttribute('aria-label', 'Open designs');
   const msg = doc.createElement('span'); msg.className = 'sk-doctabs-msg'; msg.setAttribute('role', 'status');
   let names = new Map();     // stored design id -> its current name (a rename happens in the store; the buffer's copy is not updated)
@@ -118,7 +117,6 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
     if (!b) return;
     if (watched !== b) { watched = b; b.ready.then(() => { restored = true; refresh(); }); } // the strip (and the sidebar's name) show once the stored design is back: no "Untitled" flash
     if (!restored) return;
-    el.hidden = false;
     const list = b.tabs();
     const sig = JSON.stringify(list.map((t) => [t.key, nameOf(t), t.active, dotOf(t) && dotOf(t).cls]));
     if (sig !== shown) { shown = sig; render(list); }
@@ -146,7 +144,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   let syncTimer = null; // a burst of store changes (every autosave notifies) is read once, a second after it settles
   const offStore = store ? store.subscribe(() => { refresh(); clearTimeout(syncTimer); syncTimer = setTimeout(syncNames, 300); }) : () => {};
   // the host creates its buffer a moment after the sidebar: look every 50 ms until it exists, then every pollMs
-  let timer = setInterval(() => { refresh(); if (!el.hidden) { clearInterval(timer); timer = setInterval(refresh, pollMs); } }, Math.min(50, pollMs));
+  let timer = setInterval(() => { refresh(); if (restored) { clearInterval(timer); timer = setInterval(refresh, pollMs); } }, Math.min(50, pollMs));
   const onKey = (e) => {
     const mains = [...el.querySelectorAll('.sk-doctab-main')];
     const i = mains.indexOf(doc.activeElement);

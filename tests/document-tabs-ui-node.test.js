@@ -111,7 +111,6 @@ const names = (b) => b.tabs().map((t) => t.name);
     const tabEls = () => [...strip.el.querySelectorAll('.sk-doctab-main')];
     const settle = async () => { for (let i = 0; i < 4; i++) { await new Promise((r) => setTimeout(r, 5)); strip.refresh(); } };
     const click = async (el) => { el.click(); await settle(); };
-    assert.strictEqual(strip.el.hidden, true, 'the strip stays hidden until the buffer has restored (no Untitled flash)');
     await b.ready; await settle();
     assert.strictEqual(strip.el.getAttribute('role'), 'tablist');
     assert.deepStrictEqual(tabEls().map((e) => e.textContent), ['Beta'], 'one tab: the design shown');

@@ -15,6 +15,7 @@ import { handleDimensionPointerDown, anchorPlacingDimension, resetDimensionState
 import { KINDS, VARIANTS, lineLike, circleLike, build, applyVariant, docOf } from './matrix-build.js';
 import { oracleState } from './matrix-oracle.js';
 import { measureResidual } from '#core/constraint-verifier.js';
+import { referenceShape } from '#core/reference-lines.js';
 
 export const svgStub = { viewBox: { baseVal: { x: 0, y: 0, width: 800, height: 800 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 800 }), innerHTML: '', setPointerCapture() {}, releasePointerCapture() {}, addEventListener() {}, removeEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; } };
 const evt = (x, y) => ({ clientX: x, clientY: y, pointerType: 'mouse', pointerId: 1, target: { closest: () => null } });
@@ -42,6 +43,12 @@ export const ROWS = [
     hits: (X, Y) => (lineLike(X.k) ? [{ shape: X }, { joint: Y.jn }] : [{ shape: Y }, { joint: X.jn }]), produces: c => c.type === 'midpoint' },
   { id: 'midpoint-3pt', label: 'midpoint (3 joints)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: () => true, nominal: () => 2, extraPoint: true,
     hits: (X, Y, Z) => [{ joint: X.jn }, { joint: Y.jn }, { joint: Z.jn }], produces: c => c.type === 'midpoint' },
+  // task 563: symmetric about the Y axis (the third pick, a built-in reference line): two lines (their end pairs), two circles / arcs (centres +
+  // radius), any other pair as two points. nominal = 4 / 3 / 2 rows; two fillet arcs each carry a driving R, so their radius row is not new.
+  { id: 'symmetric', label: 'symmetric (about the Y axis)', type: 'symmetric', arity: 2, tool: TOOL_MODES.SYMMETRIC, ui: () => true,
+    nominal: (x, y) => (lineLike(x) && lineLike(y) ? 4 : circleLike(x) && circleLike(y) ? ((x === 'F' && y === 'F') ? 2 : 3) : 2),
+    hits: (X, Y) => [...((lineLike(X.k) && lineLike(Y.k)) || (circleLike(X.k) && circleLike(Y.k)) ? [{ shape: X }, { shape: Y }] : [{ joint: X.jn }, { joint: Y.jn }]), { ref: 'ref_axis_y' }],
+    produces: c => c.type === 'symmetric' },
   // ---- dimensions (the Dimension tool)
   { id: 'dim-aligned', label: 'dim point-point aligned', type: 'distance', arity: 2, dim: true, mode: 'aligned', ui: () => true, nominal: () => 1, layout: [150, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
   { id: 'dim-horizontal', label: 'dim point-point H', type: 'distance', arity: 2, dim: true, mode: 'horizontal', ui: () => true, nominal: () => 1, layout: [150, 90], produces: c => c.type === 'distance' && c.joints && c.joints.length === 2 && !c.isRadius },
@@ -77,7 +84,7 @@ export function driveConstraintTool(S, row, hits) {
   const st = S.state;
   st.currentTool = row.tool; st.pendingConstraint = null;
   const rets = [];
-  muted(() => { for (const h of hits) rets.push(handleConstraintPointerDown(null, null, st, h.joint ? hitJ(S, h.joint) : null, sh(S, h), null)); });
+  muted(() => { for (const h of hits) rets.push(handleConstraintPointerDown(null, null, st, h.joint ? hitJ(S, h.joint) : null, h.ref ? { shape: referenceShape(h.ref) } : sh(S, h), null)); });
   resetConstraintState(st);
   return rets;
 }

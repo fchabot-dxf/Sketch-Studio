@@ -17,10 +17,10 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.stringify([...b].sort())}`;
 
 const EXPECTED = {
-  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint'],
+  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric'],
   notInRibbon: ['pan'],
-  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint'],
-  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'mouse_spring'],
+  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric'],
+  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'mouse_spring'],
   shapeKinds: ['line', 'construction line', 'circle', 'arc (centre, start, end)', 'fillet arc', 'polygon side', 'rect side', 'bezier', 'point / joint'],
   shapeTypeLiterals: ['arc', 'bezier', 'circle', 'line'],
   dimensionModes: ['aligned', 'horizontal', 'vertical', 'line length', 'point-line', 'line-line', 'angle', 'radius'],
@@ -57,9 +57,9 @@ const COVER = {
     trim: ['deferred', 'rewrites shapes/joints: a part 2/3 edit audit'], break: ['deferred', 'splits a line: a part 2/3 edit audit'], fillet: ['kinds', 'F'],
     dim: ['rows', 'dim-aligned', 'dim-horizontal', 'dim-vertical', 'dim-length', 'dim-point-line', 'dim-line-line', 'dim-angle-xy', 'dim-radius'],
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
-    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'] },
+    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'] },
   constraintTypes: { coincident: 'coincident', horizontal: 'horizontal-2pt', vertical: 'vertical-2pt', parallel: 'parallel', perpendicular: 'perpendicular', collinear: 'collinear', tangent: 'tangent',
-    pointOnLine: 'dim-point-line', distance: 'dim-aligned', equal: 'equal', angle: 'dim-angle-xy', midpoint: 'midpoint-line' },
+    pointOnLine: 'dim-point-line', distance: 'dim-aligned', equal: 'equal', angle: 'dim-angle-xy', midpoint: 'midpoint-line', symmetric: 'symmetric' },
   definitionsDeferred: { mouse_spring: 'drag spring, not a user constraint' },
   dimensionModes: { aligned: 'dim-aligned', horizontal: 'dim-horizontal', vertical: 'dim-vertical', 'line length': 'dim-length', 'point-line': 'dim-point-line', 'line-line': 'dim-line-line', angle: 'dim-angle-xy', radius: 'dim-radius' },
   shapeKinds: { line: 'L', 'construction line': 'C', circle: 'O', 'arc (centre, start, end)': 'A', 'fillet arc': 'F', 'polygon side': 'S', 'rect side': 'R', bezier: 'B', 'point / joint': 'P' },

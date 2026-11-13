@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { Definitions, BODY_POINTS } from '#core/solver/definitions.js';
 import { createNewtonSolver } from '#core/solver/engine.js';
+import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
 
 // GUARD (task 511, audit F6): the DOF / redundancy analysis (engine.jointFreedom, rankRowRedundant) reads the nullspace of the
 // solver Jacobian, _assemble(x). For EVERY constraint type in Definitions that Jacobian must equal a central
@@ -41,12 +42,16 @@ const CASES = {
   tangent: { type: 'tangent', line: 'L1', circle: 'C1' },
   equal: { type: 'equal', joints: ['a', 'b', 'c', 'd'] },
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
+  symmetric: { type: 'symmetric', joints: ['m', 'n'], line: 'L1' },
 };
 
 // One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on
 // each circle radius column and on each joint's x/y columns, so a radius case can also assert its radius column is really in the row.
-function guard(label, c, extraShapes = []) {
-  const solver = createNewtonSolver(joints(), [{ ...c }], [...SH(), ...extraShapes], { maxIter: 1 });
+const withOrigin = () => new Map([['j_origin', { x: 0, y: 0, fixed: true }], ...joints()]);   // the axes pass through the origin joint
+// scene: resolve the operands in the scene (the two built-in axes, task 539), as the app's engine does (constraint-solver.js).
+function guard(label, c, extraShapes = [], scene = false) {
+  const J = scene ? sceneJoints(withOrigin()) : joints(), shp = scene ? sceneShapes([...SH(), ...extraShapes]) : [...SH(), ...extraShapes];
+  const solver = createNewtonSolver(J, [{ ...c }], shp, { maxIter: 1 });
   const x0 = solver._pack(), n = x0.length;
   const asm = solver._assemble(x0);
   let worst = 0;
@@ -193,6 +198,34 @@ for (const kind of Object.keys(BODY_POINTS)) assert.ok(BODY_CASES.some(b => b[0]
 for (const [, label, c, extra, uses] of BODY_CASES) {
   const col = guard('body drag: ' + label, c, extra);
   for (const id of uses) assert.ok(col[id] > 0.5, `body drag: ${label}: the ${id} column is ${col[id]} (expected it in the row)`);
+  checked++;
+}
+// SYMMETRIC (task 563): every form (points 2 rows, lines 4, circles / arcs 3) about a sketch line and about each axis, both end pairings of two
+// lines, and the patterns where a joint repeats inside the row (a point that is an end of the symmetry line, the same point twice, two lines
+// sharing an end, two circles sharing a centre). The symmetry line's own ends are free here, so their columns must be in the rows (a free line
+// can move); about an axis they are fixed (no column).
+const SYM = (extra) => ({ type: 'symmetric', ...extra });
+const SYMMETRIC_CASES = [
+  ['points about a sketch line', SYM({ joints: ['m', 'n'], line: 'L1' }), [], false, 2, ['a', 'b', 'm', 'n']],
+  ['points about the X axis', SYM({ joints: ['m', 'n'], line: 'ref_axis_x' }), [], true, 2, ['m', 'n']],
+  ['points about the Y axis', SYM({ joints: ['c', 'd'], line: 'ref_axis_y' }), [], true, 2, ['c', 'd']],
+  ['points, one is the symmetry line start', SYM({ joints: ['a', 'm'], line: 'L1' }), [], false, 2, ['a', 'b', 'm']],
+  ['points, one is the symmetry line end', SYM({ joints: ['n', 'b'], line: 'L1' }), [], false, 2, ['a', 'b', 'n']],
+  ['points, the same point twice', SYM({ joints: ['m', 'm'], line: 'L1' }), [], false, 2, ['a', 'b', 'm']],
+  ['lines, straight end pairs', SYM({ joints: ['c', 'm', 'd', 'n'], shapes: ['L2', 'LX'], line: 'L1' }), LX('m', 'n'), false, 4, ['a', 'b', 'c', 'd', 'm', 'n']],
+  ['lines, crossed end pairs', SYM({ joints: ['c', 'n', 'd', 'm'], shapes: ['L2', 'LX'], line: 'L1' }), LX('m', 'n'), false, 4, ['c', 'd', 'm', 'n']],
+  ['lines sharing an end', SYM({ joints: ['c', 'ae', 'd', 'd'], shapes: ['L2', 'L3'], line: 'L1' }), [], false, 4, ['a', 'b', 'c', 'd', 'ae']],
+  ['lines about the Y axis', SYM({ joints: ['c', 'm', 'd', 'n'], shapes: ['L2', 'LX'], line: 'ref_axis_y' }), LX('m', 'n'), true, 4, ['c', 'd', 'm', 'n']],
+  ['circles about a sketch line', SYM({ shapes: ['C1', 'C2'], line: 'L1' }), [], false, 3, ['C1', 'C2', 'm', 'n', 'a', 'b']],
+  ['circle and arc about a sketch line', SYM({ shapes: ['C1', 'A1'], line: 'L2' }), [], false, 3, ['C1', 'm', 'ac', 'as', 'c', 'd']],
+  ['arc and arc about the X axis', SYM({ shapes: ['A1', 'A2'], line: 'ref_axis_x' }), [], true, 3, ['ac', 'as', 'bc', 'bs']],
+  ['circles sharing a centre', SYM({ shapes: ['C1', 'A3'], line: 'L1' }), ARC3('m', 'bs', 'be'), false, 3, ['C1', 'm', 'bs']],
+];
+for (const [label, c, extra, scene, rows, uses] of SYMMETRIC_CASES) {
+  const col = guard('symmetric: ' + label, c, extra, scene);
+  const solver = createNewtonSolver(scene ? sceneJoints(withOrigin()) : joints(), [{ ...c }], scene ? sceneShapes([...SH(), ...extra]) : [...SH(), ...extra], { maxIter: 1 });
+  assert.strictEqual(solver._assemble(solver._pack()).m, rows, `symmetric: ${label}: ${rows} rows`);
+  for (const id of uses) assert.ok(col[id] > 1e-3, `symmetric: ${label}: the ${id} column is ${col[id]} (expected it in the rows)`);
   checked++;
 }
 console.log(`jacobian-fd-guard: ${checked} cases agree with finite differences (tol ${TOL}), circle radius and arc rim columns included, ${SHARED_CASES.length} of them with a joint shared inside the row.`);

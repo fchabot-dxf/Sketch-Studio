@@ -15,7 +15,11 @@ export const CONSTRAINT_TYPES = {
   DISTANCE: 'distance',
   EQUAL: 'equal',
   ANGLE: 'angle',
-  MIDPOINT: 'midpoint'
+  MIDPOINT: 'midpoint',
+  // task 563 (like Fusion's Symmetric): two points, two lines or two circles / arcs are mirror images across a line (a sketch line or an axis).
+  // Stored { joints: [p, q], line } (points), { joints: [p1, q1, p2, q2], shapes: [l1, l2], line } (lines: each (p_i, q_i) an end pair
+  // that mirrors) or { shapes: [c1, c2], line } (circles / arcs: centres mirror, radii equal). #core/symmetric.js reads it.
+  SYMMETRIC: 'symmetric'
 };
 
 // Snap tolerances (in screen pixels)
@@ -86,6 +90,7 @@ export const CONSTRAINT_COLORS = {
   [CONSTRAINT_TYPES.ANGLE]:         { fill: '#60A5FA', stroke: '#2563eb' },
   // Midpoint uses the standard unified blue to match other glyphs
   [CONSTRAINT_TYPES.MIDPOINT]:      { fill: '#60A5FA', stroke: '#2563eb' },
+  [CONSTRAINT_TYPES.SYMMETRIC]:     { fill: '#60A5FA', stroke: '#2563eb' },
 };
 
 // Drawing tool modes
@@ -109,8 +114,16 @@ export const TOOL_MODES = {
   COLLINEAR: 'collinear',
   TANGENT: 'tangent',
   DIMENSION: 'dim',
-  MIDPOINT: 'midpoint'
+  MIDPOINT: 'midpoint',
+  SYMMETRIC: 'symmetric' // task 563: entity, entity, then the symmetry line
 };
+
+// The constraint tools (the picks become a geometric constraint): ONE list for the tool router, the pre-selection on activation and the
+// constraint cursor. (Dimension is not one of them: it has its own tool.)
+export const CONSTRAINT_TOOLS = Object.freeze([
+  TOOL_MODES.COINCIDENT, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.MIDPOINT, TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR,
+  TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.EQUAL, TOOL_MODES.SYMMETRIC
+]);
 
 // TASK 483: the regular polygon's side count: declared ONCE (the tool, the ribbon field and the builder all clamp with it).
 export const POLYGON_SIDES = { min: 3, max: 64, default: 6 };

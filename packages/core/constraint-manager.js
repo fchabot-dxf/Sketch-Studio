@@ -9,6 +9,7 @@ import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
+import { pairLineEnds, symmetricImpossible } from './symmetric.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -20,7 +21,7 @@ const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.COINCIDENT, CONSTRAINT_TYPES.HORIZONTAL, CONSTRAINT_TYPES.VERTICAL,
     CONSTRAINT_TYPES.PARALLEL, CONSTRAINT_TYPES.PERPENDICULAR, CONSTRAINT_TYPES.COLLINEAR,
     CONSTRAINT_TYPES.TANGENT, CONSTRAINT_TYPES.POINT_ON_LINE, CONSTRAINT_TYPES.EQUAL,
-    CONSTRAINT_TYPES.MIDPOINT
+    CONSTRAINT_TYPES.MIDPOINT, CONSTRAINT_TYPES.SYMMETRIC
 ]);
 
 export class ConstraintManager {
@@ -174,6 +175,12 @@ export class ConstraintManager {
             this.lockPerpendicularBranch(state, normalized);
         }
 
+        // SYMMETRIC of two lines (task 563): which end mirrors which is fixed now, from the current geometry (#core/symmetric.js pairLineEnds).
+        if (type === CONSTRAINT_TYPES.SYMMETRIC && normalized.shapes && normalized.shapes.length === 2 && !(normalized.joints && normalized.joints.length === 4)) {
+            const ends = pairLineEnds(state.joints, state.shapes, normalized.shapes[0], normalized.shapes[1], normalized.line);
+            if (ends) normalized.joints = ends;
+        }
+
         // Tangent branch auto-detect is intentionally OFF for now. Even with the
         // proximity gate, locking 'external' vs 'internal' at creation time can
         // surprise users — the solver gets pinned to a target distance the user
@@ -237,6 +244,16 @@ export class ConstraintManager {
                     notify(`Dimension set to reference — ${mathConflict} [ERR-CMATH-02]`, 'warning', 3000);
                     dbg.log('constraints', `[ConstraintManager] ${type} auto-driven: ${mathConflict} [ERR-CMATH-02]`);
                 }
+            }
+
+            // SYMMETRIC (task 563): refused when the sketch already determines it (no row of it raises the rank of the existing driving
+            // constraints, the engine's rank test): already symmetric (redundant), or a contradiction of what already holds the entities.
+            if (!mathConflict && type === CONSTRAINT_TYPES.SYMMETRIC && state.engine && typeof state.engine.isDistanceRedundant === 'function'
+                && state.engine.isDistanceRedundant({ ...normalized, type })) {
+                const satisfied = measureResidual({ ...normalized, type }, state.joints, state.shapes) <= (SolverConfig.VERIFIER_TOLERANCE || 0.001);
+                notify(`Symmetric rejected — ${satisfied ? 'the two entities are already symmetric (redundant)' : 'it contradicts the existing constraints'} [ERR-CMATH-01]`, 'error', 3000);
+                dbg.warn('constraints', `[ConstraintManager] symmetric refused: rank-redundant (${satisfied ? 'already satisfied' : 'unsatisfied'})`);
+                return null;
             }
 
             // Layer 2: Sandbox solver check (only if math didn't already catch it)
@@ -539,6 +556,7 @@ export class ConstraintManager {
             [CONSTRAINT_TYPES.DISTANCE]: 'Distance',
             [CONSTRAINT_TYPES.ANGLE]: 'Angle',
             [CONSTRAINT_TYPES.MIDPOINT]: 'Midpoint',
+            [CONSTRAINT_TYPES.SYMMETRIC]: 'Symmetric',
         };
         return names[type] || type;
     }
@@ -879,6 +897,10 @@ export class ConstraintManager {
                 return null;
             }
 
+            // ── SYMMETRIC (task 563) ──────────────────────────────────────
+            case CONSTRAINT_TYPES.SYMMETRIC:
+                return symmetricImpossible(params, joints, shapes, constraints, isEffectivelyFixed, SolverConfig.GEOMETRY_TOLERANCE || 0.05);
+
             default:
                 return null;
         }
@@ -992,6 +1014,10 @@ export class ConstraintManager {
                     || (params.joints && Array.isArray(params.joints) && params.joints.length >= 4);
             case CONSTRAINT_TYPES.MIDPOINT:
                 return params.joints && Array.isArray(params.joints) && params.joints.length === 3;
+            case CONSTRAINT_TYPES.SYMMETRIC:
+                // two points { joints: [p, q] } or two shapes { shapes: [s1, s2] } (+ the end pairs of two lines), and the symmetry line
+                return !!params.line && ((Array.isArray(params.shapes) && params.shapes.length === 2)
+                    || (!params.shapes && Array.isArray(params.joints) && params.joints.length === 2));
             case CONSTRAINT_TYPES.ANGLE:
                 return params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2 && typeof params.value === 'number';
             default:

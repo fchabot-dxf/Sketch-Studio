@@ -13994,6 +13994,67 @@ Proof: each of numeric-input-self-hiding, draw-undo-live-esc, axis-snap-live-sha
 - Gate fixes (TURN 562): the first gate had 3 failures, all mine: tests with stub DOMs (the Done button is now built on the first TOUCH press; the ribbon fade is a `data-fade` attribute instead of style vars) and tests/diagnostic-log-in-statusbar.test.js (task 509 asserted the footer Log button at 390; item 5 of this task moves it into the menu at <= 640 px, so the test now asserts it is hidden there and opens the log from menu > Log; 1440 unchanged).
 - Merge of 554/559/535-3/553: constants.js and constraint-solver.js keep both (ORIGIN_JOINT + AXIS_SNAP_TARGETS; ORIGIN import + scene wiring). The clipboard already treats an axis constraint as an outside link (tests/reference-lines-clipboard.test.js). origin-snap-live-runner updated to pointOnLine(ref_axis_x). Gate rounds: 322/324 (2 origin-snap-live, fixed here).
 
+## TURN 563 (Symmetric constraint like Fusion's; owner approved 2026-11-12)
+- WHAT: CONSTRAINT_TYPES.SYMMETRIC + TOOL_MODES.SYMMETRIC (ribbon Constrain group, "Sym"): pick entity 1, entity 2 (two points, two lines or two
+  circles / arcs), then the symmetry line (a sketch line, a construction line, or the X / Y axis: an axis is pickable at the THIRD pick only,
+  reference-lines.js REFERENCE_PICK_STEP, the declared per-step form of the 539 rule that the Dimension tool's second-target rule now also uses).
+- ONE operand reader packages/core/symmetric.js (solver, verifier, placement, renderer, tool all read it). Stored: points { joints: [p, q], line };
+  lines { joints: [p1, q1, p2, q2], shapes, line } (each end pair mirrors: the SEGMENTS are mirror images, equal length, not only the infinite lines;
+  chosen because it is the point rule twice (one formulation) and gives the drawn result Fusion shows; the end pairing (straight or crossed, the
+  nearer one) is fixed at creation, pairLineEnds, like the perpendicular branch lock; a shared end pairs with itself = on the line);
+  circles / arcs { shapes, line }: centres mirror + radii equal. (to verify in Fusion UI: Fusion's line form and its arc form; ours mirrors line ends,
+  and for arcs only centre + radius.)
+- Rows (definitions.js): ONE mirror-pair rule, the reflection residual q - mirror(p) in the line's frame: row 1 = ((p-a)x u + (q-a)x u)/|u|
+  (midpoint on the line), row 2 = (q-p).u/|u| (pq perpendicular); world units, orthonormal in (p, q), full derivative on the line's ends (a free
+  symmetry line can move). Lines = 2 pairs (4 rows), circles = 1 pair + size1 - size2 through sizeValue/addSizeGrad, now shared with equal
+  (bit-identical refactor; engine _sizeTerm shared too). addGrad only, operands only (541's check). engine: def.rows(c, shapes); row buffers grow
+  past 2 on need (nothing else had more than 2 rows).
+- ConstraintManager: validate, pair line ends, _mathPreCheck (symmetricImpossible: same point incl. a coincident cluster, same line / circle, the
+  line as an entity, all fixed and not mirrored), then a REDUNDANT refusal (engine rank test isDistanceRedundant on the candidate: "already
+  symmetric" when satisfied, else "contradicts"). STRUCTURAL (refused, never driven).
+- Placement (525 seam): PLACE.symmetric, the mover becomes the anchor's mirror image (a point: translation / turn about its one held point; a free
+  line / circle / arc: one similarity; held: least-change solve alone). The fitted table had no row: ONE DECLARED row added through the generator
+  (fit-placement-table.mjs DECLARED_RULES, `rule` text in the table): tie = the second pick gives way; "held more" = a larger hold weight (sum of
+  the hold-class features: hv/centred/sized/corner 1, chain/pinned 2; full / point:fixed above all). The other 17 keys unchanged
+  (creation-placement-table test: 18 keys equal the fit).
+- Tool: one undo step per symmetric owned by the tool (captureUndoSnapshot + saveStateForce after a successful create; a refusal leaves none).
+  CONSTRAINT_TOOLS declared once in constants.js (replaces 4 identical hand lists: constraint-tools, input-manager, ui-manager, cursor-manager).
+- Glyphs: one per entity like Fusion, through opShapes / opJoints (glyphAnchorOfShape factored out of the parallel/equal/collinear branch); a
+  point's glyph sits on the side away from the line; none on the line. No symmetry glyph existed in assets: declared icon-symmetric (cursor-manager
+  ICONS, badge style + ribbon + cursor) and glyph-symmetric added to assets/constraint-glyphs.svg (fusion style). Right-click on a symmetric glyph:
+  menu kind 'constraint' with "Delete constraint" (context-menu.js CONSTRAINT_MENU_TYPES = [symmetric]; other glyphs unchanged). Design panel row
+  label + "p – q about Y axis" text. Clipboard: unchanged code, the `line` field is an operand, so a symmetric is copied only with all three and
+  never with an axis (tested). Not a dimension: no Params entry.
+- Tests: tests/symmetric.test.js (136 checks: every form about a sketch line and each axis, who moves incl. held second, DOF engine = panel =
+  finite-difference nullity before/after, refusals, the tool's picks and axis rule, undo/redo, save/load/save byte-identical, clipboard, params,
+  menu Delete, the declared table row), tests/symmetric-glyph.test.js (render, both styles, 2 glyphs per constraint), jacobian-fd-guard +14
+  symmetric cases (187 total), verifier-covers-definitions, coverage-matrix new row `symmetric` (178 PASS, 2 N/A; whole matrix 3564 cells, PASS
+  1800 -> 1978, other cells unchanged), live tests/symmetric-live-{sketchstudio,shaper}.test.js (real pointer + keys).
+- Evidence: .evidence/563/sketchstudio-symmetric-glyphs.png md5 798cff7fc9c81677a3d48196cda24131, shaper-symmetric-glyphs.png md5
+  456d5597d209320e8363cad9569b3a72, coverage-symmetric-row.txt, gate-1.log.
+- BEHAVIOUR CHANGES for existing users: (1) a "Sym" button in the Constrain group of every host of the shared ribbon (SketchStudio, Shaper, Pen
+  Plotter, Trace); (2) the DIMENSION axis rule moved into REFERENCE_PICK_STEP (same condition, no behaviour change); (3) the equal row and the
+  constraint-tool lists refactored (same arithmetic / same members); nothing else.
+- Gate round 1: `GATE files=331 pass=330 fail=1` (tests/coverage-properties.test.js: its op kinds come from the inventory, so `symmetric` joined
+  them with no weight: NaN in the weighted draw, every kind after it was never drawn). Fixed in tests/harness/coverage/prop-random.js: symmetric
+  weight 1, a generator (two points / two lines / two circles, about an axis or another sketch line) and its apply; 49 symmetric ops in the 300
+  cases (30 points, 12 lines, 7 circles; 25 about an axis); `coverage-properties: passed`, every invariant failure explained by the pinned
+  findings. The random sequences of the other kinds changed with the new total weight (tallies differ from main's run, still all explained).
+- Merged origin/main bc06caa (560 shared launcher / ready signals, 562 mobile step 1): conflicts only in input-manager.js imports (CONSTRAINT_TOOLS +
+  snapBoostFor) and the context-menu call (kind 'constraint' + 562's `touch`), both kept. After the merge: symmetric 136 checks, symmetric-glyph,
+  jacobian-fd-guard 187, coverage-matrix, coverage-properties, creation-placement-table, live SketchStudio + Shaper all pass (screenshots identical
+  md5). Final gate on 7e7df3b: `GATE files=332 pass=331 fail=1` (tests/sidebar-projects.test.js), `SMOKE 12/12`, `HEADLESS-LEFT 0`. That file is
+  not touched by this branch (git diff origin/main..HEAD: 0 sidebar / project files); alone it passes 7 of 9 runs, the failing assertion is "the
+  refusal message is shown in the drawer" (a timing flake on main, reported, not fixed).
+- Merge of origin/main d058485 (task 555, Dimension tool picks like Fusion): conflict in reference-lines.js resolved into ONE declared map,
+  REFERENCE_PICK_STEP = { dim: 555's dimensionAsksSecondTarget (pending joint, or a line's preview with __asksSecondPick), symmetric: the third
+  pick }; referenceLinesPickable reads REFERENCE_PICK_TOOLS (always) or that map (one step). After it: symmetric 136, symmetric-glyph, jacobian-fd-guard
+  187, coverage-matrix, coverage-properties, creation-placement-table, dimension-pick-sequence, reference-lines-solve, dimension-pick-live studio +
+  shaper, fusion-drag-live, symmetric-live studio + shaper all pass (.evidence/563/merge-555/). Gate on 88396c7: `GATE files=335 pass=335 fail=0`,
+  `SMOKE 12/12`, `HEADLESS-LEFT 0`.
+- FOUND, not fixed: the other constraint tools (parallel, perpendicular, coincident, ...) create NO undo step of their own (probe: parallel through the
+  tool, history stays 0, Ctrl+Z then also removes the step before it); a right-click on any glyph lying over geometry opens the geometry menu (a
+  joint / shape wins the pick; seen live on a point glyph lying on its own line).
 ## TURN 555 (Dimension tool picks like Fusion: entity -> preview follows the cursor -> second entity upgrades -> empty space places -> Esc cancels)
 - STEP 1, the state machine on main before this task (packages/ui/input-handlers/dimension-tool.js `dimensionPointerDown`; input-manager.js hit-tests with findSnap(pickableShapes) and passes hitJoint / hitShape):
   1. Click on a dimension LABEL: double click opens the edit box; a single click falls through.

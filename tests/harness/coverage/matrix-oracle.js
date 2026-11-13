@@ -3,6 +3,9 @@
 import * as L from '../audit/lib.js';
 import { GcsWrapper } from '@salusoft89/planegcs';
 import { measureResidual, measureShapeSizes, COLLAPSE_RATIO } from '#core/constraint-verifier.js';
+import { referenceShape, REFERENCE_JOINTS } from '#core/reference-lines.js';
+import { symmetricOperands } from '#core/symmetric.js';
+import { sceneShapes } from '#core/reference-lines.js';
 
 export async function oracleState(S) {
   const mod = await L.planegcs();
@@ -16,6 +19,20 @@ export async function oracleState(S) {
       prims.push({ id: `x_col_${n}b`, type: 'point_on_line_ppp', p_id: l2.joints[1], lp1_id: l1.joints[0], lp2_id: l1.joints[1] });
     } else if (c.type === 'tangent' && c.shapes && c.shapes.length === 2) {
       prims.push({ id: `x_tcc_${++n}`, type: 'tangent_cc', c1_id: c.shapes[0], c2_id: c.shapes[1] });
+    } else if (c.type === 'symmetric' && symmetricOperands(c, sceneShapes(S.state.shapes))) {
+      // task 563: PlaneGCS's p2p_symmetric_ppl per mirrored pair (+ equal_radius_cc for circles / arcs: toPlanegcs makes an arc a circle); an axis
+      // symmetry line is added as its two fixed points and a line
+      const o = symmetricOperands(c, sceneShapes(S.state.shapes));
+      const ax = referenceShape(c.line);
+      if (ax && !prims.some(q => q.id === ax.id)) {
+        for (const j of REFERENCE_JOINTS.filter(r => ax.joints.includes(r.id))) prims.push({ id: j.id, type: 'point', x: j.x, y: j.y, fixed: true });
+        prims.push({ id: ax.id, type: 'line', p1_id: ax.joints[0], p2_id: ax.joints[1] });
+      }
+      // a pair that is ONE joint (two lines sharing an end, two circles sharing a centre) mirrors onto itself = lies on the line: PlaneGCS's
+      // p2p_symmetric_ppl of a point with itself has an identically zero equation (it reports it conflicting), so it is given as point-on-line
+      for (const [p, q] of o.pairs) prims.push(p === q ? { id: `x_sym_${++n}`, type: 'point_on_line_ppp', p_id: p, lp1_id: o.line[0], lp2_id: o.line[1] }
+        : { id: `x_sym_${++n}`, type: 'p2p_symmetric_ppl', p1_id: p, p2_id: q, l_id: c.line });
+      if (o.sizes) prims.push({ id: `x_sym_${++n}`, type: 'equal_radius_cc', c1_id: c.shapes[0], c2_id: c.shapes[1] });
     } else left.push(c);
   }
   const w = new GcsWrapper(new mod.GcsSystem());

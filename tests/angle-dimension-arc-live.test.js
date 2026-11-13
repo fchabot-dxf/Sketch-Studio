@@ -17,7 +17,7 @@ const INT = { x: 587.4900947223791, y: 7584.647136653884 };                     
 await (async () => {
   const cdp = await launchBrowser({ tag: '543' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp, flushAutosave } = cdp;
   try {
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const click = async (x, y) => { await mouse('mouseMoved', x, y, 0); await sleep(40); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y, 0); await sleep(250); };
@@ -39,8 +39,8 @@ await (async () => {
     await evalJs(`(async () => { const { getProjectStore } = await import('/packages/ui/project-store.js'); const s = getProjectStore();
       const p = await s.newDesign('owner-543', { app: 'sketchstudio' }); await s.save(${JSON.stringify(OWNER)}, { app: 'sketchstudio', id: p.id }); return p.id; })()`);
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
+    await waitForApp('svgCanvas');
     await waitFor(`!!document.querySelector('#svgCanvas .dim-label')`, 'the owner dimension to be drawn', 15000);
-    await sleep(1500);
     // the dimension sits 19757 units from the vertex, past the top of the first fit: a real wheel zoom-out brings the whole dimension into view
     { const cvr = await centerOf('#svgCanvas'); await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: cvr.x, y: cvr.y, deltaX: 0, deltaY: 700 }); await sleep(500); }
     await shot('arc-zoomed-out.png');
@@ -76,10 +76,10 @@ await (async () => {
     const clickEl = async (sel) => { const c = await centerOf(sel); assert(c, sel + ' not found'); await click(c.x, c.y); };
     const labels = () => evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas .dim-label')].map(e => e.textContent.replace(/\s+/g, '')))`).then(JSON.parse);
     const inputOpen = `(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`;
-    await clickEl('#btn-clear'); await sleep(3500);                                  // an empty design, then a reload for the default view (the owner document's view is zoomed far out)
+    await clickEl('#btn-clear'); await flushAutosave();                                  // an empty design, then a reload for the default view (the owner document's view is zoomed far out)
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`!!document.getElementById('svgCanvas') && !!document.getElementById('tool-dim')`, 'SketchStudio to reload');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     const C = await centerOf('#svgCanvas');
     const corner = { x: C.x - 250, y: C.y + 100 };
     const drawLine = async (a, b) => { await clickEl('#tool-line'); await click(a.x, a.y); await click(b.x, b.y); await key('Escape', 'Escape', 27); await sleep(200); };

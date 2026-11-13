@@ -15,6 +15,8 @@ const CSS = `
 .sk-context-item.active:not(.disabled), .sk-context-item:hover:not(.disabled) { background: var(--sk-sidebar-hover, rgba(127,127,127,0.18)); }
 .sk-context-item.disabled { opacity: 0.45; cursor: not-allowed; }
 .sk-context-check { width: 14px; flex: 0 0 14px; text-align: center; color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); }
+.sk-context-menu.touch { min-width: 220px; font-size: 14px; }
+.sk-context-menu.touch .sk-context-item { min-height: 44px; padding: 0 16px; }
 .sk-context-reason { margin-left: auto; padding-left: 12px; font-weight: 500; opacity: 0.8; }
 `;
 
@@ -28,15 +30,22 @@ function injectStyles() {
 export function closeContextMenu() { if (current) current.close(); }
 export function isContextMenuOpen() { return !!current; }
 
+// TASK 562: how far from a FINGER the menu opens (px): the pressed item stays visible beside it.
+const TOUCH_GAP = 40;
+const isCoarsePointer = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+
 /**
- * showContextMenu({ x, y, items:[{ id, label, checked?, disabled?, reason?, onSelect }], returnFocusTo? })
+ * showContextMenu({ x, y, items:[{ id, label, checked?, disabled?, reason?, onSelect }], returnFocusTo?, touch? })
  * Closes on Escape, an outside click, a selection, or a scroll / zoom. Arrows move, Enter selects.
+ * touch (a finger opened it: the long-press, or any coarse-pointer device): rows are >= 44 px tall and the menu opens BESIDE the point
+ * (right of it, else left, else below / above it) instead of with its corner on it, so the finger does not cover the menu or the pressed item.
  */
-export function showContextMenu({ x, y, items, returnFocusTo = null }) {
+export function showContextMenu({ x, y, items, returnFocusTo = null, touch = false }) {
   closeContextMenu();
   injectStyles();
   const el = document.createElement('div');
-  el.className = 'sk-context-menu'; el.setAttribute('role', 'menu'); el.tabIndex = -1;
+  const fingers = !!touch || isCoarsePointer();
+  el.className = 'sk-context-menu' + (fingers ? ' touch' : ''); el.setAttribute('role', 'menu'); el.tabIndex = -1;
   let active = -1;
   const rows = items.map((it, i) => {
     const row = document.createElement('div');
@@ -90,8 +99,15 @@ export function showContextMenu({ x, y, items, returnFocusTo = null }) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   document.body.appendChild(el);
   const w = el.offsetWidth, h = el.offsetHeight;
-  el.style.left = Math.max(0, Math.min(x, window.innerWidth - w - 4)) + 'px';
-  el.style.top = Math.max(0, Math.min(y, window.innerHeight - h - 4)) + 'px';
+  let left = x, top = y;
+  if (fingers) {
+    // beside the finger, never under it: right of it, else left of it, else (a phone: the finger is mid-screen) above or below it
+    if (x + TOUCH_GAP + w + 4 <= window.innerWidth) { left = x + TOUCH_GAP; top = y - h / 2; }
+    else if (x - TOUCH_GAP - w >= 0) { left = x - TOUCH_GAP - w; top = y - h / 2; }
+    else { left = x - w / 2; top = y + TOUCH_GAP + h + 4 <= window.innerHeight ? y + TOUCH_GAP : y - TOUCH_GAP - h; }
+  }
+  el.style.left = Math.max(0, Math.min(left, window.innerWidth - w - 4)) + 'px';
+  el.style.top = Math.max(0, Math.min(top, window.innerHeight - h - 4)) + 'px';
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('pointerdown', onOutside, true);
   document.addEventListener('wheel', onPanZoom, true);

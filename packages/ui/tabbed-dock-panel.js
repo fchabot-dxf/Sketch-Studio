@@ -50,6 +50,11 @@ function injectStyles() {
   cursor: pointer; font: 14px/1 system-ui, sans-serif; opacity: 0.7; }
 .sk-dock-close:hover { background: var(--sk-dock-hover, rgba(255,255,255,0.08)); opacity: 1; }
 .sk-dock-close:focus-visible, .sk-dock-tab:focus-visible { outline: 2px solid var(--sk-dock-accent, var(--sk-selection, #4c9aff)); outline-offset: 1px; }
+/* TASK 562: a finger: tabs and the close button >= 44 px. */
+@media (pointer: coarse) {
+  .sk-dock-tab { min-height: 44px; font-size: 14px; }
+  .sk-dock-close { width: 44px; height: 44px; font-size: 18px; }
+}
 @media (max-width: 640px) {
   .sk-dock[data-sheet] { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important;
     height: min(60vh, 420px) !important; border-radius: 12px 12px 0 0; }

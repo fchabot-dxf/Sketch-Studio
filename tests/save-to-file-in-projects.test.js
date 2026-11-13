@@ -18,7 +18,7 @@ const STUB = `(() => {
 await (async () => {
   const cdp = await launchBrowser({ tag: '547', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: STUB });
     const shot = async (name, w = 1000, h = 680, x = 0, y = 0) => {
@@ -49,7 +49,7 @@ await (async () => {
       await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
       await navigate(`http://127.0.0.1:${port}/apps/${host}/index.html`, 10000);
       await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, `${host} sidebar button`);
-      await sleep(1500);
+      if (host === 'sketchstudio') await waitForApp('svgCanvas'); // the Shaper's Design buffer exists only once its Design tab is entered
       const H = JSON.stringify(host);
       // seed: two designs in My Designs (with geometry) and one in a new project
       await q(`(async () => { const s = ${S};

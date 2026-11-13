@@ -119,6 +119,19 @@ function injectStyles() {
 .sk-ribbon-menu-item:hover { background: var(--sk-ribbon-hover, #f3f4f6); }
 .sk-ribbon-menu-item.active { background: var(--sk-selection, #3B82F6); color: #fff; }
 .sk-ribbon-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+/* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, the polygon Sides box 44 x 44, menu rows 44 px. Desktop (a mouse) is untouched. */
+@media (pointer: coarse) {
+  .sk-ribbon-btn { width: 62px; height: 60px; }
+  .sk-ribbon-lbl, .sk-ribbon-group-label { font-size: 12px; font-weight: 700; }
+  .sk-ribbon-poly input { width: 52px !important; height: 44px; font-size: 16px !important; }
+  .sk-ribbon-menu-item { min-height: 44px; font-size: 14px; }
+}
+/* TASK 562: at phone width an edge fade says the ribbon scrolls: the JS sets data-fade (left / right / both) from the scroll position. */
+@media (max-width: 640px) {
+  .sk-ribbon[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); }
+  .sk-ribbon[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px); mask-image: linear-gradient(to right, transparent 0, #000 28px); }
+  .sk-ribbon[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
+}
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -246,7 +259,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     toolBtns.push({ btn: b, tool: t.tool });
     const input = document.createElement('input'); input.type = 'number'; input.id = 'polygon-sides';
     input.min = POLYGON_SIDES.min; input.max = POLYGON_SIDES.max; input.step = 1; input.value = state ? state.polygonSides : POLYGON_SIDES.default;
-    input.title = `Number of sides (${POLYGON_SIDES.min}-${POLYGON_SIDES.max})`; input.setAttribute('aria-label', 'Polygon sides');
+    input.className = 'sk-ribbon-poly-input'; input.title = `Number of sides (${POLYGON_SIDES.min}-${POLYGON_SIDES.max})`; input.setAttribute('aria-label', 'Polygon sides');
     input.style.cssText = 'width:38px;box-sizing:border-box;font:600 12px system-ui,sans-serif;padding:3px 2px;text-align:center;border:1px solid var(--sk-ribbon-sep,#cbd5e1);border-radius:6px;background:var(--sk-ribbon-bg,#fff);color:var(--sk-ribbon-fg,inherit);';
     const commit = () => {
       const kept = clampPolygonSides(input.value === '' ? (state && state.polygonSides) : input.value);
@@ -338,16 +351,29 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     if (paramsBtn) paramsBtn.setAttribute('aria-pressed', String(!!(paramsWin && paramsWin.isOpen())));
   }
 
+  // TASK 562: the edge-fade cue. Each side fades only while there is more ribbon that way (CSS applies it at <= 640 px).
+  function syncFade() {
+    const max = el.scrollWidth - el.clientWidth;
+    const more = { left: max > 2 && el.scrollLeft > 2, right: max > 2 && el.scrollLeft < max - 2 };
+    el.dataset.fade = more.left && more.right ? 'both' : more.left ? 'left' : more.right ? 'right' : 'none';
+  }
+  el.addEventListener('scroll', syncFade, { passive: true });
+  window.addEventListener('resize', syncFade);
+  const fadeObserver = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(syncFade) : null;
+  if (fadeObserver) fadeObserver.observe(el);
+
   refresh();
   return {
     el,
-    render: (container) => { if (container) container.appendChild(el); refresh(); return el; },
+    render: (container) => { if (container) container.appendChild(el); refresh(); syncFade(); return el; },
     refresh,
     destroy: () => {
       if (unlistenHistory) unlistenHistory();
       if (paramsWin) paramsWin.destroy();
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);
+      window.removeEventListener('resize', syncFade);
+      if (fadeObserver) fadeObserver.disconnect();
       try { el.remove(); } catch (_) {}
     },
   };

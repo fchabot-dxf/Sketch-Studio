@@ -2,7 +2,8 @@
 // shapes made in a tight loop (many in one millisecond) never share an id. Before it, the rect tool named its lines 's' + Date.now() + '_k'
 // and the line / circle tools 's' + Date.now(): two made in one millisecond collided, and shapes.find returned the wrong shape.
 // 1000 of each maker in a tight loop (rectangles in all three modes, polygons, arcs, beziers, and the id the line / circle tools mint), then
-// every shape id unique across all of them, every group id unique per group; and no source file mints a shape id from Date.now() alone.
+// every shape id unique across all of them, every group id unique per group; and no source file mints a shape id from Date.now() alone
+// (or from its own Date.now() + counter, like the clipboard's paste did: the generator is the one place).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,7 +38,7 @@ console.log(`${ids.length} shape ids from ${call} maker calls + ${2 * N} tool id
 
 // no shape id minted from Date.now() alone anywhere in the packages or apps (the forms the generator replaced)
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
-const BAD = /'s' \+ Date\.now\(\)|`s_bezier_\$\{Date\.now\(\)\}`|'circle_' \+ Date\.now\(\)|'rect_' \+ Date\.now\(\)|const base = Date\.now\(\)/;
+const BAD = /'s' \+ Date\.now\(\)|`s_bezier_\$\{Date\.now\(\)\}`|'circle_' \+ Date\.now\(\)|'rect_' \+ Date\.now\(\)|const base = Date\.now\(\)|`\$\{Date\.now\(\)\}_\$\{\+\+/;
 const offenders = [];
 const walk = (dir) => {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

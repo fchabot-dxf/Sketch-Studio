@@ -17,7 +17,7 @@ import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
 // Constraint / dimension operands resolve through the scene (task 539): the real containers + the two built-in reference lines.
-import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
+import { sceneJoints, sceneShapes, pickableShapes, referenceEnds } from '#core/reference-lines.js';
 
 function logDim() { /* logging disabled */ }
 
@@ -169,6 +169,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
 
             try { c.__placing = true; } catch(_){ }
             try { c.__newlyPlaced = true; } catch(_){ }
+            c.__asksSecondPick = true; // a line's length preview: a second pick (line, axis, point) upgrades it (task 555)
             updateConstraintOffset(state, c, w);
             try { c.glyphPos = w; } catch(_){ }
 
@@ -395,16 +396,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
                 // If we found the original line and it's different from the new one
                 if (s1 && s1.id !== s2.id) {
                     logDim('upgrade-line-dim', { pendingId: pending.id || '(pending)', s1: s1.id, s2: s2.id });
-                    // Remove the temporary length constraint and discard its birth snapshot
-                    if (pending.__newlyPlaced && typeof pending.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) {
-                        state.discardSnapshotAt(pending.__birthHistoryLength);
-                    }
-                    const idx = state.constraints.indexOf(pending);
-                    if (idx !== -1) state.constraints.splice(idx, 1);
-                    pending.__placing = false;
-                    pending.__newlyPlaced = false;
-                    if (state && state.placingConstraint === pending) state.placingConstraint = null;
-                    dimensionState.placingConstraint = null;
+                    discardPlacingLength(state, pending);
 
                     // Check Parallelism
                     const j1a = sceneJoints(state.joints).get(s1.joints[0]);
@@ -494,6 +486,17 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             }
         }
         
+        // 2b. UPGRADE TO POINT-TO-LINE (task 555, Fusion's second pick): a point clicked while a line's length is being placed
+        // turns the preview into the perpendicular distance from that point to the line. A click on the line's own end is a drop.
+        if (hitJoint && pending.__asksSecondPick && pending.type === CONSTRAINT_TYPES.DISTANCE && pending.joints && pending.joints.length === 2) {
+            const lineOfPending = sceneShapes(state.shapes).find(s => s.type === 'line' && s.joints.includes(pending.joints[0]) && s.joints.includes(pending.joints[1]));
+            if (lineOfPending && !lineOfPending.joints.includes(hitJoint.id)) {
+                discardPlacingLength(state, pending);
+                state.active = null;
+                return createPointLineDimension(svg, state, hitJoint.id, lineOfPending, e, w);
+            }
+        }
+
         logDim('finalize-continue');
 
         // If it's a driven (reference) dimension, just drop it.
@@ -588,39 +591,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         // Case A: Clicked a Shape (Line) -> Create Point-to-Line Dimension
         if (hitShape && hitShape.shape && hitShape.shape.type === 'line') {
             logDim('create-point-to-line');
-            const firstId = dimensionState.pendingDimension.firstJoint;
-            const lineShape = hitShape.shape;
-
-            // Prevent creating dimension to own line
-            if (lineShape.joints.includes(firstId)) {
-                dbg.warn('app', '[dimension-tool] Cannot dimension a joint against its own line.');
-                resetDimensionState(state);
-                return true; 
-            }
-
-            const a = sceneJoints(state.joints).get(lineShape.joints[0]);
-            const b = sceneJoints(state.joints).get(lineShape.joints[1]);
-            const firstJ = sceneJoints(state.joints).get(firstId);
-            if (!a || !b || !firstJ) {
-                resetDimensionState(state);
-                return true;
-            }
-
-            // Point-to-line = the PERPENDICULAR distance from the point to the line: one distance constraint stored with
-            // the three joints [P, A, B] (solver row distance.__lineLine, the same one a line-line distance uses). No helper joint.
-            beginDimUndo(state);
-            const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-                joints: [firstId, lineShape.joints[0], lineShape.joints[1]],
-                value: Math.abs(perpendicularDistance(firstJ, a, b))
-            }, { source: 'dimension' });
-            const c = (res && typeof res === 'object') ? res : null;
-            if (!c) { endDimUndo(state); resetDimensionState(state); return true; }
-
-            startPlacing(svg, state, c, e, w);
-            updateConstraintOffset(state, c, w);
-            dimensionState.pendingDimension = null;
-            finalizeDimBirth(c, state);
-            return true;
+            return createPointLineDimension(svg, state, dimensionState.pendingDimension.firstJoint, hitShape.shape, e, w);
         }
 
         // Case B: Clicked another Joint -> Create Point-to-Point Dimension
@@ -694,6 +665,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             
             // Initialize placement state (Inline logic)
             try { c.__placing = true; } catch(_){ }
+            c.__asksSecondPick = true; // a line's length preview: a second pick (line, axis, point) upgrades it (task 555)
             state.placingConstraint = c;
             dimensionState.placingConstraint = c;
             
@@ -773,6 +745,51 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
     return false;
 }
 
+// The temporary LENGTH dimension of a line (the preview while its label follows the cursor) is removed together with its birth snapshot
+// when a second pick turns it into another dimension (line + line, line + axis, line + point).
+function discardPlacingLength(state, pending) {
+    if (pending.__newlyPlaced && typeof pending.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) {
+        state.discardSnapshotAt(pending.__birthHistoryLength);
+    }
+    const idx = state.constraints.indexOf(pending);
+    if (idx !== -1) state.constraints.splice(idx, 1);
+    pending.__placing = false;
+    pending.__newlyPlaced = false;
+    if (state && state.placingConstraint === pending) state.placingConstraint = null;
+    dimensionState.placingConstraint = null;
+}
+
+// Point-to-line = the PERPENDICULAR distance from the point to the line: one distance constraint stored with the three joints
+// [P, A, B] (solver row distance.__lineLine, the same one a line-line distance uses). No helper joint. The line may be an axis (task 539).
+// The ONE creation of this dimension: a point then a line, and a line then a point, both end here.
+function createPointLineDimension(svg, state, firstId, lineShape, e, w) {
+    if (lineShape.joints.includes(firstId)) {
+        dbg.warn('app', '[dimension-tool] Cannot dimension a joint against its own line.');
+        resetDimensionState(state);
+        return true;
+    }
+    const a = sceneJoints(state.joints).get(lineShape.joints[0]);
+    const b = sceneJoints(state.joints).get(lineShape.joints[1]);
+    const firstJ = sceneJoints(state.joints).get(firstId);
+    if (!a || !b || !firstJ) {
+        resetDimensionState(state);
+        return true;
+    }
+    beginDimUndo(state);
+    const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
+        joints: [firstId, lineShape.joints[0], lineShape.joints[1]],
+        value: Math.abs(perpendicularDistance(firstJ, a, b))
+    }, { source: 'dimension' });
+    const c = (res && typeof res === 'object') ? res : null;
+    if (!c) { endDimUndo(state); resetDimensionState(state); return true; }
+
+    startPlacing(svg, state, c, e, w);
+    updateConstraintOffset(state, c, w);
+    dimensionState.pendingDimension = null;
+    finalizeDimBirth(c, state);
+    return true;
+}
+
 // Helper to initialize placement state for a new constraint
 function startPlacing(svg, state, constraint, e, w) {
     try { constraint.__placing = true; } catch(_){ }
@@ -799,7 +816,7 @@ function startPlacing(svg, state, constraint, e, w) {
 }
 
 // Helper for screen distance to segment
-function getScreenDistToLine(svg, mx, my, j1, j2) {
+function getScreenDistToLine(svg, mx, my, j1, j2, endless = false) {
     const p1 = worldToScreen(svg, j1);
     const p2 = worldToScreen(svg, j2);
     if (!p1 || !p2) return Infinity;
@@ -808,7 +825,7 @@ function getScreenDistToLine(svg, mx, my, j1, j2) {
     if (l2 === 0) return Math.hypot(mx - p1.x, my - p1.y);
     
     let t = ((mx - p1.x) * (p2.x - p1.x) + (my - p1.y) * (p2.y - p1.y)) / l2;
-    t = Math.max(0, Math.min(1, t));
+    if (!endless) t = Math.max(0, Math.min(1, t));
     
     const projX = p1.x + t * (p2.x - p1.x);
     const projY = p1.y + t * (p2.y - p1.y);
@@ -853,14 +870,16 @@ export function handleDimensionPointerMove(e, svg, state, w) {
                  let bestLine = null;
                  let minD = 20; // 20px hit tolerance
                  
-                 for (const s of state.shapes) {
+                 for (const s of pickableShapes(state)) {
                      if (s.id === sourceLine.id) continue;
                      if (s.type !== 'line') continue;
                      
-                     const j1 = sceneJoints(state.joints).get(s.joints[0]);
-                     const j2 = sceneJoints(state.joints).get(s.joints[1]);
+                     // an axis is an endless line (task 539): measured on the whole line, from its declared two points
+                     const ends = s.reference ? referenceEnds(s) : null;
+                     const j1 = ends ? ends[0] : sceneJoints(state.joints).get(s.joints[0]);
+                     const j2 = ends ? ends[1] : sceneJoints(state.joints).get(s.joints[1]);
                      if (j1 && j2) {
-                         const d = getScreenDistToLine(svg, e.clientX, e.clientY, j1, j2);
+                         const d = getScreenDistToLine(svg, e.clientX, e.clientY, j1, j2, !!s.reference);
                          if (d < minD) {
                              minD = d;
                              bestLine = s;

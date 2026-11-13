@@ -77,6 +77,29 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-13 afternoon, turn 1170)
+- MERGED (main 1c4974b, FULL 360/360 in 372 s): 563 symmetry, then 572 two-line symmetry = infinite lines like Fusion (all four
+  pairs measured in Fusion: points / lines / arcs / circles, second pick moves); 564 joint ids; 565 Open-from-file GC fix; 566
+  Import SVG/DXF in every File menu (one importer); 567 Trace project saving (hosts.trace = params, no photo); 570 import fits the
+  imported shapes + Pen Plotter import undo restores host data; 573 Pen Plotter import frames the whole paper; 571 one undo step
+  per constraint tool + 571b glyph wins right-click only ON its badge; 574 merge tier follows URL/template-literal app loads;
+  568 tiered gate; 569 node test kit (happy-dom 21.0.4 devDependency, hosts declare design-canvas.js once); 576 node batch A
+  (28 browser tests -> node, live tier 94 -> 65); 575 drag targets live only as long as the drag + no redundant snap constraint;
+  578 an arc END drags only itself (Fusion); 577 sketches as layers (Fusion-style rows, lock / show only / move to sketch /
+  reorder by dragging the name, activate radio; the SAME panel in all four apps via mountDesignSidePanel; SketchStudio canvas
+  244 px narrower). Mockup: https://claude.ai/artifact/KYZBDzj4MarrouqU6KFFYR
+- IN FLIGHT: 579 timing tests (solver-perf-guard...) run EXCLUSIVE after the parallel batch (flaked twice on load).
+- OPEN / OWNER: node batches B-D (B = 12 files needing kit additions) - ask; Fusion checks BLOCKED until the owner closes the
+  "Recovered Documents" dialog (his "6x9 12oct.f3d") and frees a document slot ("Document limit reached" -> new docs read-only):
+  (a) does a point already held on a line snap while dragged (575 item 3 + 578 parallel-inference staircase), (b) arc CENTRE
+  drag with one rim fixed (our cluster locks), (c) Mirror tool (owner wants Mirror in Create; measure Fusion's first, via the
+  real UI - launching MirrorSketchCommand from a script CRASHED Fusion). Shaper header wider than 390 px (drawer button
+  off-screen). Cross-sketch constraints allowed today (Fusion projects); suggested: locked sketch geometry held fixed in solve.
+- LESSONS: subagents are STOPPED by an owner interrupt (SendMessage then refuses; finish from the worktree's local commits with a
+  new agent, only when the owner says so); never execute Fusion commands that need selections from a script (crash); the
+  sk-test-<N> browser tag names the TEST's origin, not the running seat - only kill browsers whose node parent is gone; a
+  timing guard in a parallel tier flakes under load.
+
 ### Update (2026-11-13, turn 1093)
 - MERGED today (main 2c66d4d, FULL tier 348/348 in 469 s): 565 Open-from-file fix (detached file input was GC'd; the
   sidebar-projects "flake" was this app bug), 564 unique joint ids, 563 symmetry, 566 Import SVG / DXF in every File menu

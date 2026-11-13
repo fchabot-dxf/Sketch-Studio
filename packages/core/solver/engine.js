@@ -816,17 +816,9 @@ export class NewtonSolver {
         }
       }
     }
-    if (!dragOpt) {
-      // a JOINT drag: auto-detect first joint carrying a dragTarget set by UI input handlers (a body drag never sets one, task 538)
-      for (const [id, j] of this.joints.entries()) {
-        if (j && j.dragTarget && !j.fixed) {
-          dragOpt = { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
-          break;
-        }
-      }
-    }
-
     const x0 = this._pack();
+    // a JOINT drag: the springs of every joint carrying a dragTarget (set by the UI input handlers; a body drag never sets one, task 538)
+    if (!dragOpt || !dragOpt.body) dragOpt = this._jointDragSprings(dragOpt);
     if (x0.length === 0) {
       // No free variables — every joint is pinned (all fixed, or merged into a
       // fixed coincident cluster). The sketch can't move, but its constraints
@@ -973,6 +965,27 @@ export class NewtonSolver {
     if (stalled) out.stallError = finalError;
     if (hasSpring) out.dragReached = dragReached;
     return out;
+  }
+
+  // THE springs of a JOINT drag (TASK 584): the explicit one (the select tool's grabbed joint, solve's options.dragTarget) and one for every
+  // other joint carrying a dragTarget, the members the drag CARRIES (selection-tools pullDrag: the grabbed point's coincident cluster, and
+  // an arc grabbed by its centre carries both rims, so it translates whole like Fusion). One spring per solver variable: coincident joints
+  // are one point (_pack), a second spring on it would only weigh the pull double. Before, only the FIRST joint carrying a target (joint
+  // insertion order) was pulled, so an arc dragged by its centre stretched: the rims followed the radius constraints, not the drag.
+  // Returns the list of springs, or null when there is none. Call after _pack (it reads _varIndex).
+  _jointDragSprings(explicit) {
+    const springs = explicit ? [explicit] : [];
+    const seen = new Set();
+    const pointOf = (id) => (this._varIndex.has(id) ? 'v' + this._varIndex.get(id) : 'j' + id); // a joint with no variable (anchored) is its own
+    if (explicit) seen.add(pointOf(explicit.jointId));
+    for (const [id, j] of this.joints.entries()) {
+      if (!j || !j.dragTarget || j.fixed) continue;
+      const p = pointOf(id);
+      if (seen.has(p)) continue;
+      seen.add(p);
+      springs.push({ jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 });
+    }
+    return springs.length ? springs : null;
   }
 
   _hasMouseSpring() {

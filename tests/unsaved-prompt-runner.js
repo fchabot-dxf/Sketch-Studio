@@ -2,7 +2,7 @@
 // "Save… / Don't save / Cancel" (project-actions.js settleUnsaved), in the UI it came from. Live, headless Edge, REAL clicks and keys, in a real
 // host. For one host and one CHOICE, every entry path:
 //   open-projects  the Projects modal: a design tile (the question shows in the modal's question bar)
-//   open-recent    the sidebar's Open recent list
+//   open-recent    the sidebar's Open recent (since task 557: the Projects modal on its Recent pane; a design tile there)
 //   open-file      the sidebar's Open from file (the real file chooser, answered with a design file)
 //   new            the sidebar's New design
 //   goto           the sidebar's GO TO another app (leaves the page)
@@ -92,8 +92,8 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
         await clickEl(`.sk-pm-tile[data-design="${otherId}"]`, 'the Other tile');
       } else if (p === 'open-recent') {
         await openSidebar(); await clickEl('[data-action="open-recent"]', 'Open recent');
-        await waitFor(`!!document.querySelector('.sk-recent[data-design="${otherId}"]')`, 'the Other row');
-        await clickEl(`.sk-recent[data-design="${otherId}"]`, 'the Other row');
+        await waitFor(`!!document.querySelector('.sk-pm-tile[data-design="${otherId}"]')`, 'the Other tile in Recent');
+        await clickEl(`.sk-pm-tile[data-design="${otherId}"]`, 'the Other tile in Recent');
       } else if (p === 'open-file') {
         chooser = once('Page.fileChooserOpened');
         await openSidebar(); await clickEl('[data-action="open-file"]', 'Open from file');
@@ -103,7 +103,7 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
         await openSidebar(); await clickEl(`.sk-sidebar-goto [data-app="${H.goto}"]`, 'GO TO ' + H.goto);
       }
       // 2. THE question, where the action came from
-      const bar = p === 'open-projects' ? '.sk-pm-ask' : '.sk-sidebar-ask';
+      const bar = (p === 'open-projects' || p === 'open-recent') ? '.sk-pm-ask' : '.sk-sidebar-ask';
       await waitFor(`(() => { const a = document.querySelector('${bar}'); return !!a && !a.hidden && !!a.querySelector('[data-choice="save"]'); })()`, `${p}: the Save… / Don't save / Cancel question`, 5000);
       const q = await evalJs(`(() => { const a = document.querySelector('${bar}'); return { text: a.textContent, buttons: [...a.querySelectorAll('button')].map((b) => b.textContent) }; })()`);
       assert.deepStrictEqual(q.buttons, ['Save…', "Don't save", 'Cancel'], `${p}: the three answers, in order: ${JSON.stringify(q)}`);

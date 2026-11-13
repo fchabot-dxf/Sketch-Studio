@@ -47,11 +47,11 @@ await (async () => {
     })`).then((s) => s && JSON.parse(s));
     const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) { await sleep(300); return; } await sleep(250); } };
     const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
+    // a fresh, empty, NAMED design for each scenario (TASK 558: only a named design autosaves, and this test reads the autosave): a new design made
+    // current in the store, then a load that restores it; the previous scenarios' designs stay in the store, never current again
     const fresh = async () => {
       await send('Page.navigate', { url }); await sleep(2500);
-      await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
-      await send('Page.navigate', { url }); await sleep(2500);
-      await evalJs(CREATE_NAMED_DESIGN('sketchstudio')); // TASK 558: only a NAMED design autosaves (this test reads the autosave); the next load restores it
+      await evalJs(CREATE_NAMED_DESIGN('sketchstudio'));
       await send('Page.navigate', { url }); await sleep(2500);
     };
     const toScreen = (wx, wy) => evalJs(`(() => { const s = document.getElementById('svgCanvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);

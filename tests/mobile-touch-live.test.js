@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { findSnap, snapBoostFor, TOUCH_SNAP_BOOST } from '#ui/snap-detection.js';
 import { SNAP } from '#core/constants.js';
 
@@ -48,6 +49,8 @@ try {
   assert.ok(desk.fade === 'none' || desk.fade === '', 'no edge fade on the desktop ribbon');
   await shot('desktop-1400');
   if (process.env.WRITE_DESKTOP_JSON) fs.writeFileSync(process.env.WRITE_DESKTOP_JSON, JSON.stringify(desk, null, 1));
+  // TASK 558: only a NAMED design autosaves; the drawing made on the phone below is carried to Shaper through the store, so start from one
+  await evalJs(CREATE_NAMED_DESIGN('sketchstudio', 'Phone'));
 
   // ═══ PHONE, 390x844, a finger ═══
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

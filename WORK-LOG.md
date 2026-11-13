@@ -14089,3 +14089,8 @@ Joint ids: ONE generator `newJointId()` in packages/core/shape-id.js (same modul
   (a) a race: the wait `.sk-pm-tile count >= 1` also held for the Recent view still on screen (the logged tiles right after it were Recent's six). It now waits for the clicked project's row to be the selected one (`.sk-pm-rowbtn.sel[data-pane=<id>]`), rendered together with that project's designs.
 - After: save-to-file-in-projects alone 3/3 ok. Project-manager / sidebar live tests alone 3x each, all exit 0: app-sidebar, sidebar-projects, sidebar-account, sidebar-drive, open-recent-modal-live, project-store-idb, recentre-on-reload-live, header-status-no-shift (.evidence/558/x3-batch.txt).
 - Merged origin/main d5514ea (565 open-file input, 564 joint ids). Gate: "GATE files=342 pass=342 fail=0", "SMOKE 12/12", "HEADLESS-LEFT 0" (.evidence/558/gate-9.txt).
+
+## TURN 558 (symmetric-live red after 563 landed)
+- Merged origin/main 773401a (563 symmetry). Failure proved first, unmodified test on this branch: symmetric-live-sketchstudio exit 1, "TypeError: Cannot read properties of null (reading 'shapes')" (.evidence/558/sym-before-symmetric-live-sketchstudio.txt): its SketchStudio half reads the AUTOSAVED current design (storedDoc), which is null on a fresh page under the save rule; the Shaper half reads the live state and passed.
+- Fix: tests/symmetric-live-runner.js starts SketchStudio from a named design (tests/helpers/named-design.js, the same helper). After: sketchstudio 3/3 (48 s each), shaper 3/3 (27-28 s). No other new 563 test drives the live app (grep launchBrowser / indexedDB / navigate in the merged tests: only that runner).
+- Gate: "GATE files=346 pass=346 fail=0", "SMOKE 12/12", "HEADLESS-LEFT 0" (.evidence/558/gate-10.txt).

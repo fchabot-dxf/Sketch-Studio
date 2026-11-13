@@ -33,24 +33,31 @@ The live tier runs 6 files side by side (task 568), so its wall time is about th
 then the stored current design), `waitFor`, `close()`. A **profile** is what a browser profile keeps across page loads: localStorage and
 the project store's records. A reload or a switch to another app is `close()` and `open()` on the same profile.
 
-What runs is the app's own code: `createSketchState`, `setupInput` (SketchStudio) / `mountSketch` (Shaper, Pen Plotter), SketchStudio's
-`setupUI` ribbon or the shared `createToolRibbon`, the host loop (solve, then the shared renderer `draw`, which also places the
-constraint glyphs that clicks hit-test), `createDocumentBuffer` on `createProjectStore` with the store's own in-memory adapter
-(`createMemoryAdapter`, already in `packages/ui/project-store.js`) and a real BroadcastChannel per profile.
+The page is a **happy-dom** Window (devDependency `happy-dom` 21.0.4, exact; released 2026-10-20) loaded with the host's real
+`index.html` (its scripts are not run). What runs is the app's own code: `createSketchState`, `setupInput` (SketchStudio) /
+`mountSketch` (Shaper, Pen Plotter), SketchStudio's `setupUI` ribbon or the shared `createToolRibbon`, the host loop (solve, then the
+shared renderer `draw`, which also places the constraint glyphs that clicks hit-test), `createDocumentBuffer` on `createProjectStore` with
+the store's own in-memory adapter (`createMemoryAdapter`) and a real BroadcastChannel per profile.
 
-App code changed for the kit: **none**. Seams used, all already there and used by the app itself: the store's `adapter` and `channel`
-options, the buffer's `store`, `doc`, `win` options, `mountSketch`'s options.
+Each host DECLARES its Design-canvas setup in one module that its page script and the kit both import (task 569 1b), so the kit copies
+nothing from a host:
+- `apps/sketchstudio/design-canvas.js`: `CANVAS_ID`, `INITIAL_VIEW` (w 20 at 1.5, -1.5), `initStudioCanvas` (state defaults, empty store,
+  initial view + viewBox), `studioBufferOptions` (app, canvas, restore = solve + fit, status text), `studioFrame` (one loop frame: solve,
+  draw, ribbon highlight). Read by `apps/sketchstudio/main.js`.
+- `apps/shaper/src/design-canvas.js`: `DESIGN_CANVAS_ID`, `DESIGN_CANVAS_OPTIONS` (mountSketch: seedDemo false, grid, profiles),
+  `RIBBON_OPTIONS`, `shaperBufferOptions` (restore = solve + fit + page views, then the cut plan / stock sidecar). Read by `apps/shaper/src/main.js`.
+- `apps/penplotter/src/design-canvas.js`: `DESIGN_CANVAS_OPTIONS` (seedDemo false), `plotterBufferOptions` (restore = solve + panels, then the
+  plotter sidecar or its reset). Read by `apps/penplotter/src/sketch-stage.js`.
+Page-only hooks (info panel, Vcarve, Prepare, Review, the Freehand button, the header) come in as callbacks; the kit passes none.
 
-What is not the browser (listed at the top of the kit too):
-- a small DOM stand-in written in the kit (no dependency: `node_modules` has no jsdom / happy-dom / linkedom, it is empty): elements,
-  attributes, a selector matcher, capture / bubble dispatch, focus that leaves a removed element. No layout: the canvas has the size it
-  has in the real page at 1600 x 900 (measured), every other element is 0 x 0; `innerHTML` is kept as text, not parsed.
-- the animation frame runs once after each dispatched event instead of on a 16 ms clock; events follow each other with no pause.
-- the host page wiring (`apps/sketchstudio/main.js`, `apps/shaper/src/main.js`, `apps/penplotter/src/sketch-stage.js`) is a page script,
-  not importable: the kit composes each host's canvas from the same shared modules with the options that host passes (the kit's
-  `HOSTS` table names what it mirrors). This is a copy of a few lines of host wiring that can drift; phase 2 can remove it by having each
-  host DECLARE its Design-canvas options in an importable module that both the page and the kit read (an app change: owner decision).
-- page timers die with the page: `close()` clears every timer the page made (a 10 s toast would otherwise keep Node running).
+Other seams used, already there and used by the app: the store's `adapter` and `channel` options, the buffer's `store`, `doc`, `win`.
+
+What is not the browser (KIT_OVERRIDES at the top of the kit, the only differences):
+1. layout: happy-dom has none, so the canvas reports the size it has in the real page at 1600 x 900 (measured); every other element 0 x 0.
+2. requestAnimationFrame: a queue the kit steps, one frame after each dispatched event instead of a 16 ms clock; no pauses between events.
+3. ResizeObserver: happy-dom's never reports; the kit's reports each observed element once (a browser's first observation).
+4. fetch stays Node's, so the glyph sheet's relative URL fails at once instead of going to a network (the renderer draws without it).
+Page timers are happy-dom's and die with the page (`close()`); Node's timers come back after it.
 
 ## Proof: three tests converted
 
@@ -59,9 +66,11 @@ The old browser files stay until the advisor reviews (phase 2 deletes them). Tim
 
 | old browser test | seconds | new node test | seconds |
 |---|---|---|---|
-| tests/snap-origin-coincident.test.js (drawing / constraint) | 72.10 | tests/snap-origin-coincident-node.test.js | 0.16 |
-| tests/draw-undo-live-lines.test.js (undo) | 18.22 | tests/draw-undo-lines-node.test.js | 0.16 |
-| tests/document-buffer-hosts.test.js (project store / save) | 17.63 | tests/document-buffer-hosts-node.test.js | 1.47 |
+| tests/snap-origin-coincident.test.js (drawing / constraint) | 72.10 | tests/snap-origin-coincident-node.test.js | 0.63 |
+| tests/draw-undo-live-lines.test.js (undo) | 18.22 | tests/draw-undo-lines-node.test.js | 0.53 |
+| tests/document-buffer-hosts.test.js (project store / save) | 17.63 | tests/document-buffer-hosts-node.test.js | 1.75 |
+
+(node times with happy-dom, task 569 1b; with the first hand-written DOM they were 0.16 / 0.16 / 1.47 s.)
 
 All three start, like their browser versions since task 558, from a NAMED current design (only a named design autosaves):
 `createNamedDesign(profile, app)` in the kit does on the profile's store what `tests/helpers/named-design.js` does in a page.

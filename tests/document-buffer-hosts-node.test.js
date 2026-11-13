@@ -21,7 +21,7 @@ const stored = async (app) => {
 // ---- A. Pen Plotter -> SketchStudio edit -> Pen Plotter
 await createNamedDesign(profile, 'penplotter', 'Hosts test'); // TASK 558: only a NAMED design autosaves; the page load restores it
 let pp = await open({ host: 'penplotter', profile });
-const pd = pp.sidecar.plotterDoc;
+const pd = pp.plotterDoc;
 const { state: plotter, makeToolpath, makePlotColor } = await import('../apps/penplotter/src/state.js');
 let plotterBefore, s1;
 try {

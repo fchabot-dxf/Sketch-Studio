@@ -1,13 +1,11 @@
-import { SolverConfig } from '#core/solver-config.js';
 import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
-import { draw } from '#ui/svg-renderer.js';
 import { setupInput, showDimInput } from '#ui/input-manager.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
+import { CANVAS_ID, initStudioCanvas, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';
-import { applyDefaultState } from '#core/state.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { createAppHeader } from '#ui/app-header.js';
@@ -93,25 +91,8 @@ function initApp(){
       svg.style.outline = 'none';
   }
   dbg.log('main', '[main] initApp starting, svg found:', !!svg);
-  // Initialize state defaults (construction mode etc.)
-  try{ applyDefaultState(state); }catch(_){ }
-  // initialize
-  engine.init();
-
-  // Empty starting sketch — only j_origin (created by engine.init()) exists.
-  // Set the view to show ~20 world units wide, centered near the origin.
-  state.view.w = 20;
-  state.view.x = 1.5;
-  state.view.y = -1.5;
-
-  const svgEl = document.getElementById('svgCanvas');
-  if(svgEl) {
-      const rect = svgEl.getBoundingClientRect();
-      if (rect.height > 0) {
-          state.view.h = state.view.w / (rect.width / rect.height);
-          svgEl.setAttribute('viewBox', `${state.view.x - state.view.w/2} ${state.view.y - state.view.h/2} ${state.view.w} ${state.view.h}`);
-      }
-  }
+  // design-canvas.js: the state defaults, the empty store (only j_origin), the initial view and its viewBox
+  initStudioCanvas(state, engine, document.getElementById(CANVAS_ID));
   
   // 6. Initialize Tuning Wizard (dev-only)
   try {
@@ -202,12 +183,7 @@ function initApp(){
   saveStatusEl.id = 'save-status';
   saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;display:inline-block;width:3.7em;white-space:nowrap;'; // fixed width = "Saving…" (the widest text) so the header buttons before it never move (TASK 557); Pen Plotter and Shaper own their toolbars (not createAppHeader), so each host keeps its own copy of this rule
   header.el.appendChild(saveStatusEl);
-  docBuffer = createDocumentBuffer({
-    state,
-    app: 'sketchstudio', canvas: svg, // TASK 474: the design records who saved it last
-    onRestored: () => { try { engine.solve(500); } catch (_) {} fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view)
-    onStatusChange: (s) => { saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
-  });
+  docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg, statusEl: saveStatusEl })); // design-canvas.js
   docBuffer.restore();
   docBuffer.start();
 
@@ -249,16 +225,10 @@ window.__dimEditHandler = (cIdx) => {
 
 // Render loop: solve → draw
 function loop(){
-  // USE CONFIGURABLE ITERATIONS
-  const iters = SolverConfig.ITERATIONS || 500;
-  engine.solve(iters);
-  // Expose latest solve stats for debug/UI consumers (AI Vision reads window.__lastSolveStats)
-  try { if (typeof window !== 'undefined') window.__lastSolveStats = engine.getSolveStats(); } catch(_) {}
-
-  draw(state.joints, state.shapes, svg, state.active, state.snapTarget, state.constraints, state.selectedJoints, state.selectedConstraints, state.currentTool, state.inference, state.selectedShapes, state.hoveredShape, state.hoveredJoint, state.hoveredConstraint, state.activeSnap, state.tempMousePos, state.drag ? true : false, worldGroup);
-  // S7c-2d: sync the shared ribbon's active highlight to state.currentTool (covers KEYBOARD switchToTool, which
-  // doesn't route through setTool). refresh() is a cheap class-toggle.
-  if (toolRibbon) toolRibbon.refresh();
+  studioFrame({ engine, state, svg, worldGroup, ribbon: toolRibbon, onSolved: () => {
+    // Expose latest solve stats for debug/UI consumers (AI Vision reads window.__lastSolveStats)
+    try { if (typeof window !== 'undefined') window.__lastSolveStats = engine.getSolveStats(); } catch(_) {}
+  } }); // design-canvas.js: solve, draw, ribbon highlight
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

@@ -1,9 +1,8 @@
 // packages/ui/sidebar-projects.js — TASK 479: the project actions + views of the shared app sidebar, wired to the project store
 // (#ui/project-store.js, task 474) through each host's document buffer. ONE module, so every app gets the SAME entries:
 //   main view  document name (click to rename inline) + where it lives and its save state (TASK 506) · New design · Save as… ·
-//              Duplicate · Open recent · Projects (opens the PROJECT MANAGER modal, project-manager.js) · Save to Google Drive (signed in only) · Open from file ·
+//              Duplicate · Open recent (opens the PROJECT MANAGER modal on its Recent pane) · Projects (opens the PROJECT MANAGER modal, project-manager.js) · Save to Google Drive (signed in only) · Open from file ·
 //              [the host's own Download actions] · GO TO (+ the account row: the Drive default toggle and connection check)
-//   views      'recent'   — listRecent, newest first, with project name + relative time
 // The project manager (modal, thumbnail grid: projects, designs, every per-design / per-project action) is #ui/project-manager.js; what
 // can be done with a design or a project is declared once in #ui/project-actions.js and used by both.
 // The host passes `getBuffer()` (its createDocumentBuffer result; it may be created lazily, so it is read at click time) and
@@ -16,7 +15,7 @@
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
-import { applyAppIdentity, appById } from './app-registry.js';
+import { applyAppIdentity } from './app-registry.js';
 import { getGoogleAccount } from './cloud/google-account.js';
 import { driveErrorText } from './cloud/drive-adapter.js';
 import { createProjectActions } from './project-actions.js';
@@ -24,8 +23,6 @@ import { openProjectManager, relativeTime } from './project-manager.js';
 import SettingsManager from '#core/settings-manager.js';
 
 export { relativeTime };
-
-const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
@@ -51,18 +48,18 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
   const openDesignById = projectActions.openDesign;
 
   // "Projects": the modal. The drawer closes first (focus goes back to the menu button, where the modal returns it on close).
-  function openManager() {
+  function openManager(start) {
     if (manager) return;
     sidebar.close();
-    manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, onClose: () => { manager = null; } });
+    manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, start, onClose: () => { manager = null; } });
   }
 
   const actions = [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); }) },
     { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, prompt: { label: 'Save a copy as', value: () => currentName + ' copy', okLabel: 'Save' }, onClick: act(async (name) => { await projectActions.saveAs(name); }) },
     { id: 'duplicate', label: 'Duplicate', icon: SIDEBAR_ICONS.copy, keepOpen: true, onClick: act(async () => { await projectActions.duplicateCurrent(); }, { close: false }) },
-    { id: 'open-recent', label: 'Open recent', icon: SIDEBAR_ICONS.recent, keepOpen: true, onClick: () => sidebar.showView('recent') },
-    { id: 'projects', label: 'Projects', icon: SIDEBAR_ICONS.folder, keepOpen: true, onClick: () => openManager() },
+    { id: 'open-recent', label: 'Open recent', icon: SIDEBAR_ICONS.recent, keepOpen: true, onClick: () => openManager('recent') },
+    { id: 'projects', label: 'Projects', icon: SIDEBAR_ICONS.folder, keepOpen: true, onClick: () => openManager('projects') },
     { divider: true },
     { id: 'save-drive', label: 'Save to Google Drive', icon: SIDEBAR_ICONS.cloud, keepOpen: true, tooltip: 'Save this design into the "My Designs" project on your Google Drive (the rest of its project stays on this device)',
       visible: () => !!(account && account.state().signedIn && store.cloud),
@@ -86,25 +83,6 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
     check: (onSteps) => store.cloud.checkConnection(onSteps),
   } : null;
 
-  // ---- views ------------------------------------------------------------------------------------------------------
-  const note = (box, text) => { const d = document.createElement('div'); d.className = 'sk-note'; d.textContent = text; box.appendChild(d); };
-  const rowBtn = (cls, html) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item sk-row ' + cls; b.innerHTML = html; return b; };
-  const liveRefresh = (box, rerender) => { const off = store.subscribe(() => { if (!box.isConnected) { off(); return; } rerender(); }); };
-
-  async function renderRecent(box) {
-    let rows = [];
-    try { rows = await store.listRecent({ limit: 40 }); } catch (e) { fail(e); }
-    box.innerHTML = '';
-    if (!rows.length) { note(box, 'No designs yet.'); return; }
-    for (const r of rows) {
-      const app = appById(r.app);
-      const b = rowBtn('sk-recent', `<span class="sk-row-main"><span class="sk-row-name">${esc(r.name)}</span><span class="sk-row-sub">${esc(r.projectName || '')} · ${esc(app ? app.name : r.app || '')} · ${esc(relativeTime(r.updatedAt))}</span></span>`);
-      b.dataset.design = r.id;
-      b.addEventListener('click', act(() => openDesignById(r.id)));
-      box.appendChild(b);
-    }
-  }
-
   sidebar = createAppSidebar({
     current: appId, docName: currentName, actions, account, driveControls, status: statusLine,
     beforeGoTo: () => projectActions.settleUnsaved(),
@@ -115,9 +93,6 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
       if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
     }, { close: false })(),
-    views: {
-      recent: { title: 'Open recent', render: (box) => { renderRecent(box); liveRefresh(box, () => renderRecent(box)); } },
-    },
   });
   store.subscribe(refreshName);
   refreshName();

@@ -9,7 +9,7 @@ import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 
 const cdp = await launchBrowser({ tag: '545', width: 1600, height: 900 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
-const { port, send, evalJs, waitFor, navigate } = cdp;
+const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
 const EV = process.env.EVIDENCE_DIR;
 const measured = {};
 try {
@@ -41,11 +41,11 @@ try {
     { name: 'Shaper Design', url: '/apps/shaper/index.html', canvas: 'design-canvas', setup: async () => {
       await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper ready');
       for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
-      await sleep(1500);
+      await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design tab to show');
     } },
   ]) {
     await navigate(`http://127.0.0.1:${port}${host.url}`, 8000);
-    await sleep(2500); await host.setup();
+    await host.setup(); await waitForApp(host.canvas);
     const W2S = (x, y) => evalJs(`(() => { const s = document.getElementById('${host.canvas}'); const p = s.createSVGPoint(); p.x = ${x}; p.y = ${y}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
     const cv = await centerOf('#' + host.canvas);
     const pre = new Set((await takeReport()).document.geometry.shapes.map((x) => x.id)); // the Shaper starts with a sample drawing

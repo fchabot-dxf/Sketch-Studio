@@ -16,7 +16,7 @@ import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-3', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp, flushAutosave } = cdp;
   const url = (p) => `http://127.0.0.1:${port}${p}`;
   try {
     const mouse = (type, x, y, buttons = 0, clickCount) => send('Input.dispatchMouseEvent', { type, x, y, button: (type === 'mouseMoved' && !buttons) ? 'none' : 'left', buttons, clickCount: clickCount != null ? clickCount : type === 'mouseMoved' ? 0 : 1 });
@@ -51,7 +51,7 @@ await (async () => {
     await evalJs(CREATE_NAMED_DESIGN('sketchstudio', 'Formulas'));
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('dimInput'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     assert.strictEqual(await evalJs(`document.getElementById('dimInput').type`), 'text', '#dimInput is a TEXT input (it was type=number, which cannot hold a name or an "=")');
     const cv = await centerOf('#svgCanvas');
     // two horizontal lines
@@ -182,10 +182,10 @@ await (async () => {
     // d2 still follows the parameter (d1 was detached from width, which stays 8)
     assert(lab.includes('fx: 5.0'), 'the other dimension still follows width: ' + JSON.stringify(lab));
     // after a reload the formulas are still there (autosave): the fx label comes back
-    await sleep(1500);
+    await flushAutosave();
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`!!document.getElementById('dimInput') && document.querySelectorAll('#svgCanvas .dim-label').length >= 2`, 'the drawing to come back after a reload', 15000);
-    await sleep(800);
+    await waitForApp('svgCanvas');
     lab = await labels('#svgCanvas');
     assert(lab.includes('fx: 5.0') && lab.includes('3.0'), 'after a reload the labels are the same: ' + JSON.stringify(lab));
 
@@ -227,10 +227,9 @@ await (async () => {
     await send('Storage.clearDataForOrigin', { origin: `http://127.0.0.1:${port}`, storageTypes: 'all' });
     await navigate(url('/apps/shaper/index.html'), 8000);
     await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'Shaper to load');
-    await sleep(1200);
     for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
     await waitFor(`!!window.__designController && !!document.getElementById('dimInput')`, 'the Shaper Design tab with its box');
-    await sleep(1500);
+    await waitForApp('design-canvas');
     await evalJs(`(() => {
       const st = window.__designController.state;
       st.clearDocument();

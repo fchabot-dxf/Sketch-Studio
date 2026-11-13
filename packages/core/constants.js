@@ -50,9 +50,13 @@ export const ORIGIN_JOINT_ID = 'j_origin';
 // and by deserializeDocument, which adds it to a loaded document that has none (an empty "New design", an older file). It belongs to the
 // default Sketch 1 from the start (task 558 F6: an unstamped origin got its sketchId only from the first undo restore).
 export const ORIGIN_JOINT = Object.freeze({ x: 0, y: 0, fixed: true, sketchId: DEFAULT_SKETCH_ID });
+
+// Task 539: the SAME two axes are the built-in REFERENCE LINES (#core/reference-lines.js). `shapeId` / `endJointId` / `end` declare the
+// reserved fixed line through j_origin that constraints and dimensions reference; the snap leaves a point-on-line with it (task 539;
+// the horizontal / vertical-with-origin constraints task 537 made stay valid in saved files).
 export const AXIS_SNAP_TARGETS = {
-  'axis-x': { constraint: CONSTRAINT_TYPES.HORIZONTAL, across: 'y', label: 'X axis' },
-  'axis-y': { constraint: CONSTRAINT_TYPES.VERTICAL,   across: 'x', label: 'Y axis' }
+  'axis-x': { across: 'y', label: 'X axis', shapeId: 'ref_axis_x', endJointId: 'j_ref_x', end: { x: 1, y: 0 } },
+  'axis-y': { across: 'x', label: 'Y axis', shapeId: 'ref_axis_y', endJointId: 'j_ref_y', end: { x: 0, y: 1 } }
 };
 
 // Default view configuration

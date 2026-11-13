@@ -56,6 +56,7 @@ function injectStyles() {
 .sk-sidebar-btn { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: inherit; cursor: pointer;
   border: 1px solid var(--sk-header-sep, var(--sk-ribbon-sep, rgba(127,127,127,0.35))); border-radius: 6px; padding: 4px 9px; font: inherit; font-weight: 700; }
 .sk-sidebar-btn:hover { background: var(--sk-header-hover, rgba(127,127,127,0.12)); }
+@media (pointer: coarse) { .sk-sidebar-btn { min-height: 44px; min-width: 44px; } .sk-sidebar-item { min-height: 44px; } }
 .sk-sidebar-burger { font-size: 1.15em; line-height: 1; }
 .sk-sidebar-backdrop { position: fixed; inset: 0; z-index: 9400; background: rgba(0,0,0,0.45); }
 .sk-sidebar-backdrop[hidden] { display: none; }

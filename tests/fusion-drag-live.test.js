@@ -12,7 +12,7 @@ import { buildCells, runOurs } from './harness/fusion-oracle/drag-cells.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '530' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   const EV = process.env.EVIDENCE_DIR;
   try {
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -47,7 +47,7 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('tool-select'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     const cv = await centerOf('#svgCanvas');
     const mid = (l) => ({ x: (l[0][0] + l[1][0]) / 2, y: (l[0][1] + l[1][1]) / 2 });
     const alongOf = (l, f) => { const n = dd(l[0], l[1]); return { x: (l[1][0] - l[0][0]) / n * f * n, y: (l[1][1] - l[0][1]) / n * f * n }; };
@@ -97,7 +97,7 @@ await (async () => {
     const lenD = Math.hypot(D[1].x - D[0].x, D[1].y - D[0].y), uD = { x: (D[1].x - D[0].x) / lenD, y: (D[1].y - D[0].y) / lenD };
     await run('line-len-end-across', async () => {
       await drawLine(D[0], D[1]);
-      await clickEl('#tool-dim'); await click((D[0].x + D[1].x) / 2, (D[0].y + D[1].y) / 2); await click(cv.x, cv.y + 100);
+      await clickEl('#tool-dim'); await click((D[0].x + D[1].x) / 2, (D[0].y + D[1].y) / 2); await click(cv.x + 60, cv.y + 40); // the drop is a click on EMPTY space, clear of both axes (the origin is at about cv + (-117, +117); a click on an axis is the second pick, task 555)
       await waitFor(`(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`, 'the dimension input', 8000);
       await key('Enter', 'Enter', 13); await sleep(400);
       console.log('dimension labels:', await evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas .dim-label')].map(e => e.textContent.trim()))`));

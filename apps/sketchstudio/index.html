@@ -269,6 +269,24 @@
         /* Show state: display block; menu is absolutely positioned and already has a high z-index */
         .tool-dropdown .tool-dropdown.show { display: block; }
 
+        /* TASK 562 -- phone layout (<= 640 px, the app's one breakpoint): the footer's Log / MAG LENS / TUNE leave the bar (Log and TUNE live in
+           the menu, see main.js; the lens is automatic under a finger). */
+        @media (max-width: 640px) {
+            #status-diag-slot, #btn-mag-toggle, #btn-tuning-toggle { display: none; }
+        }
+        /* TASK 562 -- a finger (coarse pointer): every control >= 44 px, text >= 12 px. A mouse keeps today's look. The MAG LENS switch is for a
+           mouse: under a finger the lens follows the finger by itself (input-manager.js). */
+        @media (pointer: coarse) {
+            #btn-mag-toggle { display: none; }
+            #btn-construct-toggle, #btn-recenter-view { min-height: 44px; font-size: 12px; }
+            footer .sk-diag-toggle, #btn-tuning-toggle { min-height: 44px; min-width: 44px; font-size: 12px; }
+            #viewport-size { font-size: 12px; }
+            #debug-panel #debug-close-btn { min-width: 44px; min-height: 44px; font-size: 22px; }
+            #debug-panel input[type=checkbox] { width: 44px; height: 44px; }
+            #debug-panel input[type=range] { height: 44px; }
+            #debug-panel span, #debug-panel div[style*="font-size:10px"] { font-size: 12px !important; }
+        }
+
         /* Ensure canvas and toolbar have explicit stacking contexts */
         #svgCanvas { position: relative; z-index: 1 !important; }
         #toolsRibbon { position: relative; z-index: 100 !important; }
@@ -404,7 +422,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
                 MAG LENS: OFF
             </button>
         </div>
-        <div class="whitespace-nowrap overflow-hidden"><span id="coords-text">X: 0 Y: 0</span><span id="viewport-size" class="ml-4 border-l border-slate-300 pl-4 text-slate-500">VIEW: - x -</span></div>
+        <div class="whitespace-nowrap overflow-hidden"><span id="viewport-size" class="text-slate-500">VIEW: - x -</span></div>
     </footer>
 
     <!-- S7c-2c: the old #settings-panel popup is retired — its stroke/style controls live in the SHARED style

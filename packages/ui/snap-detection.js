@@ -1,8 +1,9 @@
 ﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#ui/coords.js';
-import { projectPointOnSegment, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
+import { projectPointOnSegment, projectPointOnLine, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';
+import { referenceEnds } from '#core/reference-lines.js';
 
 // Find joint at screen position
 export function hitJointAtScreen(joints, svg, screenX, screenY, threshold=14){
@@ -88,10 +89,18 @@ export function findCoincidentCluster(jointId, constraints = []){
   return cluster;
 }
 
+// TASK 562: the ONE touch reach multiplier. A finger is less exact than a mouse, so EVERY pick reach of findSnap (joint, line / shape,
+// midpoint inference, X / Y axis) grows by the same factor when the press is a touch: joint 30 -> 60 px, line 20 -> 40 px, midpoint
+// 15 -> 30 px, axis 20 -> 40 px. Callers pass snapBoostFor(isTouch); nothing else multiplies a reach.
+export const TOUCH_SNAP_BOOST = 2.0;
+export function snapBoostFor(isTouch){ return isTouch ? TOUCH_SNAP_BOOST : 1.0; }
+
 export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeLineSnap=false, useInferenceTolerance=false, dragBoost=1){
   if(!lastMouse) return null;
+  const boost = dragBoost || 1;
   const basePointThreshold = SNAP.JOINT_PX;
-  const pointThreshold = basePointThreshold * (dragBoost || 1);
+  const pointThreshold = basePointThreshold * boost;
+  const inferencePx = SNAP.INFERENCE_PX * boost;
   const excluded = Array.isArray(excludeIds) ? excludeIds : (excludeIds ? [excludeIds] : []);
 
   // Evaluate joints
@@ -108,11 +117,11 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
   // Evaluate shapes (lines, circles, arcs)
   let bestShape = null; let bestShapeDist = Infinity;
   if(!excludeLineSnap){
-    const lineThreshold = SNAP.LINE_PX;
+    const lineThreshold = SNAP.LINE_PX * boost;
     const worldMouse = screenToWorld(svg, lastMouse.x, lastMouse.y);
 
     // Line→Line midpoint candidates: consider the midpoint between two lines' midpoints
-    const visibleLines = shapes.filter(s => s.type === 'line' && Array.isArray(s.joints) && s.joints.length >= 2)
+    const visibleLines = shapes.filter(s => s.type === 'line' && !s.reference && Array.isArray(s.joints) && s.joints.length >= 2)
                               .map(s => ({ shape: s, a: joints.get(s.joints[0]), b: joints.get(s.joints[1]), aId: s.joints[0], bId: s.joints[1] }))
                               .filter(l => l.a && l.b);
 
@@ -124,7 +133,7 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
             const midBetween = { x: (m1.x + m2.x) / 2, y: (m1.y + m2.y) / 2 };
             const midSC = worldToScreen(svg, midBetween);
             const dmid = Math.hypot(midSC.x - lastMouse.x, midSC.y - lastMouse.y);
-            if (dmid < SNAP.INFERENCE_PX && dmid < bestShapeDist) {
+            if (dmid < inferencePx && dmid < bestShapeDist) {
                 // pick best combo of endpoints (one from each line) as anchors
                 const combos = [ [L1.aId, L2.aId], [L1.aId, L2.bId], [L1.bId, L2.aId], [L1.bId, L2.bId] ];
                 let bestCombo = null, bestComboDist = Infinity;
@@ -149,9 +158,18 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
       let snapPt = null;
 
       if(s.type === 'line') {
-        const pts = resolveJoints(joints, s.joints);
+        const pts = s.reference ? referenceEnds(s) : resolveJoints(joints, s.joints);
         if(!pts) continue;
         const [a, b] = pts;
+        // A built-in reference line (task 539: an axis, offered only while a tool asks for a target) is ENDLESS and has no midpoint
+        // (its two stored points are only a direction): the foot of the pointer on the whole line, never a segment end.
+        if (s.reference) {
+          snapPt = projectPointOnLine(worldMouse, a, b);
+          const rsc = worldToScreen(svg, snapPt);
+          dist = Math.hypot(rsc.x - lastMouse.x, rsc.y - lastMouse.y);
+          if (dist < lineThreshold && dist + 2 < bestShapeDist) { bestShapeDist = dist; bestShape = { type: 'shape', targetId: s.id, x: snapPt.x, y: snapPt.y, shape: s, dist }; }
+          continue;
+        }
         snapPt = projectPointOnSegment(worldMouse, a, b);
         const sc = worldToScreen(svg, snapPt);
         dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
@@ -166,7 +184,7 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
 
         // Decide whether midpoint or closest projected point wins for this segment
         let chosen = null; // { type: 'midpoint'|'shape', dist, pt }
-        if (dmid < SNAP.INFERENCE_PX && dmid <= dist + MIDPOINT_BIAS && dmid <= lineThreshold) {
+        if (dmid < inferencePx && dmid <= dist + MIDPOINT_BIAS && dmid <= lineThreshold) {
           chosen = { type: 'midpoint', dist: dmid, pt: mid };
         } else if (dist < lineThreshold) {
           chosen = { type: 'shape', dist: dist, pt: snapPt };
@@ -236,17 +254,17 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
   if(bestJoint && bestShape) return (bestJoint.dist <= bestShape.dist) ? bestJoint : bestShape;
   if(bestJoint) return bestJoint;
   if(bestShape) return bestShape;
-  return findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap);
+  return findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap, boost);
 }
 
 // The X axis (y = 0) / Y axis (x = 0) snap candidate nearest the pointer, or null. The target point is the pointer's foot on the
 // axis (its coordinate across the axis is exactly 0, the one along it is free). It exists only where the host has the origin joint
 // the constraint hangs on (the axes are drawn by the shared renderer around that same origin) and only while AXIS_SNAP is on.
-function findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap){
+function findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap, boost = 1){
   if(excludeLineSnap || SettingsManager.get('AXIS_SNAP') === false) return null;
   if(!joints.has(ORIGIN_JOINT_ID) || excluded.includes(ORIGIN_JOINT_ID)) return null;
   const w = screenToWorld(svg, lastMouse.x, lastMouse.y);
-  let best = null, bestDist = SNAP.AXIS_PX;
+  let best = null, bestDist = SNAP.AXIS_PX * boost;
   for(const [type, axis] of Object.entries(AXIS_SNAP_TARGETS)){
     const pt = { x: w.x, y: w.y }; pt[axis.across] = 0;
     const sc = worldToScreen(svg, pt);

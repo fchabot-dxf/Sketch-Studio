@@ -12,6 +12,7 @@ import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { state, findOrCreatePlotColor, makeShapeStyle, DEFAULT_STROKE_WIDTH } from './state.js';
 import { inheritPaint, penColorFor } from './svg-import.js'; // reuse the plotter's paint resolver (UNIFY-7 relocates)
 import { setDocSize } from './settings.js';                  // IMPORT-DOC-SIZE: the import defines the paper size
+import { newShapeId } from '#core/shape-id.js';
 
 const TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
 const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style', 'clippath', 'lineargradient', 'radialgradient']);
@@ -63,17 +64,15 @@ export function importSvgToCore(svgText, fileName, controller) {
   const size = computeImportSize(root);
   const docSet = size ? setDocSize(size.w, size.h) : false;
 
-  // Land the import in a NEW named sketch (like Shaper). idBase makes per-descriptor shape ids unique.
+  // Land the import in a NEW named sketch (like Shaper). Each descriptor's idPrefix comes from THE shape-id generator (unique shape ids).
   const sk = addSketch(st, (fileName || 'Imported').replace(/\.svg$/i, '') || 'Imported');
   activateSketch(st, sk.id);
-  const idBase = 'imp' + Date.now().toString(36) + '_';
 
   const importedIds = [];
-  let seq = 0;
   // Per-descriptor so each element's DIGITAL color maps exactly to the shapes it produced. genJ is shared (unique
   // joint ids); idPrefix is unique per descriptor (unique shape ids). importSvgGeometry stats carry ellipse/S-T-A skips.
   for (const d of descs) {
-    const { joints, shapes, stats } = importSvgGeometry([d], { genJ: () => engine.genJ(), scale, idPrefix: idBase + (seq++) });
+    const { joints, shapes, stats } = importSvgGeometry([d], { genJ: () => engine.genJ(), scale, idPrefix: newShapeId('imp') });
     for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
     // STYLE-1: one style record per produced shape, from the element's RESOLVED paint. An element with neither fill
     // nor stroke set is black-filled per SVG's default (that is what penColorFor already assumed), so fall back to
@@ -103,7 +102,7 @@ function bumpInto(obj, k, n) { obj[k] = (obj[k] || 0) + n; }
 // Geometry is static; a DXF carries no paint, so every shape gets the default black pen style (like an unpainted SVG element).
 export function importDxfToCore(dxfText, fileName, controller) {
   const st = controller.state, engine = controller.engine;
-  const res = importDxf(dxfText, { genJ: () => engine.genJ(), idPrefix: 'imp' + Date.now().toString(36) + '_' });
+  const res = importDxf(dxfText, { genJ: () => engine.genJ(), idPrefix: newShapeId('imp') });
   if (res.error) return { error: res.error };
   const { joints, shapes, stats } = res;
   const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');

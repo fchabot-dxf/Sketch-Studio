@@ -40,6 +40,7 @@ import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop 
 import { importDxf, looksLikeDxf } from '#core/dxf-import.js'; // TASK 478: a Fusion sketch DXF -> #core shapes (true lines / arcs / circles)
 import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
 import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
+import { newShapeId } from '#core/shape-id.js';                            // THE shape-id generator (import id prefixes)
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -277,7 +278,6 @@ document.addEventListener('keydown', (e) => {
 // the root size; the PURE #core/svg-import maps them → STATIC joints/shapes (no auto-constraints). Each import = one
 // named sketch (addSketch → activate → push; the wrap stamps sketchId). v1 subset: unsupported elements/features are
 // COUNTED + surfaced, never silently dropped.
-let importSeq = 0;
 const SVG_IMPORT_TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
 const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style']); // structural, not dropped geometry
 function svgImportDescriptors(svg) {
@@ -322,7 +322,7 @@ function landImport(st, fileName, joints, shapes) {
 function importDxfToSketch(text, fileName) {
   ensureSketch();
   const st = designController.state;
-  const res = importDxf(text, { genJ: () => st.genJ(), idPrefix: 'dxf' + (importSeq++) });
+  const res = importDxf(text, { genJ: () => st.genJ(), idPrefix: newShapeId('dxf') });
   if (res.error) { groupStatus('Import failed: ' + res.error); return; }
   const { joints, shapes, stats } = res;
   const skipN = (stats.skipped || []).reduce((n, s) => n + s.count, 0);
@@ -342,7 +342,7 @@ function importSvgToSketch(svgText, fileName) {
   let svg; try { svg = parseSvg(svgText); } catch (e) { groupStatus('Import failed: ' + e.message); return; }
   const { descs, skippedEls } = svgImportDescriptors(svg);
   const { scale, label, assumed } = computeImportScale({ width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') });
-  const { joints, shapes, stats } = importSvgGeometry(descs, { genJ: () => st.genJ(), scale, idPrefix: 'svg' + (importSeq++) });
+  const { joints, shapes, stats } = importSvgGeometry(descs, { genJ: () => st.genJ(), scale, idPrefix: newShapeId('svg') });
   const skipN = skippedEls.length + (stats.skipped || []).reduce((n, s) => n + s.count, 0);
   if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
   const sk = landImport(st, fileName, joints, shapes);

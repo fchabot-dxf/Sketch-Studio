@@ -11,6 +11,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { computeImportScale, importSvgGeometry,
          multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
+import { newShapeId } from '#core/shape-id.js';
 
 const SVG_IMPORT_TAGS = new Set(['line','rect','circle','ellipse','polyline','polygon','path']);
 const SKIP_SILENT     = new Set(['metadata','title','desc','defs','style']);
@@ -18,7 +19,6 @@ const SKIP_SILENT     = new Set(['metadata','title','desc','defs','style']);
 let designController = null;
 let infoPanel        = null;
 let ribbonMounted    = false;
-let importSeq        = 0;
 
 /**
  * Lazy-mount the sketch canvas the first time the Edit tab is opened.
@@ -107,7 +107,7 @@ export function importSvgToEdit(svgText, name, onStatus) {
   const { joints, shapes, stats } = importSvgGeometry(descs, {
     genJ:     () => st.genJ(),
     scale,
-    idPrefix: 'tr' + (importSeq++),
+    idPrefix: newShapeId('tr'),
   });
 
   const skipN = skippedEls.length + (stats.skipped || []).reduce((n, s) => n + s.count, 0);

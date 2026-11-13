@@ -94,13 +94,14 @@ function injectStyles() {
  *   actions : createProjectActions(...) result (designItems / projectItems)
  *   toolbar : [{ id, label, ask?, closes?, run(arg) }]  — New project / New design / Open from file, declared by project-actions.js
  *   account : the Google account controller (optional): its sign-in state drives the "Drive projects are hidden" note
+ *   start   : 'projects' (default: the project list) | 'recent' (the Recent pane; on a narrow screen the pane is shown, not the list)
  *   onClose : called once when the modal closes (focus is already restored)
  */
-export function openProjectManager({ store, actions, toolbar = [], account = null, onClose = () => {} }) {
+export function openProjectManager({ store, actions, toolbar = [], account = null, start = 'projects', onClose = () => {} }) {
   injectStyles();
   const returnTo = document.activeElement;
   const back = document.createElement('div'); back.className = 'sk-pm-backdrop';
-  const dlg = document.createElement('div'); dlg.className = 'sk-pm'; dlg.setAttribute('role', 'dialog'); dlg.setAttribute('aria-modal', 'true'); dlg.setAttribute('aria-label', 'Projects'); dlg.dataset.pane = 'side';
+  const dlg = document.createElement('div'); dlg.className = 'sk-pm'; dlg.setAttribute('role', 'dialog'); dlg.setAttribute('aria-modal', 'true'); dlg.setAttribute('aria-label', 'Projects'); dlg.dataset.pane = start === 'recent' ? 'main' : 'side';
   dlg.innerHTML = `<div class="sk-pm-head"><h2 class="sk-pm-title">Projects</h2><button type="button" class="sk-pm-x" data-pm="close" aria-label="Close">&times;</button></div>
 <div class="sk-pm-bar"></div><div class="sk-pm-msg" hidden></div>
 <div class="sk-pm-body"><div class="sk-pm-side" data-pm="side"></div><div class="sk-pm-main" data-pm="main"></div></div><div class="sk-pm-ask" hidden></div>`;

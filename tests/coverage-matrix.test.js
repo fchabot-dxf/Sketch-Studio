@@ -18,7 +18,7 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.stringify([...b].sort())}`;
 
 const EXPECTED = {
-  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric'],
+  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror'],
   notInRibbon: ['pan'],
   constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric'],
   definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'mouse_spring'],
@@ -46,7 +46,7 @@ check('shape kinds', I.shapeKinds.map(k => k.kind), EXPECTED.shapeKinds);
 check('shape type literals the tools create', I.shapeTypeLiterals, EXPECTED.shapeTypeLiterals);
 check('dimension modes', I.dimensionModes.map(d => d.mode), EXPECTED.dimensionModes);
 check('edit features', I.editFeatures.map(e => e.feature), EXPECTED.editFeatures);
-ok('mirror / offset / copy-paste are absent from SketchStudio (scan finds no code)', I.absent.hits.length === 0, JSON.stringify(I.absent.hits));
+ok('offset / copy-paste are absent from SketchStudio (scan finds no code; mirror is the task-585 tool)', I.absent.hits.length === 0, JSON.stringify(I.absent.hits));
 ok('diameter has a label branch but no creator', I.diameter.line > 0);
 ok('every inventory item carries a file:line', [...I.tools, ...I.constraintTypes, ...I.dimensionModes, ...I.editFeatures.map(e => ({ ...e.where })), ...I.shapeKinds.map(k => ({ ...k.where }))].every(x => x.file && x.line > 0));
 
@@ -58,7 +58,8 @@ const COVER = {
     trim: ['deferred', 'rewrites shapes/joints: a part 2/3 edit audit'], break: ['deferred', 'splits a line: a part 2/3 edit audit'], fillet: ['kinds', 'F'],
     dim: ['rows', 'dim-aligned', 'dim-horizontal', 'dim-vertical', 'dim-length', 'dim-point-line', 'dim-line-line', 'dim-angle-xy', 'dim-radius'],
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
-    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'] },
+    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'],
+    mirror: ['deferred', 'copies shapes + links them with the symmetric row (covered there): tests/mirror.test.js, mirror-fusion-node.test.js'] },
   constraintTypes: { coincident: 'coincident', horizontal: 'horizontal-2pt', vertical: 'vertical-2pt', parallel: 'parallel', perpendicular: 'perpendicular', collinear: 'collinear', tangent: 'tangent',
     pointOnLine: 'dim-point-line', distance: 'dim-aligned', equal: 'equal', angle: 'dim-angle-xy', midpoint: 'midpoint-line', symmetric: 'symmetric' },
   definitionsDeferred: { mouse_spring: 'drag spring, not a user constraint' },

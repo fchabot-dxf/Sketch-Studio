@@ -5,7 +5,7 @@
 // the shape count, selection and delete never see them. A "scene" (the real containers read LIVE + the reserved entries) is handed
 // only to the code that RESOLVES a constraint's shape / joint id (the solver, the verifier, the status analysis, the constraint
 // manager, the renderer's glyph lookup). A constraint stores an axis by its reserved id, the same fields as for any line.
-import { AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID, TOOL_MODES } from './constants.js';
+import { AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID, TOOL_MODES, MIRROR_STEPS } from './constants.js';
 
 // The reserved line of each axis: { id, type:'line', joints:[j_origin, end], reference:true, axis:<snap type> }.
 export const REFERENCE_SHAPES = Object.freeze(Object.entries(AXIS_SNAP_TARGETS).map(([axis, a]) =>
@@ -35,7 +35,7 @@ export function constraintReferencesAxis(c) {
 export const REFERENCE_PICK_TOOLS = Object.freeze([
   TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
-// (DIMENSION and SYMMETRIC are not in this list: they ask for an axis at ONE step of their picks, REFERENCE_PICK_STEP below.)
+// (DIMENSION, SYMMETRIC and MIRROR are not in this list: they ask for an axis at ONE step of their picks, REFERENCE_PICK_STEP below.)
 // The DIMENSION tool asks for an axis only for its SECOND pick (task 555, Fusion's sequence), so a first dimension click near an axis
 // picks real geometry: after a real first JOINT (state.active.mode 'dim': a pending joint), or while a LINE's length preview follows the
 // cursor (placingConstraint.__asksSecondPick, set by the dimension tool when it makes that preview). A click on an axis then PICKS it
@@ -46,8 +46,11 @@ const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DI
 // The SYMMETRIC tool (task 563) asks for an axis only for its THIRD pick, the symmetry line: entity 1 and entity 2 are real geometry.
 const symmetricAsksLine = (state) => state.currentTool === TOOL_MODES.SYMMETRIC && !!(state.pendingConstraint && Array.isArray(state.pendingConstraint.selectionBuffer)
   && state.pendingConstraint.selectionBuffer.length === 2);
+// The MIRROR tool (task 585) asks for an axis only at its mirror-LINE step: the objects are real geometry.
+const mirrorAsksLine = (state) => state.currentTool === TOOL_MODES.MIRROR && !!state.mirror && state.mirror.step === MIRROR_STEPS.LINE;
 // THE declaration of the tools that ask for an axis at ONE step of their picks: tool mode -> "is it that step now?" (state).
-export const REFERENCE_PICK_STEP = Object.freeze({ [TOOL_MODES.DIMENSION]: dimensionAsksSecondTarget, [TOOL_MODES.SYMMETRIC]: symmetricAsksLine });
+export const REFERENCE_PICK_STEP = Object.freeze({ [TOOL_MODES.DIMENSION]: dimensionAsksSecondTarget, [TOOL_MODES.SYMMETRIC]: symmetricAsksLine,
+  [TOOL_MODES.MIRROR]: mirrorAsksLine });
 export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool)
   || (Object.prototype.hasOwnProperty.call(REFERENCE_PICK_STEP, state.currentTool) && REFERENCE_PICK_STEP[state.currentTool](state)));
 // The shapes a target pick may hit now: the real ones, then (only while pickable) the two axes LAST, so real geometry wins a tie.

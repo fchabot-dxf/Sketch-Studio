@@ -12,6 +12,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { contextMenuItems } from '#ui/context-menu.js';
 import { mountDesignBrowser } from '#ui/design-browser.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { updateViewBox } from '#ui/input-manager.js';
 
 const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); };
 const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`ASSERT: ${m}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
@@ -35,6 +36,9 @@ async function canvasChecks(host) {
   const app = await open({ host, profile });
   try {
     const S = app.state;
+    // TASK 583: the Pen Plotter node host is now the real stages, whose Design view frames the whole 200 mm paper (about 3.5 px per unit); this test's pixel offsets
+    // (a 5 px dy to the second point, the grid snap reach in px) were written for the 120-unit-wide view Shaper opens with, so Pen Plotter starts from that same view
+    if (host === 'penplotter') { Object.assign(S.view, { x: 0, y: 0, w: 120 }); updateViewBox(app.svg, S.view); app.frames(2); }
     // two sketches: A in Sketch 1, B in Sketch 2 (active), far apart on the canvas
     const A = addLine(app, 10, 10, 30, 10);
     const sk2 = addSketch(S, 'Plate'); activateSketch(S, sk2.id);

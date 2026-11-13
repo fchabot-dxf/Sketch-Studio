@@ -279,11 +279,11 @@ export function mountSketchStage(view, ctx = {}) {
   const saveStatusEl = document.getElementById('save-status');
   // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored); a design with no
   // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
-  docBuffer = createDocumentBuffer(plotterBufferOptions({ // design-canvas.js: the restore, the plotter sidecar, the status
+  docBuffer = createDocumentBuffer({ ...plotterBufferOptions({ // design-canvas.js: the restore, the plotter sidecar, the status
     controller, canvas: designCanvas, statusEl: saveStatusEl,
     refreshPanels: () => { if (infoPanel) infoPanel.refresh(); },
     afterSidecar: refreshAfterPlotterRestore,
-  }));
+  }), ...ctx.bufferSeams }); // TASK 583: ctx.bufferSeams = the buffer's own store / doc / win seams (the page passes none: stages.js)
   docBuffer.restore();
   docBuffer.start();
 

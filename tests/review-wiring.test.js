@@ -8,6 +8,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const html = read('apps/shaper/index.html');
 const main = read('apps/shaper/src/main.js');
+const modes = read('apps/shaper/src/modes.js'); // TASK 583: the mode router and its views are declared in modes.js (main.js and the node test kit both use it)
 const view = read('apps/shaper/src/review-view.js');
 
 // importmap pins three to the vendored 0.170.0 files, and those files exist
@@ -37,5 +38,5 @@ assert.doesNotMatch(html, /data-mode="simexport"/);
 assert.doesNotMatch(html, /Simulate\/Export/);
 assert.match(html, /id="view-review"[\s\S]*id="btn-generate-svg"/, 'the export panel lives inside the Review view');
 assert.match(main, /initMode === 'simexport'\) initMode = 'review'/);
-assert.match(main, /review:\s+document\.getElementById\('view-review'\)/);
+assert.match(modes, /review:\s+doc\.getElementById\('view-review'\)/);
 console.log('review-wiring: ok');

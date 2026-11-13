@@ -17,8 +17,8 @@ export const CONSTRAINT_TYPES = {
   ANGLE: 'angle',
   MIDPOINT: 'midpoint',
   // task 563 (like Fusion's Symmetric): two points, two lines or two circles / arcs are mirror images across a line (a sketch line or an axis).
-  // Stored { joints: [p, q], line } (points), { joints: [p1, q1, p2, q2], shapes: [l1, l2], line } (lines: each (p_i, q_i) an end pair
-  // that mirrors) or { shapes: [c1, c2], line } (circles / arcs: centres mirror, radii equal). #core/symmetric.js reads it.
+  // Stored { joints: [p, q], line } (points), { shapes: [l1, l2], line } (lines: the infinite lines mirror, lengths free, task 572) or
+  // { shapes: [c1, c2], line } (circles / arcs: centres mirror, radii equal). #core/symmetric.js reads it.
   SYMMETRIC: 'symmetric'
 };
 

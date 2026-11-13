@@ -1,6 +1,7 @@
 import { measureResidual } from './constraint-verifier.js';
 import { SolverConfig } from './solver-config.js';
 import { createNewtonSolver } from './solver/engine.js';
+import { sceneJoints, sceneShapes } from './reference-lines.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from './constants.js';
 
 
@@ -26,7 +27,8 @@ export function createEngine(options = {}){
   // Injected seams (shell wires these). onMetrics replaces the old
   // window.__updateSolverMetrics global so the core never reaches for window.
   const { onMetrics = null } = options || {};
-  const solver = createNewtonSolver(joints, constraints, shapes, {
+  // The solver resolves a constraint's shape / joint ids in the SCENE: the real containers (read live) + the two built-in reference lines (task 539).
+  const solver = createNewtonSolver(sceneJoints(joints), constraints, sceneShapes(shapes), {
     maxIter: SolverConfig.ITERATIONS || 500,
     tol: SolverConfig.LM_TOL || 1e-6,
     lambdaInit: SolverConfig.LM_LAMBDA_INIT || 1e-3,

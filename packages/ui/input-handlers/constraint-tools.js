@@ -5,6 +5,7 @@
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { dbg } from '#core/debug.js';
+import { findShapeById, isReferenceShapeId } from '#core/reference-lines.js';
 
 export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');
@@ -117,28 +118,39 @@ function handleShapeConstraintPointerDown(e, svg, state, hitShape) {
 }
 
 function handleCoincidentPointerDown(e, svg, state, hitJoint, hitShape) {
-    // COINCIDENT tool operates on joints only in the UI (Point-on-Line is handled by other flows)
-    if (!hitJoint) return false;
+    // COINCIDENT tool: joint + joint -> coincident; joint + a built-in axis (task 539) -> point on that axis (point-on-line). Point-on-line
+    // with a real line is handled by other flows.
+    const axisHit = hitShape && hitShape.shape && hitShape.shape.reference ? hitShape.shape : null;
+    if (!hitJoint && !axisHit) return false;
+    const pending = state.pendingConstraint && state.pendingConstraint.firstElement;
 
-    if (!state.pendingConstraint || !state.pendingConstraint.firstElement) {
-        state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'joint', id: hitJoint.id } };
-        state.selectedJoints.add(hitJoint.id);
-        return true;
-    } else {
-        const first = state.pendingConstraint.firstElement;
-        // Case: Joint + Joint -> Coincident
-        if (first.type === 'joint' && hitJoint) {
-            if (first.id !== hitJoint.id) {
-                ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [first.id, hitJoint.id] }, { source: 'toolbar' });
-            }
+    if (!pending) {
+        if (hitJoint) {
+            state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'joint', id: hitJoint.id } };
+            state.selectedJoints.add(hitJoint.id);
+        } else {
+            state.pendingConstraint = { type: TOOL_MODES.COINCIDENT, firstElement: { type: 'shape', id: axisHit.id } };
+            state.selectedShapes.add(axisHit.id);
         }
-
-        // Cleanup selection highlights
-        if (first.type === 'joint') state.selectedJoints.delete(first.id);
-
-        resetConstraintState(state);
         return true;
     }
+    const first = pending;
+    if (first.type === 'joint' && hitJoint) {
+        if (first.id !== hitJoint.id) {
+            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [first.id, hitJoint.id] }, { source: 'toolbar' });
+        }
+    } else if (first.type === 'joint' && axisHit) {
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: first.id, shape: axisHit.id }, { source: 'toolbar' });
+    } else if (first.type === 'shape' && isReferenceShapeId(first.id) && hitJoint) {
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: hitJoint.id, shape: first.id }, { source: 'toolbar' });
+    }
+
+    // Cleanup selection highlights
+    if (first.type === 'joint') state.selectedJoints.delete(first.id);
+    if (first.type === 'shape') state.selectedShapes.delete(first.id);
+
+    resetConstraintState(state);
+    return true;
 }
 
 /**
@@ -154,7 +166,7 @@ function handleCollinearPointerDown(e, svg, state, hitShape) {
     if (!state.pendingConstraint) state.pendingConstraint = { type: TOOL_MODES.COLLINEAR, selectionBuffer: [] };
     // If firstElement was set by UI manager, move it to buffer
     if (state.pendingConstraint.firstElement && state.pendingConstraint.firstElement.type === 'shape') {
-        const s = state.shapes.find(x => x.id === state.pendingConstraint.firstElement.id);
+        const s = findShapeById(state.shapes, state.pendingConstraint.firstElement.id);
         if (s) state.pendingConstraint.selectionBuffer = [s];
         delete state.pendingConstraint.firstElement;
     }
@@ -193,7 +205,7 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
     if (!state.pendingConstraint) state.pendingConstraint = { type: TOOL_MODES.TANGENT, selectionBuffer: [] };
     // If firstElement was set by UI manager, move it to buffer
     if (state.pendingConstraint.firstElement && state.pendingConstraint.firstElement.type === 'shape') {
-        const s = state.shapes.find(x => x.id === state.pendingConstraint.firstElement.id);
+        const s = findShapeById(state.shapes, state.pendingConstraint.firstElement.id);
         if (s) state.pendingConstraint.selectionBuffer = [s];
         delete state.pendingConstraint.firstElement;
     }
@@ -246,7 +258,7 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
          if (state.pendingConstraint.firstElement.type === 'joint') {
              state.pendingConstraint.selectionBuffer.push({ type: 'joint', id: state.pendingConstraint.firstElement.id });
          } else if (state.pendingConstraint.firstElement.type === 'shape') {
-             const s = state.shapes.find(x => x.id === state.pendingConstraint.firstElement.id);
+             const s = findShapeById(state.shapes, state.pendingConstraint.firstElement.id);
              if (s) state.pendingConstraint.selectionBuffer.push({ type: 'shape', id: s.id, shape: s });
          }
          delete state.pendingConstraint.firstElement;
@@ -300,7 +312,7 @@ function handleEqualPointerDown(e, svg, state, hitShape) {
     if (!state.pendingConstraint) state.pendingConstraint = { type: TOOL_MODES.EQUAL, selectionBuffer: [] };
     // If firstElement was set by UI manager, move it to buffer
     if (state.pendingConstraint.firstElement && state.pendingConstraint.firstElement.type === 'shape') {
-        const s = state.shapes.find(x => x.id === state.pendingConstraint.firstElement.id);
+        const s = findShapeById(state.shapes, state.pendingConstraint.firstElement.id);
         if (s) state.pendingConstraint.selectionBuffer = [s];
         delete state.pendingConstraint.firstElement;
     }

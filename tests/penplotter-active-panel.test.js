@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
@@ -61,10 +62,8 @@ await (async () => {
     const waitState = (cond, what) => waitFor(`import('/apps/penplotter/src/state.js').then(({ state }) => ${cond})`, what);
 
     await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
-    await waitFor(`!!document.getElementById('importSvgFile') && !!window.__sketch`, 'the Pen Plotter page to load');
-    const root = await send('DOM.getDocument');
-    const q = await send('DOM.querySelector', { nodeId: root.root.nodeId, selector: '#importSvgFile' });
-    await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
+    await waitFor(`!!document.querySelector('.sk-sidebar-btn') && !!window.__sketch`, 'the Pen Plotter page to load');
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`window.__sketch.controller.state.shapes.length > 0`, 'the SVG import to add shapes');
     // Design: a real click on the circle's edge selects it.
     await clickEl('#tool-select');

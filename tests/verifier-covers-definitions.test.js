@@ -38,6 +38,7 @@ const VIOLATED = {
   tangent: { type: 'tangent', line: 'L1', circle: 'C1' },
   equal: { type: 'equal', joints: ['a', 'b', 'c', 'd'] },
   angle: { type: 'angle', shapes: ['L1', 'L2'], value: 90 },
+  symmetric: { type: 'symmetric', joints: ['a', 'm'], line: 'L2' },
 };
 
 let checked = 0;

@@ -3,6 +3,8 @@
 // list per target kind (dimension / geometry). Hosts never build their own copy: input-manager.js picks the target
 // and passes the existing actions in, so every entry runs the same function as its key / ribbon twin.
 
+import { CONSTRAINT_TYPES } from '#core/constants.js';
+
 const STYLE_ID = 'sk-context-menu-styles';
 const CSS = `
 .sk-context-menu { position: fixed; z-index: 100000; min-width: 190px; padding: 4px 0; outline: none; user-select: none;
@@ -117,6 +119,10 @@ export function showContextMenu({ x, y, items, returnFocusTo = null, touch = fal
   return el;
 }
 
+// The geometric constraints whose GLYPH opens a menu (kind 'constraint': its Delete). Task 563 added Symmetric; the other geometric glyphs
+// open none (unchanged), a type joins with one entry here.
+export const CONSTRAINT_MENU_TYPES = Object.freeze([CONSTRAINT_TYPES.SYMMETRIC]);
+
 /**
  * The declared item list per target kind. `actions` are the EXISTING functions (see input-manager.js):
  *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked }.
@@ -128,6 +134,11 @@ export function contextMenuItems(kind, { target, actions }) {
       { id: 'dim-driving', label: 'Driving dimension', checked: !driven, onSelect: () => { if (driven) actions.toggleDriving(target.constraint); } },
       { id: 'dim-reference', label: 'Reference dimension', checked: driven, onSelect: () => { if (!driven) actions.toggleDriving(target.constraint); } },
       { id: 'dim-delete', label: 'Delete dimension', onSelect: () => actions.deleteSelection() },
+    ];
+  }
+  if (kind === 'constraint') {
+    return [
+      { id: 'con-delete', label: 'Delete constraint', onSelect: () => actions.deleteSelection() },
     ];
   }
   if (kind === 'geometry') {

@@ -2,6 +2,7 @@
 // resolves what a constraint binds. No shape-naming existed in the codebase before this (grep: no label/tooltip/Prepare
 // naming), so the Design panel and the renderer's constraint highlight share these two helpers.
 // Numbering is per shape type, in state.shapes order → stable while the sketch doesn't change.
+import { referenceShape } from '#core/reference-lines.js';
 
 const SHAPE_BASE = { line: 'Line', arc: 'Arc', circle: 'Circle', bezier: 'Bezier' };
 const JOINT_ROLES = { line: ['start', 'end'], arc: ['center', 'start', 'end'], circle: ['center', 'rim'], bezier: ['start', 'end'] };
@@ -55,6 +56,10 @@ export function constraintGeometryText(c, shapes, label) {
     return `${joint(a)} – ${joint(b)}`;
   };
   if (c.type === 'pointOnLine' && c.joint && c.shape) return `${joint(c.joint)} on ${label({ shape: c.shape })}`;
+  if (c.type === 'symmetric' && c.line) {   // task 563: the two entities, then the symmetry line (an axis by its name)
+    const ents = Array.isArray(c.shapes) && c.shapes.length === 2 ? c.shapes.map((id) => label({ shape: id })) : (Array.isArray(c.joints) ? c.joints : []).map(joint);
+    return `${ents.join(sep)} about ${referenceShape(c.line) ? referenceShape(c.line).label : label({ shape: c.line })}`;
+  }
   const refs = [...(Array.isArray(c.shapes) ? c.shapes : []), ...['shape', 'line', 'circle'].filter((k) => c[k]).map((k) => c[k])];
   if (refs.length) return [...new Set(refs)].map((id) => label({ shape: id })).join(sep);
   const js = Array.isArray(c.joints) ? c.joints : [];

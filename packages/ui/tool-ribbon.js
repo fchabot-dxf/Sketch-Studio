@@ -50,6 +50,7 @@ const CONSTRAIN = [
   { tool: TOOL_MODES.TANGENT,             icon: 'icon-tangent',      label: 'Tang' },
   { tool: TOOL_MODES.EQUAL,               icon: 'icon-equal',        label: 'Equal' },
   { tool: TOOL_MODES.MIDPOINT,            icon: 'icon-midpoint',     label: 'Mid' },
+  { tool: TOOL_MODES.SYMMETRIC,           icon: 'icon-symmetric',    label: 'Sym' },   // task 563: entity, entity, then the symmetry line
 ];
 // Lock is an ACTION (not a drawing mode): the same toggleFixedSelection as the F key and the context menu.
 const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock (F)' };

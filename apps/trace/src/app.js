@@ -19,19 +19,29 @@ import { initScale }                      from './scale.js';
 import { initPreview }                    from './preview.js';
 import { trace }                          from './tracer.js';
 import { downloadSVG, downloadDXF, copySVG } from './export.js';
-import { ensureEditMount, importSvgToEdit }  from './edit-view.js';
+import { ensureEditMount, importToEdit }  from './edit-view.js';
+import { importSidebarAction, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's File-menu entry + drop
 
 // ── App sidebar (TASK 473) ────────────────────────────────────────────────────
 // This host declares ITS actions: Download = the traced SVG / DXF (enabled once there is a trace), New = a fresh document.
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
-  swHost.appendChild(createAppSidebar({
+  const sidebar = createAppSidebar({
     current: 'trace', docName: 'Untitled', account: getGoogleAccount(),
     actions: [
+      importSidebarAction({ importFile: (text, name) => importDrawing(text, name), getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open }), // TASK 566: the same File-menu entry as the other apps
       { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
       { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
     ],
-  }).el);
+  });
+  swHost.appendChild(sidebar.el);
+}
+
+// TASK 566: import an SVG / DXF into the Edit tab's sketch (the File menu's entry, and a drop on the Edit tab) and show the Edit tab.
+function importDrawing(text, name) {
+  const res = importToEdit(text, name);
+  toast(res.message, res.ok ? 'success' : 'error');
+  if (res.ok) switchTab('edit');
 }
 
 // DIAG-OVERLAY: log/error/viewport/touch capture works the same as every other app. The document
@@ -68,6 +78,7 @@ const tabPanes = {
   edit:   document.getElementById('tab-edit'),
   export: document.getElementById('tab-export'),
 };
+if (tabPanes.edit) mountImportDrop(tabPanes.edit, importDrawing); // TASK 566: a drop on the Edit tab imports too
 
 const tabBtns = document.querySelectorAll('.tr-tab[data-tab]');
 
@@ -162,8 +173,7 @@ document.getElementById('btn-send-to-edit')?.addEventListener('click', () => {
   const { downloadSVG: _, copySVG: __, downloadDXF: ___, ...rest } = {};
   // Get the scaled SVG string (same as what would be downloaded)
   const scaledSvg = buildScaledSvg();
-  importSvgToEdit(scaledSvg, state.imageName, msg => toast(msg, 'success'));
-  switchTab('edit');
+  importDrawing(scaledSvg, state.imageName);
 });
 
 function buildScaledSvg() {

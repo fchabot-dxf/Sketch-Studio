@@ -660,3 +660,20 @@ Same test after task 550: 2880 cells = **PASS 1839, N/A 177, NA-BUILD 788, FAIL 
 - **EA-3**: the 14 own-ends cells are EA-1 refusals now; one cell remains (`r0.5s0.1cw tangent-arc shared`: 0.1 -> 359.7 degrees) where no solution keeps the arc's side. An orientation lock in the solve was built and measured (`.evidence/550/arc-side-lock-attempt.patch` on the task 550 branch): with a fallback it changes no cell (our least-change solve already keeps the side wherever a same-side solution exists, Fusion's fixed-ends radius sequence included); refusing the wrap instead turns 67 passing cells into jitter re-solve failures and 10 Fusion graded cells + 1 dimension-edit run into new divergences. Advisor ruling: left out (one cell is not worth 67 jitter failures and 11 new Fusion divergences).
 - **EA-10 fixed**: `snap-detection.js` hits an arc only on its drawn sweep (the mouse on its circle outside the sweep snaps to the nearer end, or to nothing).
 - The coverage matrix's oracle counts an arc whose two ends meet as "not a drawing" (like a collapsed line). New matrix entry NEW-10 (advisor ruling: the refusal is accepted, a zero-sweep arc must never be accepted): a coincident onto a fillet arc that shares its centre with the other operand (LF / CF / SF shared, 3 cells) is feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it: refused (main accepted the collapse and the cell read PASS). Same in the Fusion graded grid: `tangent-circle-circle|FF|0,c` (main accepted fillet 1 collapsed 90 -> 0 degrees, which read like Fusion's "deform"; now refused). Solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521.
+
+## Symmetric (task 563)
+New row `symmetric (about the Y axis)` (tests/harness/coverage/matrix-run.js): the real Symmetric tool, entity 1, entity 2, then the Y axis as the
+third pick. Two line-likes are picked as LINES (their end pairs mirror, 4 DOF), two circle-likes as CIRCLES (centres + radius, 3 DOF; two fillet
+arcs already carry their driving R: 2), any other pair as two POINTS (2 DOF). PlaneGCS oracle: `p2p_symmetric_ppl` per pair + `equal_radius_cc`; a
+pair that is ONE joint (two lines sharing an end, two circles sharing a centre) is given as point-on-line (PlaneGCS's symmetric of a point with
+itself has an identically zero equation and reports it conflicting). The finite-difference Jacobian of the harness (audit/lib.js fdJacobian) now
+resolves operands in the scene, as the app's engine does, so a constraint naming an axis has rows there too (no other cell changed).
+```
+  LL    LC    LS    LR    LO    LA    LF    LB    LP    CC    CS    CR    CO    CA    CF
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP
+  CB    CP    SS    SR    SO    SA    SF    SB    SP    RR    RO    RA    RF    RB    RP
+  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP
+  OO    OA    OF    OB    OP    AA    AF    AB    AP    FF    FB    FP    BB    BP    PP
+  PPPP  PPPP  PPPP  PPPP  PnPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PnPP
+  N/A=2  PASS=178   (the 2 N/A: the shared variant picks the same joint twice, refused by the tool)
+```

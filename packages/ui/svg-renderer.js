@@ -15,6 +15,7 @@ import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
+import { symmetricOperands } from '#core/symmetric.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
@@ -2181,6 +2182,13 @@ switch(c.type){
         break;
       }
 
+      case CONSTRAINT_TYPES.SYMMETRIC: {
+        // one of the two glyphs (the caller passes each entity's anchor as __pos)
+        if (!c.__pos) return;
+        drawUnifiedGlyph(c, c.__pos.x, c.__pos.y, 'icon-symmetric', 0, { parent: opts.parent });
+        break;
+      }
+
       case 'midpoint': {
         // Midpoint glyph: positioned at the midpoint joint (usually index 2) or average of endpoints
         let mx, my;
@@ -2348,6 +2356,51 @@ switch(c.type){
     }
   } catch (_){ /* layout pass is best-effort; swallow any errors */ }
 
+  // The glyph anchor of a constraint operand SHAPE (a dual-glyph constraint draws one per operand): a line's midpoint pushed out along its
+  // normal; a circle / arc just outside its rim at a stable angle. { x, y, dir } or null.
+  const glyphAnchorOfShape = (shape) => {
+    const offset = scale(GLYPH_OFFSET_PX);
+    if (!shape || !shape.joints || shape.joints.length < 1) return null;
+    if (shape.type === 'line' && shape.joints.length >= 2) {
+      const a = opJoints.get(shape.joints[0]);
+      const b = opJoints.get(shape.joints[1]);
+      if (!a || !b) return null;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const { nx, ny } = perpendicularNormal(a, b);
+      return { x: mx + nx * offset, y: my + ny * offset, dir: { x: b.x - a.x, y: b.y - a.y } };
+    }
+    // Circles/arcs: place glyph just outside radius along a stable angle
+    const center = opJoints.get(shape.joints[0]);
+    if (!center) return null;
+    let r = shape.radius;
+    let angle = -Math.PI / 4;
+    if (typeof r !== 'number' && shape.joints.length >= 2) {
+      const rim = opJoints.get(shape.joints[1]);
+      if (rim) {
+        r = Math.hypot(rim.x - center.x, rim.y - center.y);
+        angle = Math.atan2(rim.y - center.y, rim.x - center.x);
+      }
+    }
+    const radius = (typeof r === 'number' && r > 0) ? r : scale(20);
+    return { x: center.x + Math.cos(angle) * (radius + offset), y: center.y + Math.sin(angle) * (radius + offset), dir: { x: Math.cos(angle), y: Math.sin(angle) } };
+  };
+  // SYMMETRIC (task 563): one glyph on EACH entity, like Fusion (the symmetry line has none). A point's glyph sits beside it on the side away
+  // from the line, so the two glyphs mirror each other; a line / circle / arc takes its shape anchor. Operands through the scene (opShapes /
+  // opJoints: an axis line resolves). [{ x, y }, { x, y }] or null.
+  const symmetricGlyphAnchors = (c) => {
+    const o = symmetricOperands(c, opShapes);
+    if (!o) return null;
+    if (o.form !== 'points') {
+      const p = c.shapes.map(id => glyphAnchorOfShape(opShapes.find(s => s.id === id)));
+      return p.every(Boolean) ? p.map(q => ({ x: q.x, y: q.y })) : null;
+    }
+    const a = opJoints.get(o.line[0]), b = opJoints.get(o.line[1]);
+    const pts = o.pairs[0].map(id => opJoints.get(id));
+    if (!a || !b || pts.some(q => !q)) return null;
+    const { nx, ny } = perpendicularNormal(a, b), offset = scale(GLYPH_OFFSET_PX);
+    return pts.map(q => { const side = (q.x - a.x) * nx + (q.y - a.y) * ny < 0 ? -1 : 1; return { x: q.x + side * nx * offset, y: q.y + side * ny * offset }; });
+  };
+
   for(const c of constraints){
     if(c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2){
       const a = getClusterLeader(c.joints[0]);
@@ -2362,35 +2415,8 @@ switch(c.type){
       const s1 = opShapes.find(s => s.id === c.shapes[0]);
       const s2 = opShapes.find(s => s.id === c.shapes[1]);
       if(s1 && s1.joints && s2 && s2.joints){
-        const offset = scale(GLYPH_OFFSET_PX);
-        const computePosForShape = (shape) => {
-          if (!shape || !shape.joints || shape.joints.length < 1) return null;
-          if (shape.type === 'line' && shape.joints.length >= 2) {
-            const a = opJoints.get(shape.joints[0]);
-            const b = opJoints.get(shape.joints[1]);
-            if (!a || !b) return null;
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const { nx, ny } = perpendicularNormal(a, b);
-            return { x: mx + nx * offset, y: my + ny * offset, dir: { x: b.x - a.x, y: b.y - a.y } };
-          }
-          // Circles/arcs: place glyph just outside radius along a stable angle
-          const center = opJoints.get(shape.joints[0]);
-          if (!center) return null;
-          let r = shape.radius;
-          let angle = -Math.PI / 4;
-          if (typeof r !== 'number' && shape.joints.length >= 2) {
-            const rim = opJoints.get(shape.joints[1]);
-            if (rim) {
-              r = Math.hypot(rim.x - center.x, rim.y - center.y);
-              angle = Math.atan2(rim.y - center.y, rim.x - center.x);
-            }
-          }
-          const radius = (typeof r === 'number' && r > 0) ? r : scale(20);
-          return { x: center.x + Math.cos(angle) * (radius + offset), y: center.y + Math.sin(angle) * (radius + offset), dir: { x: Math.cos(angle), y: Math.sin(angle) } };
-        };
-
-        const p1 = computePosForShape(s1);
-        const p2 = computePosForShape(s2);
+        const p1 = glyphAnchorOfShape(s1);
+        const p2 = glyphAnchorOfShape(s2);
         if(p1 && p2){
           const c1 = { ...c, __pos: { x: p1.x, y: p1.y } };
           const c2 = { ...c, __pos: { x: p2.x, y: p2.y } };
@@ -2398,6 +2424,12 @@ switch(c.type){
           if (!s1.reference) drawConstraintGlyph(svg, c1, { parent: c }); // an axis gets no glyph (task 539): the real line carries it
           if (!s2.reference) drawConstraintGlyph(svg, c2, { parent: c });
         }
+      }
+    } else if(c.type === CONSTRAINT_TYPES.SYMMETRIC){
+      const anchors = symmetricGlyphAnchors(c);
+      if (anchors) {
+        try{ c.glyphPos = anchors.map(p => ({ x: p.x, y: p.y })); }catch(_){ }
+        for (const p of anchors) drawConstraintGlyph(svg, { ...c, __pos: { x: p.x, y: p.y } }, { parent: c });
       }
     } else if(c.type === CONSTRAINT_TYPES.PERPENDICULAR && c.shapes && c.shapes.length >= 2){
         // Draw glyph on both shapes participating in perpendicular constraint

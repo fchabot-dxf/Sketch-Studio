@@ -2,7 +2,7 @@
 // CONSTRAINT TOOLS - Handles constraint creation and manipulation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { dbg } from '#core/debug.js';
 import { findShapeById, isReferenceShapeId } from '#core/reference-lines.js';
@@ -12,16 +12,7 @@ export function setupConstraintTools(svg, appState) {
 }
 
 export function handleConstraintPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) {
-    if (![
-        TOOL_MODES.COINCIDENT,
-        TOOL_MODES.HORIZONTAL_VERTICAL,
-        TOOL_MODES.MIDPOINT,
-        TOOL_MODES.PARALLEL,
-        TOOL_MODES.PERPENDICULAR,
-        TOOL_MODES.COLLINEAR,
-        TOOL_MODES.TANGENT,
-        TOOL_MODES.EQUAL
-    ].includes(state.currentTool)) {
+    if (!CONSTRAINT_TOOLS.includes(state.currentTool)) {
         return false;
     }
     
@@ -42,6 +33,8 @@ export function handleConstraintPointerDown(e, svg, state, hitJoint, hitShape, h
             return handleEqualPointerDown(e, svg, state, hitShape);
         case TOOL_MODES.MIDPOINT:
             return handleMidpointPointerDown(e, svg, state, hitJoint, hitShape);
+        case TOOL_MODES.SYMMETRIC:
+            return handleSymmetricPointerDown(e, svg, state, hitJoint, hitShape);
     }
     
     return false;
@@ -299,6 +292,56 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
         state.selectedJoints.clear(); state.selectedShapes.clear();
         resetConstraintState(state);
     }
+    return true;
+}
+
+// The entity families of the Symmetric tool: two of one family mirror (a shape kind not listed cannot be an entity; a point is a joint pick).
+const SYMMETRIC_FAMILY = { line: 'line', circle: 'circle', arc: 'circle' };
+
+/**
+ * Symmetric (task 563, like Fusion): entity 1, entity 2 (two points, two lines or two circles / arcs), then the symmetry line: a sketch line,
+ * a construction line or an X / Y axis (an axis is pickable at this third pick only: #core/reference-lines.js REFERENCE_PICK_STEP).
+ */
+function handleSymmetricPointerDown(e, svg, state, hitJoint, hitShape) {
+    if (!state.pendingConstraint) state.pendingConstraint = { type: TOOL_MODES.SYMMETRIC, selectionBuffer: [] };
+    const pending = state.pendingConstraint;
+    if (!pending.selectionBuffer) pending.selectionBuffer = [];
+    const buffer = pending.selectionBuffer;
+    const entityOf = (joint, shape) => {
+        if (joint) return { type: 'joint', id: joint, family: 'point' };
+        return shape && !shape.reference && SYMMETRIC_FAMILY[shape.type] ? { type: 'shape', id: shape.id, family: SYMMETRIC_FAMILY[shape.type] } : null;
+    };
+    const selectionOf = (item) => (item.type === 'joint' ? state.selectedJoints : state.selectedShapes);
+    // a pre-selection (the ribbon's pick-first workflow) is entity 1
+    if (pending.firstElement) {
+        const f = pending.firstElement;
+        delete pending.firstElement;
+        const item = f.type === 'joint' ? entityOf(f.id, null) : entityOf(null, findShapeById(state.shapes, f.id));
+        if (item) buffer.push(item);
+    }
+
+    if (buffer.length < 2) {
+        const item = entityOf(hitJoint ? hitJoint.id : null, hitJoint ? null : hitShape && hitShape.shape);
+        if (!item) return false;
+        if (buffer.length === 1 && buffer[0].family !== item.family) return false;      // two points, two lines or two circles / arcs
+        if (buffer.some(x => x.type === item.type && x.id === item.id)) return false;    // the same entity twice
+        buffer.push(item);
+        selectionOf(item).add(item.id);
+        return true;
+    }
+
+    // the third pick: the symmetry line
+    const line = !hitJoint && hitShape && hitShape.shape && hitShape.shape.type === 'line' ? hitShape.shape : null;
+    if (!line) return false;
+    const [e1, e2] = buffer;
+    const params = e1.type === 'joint' ? { joints: [e1.id, e2.id], line: line.id } : { shapes: [e1.id, e2.id], line: line.id };
+    // ONE undo step per symmetric, owned here in the tool layer (as the fillet / dimension tools do): the document before the add is the
+    // step's "before", pushed only when the constraint was created (a refusal leaves no empty step)
+    const before = state.captureUndoSnapshot();
+    const created = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.SYMMETRIC, params, { source: 'toolbar' });
+    if (created) state.saveStateForce('symmetric', before);
+    for (const x of buffer) selectionOf(x).delete(x.id);
+    resetConstraintState(state);
     return true;
 }
 

@@ -15,11 +15,11 @@ const warns = [];
 const origWarn = dbg.warn; dbg.warn = (...a) => { warns.push(a.join(' ')); };
 
 // ---- the REAL file: exactly the 11 glyphs, finite bboxes, guides/labels ignored, transforms never read
-const NAMES = ['coincident', 'collinear', 'concentric', 'equal', 'horizontal', 'midpoint', 'parallel', 'perpendicular', 'polygon', 'tangent', 'vertical'].map((n) => 'glyph-' + n);
+const NAMES = ['coincident', 'collinear', 'concentric', 'equal', 'horizontal', 'midpoint', 'parallel', 'perpendicular', 'polygon', 'symmetric', 'tangent', 'vertical'].map((n) => 'glyph-' + n);
 const { parseGlyphSheet, getGlyph, loadGlyphSheet, onGlyphSheetReady } = await import('../packages/ui/glyph-sheet.js');
 const { fusionGlyphMarkup, CONSTRAINT_GLYPH, loadFusionGlyphs } = await import('../packages/ui/fusion-glyphs.js');
 const table = parseGlyphSheet(sheetText, new DOMParserShim());
-assert.deepStrictEqual([...table.keys()].sort(), NAMES, 'exactly the 11 glyph-* groups (guides and labels ignored)');
+assert.deepStrictEqual([...table.keys()].sort(), NAMES, 'exactly the 12 glyph-* groups (guides and labels ignored; glyph-symmetric added by task 563)');
 for (const [id, g] of table) {
   assert(g.paths.length >= 1, `${id} has paths`);
   for (const v of [g.bbox.x0, g.bbox.y0, g.bbox.w, g.bbox.h, g.centre.x, g.centre.y]) assert(Number.isFinite(v), `${id} finite bbox`);

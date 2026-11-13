@@ -25,6 +25,7 @@ const TYPE_META = {
   equal:        { icon: '=', label: 'Equal' },
   angle:        { icon: '∠', label: 'Angle' },
   midpoint:     { icon: '◐', label: 'Midpoint' },
+  symmetric:    { icon: '⇹', label: 'Symmetric' },
 };
 
 let stylesInjected = false;

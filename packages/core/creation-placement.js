@@ -18,6 +18,7 @@ import { measureResidual, measureShapeSizes, findCollapsedShape } from './constr
 import { snapshotSolverState, restoreSolverState, hasRadiusUnknown } from './solver/engine.js';
 import { SolverConfig } from './solver-config.js';
 import { WHO_MOVES } from './creation-placement-table.js';
+import { symmetricOperands, mirrorPoint } from './symmetric.js';
 
 const EPS_SAT = 1e-6;     // a residual at or below this (mm or rad) is satisfied
 const EPS_WORSE = 1e-7;   // a placement may not raise an existing constraint's residual by more than this
@@ -276,7 +277,39 @@ export const PLACE = {
   },
   // tangent circles: the mover alone by least change (Fusion slides and resizes a free circle, resizes one whose centre is held)
   'tangent-circle-circle': { operands: (s, c) => shapesOp(c), place: () => SOLVE_ALONE },
+  // symmetric (task 563, #core/symmetric.js): the mover becomes the MIRROR IMAGE of the anchor across the symmetry line (the line stays). A point
+  // goes to the anchor point's mirror (its body translates, or turns + scales about its one held point); a free line / circle / arc is taken
+  // by ONE similarity onto the anchor's mirror image (a line: its two paired ends; a circle / arc: centre and radius); a mover that is held
+  // somewhere takes it by the least-change solve of the mover alone.
+  symmetric: {
+    body: 'component',
+    operands: (s, c) => {
+      const o = symmetricOperands(c, s.shapes);
+      if (!o) return null;
+      return o.form === 'points' ? jointsOp(c) : shapesOp(c);
+    },
+    place: (state, M, A, c) => {
+      const o = symmetricOperands(c, state.shapes);
+      const la = pos(state, o.line[0]), lb = pos(state, o.line[1]);
+      const R = (id) => mirrorPoint(pos(state, id), la, lb);
+      if (o.form === 'points') return pointMotion(M, pos(state, M.op.id), R(A.id));
+      if (M.pivots.length) return SOLVE_ALONE;
+      if (o.form === 'lines') {
+        const moverIsFirst = M.op.id === c.shapes[0];
+        const [[m1, a1], [m2, a2]] = o.pairs.map(([p, q]) => (moverIsFirst ? [p, q] : [q, p]));   // [the mover's end, the anchor's end]
+        return similarityTaking(pos(state, m1), pos(state, m2), R(a1), R(a2));
+      }
+      const ms = shapeOf(state, M.op.id), as = shapeOf(state, A.id), C = pos(state, ms.joints[0]), rm = radiusOf(state, ms);
+      return rm < EPS_POS ? null : motion(C, radiusOf(state, as) / rm, 0, sub(R(as.joints[0]), C));
+    },
+  },
 };
+// The direct similarity that takes p1 -> t1 and p2 -> t2 (a turn + scale about p1, then a translation), or null for a zero-length mover.
+function similarityTaking(p1, p2, t1, t2) {
+  const d = sub(p2, p1), e = sub(t2, t1);
+  if (len(d) < EPS_POS) return null;
+  return motion(p1, len(e) / len(d), ang(e) - ang(d), sub(t1, p1));
+}
 function toRow(state, M, A) { const Q = pos(state, M.op.id); return pointMotion(M, Q, { x: Q.x, y: pos(state, A.id).y }); }
 function toColumn(state, M, A) { const Q = pos(state, M.op.id); return pointMotion(M, Q, { x: pos(state, A.id).x, y: Q.y }); }
 // the mover's point at the dimension's value from the anchor's point: along the line joining them (aligned), or along x / y
@@ -316,6 +349,7 @@ export function placementKey(state, type, c) {
     }
     case T.ANGLE: return isDriving(c) && typeof c.value === 'number' && isLine(shp(0)) && isLine(shp(1)) ? 'dim-angle' : null;
     case T.MIDPOINT: return Array.isArray(c.joints) && c.joints.length === 3 && lineOfPair(state, c.joints[0], c.joints[1]) ? 'midpoint' : null;
+    case T.SYMMETRIC: return symmetricOperands(c, state.shapes) ? 'symmetric' : null;
     case T.TANGENT: {
       const pair = c.line && c.circle ? [shapeOf(state, c.line), shapeOf(state, c.circle)] : [shp(0), shp(1)];
       if (pair.some(x => !x)) return null;

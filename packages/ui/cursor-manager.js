@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES } from '#core/constants.js';
+import { TOOL_MODES, CONSTRAINT_TOOLS } from '#core/constants.js';
 
 // Central definition of all icons. 
 // These paths will be used for BOTH the UI buttons (via <symbol>) and the Cursors (via Data URI).
@@ -53,6 +53,12 @@ const ICONS = {
     'icon-midpoint': {
         viewBox: '0 0 13 13',
         content: `<path d="M6.5,2 L11.5,11 L1.5,11 Z" stroke="var(--icon-accent, #ef4444)" fill="none"/>`
+    },
+    // task 563: no symmetry glyph exists in the glyph set: a declared one, two triangles mirrored across a dashed line
+    'icon-symmetric': {
+        viewBox: '0 0 13 13',
+        content: `<path d="M6.5,0.8 L6.5,12.2" stroke="var(--icon-accent, #ef4444)" stroke-dasharray="1.6 1.2"/>
+                  <path d="M4.6,3 L4.6,10 L0.8,6.5 Z" stroke="currentColor" fill="none"/><path d="M8.4,3 L8.4,10 L12.2,6.5 Z" stroke="currentColor" fill="none"/>`
     },
 
     // --- Header / UI icons that must survive initCursors() ---
@@ -155,7 +161,8 @@ const TOOL_CURSOR_MAP = {
     [TOOL_MODES.COLLINEAR]: 'icon-collinear',
     [TOOL_MODES.TANGENT]: 'icon-tangent',
     [TOOL_MODES.EQUAL]: 'icon-equal',
-    [TOOL_MODES.MIDPOINT]: 'icon-midpoint'
+    [TOOL_MODES.MIDPOINT]: 'icon-midpoint',
+    [TOOL_MODES.SYMMETRIC]: 'icon-symmetric'
 };
 
 /**
@@ -262,12 +269,7 @@ function injectCursorStyles() {
 
     let css = '';
 
-    // Define Constraint Tools (Use Arrow Cursor)
-    const CONSTRAINT_TOOLS = [
-        TOOL_MODES.COINCIDENT, TOOL_MODES.HORIZONTAL_VERTICAL, TOOL_MODES.PARALLEL,
-        TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.EQUAL,
-        TOOL_MODES.MIDPOINT
-    ];
+    // Constraint tools (#core/constants.js CONSTRAINT_TOOLS) use the arrow cursor
 
     // Standard Arrow Path (Hotspot at 0,0)
     const arrowPath = `<path d="M0 0 L0 16 L4 12 L8 20 L10 19 L6 11 L11 11 Z" fill="white" stroke="black" stroke-width="1" stroke-linejoin="round"/>`;

@@ -82,6 +82,8 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 //   navigation away from a page with unsaved work goes on; TASK 558 arms it), 'stay', or null (not answered: the test answers it). Every JS dialog
 //   is recorded in the returned `dialogs` array (its type, in order).
 export async function launchBrowser(opts = {}) {
+  // scripts/gate.cjs runs the quick tier (no browser) with this set: a browser test misplaced there fails loudly instead of running unlocked.
+  if (process.env.SKETCH_GATE_TIER === 'quick') throw new Error('launchBrowser refused: this test runs in the quick (no-browser) gate tier; it is a live test');
   const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null, leaveDialog = 'leave' } = opts;
   const browser = findBrowser();
   if (!browser) return null;

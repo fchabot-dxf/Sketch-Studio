@@ -14114,3 +14114,9 @@ Evidence: .evidence/566/ (menus-before.json, menus-after.json, ss-menu-before/af
 - Times: quick 49s (first) / 16-19s warm; full 380s and 379s (2 green rounds, 337/337); old serial gate: advisor's 35-45 min (the new runner at --jobs 1 is 2000s live + ~3 min quick, about 35 min).
 - Machine-wide lock %LOCALAPPDATA%\sketch-studio-gate.lock (pid, worktree, tier, start): waits and prints the holder, stale (dead pid) taken over and announced, released in finally and on SIGINT/SIGTERM. Per-file timings in %LOCALAPPDATA%\sketch-studio-gate-timings.json; queue is longest-first; 15 slowest printed each run.
 - Evidence: .evidence/568/ (local).
+
+## TURN 558 (merges with 566 and 568)
+- Merged origin/main bf87859 (566 shared importer): project-actions.js / sidebar-projects.js keep BOTH the `importFile` / importDrawing action and the unsaved-design question (`ask`, settleUnsaved); tests/document-buffer-hosts.test.js imports through the menu (566) into a named design (558). The live tests 566 touched pass alone: document-buffer-hosts, penplotter-persist, app-sidebar, penplotter-active-panel, penplotter-cosmetics, shaper-cut-undo, dxf-import-live, sidebar-projects, two unsaved-prompt files (.evidence/558/m566-batch.txt).
+- Merged origin/main 7698fcf (568 tiered gate): launchBrowser keeps the quick-tier refusal AND the leave-dialog option.
+- Environment: the old serial full gate (gate-11) failed 3 solver files with "Cannot find package '@salusoft89/planegcs'": the main checkout's node_modules this worktree was junctioned to is now empty. The junction link was removed (target untouched) and the worktree has its own `npm ci` install; the 3 files then pass alone.
+- Gate: `npm run gate:merge -- --base origin/main` (cdp-browser.js changed: all 91 live tests): "GATE tier=merge jobs=quick=22,live=6 files=347 pass=347 fail=0 elapsed=480s", "SMOKE 12/12", "HEADLESS-LEFT 0" (.evidence/558/gate-merge-1.txt).

@@ -12,11 +12,11 @@ import { replayReport } from './harness/sketch.js';
 
 const cdp = await launchBrowser({ tag: '507', width: 1600, height: 900 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
-const { port, send, evalJs, navigate } = cdp;
+const { port, send, evalJs, navigate, waitForApp } = cdp;
 try {
   await send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] });
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
-  await sleep(2500);
+  await waitForApp('svgCanvas');
   const mouse = (type, x, y, buttons, clickCount) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : (clickCount || 1) });
   const click = async (x, y, clickCount = 1) => { await mouse('mouseMoved', x, y, 0); await sleep(30); await mouse('mousePressed', x, y, 1, clickCount); await sleep(30); await mouse('mouseReleased', x, y, 0, clickCount); await sleep(250); };
   const centerOf = (sel) => evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);

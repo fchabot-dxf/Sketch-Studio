@@ -192,6 +192,27 @@ function renameInAst(n, fromKey, to) {
   }
 }
 
+// TASK 559 (copy / paste): every name an expression reads is mapped through `mapName(name)` AT ONCE (renameInAst renames one name at a time, so a
+// d1 -> d3, d3 -> d5 mapping would chain). Constants (PI ...) are not names the caller maps. → { ok:true, text } with the canonical re-printed text
+// | { ok:false } when the text does not parse or `mapName` returned null for a name (one the caller cannot resolve: the caller decides what that means).
+function mapNamesInAst(n, mapName, isMapped) {
+  if (!n) return n;
+  switch (n.t) {
+    case 'name': { if (!isMapped(n.name)) return n; const to = mapName(n.name); return to == null ? null : { ...n, name: to }; }
+    case 'unit': case 'neg': { const arg = mapNamesInAst(n.arg, mapName, isMapped); return arg == null ? null : { ...n, arg }; }
+    case 'bin': { const left = mapNamesInAst(n.left, mapName, isMapped), right = mapNamesInAst(n.right, mapName, isMapped); return left == null || right == null ? null : { ...n, left, right }; }
+    case 'call': { const args = n.args.map((a) => mapNamesInAst(a, mapName, isMapped)); return args.some((a) => a == null) ? null : { ...n, args }; }
+    default: return n;
+  }
+}
+export function remapExpressionNames(text, mapName) {
+  const p = parseInput(text, { allowAssign: false });
+  if (!p.ok) return { ok: false };
+  const read = new Set(dependencies(p)); // the names the expression reads (constants are not among them)
+  const ast = mapNamesInAst(p.ast, mapName, (name) => read.has(name));
+  return ast == null ? { ok: false } : { ok: true, text: print(ast) };
+}
+
 // a plain number: no name, no call, no operator but a "1/2 in" fraction (typed into a dimension it REPLACES any formula)
 function isPlainNumber(n) {
   if (n.t === 'num') return true;

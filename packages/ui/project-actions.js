@@ -17,7 +17,9 @@ import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null }) {
+// TASK 587: `tabs: true` (the host shows the document-tab strip, sidebar-projects.js `documentTabs`) makes Open / Open recent / Open from file / New open a
+// NEW TAB instead of replacing the shown design (docs/DOCUMENT-TABS-DESIGN.md T2, T3): the unsaved Untitled is not replaced then, so those ask no question.
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
 
@@ -35,8 +37,8 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   }
   /** Resolves null when the user cancelled the unsaved-design question (nothing changed). */
   async function openDesign(id) {
-    if (!(await settleUnsaved())) return null;
-    const out = await buf().openDesign(id);
+    if (!tabs && !(await settleUnsaved())) return null;
+    const out = await (tabs ? buf().openTab(id) : buf().openDesign(id));
     if (!out.restored) throw new Error(out.reason || 'This design could not be opened.');
     return out;
   }
@@ -86,8 +88,31 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   const duplicateCurrent = async () => { const b = buf(); await b.flush(); return duplicateNow(b.designId()); };
   const saveCurrentToDrive = async () => { const b = buf(); await b.flush(); return saveToDriveNow(b.designId()); };
   const saveAs = (name) => buf().saveAs(name);
-  const newDesign = async () => ((await settleUnsaved()) ? buf().newDesign() : null);
-  const openFile = async () => ((await settleUnsaved()) ? buf().openFile() : null);
+  const newDesign = async () => (tabs ? buf().newTab() : (await settleUnsaved()) ? buf().newDesign() : null);
+  const openFile = async () => (tabs ? buf().openFileTab() : (await settleUnsaved()) ? buf().openFile() : null);
+
+  // ---- the document-tab strip's actions (TASK 587) -------------------------------------------------------------------------------
+  const activateTab = (key) => buf().activate(key);
+  /** Close tab `key`. A named design closes without asking (it is autosaved); an unsaved Untitled with content asks THE question (settleUnsaved:
+   *  Save… / Don't save / Cancel); a design whose last save failed asks "Close anyway" / "Try saving again". The question is about the ACTIVE design, so
+   *  a tab that needs it is activated first (Cancel leaves you on it). Resolves false = cancelled. */
+  async function closeTab(key) {
+    const b = buf();
+    const t = b.tabs().find((x) => x.key === key);
+    if (!t) return true;
+    if (t.needsSavePrompt) {
+      if (!t.active) await b.activate(key);
+      if (t.needsSavePrompt === 'unsaved') {
+        if (!(await settleUnsaved())) return false;
+      } else {
+        const choice = await ask({ kind: 'choose', label: 'The last save of this design failed.', options: [{ id: 'retry', label: 'Try saving again' }, { id: 'close', label: 'Close anyway' }] });
+        if (choice === 'retry') { await b.flush(); if (b.needsSavePrompt()) throw new Error('This design still could not be saved.'); }
+        else if (choice !== 'close') return false;
+      }
+    }
+    await b.closeTab(key);
+    return true;
+  }
   // pick an SVG / DXF and hand its text to the host's importer; null = the picker was cancelled
   const importDrawing = importFile ? () => pickAndImport(importFile) : null;
 
@@ -101,5 +126,5 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     ];
   }
 
-  return { duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems, settleUnsaved };
+  return { activateTab, closeTab, duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems, settleUnsaved };
 }

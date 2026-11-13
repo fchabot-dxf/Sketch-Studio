@@ -20,19 +20,23 @@ import { applyAppIdentity } from './app-registry.js';
 import { getGoogleAccount } from './cloud/google-account.js';
 import { driveErrorText } from './cloud/drive-adapter.js';
 import { createProjectActions } from './project-actions.js';
+import { createDocumentTabs } from './document-tabs.js';
 import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
 import SettingsManager from '#core/settings-manager.js';
 
 export { relativeTime };
 
-export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
+// TASK 587: `documentTabs: true` opts the host into DOCUMENT TABS (document-tabs.js; docs/DOCUMENT-TABS-DESIGN.md): the strip is inserted as its own row
+// immediately before the host's <header> (the element holding this sidebar's button), Open / Open recent / Open from file / New open a new tab, and the name,
+// status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
   let manager = null;   // the open project manager modal, if any
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = createProjectActions({ store, getBuffer, account, importFile, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
+  const projectActions = createProjectActions({ store, getBuffer, account, importFile, tabs: documentTabs, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
@@ -40,7 +44,11 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   async function refreshName() {
     let c = null;
-    try { c = await store.current(); } catch (_) { c = null; }
+    try {
+      const b = documentTabs && getBuffer && getBuffer();
+      const id = b ? b.designId() : null;
+      c = documentTabs ? (id ? await store.get(id) : null) : await store.current(); // with tabs: the design SHOWN (the active tab's), not the device-wide pointer
+    } catch (_) { c = null; }
     currentName = c ? c.name : 'Untitled';
     currentDesignId = c ? c.id : null;
     if (sidebar) { sidebar.setDocName(currentName); sidebar.refreshStatus(); }
@@ -99,6 +107,22 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   });
   store.subscribe(refreshName);
   refreshName();
+
+  let tabStrip = null;
+  if (documentTabs) {
+    tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName });
+    // the host appends the sidebar's button into its header AFTER this call: place the strip as soon as the button has a <header>
+    const place = () => {
+      const header = sidebar.el.closest('header');
+      if (!header || !header.parentNode) return false;
+      header.parentNode.insertBefore(tabStrip.el, header);
+      return true;
+    };
+    if (!place()) {
+      const mo = new MutationObserver(() => { if (place()) mo.disconnect(); });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
 
   // Ctrl+S (Cmd+S): save. Captured on the window, before the canvas shortcuts (where a bare "s" picks the Select tool) and the browser's
   // own "save page".

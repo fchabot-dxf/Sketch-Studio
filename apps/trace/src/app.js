@@ -3,38 +3,39 @@
  *
  * Tabs: Trace → Edit → Export
  * Trace tab: upload, param controls, scale, preview
- * Edit tab:  shared #core sketch canvas (lazy-mounted), tool ribbon, trim/break
+ * Edit tab:  shared #core sketch canvas (mounted at boot, bound to the project store), tool ribbon, trim/break
  * Export tab: SVG (Shaper Origin) + DXF (Fusion 360)
  */
 
-import { createAppSidebar, SIDEBAR_ICONS } from '#ui/app-sidebar.js'; // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
+import { SIDEBAR_ICONS }                  from '#ui/app-sidebar.js';
+import { mountProjectSidebar }            from '#ui/sidebar-projects.js'; // TASK 567: the SAME File menu (project actions, store-backed) every editor mounts
 import { getGoogleAccount }               from '#ui/cloud/google-account.js'; // TASK 488: the shared account row
 getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload }                     from './upload.js';
-import { initControls }                   from './controls.js';
+import { initControls, DEFAULT_PARAMS }    from './controls.js';
 import { initScale }                      from './scale.js';
 import { initPreview }                    from './preview.js';
 import { trace }                          from './tracer.js';
 import { downloadSVG, downloadDXF, copySVG } from './export.js';
-import { ensureEditMount, importToEdit }  from './edit-view.js';
-import { importSidebarAction, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's File-menu entry + drop
+import { mountEdit, getEditBuffer, getEditState, startEdit, stopEdit, importToEdit } from './edit-view.js';
+import { mountImportDrop }                from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's drop on the Edit tab
 
-// ── App sidebar (TASK 473) ────────────────────────────────────────────────────
-// This host declares ITS actions: Download = the traced SVG / DXF (enabled once there is a trace), New = a fresh document.
+// ── App sidebar (TASK 473, 567) ───────────────────────────────────────────────
+// The File menu is the shared one every editor mounts (sidebar-projects.js): New design, Save as, Duplicate, Open recent, Projects, Save to Google
+// Drive, Open from file, Import SVG / DXF…. This host declares only ITS actions, which sit after those (below a divider) like the other apps'
+// own Download: Download SVG / DXF = the traced result (enabled once there is a trace).
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
-  const sidebar = createAppSidebar({
-    current: 'trace', docName: 'Untitled', account: getGoogleAccount(),
-    actions: [
-      importSidebarAction({ importFile: (text, name) => importDrawing(text, name), getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open }), // TASK 566: the same File-menu entry as the other apps
+  swHost.appendChild(mountProjectSidebar({
+    appId: 'trace', getBuffer: () => getEditBuffer(), importFile: (text, name) => importDrawing(text, name),
+    hostActions: [
       { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
       { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
     ],
-  });
-  swHost.appendChild(sidebar.el);
+  }).el);
 }
 
 // TASK 566: import an SVG / DXF into the Edit tab's sketch (the File menu's entry, and a drop on the Edit tab) and show the Edit tab.
@@ -44,13 +45,8 @@ function importDrawing(text, name) {
   if (res.ok) switchTab('edit');
 }
 
-// DIAG-OVERLAY: log/error/viewport/touch capture works the same as every other app. The document
-// (serializeDocument) section is deliberately omitted here rather than reaching into the Edit tab's
-// #core state through a getter this turn — that getter exists only in another in-progress,
-// uncommitted change to edit-view.js/app.js (not authored by this turn), and depending on it would
-// entangle this commit with unreviewed work. Everything else in the report still works; wiring the
-// document section in is a small, clean follow-up once that other change lands.
-const _diagLog = createDiagnosticLog({ appId: 'trace' });
+// DIAG-OVERLAY: log/error/viewport/touch capture, and the document section (the Edit canvas's sketch state, through the same getter shape the other hosts use).
+const _diagLog = createDiagnosticLog({ appId: 'trace', state: () => getEditState() });
 if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
@@ -87,10 +83,8 @@ function switchTab(id) {
   Object.entries(tabPanes).forEach(([k, el]) => {
     if (el) el.hidden = k !== id;
   });
-  if (id === 'edit') {
-    ensureEditMount();
-    updateExportButtons();
-  }
+  if (id === 'edit') { startEdit(); updateExportButtons(); } // the shared Design canvas draws only while its tab shows (idempotent start)
+  else stopEdit();
   if (id === 'export') {
     updateExportButtons();
     updateScaleNote();
@@ -103,7 +97,21 @@ tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab))
 const preview = initPreview(eventBus);
 const { setImageSize } = initScale(eventBus);
 initUpload(eventBus);
-const { getParams } = initControls(eventBus);
+const { getParams, setParams } = initControls(eventBus);
+
+// TASK 567: the Edit canvas is mounted now and bound to the project store. What Trace keeps of a design in its sidecar (doc.hosts.trace) is the
+// trace PARAMETERS and the image name; NOT the photo (see WORK-LOG TURN 567: the traced geometry in the sketch IS the design, the photo is a
+// 3-25 MB re-trace source), and not the scale (mm per photo pixel: meaningless without the photo's pixel size).
+mountEdit({
+  isActive: () => !tabPanes.edit.hidden,
+  getHostData: () => ({ imageName: state.imageName, params: getParams() }),
+  applyHost: (side) => { // a design without a trace sidecar gets the defaults: it must not inherit the previous design's controls
+    setParams({ ...DEFAULT_PARAMS, ...(side && side.params) });
+    if (side && side.imageName && !state.imageCanvas) state.imageName = side.imageName;
+    if (getEditState().shapes.length) switchTab('edit'); // a stored design is its sketch: show it (the photo is not kept, so the Trace tab would be empty)
+  },
+  onStatusChange: (st) => setStatus(st === 'saving' ? 'Saving…' : st === 'saved' ? 'Saved' : ''),
+});
 
 preview.onMaskChanged(() => scheduleTrace());
 

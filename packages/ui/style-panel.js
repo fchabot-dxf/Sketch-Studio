@@ -97,6 +97,13 @@ function injectStyles() {
 .sk-style-btn { padding: 4px 10px; border-radius: 6px; cursor: pointer; background: transparent; color: inherit;
   border: 1px solid var(--sk-style-sep, #cbd5e1); }
 .sk-style-btn-primary { background: var(--sk-selection, #3B82F6); color: #fff; border-color: transparent; }
+/* TASK 562: a finger: every control >= 44 px, text >= 14 px (a mouse keeps today's size). */
+@media (pointer: coarse) {
+  .sk-style-close { min-width: 44px; min-height: 44px; font-size: 22px; }
+  .sk-style-tab, .sk-style-btn { min-height: 44px; font-size: 14px; padding: 4px 14px; }
+  .sk-style-input { min-height: 44px; min-width: 44px; font-size: 14px; }
+  .sk-style-slider { height: 44px; }
+}
 `;
   document.head.appendChild(s);
   stylesInjected = true;

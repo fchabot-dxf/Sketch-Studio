@@ -103,11 +103,26 @@ export function mountSketch(svgEl, opts = {}) {
     seedDemo(engine, state);
   }
 
-  // P5b: interactive input. Host input ctx binds the Design canvas; OMIT getMagEls (loupe) + the toolbar methods
+  // P5b: interactive input. Host input ctx binds the Design canvas; the loupe is declared just above; OMIT the toolbar methods
   // (P4 fall-throughs degrade gracefully). isActive gates the document-level listeners to the Design surface.
+  // TASK 562: the touch magnifier (the lens that shows the point a drawing / dragging finger covers) is part of the Design tab, so
+  // the host svg gets the same lens SketchStudio's page declares: created once, hidden until a finger works (input-manager.js).
+  let magEls = null;
+  const getMagEls = () => {
+    if (magEls || !svgEl) return magEls || {};
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.id = 'design-magnifier'; g.setAttribute('pointer-events', 'none'); g.style.display = 'none';
+    g.innerHTML = '<circle r="50" fill="white" fill-opacity="0.9" stroke="#3B82F6" stroke-width="2"></circle>'
+      + '<defs><mask id="design-mag-mask" maskContentUnits="userSpaceOnUse"><circle cx="0" cy="0" r="48" fill="white"></circle></mask></defs>'
+      + '<g id="design-mag-content" mask="url(#design-mag-mask)"></g>';
+    svgEl.appendChild(g);
+    magEls = { mag: g, magContent: g.querySelector('#design-mag-content') };
+    return magEls;
+  };
   const hostInputCtx = {
     getCanvasSvg: () => svgEl,
     getWorldGroup: () => worldGroup,
+    getMagEls,
     getInputHost: () => (typeof document !== 'undefined' ? document.body : null),
   };
   try { setupInput(svgEl, state, { inputCtx: hostInputCtx, isActive: opts.isActive, profiles: opts.profiles, notify: opts.notify }); } catch (_) { /* non-fatal */ }

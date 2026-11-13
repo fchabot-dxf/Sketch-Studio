@@ -101,6 +101,11 @@ function injectStyles() {
   background: var(--sk-info-head, rgba(127,127,127,0.2)); }
 .sk-ptable .pt-ref { display: inline-block; font-size: 0.75em; padding: 0 4px; margin-left: 4px; border-radius: 4px; border: 1px solid currentColor; font-style: normal; }
 .sk-ptable .pt-empty { opacity: 0.6; font-style: italic; padding: 6px; }
+/* TASK 562: a finger: the filter box >= 44 px, table text >= 12 px. */
+@media (pointer: coarse) {
+  .sk-ptable-filter { min-height: 44px; font-size: 14px; }
+  .sk-ptable thead th, .sk-ptable th[scope="rowgroup"], .sk-ptable .pt-count { font-size: 12px; }
+}
 @media (max-width: 640px) {
   .sk-ptable .pt-unit, .sk-ptable .pt-comment { display: none; }
   .sk-ptable .pt-name { width: 22%; } .sk-ptable .pt-expr { width: 38%; } .sk-ptable .pt-val { width: 40%; } /* three visible columns must sum to 100% (fixed layout) */

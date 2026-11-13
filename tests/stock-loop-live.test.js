@@ -1,6 +1,6 @@
-// tests/stock-loop-live.test.js — TASK 472: Stock as a cut type in the REAL app (headless Edge, software WebGL): pick Stock on a closed
-// loop in Prepare with real clicks, the role MOVES (with a notice) when a second loop is marked, Ctrl+Z undoes the move, and the Review
-// shows the board as that irregular profile.
+// tests/stock-loop-live.test.js — TASK 472, trimmed in TASK 583: what only a BROWSER can check of Stock as a cut type (headless Edge, software WebGL): the
+// Stock loop's drawn look in Prepare (warm tan, dashed: CSS) and the Review showing the board as that irregular profile in 3D. Picking Stock with real clicks, the
+// role moving with its notice, exactly one Stock and Ctrl+Z are tests/stock-loop-node.test.js. The Stock is set here directly in the cut plan (setup).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,56 +51,19 @@ await (async () => {
     })()`);
     await openMode('prepare');
     await waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.getElementById('prepare-canvas').children.length > 0`, 'prepare canvas ready');
-    const screen = (x, y) => evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = ${x}; p.y = ${y}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
-    const clickAt = async (pt) => { await mouse('mouseMoved', pt.x, pt.y); await mouse('mousePressed', pt.x, pt.y, 1); await mouse('mouseReleased', pt.x, pt.y); await sleep(250); };
-    const pickType = async (tid) => { await clickEl('.cut-type-trigger'); await waitFor(`!!document.querySelector('.cut-type-opt[data-id="${tid}"]')`, 'cut type menu open'); await clickEl(`.cut-type-opt[data-id="${tid}"]`); };
-    const stockKey = () => evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return plan.stockKeyOf(plan.CUT_PLAN); })()`);
-    const notice = () => evalJs(`(() => { const e = document.getElementById('prepare-notice'); return e && !e.hidden ? e.textContent : ''; })()`);
-
-    // the menu: Stock beside the others, with its icon
-    await clickAt(await screen(100, 30));                      // inside A, outside B: selects the L loop
-    await clickEl('.cut-type-trigger');
-    await waitFor(`document.querySelectorAll('.cut-type-opt').length > 0`, 'cut type menu open');
-    const opts = await evalJs(`[...document.querySelectorAll('.cut-type-opt')].map((o) => o.dataset.id + (o.disabled ? ':off' : '') + (o.querySelector('svg') ? ':icon' : ''))`);
-    console.log('menu:', JSON.stringify(opts));
-    assert.deepStrictEqual(opts, ['online:icon', 'guide:icon', 'interior:icon', 'pocket:icon', 'exterior:icon', 'stock:icon'], 'Stock sits beside the other types with its icon');
-    await clickEl('.cut-type-opt[data-id="stock"]');
-    await waitFor(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return !!plan.stockKeyOf(plan.CUT_PLAN); })()`, 'the L loop becomes the Stock');
-    const keyA = await stockKey();
-    assert.ok(keyA && keyA.startsWith('loop:'), 'the L loop is now the Stock: ' + keyA);
-    assert.match(await notice(), /now the Stock/);
-    // the card for a Stock: ONE field (Thickness), no offset / bit / shape rows
-    const rows = await evalJs(`[...document.querySelectorAll('.cut-rows > .cut-row')].filter((r) => getComputedStyle(r).display !== 'none').map((r) => (r.dataset.param || r.dataset.row) + ':' + r.querySelector('.cut-field-label').textContent)`);
-    console.log('stock card rows:', JSON.stringify(rows));
-    assert.deepStrictEqual(rows, ['cutDepth:Thickness'], 'the card shows only the Thickness row');
-    await evalJs(`(() => { const i = document.querySelector('.cut-depth'); i.value = '0.5in'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    await waitFor(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return plan.CUT_PLAN.get(plan.stockKeyOf(plan.CUT_PLAN)).cutDepth === 12.7; })()`, 'thickness stored');
-    assert.strictEqual(await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return plan.CUT_PLAN.get(plan.stockKeyOf(plan.CUT_PLAN)).cutDepth; })()`), 12.7, 'thickness typed as 0.5in is stored in mm');
-    await mouse('mouseMoved', 5, 700); await sleep(200);
-    if (process.env.EVIDENCE_DIR) { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 44, width: 1400, height: 750, scale: 1 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'prepare-stock-loop.png'), Buffer.from(r.data, 'base64')); }
-
-    // idle: deselect (click empty canvas): the Stock loop keeps its distinct look (warm tan dashed edge + label)
-    await clickAt(await screen(230, 90)); await mouse('mouseMoved', 5, 700);
+    // setup: the L loop is the Stock (what picking Stock on it in Prepare stores: tests/stock-loop-node.test.js), 0.5 in thick
+    await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');
+      const st = window.__designController.state; const sb = new Map(st.shapes.map((x) => [x.id, x]));
+      const a = findLoops(st).map((l) => ({ ...l, polygon: loopPolygon(l, st, sb) })).find((l) => Math.max(...l.polygon.map((p) => p.x)) === 120);
+      plan.CUT_PLAN.set(plan.keyOf('loop', a.id), { cutType: 'stock', cutDepth: 12.7, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
+      window.__prepareView.refreshLook(); })()`);
+    // the Stock loop keeps its distinct look when not selected: warm tan dashed edge + label
     await waitFor(`(() => { const e = document.querySelector('#prepare-canvas .sk-edge-stock'); return !!e && /227, 184, 115/.test(getComputedStyle(e).stroke); })()`, 'the unselected Stock edge is drawn');
     const idleEdge = await evalJs(`(() => { const e = document.querySelector('#prepare-canvas .sk-edge-stock'); if (!e) return null; const cs = getComputedStyle(e); return { stroke: cs.stroke, dash: cs.strokeDasharray }; })()`);
     console.log('idle stock edge:', JSON.stringify(idleEdge));
     assert.ok(idleEdge && /227, 184, 115/.test(idleEdge.stroke) && idleEdge.dash !== 'none', 'the unselected Stock loop is drawn warm tan and dashed');
     assert.ok(await evalJs(`!!document.querySelector('#prepare-canvas .sk-stock-label')`), 'and carries its STOCK label');
     if (process.env.EVIDENCE_DIR) { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 44, width: 1400, height: 750, scale: 1 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'prepare-stock-idle.png'), Buffer.from(r.data, 'base64')); }
-
-    // a SECOND Stock moves the role (one per document) and says so; Ctrl+Z undoes the move
-    await clickAt(await screen(180, 20));                      // the rectangle C
-    await pickType('stock');
-    await waitFor(`(() => { const e = document.getElementById('prepare-notice'); return !!e && !e.hidden && /Stock moved to this loop/.test(e.textContent); })()`, 'the Stock moved notice');
-    const keyC = await stockKey();
-    assert.notStrictEqual(keyC, keyA, 'the role moved to the second loop');
-    assert.match(await notice(), /Stock moved to this loop/);
-    assert.strictEqual(await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return [...plan.CUT_PLAN.values()].filter((r) => r.cutType === 'stock').length; })()`), 1, 'exactly one Stock');
-    if (process.env.EVIDENCE_DIR) { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 44, width: 1400, height: 750, scale: 1 } }); fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'prepare-stock-moved.png'), Buffer.from(r.data, 'base64')); }
-    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 2 });
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90, modifiers: 2 });
-    await waitFor(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); return plan.stockKeyOf(plan.CUT_PLAN) === ${JSON.stringify(keyA)}; })()`, 'Ctrl+Z restores the Stock');
-    assert.strictEqual(await stockKey(), keyA, 'Ctrl+Z gives the Stock role back to the L loop');
 
     // a pocket part inside the board (B), then the Review: the board IS the L profile
     await evalJs(`(async () => { const plan = await import('/apps/shaper/src/cut-plan.js'); const { findLoops } = await import('#core/loop-finder.js'); const { loopPolygon } = await import('#core/loop-geometry.js');

@@ -675,12 +675,6 @@ function handlePointerDown(e, svg, state) {
         }
     }
 
-    // A line→line 'midpoint' snap (snap-detection.js) is a VIRTUAL draw-aid between two lines and carries NO `.shape`.
-    // It must not become a malformed shape-hit: handleShapeSelection reads `hitShape.shape.id` and would throw
-    // "Cannot read properties of undefined (reading 'id')". Drawing reads clickSnap directly, so dropping it here only
-    // affects the SELECT/DIMENSION path — where a virtual midpoint is not a selectable feature (falls through to marquee).
-    if (hitShape && !hitShape.shape) hitShape = null;
-
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
     const constraintTol = 20 * snapBoostFor(isTouch);

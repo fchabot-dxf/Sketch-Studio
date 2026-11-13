@@ -51,7 +51,7 @@ export const KINDS = [...new Set([
   'lock',
 ])];
 // weights: dimensions and the structural constraints people use most come up more often
-const WEIGHT = { coincident: 2, horizontal: 3, vertical: 3, parallel: 2, perpendicular: 2, collinear: 1, tangent: 2, pointOnLine: 2, equal: 2, midpoint: 1, angle: 2,
+const WEIGHT = { coincident: 2, horizontal: 3, vertical: 3, parallel: 2, perpendicular: 2, collinear: 1, tangent: 2, pointOnLine: 2, equal: 2, midpoint: 1, symmetric: 1, angle: 2,
   'dist-aligned': 3, 'dist-horizontal': 3, 'dist-vertical': 3, 'dist-line': 3, 'dist-point-line': 1, 'dist-line-line': 1, radius: 2, lock: 1 };
 
 // ---------------------------------------------------------------- geometry
@@ -105,6 +105,14 @@ export function genOp(rnd, ctx, kind) {
     case 'tangent': return rnd() < 0.7 ? (nL && nC ? { k: kind, l: [pick(rnd, nL)], c: [pick(rnd, nC)] } : null) : (nC > 1 ? { k: kind, c: two(rnd, nC) } : null);
     case 'pointOnLine': return nJ > 1 && ctx.all.length ? { k: kind, j: [1 + pick(rnd, nJ - 1)], s: pick(rnd, ctx.all.length) } : null;
     case 'midpoint': return nJ > 2 ? { k: kind, j: [pick(rnd, nJ), pick(rnd, nJ - 1), pick(rnd, nJ - 2)] } : null;   // resolved to 3 DISTINCT joints in apply
+    // symmetric (task 563): two points, two lines or two circles / arcs; the symmetry line is an axis or another sketch line
+    case 'symmetric': {
+      const form = rnd(), axis = rnd() < 0.5 ? (rnd() < 0.5 ? 'ref_axis_x' : 'ref_axis_y') : null;
+      const third = (except) => { if (axis) return axis; const free = ctx.lines.map((_, i) => i).filter(i => !except.includes(i)); return free.length ? free[pick(rnd, free.length)] : null; };
+      if (form < 0.5) { if (nJ < 2) return null; const j = two(rnd, nJ), a = third([]); return a == null ? null : { k: kind, j, a }; }
+      if (form < 0.8) { if (nL < 2) return null; const l = two(rnd, nL), a = third(l); return a == null ? null : { k: kind, l, a }; }
+      if (nC < 2) return null; const c = two(rnd, nC), a = third([]); return a == null ? null : { k: kind, c, a };
+    }
     case 'angle': return nL > 1 ? { k: kind, l: two(rnd, nL), f } : null;
     case 'dist-aligned': case 'dist-horizontal': case 'dist-vertical': return nJ > 1 ? { k: kind, j: two(rnd, nJ), f } : null;
     case 'dist-line': return nL ? { k: kind, j: lineJoints(), f } : null;
@@ -148,6 +156,10 @@ export function applyOp(S, ctx, op) {
       const a = op.j[0], b = op.j[1] >= a ? op.j[1] + 1 : op.j[1];
       const used = [a, b].sort((x, y) => x - y); let m = op.j[2]; for (const u of used) if (m >= u) m++;
       return L.applyStep(S, { type: 'midpoint', joints: [J(a), J(b), J(m)] }, {});
+    }
+    case 'symmetric': {
+      const line = typeof op.a === 'string' ? op.a : Ln(op.a);
+      return L.applyStep(S, { type: 'symmetric', ...(op.j ? { joints: jp } : { shapes: op.l ? op.l.map(Ln) : op.c.map(Ci) }), line }, {});
     }
     case 'angle': return L.applyStep(S, dim('angle', { shapes: op.l.map(Ln) }, op.f), {});
     case 'dist-aligned': return L.applyStep(S, dim('distance', { joints: jp, dimMode: 'aligned' }, op.f), {});

@@ -118,6 +118,13 @@ export function getConstrainedGeometry(constraint, shapes) {
                 for (const sid of constraint.shapes) constraintShapes.add(sid);
             }
             break;
+
+        case CONSTRAINT_TYPES.SYMMETRIC:
+            // the two entities (points / end pairs, or shapes) and the symmetry line
+            if (constraint.joints) for (const jid of constraint.joints) constraintJoints.add(jid);
+            if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
+            if (constraint.line) constraintShapes.add(constraint.line);
+            break;
     }
     
     return { joints: constraintJoints, shapes: constraintShapes };
@@ -286,6 +293,21 @@ export function createConstraint(type, params) {
             if (!params.joints || params.joints.length !== 3) return null;
             return { type: CONSTRAINT_TYPES.MIDPOINT, joints: params.joints.slice() };
 
+        case CONSTRAINT_TYPES.SYMMETRIC: {
+            // task 563 (#core/symmetric.js): points { joints: [p, q], line }; lines { joints: [p1, q1, p2, q2], shapes, line }; circles
+            // { shapes, line }. Fields in this one order (byte-stable saves).
+            if (!params.line) return null;
+            if (Array.isArray(params.shapes) && params.shapes.length === 2) {
+                const out = { type: CONSTRAINT_TYPES.SYMMETRIC };
+                if (Array.isArray(params.joints) && params.joints.length === 4) out.joints = params.joints.slice();
+                out.shapes = params.shapes.slice();
+                out.line = params.line;
+                return out;
+            }
+            if (Array.isArray(params.joints) && params.joints.length === 2) return { type: CONSTRAINT_TYPES.SYMMETRIC, joints: params.joints.slice(), line: params.line };
+            return null;
+        }
+
         default:
             dbg.warn('app', 'Unknown constraint type:', type);
             return null;
@@ -423,6 +445,15 @@ export function hasConstraint(constraints, type, params) {
                 }
                 break;
             
+            case CONSTRAINT_TYPES.SYMMETRIC: {
+                // the same symmetry line and the same two entities, in either pick order
+                if (c.line !== params.line) break;
+                const pair = (x) => (Array.isArray(x.shapes) && x.shapes.length === 2 ? x.shapes : Array.isArray(x.joints) && x.joints.length === 2 ? x.joints : null);
+                const a = pair(c), b = pair(params);
+                if (a && b && ((a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]))) return true;
+                break;
+            }
+
             case CONSTRAINT_TYPES.MIDPOINT:
                 if (c.joints && params.joints && c.joints.length === 3 && params.joints.length === 3) {
                     // joints[2] is the midpoint joint — must match exactly

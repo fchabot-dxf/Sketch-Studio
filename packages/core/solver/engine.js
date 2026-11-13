@@ -4,6 +4,7 @@ import { InteractionSolver } from './interaction.js';
 import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
 import { isPointLineDistance } from '../geometry.js';
+import { symmetricOperands } from '../symmetric.js';
 
 // THE declaration of the solver's non-joint unknown (task 515, like Fusion and PlaneGCS): a CIRCLE is one centre joint plus a `radius`,
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
@@ -253,6 +254,16 @@ export class NewtonSolver {
     return typeof rim === 'number' ? { rim } : { radius: 0 };
   }
 
+  // THE size term of a shape in a row (definitions.js sizeValue): { at } a circle's radius unknown, { a, b } the length of its first two joints
+  // (a line, or an arc's centre-rim pair = its live radius), null when it has neither.
+  _sizeTerm(s, jointIndexMap) {
+    const at = this._radiusAt(s);
+    if (at !== undefined) return { at };
+    const a = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[0]) : undefined;
+    const b = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[1]) : undefined;
+    return typeof a === 'number' && typeof b === 'number' ? { a, b } : null;
+  }
+
   // THE operand of a BODY drag target (task 538) { shape: id, param }: the shape kind's declared BODY_POINTS entry and its op
   // (dense joint indices in shape.joints order, the parameter, the radius operand of a circle / arc).
   _bodyOperand(body, jointIndexMap, target) {
@@ -282,9 +293,9 @@ export class NewtonSolver {
       if (def && typeof def.rows === 'number') {
         rowsPerConstraint[i] = def.rows;
       } else if (def && typeof def.rows === 'function') {
-        // Variable-row constraint (e.g. branch-locked perpendicular): the def
-        // decides per-instance based on params.
-        rowsPerConstraint[i] = def.rows(c) | 0;
+        // Variable-row constraint (symmetric: 2 per mirrored pair + 1 for a radius equality): the def decides per instance, from the
+        // constraint and the shapes it names.
+        rowsPerConstraint[i] = def.rows(c, this.shapes) | 0;
       } else if (c.type === 'coincident') {
         rowsPerConstraint[i] = 2;
       } else if (c.type === 'collinear') {
@@ -459,6 +470,14 @@ export class NewtonSolver {
       // Point-to-line dimension: joints [P, A, B] -> the perpendicular distance from P to line AB (the line-line row).
       if (c.type === 'distance' && isPointLineDistance(c)) params.__lineLine = true;
 
+      // Symmetric (task 563): ONE operand reader (#core/symmetric.js) -> joints [line a, line b, p1, q1, (p2, q2)] and, for circles / arcs,
+      // the two size terms of the radius equality. Unresolved -> no joints: the Definition returns no rows (and counted none).
+      if (c.type === 'symmetric') {
+        const o = symmetricOperands(c, this.shapes);
+        params.joints = o ? [...o.line, ...o.pairs.flat()].map(id => jointIndexMap.get(id)) : [];
+        if (o && o.sizes) params.terms = o.sizes.map(sh => this._sizeTerm(sh, jointIndexMap));
+      }
+
       // Backwards compatibility: many constraints use `joint` + `shape` or `shapes` instead of `joints`.
       // Synthesize `params.joints` for common shape-backed constraints (pointOnLine, collinear, parallel, perpendicular).
       if ((!params.joints || params.joints.length === 0)) {
@@ -563,14 +582,7 @@ export class NewtonSolver {
         // Equal with a CIRCLE operand: one size term per shape, a circle's radius unknown or the length of a line / an arc's
         // centre-rim pair (its first two joints), so equal(circle, circle) is r1 - r2 and equal(circle, arc) r - |rim - centre|.
         else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(this.shapes.find(x => x && x.id === sid)) !== undefined)) {
-          const terms = c.shapes.map(sid => {
-            const s = this.shapes.find(x => x && x.id === sid);
-            const at = this._radiusAt(s);
-            if (at !== undefined) return { at };
-            const a = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[0]) : undefined;
-            const b = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[1]) : undefined;
-            return typeof a === 'number' && typeof b === 'number' ? { a, b } : null;
-          });
+          const terms = c.shapes.map(sid => this._sizeTerm(this.shapes.find(x => x && x.id === sid), jointIndexMap));
           if (terms.every(Boolean)) params.terms = terms;
         }
         else if ((c.type === 'collinear' || c.type === 'parallel' || c.type === 'perpendicular' || c.type === 'equal' || c.type === 'angle') && c.shapes && c.shapes.length > 0) {
@@ -599,8 +611,11 @@ export class NewtonSolver {
 
       const e = def.computeError(params, densePositions);
       if (Array.isArray(e)) {
-        // multi-row (e.g., coincident): the two row buffers
-        if (withJ) { operandsOf(params); def.computeJacobian(params, densePositions, bufs); }
+        // multi-row (coincident, midpoint, collinear: 2; symmetric: up to 4): one row buffer per row, added on first need
+        if (withJ) {
+          while (bufs.length < e.length) bufs.push(new Float64Array(denseLen));
+          operandsOf(params); def.computeJacobian(params, densePositions, bufs);
+        }
         for (let k = 0; k < e.length; ++k) {
           r[row] = e[k] * wStruct;
           if (withJ) emitRow(bufs[k]); else row++;

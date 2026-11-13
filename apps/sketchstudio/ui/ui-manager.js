@@ -1,6 +1,6 @@
 import { dbg } from '#core/debug.js';
 import { fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
-import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { exportToFile } from './export-manager.js';
@@ -50,8 +50,7 @@ export function setupUI(state){
   // refreshes the shared ribbon). The shared ribbon's onToolClick routes here, so the CAD pre-selection workflows
   // (pre-selection as 1st element, H/V-immediate, dimension-from-selection) survive the ribbon adoption.
   function handleToolActivate(t){
-    const constraintTools = [TOOL_MODES.COINCIDENT,TOOL_MODES.MIDPOINT,TOOL_MODES.HORIZONTAL_VERTICAL,TOOL_MODES.PARALLEL,TOOL_MODES.PERPENDICULAR,TOOL_MODES.COLLINEAR,TOOL_MODES.TANGENT,TOOL_MODES.EQUAL];
-    if(constraintTools.includes(t)){
+    if(CONSTRAINT_TOOLS.includes(t)){
       // 1. Pre-selection: a single selected joint/shape becomes the constraint's first element
       let firstEl = null;
       if(state.selectedJoints.size === 1 && state.selectedShapes.size === 0) firstEl = { type: 'joint', id: [...state.selectedJoints][0] };

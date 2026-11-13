@@ -1,4 +1,5 @@
 import { angleSectorOf } from '../angle-sector.js';
+import { symmetricRowCount } from '../symmetric.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
@@ -33,6 +34,54 @@ const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
     addGrad(outRow, rim, coef * rx / rd, coef * ry / rd);
     addGrad(outRow, centre, -coef * rx / rd, -coef * ry / rd);
   }
+};
+
+// THE size of a shape in a row (equal with a circle operand, the symmetric circle form): a term { at } is a circle's radius unknown, a term
+// { a, b } the length |a - b| (a line, or an arc's centre-rim pair = its live radius). engine.js _sizeTerm builds the term.
+const sizeValue = (t, positions) => (typeof t.at === 'number' ? positions[t.at]
+  : Math.hypot(positions[t.a*2] - positions[t.b*2], positions[t.a*2+1] - positions[t.b*2+1]));
+// ACCUMULATE sg * d(size)/d(variables) into outRow (the two terms of a row may share a joint).
+const addSizeGrad = (outRow, t, sg, positions) => {
+  if (typeof t.at === 'number') { outRow[t.at] += sg; return; }
+  const dx = positions[t.a*2] - positions[t.b*2], dy = positions[t.a*2+1] - positions[t.b*2+1];
+  const l = Math.hypot(dx, dy) || 1e-12;
+  addGrad(outRow, t.a, sg * dx / l, sg * dy / l);
+  addGrad(outRow, t.b, -sg * dx / l, -sg * dy / l);
+};
+
+// THE mirror rows of ONE point pair (p, q) across the line through a and b (task 563, the symmetric constraint; every form uses it). With
+// u = b - a and n = u turned -90 degrees / |u| (the normal of the cross product (w x u) / |u|), the reflection residual q - mirror(p) written
+// in the line's own frame is
+//   row 1   ((p - a) x u + (q - a) x u) / |u|   = (q - mirror(p)) . n   the signed distances of p and q sum to 0: their midpoint is on the line
+//   row 2   (q - p) . u / |u|                   = (q - mirror(p)) . u/|u|   the segment pq is perpendicular to the line
+// Both rows are world units and orthonormal in (p, q) (d/dp = [n, -u/|u|], d/dq = [n, u/|u|]), so the pair is as well-conditioned as a
+// coincident whatever the line's length (an axis is 1 unit long, a sketch line any length); |q - mirror(p)| = hypot(row 1, row 2) is what
+// the verifier measures. The line's ends take part (full derivative): a free symmetry line can move.
+const mirrorPairError = (positions, a, b, p, q) => {
+  const ax = positions[a*2], ay = positions[a*2+1], ux = positions[b*2] - ax, uy = positions[b*2+1] - ay;
+  const lu = Math.hypot(ux, uy) || 1e-12;
+  const px = positions[p*2] - ax, py = positions[p*2+1] - ay, qx = positions[q*2] - ax, qy = positions[q*2+1] - ay;
+  return [((px * uy - py * ux) + (qx * uy - qy * ux)) / lu, ((qx - px) * ux + (qy - py) * uy) / lu];
+};
+const mirrorPairGrad = (positions, a, b, p, q, row1, row2) => {
+  const ax = positions[a*2], ay = positions[a*2+1], ux = positions[b*2] - ax, uy = positions[b*2+1] - ay;
+  const lu = Math.hypot(ux, uy) || 1e-12, lu3 = lu * lu * lu;
+  const px = positions[p*2] - ax, py = positions[p*2+1] - ay, qx = positions[q*2] - ax, qy = positions[q*2+1] - ay;
+  // row 1: (s x u) / |u| with s = (p - a) + (q - a):  d/ds = (uy, -ux) / |u|;  d/du = (-sy, sx) / |u| - (s x u) u / |u|^3
+  const sx = px + qx, sy = py + qy, c1 = sx * uy - sy * ux;
+  const g1ux = -sy / lu - c1 * ux / lu3, g1uy = sx / lu - c1 * uy / lu3;
+  addGrad(row1, p, uy / lu, -ux / lu);
+  addGrad(row1, q, uy / lu, -ux / lu);
+  // s holds -2a (ds/da = -2 I) and u = b - a (du/da = -I, du/db = I)
+  addGrad(row1, a, -2 * uy / lu - g1ux, 2 * ux / lu - g1uy);
+  addGrad(row1, b, g1ux, g1uy);
+  // row 2: (v . u) / |u| with v = q - p:  d/dv = u / |u|;  d/du = v / |u| - (v . u) u / |u|^3
+  const vx = qx - px, vy = qy - py, d2 = vx * ux + vy * uy;
+  const g2ux = vx / lu - d2 * ux / lu3, g2uy = vy / lu - d2 * uy / lu3;
+  addGrad(row2, p, -ux / lu, -uy / lu);
+  addGrad(row2, q, ux / lu, uy / lu);
+  addGrad(row2, a, -g2ux, -g2uy);
+  addGrad(row2, b, g2ux, g2uy);
 };
 
 // THE angle row (task 553): the measured SECTOR (#core/angle-sector.js: rays of line 1 and line 2 + the way it turns) holds the CCW angle
@@ -501,11 +550,7 @@ export const Definitions = {
     rows: 1,
     computeError: (params, positions) => {
       // A circle operand (engine.js): params.terms = [t1, t2], each { at } (a circle's radius unknown) or { a, b } (|a - b|).
-      if (params.terms) {
-        const size = (t) => (typeof t.at === 'number' ? positions[t.at]
-          : Math.hypot(positions[t.a*2] - positions[t.b*2], positions[t.a*2+1] - positions[t.b*2+1]));
-        return size(params.terms[0]) - size(params.terms[1]);
-      }
+      if (params.terms) return sizeValue(params.terms[0], positions) - sizeValue(params.terms[1], positions);
       // Prefer explicit joint pairs when present: [a,b,c,d] -> len(a,b) - len(c,d)
       if (params.joints && params.joints.length >= 4) {
         const a = params.joints[0], b = params.joints[1], c = params.joints[2], d = params.joints[3];
@@ -522,14 +567,7 @@ export const Definitions = {
     computeJacobian: (params, positions, outRow) => {
       if (params.terms) {
         // ACCUMULATE: the two terms may share a joint (see below).
-        params.terms.forEach((t, i) => {
-          const sg = i === 0 ? 1 : -1;
-          if (typeof t.at === 'number') { outRow[t.at] += sg; return; }
-          const dx = positions[t.a*2] - positions[t.b*2], dy = positions[t.a*2+1] - positions[t.b*2+1];
-          const l = Math.hypot(dx, dy) || 1e-12;
-          addGrad(outRow, t.a, sg * dx / l, sg * dy / l);
-          addGrad(outRow, t.b, -sg * dx / l, -sg * dy / l);
-        });
+        params.terms.forEach((t, i) => addSizeGrad(outRow, t, i === 0 ? 1 : -1, positions));
         return;
       }
       if (params.joints && params.joints.length >= 4) {
@@ -602,6 +640,26 @@ export const Definitions = {
       addGrad(outRow, bI,  drdux,  drduy);
       addGrad(outRow, cI, -drdvx, -drdvy);
       addGrad(outRow, dI,  drdvx,  drdvy);
+    }
+  },
+
+  // Symmetric (task 563, #core/symmetric.js): params.joints = [a, b (the symmetry line), p1, q1, (p2, q2)] from engine.js, every (p_i, q_i)
+  // a mirrored pair (mirrorPair*: 2 rows each); the circle form adds params.terms = [size 1, size 2] and one row size 1 - size 2 (radii equal).
+  // 2 rows for points, 4 for lines (both end pairs), 3 for circles / arcs (centres + radius).
+  symmetric: {
+    rows: (c, shapes) => symmetricRowCount(c, shapes),
+    computeError: (params, positions) => {
+      const j = params.joints || [];
+      const out = [];
+      for (let k = 2; k + 1 < j.length; k += 2) out.push(...mirrorPairError(positions, j[0], j[1], j[k], j[k + 1]));
+      if (params.terms) out.push(sizeValue(params.terms[0], positions) - sizeValue(params.terms[1], positions));
+      return out;
+    },
+    computeJacobian: (params, positions, outRows) => {
+      const j = params.joints || [];
+      let r = 0;
+      for (let k = 2; k + 1 < j.length; k += 2, r += 2) mirrorPairGrad(positions, j[0], j[1], j[k], j[k + 1], outRows[r], outRows[r + 1]);
+      if (params.terms) { addSizeGrad(outRows[r], params.terms[0], 1, positions); addSizeGrad(outRows[r], params.terms[1], -1, positions); }
     }
   },
 

@@ -12,7 +12,7 @@ import { buildCells, runOurs } from './harness/fusion-oracle/drag-cells.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '530' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   const EV = process.env.EVIDENCE_DIR;
   try {
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -47,7 +47,7 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('tool-select'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     const cv = await centerOf('#svgCanvas');
     const mid = (l) => ({ x: (l[0][0] + l[1][0]) / 2, y: (l[0][1] + l[1][1]) / 2 });
     const alongOf = (l, f) => { const n = dd(l[0], l[1]); return { x: (l[1][0] - l[0][0]) / n * f * n, y: (l[1][1] - l[0][1]) / n * f * n }; };

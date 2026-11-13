@@ -8,7 +8,7 @@ import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '516' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     const mouse = (type, x, y, buttons, button) => send('Input.dispatchMouseEvent', { type, x, y, button: button || (type === 'mouseMoved' && !buttons ? 'none' : 'left'), buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const click = async (x, y) => { await mouse('mouseMoved', x, y, 0); await sleep(40); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y, 0); await sleep(250); };
@@ -37,7 +37,7 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-rect') && !!document.getElementById('tool-dim'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     const cv = await centerOf('#svgCanvas');
 
     // a rectangle, one corner locked, width and height dimensioned: fully constrained. Each of these two dimensions is NOT redundant, so

@@ -19,7 +19,7 @@ import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/co
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
 import { updateHover } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
-import { setupConstraintTools, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
+import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
@@ -1260,7 +1260,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
             if (selShapes.length === 1) {
                 const s = state.shapes.find(x => x.id === selShapes[0]);
                 if (s && s.type === 'line') {
-                    ConstraintManager.addHorizontalOrVertical(state, s.joints);
+                    recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
                     e.preventDefault();
                     return;
                 }
@@ -1277,7 +1277,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                 const s2 = state.shapes.find(x => x.id === selShapes[1]);
                 const isCircleLike = (s) => s && (s.type === 'circle' || s.type === 'arc');
                 if ((s1 && s2 && s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2))) {
-                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
+                    recordConstraintStep(state, TOOL_MODES.EQUAL, () => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' }));
                     // Keep selections and the tool active — do not reset or switch away; user will exit manually.
                     try { showNotification('Equal constraint applied', 'success'); } catch(_) {}
                     e.preventDefault();
@@ -1313,12 +1313,14 @@ function pickContextTarget(svg, state, e) {
         const c = state.constraints[parseInt(label.dataset.constraintIdx, 10)];
         if (c) return { kind: 'dimension', constraint: c };
     }
-    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
-    if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
-    if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
+    // A constraint GLYPH is drawn on top of the geometry, so the pointer on one means the glyph (task 571): it is picked before the joint /
+    // shape it sits on. (A left click is not this order: a joint wins there, then a glyph, then a shape.)
     const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20 * snapBoostFor(e.pointerType === 'touch'));
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
+    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
+    if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
+    if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
     return null;
 }
 
@@ -1464,7 +1466,7 @@ export function switchToTool(state, toolName) {
             if (toolName === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape') {
                 const s = state.shapes.find(x => x.id === firstEl.id);
                 if (s && s.type === 'line') {
-                    ConstraintManager.addHorizontalOrVertical(state, s.joints);
+                    recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
                     // Keep the current tool active (do not switch to Select). User will exit the tool manually.
                     try { showNotification('Horizontal/Vertical constraint applied', 'success'); } catch(_) {}
                     return;

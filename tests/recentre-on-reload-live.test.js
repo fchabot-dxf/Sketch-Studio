@@ -1,5 +1,5 @@
 // tests/recentre-on-reload-live.test.js — TASK 494: a restored drawing is framed (fitToDrawing) after a reload and after Open recent.
-// Live headless CDP, SketchStudio (#svgCanvas) and Shaper (#design-canvas). Designs are seeded straight into the shared project store.
+// Live headless CDP. TASK 576: only Pen Plotter (#design-canvas) runs here; SketchStudio and Shaper are tests/recentre-on-reload-node.test.js. Designs are seeded straight into the shared project store.
 //  - a small drawing far off-centre: after a reload its box is inside the canvas, centred, with the 10% margin
 //  - an empty design keeps the default view
 //  - after the user zooms, an autosave tick does not re-fit
@@ -52,7 +52,9 @@ await (async () => {
       // Pen Plotter: its Design tab is this same shared canvas; a restored sketch is framed instead of the paper (an empty one keeps the paper fit)
       { app: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', ready: `!!window.__sketch` },
     ];
-    for (const h of hosts) {
+    // TASK 576: SketchStudio and Shaper moved to tests/recentre-on-reload-node.test.js; Pen Plotter stays here: its framing is wired in the page
+    // script (apps/penplotter/src/sketch-stage.js fitToDrawing), which the node kit does not run (batch C: the host stages)
+    for (const h of hosts.filter((x) => x.app === 'penplotter')) {
       SMALL.bbox.maxY = 3020;
       const goto = async () => {
         await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);

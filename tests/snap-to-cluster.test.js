@@ -1,4 +1,6 @@
-import { undoStub } from './helpers/undo-stub.js';
+// TASK 582: a drag takes a snap only where the drag's SOLVE puts the dragged joint (selection-tools.js dragToward), so the sketch is the real
+// engine-backed sketch state (tests/harness/audit/lib.js newSketch), as in the app; a hand-built state without a solver never moves the joint.
+import * as L from './harness/audit/lib.js';
 (async () => {
   const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } = await import('#ui/input-handlers/selection-tools.js');
   const { findSnap } = await import('#ui/snap-detection.js');
@@ -7,14 +9,14 @@ import { undoStub } from './helpers/undo-stub.js';
 
   const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), viewBox: { baseVal: { x:0,y:0,width:800,height:600 } }, setPointerCapture: () => {}, releasePointerCapture: () => {} };
 
-  function makeState(){ return { currentTool: TOOL_MODES.SELECT, joints: new Map(), shapes: [], constraints: [], selectedJoints: new Set(), beginUndoGroup: () => {}, ...undoStub(), endUndoGroup: () => {} }; }
+  function makeState(){ const st = L.newSketch().state; st.currentTool = TOOL_MODES.SELECT; return st; }
 
   // Cluster: A-B-C at same location with two constraints
   const state = makeState();
   state.joints.set('A', { x: 200, y: 200 });
   state.joints.set('B', { x: 200, y: 200 });
   state.joints.set('C', { x: 200, y: 200 });
-  state.constraints = [{ type: 'coincident', joints: ['A','B'] }, { type: 'coincident', joints: ['B','C'] }];
+  state.constraints.push({ type: 'coincident', joints: ['A','B'] }, { type: 'coincident', joints: ['B','C'] });
 
   // A new joint D starts away and will be dragged into cluster
   state.joints.set('D', { x: 300, y: 200 });

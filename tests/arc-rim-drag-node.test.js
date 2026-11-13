@@ -15,10 +15,13 @@ import { measureResidual } from '#core/constraint-verifier.js';
 const DOC = JSON.parse(fs.readFileSync(new URL('./fixtures/drag/owner-two-arcs-575.json', import.meta.url), 'utf8'));
 const J8 = 'j8_1794492561525', J2 = 'j2_1794492542145', C_INNER = 'j1_1794492540938', C_OUTER = 'j7_1794492560318', ORIGIN = 'j_origin';
 
-// The owner's two sides are parallel to a construction line, so the drag's PARALLEL INFERENCE (inference-engine.js findInference, a snap; not touched
-// by task 578) keeps the grabbed end on its own line until the cursor has left its angle tolerance (about 13 events of 4 px here) and then moves it
-// on in steps: the end trails the cursor by at most LAG_PX and keeps pace with it. Before task 578 it never moved at all (gap 4, 8 ... 79 px, still 0 travel).
-const EVENTS = 40, LAG_PX = 60;
+// The owner's two sides are parallel to a construction line, so the drag's PARALLEL INFERENCE (inference-engine.js findInference) holds on every
+// event: it kept the grabbed end on its own line until the cursor left its angle tolerance and then moved it on in steps (a staircase, worst gap
+// 40.4 px with 40 events, task 578). The side is COLLINEAR with that construction line, so the sketch already implies the parallel: since task 582
+// such an inference pins nothing (selection-tools.js canApplyInference, the engine's rank test) and the end follows the cursor within one event's
+// step (worst gap 1.08 px).
+// Before task 578 it never moved at all (gap 4, 8 ... 79 px, still 0 travel).
+const EVENTS = 40, LAG_PX = 4;
 const residual = (st) => { let max = 0; for (const c of st.constraints) { if (!c || c.driven || c.type === 'mouse_spring') continue; const r = measureResidual(c, st.joints, st.shapes); if (!(r <= max)) max = r; } return max; };
 const pos = (st, id) => { const j = st.joints.get(id); return { x: j.x, y: j.y }; };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -41,6 +44,7 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const Rs = Math.hypot(start.x - o.x, start.y - o.y), a0 = Math.atan2(start.y - o.y, start.x - o.x);
     const ang0 = Math.atan2(pos(st, J8).y, pos(st, J8).x);
     assert.ok(residual(st) < 1e-6, 'the owner drawing loads solved (residual ' + residual(st) + ')');
+    const n0 = st.constraints.length;
     app.move(start.x, start.y); app.down(start.x, start.y);
     assert.ok(st.drag, 'the press on j8 starts a drag');
     assert.deepStrictEqual(st.drag.jointIds, [J8], 'a rim joint drag holds the grabbed joint alone: ' + JSON.stringify(st.drag.jointIds));
@@ -53,6 +57,8 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
       worst = Math.max(worst, Math.hypot(j.x - c.x, j.y - c.y));
     }
     app.up(c.x, c.y);
+    // TASK 582: the release adds no parallel(side, its collinear construction line): the sketch implies it (before: 17 -> 18)
+    assert.strictEqual(st.constraints.length, n0, 'the release adds no constraint: ' + JSON.stringify(st.constraints.slice(n0).map((x) => [x.type, x.shapes || x.joints])));
     const rot = (Math.atan2(pos(st, J8).y, pos(st, J8).x) - ang0) * 180 / Math.PI;
     console.log(`1. j8 dragged 160 px along its circle in 40 events: worst gap to the cursor ${worst.toFixed(3)} px, drawing rotated ${rot.toFixed(3)} deg, worst residual ${residual(st).toExponential(1)}`);
     const endGap = Math.hypot(app.toScreen(pos(st, J8).x, pos(st, J8).y).x - c.x, app.toScreen(pos(st, J8).x, pos(st, J8).y).y - c.y);

@@ -955,11 +955,18 @@ function setupEventListeners(svg, state) {
             },
         });
         // TASK 562: the touch "Done" button ends a Line chain exactly like Enter (finishLineChain); shown only while a finger is the input.
-        const doneButton = createTouchDoneButton({
-            svg,
-            isChainOpen: () => isActiveFn() && state.currentTool === TOOL_MODES.LINE && !!state.active && state.active.mode === TOOL_MODES.LINE,
-            onDone: () => finishLineChain(state),
-        });
+        // Built on the first touch press, so a host / test that never sees a finger never gets the element.
+        let doneButton = null;
+        const syncDone = (e) => {
+            if (!doneButton && e.pointerType === 'touch') {
+                doneButton = createTouchDoneButton({
+                    svg,
+                    isChainOpen: () => isActiveFn() && state.currentTool === TOOL_MODES.LINE && !!state.active && state.active.mode === TOOL_MODES.LINE,
+                    onDone: () => finishLineChain(state),
+                });
+            }
+            if (doneButton) doneButton.sync(e.pointerType === 'touch');
+        };
         const holdTools = () => state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION;
         svg.addEventListener('pointerdown', (e) => {
             dbg.log('input', '[input-manager] svg pointerdown', {x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName});
@@ -969,7 +976,7 @@ function setupEventListeners(svg, state) {
                 if (!e.isPrimary) hold.cancel();
             }
             holdWasPlacing = isDimensionPlacing(state);
-            doneButton.sync(e.pointerType === 'touch');
+            syncDone(e);
             try{ handlePointerDown(e, svg, state); } catch(err){ 
                 console.error('[input-manager] handlePointerDown error', err);
                 showNotification("Input Error: " + err.message, "error");
@@ -994,7 +1001,7 @@ function setupEventListeners(svg, state) {
                 }
             }
             try{ handlePointerUp(e, svg, state); } catch(err){ console.error('[input-manager] handlePointerUp error', err); }
-            doneButton.sync(e.pointerType === 'touch');
+            syncDone(e);
         });
         svg.addEventListener('pointercancel', (e) => {
             if (e.pointerType !== 'touch') return;

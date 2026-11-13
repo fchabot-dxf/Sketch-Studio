@@ -125,10 +125,11 @@ function injectStyles() {
   .sk-ribbon-poly input { width: 52px !important; height: 44px; font-size: 16px !important; }
   .sk-ribbon-menu-item { min-height: 44px; font-size: 14px; }
 }
-/* TASK 562: at phone width an edge fade says the ribbon scrolls: the JS sets the two fade widths from the scroll position. */
+/* TASK 562: at phone width an edge fade says the ribbon scrolls: the JS sets data-fade (left / right / both) from the scroll position. */
 @media (max-width: 640px) {
-  .sk-ribbon { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--sk-fade-l, 0px), #000 calc(100% - var(--sk-fade-r, 0px)), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 var(--sk-fade-l, 0px), #000 calc(100% - var(--sk-fade-r, 0px)), transparent 100%); }
+  .sk-ribbon[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); }
+  .sk-ribbon[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px); mask-image: linear-gradient(to right, transparent 0, #000 28px); }
+  .sk-ribbon[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
 }
 `;
   document.head.appendChild(s);
@@ -350,11 +351,10 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   }
 
   // TASK 562: the edge-fade cue. Each side fades only while there is more ribbon that way (CSS applies it at <= 640 px).
-  const FADE_PX = 28;
   function syncFade() {
     const max = el.scrollWidth - el.clientWidth;
-    el.style.setProperty('--sk-fade-l', max > 2 && el.scrollLeft > 2 ? FADE_PX + 'px' : '0px');
-    el.style.setProperty('--sk-fade-r', max > 2 && el.scrollLeft < max - 2 ? FADE_PX + 'px' : '0px');
+    const more = { left: max > 2 && el.scrollLeft > 2, right: max > 2 && el.scrollLeft < max - 2 };
+    el.dataset.fade = more.left && more.right ? 'both' : more.left ? 'left' : more.right ? 'right' : 'none';
   }
   el.addEventListener('scroll', syncFade, { passive: true });
   window.addEventListener('resize', syncFade);

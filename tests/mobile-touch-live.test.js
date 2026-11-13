@@ -39,7 +39,7 @@ try {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
     return { coarse: matchMedia('(pointer: coarse)').matches, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), style: m('.sk-header-style'), debug: m('#btn-debug-toggle'), ribbonBtn: m('.sk-ribbon-btn'),
       ribbonLbl: m('.sk-ribbon-lbl'), poly: m('#polygon-sides'), construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
-      tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#coords-text'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
+      tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
   console.log('desktop 1400:', JSON.stringify(desk));
   assert.strictEqual(desk.coarse, false);
   assert.ok(desk.menuBtn[1] < 44 && desk.style[1] < 44 && desk.debug[1] < 44, 'desktop keeps its compact header (no 44 px growth)');
@@ -66,7 +66,7 @@ try {
   const ph = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
     return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), actions: m('.sk-header-actions'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'), poly: m('#polygon-sides'),
-      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#coords-text'),
+      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'),
       fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage.slice(0, 40), hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       headerRight: Math.round(document.querySelector('.sk-header').getBoundingClientRect().right), ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
   console.log('phone 390:', JSON.stringify(ph));
@@ -78,10 +78,10 @@ try {
   for (const k of ['mag', 'tune', 'diagSlot']) assert.strictEqual(ph[k][3], 'none', `${k} left the footer on a phone`);
   assert.ok(ph.fade.includes('linear-gradient'), 'the ribbon has the edge-fade cue at phone width');
   assert.ok(ph.ribbonScroll[0] > ph.ribbonScroll[1], 'the ribbon scrolls');
-  const fadeVars = () => evalJs(`(() => { const s = document.querySelector('.sk-ribbon').style; return [s.getPropertyValue('--sk-fade-l').trim(), s.getPropertyValue('--sk-fade-r').trim()]; })()`);
-  assert.deepStrictEqual(await fadeVars(), ['0px', '28px'], 'at the start only the right edge fades');
+  const fadeVars = () => evalJs(`document.querySelector('.sk-ribbon').dataset.fade`);
+  assert.strictEqual(await fadeVars(), 'right', 'at the start only the right edge fades');
   await evalJs(`document.querySelector('.sk-ribbon').scrollLeft = 99999`); await sleep(300);
-  assert.deepStrictEqual(await fadeVars(), ['28px', '0px'], 'at the end only the left edge fades');
+  assert.strictEqual(await fadeVars(), 'left', 'at the end only the left edge fades');
   await evalJs(`document.querySelector('.sk-ribbon').scrollLeft = 0`); await sleep(300);
   // Style / Debug / Log / Tune are in the menu
   await tapSel('.sk-sidebar-btn'); await sleep(400);

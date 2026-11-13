@@ -62,6 +62,9 @@ await (async () => {
       return true;`;
     await state(seed);
     await sleep(800);
+    // task 586: the floating browser covers the canvas's top-left and the canvas is wider; a real wheel zoom-out at its centre puts the seeded lines (-40..40 mm) clear of the box
+    for (let i = 0; i < 3; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 800, y: 500, deltaX: 0, deltaY: 200 }); await sleep(150); }
+    await sleep(300);
 
     // ---- (1) lock Plate through the row's REAL right-click menu, then a real drag on it moves nothing
     await rightClick(await center(head('sketch-2') + ' .sk-sketch-name'));

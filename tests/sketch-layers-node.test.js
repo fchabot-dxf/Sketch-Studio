@@ -81,7 +81,7 @@ async function canvasChecks(host) {
     app.tool('line');
     const endB = app.toScreen(...jointXY(app, B.b));
     app.click(endB.x, endB.y);                          // first point ON the locked line's end point
-    app.click(endB.x + 120, endB.y + 5);                // second point
+    app.click(endB.x + 120, endB.y + 40);               // second point
     app.esc(); app.tool('select');
     assert(S.shapes.length === nShapes + 1, host + ': the line tool drew one line: ' + (S.shapes.length - nShapes));
     const drawn = S.shapes[S.shapes.length - 1];

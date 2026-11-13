@@ -16,7 +16,7 @@
 //
 // HOW A FILE'S TIER IS KNOWN (declared once, here): a test is `live` when its relative-import closure reaches
 // tests/helpers/cdp-browser.js (the one browser launcher) or a file that starts a browser itself (it contains
-// '--remote-debugging-port'; today the two hand-rolled launchers reference-lines-live and reference-lines-glyph-live-runner).
+// '--remote-debugging-port'; today the hand-rolled launcher reference-lines-live).
 // Everything else is `quick`. A new browser test therefore lands in `live` on its own. The safety net: quick runs with
 // SKETCH_GATE_TIER=quick, and launchBrowser() refuses to start while that is set, so a browser test misplaced in quick fails loudly.
 

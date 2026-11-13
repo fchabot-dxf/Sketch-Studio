@@ -459,7 +459,8 @@ function updateSnapTarget(e, svg, state) {
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
         // This ensures the origin is always snappable even if findSnap logic skips it.
-        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin')) {
+        // TASK 584: except for a drag that holds the origin itself (a joint coincident with it: its cluster includes j_origin), as findSnap.
+        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin') && !excludeIds.includes('j_origin')) {
             const origin = state.joints.get('j_origin');
             const sOrigin = worldToScreen(svg, origin);
             const dOrigin = Math.hypot(e.clientX - sOrigin.x, e.clientY - sOrigin.y);
@@ -675,12 +676,6 @@ function handlePointerDown(e, svg, state) {
             }
         }
     }
-
-    // A line→line 'midpoint' snap (snap-detection.js) is a VIRTUAL draw-aid between two lines and carries NO `.shape`.
-    // It must not become a malformed shape-hit: handleShapeSelection reads `hitShape.shape.id` and would throw
-    // "Cannot read properties of undefined (reading 'id')". Drawing reads clickSnap directly, so dropping it here only
-    // affects the SELECT/DIMENSION path — where a virtual midpoint is not a selectable feature (falls through to marquee).
-    if (hitShape && !hitShape.shape) hitShape = null;
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;

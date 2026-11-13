@@ -54,6 +54,7 @@ export function createSketchState(engine, view) {
     inference: null,  // Track inference hints (horizontal, vertical, perpendicular)
     lastMouse: null,
     pendingConstraint: null,  // { type: 'parallel', firstElement: { type: 'line|joint', id }, ... }
+    mirror: null,  // TASK 585: the Mirror tool's pick { step: MIRROR_STEPS.*, objects: { shapes, joints } | null, line: id | null }; read only while currentTool is MIRROR (input-handlers/mirror-tool.js beginMirror sets it)
     view,
     selectedJoints: new Set(),  // Track selected joints for showing constraint glyphs
     selectedConstraints: new Set(), // Track selected constraints (support multi-select)

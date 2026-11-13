@@ -111,19 +111,14 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
             }catch(e){ return false; }
 
         case 'midpoint':
-            // Joint-to-Line or joint-to-joints midpoint -> MIDPOINT constraint referencing anchor joints
-            // If the snapTarget provides explicit anchor joint ids, prefer them (supports line→line midpoints)
+            // Joint-to-Line midpoint -> MIDPOINT constraint on the line's own endpoints
             let anchorJoints = null;
-            if (Array.isArray(snapTarget.joints) && snapTarget.joints.length >= 2) {
-                anchorJoints = snapTarget.joints.slice(0,2);
-            } else {
-                const midShapeId = (snapTarget.shape && snapTarget.shape.id) ? snapTarget.shape.id : (snapTarget.targetId || snapTarget.id || null);
-                if (!midShapeId) return false;
-                if (snapTarget.shape && Array.isArray(snapTarget.shape.joints)) anchorJoints = snapTarget.shape.joints.slice(0,2);
-                else if (state && state.shapes) {
-                    const s = state.shapes.find(xx => xx.id === midShapeId);
-                    if (s && s.joints) anchorJoints = s.joints.slice(0,2);
-                }
+            const midShapeId = (snapTarget.shape && snapTarget.shape.id) ? snapTarget.shape.id : (snapTarget.targetId || snapTarget.id || null);
+            if (!midShapeId) return false;
+            if (snapTarget.shape && Array.isArray(snapTarget.shape.joints)) anchorJoints = snapTarget.shape.joints.slice(0,2);
+            else if (state && state.shapes) {
+                const s = state.shapes.find(xx => xx.id === midShapeId);
+                if (s && s.joints) anchorJoints = s.joints.slice(0,2);
             }
             if (!anchorJoints || anchorJoints.length < 2) return false;
             if (anchorJoints.includes(jointId)) return false;

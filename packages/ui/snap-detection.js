@@ -120,38 +120,6 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
     const lineThreshold = SNAP.LINE_PX * boost;
     const worldMouse = screenToWorld(svg, lastMouse.x, lastMouse.y);
 
-    // Line→Line midpoint candidates: consider the midpoint between two lines' midpoints
-    const visibleLines = shapes.filter(s => s.type === 'line' && !s.reference && Array.isArray(s.joints) && s.joints.length >= 2)
-                              .map(s => ({ shape: s, a: joints.get(s.joints[0]), b: joints.get(s.joints[1]), aId: s.joints[0], bId: s.joints[1] }))
-                              .filter(l => l.a && l.b);
-
-    for (let i = 0; i < visibleLines.length; i++){
-        for (let j = i + 1; j < visibleLines.length; j++){
-            const L1 = visibleLines[i], L2 = visibleLines[j];
-            const m1 = { x: (L1.a.x + L1.b.x) / 2, y: (L1.a.y + L1.b.y) / 2 };
-            const m2 = { x: (L2.a.x + L2.b.x) / 2, y: (L2.a.y + L2.b.y) / 2 };
-            const midBetween = { x: (m1.x + m2.x) / 2, y: (m1.y + m2.y) / 2 };
-            const midSC = worldToScreen(svg, midBetween);
-            const dmid = Math.hypot(midSC.x - lastMouse.x, midSC.y - lastMouse.y);
-            if (dmid < inferencePx && dmid < bestShapeDist) {
-                // pick best combo of endpoints (one from each line) as anchors
-                const combos = [ [L1.aId, L2.aId], [L1.aId, L2.bId], [L1.bId, L2.aId], [L1.bId, L2.bId] ];
-                let bestCombo = null, bestComboDist = Infinity;
-                for (const [xId, yId] of combos) {
-                    const x = joints.get(xId), y = joints.get(yId);
-                    if (!x || !y) continue;
-                    const mm = { x: (x.x + y.x) / 2, y: (x.y + y.y) / 2 };
-                    const mmSC = worldToScreen(svg, mm);
-                    const dd = Math.hypot(mmSC.x - midSC.x, mmSC.y - midSC.y);
-                    if (dd < bestComboDist) { bestComboDist = dd; bestCombo = [xId, yId]; }
-                }
-                if (bestCombo) {
-                    bestShapeDist = dmid;
-                    bestShape = { type: 'midpoint', targetId: null, x: midBetween.x, y: midBetween.y, joints: bestCombo, dist: dmid, pt: midBetween };
-                }
-            }
-        }
-    }
     for(const s of shapes){
       if(s.joints && s.joints.some(jid => excluded.includes(jid))) continue;
       let dist = Infinity;

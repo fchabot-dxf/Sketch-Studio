@@ -2022,3 +2022,16 @@ the j3 corner (a cluster) 0.8 -> 0.8 px.
 Default grid magnet: worst gap 16.23 -> 10.40 px, snap lock changes per drag 13 -> 13 (grid nodes the end passes, each within the magnet of where the end is). A LOCKED point
 (the outer centre j7, welded to the origin) dragged 40 x (4, 2) px with the default grid magnet: lock changes 15 -> 2, events locked 26 -> 3 of 40 (task 575 item 3: the snap no
 longer locks onto grid nodes / targets under the cursor that the held point cannot reach). Evidence: .evidence/582/probe-owner.mjs (local).
+
+## Select tool: double-click chain and moving a selection (task 588)
+NOT measured in Fusion: the advisor's live check was cut short (a display problem), so both rows below are the advisor's knowledge of Fusion and are **to verify in
+Fusion**. Ours = tests/chain-select-move-node.test.js (the node kit) and tests/chain-select-move-live.test.js (SketchStudio, real mouse and keys).
+
+| case | Fusion (to verify in Fusion) | ours (task 588) |
+|---|---|---|
+| Double-click a sketch curve | selects the whole CONNECTED chain of curves through it (end-to-end lines and arcs; a closed profile's outline) | the same: every curve connected END TO END to it (an end joint shared or made coincident), THROUGH branches; only curves of the same kind (construction chains construction, normal chains normal); never into a locked or hidden sketch; a circle (no ends) is a chain of itself; a line from an arc's centre is not connected to the arc (a centre is not an end). Shift + double-click adds the chain to the selection |
+| Drag a curve when several are selected | the WHOLE selection moves; its constraints, and those to unselected geometry, still hold (the solver decides what moves); fixed or fully constrained parts do not move | the same through the solver: one drag spring per selected joint (each toward its start + the cursor's displacement), every constraint holds, unselected geometry tied to the selection follows as the solver decides; a held member (fixed, 0 DOF, or coincident with such a point) locks the WHOLE group (the cluster-drag rule, getDragDOF), an axis lock of any member masks that axis for all; no snap, no inference, no constraint at release; ONE undo step "move selection" |
+| Click inside a closed profile (not on an edge) | (not checked) | starts a box selection, as before (no region pick) |
+
+To verify in Fusion: whether the double-click chain goes through branches and whether it mixes construction and normal curves; whether a group drag with a fixed member
+moves the free part (ours: nothing moves); whether a group drag snaps (ours: never).

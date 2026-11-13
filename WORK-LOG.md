@@ -14299,3 +14299,13 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
 - Callers: getDragDOF (one caller, dragToward); new pullDrag / snapIdOf (dragToward only). No function lost its last caller.
 - Gate: first merge run on 28d4a02: files=358 pass=356 fail=2 (arc-rim-drag-live, drag-target-release-live: the stall above). Final 7673a3d: "GATE tier=merge jobs=quick=22,live=6 files=358 pass=358 fail=0 elapsed=650s", SMOKE 12/12, HEADLESS-LEFT 0 (a clean rerun: a run before it overlapped a 10 s local swap of selection-tools.js for an evidence probe, so it is not counted). arc-rim-drag-live alone: "rotated 15.693 deg (160.0 px of travel), worst gap 19.95 px"; drag-target-release-live alone: ok (Esc drift 0.0000 deg, 17 -> 17).
 - Evidence (local): .evidence/582/ (before-node.txt / after-node.txt, probe-owner*.txt, probe-framed-*.txt, oracle-before/after.txt, gate-merge*.log).
+
+## TURN 586 (floating SKETCHES browser)
+- The status line (constraints · DOF · free · solved) and the SKETCHES tree move from the right-hand panel (577b) into ONE floating card over the canvas's top-left, `mountDesignBrowser` in `packages/ui/design-browser.js` (renamed from design-side-panel.js). All four apps mount it; the row design / menus / layer behaviour are untouched (createDesignInfoPanel unchanged).
+- SketchStudio and Trace: the side panel is gone, the canvas is full width (1440 px: right edge 1423 / 1440). Shaper: its design aside was only the tree, so it is removed (canvas 1600 at 1600 px). Pen Plotter keeps its aside (Document button + style controls), only the tree left it.
+- Card: absolute, 8 px in from the canvas corner, 248 px wide, translucent white; the canvas ribbon is outside the canvas element so is not covered. Axis numbers are drawn along the axes at the origin, not at a screen corner, so the card only overlaps them when the user pans an axis under it (a Fusion-style overlay).
+- Collapse: header bar only; per-user setting BROWSER_COLLAPSED (SettingsManager, local), not in the document.
+- Phones (<= 640 px): the same element is the slide-over drawer (createMobileDrawer, breakpoint 641), opened by the header button; mobile-drawer.js styles are now per breakpoint (sk-bp-N class) so the 641 browser drawer and 768 host drawers do not mix.
+- MEASURED_CANVAS_RECT re-measured at 1600x900: sketchstudio 1566 wide, shaper 1600, penplotter 1356 (unchanged).
+- Tests: tests/design-browser-live.test.js (new, 4 hosts at 1440 + 390 touch); selectors updated in sketch-layers-live / -node, phone-header-live, dimension-delete-live, design-info-panel-right-dock (Shaper dropped: no panel).
+- Evidence: .evidence/586/{before,after}-{sketchstudio,shaper}-1440.png.

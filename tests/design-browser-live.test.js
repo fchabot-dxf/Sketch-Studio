@@ -49,7 +49,7 @@ await (async () => {
       assert(box.left - cv.left >= 0 && box.left - cv.left <= 16 && box.top - cv.top >= 0 && box.top - cv.top <= 16, `${h.name}: the box is at the canvas's top-left: box ${box.left},${box.top} canvas ${cv.left},${cv.top}`);
       assert(box.right < cv.left + 300 && box.bottom < cv.top + 300, h.name + ': the box is small, in the corner');
       if (h.full) assert(cv.right >= 1440 - 40, `${h.name}: the canvas is full width again (right edge ${cv.right} of 1440)`);
-      assert.strictEqual(await evalJs(`/constraints? · DOF \d+/.test(document.querySelector('.sk-browser .sk-info-dof').textContent)`), true, h.name + ': the status line (constraints · DOF) is in the box');
+      assert.strictEqual(await evalJs(`/constraints? · DOF [0-9]+/.test(document.querySelector('.sk-browser .sk-info-dof').textContent)`), true, h.name + ': the status line (constraints · DOF) is in the box');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').textContent.includes('Sketch 1')`), true, h.name + ': Sketch 1 row');
       assert.strictEqual(await evalJs(`document.elementFromPoint(${box.x}, ${Math.round(box.top) + 12}).closest('.sk-browser') !== null`), true, h.name + ': the box is on top of the canvas at its own place');
 

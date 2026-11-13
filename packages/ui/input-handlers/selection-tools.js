@@ -951,7 +951,11 @@ function pullDrag(state, to, iters, pivot) {
     try {
         const primary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
         if (state.engine && primary) {
-            const dt = { jointId: primary, x: to.x, y: to.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
+            // the grabbed joint's own target: its start + the grab's displacement. That is `to` for every drag that starts ON its joint
+            // (startWorld = the joint); a GROUP drag (task 588) starts at the cursor, so its first member's target is not the cursor itself.
+            const init0 = !pivot && state.drag.initial && state.drag.initial.get(primary);
+            const pt = init0 ? { x: init0.x + dx, y: init0.y + dy } : to;
+            const dt = { jointId: primary, x: pt.x, y: pt.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
             try { state.engine.solve(iters, { dragTarget: dt }); } catch (_) { /* fail-open */ }
         }
     } catch (_) { }

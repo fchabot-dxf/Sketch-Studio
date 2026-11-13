@@ -213,7 +213,7 @@ const dragBy = quiet(async (app, a, dx, dy) => {
     await selectRectAndS(app);
     { const p = on(app, 'W', 0.5); await dragBy(app, p, 30, 0); }
     assert.deepStrictEqual(sel(st), ['W'], 'the press on an unselected line replaced the selection');
-    assert.ok(dist(pos(st, 'w1'), w0) > 1 && dist(pos(st, 'r1'), r0) === 0, 'only that line moved');
+    assert.ok(dist(pos(st, 'w1'), w0) > 1 && dist(pos(st, 'r1'), r0) === 0, 'only that line moved (r1 moved ' + dist(pos(st, 'r1'), r0) + ' mm)');
     // a single selected line dragged by its body: today's body drag (538), not a group drag
     await click(app, 'S'); await app.pause(PAIR_GAP_MS);
     { const p = on(app, 'S', 0.5); app.move(p.x, p.y); app.down(p.x, p.y); assert.ok(st.drag && st.drag.body && !st.drag.group, 'one selected line pressed by its body: the body drag'); app.up(p.x, p.y); }

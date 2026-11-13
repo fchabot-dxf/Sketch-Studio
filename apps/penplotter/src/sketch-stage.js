@@ -9,7 +9,7 @@
 
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored sketch
-import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
@@ -98,7 +98,6 @@ const SCAFFOLD = `
             <div id="mixStatus" class="dp-note"></div>
           </div>
         </div>
-        <div id="design-panel-info"></div>
       </aside>
     </div>
   </div>`;
@@ -117,7 +116,7 @@ export function mountSketchStage(view, ctx = {}) {
   const docBtn = view.querySelector('#designDocBtn'); // DOC-SIZE-IN-DESIGN: opens #docModal; label shows the size
   const mixStatus = view.querySelector('#mixStatus');
 
-  let controller = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', lastDocSig = '', underlayDirty = true;
+  let controller = null, browser = null, infoPanel = null, ribbon = null, lastSig = '', lastUSig = '', lastMixSig = '', lastDocSig = '', underlayDirty = true;
 
   // UNIFY-throttle: a shape is STATIC (drawn by the color underlay; SKIPPED by the per-frame sketcher — perf, and its
   // joint glyphs are suppressed) ONLY when the plotter has MARKED it static (state.staticShapeIds — imported/dense
@@ -290,8 +289,9 @@ export function mountSketchStage(view, ctx = {}) {
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.
-  infoPanel = createDesignInfoPanel({ state: controller.state, engine: controller.engine, showSketchTree: true });
-  infoPanel.render(view.querySelector('#design-panel-info'));
+  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine, toggleHost: document.querySelector('header.toolbar') });
+  browser.drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
+  infoPanel = browser.panel;
   const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };
   ribbon = createToolRibbon({
     state: controller.state,
@@ -406,8 +406,8 @@ export function mountSketchStage(view, ctx = {}) {
       // (persists across tabs). updateViewBox is the #ui's own applier (center-based; adjusts h to this canvas aspect).
       if (needsFit()) fitDesignView();
       try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
-      drawer.toggleEl.style.display = '';
+      drawer.toggleEl.style.display = ''; browser.drawer.toggleEl.style.display = '';
     },
-    onLeave: () => { controller.stop(); drawer.toggleEl.style.display = 'none'; },
+    onLeave: () => { controller.stop(); drawer.toggleEl.style.display = 'none'; browser.drawer.close(); browser.drawer.toggleEl.style.display = 'none'; },
   };
 }

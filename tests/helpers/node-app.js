@@ -47,8 +47,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // ------------------------------------------------------------------------------------------------ KIT_OVERRIDES
 // 1. layout: the canvas rect in the real page at 1600 x 900 (getBoundingClientRect, measured)
 const MEASURED_CANVAS_RECT = {
-  sketchstudio: { left: 17, top: 143, width: 1314, height: 701 },
-  shaper: { left: 0, top: 124, width: 1356, height: 776 },
+  sketchstudio: { left: 17, top: 143, width: 1566, height: 701 },
+  shaper: { left: 0, top: 124, width: 1600, height: 776 },
   penplotter: { left: 0, top: 124, width: 1356, height: 776 },
 };
 function giveLayout(el, r) { el.getBoundingClientRect = () => ({ ...r, x: r.left, y: r.top, right: r.left + r.width, bottom: r.top + r.height }); }

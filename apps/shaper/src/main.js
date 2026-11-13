@@ -8,10 +8,9 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
-import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
-import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { undoRedoKeyAction } from '#ui/input-manager.js'; // TASK 463: the shared history key mapping
 import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, shaperBufferOptions } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
@@ -407,7 +406,7 @@ bindTemplateTokens(document.getElementById('design-canvas'));
 const settingsBtn = document.getElementById('btn-settings');
 if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());
 
-let infoPanel = null, ribbon = null, lastSig = '', drawer = null;
+let browser = null, infoPanel = null, ribbon = null, lastSig = '';
 
 // Refresh the Design ribbon + info panel when the sketch changes (active tool / constraint count / values /
 // selection). Called each render frame via mountSketch's onRender hook; the signature check keeps it cheap. Since
@@ -423,42 +422,19 @@ function panelTick() {
   if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
 }
 
-// Build the Design UI ONCE (S7b): a full-width SketchStudio-style tool ribbon on TOP (#design-ribbon), and a
-// COLLAPSIBLE right side panel holding ONLY the live constraint-list/DOF info panel (#design-panel-info) beside the
-// untouched canvas. Reuses the shared #ui factories; dark via --sk-* (Shaper's :root). The canvas is not touched —
-// collapsing the panel just reflows it wider.
-const PANEL_COLLAPSED_KEY = 'shaper-design-panel-collapsed';
+// Build the Design UI ONCE (S7b): a full-width SketchStudio-style tool ribbon on TOP (#design-ribbon) and the canvas below it, with the
+// SKETCHES browser (shared, #ui/design-browser.js, task 586) floating over the canvas's top-left. Shaper's Design tab has no other panel.
 function buildDesignUI() {
   const { state, engine } = designController;
-  infoPanel = createDesignInfoPanel({ state, engine, showSketchTree: true }); // SKETCH-1b: Shaper opts into the tree
-  infoPanel.render(document.getElementById('design-panel-info'));
+  browser = mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, toggleHost: document.querySelector('header.toolbar') });
+  browser.drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
+  infoPanel = browser.panel;
   ribbon = createToolRibbon({
     state,
     ...RIBBON_OPTIONS, // design-canvas.js
     notify: groupStatus,
   });
   ribbon.render(document.getElementById('design-ribbon'));
-
-  // Collapsible side panel: chevron toggles a thin strip ↔ full panel (canvas reflows); persisted.
-  const panel = document.getElementById('design-panel');
-  const toggle = document.getElementById('design-panel-toggle');
-  const setCollapsed = (c) => {
-    panel.classList.toggle('collapsed', c);
-    toggle.textContent = c ? '◀' : '▶';
-    toggle.title = c ? 'Expand panel' : 'Collapse panel';
-    try { localStorage.setItem(PANEL_COLLAPSED_KEY, c ? '1' : '0'); } catch (_) { /* storage blocked */ }
-  };
-  let collapsed = false;
-  try { collapsed = localStorage.getItem(PANEL_COLLAPSED_KEY) === '1'; } catch (_) {}
-  setCollapsed(collapsed);
-  toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
-
-  // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
-  // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
-  const header = document.querySelector('header.toolbar');
-  if (header) header.appendChild(drawer.toggleEl);
-  drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
 
   wireImportDrop(); // a drop on the Design view (the menu entry is mounted with the sidebar)
 }
@@ -534,7 +510,7 @@ function showMode(mode) {
   modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'design') { ensureSketch(); designController.start(); } // idempotent (guards against a second RAF)
   else if (designController) designController.stop();                   // pause the RAF off Design
-  if (drawer) drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none';
+  if (browser) { if (mode !== 'design') browser.drawer.close(); browser.drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none'; }
   // VCARVE-3b: the Vcarve workspace operates on the shared Design sketch — ensure it's mounted + solved, then mount the
   // live view once (re-populate its region list on each entry, since the sketch may have changed, e.g. after an import).
   if (mode === 'vcarve') {

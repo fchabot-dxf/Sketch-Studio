@@ -17,10 +17,10 @@ await (async () => {
     const tap = async (r) => { await T('touchStart', [{ x: Math.round((r.left + r.right) / 2), y: Math.round((r.top + r.bottom) / 2) }]); await sleep(40); await T('touchEnd', []); await sleep(500); };
     const hosts = [
       { name: 'shaper-explore', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="explore"]').click()`, ready: `!!document.querySelector('[data-mode="explore"].active')`, drawer: false },
-      { name: 'shaper-design', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="design"]').click()`, ready: `!!document.querySelector('#design-panel-info .sk-sketch-node')`, drawer: true },
-      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, ready: `!!document.querySelector('#design-panel-info .sk-sketch-node')`, drawer: true },
-      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-side .sk-sketch-node')`, drawer: true },
-      { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-side .sk-sketch-node')`, drawer: true },
+      { name: 'shaper-design', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')`, drawer: true },
+      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')`, drawer: true },
+      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-browser .sk-sketch-node')`, drawer: true },
+      { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-browser .sk-sketch-node')`, drawer: true },
     ];
     const measure = () => evalJs(`(() => { const h = document.querySelector('header'); const hr = h.getBoundingClientRect(); const vw = window.innerWidth;
       const controls = [...h.querySelectorAll('button, input, a, select')].map((e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return { id: (e.id || e.className || e.tagName).toString().slice(0, 30), text: (e.textContent || '').trim().slice(0, 10), shown: r.width > 0 && r.height > 0 && cs.visibility !== 'hidden', left: r.left, right: r.right, top: r.top, bottom: r.bottom, h: r.height, w: r.width }; }).filter((c) => c.shown);

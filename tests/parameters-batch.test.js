@@ -127,9 +127,9 @@ for (const n of [1, 2, 10, 30]) {
 }
 
 // ---------------------------------------------------------------- 1b. 100 dimensions: correctness once, time measured and printed
-// KNOWN P-1: 100 dimensions take ~4 s (target 2 s; the cost is the dense solver algebra, task 541, NOT this seam). The guard below only catches a
-// pathological regression (> 30 s). When the solver is fixed three consecutive measurements drop under 2 s and this FAILS LOUDLY: delete P-1.
-const P1_TARGET_MS = 2000, P1_GUARD_MS = 30000;
+// The time is printed; the guard below only catches a pathological regression (> 30 s). The solver's own speed guard is tests/solver-perf-guard.test.js
+// (task 541: 100 dimensions went from ~4 s to ~0.1 s).
+const P1_GUARD_MS = 30000;
 const times100 = [];
 for (let run = 0; run < 3; run++) {
   const k = build(100);
@@ -149,8 +149,6 @@ for (let run = 0; run < 3; run++) {
   ok(ms < P1_GUARD_MS, `n=100 took ${ms.toFixed(0)} ms: above ${P1_GUARD_MS} ms is a pathological regression`);
 }
 console.log(`n=100 timings: ${times100.map((t) => t.toFixed(0)).join(' / ')} ms`);
-console.log(`KNOWN P-1: 100 dimensions take ~4 s (target ${P1_TARGET_MS / 1000} s; solver algebra, task 541)`);
-ok(!times100.every((t) => t < P1_TARGET_MS), `P-1 is FIXED (${times100.map((t) => t.toFixed(0))} ms, all under ${P1_TARGET_MS} ms): delete the KNOWN entry P-1 from this test and from docs/PARAMETERS-DESIGN.md`);
 
 // ---------------------------------------------------------------- 1c. the PLACEMENT RULE: a batch of ONE edit places (who-moves), a batch of several does not
 {

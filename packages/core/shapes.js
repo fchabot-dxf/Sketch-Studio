@@ -4,6 +4,7 @@
 
 import { CONSTRAINT_TYPES, POLYGON_SIDES } from './constants.js';
 import { getDist, angleBetween } from './geometry.js';
+import { newShapeId } from './shape-id.js';
 
 /**
  * Create rectangle from two opposite corners (2-point mode)
@@ -36,8 +37,8 @@ export function makeRectFromTwoJoints(joints, j1Id, j3Id, genJ, isConstruction=f
     joints.set(j4A, { x: c4.x, y: c4.y, fixed: false });
     joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
 
-    const groupId = 'rect_' + Date.now();
-    const base = Date.now();
+    const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
+    const groupId = 'rect_' + base;
 
     const shapes = [
         { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
@@ -98,8 +99,8 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
     joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
     joints.set(j4C, { x: c4.x, y: c4.y, fixed: false });
 
-    const groupId = 'rect_' + Date.now();
-    const base = Date.now();
+    const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
+    const groupId = 'rect_' + base;
 
     const shapes = [
         { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
@@ -188,8 +189,8 @@ export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstructi
     joints.set(j4A, { x: c4.x, y: c4.y, fixed: false });
     joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
 
-    const groupId = 'rect_' + Date.now();
-    const base = Date.now();
+    const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
+    const groupId = 'rect_' + base;
 
     const shapes = [
         { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
@@ -221,8 +222,6 @@ export function clampPolygonSides(n) {
     return Math.min(POLYGON_SIDES.max, Math.max(POLYGON_SIDES.min, v));
 }
 
-let polySeq = 0;
-let arcSeq = 0;
 /**
  * Create a REGULAR polygon from a centre joint and a first corner joint (TASK 483). Plain geometry, no parametric shape kind:
  *   - N `line` shapes between N corner joints that are SHARED by neighbouring sides (the first corner is `vertexId`);
@@ -242,7 +241,7 @@ export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstr
     const n = clampPolygonSides(numSides);
     const radius = getDist(center, vertex);
     const startAngle = angleBetween(center, vertex);
-    const seq = Date.now() + '_' + (++polySeq);   // digits first: ids stay unique even for two polygons in the same millisecond
+    const seq = newShapeId('');   // THE shape-id generator: unique even for two polygons in the same millisecond
     const groupId = 'poly_' + seq;
 
     const corners = [vertexId];
@@ -272,7 +271,7 @@ export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstr
  * Arcs store 3 joints but interpret them based on subType.
  */
 export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=false) {
-    const seq = Date.now() + '_' + (++arcSeq);   // digits first, like makePolygon: unique even within one millisecond
+    const seq = newShapeId('');   // THE shape-id generator: unique even for two arcs in the same millisecond
     const groupId = `arc_${seq}`;
     const shape = {
         id: `s_arc_${seq}`,
@@ -299,13 +298,14 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
  * the non-constrainable freehand beziers this enables; revisit when control-point constraints land).
  */
 export function makeBezier(joints, p0, p3, c1, c2, isConstruction=false) {
+    const seq = newShapeId('');   // THE shape-id generator
     const shape = {
-        id: `s_bezier_${Date.now()}`,
+        id: `s_bezier_${seq}`,
         type: 'bezier',
         joints: [p0, p3],
         c1: [c1[0], c1[1]],
         c2: [c2[0], c2[1]],
-        groupId: `bezier_${Date.now()}`
+        groupId: `bezier_${seq}`
     };
     if (isConstruction) shape.isConstruction = true;
     return { shapes: [shape], constraints: [] };

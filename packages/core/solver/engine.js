@@ -42,6 +42,13 @@ export function reachableDirections(N, k, grad) {
   return { fx, fy, rank, dir };
 }
 
+// One assembly (_assemble): the residuals r (m), the sparse Jacobian rows S (Algebra's form, null for a residuals-only assembly) and, on
+// first read, J: the dense m x n row-major copy of S.
+class Assembly {
+  constructor(S, r, m, n) { this.S = S; this.r = r; this.m = m; this.n = n; this._J = null; }
+  get J() { return this._J || (this._J = Algebra.dense(this.S, this.m, this.n)); }
+}
+
 // Newton-Raphson + Levenberg-Marquardt solver class
 export class NewtonSolver {
   constructor(jointsMap, constraintsArray, shapesArray, config = {}) {
@@ -81,6 +88,28 @@ export class NewtonSolver {
 
     const freeReps = [];
     const processed = new Set(); // joint ids already assigned to a cluster/var
+    // the dense index of each joint (insertion order): the order of a cluster's members and the layout _assemble reads
+    this._jointIndex = new Map();
+    let ji = 0;
+    for (const [id] of this.joints.entries()) this._jointIndex.set(id, ji++);
+    // The coincident clusters, every one at once (task 541): the connected components of the coincident pairs, the same sets
+    // getCoincidentJoints closes transitively one joint at a time; each component's joints in insertion order.
+    const parent = new Map();
+    const find = (a) => {
+      if (!parent.has(a)) { parent.set(a, a); return a; }
+      let r = a; while (parent.get(r) !== r) r = parent.get(r);
+      while (a !== r) { const nx = parent.get(a); parent.set(a, r); a = nx; }
+      return r;
+    };
+    for (const c of this.constraints) {
+      if (c.type === 'coincident' && c.joints) { const [j1, j2] = c.joints; const a = find(j1), b = find(j2); if (a !== b) parent.set(a, b); }
+    }
+    const inOrder = new Map(); // component root -> its joints in insertion order
+    for (const [id] of this.joints.entries()) {
+      const root = parent.has(id) ? find(id) : id;
+      if (!inOrder.has(root)) inOrder.set(root, []);
+      inOrder.get(root).push(id);
+    }
 
     // Iterate in insertion order so representative selection is deterministic
     for (const [id, j] of this.joints.entries()) {
@@ -88,8 +117,8 @@ export class NewtonSolver {
       if (id === 'j_origin') continue;
       if (processed.has(id)) continue;
 
-      // Compute the full coincident cluster (transitive)
-      const cluster = getCoincidentJoints(id, this.constraints) || new Set([id]);
+      // The full coincident cluster (transitive), its joints in insertion order
+      const clusterJoints = inOrder.get(parent.has(id) ? find(id) : id);
 
       // If the cluster contains a fixed member (j_origin or fixed:true), the
       // entire cluster is pinned by that anchor. Pull every cluster member's
@@ -97,10 +126,14 @@ export class NewtonSolver {
       // they're constants, not unknowns. Without this, a coincident-with-fixed
       // joint becomes a solver variable held only by a unit-weight residual,
       // which a stiff mouse spring (weight ~1e4) can pull away from the anchor.
-      let anchor = null;
-      for (const jid of cluster) {
-        const mj = this.joints.get(jid);
-        if (mj && (mj.fixed || jid === 'j_origin')) { anchor = jid; break; }
+      // The anchor is the first fixed member in getCoincidentJoints' order (which one, when a cluster holds two, decides where it snaps).
+      let anchor = null, cluster = null;
+      if (clusterJoints.some(jid => { const mj = this.joints.get(jid); return mj && (mj.fixed || jid === 'j_origin'); })) {
+        cluster = getCoincidentJoints(id, this.constraints);
+        for (const jid of cluster) {
+          const mj = this.joints.get(jid);
+          if (mj && (mj.fixed || jid === 'j_origin')) { anchor = jid; break; }
+        }
       }
       if (anchor) {
         const ap = this.joints.get(anchor);
@@ -118,8 +151,7 @@ export class NewtonSolver {
       // Choose the representative as the first cluster member encountered in joint insertion order
       let rep = null;
       const members = [];
-      for (const [jid] of this.joints.entries()) {
-        if (!cluster.has(jid)) continue;
+      for (const jid of clusterJoints) {
         const mj = this.joints.get(jid);
         if (!mj || mj.fixed) { processed.add(jid); continue; } // skip fixed members from variable mapping
         if (!rep) rep = jid;
@@ -153,6 +185,17 @@ export class NewtonSolver {
     for (let k = 0; k < this._radiusShapes.length; ++k) x[nJ + k] = this._radiusShapes[k].radius;
     this._freeIds = freeReps;
     this._nJointVars = nJ;
+    // The layout _assemble reads (task 541): the J column of each dense index (a joint's x/y -> its cluster's variable, a circle radius ->
+    // its unknown, -1 = a constant: fixed or anchored) and the reusable row buffers.
+    const denseLen = this.joints.size * 2 + this._radiusShapes.length;
+    this._colOf = new Int32Array(denseLen).fill(-1);
+    for (const [id, vi] of this._varIndex) { const d = this._jointIndex.get(id) * 2; this._colOf[d] = vi * 2; this._colOf[d + 1] = vi * 2 + 1; }
+    for (let k = 0; k < this._radiusShapes.length; ++k) this._colOf[this.joints.size * 2 + k] = nJ + k;
+    this._rowBufs = [new Float64Array(denseLen), new Float64Array(denseLen)]; // zero between rows (_assemble's emitRow clears them)
+    this._acc = new Float64Array(x.length);
+    this._mark = new Uint8Array(x.length);
+    this._touched = new Int32Array(x.length);
+    this._ops = new Int32Array(16);
     return x;
   }
 
@@ -220,10 +263,12 @@ export class NewtonSolver {
     return { kind, op: { joints: shape.joints.map(id => jointIndexMap.get(id)), param: body.param, target, radiusAt: rad.at, radius: rad.radius, rimJoint: rad.rim } };
   }
 
-  // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack)
-  _assemble(x) {
+  // Assemble residual vector r and Jacobian J (m x n where n = 2*freeJoints + circle radii, the layout of _pack). J is SPARSE (task 541):
+  // the result's S = { rowPtr, cols, vals } holds each row's non-zero columns ascending (Algebra); `J` is its dense m x n row-major copy,
+  // built on first read (tests and audits read it). opts.jacobian === false: the residuals only (S null), for the trial steps.
+  _assemble(x, opts = {}) {
+    const withJ = opts.jacobian !== false;
     const n = x.length;
-    const nJ = this._nJointVars, nR = this._radiusShapes.length, jointDense = this.joints.size * 2;
 
     // First pass: compute number of scalar constraint rows (use def.rows when available)
     let m = 0;
@@ -261,36 +306,59 @@ export class NewtonSolver {
       m += rowsPerConstraint[i];
     }
 
-    const J = Algebra.allocMatrix(m, n); // row-major matrix (m rows, n cols)
     const r = new Float64Array(m);
-
-    // Zero out J
-    for (let i = 0; i < J.length; ++i) J[i] = 0.0;
+    // The sparse rows of J: row i's entries are cols/vals[rowPtr[i] .. rowPtr[i + 1]). A row past m is dropped, a row never written is empty
+    // (a zero row), as the dense m x n matrix did.
+    const rowPtr = new Int32Array(m + 1);
+    let cap = Math.max(16, m * 8), nnz = 0;
+    let cols = new Int32Array(cap), vals = new Float64Array(cap);
+    const push = (c, v) => {
+      if (nnz === cap) { cap *= 2; const c2 = new Int32Array(cap); c2.set(cols); cols = c2; const v2 = new Float64Array(cap); v2.set(vals); vals = v2; }
+      cols[nnz] = c; vals[nnz] = v; nnz++;
+    };
 
     let row = 0;
-    // Provide a mapping from joint id -> dense index used by Definitions (joint insertion order)
-    const jointIndexMap = new Map();
-    let jIdx = 0;
-    for (const [id] of this.joints.entries()) { jointIndexMap.set(id, jIdx++); }
+    const endRow = () => { if (row < m) rowPtr[row + 1] = nnz; row++; };
+    // The mapping from joint id -> dense index used by Definitions (joint insertion order, _pack)
+    const jointIndexMap = this._jointIndex;
 
     // The dense array the Definitions read (joints in insertion order, then the circle radii).
     const densePositions = this._positionsFromVector(x);
     const denseLen = densePositions.length;
-    // Copy one dense Jacobian row into J row `row`: a joint column sums its cluster members, a radius column is copied.
-    const copyRow = (rowBuf, w = wStruct) => {
-      for (let vi = 0; vi < this._freeIds.length; ++vi) {
-        const base = vi*2; const repId = this._freeIds[vi];
-        const members = (this._clusterMembers && this._clusterMembers.get(repId)) ? this._clusterMembers.get(repId) : [repId];
-        let sumX = 0.0, sumY = 0.0;
-        for (const mem of members) {
-          const denseIdx = jointIndexMap.get(mem) * 2;
-          sumX += rowBuf[denseIdx + 0];
-          sumY += rowBuf[denseIdx + 1];
+    const colOf = this._colOf, acc = this._acc, mark = this._mark, touched = this._touched, bufs = this._rowBufs;
+    // THE operands of a row: the dense indices its Definition reads and differentiates, every one set into the row's params (or a body
+    // point's op) by this function: joints / rimJoint / rimJoints / the terms' a and b (both coordinates of a joint), radiusAt / radiiAt /
+    // the terms' at (a circle's radius unknown). Ascending, so emitRow sums a cluster's members in insertion order. A Definition writing
+    // anywhere else would leave a row buffer dirty: the assembly checks they are all zero at its end and THROWS (never a wrong row).
+    let ops = this._ops, nOps = 0;
+    const addIdx = (i) => { if (nOps === ops.length) { const o2 = new Int32Array(ops.length * 2); o2.set(ops); ops = this._ops = o2; } ops[nOps++] = i; };
+    const addJoint = (j) => { if (Number.isInteger(j) && j >= 0) { addIdx(j * 2); addIdx(j * 2 + 1); } };
+    const addAt = (a) => { if (Number.isInteger(a) && a >= 0) addIdx(a); };
+    const operandsOf = (p) => {
+      nOps = 0;
+      if (Array.isArray(p.joints)) for (const j of p.joints) addJoint(j);
+      addAt(p.radiusAt); addJoint(p.rimJoint);
+      if (Array.isArray(p.radiiAt)) for (const a of p.radiiAt) addAt(a);
+      if (Array.isArray(p.rimJoints)) for (const j of p.rimJoints) addJoint(j);
+      if (Array.isArray(p.terms)) for (const t of p.terms) if (t) { addAt(t.at); addJoint(t.a); addJoint(t.b); }
+      for (let a = 1; a < nOps; ++a) { const v = ops[a]; let b = a - 1; while (b >= 0 && ops[b] > v) { ops[b + 1] = ops[b]; --b; } ops[b + 1] = v; }
+    };
+    // Close row `row` from one dense Jacobian row (the Definitions' layout) over the row's operands, scaled by w: a joint column sums its
+    // cluster members (in insertion order), a radius column is copied, a constant (fixed / anchored) joint has no column. The operands are
+    // left zeroed for the next row. Exactly the dense values: a column no member touches is 0, and is not stored.
+    const emitRow = (buf, w = wStruct) => {
+      let t = 0;
+      for (let q = 0; q < nOps; ++q) {
+        const i = ops[q], v = buf[i];
+        if (v !== 0) {
+          buf[i] = 0;
+          const c = colOf[i];
+          if (c >= 0) { if (!mark[c]) { mark[c] = 1; touched[t++] = c; } acc[c] += v; }
         }
-        J[row * n + base + 0] = sumX * w;
-        J[row * n + base + 1] = sumY * w;
       }
-      for (let k = 0; k < nR; ++k) J[row * n + nJ + k] = rowBuf[jointDense + k] * w;
+      for (let a = 1; a < t; ++a) { const c = touched[a]; let b = a - 1; while (b >= 0 && touched[b] > c) { touched[b + 1] = touched[b]; --b; } touched[b + 1] = c; }
+      for (let a = 0; a < t; ++a) { const c = touched[a]; push(c, acc[c] * w); acc[c] = 0; mark[c] = 0; }
+      endRow();
     };
 
     // --- Drag-time structural weighting ---------------------------------------
@@ -317,25 +385,30 @@ export class NewtonSolver {
       if (c.isDriven || c.driven) continue; // skip driven (reference) rows — a reference never affects geometry
 
       // --- Temporary mouse-spring added by InteractionSolver, BODY form (task 538): the grabbed point of a shape, P(x) - target,
-      // weighted sqrt(stiffness) (never wStruct), its two rows from the shape kind's declared BODY_POINTS entry (cluster-aware copyRow).
+      // weighted sqrt(stiffness) (never wStruct), its two rows from the shape kind's declared BODY_POINTS entry (cluster-aware emitRow).
       if (c.type === 'mouse_spring' && c.body) {
         const b = this._bodyOperand(c.body, jointIndexMap, c.value);
         const w = Math.sqrt(c.stiffness || 1e3);
         const p = b.kind.point(b.op, densePositions);
         r[row] = w * (p[0] - c.value[0]);
         r[row+1] = w * (p[1] - c.value[1]);
-        const rows = [new Float64Array(denseLen), new Float64Array(denseLen)];
-        b.kind.grad(b.op, densePositions, rows);
-        copyRow(rows[0], w); row++;
-        copyRow(rows[1], w); row++;
+        if (withJ) {
+          operandsOf(b.op);
+          b.kind.grad(b.op, densePositions, bufs);
+          emitRow(bufs[0], w);
+          emitRow(bufs[1], w);
+        } else row += 2;
         // the drag's temporary HOLDS (engine.bodyDragTarget: e.g. a circle's centre): joint - its held position, weighted like a
         // structural row (wStruct) so the spring moves what is not held.
         for (const h of (c.body.hold || [])) {
           const hj = jointIndexMap.get(h.joint);
           for (let k = 0; k < 2; ++k) {
             r[row] = wStruct * (densePositions[hj*2 + k] - (k ? h.y : h.x));
-            const hr = new Float64Array(denseLen); hr[hj*2 + k] = 1;
-            copyRow(hr); row++;
+            if (withJ) {
+              const col = colOf[hj*2 + k];   // the row's one entry: d(joint)/d(its column) = 1
+              if (col >= 0) push(col, 1 * wStruct);
+            }
+            endRow();
           }
         }
         continue;
@@ -355,21 +428,10 @@ export class NewtonSolver {
         r[row+1] = w * (py - ty);
         // Jacobian rows: derivatives only on the variable that represents this joint (cluster-aware)
         const targetVar = (this._varIndex && this._varIndex.has(jointId)) ? this._varIndex.get(jointId) : -1;
-        for (let vi = 0; vi < this._freeIds.length; ++vi) {
-          const base = vi*2;
-          if (vi === targetVar) {
-            J[row * n + base + 0] = w;
-            J[row * n + base + 1] = 0.0;
-            J[(row+1) * n + base + 0] = 0.0;
-            J[(row+1) * n + base + 1] = w;
-          } else {
-            J[row * n + base + 0] = 0.0;
-            J[row * n + base + 1] = 0.0;
-            J[(row+1) * n + base + 0] = 0.0;
-            J[(row+1) * n + base + 1] = 0.0;
-          }
-        }
-        row += 2;
+        if (withJ && targetVar >= 0) push(targetVar * 2, w);
+        endRow();
+        if (withJ && targetVar >= 0) push(targetVar * 2 + 1, w);
+        endRow();
         continue;
       }
 
@@ -528,65 +590,98 @@ export class NewtonSolver {
 
       // A radius distance whose shape gives neither a radius unknown nor a centre-rim pair (the shape is missing or has no
       // radius) has nothing to measure: an EXPLICIT zero row. Definitions.distance would index params.joints[0]/[1] of an empty
-      // array -> positions[NaN] -> NaN, and Algebra.atx's 0 * NaN poisons the whole gradient of every constraint it shares.
+      // array -> positions[NaN] -> NaN, and that NaN poisons the gradient (Algebra.atx) of every column it shares.
       if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && (!params.joints || params.joints.length < 2)) {
         r[row] = 0;
-        row++;
+        endRow();
         continue;
       }
 
       const e = def.computeError(params, densePositions);
       if (Array.isArray(e)) {
-        // multi-row (e.g., coincident)
-        const outRows = [new Float64Array(denseLen), new Float64Array(denseLen)];
-        for (let k = 0; k < outRows.length; ++k) outRows[k].fill(0.0);
-        def.computeJacobian(params, densePositions, outRows);
+        // multi-row (e.g., coincident): the two row buffers
+        if (withJ) { operandsOf(params); def.computeJacobian(params, densePositions, bufs); }
         for (let k = 0; k < e.length; ++k) {
           r[row] = e[k] * wStruct;
-          copyRow(outRows[k]);
-          row++;
+          if (withJ) emitRow(bufs[k]); else row++;
         }
+        if (withJ) for (let k = e.length; k < bufs.length; ++k) for (let q = 0; q < nOps; ++q) bufs[k][ops[q]] = 0; // a buffer no row read
       } else {
         r[row] = e * wStruct;
-        const rowBuf = new Float64Array(denseLen); rowBuf.fill(0.0);
-        def.computeJacobian(params, densePositions, rowBuf);
-        copyRow(rowBuf);
-        row++;
+        if (withJ) {
+          operandsOf(params);
+          def.computeJacobian(params, densePositions, bufs[0]);
+          emitRow(bufs[0]);
+        } else row++;
       }
     }
+    for (let i = row; i < m; ++i) rowPtr[i + 1] = nnz;
+    if (withJ) for (const buf of bufs) for (let i = 0; i < denseLen; ++i) {
+      if (buf[i] !== 0) throw new Error(`solver: a constraint row wrote dense index ${i}, outside the operands _assemble gave it (engine.js operandsOf)`);
+    }
 
-    return { J, r, m, n };
+    return new Assembly(withJ ? { rowPtr, cols: cols.subarray(0, nnz), vals: vals.subarray(0, nnz) } : null, r, m, n);
   }
 
   // ── Rank-redundancy of a candidate constraint row ───────────────────────────
   // Slice a row-major assembly {J,m,n} into an array of length-n row vectors.
   _rowsOf(asm) {
-    const { J, m, n } = asm; const rows = [];
-    for (let i = 0; i < m; ++i) { const v = new Float64Array(n); for (let k = 0; k < n; ++k) v[k] = J[i * n + k]; rows.push(v); }
+    const { S, m, n } = asm; const rows = [];
+    for (let i = 0; i < m; ++i) { const v = new Float64Array(n); for (let p = S.rowPtr[i]; p < S.rowPtr[i + 1]; ++p) v[S.cols[p]] = S.vals[p]; rows.push(v); }
     return rows;
   }
 
   // True if ANY candidate row has a component OUTSIDE the span of the basis rows — i.e. adding it
   // RAISES the constraint rank. Modified Gram-Schmidt with a scale-robust relative tolerance.
+  // Sparse (task 541), the same arithmetic as the dense sweep: a basis vector keeps its support (its non-zero columns, ascending) and a dot
+  // or an update runs over that support only (the skipped terms are products with a zero); a basis vector whose support does not meet
+  // the row's current support is skipped (its dot is exactly 0: no change), the candidates found per column (colTo).
   _rowsRaiseRank(basisRows, candRows, n) {
-    const dot = (a, b) => { let s = 0; for (let i = 0; i < n; ++i) s += a[i] * b[i]; return s; };
     const ABS = 1e-9, REL = 1e-6;
-    const basis = [];
-    for (const row of basisRows) {
+    const basis = [];                                  // { v, idx }: the unit vector and its support, ascending
+    const colTo = Array.from({ length: n }, () => []); // column -> the basis vectors whose support holds it
+    const inSup = new Uint8Array(n);
+    const normOf = (v, sup) => { let s = 0; for (let p = 0; p < sup.length; ++p) s += v[sup[p]] * v[sup[p]]; return Math.sqrt(s); };
+    // the row with every basis vector's component removed, in basis order; returns { v, sup (ascending), n0 }; skip: n0 below which it stops
+    const reduce = (row, skip) => {
       const v = Float64Array.from(row);
-      const n0 = Math.sqrt(dot(v, v));
-      for (const b of basis) { const d = dot(v, b); for (let i = 0; i < n; ++i) v[i] -= d * b[i]; }
-      const nrm = Math.sqrt(dot(v, v));
+      const sup = [];
+      for (let i = 0; i < n; ++i) if (v[i] !== 0) { sup.push(i); inSup[i] = 1; }
+      const n0 = normOf(v, sup);
+      if (n0 >= skip) {
+        const cand = new Uint8Array(basis.length);
+        for (const i of sup) for (const b of colTo[i]) cand[b] = 1;
+        for (let bi = 0; bi < basis.length; ++bi) {
+          if (!cand[bi]) continue;
+          const { v: bv, idx } = basis[bi];
+          let d = 0; for (let p = 0; p < idx.length; ++p) d += v[idx[p]] * bv[idx[p]];
+          for (let p = 0; p < idx.length; ++p) {
+            const i = idx[p];
+            v[i] -= d * bv[i];
+            if (!inSup[i] && v[i] !== 0) { inSup[i] = 1; sup.push(i); for (const b of colTo[i]) if (b > bi) cand[b] = 1; }
+          }
+        }
+        sup.sort((a, b) => a - b);
+      }
+      for (const i of sup) inSup[i] = 0;
+      return { v, sup, n0 };
+    };
+    for (const row of basisRows) {
+      const { v, sup, n0 } = reduce(row, -Infinity);
+      const nrm = normOf(v, sup);
       // Relative like the candidate test below: a row that is dependent up to solve-tolerance noise must NOT count as a
       // new basis direction, or the basis spans all of R^n and every candidate looks redundant.
-      if (nrm > ABS && nrm > REL * n0) { for (let i = 0; i < n; ++i) v[i] /= nrm; basis.push(v); }
+      if (nrm > ABS && nrm > REL * n0) {
+        for (const i of sup) v[i] /= nrm;
+        const id = basis.length;
+        basis.push({ v, idx: Int32Array.from(sup) });
+        for (const i of sup) colTo[i].push(id);
+      }
     }
     for (const row of candRows) {
-      const v = Float64Array.from(row);
-      const n0 = Math.sqrt(dot(v, v));
+      const { v, sup, n0 } = reduce(row, ABS);
       if (n0 < ABS) continue; // a zero row carries no information
-      for (const b of basis) { const d = dot(v, b); for (let i = 0; i < n; ++i) v[i] -= d * b[i]; }
-      if (Math.sqrt(dot(v, v)) > REL * n0) return true; // an independent component remains
+      if (normOf(v, sup) > REL * n0) return true; // an independent component remains
     }
     return false;
   }
@@ -606,8 +701,10 @@ export class NewtonSolver {
     try {
       this.constraints = basisCons;
       const basisRows = this._rowsOf(this._assemble(x0));
-      this.constraints = basisCons.concat([candidate]);
-      const candRows = this._rowsOf(this._assemble(x0)).slice(basisRows.length);
+      // the candidate's own rows: a row depends on its constraint alone (no spring here, so wStruct = 1), so they are the rows it would
+      // add at the end of the basis assembly, without assembling the basis twice
+      this.constraints = [candidate];
+      const candRows = this._rowsOf(this._assemble(x0));
       redundant = candRows.length > 0 && !this._rowsRaiseRank(basisRows, candRows, n);
     } finally {
       this.constraints = allC;
@@ -641,7 +738,7 @@ export class NewtonSolver {
     let residual = Infinity;
 
     for (let k = 0; k < maxIters; ++k) {
-      const { J, r, m } = this._assemble(x);
+      const { S, r, m } = this._assemble(x);
       if (m === 0) return { x, converged: true, residual: 0 };
 
       cost = 0; for (let i = 0; i < m; ++i) cost += r[i] * r[i]; cost *= 0.5;
@@ -652,17 +749,14 @@ export class NewtonSolver {
 
       // g = Jᵀ r
       const g = new Float64Array(n);
-      for (let j = 0; j < n; ++j) {
-        let s = 0; for (let i = 0; i < m; ++i) s += J[i * n + j] * r[i];
-        g[j] = s;
-      }
+      Algebra.atx(S, m, n, r, g);
       let gNorm2 = 0; for (let j = 0; j < n; ++j) gNorm2 += g[j] * g[j];
       if (gNorm2 < 1e-24) return { x, converged: false, residual };
 
       // ‖Jg‖² (avoid materializing Jg)
       let JgNorm2 = 0;
       for (let i = 0; i < m; ++i) {
-        let s = 0; for (let j = 0; j < n; ++j) s += J[i * n + j] * g[j];
+        let s = 0; for (let p = S.rowPtr[i]; p < S.rowPtr[i + 1]; ++p) s += S.vals[p] * g[S.cols[p]];
         JgNorm2 += s * s;
       }
       if (JgNorm2 < 1e-30) return { x, converged: false, residual };
@@ -672,7 +766,7 @@ export class NewtonSolver {
       // Armijo backtracking: try the Cauchy step, halve up to 6 times.
       for (let bt = 0; bt < 6; ++bt) {
         for (let j = 0; j < n; ++j) xNew[j] = x[j] - alpha * g[j];
-        const { r: rNew } = this._assemble(xNew);
+        const { r: rNew } = this._assemble(xNew, { jacobian: false });
         let costNew = 0; for (let i = 0; i < rNew.length; ++i) costNew += rNew[i] * rNew[i]; costNew *= 0.5;
         if (costNew < cost - 1e-4 * alpha * gNorm2) {
           // swap x ↔ xNew (avoid re-alloc)
@@ -721,7 +815,7 @@ export class NewtonSolver {
       // fixed coincident cluster). The sketch can't move, but its constraints
       // may still be VIOLATED (e.g. a distance on a joint welded to the origin).
       // Check the residual instead of unconditionally claiming success.
-      const { r } = this._assemble(x0);
+      const { r } = this._assemble(x0, { jacobian: false });
       let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
       const residual0 = Math.sqrt(s);
       let cleanup0 = null;
@@ -755,7 +849,7 @@ export class NewtonSolver {
     // Relaxation pre-pass: only worthwhile when starting far from the solution.
     // Cheap cost-of-entry: one assemble to measure initial residual.
     if (this.config.prepassEnabled) {
-      const { r: rInit } = this._assemble(x);
+      const { r: rInit } = this._assemble(x, { jacobian: false });
       let r0 = 0; for (let i = 0; i < rInit.length; ++i) r0 += rInit[i] * rInit[i];
       const residual0 = Math.sqrt(r0);
       if (residual0 > this.config.prepassResidualSkip) {
@@ -776,7 +870,7 @@ export class NewtonSolver {
     }
 
     for (let k = 0; k < iter; ++k) {
-      const { J, r, m, n } = this._assemble(x);
+      const { S, r, m, n } = this._assemble(x);
       // cost = 0.5 * r^T r
       let cost = 0.0; for (let i = 0; i < m; ++i) cost += r[i] * r[i]; cost *= 0.5;
 
@@ -784,20 +878,16 @@ export class NewtonSolver {
       const residual = Math.sqrt(2 * cost);
       if (residual < this.config.tol) { converged = true; finalError = residual; break; }
 
-      // Build normal equations: A = J^T J  (n x n), g = J^T r (n)
-      const A = Algebra.allocMatrix(n, n); for (let i=0;i<A.length;++i) A[i]=0.0;
-      Algebra.gram(J, m, n, A);
-      const g = new Float64Array(n); Algebra.atx(J, m, n, r, g);
+      // Build normal equations: A = J^T J  (n x n, envelope), g = J^T r (n)
+      const A = Algebra.gram(S, m, n);
+      const g = new Float64Array(n); Algebra.atx(S, m, n, r, g);
       // Levenberg-Marquardt: (A + lambda * diag(A)) dx = -g
-      for (let i = 0; i < n; ++i) {
-        // LM damping — add λ on the diagonal (J^T J + λ I)
-        A[i * n + i] += lambda + 1e-12;
-        g[i] = -g[i]; // move to RHS
-      }
+      // LM damping — add λ on the diagonal (J^T J + λ I)
+      Algebra.addToDiag(A, lambda + 1e-12);
+      for (let i = 0; i < n; ++i) g[i] = -g[i]; // move to RHS
 
       const dx = new Float64Array(g); // copy RHS
-      const Acopy = new Float64Array(A); // cholesky is destructive
-      const ok = Algebra.choleskySolve(Acopy, n, dx);
+      const ok = Algebra.choleskySolveEnvelope(A, dx); // destructive: A is not used again
       if (!ok) {
         // Matrix not positive definite: increase damping and retry
         lambda *= this.config.lambdaUp;
@@ -811,7 +901,7 @@ export class NewtonSolver {
       for (let i = 0; i < n; ++i) { xCand[i] = x[i] + dx[i]; maxStep = Math.max(maxStep, Math.abs(dx[i])); }
 
       // Evaluate new cost
-      const { r: rNew } = this._assemble(xCand);
+      const { r: rNew } = this._assemble(xCand, { jacobian: false });
       let costNew = 0.0; for (let i = 0; i < rNew.length; ++i) costNew += rNew[i] * rNew[i]; costNew *= 0.5;
 
       if (this.config.verbose) {
@@ -837,21 +927,18 @@ export class NewtonSolver {
     // accuracy. The undamped Cholesky here doubles as a rank-deficiency probe:
     // success ⟺ JᵀJ is positive-definite ⟺ rank(J) = n ⟺ well-constrained.
     try {
-      const assembled = this._assemble(x);
-      const { J, r, m, n } = assembled;
-      const A = Algebra.allocMatrix(n, n); for (let i=0;i<A.length;++i) A[i]=0.0;
-      Algebra.gram(J, m, n, A);
-      const g = new Float64Array(n); Algebra.atx(J, m, n, r, g);
+      const { S, r, m, n } = this._assemble(x);
+      const A = Algebra.gram(S, m, n);
+      const g = new Float64Array(n); Algebra.atx(S, m, n, r, g);
       for (let i = 0; i < n; ++i) g[i] = -g[i];
-      const Acopy = new Float64Array(A);
       const dx = new Float64Array(g);
-      const ok = Algebra.choleskySolve(Acopy, n, dx);
+      const ok = Algebra.choleskySolveEnvelope(A, dx);
       rankDeficient = !ok;
       if (ok) {
         // apply small polish step and accept only if it reduces residual
         const xPolish = new Float64Array(n);
         for (let i = 0; i < n; ++i) xPolish[i] = x[i] + dx[i];
-        const rPolish = this._assemble(xPolish).r;
+        const rPolish = this._assemble(xPolish, { jacobian: false }).r;
         let costPolish = 0.0; for (let i = 0; i < rPolish.length; ++i) costPolish += rPolish[i] * rPolish[i]; costPolish *= 0.5;
         if (costPolish < 0.5 * finalError * finalError) {
           x = xPolish; finalError = Math.sqrt(2 * costPolish);
@@ -906,7 +993,7 @@ export class NewtonSolver {
     let structuralError = 0;
     try {
       this.constraints = allC.filter(c => !c || c.type !== 'mouse_spring');
-      const { r } = this._assemble(x);
+      const { r } = this._assemble(x, { jacobian: false });
       let s = 0; for (let i = 0; i < r.length; ++i) s += r[i] * r[i];
       structuralError = Math.sqrt(s);
     } finally {
@@ -1054,12 +1141,11 @@ export class NewtonSolver {
   // Used by the early-return path when the pre-pass converges before LM runs.
   _checkRankDeficient(x) {
     try {
-      const { J, m, n } = this._assemble(x);
+      const { S, m, n } = this._assemble(x);
       if (m === 0 || n === 0) return false;
-      const A = Algebra.allocMatrix(n, n); for (let i = 0; i < A.length; ++i) A[i] = 0.0;
-      Algebra.gram(J, m, n, A);
+      const A = Algebra.gram(S, m, n);
       const probe = new Float64Array(n);
-      return !Algebra.choleskySolve(A, n, probe);
+      return !Algebra.choleskySolveEnvelope(A, probe);
     } catch (_) { return false; }
   }
 }

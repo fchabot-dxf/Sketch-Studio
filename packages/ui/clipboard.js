@@ -18,6 +18,7 @@
 import { serializeDocument, validateDocument } from '#core/document.js';
 import { addConstraintObject } from '#core/constraints.js';
 import { deleteSelection } from '#core/delete-manager.js';
+import { newShapeId } from '#core/shape-id.js';
 import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames } from '#core/parameters.js';
 import { userToWorldY } from '#core/units.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -97,17 +98,15 @@ export function parseClipboardText(text) {
   return { ok: true, document: env.document };
 }
 
-let shapeSeq = 0;
-
 // ── paste: add a translated copy of `document` to `state`; ONE undo step; select the copy. → { ok, shapes, joints, constraints, frozen:[names] } ──
 // step = how many PASTE_STEP_MM the copy is moved right / down; unit = the document unit the formulas are read in.
 export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
   const g = document.geometry;
   const dx = PASTE_STEP_MM * step, dy = userToWorldY(-PASTE_STEP_MM * step); // right, and DOWN on screen (user Y points up)
-  const seq = `${Date.now()}_${++shapeSeq}`;
+  const seq = newShapeId('');   // THE shape-id generator (#core/shape-id.js): unique even for two pastes in one millisecond
   const jointMap = new Map(), shapeMap = new Map(), groupMap = new Map();
   for (const [id] of g.joints) jointMap.set(id, state.genJ());
-  g.shapes.forEach((s, i) => shapeMap.set(s.id, `s_paste_${seq}_${i}`));
+  g.shapes.forEach((s, i) => shapeMap.set(s.id, `s${seq}_${i}`));
   const groupOf = (gid) => { if (!groupMap.has(gid)) groupMap.set(gid, `paste_${seq}_${groupMap.size}`); return groupMap.get(gid); };
   const used = new Set(g.shapes.flatMap((s) => asList(s.joints)));
   const frozen = [];

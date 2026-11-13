@@ -556,15 +556,20 @@ function canApplyInference(state, primaryId, inference, options = {}) {
         // line (which are already perpendicular by construction). The snap value
         // would equal the cursor's current position and produce nothing but visual
         // noise.
+        // TASK 582: "already enforced" also when the sketch's constraints IMPLY it (the engine's rank test, the one task 575's snap rule uses):
+        // the owner's side is collinear with a construction line, so it is parallel to it by construction. Found at the cursor, that inference
+        // held the dragged end on its own line until the cursor left the angle tolerance (task 578's staircase), and the release added a
+        // redundant parallel.
         const wantParallel = type === INFERENCE_TYPES.PARALLEL;
+        const cType = wantParallel ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
+        const impliedBySketch = (s) => !!(state.engine && typeof state.engine.isDistanceRedundant === 'function' && state.engine.isDistanceRedundant({ type: cType, shapes: [s.id, targetId] }));
         for (const s of lineShapes) {
             if (s.id === targetId) continue;
-            if (isRelationshipAlreadyEnforced(state, s.id, targetId, wantParallel)) return false;
+            if (isRelationshipAlreadyEnforced(state, s.id, targetId, wantParallel) || impliedBySketch(s)) return false;
         }
         // During dragging (full: false), always allow position snapping for visual guidance
         // Only validate constraint addition when committing (full: true)
         if (!opts.full) return true;
-        const cType = wantParallel ? CONSTRAINT_TYPES.PARALLEL : CONSTRAINT_TYPES.PERPENDICULAR;
         for (const s of lineShapes) {
             if (s.id === targetId) continue;
             const res = ConstraintManager.canAddConstraint(state, cType, { shapes: [s.id, targetId] }, opts);
@@ -715,13 +720,13 @@ export function handleSelectionPointerMove(e, svg, state) {
 // One step of a geometry drag toward the world point wpt: the DOF mask, the drag target and the solver pass, the snap or inference.
 // atPointer: wpt is the pointer itself. The snap found for this pointer event applies only there, and the solver pass is the quick one
 // (the app's frame solve follows it); a sub-move of the drag step is not at the pointer and is solved to convergence (SolverConfig.ITERATIONS).
-// TASK 582 (Fusion, measured with the real mouse): a JOINT / CLUSTER drag decides its snap and its inference from where the solve PUTS the
-// dragged point, not from where the cursor is. The step first pulls toward the masked cursor (a PRE-SOLVE in this same event: the previous
+// TASK 582 (Fusion, measured with the real mouse): a JOINT / CLUSTER drag takes its SNAP from where the solve PUTS the dragged point, not
+// from where the cursor is. The step first pulls toward the masked cursor (a PRE-SOLVE in this same event, the quick pass: the previous
 // frame's position is one event late, and once a snap has pinned the point it sits on the snap point and would keep any snap locked); the
 // dragged joint's solved position `reached` then takes the cursor's snap candidate (input-manager updateSnapTarget) only when the candidate's
-// point is within the snap magnet of it (a point held on a line that cannot reach the target does not snap, and the release adds nothing),
-// and the inference is found at `reached`. A pin (the snap point, the inferred position) is a second pull. A free point reaches the cursor:
-// its snap and inference are the cursor's, as before. A BODY / LINE drag is unchanged: its snap is taken at the cursor, it has no inference.
+// point is within the snap magnet of it (a point held on a line that cannot reach the target does not snap, and the release adds nothing).
+// The inference stays found at the masked cursor (see below). A pin (the snap point, the inferred position) is a second pull. A free point
+// reaches the cursor: its snap is the cursor's, as before. A BODY / LINE drag is unchanged: its snap is taken at the cursor, no inference.
 function dragToward(e, svg, state, wpt, atPointer) {
     const iters = atPointer ? (SolverConfig.QUICK_SOLVE || 8) : (SolverConfig.ITERATIONS || 500);
     const pointDrag = state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER;
@@ -854,14 +859,17 @@ function dragToward(e, svg, state, wpt, atPointer) {
         // If not locked, ensure we don't keep a stale lockedTo
         delete state.drag.lockedTo;
 
-        // Axis Inference (H/V relative to start), found where the pre-solve put the dragged point (TASK 582)
+        // Axis Inference (H/V relative to start). Found at the (masked) cursor, NOT where the pre-solve put the point (TASK 582, measured): the
+        // at-pointer pass is the quick one (task 548), so on a stiff drawing (the owner's 2.7 km arcs at the framed view, about 40 units per 4 px
+        // event) it leaves the point behind the cursor; an inference found there pins it behind, the frame solve holds that pin and the drag
+        // stalls (j3 stopped after 3 events). An inference the sketch already implies pins nothing (canApplyInference).
         if (pointDrag) {
             const primaryId = state.drag.id;
             const initialPos = state.drag.initial.get(primaryId);
             if (initialPos) {
                 // Check inference relative to start position (allow full geometry-based inference)
                 const draggedType = state.drag.type === DRAG_TYPES.JOINT ? 'joint' : 'other';
-                const inf = findInference(initialPos, reached, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType, worldPerPx: getZoomFactor(svg), constraints: state.constraints });
+                const inf = findInference(initialPos, target, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType, worldPerPx: getZoomFactor(svg), constraints: state.constraints });
                 if (inf) {
                     const infState = { type: inf.type, pos: inf.pos, origin: initialPos, targetId: inf.targetId || null, ref: inf };
                     if (canApplyInference(state, primaryId, infState, { full: false })) {

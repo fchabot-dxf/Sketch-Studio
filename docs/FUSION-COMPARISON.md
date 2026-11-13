@@ -1995,8 +1995,11 @@ magnet; ours is mm, shown here in cm).
 **The rule (ours, task 582).** A point drag (packages/ui/input-handlers/selection-tools.js `dragToward`) first solves toward the masked cursor in the same pointer event
 (the PRE-SOLVE); the cursor's snap candidate (input-manager `updateSnapTarget`, unchanged, shared with the drawing tools) is TAKEN only when the dragged point's
 solved position is within the snap magnet of the candidate's point (the release distance when the previous step held the same target). A candidate it does not
-take is no lock: no snap shown, no constraint at release. The inference (H / V / parallel / perpendicular / midpoint / tangent) is found at that solved position.
-A free point reaches the cursor, so its snap and inference are the cursor's, as before (M2). An arc grabbed by its centre with ONE held rim (fixed, 0 DOF, or coincident
+take is no lock: no snap shown, no constraint at release. A free point reaches the cursor, so its snap is the cursor's, as before (M2). The INFERENCE
+(H / V / parallel / perpendicular / midpoint / tangent) is still found at the masked cursor: found where the quick at-pointer pass (task 548) put the point, it
+stalled stiff drawings (the owner's drawing at the framed view: the j3 corner stopped after 3 events of 4 px; worst gap 36 px), because that pass leaves the point
+behind the cursor and the pin then holds it there; a converged pre-solve fixes that but changes task 548's "quick pass at the pointer" (open question to the
+advisor). Instead a parallel / perpendicular inference the sketch already IMPLIES (the engine's rank test, task 575's snap rule) pins nothing and adds nothing. An arc grabbed by its centre with ONE held rim (fixed, 0 DOF, or coincident
 with such a point) turns about that rim (getDragDOF `pivot`): the centre's target is the point of its circle about the rim nearest the cursor, so the radius stays;
 two held rims still lock it, a held centre still locks it, a free arc is unchanged.
 
@@ -2011,8 +2014,11 @@ two held rims still lock it, a held centre still locks it, a free arc is unchang
 - Drag oracle (tests/fusion-drag.test.js): 140 same / 17 KNOWN / 4 unstable before and after task 582, every cell identical (its replay calls the pointer handlers without
   input-manager's snap search, so it has no snap candidates; no cell has a held arc rim with a centre grab).
 
-**Owner drawing (tests/fixtures/drag/owner-two-arcs-575.json), j8 dragged 160 px along its circle in 40 events.** No grid magnet: worst gap to the cursor 40.43 -> 1.08 px
-(the task 578 parallel-inference staircase: the inference was found at the cursor, where the side is parallel only within the angle tolerance, and held the end on its own line).
+**Owner drawing (tests/fixtures/drag/owner-two-arcs-575.json), j8 dragged 160 px along its circle in 40 events.** No grid magnet: worst gap to the cursor 40.43 -> 1.08 px,
+events with an inference 40 -> 0, constraints at release 17 -> 18 (a redundant parallel(side, its collinear construction line)) before, 17 -> 17 after (the task 578
+parallel-inference staircase: the side is collinear with a construction line, so the parallel inference held the end on its own line until the cursor left the angle tolerance).
+At the view the app frames the drawing in (as tests/arc-rim-drag-live.test.js): j8 worst gap 19.8 -> 19.8 px (the events where the end takes the Y-axis snap it reaches),
+the j3 corner (a cluster) 0.8 -> 0.8 px.
 Default grid magnet: worst gap 16.23 -> 10.40 px, snap lock changes per drag 13 -> 13 (grid nodes the end passes, each within the magnet of where the end is). A LOCKED point
 (the outer centre j7, welded to the origin) dragged 40 x (4, 2) px with the default grid magnet: lock changes 15 -> 2, events locked 26 -> 3 of 40 (task 575 item 3: the snap no
 longer locks onto grid nodes / targets under the cursor that the held point cannot reach). Evidence: .evidence/582/probe-owner.mjs (local).

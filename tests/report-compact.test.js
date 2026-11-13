@@ -60,6 +60,10 @@ for (const n of ['midpoint-move', 'line-line-driven', 'drag-frozen']) {
   const f = fix('midpoint-move');
   const adds = f.journal.steps.filter((s) => (s.addedConstraints || []).some((c) => c.type === 'midpoint'));
   assert.ok(adds.length >= 1 && adds.every((s) => /drag/.test(s.label)), 'case 1: the journal names the drag step(s) that added a midpoint constraint: ' + adds.map((s) => `${s.n} ${s.label}`));
+  // the log keeps the lines that say WHICH snap acted during a drag (the source logs no midpoint-specific line: there is none to keep)
+  const snapLines = f.log.filter((e) => /\[snap-constraints\] applySnapConstraint called|creating snap-based constraint/.test(e.msg));
+  assert.ok(snapLines.length >= 2 && snapLines.some((e) => e.data && JSON.stringify(e.data).includes('"targetId"') && /shape|joint/.test(JSON.stringify(e.data))), 'case 1: the snap lines (snap type + target) are kept in the log');
+  assert.ok(!f.log.some((e) => /\[addConstraint\] Adding constraint:/.test(e.msg)), 'case 1: the undo/restore re-adds are dropped');
   assert.strictEqual(adds[0].addedConstraints.find((c) => c.type === 'midpoint').joints.length, 3, 'case 1: the midpoint constraint is there whole, with its joints');
 }
 {
@@ -142,6 +146,8 @@ assert.ok(!/glyphPos/.test(JSON.stringify(c.log)), 'log data carries no label po
   const msgs = lg.log.map((l) => l.msg);
   assert.deepStrictEqual(msgs, ['[selection-tools] pointerDown', 'Setting tool to:', '[selection-tools] drag LOCKED to snap', '[selection-tools] pointerUp performedDrag', '[ConstraintManager] Added midpoint constraint from snap:', 'warned', 'boom'], 'what the log keeps');
   assert.deepStrictEqual(lg.dropped, { selection: 800, renderer: 40, constraints: 3 }, 'what it dropped is counted');
+  const sn = compactLog([e('app', '[snap-constraints] applySnapConstraint called', { level: 'debug', args: ['[snap-constraints] applySnapConstraint called', { jointId: 'j1', snapTarget: { type: 'shape', targetId: 's1' } }] }), e('selection', '[selection-tools] creating snap-based constraint (from state.activeSnap)')], { now });
+  assert.strictEqual(sn.log.length, 2, 'the lines naming the snap that adds a constraint are kept');
   assert.strictEqual(lg.log[0].t, -5, 'times are seconds before the report');
   assert.deepStrictEqual(lg.log[0].data, [{ v: 1 }], 'log numbers are rounded');
   const mv = (t) => ({ t, type: 'pointermove', x: 1, y: 2, pointerType: 'mouse', target: 'svg' });

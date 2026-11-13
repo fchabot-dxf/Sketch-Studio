@@ -68,6 +68,7 @@ await (async () => {
     // ---- SketchStudio, mm ----
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 5000);
     await waitFor(`!!document.querySelector('#svgCanvas #infinite-grid')`, 'SketchStudio grid');
+    await waitFor(`document.getElementById('svgCanvas').dataset.docReady === '1' && !!document.querySelector('.sk-doctabs') && !document.querySelector('.sk-doctabs').hidden`, 'SketchStudio restored and its document-tab strip shown (TASK 587: it appears once, moving the canvas down; probe after that)');
     await evalJs(`localStorage.clear()`);
     await evalJs(probe);
     const SS = '#svgCanvas';

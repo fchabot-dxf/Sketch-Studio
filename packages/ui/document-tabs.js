@@ -58,6 +58,8 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   let shown = '';            // the signature of what is drawn: the strip is rebuilt only when it changes
   let lastActive = null;     // `${key}|${designId}|${name}` of the active tab, to tell the sidebar when it changed
   let msgTimer = null;
+  let watched = null;        // the buffer whose `ready` we wait on
+  let restored = false;      // its first restore is done
   let busy = false;          // an action of this strip is running: its clicks are ignored until it settles
 
   function say(text) {
@@ -114,6 +116,8 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   function refresh() {
     const b = getBuffer && getBuffer();
     if (!b) return;
+    if (watched !== b) { watched = b; b.ready.then(() => { restored = true; refresh(); }); } // the strip (and the sidebar's name) show once the stored design is back: no "Untitled" flash
+    if (!restored) return;
     el.hidden = false;
     const list = b.tabs();
     const sig = JSON.stringify(list.map((t) => [t.key, nameOf(t), t.active, dotOf(t) && dotOf(t).cls]));

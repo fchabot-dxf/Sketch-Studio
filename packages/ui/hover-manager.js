@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // HOVER MANAGER - Single source of truth for hover state
 // ═══════════════════════════════════════════════════════════════════════════════
-import { findSnap } from '#ui/snap-detection.js';
+import { findSnap, hitConstraintAtScreen } from '#ui/snap-detection.js';
+import SettingsManager from '#core/settings-manager.js';
 import { worldToScreen } from '#ui/coords.js';
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
@@ -9,7 +10,29 @@ import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
 
-const SELECT_THRESHOLD = 40; // pixels - increased for better UX
+// THE glyph pick (task 571b right click; task 588 left click and hover): a constraint glyph is under the pointer only when the pointer is ON
+// the glyph AS DRAWN (glyphDrawnRadiusPx, the same on touch: the glyph is not bigger there) plus GLYPH_PICK_MARGIN_PX. A pointer merely NEAR a
+// glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click and hover all call glyphAt.
+export const GLYPH_PICK_MARGIN_PX = 3;
+// The screen radius of a glyph as drawn (svg-renderer drawUnifiedGlyph): the 'badge' style draws a disc of GLYPH_BG_DIAMETER_PX; the 'fusion'
+// style draws no disc, only the icon, GLYPH_SYMBOL_SIZE_PX on its longer side (fusion-glyphs.js fusionGlyphMarkup).
+export function glyphDrawnRadiusPx(settings = SettingsManager.getAll()) {
+    return settings.GLYPH_STYLE === 'fusion' ? Number(settings.GLYPH_SYMBOL_SIZE_PX || 20) / 2 : settings.GLYPH_BG_DIAMETER_PX / 2;
+}
+export function glyphAt(svg, state, screenX, screenY) {
+    return hitConstraintAtScreen(pickableConstraints(state) || [], svg, screenX, screenY, glyphDrawnRadiusPx() + GLYPH_PICK_MARGIN_PX);
+}
+
+// THE select tool's pick (task 588: HOVER = CLICK, so what lights up on hover is exactly what a click selects): a joint in snap reach
+// (hitJoint), else a glyph the pointer is ON (glyphAt), else a shape (hitShape). Returns { joint } | { constraint } | { shape } | null.
+// selection-tools handleSelectionPointerDown (the click) and applyHoverPriority (the hover) both call it.
+export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY) {
+    if (hitJoint) return { joint: hitJoint };
+    const constraint = glyphAt(svg, state, screenX, screenY);
+    if (constraint) return { constraint };
+    if (hitShape) return { shape: hitShape };
+    return null;
+}
 
 // Helper: compute screen-space distance (pixels) between mouse and a world point
 export const getScreenDist = (svg, mx, my, worldPt) => {
@@ -47,54 +70,13 @@ export const findClosestConstraintGlyph = (svg, mx, my, constraints = [], requir
 };
 
 /**
- * Apply hover priority logic and set state.hovered* appropriately
- * Priority: joint > constraint > shape (within threshold)
+ * Set state.hovered* from the select tool's pick (selectPick: hover = click).
  */
-function applyHoverPriority(state, svg, hitJoint, hitShape, hitConstraint, px, py) {
-    // Calculate distances
-    const dJoint = hitJoint ? getScreenDist(svg, px, py, hitJoint.j) : Infinity;
-    
-    const constraintsList = pickableConstraints(state) || [];
-    const best = findClosestConstraintGlyph(svg, px, py, constraintsList);
-    const dConstraint = best.constraint ? best.dist : Infinity;
-    
-    // Find closest within threshold
-    let winner = null;
-    let minDist = SELECT_THRESHOLD;
-    
-    if (dJoint <= minDist) {
-        winner = 'joint';
-        minDist = dJoint;
-    }
-    
-    if (dConstraint <= minDist) {
-        winner = 'constraint';
-        minDist = dConstraint;
-    }
-    
-    // Shape fallback: If no joint/constraint within threshold AND we have a hitShape
-    if (!winner && hitShape) {
-        winner = 'shape';
-    }
-    
-    // Set hover state
-    if (winner === 'joint') {
-        state.hoveredJoint = hitJoint.id;
-        state.hoveredConstraint = null;
-        state.hoveredShape = null;
-    } else if (winner === 'constraint') {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = best.constraint;
-        state.hoveredShape = null;
-    } else if (winner === 'shape') {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = null;
-        state.hoveredShape = hitShape.shape.id;
-    } else {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = null;
-        state.hoveredShape = null;
-    }
+export function applyHoverPriority(state, svg, hitJoint, hitShape, px, py) {
+    const pick = selectPick(svg, state, hitJoint, hitShape, px, py);
+    state.hoveredJoint = pick && pick.joint ? pick.joint.id : null;
+    state.hoveredConstraint = pick && pick.constraint ? pick.constraint : null;
+    state.hoveredShape = pick && pick.shape ? pick.shape.shape.id : null;
 }
 
 export function setHoverFromSnap(state) {
@@ -133,23 +115,12 @@ export function updateHover(svg, screenX, screenY, state) {
         if (hoverSnapResult.type === 'joint') {
             const jid = hoverSnapResult.targetId;
             hitJoint = { id: jid, j: state.joints.get(jid) };
-        } else if (hoverSnapResult.type === 'line' || hoverSnapResult.type === 'shape') {
+        } else if ((hoverSnapResult.type === 'line' || hoverSnapResult.type === 'shape' || hoverSnapResult.type === 'midpoint') && hoverSnapResult.shape) { // as the click (input-manager handlePointerDown)
             hitShape = { shape: hoverSnapResult.shape, pt: hoverSnapResult.pt || { x: hoverSnapResult.x, y: hoverSnapResult.y } };
         }
     }
     
-    // Compute constraint hit
-    let hitConstraint = null;
-    try { 
-        const constraintsList = pickableConstraints(state) || [];
-        const best = findClosestConstraintGlyph(svg, screenX, screenY, constraintsList);
-        if (best.constraint && best.dist < SELECT_THRESHOLD) {
-            hitConstraint = best.constraint;
-        }
-    } catch(_) { }
-    
-    // Apply priority logic
-    applyHoverPriority(state, svg, hitJoint, hitShape, hitConstraint, screenX, screenY);
+    applyHoverPriority(state, svg, hitJoint, hitShape, screenX, screenY);
 }
 
 /**

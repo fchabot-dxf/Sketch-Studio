@@ -51,9 +51,9 @@ function showCoincidentGlyphsForCluster(state, cluster){
 } 
 
 // Import shared helpers from hover-manager (single source of truth)
-import { findClosestConstraintGlyph, getScreenDist } from '#ui/hover-manager.js';
+import { findClosestConstraintGlyph, selectPick, applyHoverPriority } from '#ui/hover-manager.js';
 import { findConnectedChain } from '#core/loop-finder.js'; // TASK 588: the double-click chain
-import { pickableConstraints, inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
+import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)
@@ -140,54 +140,13 @@ export function setupSelectionTools(svg, appState) {
 }
 
 /**
- * Update hover feedback for selection tests and UI. This enforces the origin-suppression rule
- * where the origin joint should not win over a nearby constraint glyph when distances tie/are close.
+ * Update hover feedback for selection tests and UI: the select tool's hover, through THE pick the click uses (hover-manager selectPick).
  */
 export function updateHoverFeedback(svg, hitJoint, hitShape, _e, state) {
     const px = state.lastMouse?.x ?? null;
     const py = state.lastMouse?.y ?? null;
     if (px === null || py === null) return;
-
-    // Compute screen distances
-    const dJoint = hitJoint ? getScreenDist(svg, px, py, hitJoint.j) : Infinity;
-    const constraintsList = pickableConstraints(state) || [];
-    const best = findClosestConstraintGlyph(svg, px, py, constraintsList);
-    const dConstraint = best.constraint ? best.dist : Infinity;
-
-    // Apply special origin suppression: if joint is origin and glyph is as close or closer, prefer glyph
-    let winner = null;
-    const SELECT_THRESHOLD = 24;
-    if (dJoint < SELECT_THRESHOLD && dJoint <= dConstraint) {
-        if (hitJoint && hitJoint.id === 'j_origin' && dConstraint <= dJoint) {
-            winner = 'constraint';
-        } else {
-            winner = 'joint';
-        }
-    } else if (dConstraint < SELECT_THRESHOLD) {
-        winner = 'constraint';
-    } else if (hitShape) {
-        winner = 'shape';
-    } else {
-        winner = null;
-    }
-
-    if (winner === 'joint') {
-        state.hoveredJoint = hitJoint.id;
-        state.hoveredConstraint = null;
-        state.hoveredShape = null;
-    } else if (winner === 'constraint') {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = best.constraint;
-        state.hoveredShape = null;
-    } else if (winner === 'shape') {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = null;
-        state.hoveredShape = hitShape.shape.id;
-    } else {
-        state.hoveredJoint = null;
-        state.hoveredConstraint = null;
-        state.hoveredShape = null;
-    }
+    applyHoverPriority(state, svg, hitJoint, hitShape, px, py); // TASK 588: THE hover (hover-manager selectPick, the click's pick)
 }
 
 /**
@@ -267,76 +226,32 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     selectionState.isDragging = false;
     selectionState.dragStartScreen = { x: e.clientX, y: e.clientY };
 
-    // Priority: If the manager already detected a hit using the high-tolerance findSnap, use it immediately.
+    // THE select tool's pick (hover-manager selectPick, task 588: the hover uses the same function, so a click selects exactly what the hover
+    // lit): a joint in snap reach, else a glyph the pointer is ON (its drawn badge + 3 px: THE glyph pick, the right click's too), else a shape.
+    // A pointer merely NEAR a glyph (on the line beside it) picks the line.
+    const pick = selectPick(svg, state, hitJoint, hitShape, e.clientX, e.clientY);
     // TASK 588: a press on a member of a selection of several shapes / points (no Shift) MOVES the whole selection (startGroupDrag); a
-    // release without a move is the click it was before (the one entity selected).
-    if (hitJoint) {
-        if (!e.shiftKey && inGeometrySelection(state, 'joint', hitJoint.id)) return startGroupDrag(e, svg, state, hitJoint.id, { kind: 'joint', id: hitJoint.id });
-        return handleJointSelection(e, svg, state, hitJoint);
+    // release without a move is the click it was before (the one entity selected). The second press of a double click on a shape selects its
+    // connected chain (selectChain). Both are decided before the selection is cleared.
+    if (pick && pick.joint) {
+        if (!e.shiftKey && inGeometrySelection(state, 'joint', pick.joint.id)) return startGroupDrag(e, svg, state, pick.joint.id, { kind: 'joint', id: pick.joint.id });
+        return handleJointSelection(e, svg, state, pick.joint);
     }
-
-    // Distance-based tie-breaker between joint and constraint (constraint-first policy)
-    const SELECT_THRESHOLD = 24; // px in screen space
-
-    // Compute screen distances for constraint glyphs and joint before considering shapes
-    const dJoint = hitJoint ? getScreenDist(svg, e.clientX, e.clientY, hitJoint.j) : Infinity;
-    const constraintsList = pickableConstraints(state) || [];
-    // First, check for a VISIBLE glyph and capture the click immediately to prevent click-through
-    const bestVisible = findClosestConstraintGlyph(svg, e.clientX, e.clientY, constraintsList, true);
-    dbg.log('selection', '[selection-tools] bestVisible check', { bestVisible: bestVisible && bestVisible.constraint ? { type: bestVisible.constraint.type, dist: bestVisible.dist, visible: bestVisible.constraint && (bestVisible.constraint.__isPreview ? true : !!bestVisible.constraint.__visible) } : null });
-    const visibleGlyphWins = !!(bestVisible.constraint && bestVisible.dist < SELECT_THRESHOLD);
-
-    const best = findClosestConstraintGlyph(svg, e.clientX, e.clientY, constraintsList, false);
-    const dConstraint = best.dist;
-
-    // Winner priority gate: joint beats constraint when closer-or-equal; constraint next; shape last
-    // Special-case: the origin joint should NOT win over a nearby constraint glyph
-    let winner = null;
-    if (dJoint < SELECT_THRESHOLD && dJoint <= dConstraint) {
-        // If this joint is the origin, prefer a nearby constraint glyph when distances tie/close
-        if (hitJoint && hitJoint.id === 'j_origin' && dConstraint <= dJoint) {
-            winner = 'constraint';
-        } else {
-            winner = 'joint';
-        }
-    } else if (dConstraint < SELECT_THRESHOLD) {
-        winner = 'constraint';
-    } else if (hitShape) {
-        winner = 'shape';
-    }
-
-    // TASK 588: a press that picks a SHAPE (the pick rule above, unchanged: a glyph in reach still wins) is, decided before the selection is
-    // cleared, the second press of a double click on that shape (its connected chain, selectChain) or a press on a member of a selection of
-    // several shapes / points (it moves the whole selection, startGroupDrag).
-    if (!visibleGlyphWins && winner === 'shape') {
-        const id = hitShape.shape.id;
-        if (pressOn('shape:' + id)) return selectChain(e, svg, state, hitShape);
-        if (!e.shiftKey && inGeometrySelection(state, 'shape', id)) return startGroupDrag(e, svg, state, hitShape.shape.joints[0], { kind: 'shape', id });
+    if (pick && pick.shape) {
+        const id = pick.shape.shape.id;
+        if (pressOn('shape:' + id)) return selectChain(e, svg, state, pick.shape);
+        if (!e.shiftKey && inGeometrySelection(state, 'shape', id)) return startGroupDrag(e, svg, state, pick.shape.shape.joints[0], { kind: 'shape', id });
     }
 
     // If Shift is not held, clear all selection sets before processing (single-select mode)
     if (!e.shiftKey) clearSelection(state);
 
-    if (visibleGlyphWins) {
-        dbg.log('selection', '[selection-tools] capturing click on VISIBLE glyph', { type: bestVisible.constraint.type, dist: bestVisible.dist, pt: bestVisible.pt });
-        return handleConstraintSelection(e, svg, state, bestVisible.constraint);
+    if (pick && pick.constraint) {
+        dbg.log('selection', '[selection-tools] capturing click on glyph', { type: pick.constraint.type });
+        return handleConstraintSelection(e, svg, state, pick.constraint);
     }
-
-    if (winner === 'constraint') {
-        return handleConstraintSelection(e, svg, state, best.constraint || hitConstraint);
-    }
-    if (winner === 'joint') {
-        // Prefer hoveredJoint if it exists and is within threshold (keeps click matching hover)
-        if (state.hoveredJoint) {
-            const hj = state.joints.get(state.hoveredJoint);
-            if (hj && getScreenDist(svg, e.clientX, e.clientY, hj) < SELECT_THRESHOLD) {
-                return handleJointSelection(e, svg, state, { id: state.hoveredJoint, j: hj });
-            }
-        }
-        return handleJointSelection(e, svg, state, hitJoint);
-    }
-    if (winner === 'shape') {
-        return handleShapeSelection(e, svg, state, hitShape);
+    if (pick && pick.shape) {
+        return handleShapeSelection(e, svg, state, pick.shape);
     }
     
     // If no target hit, start marquee selection

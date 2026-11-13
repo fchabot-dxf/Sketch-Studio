@@ -356,9 +356,7 @@ export function handleJointSelection(e, svg, state, hitJoint) {
                 if(s && s.type === 'arc' && s.joints && s.joints.length >= 3){
                     // If the clicked joint is the center of an arc, include the arc's rim joints so drag translates the arc
                     if(s.joints[0] === hitJoint.id){ jointIdSet.add(s.joints[1]); jointIdSet.add(s.joints[2]); }
-                    // If the clicked joint is one of the rim joints, include the center and the other rim so dragging any arc joint
-                    // will translate the entire arc symmetrically
-                    if(s.joints[1] === hitJoint.id || s.joints[2] === hitJoint.id){ jointIdSet.add(s.joints[0]); jointIdSet.add(s.joints[1]); jointIdSet.add(s.joints[2]); }
+                    // A rim joint drags ITSELF only (task 578, like Fusion): the solver moves whatever its constraints require.
                 }
             }
 

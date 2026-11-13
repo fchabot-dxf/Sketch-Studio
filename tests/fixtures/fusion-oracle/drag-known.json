@@ -8,7 +8,7 @@
   "reason": "length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it (both ends move, length kept)"
  },
  "arc.free.end.along": {
-  "class": "arc.end: stretch -> rotate",
+  "class": "arc.end: stretch -> stretch (moved set)",
   "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
  },
  "arc.free.end.across": {
@@ -53,30 +53,6 @@
  },
  "arc.rad.centre.diag": {
   "class": "arc.centre: translate -> rotate",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixc.end.along": {
-  "class": "arc.end: stretch -> none",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixc.end.across": {
-  "class": "arc.end: stretch -> none",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixc.end.diag": {
-  "class": "arc.end: stretch -> none",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixcrad.end.along": {
-  "class": "arc.end: rotate -> none",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixcrad.end.across": {
-  "class": "arc.end: rotate -> none",
-  "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
- },
- "arc.fixcrad.end.diag": {
-  "class": "arc.end: rotate -> none",
   "reason": "arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it"
  },
  "tangent.free.lineend.diag": {

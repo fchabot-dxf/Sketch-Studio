@@ -174,22 +174,22 @@ const memSeam = () => { const s = { text: null, name: null, save: async (text, n
   sA.joints.set('j2', { x: 5, y: 5 });
   await A.flush();
   const first = A.designId();
-  assert.strictEqual((await store.get(first)).document.geometry.joints.length, 2, 'autosave wrote into the current project');
-  assert.strictEqual((await store.get(first)).document.hosts.penplotter.v, 2, 'with the host sidecar');
+  assert.strictEqual((await store.get(first)).document.geometry.joints.length, 3, 'autosave wrote into the current project'); // TASK 554: j_origin (added on load) + j1 + j2
+  assert.strictEqual((await store.get(first)).document.hosts.penplotter.v, 3, 'with the host sidecar'); // TASK 554: v = joint count, the origin included
   // a second app (its own buffer) sharing the project, no sidecar of its own: the plotter sidecar survives its save
   const sB = mkState();
   const B = createDocumentBuffer({ state: sB, app: 'shaper', store, pollMs: 1e9 });
   await B.restore();
   sB.joints.set('j3', { x: 9, y: 9 });
   await B.flush();
-  assert.deepStrictEqual((await store.get(first)).document.hosts.penplotter, { v: 2 }, 'the other host\'s sidecar is untouched by B\'s save');
+  assert.deepStrictEqual((await store.get(first)).document.hosts.penplotter, { v: 3 }, 'the other host\'s sidecar is untouched by B\'s save');
   // Save As from A: new current project; further A autosaves go there, the original stays as it was
   await A.flush();
   const copy = await A.saveAs('Version 2');
   sA.joints.set('j4', { x: 1, y: 1 });
   await A.flush();
   assert.strictEqual(A.designId(), copy.id);
-  assert.strictEqual((await store.get(copy.id)).document.geometry.joints.length, 3 + 0 || 3, 'the copy takes the new autosaves');
+  assert.strictEqual((await store.get(copy.id)).document.geometry.joints.length, 4, 'the copy takes the new autosaves'); // TASK 554: j_origin + j1 + j2 + j4
   // binding: B (still bound to the first project) keeps writing THERE even though the global pointer now names the copy
   sB.joints.set('j5', { x: 2, y: 2 });
   await B.flush();
@@ -202,7 +202,7 @@ const memSeam = () => { const s = { text: null, name: null, save: async (text, n
   assert.deepStrictEqual(calls[calls.length - 1].slice(0, 3), ['A', true, 'Untitled']);
   // new project: empty state, empty hosts (the host resets its own state in onRestored)
   const rn = await A.newDesign('Fresh');
-  assert(rn.restored && sA.joints.size === 0 && Object.keys(rn.hosts).length === 0 && rn.name === 'Fresh', 'a new project is empty');
+  assert(rn.restored && [...sA.joints.keys()].join() === 'j_origin' && Object.keys(rn.hosts).length === 0 && rn.name === 'Fresh', 'a new project is empty: only its origin (TASK 554)');
   // files through the buffer
   sA.joints.set('jz', { x: 3, y: 3 });
   const seam = memSeam();

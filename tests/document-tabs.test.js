@@ -16,8 +16,9 @@ const mkStore = (adapter = createMemoryAdapter()) => { let n = 0; return createP
 const docWith = (...ids) => ({ ...emptyDocument(), geometry: { joints: ids.map((id, i) => [id, { x: i, y: 0 }]), shapes: [], constraints: [] } });
 const engine = createEngine(null);
 const mkState = () => { engine.init(); return createSketchState(engine, { x: 0, y: 0, w: 100, h: 80 }); };
-const ids = (st) => [...st.joints.keys()].sort();
-const storedIds = async (store, id) => (await store.get(id)).document.geometry.joints.map((j) => j[0]).sort();
+// the DRAWN joints (every loaded document also holds the fixed origin since task 554: asserted on its own below)
+const ids = (st) => [...st.joints.keys()].filter((k) => k !== 'j_origin').sort();
+const storedIds = async (store, id) => (await store.get(id)).document.geometry.joints.map((j) => j[0]).filter((k) => k !== 'j_origin').sort();
 const step = (st, label, id) => { st.saveState(label); st.joints.set(id, { x: 1, y: 2 }); };
 const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, app: 'sketchstudio', store, pollMs: 1e9, doc: null, win: null, ...extra });
 
@@ -74,22 +75,22 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   assert.strictEqual(buf.designId(), saved.id);
   assert.strictEqual(buf.designName(), 'Bracket');
   assert.strictEqual(buf.needsSavePrompt(), null, 'a named design closes without asking');
-  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1', 'j_origin'], 'the stored design holds the drawing');
+  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1'], 'the stored design holds the drawing');
   assert.strictEqual((await store.current()).id, saved.id, 'the named design is the current one');
   // from then on, edits autosave
   step(st, 'line', 'j2');
   await buf.flush();
-  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1', 'j2', 'j_origin'], 'after the named save, edits autosave');
+  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1', 'j2'], 'after the named save, edits autosave');
 
   // New design: an in-memory Untitled again; the named design keeps its content; nothing new is stored
   const rn = await buf.newDesign();
-  assert(rn.restored && rn.name === 'Untitled' && st.joints.size === 0, 'New design shows an empty Untitled');
+  assert(rn.restored && rn.name === 'Untitled' && [...st.joints.keys()].join() === 'j_origin', 'New design shows an empty Untitled: only its fixed origin (task 554)');
   assert.strictEqual(buf.designId(), null);
   assert.strictEqual((await store.listRecent()).length, 1, 'New design stores nothing');
   assert.strictEqual(await store.current(), null, 'New design clears the current pointer (the sidebar names what is shown)');
   step(st, 'line', 'j9');
   await buf.flush();
-  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1', 'j2', 'j_origin'], 'the Untitled\'s edits never reach the named design');
+  assert.deepStrictEqual(await storedIds(store, saved.id), ['j1', 'j2'], 'the Untitled\'s edits never reach the named design');
   // opening / New / Open file over an unsaved Untitled with content is refused (nothing is lost; the prompt is slice 4's)
   await assert.rejects(() => buf.openDesign(saved.id), /not saved yet/);
   await assert.rejects(() => buf.newDesign(), /not saved yet/);
@@ -196,7 +197,7 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   await buf.closeTab(kA);                                       // an INACTIVE tab
   await buf.closeTab(buf.tabs()[0].key);                        // the last one
   assert.deepStrictEqual(buf.tabs().map((x) => [x.name, x.stored]), [['Untitled', false]], 'closing the last tab leaves a fresh Untitled');
-  assert.strictEqual(st.joints.size, 0);
+  assert.deepStrictEqual([...st.joints.keys()], ['j_origin'], 'the fresh Untitled holds only its origin');
   assert.strictEqual(st.history.length, 0);
   assert.deepStrictEqual(await storedIds(store, a.id), docA, 'closing never lost a stored design');
 
@@ -208,4 +209,27 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   await assert.rejects(() => buf.openTab(a.id), /Close a tab first/);
 }
 
-console.log('document-tabs: F4 race, save rule, tab model OK');
+// ---- beforeunload: armed exactly while leaving would lose work ------------------------------------------------------------------------
+{
+  const store = mkStore();
+  const win = new EventTarget();
+  const st = mkState();
+  const buf = mkBuffer(st, store, { win, doc: null });
+  await buf.restore(); buf.start();
+  const leave = () => { const e = new Event('beforeunload', { cancelable: true }); win.dispatchEvent(e); return e.defaultPrevented; };
+  assert.strictEqual(leave(), false, 'a clean Untitled: no leave-page warning');
+  step(st, 'line', 'ju');
+  assert.strictEqual(leave(), true, 'an unsaved Untitled with content: the warning is armed');
+  buf.discardUnsaved();
+  assert.deepStrictEqual(ids(st), [], 'Don\'t save discards the Untitled');
+  assert.strictEqual(leave(), false, 'after Don\'t save: no warning');
+  step(st, 'line', 'jv');
+  await buf.saveAs('Kept');
+  assert.strictEqual(leave(), false, 'a named, saved design: no warning');
+  buf.discardUnsaved();
+  assert.deepStrictEqual(ids(st), ['jv'], 'a stored design is never discarded');
+  buf.stop();
+  assert.strictEqual(leave(), false, 'stopped: nothing listens');
+}
+
+console.log('document-tabs: F4 race, save rule, tab model, beforeunload OK');

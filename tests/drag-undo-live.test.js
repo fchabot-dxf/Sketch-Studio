@@ -31,9 +31,7 @@ try {
     await evalJs(`document.querySelector('.sk-diag-close').click()`); await sleep(100);
     return JSON.parse(text);
   };
-  // the origin's sketchId is presentation noise an undo restore stamps (draw-undo-runner.js normalises it the same way): since TASK 558 a
-  // fresh page is never restored from an autosave, so its origin starts unstamped (finding F6, docs/DOCUMENT-TABS-DESIGN.md)
-  const joints = (r) => JSON.stringify(r.document.geometry.joints.map(([k, v]) => { if (k !== 'j_origin') return [k, v]; const { sketchId, ...rest } = v; return [k, rest]; }));
+  const joints = (r) => JSON.stringify(r.document.geometry.joints);
   // a circle-rim drag changes the RADIUS (a solver unknown, task 515), not a joint: the drag result is the joints AND the shapes
   const geom = (r) => joints(r) + JSON.stringify(r.document.geometry.shapes);
   const labelsOf = (r) => r.journal.steps.map((s) => s.label);

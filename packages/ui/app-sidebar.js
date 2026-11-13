@@ -23,6 +23,9 @@
 //            projects to designs and back): { [id]: { title, render(container, { go, back, close }) } }. The main view (document
 //            name, actions, GO TO) is the built-in view 'main'; `showView(id)` swaps the drawer body, a back arrow returns to
 //            'main' (or `back()` / `go('other')` from inside a view, so a view can drill down by re-rendering itself).
+//   beforeGoTo(app) OPTIONAL async () => boolean: asked before a GO TO entry leaves the page (TASK 558: the unsaved-design question); false
+//            stays. ask(spec) shows a question inline in the drawer (opening it): { kind: 'choose', label, options: [{ id, label }] } resolves the
+//            chosen id, { kind: 'prompt', label, value, okLabel } the typed text; Cancel / Esc / closing the drawer resolves null.
 //   `el` is the header button; the drawer + backdrop live on document.body.
 // Esc closes, an outside click (the backdrop) closes, Tab is trapped inside while open, focus returns to the button on close.
 // Themed through --sk-sidebar-* tokens that fall back to each host's own --sk-header-* palette (Shaper sets the dark Studio
@@ -118,7 +121,7 @@ function injectStyles() {
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null } = {}) {
   injectStyles();
   const list = Array.isArray(apps) && apps.length ? apps : APPS;
   const cur = list.find((a) => a.id === current) || list[0];
@@ -152,7 +155,10 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     try { def.render(body, { go: showView, back: () => showView('main'), close }); } catch (e) { console.error(e); }
   }
 
-  function render() {
+  // an open ask() question survives a re-render (a store change repaints the drawer while the user decides)
+  let askRow = null, askSettle = null;
+  function render() { renderBody(); if (askRow) placeAsk(); }
+  function renderBody() {
     drawer.innerHTML = '';
     if (viewId !== 'main' && viewDefs[viewId]) { renderView(viewDefs[viewId]); return; }
     viewId = 'main';
@@ -198,7 +204,11 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-item' + (app.id === (cur && cur.id) ? ' current' : ''); b.dataset.app = app.id;
       if (app.id === (cur && cur.id)) b.setAttribute('aria-current', 'true');
       b.innerHTML = `<span class="sk-sidebar-ic sk-sidebar-appic" aria-hidden="true">${app.icon}</span><span>${app.name}</span>${app.id === (cur && cur.id) ? '<span class="sk-sidebar-check" aria-hidden="true">&#10003;</span>' : ''}`;
-      b.addEventListener('click', () => { close(); if (app.id !== (cur && cur.id)) location.href = app.href; });
+      b.addEventListener('click', async () => {
+        if (app.id === (cur && cur.id)) { close(); return; }
+        if (beforeGoTo) { let go = false; try { go = await beforeGoTo(app); } catch (e) { notify(e.message || String(e), 'error'); return; } if (!go) return; }
+        close(); location.href = app.href;
+      });
       go.appendChild(b);
     }
     if (account) go.appendChild(renderAccount());
@@ -294,6 +304,34 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     row.querySelector('.cancel').focus();
   }
 
+  // ask(spec): a question inline under the drawer's heading (see the header comment). One at a time: a newer one cancels the older.
+  function placeAsk() { const top = drawer.querySelector('.sk-sidebar-top') || drawer.querySelector('.sk-sidebar-viewhead'); if (top) top.after(askRow); else drawer.prepend(askRow); }
+  function ask(spec) {
+    if (askSettle) askSettle(null);
+    if (!isOpenFlag) open();
+    return new Promise((resolve) => {
+      const row = document.createElement('div'); row.className = 'sk-sidebar-confirm sk-sidebar-ask'; row.setAttribute('role', spec.kind === 'prompt' ? 'group' : 'alertdialog');
+      const label = document.createElement('span'); label.textContent = spec.label; row.appendChild(label);
+      const settle = (v) => { if (askSettle !== settle) return; askSettle = null; askRow = null; row.remove(); resolve(v); };
+      let inp = null;
+      if (spec.kind === 'prompt') {
+        inp = document.createElement('input'); inp.type = 'text'; inp.className = 'sk-sidebar-input'; inp.value = spec.value || ''; row.appendChild(inp);
+      }
+      const btns = document.createElement('div'); btns.className = 'sk-sidebar-confirm-btns';
+      const mk = (cls, text, onClick) => { const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls; b.textContent = text; b.addEventListener('click', onClick); btns.appendChild(b); return b; };
+      const typed = () => { const v = inp.value.trim(); if (v) settle(v); };
+      if (spec.kind === 'choose') for (const o of spec.options) mk('ok', o.label, () => settle(o.id)).dataset.choice = o.id;
+      mk('cancel', 'Cancel', () => settle(null));
+      if (inp) {
+        mk('ok', spec.okLabel || 'OK', typed);
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); typed(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); settle(null); } });
+      }
+      row.appendChild(btns);
+      askRow = row; askSettle = settle; placeAsk();
+      if (inp) { inp.focus(); inp.select(); } else row.querySelector('button').focus();
+    });
+  }
+
   function showView(id) { viewId = viewDefs[id] ? id : 'main'; message = null; if (isOpenFlag) { render(); firstFocus(); } }
   // an inline text prompt row: Enter / OK runs onClick(text), Esc / Cancel returns to the list
   function askPrompt(btn, a) {
@@ -341,6 +379,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   function close() {
     if (!isOpenFlag) return;
     isOpenFlag = false;
+    if (askSettle) askSettle(null); // closing the drawer cancels an open question
     backdrop.hidden = true; drawer.classList.remove('open'); el.setAttribute('aria-expanded', 'false');
     document.removeEventListener('keydown', onKey, true);
     try { el.focus(); } catch (_) {}
@@ -355,7 +394,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     setDocName(n) { name = n; const h = drawer.querySelector('h2.sk-sidebar-doc'); if (h) h.textContent = n; },
     /** Repaint the status line in place (the store's state changed). */
     refreshStatus() { const s = drawer.querySelector('[data-section=status]'); if (s && status) paintStatus(s); },
-    showView, notify, registerView(id, def) { viewDefs[id] = def; },
+    showView, notify, ask, registerView(id, def) { viewDefs[id] = def; },
     setActions(a) { acts = Array.isArray(a) ? a : []; if (isOpenFlag) render(); },
     destroy() { close(); try { el.remove(); backdrop.remove(); drawer.remove(); } catch (_) {} },
   };

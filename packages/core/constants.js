@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS - Single source of truth for all application constants
 // ═══════════════════════════════════════════════════════════════════════════════
+import { DEFAULT_SKETCH_ID } from './sketch-model.js'; // the origin's sketch (sketch-model.js imports nothing)
 
 export const CONSTRAINT_TYPES = {
   COINCIDENT: 'coincident',
@@ -46,8 +47,9 @@ export const SNAP = {
 // and the drag-lock check (#ui). `across` = the coordinate the snap pins to 0; the other coordinate stays free.
 export const ORIGIN_JOINT_ID = 'j_origin';
 // The origin joint itself (task 554): every sketch has exactly one, fixed at (0, 0). Copied (never shared) by the engine's empty store
-// and by deserializeDocument, which adds it to a loaded document that has none (an empty "New design", an older file).
-export const ORIGIN_JOINT = Object.freeze({ x: 0, y: 0, fixed: true });
+// and by deserializeDocument, which adds it to a loaded document that has none (an empty "New design", an older file). It belongs to the
+// default Sketch 1 from the start (task 558 F6: an unstamped origin got its sketchId only from the first undo restore).
+export const ORIGIN_JOINT = Object.freeze({ x: 0, y: 0, fixed: true, sketchId: DEFAULT_SKETCH_ID });
 export const AXIS_SNAP_TARGETS = {
   'axis-x': { constraint: CONSTRAINT_TYPES.HORIZONTAL, across: 'y', label: 'X axis' },
   'axis-y': { constraint: CONSTRAINT_TYPES.VERTICAL,   across: 'x', label: 'Y axis' }

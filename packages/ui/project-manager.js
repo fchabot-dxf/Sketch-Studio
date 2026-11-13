@@ -88,7 +88,9 @@ function injectStyles() {
 }
 
 /**
- * openProjectManager({ store, actions, toolbar, onClose }) -> { el, close, notify, refresh }
+ * openProjectManager({ store, actions, toolbar, onClose }) -> { el, close, notify, refresh, ask }
+ *   ask(spec) -> Promise: the question bar for a question an action asks while it runs (TASK 558: the unsaved-design question),
+ *     spec = an item's `ask` ({ kind: 'choose' | 'prompt' | 'confirm', ... }); resolves the answer, or null for Cancel / the modal closing.
  *   actions : createProjectActions(...) result (designItems / projectItems)
  *   toolbar : [{ id, label, ask?, closes?, run(arg) }]  — New project / New design / Open from file, declared by project-actions.js
  *   account : the Google account controller (optional): its sign-in state drives the "Drive projects are hidden" note
@@ -123,6 +125,7 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
   let off = () => {};
   function close() {
     if (closed) return; closed = true;
+    if (askCancel) askCancel();
     document.removeEventListener('keydown', onKey, true); off();
     back.remove();
     if (returnTo && returnTo.focus && returnTo.isConnected) returnTo.focus();
@@ -130,14 +133,17 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
   }
 
   // ---- asking (rename / new / confirm / choose) ------------------------------------------------------------------
-  const closeAsk = () => { askEl.hidden = true; askEl.innerHTML = ''; };
-  function ask(item, then) {
+  let askCancel = null; // what a Cancel of the open question runs (null: nothing)
+  const closeAsk = () => { askEl.hidden = true; askEl.innerHTML = ''; askCancel = null; };
+  function ask(item, then, onCancel = null) {
     closeMenu();
+    if (askCancel) askCancel(); // a newer question replaces an open one (which counts as cancelled)
     const a = item.ask;
     askEl.hidden = false; askEl.innerHTML = '';
     const label = document.createElement('span'); label.textContent = a.kind === 'confirm' ? a.text : a.label; askEl.appendChild(label);
     const mk = (cls, text) => { const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls; b.textContent = text; return b; };
-    const cancel = mk('cancel', 'Cancel'); cancel.addEventListener('click', closeAsk);
+    const cancel = mk('cancel', 'Cancel'); cancel.addEventListener('click', () => { const c = askCancel; closeAsk(); if (c) c(); });
+    askCancel = onCancel;
     if (a.kind === 'choose') {
       for (const o of a.options) { const b = mk('', o.label); b.dataset.choice = o.id; b.addEventListener('click', () => { closeAsk(); then(o.id); }); askEl.appendChild(b); }
       askEl.appendChild(cancel); askEl.querySelector('button').focus(); return;
@@ -303,5 +309,7 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
   for (const type of ['keydown', 'keyup', 'keypress']) back.addEventListener(type, (e) => e.stopPropagation());
 
   refresh().then(() => { const first = bar.querySelector('button'); if (first) first.focus(); });
-  return { el: back, close, notify: showMsg, refresh };
+  /** A question asked by an action while it runs: resolves the answer, or null for Cancel / the modal closing. */
+  const askAsync = (spec) => new Promise((resolve) => { if (closed) { resolve(null); return; } ask({ ask: spec }, resolve, () => resolve(null)); });
+  return { el: back, close, notify: showMsg, refresh, ask: askAsync };
 }

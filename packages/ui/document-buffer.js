@@ -18,9 +18,10 @@
 // DDCS Studio lessons this steals (already paid for there, not rediscovered — see web/data/fsHandles.js,
 // web/ui/fileSaveState.js:164):
 //   - Autosave != a named save. Naming/saving-as/opening are explicit design actions (below); the loop never prompts.
-//   - NO beforeunload warning for a STORED design. The buffer survives reload, so a warning would cry wolf on every refresh
-//     and teach people to click through real ones. A passive status callback is the only truth-teller. (An unsaved Untitled
-//     with content is the exception the save rule makes: needsSavePrompt() says when.)
+//   - NO beforeunload warning for a clean STORED design. The buffer survives reload, so a warning would cry wolf on every refresh
+//     and teach people to click through real ones. A passive status callback is the only truth-teller. The exception the save rule
+//     makes: while needsSavePrompt() answers (an unsaved Untitled with content, or a design whose last save failed) the browser's
+//     leave-page warning is armed, because leaving then really loses work.
 //   - All storage is best-effort: a write/read failure just means "not saved this time," never a thrown
 //     error the host has to handle (the explicit actions DO throw readable errors: the user asked for them).
 //   - Hosts you don't own pass through: a save replaces only its own doc.hosts entry (TASK 458, kept per design in the store).
@@ -63,7 +64,7 @@ export const UNTITLED = 'Untitled';
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
  * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
- *   isStored, needsSavePrompt, tabs, openTab, newTab, activate, closeTab, store }.
+ *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, newTab, activate, closeTab, store }.
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   // ---- the ACTIVE tab's live binding (an inactive tab keeps the same fields in its record) ----
@@ -146,7 +147,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   function loadUntitled(reason) {
     const result = deserializeDocument(emptyDocument(), state);
     bindUntitled();
-    return restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
+    const out = restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
+    lastSig = emptySig = sigNow(); // the empty baseline is taken AFTER the host reset its own data (its sidecar is part of the signature)
+    return out;
   }
 
   /** The content test of an unsaved Untitled: anything other than the document it started as. */
@@ -182,26 +185,29 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const onConflict = (id) => { if (id === boundId) store.get(id).then((d) => { if (d) load(d, 'conflict'); }, (e) => console.error('reload after a Drive conflict failed', e)); };
   const onVisibility = () => { if (doc.visibilityState === 'hidden') flush(); };
   const onPageHide = () => { flush(); };
+  // THE leave-page warning (owner ruling 2026-11-12): armed exactly while leaving would lose work (see needsSavePrompt).
+  const onBeforeUnload = (e) => { if (!needsSavePrompt()) return; e.preventDefault(); e.returnValue = ''; };
   function start() {
     if (intervalId != null) return;
     intervalId = setInterval(poll, pollMs);
     offConflict = store.subscribeConflict(onConflict);
     if (doc) doc.addEventListener('visibilitychange', onVisibility);
-    if (win) win.addEventListener('pagehide', onPageHide);
+    if (win) { win.addEventListener('pagehide', onPageHide); win.addEventListener('beforeunload', onBeforeUnload); }
   }
   function stop() {
     if (intervalId == null) return;
     clearInterval(intervalId); intervalId = null;
     offConflict();
     if (doc) doc.removeEventListener('visibilitychange', onVisibility);
-    if (win) win.removeEventListener('pagehide', onPageHide);
+    if (win) { win.removeEventListener('pagehide', onPageHide); win.removeEventListener('beforeunload', onBeforeUnload); }
   }
   /** Save pending changes NOW (before an action that copies / exports the stored design, and when the tab hides), written through to Drive. */
   async function flush() { await poll(); await store.flushDrive(boundId || undefined); }
 
   // ---- explicit design actions (they throw readable errors: the user asked for them) -------------------------------
-  // They act on the ACTIVE tab. One that would replace an unsaved Untitled WITH content refuses (nothing is ever thrown away silently;
-  // the Save… / Don't save / Cancel prompt is the UI's, slice 4); an empty Untitled is simply replaced.
+  // They act on the ACTIVE tab. One that would replace an unsaved Untitled WITH content refuses: nothing is ever thrown away silently.
+  // The UI never meets that refusal: it asks Save… / Don't save / Cancel first (project-actions.js settleUnsaved) and then either saves
+  // (saveAs) or discards (discardUnsaved) before calling these. An empty Untitled is simply replaced.
   async function openDesign(id) { refuseIfUnsaved(); await flush(); return load(await store.open(id), 'open'); }
   /** New design: an empty, UNSAVED Untitled (stored at its first named save). No design is current while it shows. */
   async function newDesign() { refuseIfUnsaved(); await flush(); await store.setCurrent(null); return loadUntitled('new'); }
@@ -225,6 +231,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (designId || boundId) { await flush(); return store.exportFile(designId || boundId, seam); }
     return seam.save(serializeProjectFile({ app, name, document: JSON.parse(sigNow()) }), projectFileName(name));
   }
+  /** "Don't save": the unsaved Untitled is thrown away (an empty Untitled takes its place), so the action the user asked for can go on.
+   *  A stored design is never discarded (it is autosaved). */
+  function discardUnsaved() { if (!boundId) loadUntitled('new'); }
   async function openFile(seam = browserFileSeam) {
     refuseIfUnsaved();
     await flush();
@@ -350,7 +359,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   return {
     restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
-    designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt,
+    designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
     tabs, openTab, newTab, activate, closeTab, store,
   };
 }

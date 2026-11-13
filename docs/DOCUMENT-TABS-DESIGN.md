@@ -177,7 +177,7 @@ failed write for it), or `null` (close without asking).
 "Content" = the Untitled's document differs from the one it started as (its serialized signature, host sidecar included). Drawing
 then undoing back to empty is no content.
 
-What is stored when, path by path (slice 1 = built now; slice 4 = the prompts and Ctrl+S, UI):
+What is stored when, path by path (built: slice 1 + the save part of slice 4 (THE question, the leave-page warning, Ctrl+S); the tab strip and the close-tab prompt come with slices 3/4):
 
 | Path | Before (main d128cb8) | Now |
 |------|-----------------------|-----|
@@ -187,29 +187,27 @@ What is stored when, path by path (slice 1 = built now; slice 4 = the prompts an
 | New tab (slice 3/4 "+") | - | Same as New design, in a new tab. |
 | Save as... on an unsaved Untitled | (did not happen: everything was stored) | THE FIRST NAMED SAVE: stored under that name, made current, autosaves from then on. One design, not a copy. |
 | Save as... on a named design | A named copy, bound from then on | Unchanged. |
-| Ctrl+S on an unsaved Untitled | - | Opens the Save as name prompt (slice 4). On a named design: flush now (slice 4). |
-| Rename (sidebar name) on an unsaved Untitled | Renamed the current design | Refused: "This design is not saved yet. Save it with a name first (Save as…)." Slice 4 makes naming the Untitled its first save. |
+| Ctrl+S | (picked the Select tool: the canvas shortcut for a bare "s" ignored Ctrl) | On an unsaved Untitled: the Save as name prompt in the sidebar (the typed name = its first named save). On a named design: the pending autosave is written NOW; when nothing is pending nothing visible happens. Ctrl+S never reaches the canvas shortcuts. In SketchStudio, Shaper and Pen Plotter (`sidebar-projects.js`). |
+| Rename (sidebar name) on an unsaved Untitled | Renamed the current design | Naming it IS its first named save (stored under that name). |
 | Duplicate / Save to Google Drive on an unsaved Untitled | "Nothing to ... yet — draw something first." | Same refusal, new text: "This design is not saved yet. Save it with a name first (Save as…)." |
-| Open from Projects / Open recent / Open from file over an unsaved Untitled WITH content | (the Untitled was stored, nothing lost) | Refused ("This design is not saved yet...") until slice 4's Save... / Don't save / Cancel prompt (or a new tab) exists. Over an EMPTY Untitled: it is simply replaced. |
+| Open (Projects modal), Open recent, Open from file, New design, GO TO another app, over an unsaved Untitled WITH content | (the Untitled was stored, nothing lost) | THE question "This design is not saved." Save… / Don't save / Cancel (`project-actions.js` settleUnsaved), asked where the action came from: the sidebar's inline row, or the Projects modal's question bar. Save… = the Save as name prompt, then the action goes on; Don't save = the Untitled is discarded, then the action goes on; Cancel = nothing. Over an EMPTY Untitled: no question. (The buffer still refuses to replace unsaved content if a caller skips the question: nothing is ever lost silently.) |
 | Open from file | Stored as a new design named from the file | Unchanged (a file has a name). |
 | Save to file on an unsaved Untitled | Exported the stored (autosaved) design | Exports the in-memory drawing, named "Untitled"; the project store stays untouched. |
 | Drive (Save to Google Drive, Drive default) | Any stored design | Only named designs reach the store, so only they reach Drive. A Drive conflict reloads only the bound named design (unchanged). |
 | Projects modal (task 547) / Open recent | Listed every stored design, including empty Untitleds | An unsaved Untitled is not stored, so it is never listed (`project-manager.js:273-275` lists `store.listRecent` / `listDesigns`). |
 | Ready gate (task 542) | Opens after the initial restore | Unchanged: it opens after `restore()` whether a design was loaded or an unsaved Untitled is shown. |
-| Close a tab: unsaved Untitled with content | - | Prompt Save... (name it) / Don't save / Cancel (slice 4; decision = `needsSavePrompt()`). |
+| Close a tab: unsaved Untitled with content | - | THE same question (with the tab strip, slices 3/4; decision = `needsSavePrompt()`). |
 | Close a tab: named design | - | No prompt, unless `needsSavePrompt()` says `'save-failed'` (T4). |
-| Reload / leave the page with an unsaved Untitled with content | (stored, restored) | The browser's leave-page warning (beforeunload, slice 4); it is not restored. Named tabs are restored (T9, slice 6). |
+| Reload / close the page | (stored, restored) | The browser's leave-page warning is armed exactly while `needsSavePrompt()` answers ('unsaved' content or 'save-failed'), never on a clean or a named, saved design. An unsaved Untitled is not restored. Named tabs are restored (T9, slice 6). |
 | Switch tabs | - | The active NAMED design is saved before it is put aside; an unsaved Untitled stays in its tab, in memory. |
-| Sidebar name / browser tab title of an unsaved Untitled | "Untitled" / "Untitled — <App>" (it was stored) | "Untitled" / "<App> · Sketch Studio" (no design is current). Slice 4 adds a "not saved" status. |
+| Sidebar name / browser tab title of an unsaved Untitled | "Untitled" / "Untitled — <App>" (it was stored) | "Untitled" / "<App> · Sketch Studio" (no design is current). A "not saved" status line can come with the tab strip. |
 | "Saving… / Saved" status of an unsaved Untitled | Saving… then Saved | Empty (nothing is written). |
 
 The DDCS Studio lesson "no beforeunload" (`document-buffer.js` header) still holds for named designs; the unsaved Untitled with
 content is the one case that warns.
 
-**Gap until slice 4 (for the advisor):** between slice 1 and slice 4 an unsaved Untitled with content is lost on reload or when the
-page is closed (no beforeunload yet), and when the user leaves for another app through GO TO. Opening another design over it is
-refused (above), so that path loses nothing. Merging slice 1 to main alone exposes users to that gap; merging it together with the
-slice 4 prompts closes it.
+The gap slice 1 alone had (an unsaved Untitled lost on reload / close / GO TO, a bare refusal on Open) is closed by the question, the
+leave-page warning and Ctrl+S above, built on the same branch.
 
 ---
 
@@ -451,7 +449,7 @@ Every slice: gate green (`npm run gate`), SMOKE 12/12, HEADLESS-LEFT 0, WORK-LOG
 | 1 (BUILT) | Headless tab model in `document-buffer.js`: tab records, `tabs()/openTab/activate/closeTab/newTab`, the `poll()` bound-id fix (4.4 hazard), `session` hook, `reason` in `onRestored`; PLUS the save rule (3b) and `needsSavePrompt()`; `store.setCurrent(id)`. No UI. | M | Any host's `onRestored` cannot tell a switch from an open without a second code path -> stop. The poll race cannot be pinned by a failing test BEFORE the fix -> stop and report. |
 | 2 | Host sessions: Pen Plotter declares `session` for `history.js` stacks; each host honours `reason: 'switch'` (no refit, restore view). Shaper: confirm nothing needed (cut plan in snapshots + sidecar). | S-M | A host keeps per-design data that is neither in the sidecar nor declarable as a session -> stop, list it. |
 | 3 | The strip `packages/ui/document-tabs.js` + `documentTabs: true` in `mountProjectSidebar`, SketchStudio first (needs T1). | M | SMOKE not 12/12, or any SketchStudio control moves (screenshot diff of the header row) -> stop. |
-| 4 | Actions: Open / Open recent / Open from file / New open tabs (T2, T3); same design -> switch; close prompts from `needsSavePrompt()` (Save... / Don't save / Cancel), the beforeunload warning for an unsaved Untitled with content, Ctrl+S, rename of an Untitled = its first save; max (T7); sidebar name/status/title from the active tab (an "Untitled, not saved" status); flush-all on page hide. | M | A store API change is needed beyond reading meta -> stop and ask. |
+| 4 | (Its SAVE part is BUILT with slice 1: THE unsaved-design question on Open / Open recent / Open from file / New / GO TO, the leave-page warning, Ctrl+S, rename = first save.) Actions: Open / Open recent / Open from file / New open tabs (T2, T3); same design -> switch; close prompts from `needsSavePrompt()` (Save... / Don't save / Cancel), the beforeunload warning for an unsaved Untitled with content, Ctrl+S, rename of an Untitled = its first save; max (T7); sidebar name/status/title from the active tab (an "Untitled, not saved" status); flush-all on page hide. | M | A store API change is needed beyond reading meta -> stop and ask. |
 | 5 | Shaper + Pen Plotter get the strip; live tests in both. | S-M | The strip overlaps or shifts `#mode-nav` (task 522 pinned its position) -> stop. |
 | 6 | Persistence + cross-app (T9, T10): `openTabs` meta, restore at boot, BroadcastChannel sync. | M | The ready gate (542) would have to wait for more than the CURRENT design -> stop. |
 | 7 | (v2, T8) drag to reorder. | S | - |
@@ -490,12 +488,9 @@ Tests (node unless marked live):
 - **F4** The `poll()` rebind hazard (4.4): latent today, real once tabs switch often. FIXED in slice 1 (failing test first:
   `tests/document-tabs.test.js`, block F4).
 - **F5** The module-level engine store (3.1), already known from 535-1b; measured again here.
-- **F6** (found in slice 1) The origin joint of a page that was never restored has no `sketchId`; the first undo restore stamps one
-  (`sketch-state.js` joints.set wrapper, `:319-320`, through `_restoreSnapshot`). Undo is therefore not byte-exact on `j_origin`.
-  `tests/draw-undo-runner.js` already normalised it; `tests/drag-undo-live.test.js` now does too (before the save rule its pages
-  were restored from an autosave, which stamped the origin first).
-- **F7** (found in slice 1) A design made by New design has NO origin joint: `emptyDocument()` (`project-store.js:67`) has no
-  joints and `deserializeDocument` clears them; only `engine.init()` creates `j_origin` (`constraint-solver.js:21`). True before
-  slice 1 (the stored empty design) and after it (the unsaved Untitled loads the same document). Origin snapping does nothing in
-  such a design. Not fixed (one place to fix: the empty document, or the load path); the test helper `tests/helpers/named-design.js`
-  stores the origin as a fresh page's first named save does.
+- **F6** (found in slice 1) The origin joint of a page whose sketch was never restored (mountSketch: `engine.init()` before
+  `createSketchState`, so Shaper / Pen Plotter / Trace) had no `sketchId`; the first undo restore stamped one (the `joints.set`
+  wrapper in `sketch-state.js`), so undo was not byte-exact on `j_origin`. FIXED at the declaration: `ORIGIN_JOINT` in
+  `packages/core/constants.js` carries `sketchId: DEFAULT_SKETCH_ID` (failing test first: `tests/origin-sketch-id.test.js`).
+  Same visible result as before (an unstamped joint already resolved to Sketch 1 through `sketchOf`); a loaded origin now always
+  belongs to Sketch 1, never to whichever sketch happened to be active when the document loaded.

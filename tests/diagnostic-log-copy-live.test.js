@@ -40,8 +40,8 @@ await (async () => {
       const status = await evalJs(`document.querySelector('.sk-diag-status').textContent`);
       const text = await evalJs(`navigator.clipboard.readText()`);
       const report = JSON.parse(text);
-      assert.strictEqual(report.app, app, `${app}: the clipboard holds that app's report`);
-      for (const k of ['app', 'url', 'ua', 'viewport', 'touchTrace', 'log', 'document', 'journal', 'trimmed']) assert.ok(k in report, `${app}: report field ${k}`);
+      assert.strictEqual(report.summary.app, app, `${app}: the clipboard holds that app's report`); // TASK 591: the compact report
+      for (const k of ['summary', 'viewport', 'log', 'dropped', 'document', 'journal']) assert.ok(k in report, `${app}: report field ${k}`);
       assert.ok(!text.includes('\n'), `${app}: one line`);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-diag-download').classList.contains('sk-hidden')`), true, `${app}: no download offer when the copy worked`);
       console.log(`${app}: ${status} (${text.length} chars)`);
@@ -59,7 +59,7 @@ await (async () => {
       await clickEl('.sk-diag-download');
       await waitFor(`window.__saved !== null`, `${app}: the download to be written`);
       const saved = JSON.parse(await evalJs(`window.__saved`));
-      assert.strictEqual(saved.app, app, `${app}: the downloaded file is the report`);
+      assert.strictEqual(saved.summary.app, app, `${app}: the downloaded file is the report`);
       assert.ok(/^Saved sketch-studio-report-.+\.json$/.test(await evalJs(`document.querySelector('.sk-diag-status').textContent`)), `${app}: saved status`);
     }
     console.log('diagnostic-log-copy-live: OK');

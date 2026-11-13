@@ -4,6 +4,7 @@
 
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const HOST = process.env.HOST || 'sketchstudio';
@@ -60,6 +61,8 @@ await (async () => {
     } else {
       await navigate(url, 8000); await waitForApp('svgCanvas');
       await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
+      await navigate(url, 8000); await waitForApp('svgCanvas');
+      await evalJs(CREATE_NAMED_DESIGN('sketchstudio')); // TASK 558: only a NAMED design autosaves (this test reads the autosave); the next load restores it
       await navigate(url, 8000); await waitForApp('svgCanvas');
     }
     const o = await toScreen(0, 0);

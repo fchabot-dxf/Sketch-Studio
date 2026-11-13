@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN_TAG = '<script type="module" src="./src/main.js"></script>';
@@ -39,6 +40,10 @@ await (async () => {
     await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
     await enterDesign();
     await waitFor(`document.getElementById('design-canvas').dataset.docReady === '1'`, 'the first page to finish its restore');
+    await evalJs(CREATE_NAMED_DESIGN('penplotter', 'Gate test')); // TASK 558: only a NAMED design autosaves; the reload restores it
+    await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
+    await enterDesign();
+    await waitFor(`document.getElementById('design-canvas').dataset.docReady === '1'`, 'the named design to be restored');
     await evalJs(`(() => {
       const { state, engine } = window.__sketch.controller;
       state.joints.set('j_a', { x: -25, y: 0, fixed: true }); state.joints.set('j_b', { x: 25, y: 0, fixed: false });

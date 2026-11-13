@@ -9,6 +9,10 @@
 // The host passes `getBuffer()` (its createDocumentBuffer result; it may be created lazily, so it is read at click time) and
 // its own `hostActions` array. A refused open / file / delete shows the store's message in the drawer and changes nothing.
 // The tab title follows the current design through the registry (appTitle).
+// TASK 558 (owner rulings 2026-11-12): an unsaved Untitled with content is never replaced or left without THE question (project-actions.js
+// settleUnsaved: Save… / Don't save / Cancel), asked in the UI the action came from (this drawer, or the Projects modal while it is open),
+// also before a GO TO entry leaves the page. Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
+// design, the Save as name prompt; on a stored one, the pending autosave is written now (nothing visible when there is nothing pending).
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
@@ -28,7 +32,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   let currentDesignId = null;
   let manager = null;   // the open project manager modal, if any
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = createProjectActions({ store, getBuffer, account, importFile, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a) });
+  const projectActions = createProjectActions({ store, getBuffer, account, importFile, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
@@ -84,13 +88,34 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   sidebar = createAppSidebar({
     current: appId, docName: currentName, actions, account, driveControls, status: statusLine,
+    beforeGoTo: () => projectActions.settleUnsaved(),
     onRenameDoc: (name) => act(async () => {
+      const b = getBuffer && getBuffer();
+      if (b && !b.isStored()) { await b.saveAs(name); return; } // naming an unsaved Untitled is its first named save
       const id = await currentId();
-      if (!id) throw new Error('Nothing to rename yet — draw something first.');
+      if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
     }, { close: false })(),
   });
   store.subscribe(refreshName);
   refreshName();
+
+  // Ctrl+S (Cmd+S): save. Captured on the window, before the canvas shortcuts (where a bare "s" picks the Select tool) and the browser's
+  // own "save page".
+  async function saveNow() {
+    const b = getBuffer && getBuffer();
+    if (!b) return;
+    await b.ready; // a stored design may still be restoring: it is not an Untitled
+    if (b.isStored()) { await b.flush(); return; }
+    const name = await sidebar.ask({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' });
+    if (!name) { sidebar.close(); return; }
+    await b.saveAs(name);
+    sidebar.close();
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || (e.key !== 's' && e.key !== 'S')) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    saveNow().catch(fail);
+  }, true);
   return sidebar;
 }

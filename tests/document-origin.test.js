@@ -9,6 +9,7 @@ import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import fs from 'node:fs';
+// TASK 558 F6: the declared origin belongs to Sketch 1 (sketchId 'sketch-1'), so every origin below carries it.
 
 const freshState = () => ({ joints: new Map([['j_stale', { x: 5, y: 5 }]]), shapes: [], constraints: [] });
 
@@ -17,7 +18,7 @@ const freshState = () => ({ joints: new Map([['j_stale', { x: 5, y: 5 }]]), shap
   const state = freshState();
   const r = deserializeDocument(emptyDocument(), state);
   assert.equal(r.ok, true);
-  assert.deepStrictEqual([...state.joints.entries()], [[ORIGIN_JOINT_ID, { x: 0, y: 0, fixed: true }]], 'an empty document loads with the fixed origin only: ' + JSON.stringify([...state.joints.entries()]));
+  assert.deepStrictEqual([...state.joints.entries()], [[ORIGIN_JOINT_ID, { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }]], 'an empty document loads with the fixed origin only: ' + JSON.stringify([...state.joints.entries()]));
 }
 
 // 2. a version-1 document with shapes but no origin (a design saved after a "New design" load) is repaired, origin first
@@ -26,14 +27,14 @@ const freshState = () => ({ joints: new Map([['j_stale', { x: 5, y: 5 }]]), shap
   const doc = { version: 1, geometry: { joints: [['j1', { x: 1, y: 2 }], ['j2', { x: 3, y: 4 }]], shapes: [{ id: 's1', type: 'line', joints: ['j1', 'j2'] }], constraints: [] } };
   deserializeDocument(doc, state);
   assert.deepStrictEqual([...state.joints.keys()], [ORIGIN_JOINT_ID, 'j1', 'j2'], 'the origin is added first, the stored joints follow');
-  assert.deepStrictEqual(state.joints.get(ORIGIN_JOINT_ID), { x: 0, y: 0, fixed: true });
+  assert.deepStrictEqual(state.joints.get(ORIGIN_JOINT_ID), { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' });
 }
 
 // 2b. every document version this build reads (1, 2, 3 = DOCUMENT_VERSION): with no origin it gets one, with one it keeps it, never two
 for (let v = 1; v <= DOCUMENT_VERSION; v++) {
   const without = freshState();
   assert.equal(deserializeDocument({ version: v, geometry: { joints: [['j1', { x: 1, y: 2 }]], shapes: [], constraints: [] } }, without).ok, true, 'version ' + v + ' loads');
-  assert.deepStrictEqual([...without.joints.entries()], [[ORIGIN_JOINT_ID, { x: 0, y: 0, fixed: true }], ['j1', { x: 1, y: 2 }]], 'version ' + v + ' without an origin gets it, first');
+  assert.deepStrictEqual([...without.joints.entries()], [[ORIGIN_JOINT_ID, { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ['j1', { x: 1, y: 2 }]], 'version ' + v + ' without an origin gets it, first');
   const withOrigin = freshState();
   deserializeDocument({ version: v, geometry: { joints: [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ['j1', { x: 1, y: 2 }]], shapes: [], constraints: [] } }, withOrigin);
   assert.deepStrictEqual([...withOrigin.joints.entries()], [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }], ['j1', { x: 1, y: 2 }]], 'version ' + v + ' with its origin keeps it, one origin');
@@ -55,7 +56,7 @@ assert.strictEqual(DOCUMENT_VERSION, 3, 'this test covers versions 1..3; extend 
   const state = freshState();
   deserializeDocument(emptyDocument(), state);
   state.joints.get(ORIGIN_JOINT_ID).sketchId = 'sketch-1';
-  assert.deepStrictEqual(ORIGIN_JOINT, { x: 0, y: 0, fixed: true });
+  assert.deepStrictEqual(ORIGIN_JOINT, { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' });
 }
 
 // 5. the owner's live document (byte copy of his diagnostic report's `document`, 2026-11-12): saved with NO j_origin. Opened, it has its origin again.
@@ -64,7 +65,7 @@ assert.strictEqual(DOCUMENT_VERSION, 3, 'this test covers versions 1..3; extend 
   assert(!owner.geometry.joints.some((e) => (Array.isArray(e) ? e[0] : e.id) === ORIGIN_JOINT_ID), 'the fixture is the origin-less document');
   const state = freshState();
   assert.equal(deserializeDocument(owner, state).ok, true);
-  assert.deepStrictEqual(state.joints.get(ORIGIN_JOINT_ID), { x: 0, y: 0, fixed: true }, 'the owner design shows its origin again');
+  assert.deepStrictEqual(state.joints.get(ORIGIN_JOINT_ID), { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }, 'the owner design shows its origin again');
   assert.strictEqual(state.joints.size, owner.geometry.joints.length + 1, 'only the origin was added');
   assert.strictEqual([...state.joints.keys()][0], ORIGIN_JOINT_ID);
 }

@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await (async () => {
@@ -38,6 +39,8 @@ await (async () => {
     const fresh = async () => {
       await navigate(url, 8000); await waitForApp('svgCanvas');
       await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
+      await navigate(url, 8000); await waitForApp('svgCanvas');
+      await evalJs(CREATE_NAMED_DESIGN('sketchstudio')); // TASK 558: only a NAMED design autosaves (this test reads the autosave); the next load restores it
       await navigate(url, 8000); await waitForApp('svgCanvas');
     };
     const toScreen = (wx, wy) => evalJs(`(() => { const s = document.getElementById('svgCanvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);

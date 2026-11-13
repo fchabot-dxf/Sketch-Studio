@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -89,6 +90,8 @@ await (async () => {
     const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
     await send('Page.navigate', { url }); await sleep(2500);
     await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
+    await send('Page.navigate', { url }); await sleep(2500);
+    await evalJs(CREATE_NAMED_DESIGN('sketchstudio')); // TASK 558: only a NAMED design autosaves (this test reads the autosave); the next load restores it
     await send('Page.navigate', { url }); await sleep(2500);
     let o = await toScreen('#svgCanvas', 0, 0);
     // a sketch line well off the axes

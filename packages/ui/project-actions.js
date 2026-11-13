@@ -6,29 +6,49 @@
 //   closes: the UI closes itself after a successful run (Open); run returning null means "cancelled" (a file picker) and keeps it open.
 //   visible: false hides the action (Save to Google Drive when signed out).
 // Failures THROW (a readable message); the UI shows it and changes nothing.
+// TASK 558 (owner ruling 2026-11-12): an action that would replace an UNSAVED Untitled with content (Open, Open recent, Open from file, New
+// design, GO TO another app) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
+// (discard it, then go on) / Cancel (nothing happens). It asks through the injected `ask` of the UI the action came from (the sidebar's
+// inline row or the Projects modal's question bar): ask({ kind: 'choose', label, options }) -> option id | null, ask({ kind: 'prompt', label,
+// value, okLabel }) -> text | null (null = Cancel).
 
 import { driveFileUrl } from './cloud/drive-adapter.js';
 import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 
 // `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null }) {
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
 
+  /** THE unsaved-design question. Resolves true = go on (nothing unsaved, or saved under a name, or discarded); false = Cancel. */
+  async function settleUnsaved() {
+    const b = buf();
+    if (b.needsSavePrompt() !== 'unsaved') return true;
+    const choice = await ask({ kind: 'choose', label: 'This design is not saved.', options: [{ id: 'save', label: 'Save…' }, { id: 'discard', label: "Don't save" }] });
+    if (choice === 'discard') { b.discardUnsaved(); return true; }
+    if (choice !== 'save') return false;
+    const name = await ask({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' });
+    if (!name) return false;
+    await b.saveAs(name);
+    return true;
+  }
+  /** Resolves null when the user cancelled the unsaved-design question (nothing changed). */
   async function openDesign(id) {
+    if (!(await settleUnsaved())) return null;
     const out = await buf().openDesign(id);
     if (!out.restored) throw new Error(out.reason || 'This design could not be opened.');
+    return out;
   }
   // (the *Now forms assume the pending edits are already saved)
   async function duplicateNow(id) {
-    if (!id) throw new Error('Nothing to duplicate yet — draw something first.');
+    if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled has no stored design
     const d = await store.duplicate(id);
     notify(`Duplicated as "${d.name}" (find it under Open recent).`, 'info');
     return d;
   }
   async function saveToDriveNow(id) {
-    if (!id) throw new Error('Nothing to save yet — draw something first.');
+    if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558
     const r = await store.cloud.saveToDrive(id);
     notify('Saved to Google Drive', 'info', { href: driveFileUrl(r.fileId), label: 'Open in Drive' });
   }
@@ -66,8 +86,8 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   const duplicateCurrent = async () => { const b = buf(); await b.flush(); return duplicateNow(b.designId()); };
   const saveCurrentToDrive = async () => { const b = buf(); await b.flush(); return saveToDriveNow(b.designId()); };
   const saveAs = (name) => buf().saveAs(name);
-  const newDesign = () => buf().newDesign();
-  const openFile = () => buf().openFile();
+  const newDesign = async () => ((await settleUnsaved()) ? buf().newDesign() : null);
+  const openFile = async () => ((await settleUnsaved()) ? buf().openFile() : null);
   // pick an SVG / DXF and hand its text to the host's importer; null = the picker was cancelled
   const importDrawing = importFile ? () => pickAndImport(importFile) : null;
 
@@ -81,5 +101,5 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     ];
   }
 
-  return { duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems };
+  return { duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems, settleUnsaved };
 }

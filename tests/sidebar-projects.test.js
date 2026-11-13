@@ -63,28 +63,36 @@ await (async () => {
 
     await nav();
     await clickEl('[data-mode="design"]'); await sleep(1200);
-    await seed(4); await sleep(3200); // autosave -> the design "Untitled"
+    await seed(4); await sleep(3200); // TASK 558 save rule: an unsaved Untitled -- the autosave stores NOTHING until the first named save
     await openSb();
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Untitled', 'the drawer shows the current design name');
-    assert.strictEqual(await title(), 'Untitled — Shaper', 'the tab title follows the design name through the registry');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Untitled', 'the drawer shows the unsaved Untitled');
+    assert.strictEqual(await title(), 'Shaper · Sketch Studio', 'an unsaved design has no design name in the tab title');
+    assert.deepStrictEqual(await recent(), [], 'an unsaved Untitled is not stored, so not listed');
     await shot('479-main-view');
 
+    // ── the FIRST NAMED SAVE: Save as… names and stores the Untitled (one design, not a copy); then it autosaves ──
+    await clickEl('[data-action="save-as"]'); await sleep(200);
+    await key('a', 'KeyA', 65, 2); await typeText('Door'); await key(' ', 'Space', 32, 0, ' '); await typeText('X'); await key('Enter', 'Enter', 13); await sleep(700);
+    assert.deepStrictEqual((await recent()).map((r) => r[0]), ['Door X'], 'Save as stored the Untitled under its name');
+    assert.strictEqual(await title(), 'Door X — Shaper', 'the title follows the design name through the registry');
+
     // ── rename inline: click the name, type, Enter -> title + recent update ──
+    await openSb();
     await clickEl('.sk-sidebar-doc'); await sleep(150);
     await key('a', 'KeyA', 65, 2); await typeText('Door'); await key(' ', 'Space', 32, 0, ' '); await typeText('A'); await key('Enter', 'Enter', 13); await sleep(500);
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Door A');
     assert.strictEqual(await title(), 'Door A — Shaper', 'rename updates the title');
     assert.deepStrictEqual((await recent()).map((r) => r[0]), ['Door A'], 'and the recent list');
 
-    // ── New design KEEPS the old one ──
+    // ── New design KEEPS the old one, and stores nothing until it is named ──
     await clickEl('[data-action="new-design"]'); await sleep(700);
     assert.strictEqual(await shapes(), 0, 'New design starts empty');
     await openSb(); // the drawer closed after the action: reopen to read the refreshed name
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar-doc').textContent`), 'Untitled');
-    assert.deepStrictEqual((await recent()).map((r) => r[0]).sort(), ['Door A', 'Untitled'], 'the previous design is kept in recent');
-    await clickEl('.sk-sidebar-doc'); await sleep(150);
-    await typeText('DoorB'); await key('Enter', 'Enter', 13); await sleep(400);
-    await seed(2); await sleep(3200); // some content for B
+    assert.deepStrictEqual((await recent()).map((r) => r[0]), ['Door A'], 'the previous design is kept; the new Untitled is not stored');
+    await clickEl('[data-action="save-as"]'); await sleep(200);
+    await key('a', 'KeyA', 65, 2); await typeText('DoorB'); await key('Enter', 'Enter', 13); await sleep(700);
+    await seed(2); await sleep(3200); // some content for B (autosaved: B is named)
     await key('Escape', 'Escape', 27); await sleep(200);
 
     // ── Open recent switches the canvas ──

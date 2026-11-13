@@ -77,11 +77,14 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 }
 
 // Returns null when no Edge/Chrome is installed (the caller prints its "skipped" line).
-// opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer).
+// opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer),
+//   leaveDialog: how the browser's leave-page warning (a beforeunload dialog) is answered: 'leave' (default: as a user who clicks through, so a
+//   navigation away from a page with unsaved work goes on; TASK 558 arms it), 'stay', or null (not answered: the test answers it). Every JS dialog
+//   is recorded in the returned `dialogs` array (its type, in order).
 export async function launchBrowser(opts = {}) {
   // scripts/gate.cjs runs the quick tier (no browser) with this set: a browser test misplaced there fails loudly instead of running unlocked.
   if (process.env.SKETCH_GATE_TIER === 'quick') throw new Error('launchBrowser refused: this test runs in the quick (no-browser) gate tier; it is a live test');
-  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null } = opts;
+  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null, leaveDialog = 'leave' } = opts;
   const browser = findBrowser();
   if (!browser) return null;
   const srv = withServer ? await startServer(REPO_ROOT, fixtures) : { server: null, port: 0 };
@@ -135,12 +138,17 @@ export async function launchBrowser(opts = {}) {
     let id = 0;
     const pending = new Map();
     const evs = {};
+    const dialogs = [];
     const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
     const once = (m) => new Promise((res) => { (evs[m] = evs[m] || []).push(res); });
     ws.addEventListener('message', (e) => {
       const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
+      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); return; }
+      if (m.method === 'Page.javascriptDialogOpening') {
+        dialogs.push(m.params.type);
+        if (m.params.type === 'beforeunload' && leaveDialog) { const i = ++id; pending.set(i, () => {}); ws.send(JSON.stringify({ id: i, method: 'Page.handleJavaScriptDialog', params: { accept: leaveDialog === 'leave' } })); }
+      }
+      if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
     });
     await new Promise((r, j) => { ws.addEventListener('open', r); ws.addEventListener('error', j); });
     await send('Runtime.enable');
@@ -167,7 +175,7 @@ export async function launchBrowser(opts = {}) {
       const status = await evalJs(`(() => { window.dispatchEvent(new Event('pagehide')); return document.getElementById('save-status').textContent; })()`);
       if (status === 'Saving…') await waitFor(`document.getElementById('save-status').textContent === 'Saved'`, 'the autosave to finish writing');
     };
-    return { port: srv.port, server: srv.server, userDir, ws, send, once, evalJs, waitFor, navigate, waitForApp, flushAutosave, close };
+    return { port: srv.port, server: srv.server, userDir, ws, send, once, evalJs, waitFor, navigate, waitForApp, flushAutosave, close, dialogs };
   } catch (e) {
     await close();
     throw e;

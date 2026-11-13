@@ -200,9 +200,14 @@ const memSeam = () => { const s = { text: null, name: null, save: async (text, n
   assert(ro.restored && ro.name === 'Untitled' && sA.joints.has('j5') && !sA.joints.has('j4'), 'open replaces the whole state');
   assert.strictEqual((await store.current()).id, first);
   assert.deepStrictEqual(calls[calls.length - 1].slice(0, 3), ['A', true, 'Untitled']);
-  // new project: empty state, empty hosts (the host resets its own state in onRestored)
-  const rn = await A.newDesign('Fresh');
-  assert(rn.restored && [...sA.joints.keys()].join() === 'j_origin' && Object.keys(rn.hosts).length === 0 && rn.name === 'Fresh', 'a new project is empty: only its origin (TASK 554)');
+  // new design: empty state (only its origin, TASK 554), empty hosts (the host resets its own state in onRestored). TASK 558 save rule:
+  // it is an UNSAVED Untitled (nothing stored) until its first named save (saveAs), which stores it under that name.
+  const designsBefore = (await store.listRecent()).length;
+  const rn = await A.newDesign();
+  assert(rn.restored && [...sA.joints.keys()].join() === 'j_origin' && Object.keys(rn.hosts).length === 0 && rn.name === 'Untitled', 'a new design is empty: only its origin (TASK 554)');
+  assert(A.designId() === null && (await store.listRecent()).length === designsBefore, 'a new design is not stored before its first named save');
+  await A.saveAs('Fresh');
+  assert((await store.listRecent()).length === designsBefore + 1 && (await store.current()).name === 'Fresh', 'the first named save stores it');
   // files through the buffer
   sA.joints.set('jz', { x: 3, y: 3 });
   const seam = memSeam();

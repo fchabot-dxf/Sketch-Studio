@@ -32,6 +32,12 @@ const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/legacy
 const TOL = 1e-9;
 const quiet = (f) => { const e = console.error, w = console.warn, l = console.log; console.error = console.warn = console.log = () => {}; try { return f(); } finally { console.error = e; console.warn = w; console.log = l; } };
 const worstJoints = (a, b) => {
+  // TASK 554: a document saved WITHOUT j_origin (the owner's) now loads with it (fixed at 0,0, nothing attached); main had no such joint
+  if (a.some((x) => x[0] === 'j_origin') && !b.some((x) => x[0] === 'j_origin')) {
+    const o = a.find((x) => x[0] === 'j_origin');
+    assert(o[1] === 0 && o[2] === 0, 'the added origin stays at (0, 0): ' + JSON.stringify(o));
+    a = a.filter((x) => x[0] !== 'j_origin');
+  }
   assert.strictEqual(a.length, b.length, 'joint count');
   let w = 0;
   a.forEach((x, i) => { assert.strictEqual(x[0], b[i][0], 'joint ids'); w = Math.max(w, Math.abs(x[1] - b[i][1]), Math.abs(x[2] - b[i][2])); });

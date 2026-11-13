@@ -79,6 +79,8 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 // Returns null when no Edge/Chrome is installed (the caller prints its "skipped" line).
 // opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer).
 export async function launchBrowser(opts = {}) {
+  // scripts/gate.cjs runs the quick tier (no browser) with this set: a browser test misplaced there fails loudly instead of running unlocked.
+  if (process.env.SKETCH_GATE_TIER === 'quick') throw new Error('launchBrowser refused: this test runs in the quick (no-browser) gate tier; it is a live test');
   const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null } = opts;
   const browser = findBrowser();
   if (!browser) return null;

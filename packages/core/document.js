@@ -28,6 +28,17 @@ import { legacyAngleSector } from '#core/angle-sector.js';
 export const DOCUMENT_VERSION = 3;
 
 /**
+ * TASK 575: a copy of a joint or shape record without its `dragTarget`: the solver's mouse-spring target, which the select tool sets
+ * only while the user drags it. It is not part of the drawing: a save (the autosave runs during a long drag), an undo snapshot and a
+ * load (a design stored while a drag was in progress) all drop it, so no target outlives its drag.
+ */
+export function withoutDragTarget(record) {
+  const copy = { ...record };
+  delete copy.dragTarget;
+  return copy;
+}
+
+/**
  * serializeDocument(state, { hosts }) → a plain, JSON-safe object.
  *   state: the shared sketch state (joints: Map, shapes/constraints: arrays, plus the optional
  *     sketches/groups/vcarves arrays — whichever a given host's state actually carries; a host without
@@ -40,8 +51,8 @@ export function serializeDocument(state, { hosts } = {}) {
     geometry: {
       // Array of [id, {x,y,fixed,...}] pairs — the SAME shape tests/harness/sketch.js's load() already
       // accepts as one of its input forms, and trivially JSON-safe (a Map is not).
-      joints: Array.from(state.joints.entries()).map(([id, j]) => [id, { ...j }]),
-      shapes: state.shapes.map((s) => ({ ...s, joints: s.joints ? [...s.joints] : [] })),
+      joints: Array.from(state.joints.entries()).map(([id, j]) => [id, withoutDragTarget(j)]),
+      shapes: state.shapes.map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })),
       constraints: state.constraints.map((c) => ({
         ...c,
         joints: c.joints ? [...c.joints] : undefined,
@@ -96,11 +107,11 @@ export function deserializeDocument(doc, state) {
   state.joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
   for (const entry of (g.joints || [])) {
     const [id, j] = Array.isArray(entry) ? entry : [entry.id, entry];
-    if (id != null && j) state.joints.set(id, { ...j });
+    if (id != null && j) state.joints.set(id, withoutDragTarget(j));
   }
 
   state.shapes.length = 0;
-  state.shapes.push(...(g.shapes || []).map((s) => ({ ...s, joints: s.joints ? [...s.joints] : [] })));
+  state.shapes.push(...(g.shapes || []).map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })));
 
   state.constraints.length = 0;
   for (const c of (g.constraints || [])) {

@@ -8,12 +8,14 @@ import { buildCells, compareCell } from '../../tests/harness/fusion-oracle/drag-
 const FX = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../tests/fixtures/fusion-oracle');
 // task 538: a body drag (line mid, rectangle edge, circle rim, tangent circle rim) pulls the grabbed point (definitions.js BODY_POINTS) and matches Fusion in every
 // recorded cell, so no body class has a reason any more: a body cell that differs again is written UNEXPLAINED and fails tests/fusion-drag.test.js.
+// task 584: an arc grabbed by its CENTRE carries both rims (every solve pulls each to the grab's displacement) and translates whole like Fusion in
+// every recorded cell (arc.free.centre.*, arc.rad.centre.*), so arc.centre has no reason any more either.
 const ARC = 'arc joint drag: ours stretches / rotates the arc or moves a different set of its three joints (cause inside the solve not isolated); Fusion resizes, rotates or translates it';
 const REASONS = {
   'line.end': 'length-dimensioned free line grabbed by an end: Fusion drags the whole line (translate); ours rotates it (both ends move, length kept)',
   'twolines.end': 'both lengths dimensioned, corner fixed, diagonal drag: Fusion rotates the line about the corner; ours leaves it where it is',
   'tangent.lineend': 'line end of a tangent line + circle: ours moves / resizes the circle in a different set of cells than Fusion',
-  'arc.end': ARC, 'arc.centre': ARC,
+  'arc.end': ARC,
 };
 const known = {};
 for (const cell of buildCells()) {

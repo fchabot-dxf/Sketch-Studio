@@ -43,7 +43,7 @@ await (async () => {
     // a rectangle, one corner locked, width and height dimensioned: fully constrained. Each of these two dimensions is NOT redundant, so
     // typeValue (which waits for the value box to open) is the check that a non-redundant dimension still opens the box and its typed value drives.
     await clickEl('#tool-rect');
-    const A = { x: cv.x - 120, y: cv.y - 100 }, C = { x: cv.x + 120, y: cv.y + 100 };
+    const A = { x: cv.x - 120, y: cv.y - 100 }, C = { x: cv.x + 120, y: cv.y + 140 };
     await drag(A, C);
     await clickEl('#tool-select');
     const corners = async () => { const l = await lines(); const xs = l.flat(); const x0 = Math.min(...xs.map(p => p.x)), x1 = Math.max(...xs.map(p => p.x)), y0 = Math.min(...xs.map(p => p.y)), y1 = Math.max(...xs.map(p => p.y)); return { x0, x1, y0, y1 }; };

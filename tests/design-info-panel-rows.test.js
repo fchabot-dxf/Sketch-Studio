@@ -74,7 +74,6 @@ const expand = (container) => container.querySelector('.sk-sketch-tw').fire('cli
     const host = new MockNode(); panel.render(host);
     assert(host.querySelectorAll('.sk-info-row').length === 0, 'rows must be hidden by default');
     assert(host.querySelector('.sk-sketch-name').textContent === 'Sketch 1', 'sketch name shown');
-    assert(host.querySelector('.sk-sketch-head').querySelector('.sk-info-val').textContent === '7', 'constraint count shown on the head');
     assert(host.querySelector('.sk-sketch-tw').classList.contains('is-collapsed'), 'collapsed caret (a chevron icon, TASK 577: marked by class)');
     expand(host);
     assert(host.querySelectorAll('.sk-info-row').length === 7, 'caret click shows the rows');

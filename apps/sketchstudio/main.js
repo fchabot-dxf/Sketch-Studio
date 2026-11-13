@@ -181,6 +181,7 @@ function initApp(){
   if (headerHost) header.render(headerHost);
   // the SKETCHES tree beside the canvas (<main> is a flex row); at phone width it is a slide-over drawer opened from this header button
   sidePanel = mountDesignSidePanel({ container: mainEl, state, engine, storageKey: 'sketchstudio-design-panel-collapsed', toggleHost: header.el });
+  if (typeof ResizeObserver !== 'undefined' && svg) new ResizeObserver(() => updateView()).observe(svg); // the side panel (collapse, phone drawer) resizes the canvas: keep its viewBox aspect
   showView('design');
 
   // PERSIST-2: a passive autosave status indicator (never a blocking prompt).

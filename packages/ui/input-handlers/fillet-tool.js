@@ -12,6 +12,7 @@ import {
   diagnoseNoFillet, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
+import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -90,6 +91,10 @@ export function getFilletRadius() {
 
 // ---- pick / hover -------------------------------------------------------------------------------------------
 
+// TASK 577: a line / corner of a locked or hidden sketch is not a fillet pick (the picks above search every shape; this drops theirs).
+function lineOf(line, state) { return line && !isShapeInert(inertEntities(state), line.id) ? line : null; }
+function cornerOf(corner, state) { return corner && lineOf(corner.lineA.shape, state) && lineOf(corner.lineB.shape, state) ? corner : null; }
+
 export function handleFilletPointerMove(e, ctx, state, viewState) {
   _ctx = ctx;
   _state = state;
@@ -103,12 +108,12 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
 
   if (_pick) {
     // line 1 is picked: preview the arc for the candidate line 2 under the cursor
-    const line2 = findLineAtPoint(state, world, thresh);
-    hoverCorner = line2 ? findCornerBetweenLines(state, _pick.line1, line2) : null;
+    const line2 = lineOf(findLineAtPoint(state, world, thresh), state);
+    hoverCorner = line2 ? cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state) : null;
     renderFilletOverlay(svg, hoverCorner, viewState, { highlight: [_pick.line1] });
     return;
   }
-  hoverCorner = findCornerAtPoint(state, world, thresh);
+  hoverCorner = cornerOf(findCornerAtPoint(state, world, thresh), state);
   renderFilletOverlay(svg, hoverCorner, viewState);
 }
 
@@ -125,20 +130,20 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   const thresh = SNAP.JOINT_PX / scale;
 
   if (_pick) {
-    const line2 = findLineAtPoint(state, world, thresh);
+    const line2 = lineOf(findLineAtPoint(state, world, thresh), state);
     if (!line2) return true; // clicked empty space: keep waiting for line 2 (Esc cancels)
     if (line2.id === _pick.line1.id) { cancelAll(); return true; } // click line 1 again: un-pick
-    const corner = findCornerBetweenLines(state, _pick.line1, line2);
+    const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state);
     if (!corner) { showNotification('Lines must meet at a corner to fillet', 'warning'); return true; }
     openInput(svg, state, viewState, corner);
     return true;
   }
 
   // shortcut: a click on a corner opens the same input-first flow directly
-  const hit = findCornerAtPoint(state, world, thresh);
+  const hit = cornerOf(findCornerAtPoint(state, world, thresh), state);
   if (hit) { openInput(svg, state, viewState, hit); return true; }
 
-  const line1 = findLineAtPoint(state, world, thresh);
+  const line1 = lineOf(findLineAtPoint(state, world, thresh), state);
   if (line1) {
     _pick = { line1 };
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });

@@ -24,7 +24,7 @@ try {
   // a rectangle, one corner locked, width and height dimensioned: fully constrained. Each of these two dimensions is NOT redundant, so
   // typeValue (which waits for the value box to open) is the check that a non-redundant dimension still opens the box and its typed value drives.
   clickBtn('tool-rect');
-  app.drag({ x: cv.x - 120, y: cv.y - 100 }, { x: cv.x + 120, y: cv.y + 100 }, 8);
+  app.drag({ x: cv.x - 120, y: cv.y - 100 }, { x: cv.x + 120, y: cv.y + 140 }, 8);
   clickBtn('tool-select');
   let R = corners();
   app.rightClick(R.x0, R.y0); // the rectangle's corner: its context menu (Lock)

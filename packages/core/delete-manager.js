@@ -1,5 +1,6 @@
 import { removeOrphanJoints } from './joints.js';
 import { SolverConfig } from './solver-config.js';
+import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo } from './sketch-model.js'; // TASK 577
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
@@ -175,9 +176,11 @@ export function deleteSelection(state) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
 
   // 1. Identify explicit selections
-  const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints) : [];
-  const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
-  const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints) : [];
+  // TASK 577: nothing of a LOCKED sketch is deleted (a pick cannot select it; this is the same rule for a selection made some other way)
+  const inert = inertEntities(state);
+  const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
+  const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
+  const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
 
   // Add explicitly selected constraints (dimensions, etc.) to the delete list
   if (state.selectedConstraints && state.selectedConstraints.size > 0) {
@@ -244,4 +247,29 @@ export function deleteSelection(state) {
   }
 
   try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
+}
+
+/**
+ * TASK 577: delete a SKETCH with its geometry (one undo step). Refused (nothing changes) for a LOCKED sketch and for the only sketch.
+ * The shapes go through deleteSelection (so joints, constraints and dimensions of those shapes go with them, as for any delete); when
+ * the deleted sketch was the active one, the first remaining unlocked sketch becomes active. Returns { ok, reason? }.
+ */
+export function deleteSketch(state, id) {
+  const list = state && Array.isArray(state.sketches) ? state.sketches : [];
+  const sk = list.find((s) => s.id === id);
+  if (!sk) return { ok: false, reason: 'no such sketch' };
+  if (sk.locked === true) return { ok: false, reason: 'it is locked: unlock it first' };
+  if (list.length < 2) return { ok: false, reason: 'it is the only sketch' };
+  const next = list.find((s) => s !== sk && s.locked !== true);
+  if (!next) return { ok: false, reason: 'every other sketch is locked: new geometry needs one to go into' };
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete sketch'); } catch (_) {}
+  recordUndo(state, 'delete sketch');
+  state.selectedShapes = new Set((state.shapes || []).filter((s) => sketchOf(s) === id).map((s) => s.id));
+  if (state.selectedJoints) state.selectedJoints = new Set();
+  if (state.selectedConstraints) state.selectedConstraints = new Set();
+  deleteSelection(state);
+  list.splice(list.indexOf(sk), 1);
+  if (state.activeSketchId === id) state.activeSketchId = next.id;
+  try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
+  return { ok: true };
 }

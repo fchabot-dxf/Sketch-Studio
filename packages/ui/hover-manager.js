@@ -4,6 +4,7 @@
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
 import { pickableShapes } from '#core/reference-lines.js';
+import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
@@ -53,7 +54,7 @@ function applyHoverPriority(state, svg, hitJoint, hitShape, hitConstraint, px, p
     // Calculate distances
     const dJoint = hitJoint ? getScreenDist(svg, px, py, hitJoint.j) : Infinity;
     
-    const constraintsList = state.constraints || [];
+    const constraintsList = pickableConstraints(state) || [];
     const best = findClosestConstraintGlyph(svg, px, py, constraintsList);
     const dConstraint = best.constraint ? best.dist : Infinity;
     
@@ -121,7 +122,8 @@ export function setHoverFromSnap(state) {
 
 export function updateHover(svg, screenX, screenY, state) {
     // Find potential targets via snap system
-    const hoverSnapResult = findSnap(state.joints, pickableShapes(state), svg, {x: screenX, y: screenY}, [], false, false, 1.0);
+    const scene = pickScene(state, pickableShapes(state));
+    const hoverSnapResult = findSnap(scene.joints, scene.shapes, svg, {x: screenX, y: screenY}, [], false, false, 1.0);
     
     // Extract hits
     let hitJoint = null;
@@ -139,7 +141,7 @@ export function updateHover(svg, screenX, screenY, state) {
     // Compute constraint hit
     let hitConstraint = null;
     try { 
-        const constraintsList = state.constraints || [];
+        const constraintsList = pickableConstraints(state) || [];
         const best = findClosestConstraintGlyph(svg, screenX, screenY, constraintsList);
         if (best.constraint && best.dist < SELECT_THRESHOLD) {
             hitConstraint = best.constraint;

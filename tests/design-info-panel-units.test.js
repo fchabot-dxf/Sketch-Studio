@@ -41,6 +41,7 @@ function setupDOM() {
       this.title = '';
       this.type = '';
       this.value = '';
+      this.dataset = {}; // TASK 577: the sketch rows use dataset
     }
     set className(val) {
       this._className = val;

@@ -10,9 +10,10 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
 class MockNode {
   constructor(tag = 'div') {
     this.tagName = tag.toUpperCase(); this.children = []; this.listeners = new Map(); this.textContent = ''; this.title = '';
-    this._cls = new Set(); this._html = '';
+    this._cls = new Set(); this._html = ''; this.dataset = {}; this.options = []; // TASK 577: the sketch rows use dataset / setAttribute
     this.classList = { add: (c) => this._cls.add(c), remove: (c) => this._cls.delete(c), contains: (c) => this._cls.has(c) };
   }
+  setAttribute() {}
   set className(v) { this._cls = new Set(String(v || '').split(/\s+/).filter(Boolean)); }
   get className() { return [...this._cls].join(' '); }
   appendChild(c) { this.children.push(c); return c; }
@@ -73,8 +74,7 @@ const expand = (container) => container.querySelector('.sk-sketch-tw').fire('cli
     const host = new MockNode(); panel.render(host);
     assert(host.querySelectorAll('.sk-info-row').length === 0, 'rows must be hidden by default');
     assert(host.querySelector('.sk-sketch-name').textContent === 'Sketch 1', 'sketch name shown');
-    assert(host.querySelector('.sk-sketch-head').querySelector('.sk-info-val').textContent === '7', 'constraint count shown on the head');
-    assert(host.querySelector('.sk-sketch-tw').textContent === '▸', 'collapsed caret');
+    assert(host.querySelector('.sk-sketch-tw').classList.contains('is-collapsed'), 'collapsed caret (a chevron icon, TASK 577: marked by class)');
     expand(host);
     assert(host.querySelectorAll('.sk-info-row').length === 7, 'caret click shows the rows');
     expand(host);

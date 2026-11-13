@@ -7,7 +7,12 @@
 // App-agnostic: imports only #core (constraint-status). Themed via --sk-*/--sk-dock-*. Self-contained styles.
 
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch
+import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME,
+  recordUndo, setSketchLocked, showOnlySketch, reorderSketch } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
+import { deleteSketch } from '#core/delete-manager.js';
+import { showContextMenu } from '#ui/context-menu.js';
+import { createLongPress } from '#ui/long-press.js';
+import { showNotification } from '#ui/notification-manager.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 
@@ -62,23 +67,33 @@ function injectStyles() {
   border-radius: 5px; width: 20px; height: 20px; line-height: 1; cursor: pointer; font: 14px system-ui, sans-serif; opacity: 0.85; }
 .sk-tree-add:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); opacity: 1; }
 .sk-sketch-node { display: flex; flex-direction: column; }
-.sk-sketch-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-weight: 600; opacity: 0.92;
-  cursor: pointer; user-select: none; border-radius: 6px; }
+.sk-sketch-head { display: flex; align-items: center; gap: 6px; padding: 3px 6px; font-weight: 600; opacity: 0.92;
+  user-select: none; border-radius: 6px; }
 .sk-sketch-head:hover { background: var(--sk-info-hover, rgba(127,127,127,0.14)); }
 /* SKETCH-2a: the ACTIVE sketch (new geometry lands in it) — accent bar + bold name + a dot. */
 .sk-sketch-head.is-active { background: var(--sk-info-head, rgba(127,127,127,0.12)); box-shadow: inset 2px 0 0 var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
 .sk-sketch-head.is-active .sk-sketch-name { font-weight: 800; }
-.sk-sketch-head.is-active .sk-sketch-dot { opacity: 1; }
-.sk-sketch-dot { color: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); opacity: 0; font-size: 0.7em; }
 .sk-sketch-tw { opacity: 0.55; font-size: 0.8em; width: 1em; text-align: center; cursor: pointer; }
 .sk-sketch-tw:hover { opacity: 0.9; }
 /* SKETCH-2b: inline rename field + the visibility (eye) toggle + a dimmed hidden node. */
 .sk-sketch-rename { flex: 1; min-width: 0; font: inherit; font-weight: 600; color: inherit; padding: 1px 4px;
   background: var(--sk-info-head, rgba(127,127,127,0.14)); border: 1px solid var(--sk-dock-accent, var(--sk-selection, #4c9aff)); border-radius: 4px; }
-.sk-sketch-eye { background: transparent; border: 0; color: inherit; cursor: pointer; opacity: 0.55; font-size: 0.95em; padding: 0 2px; line-height: 1; }
-.sk-sketch-eye:hover { opacity: 1; }
 .sk-sketch-node.is-hidden .sk-sketch-name { opacity: 0.5; font-style: italic; }
-.sk-sketch-name { flex: 1; }
+/* TASK 577: sketches as layers (Fusion browser row): eye | sketch icon (+ purple lock badge) | name | activate radio. */
+.sk-sketch-eye, .sk-sketch-radio { background: transparent; border: 0; color: inherit; cursor: pointer; width: 26px; height: 26px; padding: 0; flex: none;
+  display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+.sk-sketch-eye { opacity: 0.7; }
+.sk-sketch-eye:hover, .sk-sketch-radio:hover:not(:disabled) { background: var(--sk-info-hover, rgba(127,127,127,0.18)); opacity: 1; }
+.sk-sketch-radio { opacity: 0.8; }
+.sk-sketch-radio:disabled { opacity: 0.3; cursor: not-allowed; }
+.sk-sketch-eye svg, .sk-sketch-radio svg { display: block; }
+.sk-sketch-icon { position: relative; width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center; }
+.sk-sketch-lockbadge { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 4px; background: #7c3aed; display: flex; align-items: center; justify-content: center; }
+.sk-sketch-name { flex: 1; min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; touch-action: pan-y; padding: 5px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sk-sketch-node.is-locked .sk-sketch-name { opacity: 0.7; }
+.sk-sketch-node.drop-before > .sk-sketch-head { box-shadow: inset 0 3px 0 var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
+.sk-sketch-node.drop-after > .sk-sketch-head { box-shadow: inset 0 -3px 0 var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
+.sk-sketch-node.dragging { opacity: 0.45; }
 .sk-sketch-children { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 7px;
   border-left: 1px solid var(--sk-info-head, rgba(127,127,127,0.18)); }
 .sk-sketch-empty { opacity: 0.5; padding: 3px 6px; font-style: italic; font-size: 0.95em; }
@@ -89,6 +104,18 @@ function injectStyles() {
   document.head.appendChild(s);
   stylesInjected = true;
 }
+
+// TASK 577: the sketch row icons: inline SVG copied from the owner-approved mockup (stroke icons use currentColor; the sketch icon and the lock badge carry their own colours).
+const ICONS = {
+  eye: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+  eyeOff: '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 2l12 12M6.3 4A7 7 0 0 1 8 3.5c4.1 0 6.5 4.5 6.5 4.5a11 11 0 0 1-1.9 2.4M10.1 11.9A6 6 0 0 1 8 12.5C3.9 12.5 1.5 8 1.5 8a11 11 0 0 1 2.3-2.8"/></svg>',
+  sketch: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="15" rx="2.5" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.2"/><path d="M5.5 15L8.5 7.5 14 10.5" stroke="#2563eb" stroke-width="1.6" stroke-linejoin="round"/><circle cx="5.5" cy="15" r="1.6" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/><circle cx="8.5" cy="7.5" r="1.6" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/><circle cx="14" cy="10.5" r="1.6" fill="#ffffff" stroke="#2563eb" stroke-width="1.2"/><path d="M15.5 16.5l5-5" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/><path d="M14.3 17.7l1.2-1.2" stroke="#334155" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  lockBadge: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="2" aria-hidden="true"><rect x="3" y="7.5" width="10" height="6.5" rx="1"/><path d="M5.3 7.5V5.3a2.7 2.7 0 0 1 5.4 0v2.2"/></svg>',
+  radioOn: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9" r="3.5" fill="currentColor"/></svg>',
+  radioOff: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/></svg>',
+  right: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5"/></svg>',
+  down: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>',
+};
 
 function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 'constraint') }; }
 
@@ -172,6 +199,69 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     return row;
   }
 
+  // TASK 577: drag a sketch's NAME to reorder (pointer events: a mouse and a finger alike; a mouse drags after a few px, a finger after a
+  // short hold so a quick swipe still scrolls). The drop position is read from the sketch nodes' rectangles; the change is reorderSketch
+  // (one undo step). A touch HOLD that stays still opens the row menu through the ONE long-press detector (task 562).
+  const DRAG_HOLD_MS = 250, DRAG_SLOP = 4;
+  function wireRow(head, name, node, sk, openMenu) {
+    let lastType = 'mouse';
+    head.addEventListener('contextmenu', (e) => { e.preventDefault(); if (lastType !== 'touch') openMenu(e.clientX, e.clientY, false); }); // a touch hold is the long press below
+    const lp = createLongPress({ onFire: (x, y) => { cancelDrag(); openMenu(x, y, true); } });
+    let drag = null; // { id, x, y, armed, moved, timer, drop }
+    const nodes = () => [...listEl.querySelectorAll('.sk-sketch-node')];
+    const slot = (y) => {
+      const list = nodes(); const from = state.sketches.findIndex((s) => s.id === sk.id);
+      let to = list.length - 1;
+      for (let i = 0; i < list.length; i++) { const r = list[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { to = i > from ? i - 1 : i; break; } }
+      return Math.max(0, to);
+    };
+    const mark = (to) => {
+      const list = nodes(); const from = state.sketches.findIndex((s) => s.id === sk.id);
+      list.forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+      if (to === from || !list[to]) return;
+      list[to].classList.add(to < from ? 'drop-before' : 'drop-after');
+    };
+    function cancelDrag() {
+      if (!drag) return;
+      clearTimeout(drag.timer); drag = null; node.classList.remove('dragging');
+      nodes().forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+    }
+    head.addEventListener('pointerdown', (e) => {
+      lastType = e.pointerType || 'mouse';
+      if (e.target.closest && e.target.closest('button')) return; // the eye / radio act alone
+      if (e.button !== undefined && e.button !== 0) return;
+      const touch = lastType === 'touch';
+      if (touch) lp.start(e);
+      if (e.target !== name) return;
+      const d = { id: e.pointerId, x: e.clientX, y: e.clientY, armed: !touch, moved: false, drop: null, timer: null };
+      if (touch) d.timer = setTimeout(() => { d.armed = true; }, DRAG_HOLD_MS);
+      drag = d;
+      try { name.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic pointer has no capture: the move / up listeners below still run on the name */ }
+    });
+    name.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const far = Math.hypot(e.clientX - drag.x, e.clientY - drag.y);
+      if (e.pointerType === 'touch') lp.move(e);
+      if (!drag.armed) { if (far > 8) { lp.cancel(); cancelDrag(); } return; } // a finger that moved before the hold is a scroll, not a drag
+      if (!drag.moved && far <= DRAG_SLOP) return;
+      if (!drag.moved) { drag.moved = true; lp.cancel(); node.classList.add('dragging'); }
+      drag.drop = slot(e.clientY); mark(drag.drop);
+    });
+    // a touch drag must not scroll the panel: the hold armed it, so the browser's own pan is cancelled from here on
+    name.addEventListener('touchmove', (e) => { if (drag && drag.armed && e.cancelable) e.preventDefault(); }, { passive: false });
+    const end = (e, commit) => {
+      lp.cancel();
+      if (!drag || e.pointerId !== drag.id) return;
+      const to = commit && drag.moved ? drag.drop : null;
+      try { name.releasePointerCapture(e.pointerId); } catch (_) { /* nothing captured */ }
+      cancelDrag();
+      if (to != null) { reorderSketch(state, sk.id, to); refresh(); }
+    };
+    name.addEventListener('pointerup', (e) => end(e, true));
+    name.addEventListener('pointercancel', (e) => end(e, false));
+    head.addEventListener('pointerup', () => lp.cancel());
+  }
+
   function refresh() {
     const cons = (state && Array.isArray(state.constraints)) ? state.constraints : [];
     const sel = (state && state.selectedConstraints instanceof Set) ? state.selectedConstraints : null;
@@ -207,7 +297,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       const hdr = document.createElement('div'); hdr.className = 'sk-tree-hdr';
       const title = document.createElement('span'); title.className = 'sk-tree-title'; title.textContent = 'Sketches';
       const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'sk-tree-add'; addBtn.title = 'New sketch'; addBtn.textContent = '+';
-      addBtn.addEventListener('click', () => { try { state.saveState && state.saveState('new sketch'); } catch (_) {} const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
+      addBtn.addEventListener('click', () => { recordUndo(state, 'new sketch'); const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
       hdr.append(title, addBtn); listEl.appendChild(hdr);
 
       const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
@@ -217,34 +307,57 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         if (!knownSketchIds.has(sk.id)) { knownSketchIds.add(sk.id); collapsedSketchIds.add(sk.id); } // collapsed by default
         const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
         const collapsed = collapsedSketchIds.has(sk.id);
-        const node = document.createElement('div'); node.className = 'sk-sketch-node' + (sk.visible === false ? ' is-hidden' : '');
+        const node = document.createElement('div'); node.className = 'sk-sketch-node' + (sk.visible === false ? ' is-hidden' : '') + (sk.locked === true ? ' is-locked' : ''); node.dataset.sketchId = sk.id;
         // FOUR clean targets (each sub-element stops propagation): CARET → collapse; NAME dbl-click → rename; EYE →
         // visibility; the HEAD single-click → activate; the nested ROWS → select.
         const head = document.createElement('div'); head.className = 'sk-sketch-head' + (sk.id === activeId ? ' is-active' : '');
-        const caret = document.createElement('span'); caret.className = 'sk-sketch-tw'; caret.textContent = collapsed ? '▸' : '▾';
+        const caret = document.createElement('span'); caret.className = 'sk-sketch-tw' + (collapsed ? ' is-collapsed' : ''); caret.innerHTML = collapsed ? ICONS.right : ICONS.down;
         caret.addEventListener('click', (e) => { e.stopPropagation(); if (collapsedSketchIds.has(sk.id)) collapsedSketchIds.delete(sk.id); else collapsedSketchIds.add(sk.id); refresh(); });
         const name = document.createElement('span'); name.className = 'sk-sketch-name'; name.textContent = sk.name;
-        name.addEventListener('dblclick', (e) => { // SKETCH-2b: inline rename
-          e.stopPropagation();
+        const locked = sk.locked === true;
+        // inline rename (SKETCH-2b): a double click on the name, or "Rename" in the row menu
+        const startRename = () => {
           const input = document.createElement('input'); input.type = 'text'; input.className = 'sk-sketch-rename'; input.value = sk.name;
           let done = false;
           const finish = (save) => {
             if (done) return; done = true;
             const v = input.value.trim();
-            if (save && v && v !== sk.name) { try { state.saveState && state.saveState('rename sketch'); } catch (_) {} sk.name = v; }
+            if (save && v && v !== sk.name) { recordUndo(state, 'rename sketch'); sk.name = v; }
             refresh();
           };
           input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); } });
           input.addEventListener('blur', () => finish(true));
           name.replaceWith(input); input.focus(); input.select();
-        });
-        const dot = document.createElement('span'); dot.className = 'sk-sketch-dot'; dot.textContent = '●';
+        };
+        name.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(); });
         const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'sk-sketch-eye';
-        eye.textContent = sk.visible === false ? '◌' : '◉'; eye.title = sk.visible === false ? 'Show sketch' : 'Hide sketch';
-        eye.addEventListener('click', (e) => { e.stopPropagation(); try { state.saveState && state.saveState('toggle sketch visibility'); } catch (_) {} sk.visible = sk.visible === false; refresh(); });
-        const count = document.createElement('span'); count.className = 'sk-info-val'; count.textContent = String(kids.length);
-        head.append(caret, name, dot, eye, count);
-        head.addEventListener('click', () => { activateSketch(state, sk.id); refresh(); }); // activate (sub-elements stop their own clicks)
+        eye.innerHTML = sk.visible === false ? ICONS.eyeOff : ICONS.eye; eye.title = sk.visible === false ? 'Show sketch' : 'Hide sketch'; eye.setAttribute('aria-label', eye.title);
+        eye.addEventListener('click', (e) => { e.stopPropagation(); recordUndo(state, 'toggle sketch visibility'); sk.visible = sk.visible === false; refresh(); });
+        const icon = document.createElement('span'); icon.className = 'sk-sketch-icon'; icon.innerHTML = ICONS.sketch;
+        if (locked) { const badge = document.createElement('span'); badge.className = 'sk-sketch-lockbadge'; badge.title = 'Locked'; badge.innerHTML = ICONS.lockBadge; icon.appendChild(badge); }
+        const isActive = sk.id === activeId;
+        const radio = document.createElement('button'); radio.type = 'button'; radio.className = 'sk-sketch-radio' + (isActive ? ' on' : '');
+        radio.innerHTML = isActive ? ICONS.radioOn : ICONS.radioOff; radio.setAttribute('role', 'radio'); radio.setAttribute('aria-checked', isActive ? 'true' : 'false');
+        radio.title = locked ? 'Locked: unlock it to draw in it' : (isActive ? 'The active sketch' : 'Make this the active sketch'); radio.setAttribute('aria-label', 'Make "' + sk.name + '" the active sketch');
+        if (locked) radio.disabled = true;
+        radio.addEventListener('click', (e) => { e.stopPropagation(); activateSketch(state, sk.id); refresh(); });
+        // the row menu (right click; a touch hold): Lock / Unlock, Show only this sketch, Rename, Delete
+        const openMenu = (x, y, touch) => showContextMenu({ x, y, touch, returnFocusTo: head, items: [
+          { id: 'sk-lock', label: locked ? 'Unlock' : 'Lock', onSelect: () => {
+            const r = setSketchLocked(state, sk.id, !locked);
+            if (!r.ok) showNotification('Cannot lock "' + sk.name + '": ' + r.reason + '.', 'warning');
+            refresh();
+          } },
+          { id: 'sk-only', label: 'Show only this sketch', onSelect: () => { showOnlySketch(state, sk.id); refresh(); } },
+          { id: 'sk-rename', label: 'Rename', onSelect: startRename },
+          { id: 'sk-delete', label: 'Delete', onSelect: () => {
+            const r = deleteSketch(state, sk.id);
+            if (!r.ok) showNotification('Cannot delete "' + sk.name + '": ' + r.reason + '.', 'warning');
+            refresh();
+          } },
+        ] });
+        wireRow(head, name, node, sk, openMenu);
+        head.append(caret, eye, icon, name, radio);
         node.appendChild(head);
         if (!collapsed) {
           const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';

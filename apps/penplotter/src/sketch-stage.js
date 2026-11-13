@@ -10,6 +10,7 @@
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored sketch
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
@@ -258,7 +259,7 @@ export function mountSketchStage(view, ctx = {}) {
     const nShapes = (s.shapes && s.shapes.length) || 0;
     const nJoints = (s.joints && s.joints.size) || 0;
     const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' +
-      (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
+      (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool + ':' + sketchesSignature(s);
     if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
     // UNIFY-throttle: dirty the underlay on shape-count / SELECTION change (a shape entering/leaving the live set),
     // NOT on per-frame joint moves — so dragging a live shape does NOT rebuild the (static) underlay's many paths.

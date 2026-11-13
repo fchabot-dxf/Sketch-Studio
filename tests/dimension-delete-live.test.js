@@ -69,7 +69,7 @@ await (async () => {
     const GEO = { L2: [-5, -5] }; // a point ON line L2 (world mm)
     const jc = (c) => JSON.parse(c);
     // the panel groups rows by type under a collapsed sketch node: expand it (real click), then find the row of constraint i
-    const expandPanel = async () => { const c = await evalJs(`(() => { const t = document.querySelector('#design-panel-info .sk-sketch-tw'); if (!t || t.textContent !== '▸') return null; const b = t.getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }; })()`); if (c) { await click(c); } };
+    const expandPanel = async () => { const c = await evalJs(`(() => { const t = document.querySelector('#design-panel-info .sk-sketch-tw'); if (!t || !t.classList.contains('is-collapsed')) return null; const b = t.getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }; })()`); if (c) { await click(c); } };
     const panelRow = async (i) => {
       const r = await evalJs(`(() => {
         const s = window.__designController.state; const find = () => [...document.querySelectorAll('#design-panel-info .sk-info-row')];

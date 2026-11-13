@@ -41,6 +41,10 @@
   /* Selection / hover / origin */
   --sk-selection: #1e40af;
   --sk-hover: #3B82F6;
+  /* TASK 588: the geometry a constraint binds, lit when its GLYPH is hovered / selected (blue stays the geometry's own hover / selection).
+     Amber, apart from the blues in hue and lightness; the selected one darker (stronger) than the hovered one. */
+  --sk-glyph-hover: #f59e0b;
+  --sk-glyph-selected: #b45309;
   --sk-origin: #3B82F6;
 
   /* Feedback */

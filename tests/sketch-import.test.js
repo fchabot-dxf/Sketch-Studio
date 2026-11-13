@@ -28,14 +28,14 @@ await (async () => {
       { name: 'SketchStudio', url: '/apps/sketchstudio/index.html', ready: `!!document.getElementById('tool-line')`, canvas: '#svgCanvas', drop: '#svgCanvas' },
       { name: 'Shaper', url: '/apps/shaper/index.html', ready: `!!document.querySelector('[data-mode="design"]')`, prep: `document.querySelector('[data-mode="design"]').click()`, canvas: '#design-canvas', drop: '#design-view' },
       { name: 'Pen Plotter', url: '/apps/penplotter/index.html', ready: `!!window.__sketch`, prep: `(document.querySelector('.stage-btn[data-stage="design"]') || document.body).click()`, canvas: '#design-canvas', count: `window.__sketch.controller.state.shapes.length`, drop: '#design-canvas-wrap' },
-      { name: 'Trace', url: '/apps/trace/index.html', ready: `!!document.getElementById('tab-edit')`, canvas: '#design-canvas', count: `import('/apps/trace/src/edit-view.js').then((m) => m.ensureEditMount().state.shapes.length)`, drop: '#tab-edit' },
+      { name: 'Trace', url: '/apps/trace/index.html', ready: `!!document.getElementById('tab-edit')`, canvas: '#design-canvas', drop: '#tab-edit' },
     ];
     const svgText = fs.readFileSync(FIX('svg', 'import-basic.svg'), 'utf8');
     for (const app of apps) {
       await nav(app.url);
       await waitFor(`!!document.querySelector('.sk-sidebar-btn') && ${app.ready}`, 'the ' + app.name + ' page'); await sleep(800);
       if (app.prep) { await evalJs(app.prep); await sleep(1200); }
-      const countJs = app.count || `document.querySelectorAll('${app.canvas} .shape-elem').length`; // Pen Plotter draws imported (static) shapes in its underlay, and Trace's Edit canvas has no render loop running (see the WORK-LOG), so those two are read from their state
+      const countJs = app.count || `document.querySelectorAll('${app.canvas} .shape-elem').length`; // Pen Plotter draws imported (static) shapes in its underlay, so it is read from its state; Trace's Edit canvas draws them like the others (TASK 567)
       const count = () => evalJs(countJs);
       const undo = async () => {
         await sleep(1000); // the drawer has closed and focus is back on the page

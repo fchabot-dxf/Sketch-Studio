@@ -1,0 +1,39 @@
+TASK 567 (Sketch-Studio): Trace gets the same File menu and project saving as the other apps. Owner 2026-11-13: the File
+menu "should be the same across apps"; asked whether Trace should also save/open projects: "It should".
+Worktree D:\APPS\Sketch-Studio.worktrees\task-567-trace-projects, branch agents/task-567-trace-projects (from origin/main bf87859, AFTER
+task 566 merged: 566 put "Import SVG / DXF..." in the shared File menu of all four apps and folded Trace's importSvgToEdit into
+one shared importer; read WORK-LOG `## TURN 566` and its list of how the four File menus differ).
+Read first: AGENTS.md, NEXT-SESSION.md PROJECT PRINCIPLES; apps/trace/src/app.js (createAppSidebar with only Download SVG /
+DXF actions; the DIAG-OVERLAY note that the document section is omitted), apps/trace/src/edit-view.js (ensureEditMount:
+mountSketch = the shared Design canvas), packages/ui/document-buffer.js (createDocumentBuffer: hostName, getHostData,
+onRestored sidecars), how Pen Plotter wires it (apps/penplotter/src/sketch-stage.js) and Shaper (apps/shaper/src/main.js),
+packages/ui/project-actions.js (the declared File menu items), packages/ui/project-store.js (app field on designs).
+WANTED:
+ 1. Trace's Edit view is bound to the shared project store through createDocumentBuffer, exactly as Pen Plotter's sketch stage
+    is: autosave rule, New design, Save as, Open recent, Projects, Open from file, Save to file: the SAME declared File menu
+    items, same order, same labels as SketchStudio / Shaper / Pen Plotter (the four menus identical except host-specific
+    extras that each app declares: Trace keeps its Download SVG / DXF; say where they sit and that the others keep theirs).
+ 2. Trace's own state that belongs to a design (the source image? the trace parameters?) is decided here: list what Trace
+    keeps; recommend what goes in its `hosts.trace` sidecar and what does not (a large photo in IndexedDB / Drive is a size
+    question: give sizes; if storing the photo is questionable, store only the parameters and SAY so: owner decision, mark it).
+ 3. A design made in Trace opens in SketchStudio / Shaper / Pen Plotter and back, sidecars of other hosts pass through
+    untouched (the existing rule). The DIAG report's document section gets wired for Trace through the same getter the other
+    hosts use (the note in app.js says it was deferred).
+ 0. FIRST, a bug found by task 566: Trace's Edit canvas never starts its render loop (apps/trace never calls
+    controller.start(); packages/ui/sketch-canvas.js only draws after start()), so imported and "Send to Editor" shapes are in
+    the state but NOT DRAWN. Fix it the way the other hosts start their Design canvas (find how; one call, no Trace-only
+    variant). Fail-first live test: after Send to Editor and after File > Import SVG / DXF, the shapes are visible in the
+    Edit canvas (the rendered SVG holds their paths), screenshot before/after. Then tests/sketch-import.test.js's Trace part
+    should check the canvas, not the state through the edit-view module: update it.
+ 4. Whatever tabs / save-prompt behaviour task 558 established (if merged by then) applies to Trace the same way: no Trace
+    special case.
+TESTS: live headless: Trace draws/imports into Edit, Save as "T1", reload restores it; Open recent / Projects open it; a
+ Trace design opens in SketchStudio with geometry identical and hosts.trace preserved after a SketchStudio save; the four
+ apps' File menu item lists are equal (one test reading the declared items from each host, minus each host's declared
+ extras). Before/after screenshots of Trace's File menu, cropped legible, md5, .evidence/567/.
+DO NOT: copy document-buffer wiring code (if Pen Plotter's wiring is hand-rolled, extract the shared part first and say so);
+ hidden globals; silent catch; change the saved format beyond adding hosts.trace.
+STOP and ask if: Trace's state cannot live as a sidecar; storing the photo is needed for a reopened design to make sense.
+List every behaviour change for existing users. Headless browsers only, closed before the REPORT. Check `pwd` before every
+write. Before the final gate `git fetch origin` and merge origin/main if it moved. Gate green, commit by path, push the
+branch, WORK-LOG `## TURN 567`, the AGENTS.md REPORT block.

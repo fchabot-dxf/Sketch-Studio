@@ -6,3 +6,11 @@ let seq = 0;
 export function newShapeId(prefix = 's') {
   return prefix + Date.now() + '_' + (++seq);
 }
+
+// THE joint-id generator (task 564): the same module, a second counter, so a JOINT id never repeats within the session either. The counter
+// is NOT reset by engine.init(), so a sketch built in the same millisecond as an earlier one gets different ids. The id keeps the old
+// 'j' + n + '_' + Date.now() form (nothing parses it). Saved ids, j_origin and the reserved j_ref_x / j_ref_y are not minted here.
+let jointSeq = 0;
+export function newJointId() {
+  return 'j' + (++jointSeq) + '_' + Date.now();
+}

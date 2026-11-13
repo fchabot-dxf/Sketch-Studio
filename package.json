@@ -11,7 +11,10 @@
     "test:unit": "node scripts/run-tests.js",
     "test:shell": "node scripts/shell-smoke.cjs",
     "build:inline": "node scripts/build-inline.cjs",
-    "gate": "node scripts/gate.cjs"
+    "gate": "node scripts/gate.cjs",
+    "gate:quick": "node scripts/gate.cjs --tier quick",
+    "gate:live": "node scripts/gate.cjs --tier live",
+    "gate:merge": "node scripts/gate.cjs --tier merge"
   },
   "keywords": [],
   "author": "",

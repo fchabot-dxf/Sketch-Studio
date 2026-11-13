@@ -21,6 +21,7 @@ import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { placeRadiusLabel } from '#ui/input-handlers/dimension-tool.js'; // TASK 448: the one radius-label placement writer
+import { releaseDragTargets } from '#ui/sketch-state.js'; // TASK 575: the one release of a drag's solver targets
 
 // Local state for selection tools
 let selectionState = {
@@ -920,17 +921,9 @@ export function handleSelectionPointerUp(e, svg, state) {
         return true;
     }
     
-    // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538)
-    if (state.drag && state.drag.body) {
-        const shape = (state.shapes || []).find(s => s.id === state.drag.body.shape);
-        if (shape) delete shape.dragTarget;
-    }
-    if (state.drag && state.drag.jointIds) {
-        for (const id of state.drag.jointIds) {
-            const j = state.joints.get(id);
-            if (j) delete j.dragTarget;
-        }
-    }
+    // Cleanup drag targets so joints stop trying to follow the mouse (a body drag: its shape's one target, task 538), BEFORE a
+    // snap-on-release below solves (TASK 575: the one release, #ui/sketch-state.js releaseDragTargets)
+    releaseDragTargets(state, state.drag);
 
     if (state.drag && (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER)) {
         // Only consider snap-on-release if the user actually dragged the pointer a meaningful distance.

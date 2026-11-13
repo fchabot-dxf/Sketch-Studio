@@ -26,6 +26,13 @@
 //      it (the pen name box, the Toolpath settings inputs, the stock thickness box commit on it). happy-dom fires neither; the kit does, from the page's own
 //      focusin / focusout and in key() for Enter, once per change (the baseline is the value after the last change event).
 //      Tab in a text field takes the focus off it (the next field is not modelled).
+//   14. sidebar (task 583): open({ sidebar: true }) mounts the shared project sidebar (packages/ui/sidebar-projects.js mountProjectSidebar, which every page script calls with
+//      the host's appId and buffer) on the profile's store, in #app-sidebar-host (or the body): its Ctrl+S, New / Open / Open recent / Projects / Open from file / GO TO and the
+//      Save… / Don't save / Cancel question are the app's own. The host's own sidebar actions (Download, Import) are not mounted.
+//   15. file chooser (task 583): a browser opens its file chooser when a page clicks an <input type=file>; happy-dom opens nothing. The kit notes the click:
+//      app.hasFileChooser() is true while one is open, app.chooseFile({ name, text }) answers it as the user does (the input gets that File, its change fires).
+//   16. navigation (task 583): a page that leaves (location.href = ...) is not loaded by happy-dom (no network, no scripts): the new location is what the page's own code asked for,
+//      and the test reads it (app.window.location); the next page is an open() on the same profile.
 // KIT API ADDED in task 580 (not overrides; each is what a browser test did through CDP, shared by the files that need it):
 //   8. hidden focus (task 580): a browser takes the focus off an element that stops being rendered; see dropFocusIfHidden below (key() and type()).
 //   focus (task 580, in the pointer helper): a press on anything but the focused text field blurs the field first, as a browser's mousedown does.
@@ -83,13 +90,14 @@ class FirstObservationResizeObserver { constructor(cb) { this.cb = cb; } observe
 // The globals the app modules read, taken from the page's happy-dom Window. Node's own timers come back when the page closes.
 const PAGE_GLOBALS = ['window', 'self', 'document', 'navigator', 'location', 'localStorage', 'sessionStorage', 'getComputedStyle', 'matchMedia',
   'Node', 'Element', 'HTMLElement', 'SVGElement', 'HTMLInputElement', 'DocumentFragment', 'Text', 'DOMParser', 'XMLSerializer', 'MutationObserver',
-  'Event', 'CustomEvent', 'KeyboardEvent', 'PointerEvent', 'MouseEvent', 'FocusEvent', 'WheelEvent', 'InputEvent'];
+  'CSS', 'Event', 'CustomEvent', 'KeyboardEvent', 'PointerEvent', 'MouseEvent', 'FocusEvent', 'WheelEvent', 'InputEvent'];
 // a field whose type has no text selection (number): happy-dom has no caret for it. The kit models what a browser does for typing: Ctrl+A selects
 // the whole text (replaced by the next typed character), otherwise a character is appended; the raw text typed is kept since the value of a number field
 // is sanitised ("-" alone reads ""), as a browser keeps the raw text in the box.
 const selectsText = (t) => t.tagName === 'TEXTAREA' || /^(text|search|url|tel|password|)$/.test(t.type || '');
 const allSelected = new WeakSet(), rawTyped = new WeakMap(), typedInto = new WeakSet(); // typedInto: a USER edit since the focus (a browser fires no change for a value the page set)
 const changeFirers = new WeakMap(); // page window -> its change-event firer (override 13)
+const fileChoosers = new WeakMap(); // page window -> { input }: the <input type=file> a click opened a chooser for (override 15)
 const TIMER_GLOBALS = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'];
 const nodeTimers = Object.fromEntries(TIMER_GLOBALS.map((k) => [k, globalThis[k]]));
 const setGlobal = (k, v) => Object.defineProperty(globalThis, k, { value: v, writable: true, configurable: true });
@@ -118,6 +126,9 @@ function installPage(host, { width, height, storage, clipboard }) {
   win.document.addEventListener('focusin', (e) => { if (isText(e.target)) baseline.set(e.target, e.target.value); });
   win.document.addEventListener('focusout', (e) => fireChange(e.target));
   changeFirers.set(win, fireChange);
+  // override 15: the file chooser a click on an <input type=file> opens
+  const chooser = { input: null }; fileChoosers.set(win, chooser);
+  win.document.addEventListener('click', (e) => { const t = e.target; if (t && t.tagName === 'INPUT' && t.type === 'file') chooser.input = t; });
   rafQueue = new Map();
   return win;
 }
@@ -237,7 +248,7 @@ let current = null; // one app at a time: the engine's store is module-level (pa
  * open({ host, profile, framesPerEvent }) -> app. Loads the host's page, mounts its Design canvas, restores the profile's current design
  * through the real buffer (the page's initial restore) and starts the autosave. Close it (app.close()) before opening the next.
  */
-export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1, width = 1600, height = 900 } = {}) {
+export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1, width = 1600, height = 900, sidebar = false } = {}) {
   if (!HOSTS[host]) throw new Error('node-app: unknown host ' + host);
   if (current) throw new Error('node-app: close the open app first (one engine store per process)');
   profile = profile || await createProfile();
@@ -250,6 +261,10 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   const store = profile.createProjectStore({ adapter: profile.adapter, legacySource: async () => null, channel });
   const m = await HOSTS[host]({ win, store });
   const { svg, state, buffer } = m;
+  if (sidebar) { // override 14: what every page script does with the shared sidebar (the host's own actions are not mounted)
+    const { mountProjectSidebar } = await import('#ui/sidebar-projects.js');
+    (doc.getElementById('app-sidebar-host') || doc.body).appendChild(mountProjectSidebar({ appId: host, getBuffer: () => buffer, store }).el);
+  }
   m.frame();
   const frames = (n = framesPerEvent) => { for (let i = 0; i < n; i++) m.frame(); };
   const pointer = (type, x, y, o = {}) => {
@@ -346,6 +361,16 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
     /** the autosave writes now (the page-hide path, as cdp-browser.js flushAutosave does); returns the stored current design's document */
     async storedDoc() { win.dispatchEvent(new win.Event('pagehide')); await buffer.flush(); const d = await store.loadCurrent({ app: host }); return d ? d.document : null; },
     saveStatus: () => m.statusEl.textContent,
+    /** override 15: is a file chooser open (an <input type=file> was clicked and not answered)? */
+    hasFileChooser: () => { const c = fileChoosers.get(win); return !!(c.input && c.input.isConnected); },
+    /** override 15: answer the open chooser with a file { name, text }: the input holds that File and its change fires */
+    chooseFile({ name, text }) {
+      const c = fileChoosers.get(win); if (!c.input || !c.input.isConnected) throw new Error('node-app: no file chooser is open');
+      const input = c.input; c.input = null;
+      Object.defineProperty(input, 'files', { configurable: true, value: [new win.File([text], name)] });
+      input.dispatchEvent(new win.Event('change', { bubbles: true }));
+      frames();
+    },
     /** a real pause (the app pairs clicks into a double click by their time: 500 ms; the kit sends events with no pause, a person does not) */
     async pause(ms) { await new Promise((r) => nodeTimers.setTimeout(r, ms)); frames(1); },
     /** polls cond() (timers and the app's setTimeout(0) work run in between), like cdp-browser.js waitFor; throws after timeoutMs */

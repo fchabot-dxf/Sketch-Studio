@@ -292,3 +292,69 @@ Spread over the kinds; each reverted with `git checkout` (the tree is clean of a
 Two first attempts did not fail the test and are recorded as what they say: removing `saveState()` from the polygon / circle tool (and the `closeDrawStep` calls in
 `handleEscape` / the tool switch) changes nothing, because another layer (`beginDrawStep`, and Undo's own `closeDrawStep`) takes the same step. The
 bites above break the layer all of them share.
+
+## Phase 2, batch B: converted (task 580)
+
+12 browser files: 8 replaced by 8 node tests and deleted (with their 2 runners and 3 wrappers), 4 trimmed to the part only a browser can check.
+`node scripts/gate.cjs --list`: before 292 quick + 68 live = 360 files; after 300 quick + 60 live = 360 files (the file count did not drop: 8 browser
+files out, 8 node files in; the 4 trimmed files stay in live). Node files run in 0.4 to 4 s each (parameters-canvas 3.2 s and angle-dimension 4 s keep
+a real 550 ms pause per double click on one label, see kit addition 12).
+
+### Kit additions (tests/helpers/node-app.js, declared in its header; no app change)
+7. **clipboard**: `navigator.clipboard` is a text clipboard (writeText / readText) kept on the PROFILE, as a browser with the permission granted (the browser
+   tests granted it over CDP). `app.clipboard.text` reads / sets it. The app's own seam (`packages/ui/clipboard.js` defaultIo reads navigator.clipboard)
+   is unchanged, so the same code runs. Needed by clipboard-node.
+8. **hidden focus**: a browser takes the focus off an element that stops being rendered (the dimension value box hides itself after Enter); happy-dom has no layout and
+   loads no stylesheet, so "not rendered" is the `hidden` attribute, the `hidden` class the apps' CSS maps to display:none, or style display none. `key()` and `type()`
+   drop the focus first. Needed by every test that commits a dimension and then presses a key (journal, parameters-canvas, angle-dimension).
+
+Kit API (not overrides), each shared by the files that need it:
+9. `type(text)`: types into the focused text field as a user does (keydown on the field, the value grows, an input event, keyup; a backspace character is the Backspace key;
+   a prevented keydown changes nothing). Needed by journal (the key ring records "char" only), parameters-canvas, angle-dimension.
+10. `report()`: the Diagnostic Log's own `buildReport` (what Copy Report puts on the clipboard) for the page's state; the module is imported right after the page exists so
+    its key / pointer capture listens on THIS page's document (a module loads once per process: it listens on the first page a process opens). Needed by drag-undo, journal.
+11. `wheel(x, y, deltaY)` (a WheelEvent on the canvas, angle-dimension), `press(el)` (pointer + mouse events on a DOM element: the autocomplete row, parameters-canvas),
+    `createNamedDesign(profile, app, name, document)` (also stores a given document, angle-dimension's owner file). Also in `tests/helpers/node-dom-read.js`:
+    `glyphPoint` (a glyph's screen point from its translate(), symmetric) and `labelBoxCenter` (the label box centre, angle-dimension).
+12. `pause(ms)`: a real pause. The app pairs two clicks on one dimension label within 500 ms into a double click; the kit sends events with no pause, a person does not (the
+    browser tests slept 60 to 700 ms). Used before a second double click or drag on the same label (parameters-canvas, angle-dimension).
+
+Two faithfulness fixes in the kit itself, found by these conversions (batch A's 40 node files all still pass):
+- SketchStudio's frame (`studioFrame`) did not step the animation-frame queue, so the app's own `requestAnimationFrame` callbacks never ran there (the value box takes
+  its focus in one). It now steps the queue after the host frame (KIT_OVERRIDES 2: the queue the kit steps).
+- A pointer press on anything but the focused text field blurs the field first (the browser's mousedown default action); without it the value box kept the focus after a
+  click away and the Delete key went to the box.
+
+### Split: what stays in the browser
+- **clipboard-live-shaper / -sketchstudio** (through clipboard-live-runner.js, trimmed): the browser's NATIVE copy from a text field (Ctrl+C in an input / textarea /
+  contenteditable is left to the browser: not prevented, and the clipboard then holds the field text). The runner's CROSS case (clipboard-live-cross) is unchanged.
+- **context-menu-live** (trimmed): the real right button opens the menu on a dimension label and on a line, a real click on an item, Escape, the real ribbon Lock click, and the
+  screenshots (md5 evidence, no assert).
+- **parameters-canvas-live** (trimmed to part B): the 390 px phone layout (inputmode text, the box / hint / list fit the screen, no overlap, no page overflow, at most 8 rows).
+  Its setup is one line and one `width = 6` dimension.
+- Checked and not kept: angle-dimension-arc reads the arc from the SVG path, which is the SAME renderer output in the node DOM; the label centre is the label box rect
+  instead of getBoundingClientRect. Journal's Copy Report button is covered by diagnostic-log-copy-live.
+
+### Same asserts, old vs new
+
+| converted (new file) | browser assert (old) | node assert (new) |
+|---|---|---|
+| drag-undo-node.test.js (SketchStudio, Shaper) | two lines + a circle drawn with the tools; in Select a joint, a line body and a circle rim drag: the geometry moved; ONE new undo step labelled drag point / drag line / drag circle (journal read from the report); Ctrl+Z restores exactly the pre-drag joints and shapes and removes the step; Ctrl+Y re-applies it; a click without movement adds no step | same, line for line; the report is `app.report()` (JSON round trip) instead of the Diagnostic Log panel + clipboard; the Shaper starts empty (no sample drawing) so `pre` is empty |
+| journal-node.test.js | session line, rect, dimension 23.6, edit to 17, undo / redo through the ribbon buttons, delete: a report after Undo carries the undone step in journal.redo and replays to the reported document; replayReport(report) deep-equals the document; step labels in gesture order incl. `edit dimension 23.6 -> 17`; the last step is the delete; every step timestamped; the key ring has Enter and Delete, typed characters only as `char` with inInput, no digits; the report has app, url, ua, t, viewport, touchTrace, log, document, journal | same. "Copy Report reached the clipboard" (the button text `Copied!`) is not asserted here: it is the panel's job, covered by diagnostic-log-copy-live |
+| clipboard-node.test.js (both hosts) | rectangle = 4 shapes; marquee; Ctrl+C: clipboard holds format `sketch-studio/geometry` v1, 4 shapes, every constraint; Ctrl+X removes it with its constraints and puts it on the clipboard, Ctrl+Z restores exactly; Ctrl+V pastes 4 shapes, every constraint and joint, new joint ids, the copy at (+10, +10); a second paste at (+20, +20); one Ctrl+Z each, exact; Ctrl+Y exact; input / textarea / contenteditable: Ctrl+C / V / X not prevented, nothing pasted; the canvas Ctrl+C is prevented; foreign clipboard text: Ctrl+V does nothing | same; the system clipboard is the kit's. The browser's "the clipboard holds the field text (the browser's own copy)" stays in the browser (above); here the clipboard is unchanged by a key in a text field |
+| context-menu-node.test.js (Shaper) | no dim-driven-toggle in the markup and the svg; dimension menu = Driving / Reference / Delete dimension, Driving checked; Escape closes; label not parenthesised; Reference makes it driven + parenthesised, menu closes, checked flips, Driving restores; arrows + Enter pick Reference; empty canvas opens nothing; line menu = Lock / Delete, the line is selected first; Lock fixes d, e; Unlock + checked; Delete removes, one Ctrl+Z restores; group selection kept and Lock acts on all; joint menu selects the joint and Lock fixes it; line tool right click ends the segment, no menu; ribbon Lock disabled with nothing selected, enabled with a selection, fixes, aria-pressed, unlocks | same. The ribbon re-syncs in a `setTimeout(0)` after a pointerup, so the two enabled / disabled reads wait for it (the browser test had sleeps). The screenshots stay in the browser |
+| symmetric-node.test.js (both hosts) | 7 shapes drawn; Symmetric tool exists; two lines about S: one constraint { shapes, line }, line 2 on the mirror of line 1, each keeps its own length and they differ; two circles: centres mirrored, radii equal; two points about the Y axis: axis not lit at picks 1 and 2, lit at pick 3, stored with line ref_axis_y, mirrored, no axis in the saved shapes / joints; 6 glyphs; one Ctrl+Z removes the last in one step, Ctrl+Y brings it back; SketchStudio: right click on the left glyph = [con-delete], Delete constraint removes that one only | same. The glyph is the right click's target element, its position from its translate(); the saved-design assert reads the autosave of a named design; the cropped screenshot is not taken |
+| reference-lines-glyph-node.test.js (a, b, c) | 10 scenarios (parallel / perpendicular / collinear / tangent X and Y, point on X / Y): exactly one glyph (none asserted for point on), the axis not left lit, stored with a ref_axis constraint; dimension point-X / point-Y: a label drawn, stored distance with j_ref_x / j_ref_y, one shape; a first dimension click near an axis lights nothing and stores no axis dimension | same, each scenario on a fresh named design; the dimension label is accepted with Enter once the box has the focus; screenshots not taken |
+| parameters-canvas-node.test.js (A, C) | A: `#dimInput` is text; inputmode text; hint `creates width = 6.0 mm`, label `fx: 6.0`; autocomplete after `wi` = [width, 6.0 mm], no row picked, Down picks, Enter inserts without committing, hint `= 6.0 mm`; no list for `pa`; `i` lists width; Esc closes the list only; `width / 2 + 1` = `fx: 4.0`; reopen shows the formula; hint `sets width 6.0 -> 8.0 mm, also changes d2`; Enter changes both; one Ctrl+Z reverts both, redo; unknown name: O5 hint, error class, aria-invalid, box stays open, nothing changed; `30 deg` and `width = d1` refused; a click on a list row inserts it and the box keeps focus; `3mm` replaces the formula; reload keeps the labels. C (Shaper): text box; hint `creates stock = 30.0 mm` in the document unit; fx label; autocomplete offers stock; Tab inserts; both formulas; parameter unit / expression and the constraints' expressions and values | same. Typing is `type()`; the row click is `press(row)`; reload = close + open on the profile. B stays in the browser |
+| angle-dimension-arc-node.test.js | A: the arc spans 10 deg, label 10.0; B: three label drags into other sectors: the span stays 10, the lines do not move; C: narrow sector about 30, supplements, labels read the box value, one undo removes it, typing 120 holds; D: 190 and 270 typed: label, span, large-arc 1, label inside; 0 refused, 270 kept, nothing moved | same. Differences: the label centre comes from its box rect (the browser read getBoundingClientRect); "Clear All + reload" = a fresh page on a fresh named design; the wheel zoom is a WheelEvent |
+
+### Bites (a behaviour broken on purpose, the node test fails, reverted with `git checkout`; `git status` shows tests / docs only)
+
+| kind | break | test | failure |
+|---|---|---|---|
+| clipboard | `PASTE_STEP_MM = 0` (`packages/ui/clipboard.js`) | clipboard-node | `AssertionError [ERR_ASSERTION]: the copy is the original moved by (+10, +10) (right and down)` |
+| undo label | `[DRAG_TYPES.JOINT]: 'move point'` (`packages/core/constants.js`) | drag-undo-node | `AssertionError ... SketchStudio joint: ONE new undo step labelled "drag point": {"stepsBefore":3,"stepsAfterDrag":4,"newLabels":["move point"]}` |
+| context menu | the Lock item does nothing (`packages/ui/context-menu.js`) | context-menu-node | `AssertionError [ERR_ASSERTION]: Lock fixes the line joints` |
+| axis highlight | an axis is always lit (`packages/ui/svg-renderer.js`) | reference-lines-glyph-node | `AssertionError [ERR_ASSERTION]: parallel X: the axis is not left lit` |
+| diagnostic key ring | typed characters recorded as typed (`packages/ui/diagnostic-log.js`) | journal-node | `AssertionError [ERR_ASSERTION]: characters typed into the number input are recorded only as "char"` |
+| parameters hint | the `creates` hint reads `makes` (`packages/core/parameters.js`) | parameters-canvas-node | `AssertionError [ERR_ASSERTION]: the live hint before Enter: makes width = 6.0 mm` |

@@ -157,6 +157,7 @@ export const DRAG_UNDO_LABELS = {
   [DRAG_TYPES.LINE]: 'drag shape'
 };
 export const DRAG_SHAPE_UNDO_LABELS = { line: 'drag line', circle: 'drag circle', arc: 'drag arc' };
+export const DRAG_GROUP_UNDO_LABEL = 'move selection'; // TASK 588: the select tool moving a selection of several shapes / points
 
 // Inference types for line drawing
 export const INFERENCE_TYPES = {

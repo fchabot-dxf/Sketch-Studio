@@ -818,9 +818,12 @@ export class NewtonSolver {
     }
     if (!dragOpt) {
       // a JOINT drag: auto-detect first joint carrying a dragTarget set by UI input handlers (a body drag never sets one, task 538)
+      // A GROUP drag (task 588: the select tool moving a selection) marks its member targets `group`: every one of them is a spring.
       for (const [id, j] of this.joints.entries()) {
         if (j && j.dragTarget && !j.fixed) {
-          dragOpt = { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
+          dragOpt = j.dragTarget.group
+            ? { springs: this._groupSprings(), stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 }
+            : { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
           break;
         }
       }
@@ -972,6 +975,15 @@ export class NewtonSolver {
     const out = { converged, error: finalError, rankDeficient, stalled, structuralError };
     if (stalled) out.stallError = finalError;
     if (hasSpring) out.dragReached = dragReached;
+    return out;
+  }
+
+  // TASK 588: the springs of a GROUP drag: every free joint whose dragTarget is marked `group`, toward its own target.
+  _groupSprings() {
+    const out = [];
+    for (const [id, j] of this.joints.entries()) {
+      if (j && j.dragTarget && j.dragTarget.group && !j.fixed) out.push({ jointId: id, x: j.dragTarget.x, y: j.dragTarget.y });
+    }
     return out;
   }
 

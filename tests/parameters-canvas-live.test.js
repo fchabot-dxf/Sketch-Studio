@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-3', width: 1400, height: 800 });
@@ -44,6 +45,10 @@ await (async () => {
     const labels = (sel) => evalJs(`JSON.stringify([...document.querySelectorAll('${sel} .dim-label')].map((g) => g.textContent.trim().replace(/\\s+/g, ' ')))`).then(JSON.parse);
 
     // ================================================================== A. SketchStudio
+    await navigate(url('/apps/sketchstudio/index.html'), 8000);
+    // TASK 558: only a NAMED design autosaves (part A reloads and expects the drawing back): start from a stored, named design
+    await waitFor(`document.getElementById('svgCanvas') && document.getElementById('svgCanvas').dataset.docReady === '1'`, 'SketchStudio restored');
+    await evalJs(CREATE_NAMED_DESIGN('sketchstudio', 'Formulas'));
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('dimInput'); })()`, 'SketchStudio to load');
     await sleep(1500);

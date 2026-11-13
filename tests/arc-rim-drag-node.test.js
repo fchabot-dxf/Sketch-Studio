@@ -15,10 +15,12 @@ import { measureResidual } from '#core/constraint-verifier.js';
 const DOC = JSON.parse(fs.readFileSync(new URL('./fixtures/drag/owner-two-arcs-575.json', import.meta.url), 'utf8'));
 const J8 = 'j8_1794492561525', J2 = 'j2_1794492542145', C_INNER = 'j1_1794492540938', C_OUTER = 'j7_1794492560318', ORIGIN = 'j_origin';
 
-// The owner's two sides are parallel to a construction line, so the drag's PARALLEL INFERENCE (inference-engine.js findInference, a snap; not touched
-// by task 578) keeps the grabbed end on its own line until the cursor has left its angle tolerance (about 13 events of 4 px here) and then moves it
-// on in steps: the end trails the cursor by at most LAG_PX and keeps pace with it. Before task 578 it never moved at all (gap 4, 8 ... 79 px, still 0 travel).
-const EVENTS = 40, LAG_PX = 60;
+// The owner's two sides are parallel to a construction line, so the drag's PARALLEL INFERENCE (inference-engine.js findInference) holds on every
+// event. Task 578 found it at the CURSOR: it kept the grabbed end on its own line until the cursor left its angle tolerance and then moved it on in
+// steps (a staircase, worst gap 40.4 px with 40 events). Task 582 finds it where the drag's solve puts the end (selection-tools.js dragToward): there
+// the side IS parallel, the inferred position is the end's own, and the end follows the cursor within one event's step (worst gap 1.08 px).
+// Before task 578 it never moved at all (gap 4, 8 ... 79 px, still 0 travel).
+const EVENTS = 40, LAG_PX = 4;
 const residual = (st) => { let max = 0; for (const c of st.constraints) { if (!c || c.driven || c.type === 'mouse_spring') continue; const r = measureResidual(c, st.joints, st.shapes); if (!(r <= max)) max = r; } return max; };
 const pos = (st, id) => { const j = st.joints.get(id); return { x: j.x, y: j.y }; };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);

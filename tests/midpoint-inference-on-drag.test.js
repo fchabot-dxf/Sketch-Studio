@@ -1,21 +1,13 @@
-import { undoStub } from './helpers/undo-stub.js';
+// TASK 582: the drag's inference is found where the drag's SOLVE puts the dragged joint (selection-tools.js dragToward), so the sketch is the
+// real engine-backed sketch state (tests/harness/audit/lib.js newSketch), as in the app; a hand-built state without a solver never moves the joint.
+import * as L from './harness/audit/lib.js';
 (async () => {
     const { handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp } = await import('#ui/input-handlers/selection-tools.js');
     const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
     // Minimal state with one line and a free joint
-    const state = {
-        joints: new Map(),
-        shapes: [],
-        constraints: [],
-        selectedJoints: new Set(),
-        selectedShapes: new Set(),
-        selectedConstraints: new Set(),
-        beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}),
-        endUndoGroup: () => {},
-        ...undoStub(),
-        currentTool: 'select'
-    };
+    const state = L.newSketch().state;
+    state.currentTool = 'select';
 
     // Create endpoints j1(0,0) and j2(10,0) and line s1
     state.joints.set('j1', { x: 0, y: 0, fixed: false });

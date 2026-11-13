@@ -176,5 +176,5 @@ export function mountSketch(svgEl, opts = {}) {
   const start = () => { if (rafId == null && typeof requestAnimationFrame === 'function') rafId = requestAnimationFrame(frame); };
   const stop = () => { if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; } };
 
-  return { state, engine, worldGroup, start, stop };
+  return { state, engine, worldGroup, svg: svgEl, start, stop };
 }

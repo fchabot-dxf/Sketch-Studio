@@ -33,6 +33,27 @@ export function applyHistoryState(s) {
     state.doc = s.doc;
 }
 
+/** TASK 570: what an SVG / DXF import changes outside the sketch (paper size, pens, per-shape styles, static ids), for the sketch undo step
+ *  of the import (state.hostSnapshot, declared `asked`: only the import's snapshot carries it, so undoing a drawing step never touches it).
+ *  JSON-safe deep copy; the toolpaths, settings and art layers are not touched by an import and are not in it. */
+export function captureImportState() {
+    return JSON.parse(JSON.stringify({
+        doc: state.doc,
+        plotColors: state.plotColors,
+        shapeStyles: Array.from(state.shapeStyles.entries()),
+        staticShapeIds: Array.from(state.staticShapeIds),
+    }));
+}
+
+/** Put back a captureImportState() result (a fresh copy, so the stored snapshot stays intact for the next undo / redo). */
+export function applyImportState(d) {
+    const c = JSON.parse(JSON.stringify(d));
+    state.doc = c.doc;
+    state.plotColors = c.plotColors;
+    state.shapeStyles = new Map(c.shapeStyles);
+    state.staticShapeIds = new Set(c.staticShapeIds);
+}
+
 /** The persisted document = the undo subset + the parts undo leaves alone. */
 export function capturePlotterDoc() {
     return {

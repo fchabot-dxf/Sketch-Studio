@@ -52,7 +52,9 @@ export function createSketchState(engine, view) {
     parameters: [], // TASK 535: user parameters { name, unit, expression, comment? }, one list per document (no non-test producer yet)
     vcarves: [],
     // TASK 463: OPTIONAL generic host hook so a host's own undoable data rides in the SAME snapshots (one history, no second
-    // stack): { capture() -> JSON-safe data, restore(data) }. Shaper uses it for its cut plan. null = nothing extra.
+    // stack): { capture() -> JSON-safe data, restore(data), [asked] }. Shaper uses it for its cut plan. null = nothing extra.
+    // TASK 570: `asked: true` = the host's data rides ONLY in snapshots saved with saveState(label, { host: true }) (an import);
+    // every other step, and its undo / redo, leaves the host's data alone (Pen Plotter). Without `asked` every snapshot carries it (Shaper).
     hostSnapshot: null,
     history: [],  // the last HISTORY_DEPTH states for undo
     maxHistory: HISTORY_DEPTH,
@@ -63,7 +65,9 @@ export function createSketchState(engine, view) {
     _undoGroupDepth: 0,
     // BURN-DOWN-2: deep-clone the live store into a snapshot object (extracted from saveStateForce so undo/redo
     // capture the current state identically — one definition of "what a snapshot is").
-    _captureSnapshot: function(){
+    // `withHost` (TASK 570): include the host's data (always for a hostSnapshot without `asked`; only when true for one with it).
+    _captureSnapshot: function(withHost){
+      const hs = this.hostSnapshot;
       return {
         joints: new Map(Array.from(this.joints.entries()).map(([k,v]) => [k, {...v}])),
         shapes: this.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})),
@@ -78,7 +82,7 @@ export function createSketchState(engine, view) {
         parameters: Array.isArray(this.parameters) ? cloneParameters(this.parameters) : undefined, // TASK 535
         // VCARVE-3b: the V-carve records (deep clone incl. the nested vbit)
         vcarves: Array.isArray(this.vcarves) ? this.vcarves.map(v => ({...v, vbit: v.vbit ? {...v.vbit} : undefined})) : undefined,
-        host: this.hostSnapshot ? this.hostSnapshot.capture() : undefined // TASK 463: the host's own undoable data
+        host: hs && (!hs.asked || withHost) ? hs.capture() : undefined // TASK 463: the host's own undoable data
       };
     },
     // TASK 507 (ops journal): every stored snapshot carries WHEN it was saved (`t`) and WHAT the user did next (`label`; default =
@@ -169,8 +173,8 @@ export function createSketchState(engine, view) {
     },
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     // TASK 549: `snapshot` (optional) = a state captured EARLIER with captureUndoSnapshot(), pushed as this step's "before" instead of the live one.
-    saveStateForce: function(label, snapshot){
-      this.history.push(this._stamp(snapshot || this._captureSnapshot(), label));
+    saveStateForce: function(label, snapshot, opts){
+      this.history.push(this._stamp(snapshot || this._captureSnapshot(!!(opts && opts.host)), label));
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       this._notifyHistory();
@@ -182,14 +186,14 @@ export function createSketchState(engine, view) {
       return true;
     },
     // Normal save - during an active undo group we still create segment snapshots (they will be compressed on commit)
-    saveState: function(label) {
+    saveState: function(label, opts) { // opts.host (TASK 570): this step's snapshot carries the host's data (see hostSnapshot.asked)
       if(this._undoGroupActive){
         // Create a segment snapshot and remember its index for the active group
-        this.saveStateForce(label);
+        this.saveStateForce(label, undefined, opts);
         try{ if(this._undoGroupInfo) this._undoGroupInfo.segmentIndices.push(this.history.length - 1); }catch(_){ }
         return;
       }
-      this.saveStateForce(label);
+      this.saveStateForce(label, undefined, opts);
     },
     beginUndoGroup: function(label, snapshot){
       if(this._undoGroupActive) {
@@ -293,7 +297,7 @@ export function createSketchState(engine, view) {
       if(this.history.length === 0) return;
       // BURN-DOWN-2: capture the CURRENT live state so redo() can return to it, THEN restore the previous snapshot.
       const snapshot = this.history.pop();
-      this.redoStack.push(this._stamp(this._captureSnapshot(), snapshot.label)); // the redo entry is labelled with the action it re-does
+      this.redoStack.push(this._stamp(this._captureSnapshot(snapshot.host !== undefined), snapshot.label)); // the redo entry is labelled with the action it re-does
       this._restoreSnapshot(snapshot); // cleanup after undo is disabled; trust the snapshot as saved
       this._notifyHistory();
     },
@@ -303,7 +307,7 @@ export function createSketchState(engine, view) {
       if(!this.redoStack || this.redoStack.length === 0) return;
       // The current state becomes undoable again, then restore the redo snapshot.
       const snapshot = this.redoStack.pop();
-      this.history.push(this._stamp(this._captureSnapshot(), snapshot.label));
+      this.history.push(this._stamp(this._captureSnapshot(snapshot.host !== undefined), snapshot.label));
       if(this.history.length > this.maxHistory) this.history.shift();
       this._restoreSnapshot(snapshot);
       this._notifyHistory();

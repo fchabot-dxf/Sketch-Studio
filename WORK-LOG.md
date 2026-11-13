@@ -14299,3 +14299,47 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
 - Callers: getDragDOF (one caller, dragToward); new pullDrag / snapIdOf (dragToward only). No function lost its last caller.
 - Gate: first merge run on 28d4a02: files=358 pass=356 fail=2 (arc-rim-drag-live, drag-target-release-live: the stall above). Final 7673a3d: "GATE tier=merge jobs=quick=22,live=6 files=358 pass=358 fail=0 elapsed=650s", SMOKE 12/12, HEADLESS-LEFT 0 (a clean rerun: a run before it overlapped a 10 s local swap of selection-tools.js for an evidence probe, so it is not counted). arc-rim-drag-live alone: "rotated 15.693 deg (160.0 px of travel), worst gap 19.95 px"; drag-target-release-live alone: ok (Esc drift 0.0000 deg, 17 -> 17).
 - Evidence (local): .evidence/582/ (before-node.txt / after-node.txt, probe-owner*.txt, probe-framed-*.txt, oracle-before/after.txt, gate-merge*.log).
+## TURN 585 - MIRROR tool in the Create group, like Fusion's Create > Mirror (owner approved 2026-11-13: "always the create menu"; Opus subagent)
+- WHAT: TOOL_MODES.MIRROR, a "Mirror" button in the shared ribbon's CREATE group (packages/ui/tool-ribbon.js; every Design host: SketchStudio, Shaper, Pen
+  Plotter, Trace). Flow (Fusion's): the OBJECTS (the selection; a pre-selection counts and starts the tool at step 2), then the mirror LINE (a sketch line,
+  a construction line or the X / Y axis: REFERENCE_PICK_STEP[MIRROR] = the LINE step only, one rule), then Enter, or the touch Done button (task 562's
+  button: input-manager TOUCH_DONE declares per tool when it shows and what it does; Line chain unchanged). Esc cancels (handleEscape: nothing made, no
+  step). The steps are announced in toasts (notification-manager): "Mirror: click the objects ..., then press Enter (Done on touch)", "Mirror: pick the
+  mirror line ...", "Mirror line: <name>. Press Enter ... Esc to cancel."; the picked line is lit like the selection (an axis too: the renderer lights a
+  reference line in the selected set). A refusal says why ("Mirror: <reason>.").
+- CORE packages/core/mirror.js (pure): mirrorObjects(state, { shapes, joints }, lineId) -> { ok, shapes, joints, constraints } | { ok: false, reason }.
+  Every point of the objects gets its OWN copy point at its mirror image (a point ON the line too, as measured), linked by a point symmetric; points joined
+  in the objects (a shared joint or a COINCIDENT cluster: the line tool's chains, the rectangles) become ONE copy point with ONE link, so the copy's corners
+  are shared joints (a chain stays connected, a rectangle closed). MIRROR_KINDS declares each kind: line (end point links, measured), circle (ONE circle-form
+  symmetric, measured; no separate centre link), arc (circle form + its two end point links = the true mirror, sweep flipped; makeArc's structural equal
+  for the copy, the arc's own definition; NOT measured: to verify in Fusion), bezier (end point links; the control points are shape data, mirrored once:
+  they do not follow later edits, as the original's do not follow its ends). A fillet arc's filletSharp and user group stay with the original. No other
+  constraint or dimension is copied. The copy lands in the ACTIVE sketch (the joints.set / shapes.push stamp). The constraints go in through
+  addConstraintObject (the load / undo / paste path: the arc's links are partly redundant on purpose, which ConstraintManager would refuse; the DOF is
+  unchanged, tested). Refusals (data, nothing changes): nothing selected, an object in a locked sketch (577), a kind with no rule, no / not a line, a line
+  of no length, the line among the objects (Fusion: to verify; refused). The symmetric math and the Sym tool are untouched.
+- UI packages/ui/input-handlers/mirror-tool.js: beginMirror (the ribbon's `begin` on the CREATE entry, run by selectTool after the host's own switch: the
+  one activation path of all hosts), handleMirrorPointerDown (OBJECTS: a click toggles a shape / point; LINE: a click picks a line), mirrorDone (Enter /
+  Done): the mirror is ONE undo step through recordConstraintStep (571), labelled 'mirror'; then the selection is cleared and the tool ends (Select).
+  state.mirror (sketch-state, declared, never saved) holds the pick; read only while currentTool is MIRROR. Icon icon-tool-mirror in cursor-manager ICONS.
+- FUSION (advisor, real UI, cm) vs ours: docs/FUSION-COMPARISON.md "Mirror (task 585)". Same: the 3 curves, the shared corner, the own on-line copy point,
+  the 4 symmetries (3 point + 1 circle), nothing else copied, 4 new points, one undo step, the edit 3 -> 4 / diameter 1 -> 1.6 moves the copy to x 4 and
+  r 0.8. Divergence (pre-existing, reported): a FREE construction line turns under our dimension edit's least-change solve, mirror or not (measured: no
+  mirror, A 30 -> 40 mm: line to (1.040,-10.034)-(5.253,49.826), A's start (4.569,40.104); with the mirror: (-1.905,-9.953)-(1.270,49.972), A's start
+  (0.802,41.146)); Fusion's stayed. The test holds the line on x = 0 (vertical + start on the Y axis): copy (40, 40.0082), (40, 9.9824), r 8 (A's height
+  drifts 0.008 mm: the same least-change spread; 0.026 mm without the mirror).
+- TESTS (fail-first: .evidence/585/fail-first.txt, every file fails on origin/main ddfc6f3's code): tests/mirror-fusion-node.test.js (44 checks, the node kit,
+  SketchStudio: the Fusion case by clicks + Enter, curves, the 4 links, nothing else copied, points +4, DOF panel = engine = finite difference unchanged,
+  one undo step, redo identical, autosave + reload identical, the dimension edits drive the copy, touch Done button flow about the X axis),
+  tests/mirror.test.js (114 checks: Y axis + free point, a slanted sketch line, shared corner, coincident chain, RECTANGLE -> closed copy, circle, arc
+  (true mirror, sweep flipped, a radius edit drives the copy), bezier, save / load, every refusal, the ACTIVE sketch, the tool's steps and axis rule, a
+  refused confirm leaves no step), tests/mirror-hosts-node.test.js (Shaper + Pen Plotter: the same button and flow), tests/mirror-live-sketchstudio.test.js
+  (headless browser, real pointer + keys: draw, Select + Shift clicks, Mirror, the Y axis lights and is picked, Enter, Ctrl+Z one step, Ctrl+Y identical).
+  coverage-matrix: 'mirror' added to the ribbon inventory (solver role in tests/harness/coverage/inventory.js, deferred in the matrix to its own tests);
+  the inventory's "mirror is absent" scan no longer looks for mirror (it exists now).
+- Evidence (.evidence/585/, local): ribbon-create-mirror.png md5 d749fdc2471f54a2d3214a56cfc064bd (the Create group with Mirror last),
+  sketchstudio-mirror-before.png md5 19d10acc0b638386f9f8baad5ab98cb3 (the selected chain + circle left of the lit Y axis), sketchstudio-mirror-after.png
+  md5 611249938a1f9476d76221eb572f0b70 (the copies right of the axis, symmetric glyphs on both sides, no H/V glyph on the copy), fail-first.txt.
+- BEHAVIOUR CHANGES for existing users: (1) a Mirror button at the end of the Create group in every host of the shared ribbon; (2) the touch Done button sets
+  its title / aria-label each time it shows (the Line chain's text is unchanged) and also shows in the Mirror tool; (3) a new `mirror: null` field on the
+  sketch state (not saved, not in undo snapshots). Nothing else.

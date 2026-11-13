@@ -51,10 +51,12 @@ await (async () => {
       await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, `${host} sidebar button`);
       if (host === 'sketchstudio') await waitForApp('svgCanvas'); // the Shaper's Design buffer exists only once its Design tab is entered
       const H = JSON.stringify(host);
-      // seed: two designs in My Designs (with geometry) and one in a new project
+      // seed: two designs in My Designs (with geometry) and one in a new project. My Designs is named: a new design goes to the CURRENT design's
+      // project by default (project-store.js newDesign), and the current design here is whatever the previous host's half opened last (TASK 558:
+      // a fresh page no longer stores an "Untitled" in My Designs that used to be the current one).
       await q(`(async () => { const s = ${S};
-        const a = await s.newDesign('Trapezoid', { app: ${H} }); await s.save(${JSON.stringify(DOC([[0, 0], [60, 0], [45, 30], [15, 30]]))}, { id: a.id, app: ${H} });
-        const b = await s.newDesign('Bracket', { app: ${H} }); await s.save(${JSON.stringify(DOC([[0, 0], [40, 0], [40, 40]]))}, { id: b.id, app: ${H} });
+        const a = await s.newDesign('Trapezoid', { app: ${H}, projectId: 'my-designs' }); await s.save(${JSON.stringify(DOC([[0, 0], [60, 0], [45, 30], [15, 30]]))}, { id: a.id, app: ${H} });
+        const b = await s.newDesign('Bracket', { app: ${H}, projectId: 'my-designs' }); await s.save(${JSON.stringify(DOC([[0, 0], [40, 0], [40, 40]]))}, { id: b.id, app: ${H} });
         const p = await s.createProject('Shop jigs'); const c = await s.newDesign('Plate', { app: ${H} }); await s.save(${JSON.stringify(DOC([[0, 0], [80, 0], [80, 20], [0, 20]]))}, { id: c.id, app: ${H} }); await s.moveDesign(c.id, p.id);
         return true; })()`);
 
@@ -87,8 +89,10 @@ await (async () => {
       await q(`(() => { const i = document.querySelector('[data-pm=search]'); i.value = ''; i.dispatchEvent(new Event('input')); })()`);
 
       // one project's designs, then Recent again
-      await q(`[...document.querySelectorAll('.sk-pm-rowbtn')].find((b) => b.textContent.includes('Shop jigs')).click()`);
-      await waitFor(`document.querySelectorAll('.sk-pm-tile').length >= 1`, `${host}: a project's designs`);
+      const shopId = await q(`(() => { const b = [...document.querySelectorAll('.sk-pm-rowbtn')].find((x) => x.textContent.includes('Shop jigs')); b.click(); return b.dataset.pane; })()`);
+      // the view's OWN condition (a tile count also holds for the Recent view still on screen): that project's row is the selected one, which
+      // the manager renders together with its designs
+      await waitFor(`!!document.querySelector('.sk-pm-rowbtn.sel[data-pane="${shopId}"]')`, `${host}: a project's designs`);
       assert.ok((await tiles()).includes('Plate') && !(await tiles()).includes('Trapezoid'), `${host}: only that project's designs`);
       await click('.sk-pm-rowbtn[data-pane="recent"]');
       await waitFor(`document.querySelectorAll('.sk-pm-tile').length >= 3`, `${host}: back to Recent`);

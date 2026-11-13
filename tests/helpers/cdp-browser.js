@@ -79,11 +79,12 @@ export async function sendRealKey(send, key, code, vk, modifiers = 0, text = '')
 // Returns null when no Edge/Chrome is installed (the caller prints its "skipped" line).
 // opts: tag (profile dir prefix), width/height (viewport), args (extra browser flags), server (false = don't start the static server), fixtures (extra served HTML pages, see startServer).
 export async function launchBrowser(opts = {}) {
-  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {} } = opts;
+  const { tag = 'cdp', width = 1600, height = 900, args = [], server: withServer = true, fixtures = {}, userDir: fixedUserDir = null } = opts;
   const browser = findBrowser();
   if (!browser) return null;
   const srv = withServer ? await startServer(REPO_ROOT, fixtures) : { server: null, port: 0 };
-  const userDir = fs.mkdtempSync(path.join(os.tmpdir(), `sk-test-${tag}-`));
+  // fixedUserDir: a caller whose leak check looks for its own profile name (scripts/gate.cjs finds shell-smoke's browser by sk-shell-smoke-<pid>); it must be unique per run
+  const userDir = fixedUserDir || fs.mkdtempSync(path.join(os.tmpdir(), `sk-test-${tag}-`));
   const proc = spawn(browser, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
     '--remote-debugging-port=0', `--user-data-dir=${userDir}`, ...args, 'about:blank',
@@ -114,7 +115,7 @@ export async function launchBrowser(opts = {}) {
     // Warn-and-continue is right here: a leftover temp dir (Windows EPERM while the browser
     // releases files) is not a test failure, and the test body has already passed.
     try {
-      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      fs.rmSync(userDir, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
     } catch (e) { console.warn(`cdp-browser: could not remove profile dir ${userDir}: ${e.message}`); }
   };
 
@@ -155,7 +156,16 @@ export async function launchBrowser(opts = {}) {
       await send('Page.navigate', { url });
       await Promise.race([loaded, sleep(timeoutMs)]);
     };
-    return { port: srv.port, server: srv.server, userDir, send, once, evalJs, waitFor, navigate, close };
+    // Waits until the app has finished its initial restore of the stored design (document-buffer.js sets data-doc-ready="1" on the Design canvas, TASK 474/542): the app is
+    // then ready for input. This is THE "page loaded" condition for a live test; never a fixed sleep after navigate.
+    const waitForApp = (canvasId) => waitFor(`(() => { const c = document.getElementById('${canvasId}'); return !!c && c.dataset.docReady === '1'; })()`, `#${canvasId} to finish restoring its stored design (data-doc-ready)`);
+    // Makes the autosave write what the app currently holds, through the app's own page-hide path (document-buffer.js: the tab closing saves pending changes at once), and waits for it.
+    // The buffer sets the "Saving…" status synchronously when something is unsaved; otherwise the store already holds the current state. Replaces "sleep past the 1500 ms poll".
+    const flushAutosave = async () => {
+      const status = await evalJs(`(() => { window.dispatchEvent(new Event('pagehide')); return document.getElementById('save-status').textContent; })()`);
+      if (status === 'Saving…') await waitFor(`document.getElementById('save-status').textContent === 'Saved'`, 'the autosave to finish writing');
+    };
+    return { port: srv.port, server: srv.server, userDir, ws, send, once, evalJs, waitFor, navigate, waitForApp, flushAutosave, close };
   } catch (e) {
     await close();
     throw e;

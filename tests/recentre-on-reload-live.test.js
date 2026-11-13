@@ -21,7 +21,7 @@ const TINY = { name: 'tiny', bbox: { minX: -900, minY: 700, maxX: -899.5, maxY: 
 await (async () => {
   const cdp = await launchBrowser({ tag: '494' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     const viewBoxOf = (sel) => evalJs(`(() => { const c = document.querySelector('${sel}'); const r = c.getBoundingClientRect(); return { vb: c.getAttribute('viewBox').split(' ').map(Number), w: r.width, h: r.height }; })()`);
     const click = async (x, y) => {
@@ -58,13 +58,14 @@ await (async () => {
         await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);
         await waitFor(h.ready, h.app + ' page to load');
         // Shaper opens on another mode: its Design canvas has no size until the user enters Design (the fit is armed until then).
-        if (h.enter) { await sleep(1200); await evalJs(h.enter); }
+        if (h.enter) await evalJs(h.enter); // the Shaper's Design buffer exists only once the tab is entered
+        await waitForApp(h.canvas.slice(1));
         await waitFor(`document.querySelector('${h.canvas}').getBoundingClientRect().width > 0`, h.app + ' canvas to have a size');
       };
       // Seeds a NEW current design in the shared store (the app is loaded so the store module is the page's own).
       const seed = (d) => evalJs(`(async () => { const { getProjectStore } = await import('/packages/ui/project-store.js'); const s = getProjectStore();
         const p = await s.newDesign(${JSON.stringify(d.name)}, { app: ${JSON.stringify(h.app)} }); await s.save(${JSON.stringify(d.document)}, { app: ${JSON.stringify(h.app)}, id: p.id }); return p.id; })()`);
-      const settle = () => sleep(1200); // the RAF/restore chain + the first layout
+      const settle = () => sleep(1200); // the RAF/restore chain + the first layout (a timed wait: this test is about what autosave ticks do over time)
 
       await goto();
       // an EMPTY design keeps the default view (the host's own initial view), and a second empty reload gives the identical view
@@ -84,7 +85,7 @@ await (async () => {
       // the user zooms: an autosave tick (the buffer polls every 1.5 s) must not re-fit
       const r = await evalJs(`(() => { const r = document.querySelector('${h.canvas}').getBoundingClientRect(); return { x: Math.round(r.left + r.width * 0.3), y: Math.round(r.top + r.height * 0.4) }; })()`);
       await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: r.x, y: r.y, deltaX: 0, deltaY: -400 });
-      await sleep(300);
+      await settle();
       const zoomed = await viewBoxOf(h.canvas);
       assert(zoomed.vb[2] < framedW, h.app + ': wheel zoomed in (' + zoomed.vb + ')');
       await evalJs(`(async () => { const { getProjectStore } = await import('/packages/ui/project-store.js'); await getProjectStore().save(${JSON.stringify(doc([['a', 5000, 3000], ['b', 5040, 3020], ['c', 5040, 3050]], [line('L1', 'a', 'b'), line('L2', 'b', 'c')]))}, { app: ${JSON.stringify(h.app)}, id: ${JSON.stringify(smallId)} }); })()`);
@@ -104,8 +105,10 @@ await (async () => {
         await clickEl('.sk-sidebar-btn');
         await clickEl('.sk-sidebar-item[data-action="open-recent"]');
         await waitFor(`[...document.querySelectorAll('.sk-pm .sk-pm-tile')].some(e => e.textContent.includes('${d.name}'))`, 'Recent pane to show ' + d.name);
+        const vbBefore = await evalJs(`document.querySelector('${h.canvas}').getAttribute('viewBox')`);
         await clickEl('.sk-pm .sk-pm-tile', d.name);
-        await sleep(800);
+        await waitFor(`document.querySelector('${h.canvas}').getAttribute('viewBox') !== ${JSON.stringify(vbBefore)}`, h.app + ' to fit the opened design ' + d.name);
+        await settle();
         assertFramed(await viewBoxOf(h.canvas), d.bbox, h.app + ' Open recent -> ' + d.name);
       }
     }

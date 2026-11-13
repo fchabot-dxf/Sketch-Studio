@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
+import { launchBrowser, sendRealKey } from './helpers/cdp-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -80,8 +80,9 @@ await (async () => {
         engine.solve(500);
         state.saveState();
         showEditInput(svg, state, c);
-        await new Promise(r => setTimeout(r, 80));
       })()`);
+      // showEditInput focuses and selects the prefilled value in the NEXT animation frame; wait for that real state (focus + whole value selected), not a fixed delay
+      await waitFor(`(() => { const i = document.getElementById('dimInput'); return document.activeElement === i && i.value.length > 0 && i.selectionStart === 0 && i.selectionEnd === i.value.length; })()`, `${host.name} #dimInput to take focus with its value selected`);
 
       const openCheck = await evalJs(`(() => ({
         activeId: document.activeElement && document.activeElement.id,
@@ -95,7 +96,7 @@ await (async () => {
       // Type "80" and commit with real Enter key
       await sendRealKey(send, '8', 'Digit8', 56, 0, '8');
       await sendRealKey(send, '0', 'Digit0', 48, 0, '0');
-      await sleep(40);
+      await waitFor(`document.getElementById('dimInput').value === '80'`, `${host.name} #dimInput to hold the typed 80`);
       await sendRealKey(send, 'Enter', 'Enter', 13, 0, '\r');
       await waitFor(`(() => { const { state } = (${host.ctxExpr})(); const c = state.constraints.find(x => x.type === 'distance'); return !!c && c.value === 80 && getComputedStyle(document.getElementById('dimInput')).display === 'none' && !(document.activeElement && document.activeElement.id === 'dimInput'); })()`, `${host.name} dimension to commit 80 and #dimInput to hide and release focus`);
 

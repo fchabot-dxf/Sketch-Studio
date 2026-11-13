@@ -48,6 +48,11 @@ function abortLine(state){
     deactivateLineTool(state);
     state.closeDrawStep();
 }
+// TASK 562: END the polyline chain, keeping the segments already committed by clicks and discarding the rubber-band segment to the
+// cursor. The ONE function behind the Enter key and the touch "Done" button (a phone has neither Enter nor Esc).
+export function finishLineChain(state){
+    abortLine(state);
+}
 const LINE_POINTERUP_DEBOUNCE_MS = 500;
 
 function canPreviewLineInference(state, startId, endId, newShapeId, activeInf) {
@@ -152,7 +157,7 @@ export function handleLineKeyDown(e, svg, state) {
     // ergonomic to reach for. deactivateLineTool removes the in-flight start
     // joint and any pending coincident constraint that the polyline auto-added.
     if (e.key === 'Enter') {
-        try { abortLine(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
+        try { finishLineChain(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
         return true;
     }
 

@@ -162,6 +162,7 @@ function initApp(){
 
   // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
+  const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
     leading: mountProjectSidebar({
@@ -169,10 +170,18 @@ function initApp(){
       hostActions: [
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
         { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
+        // TASK 562: at phone width (<= 640 px) the header's Style / Debug buttons and the footer's Log / TUNE are hidden and live here
+        // instead (the same buttons' own handlers run: nothing is rebuilt). A wider screen keeps them where they are.
+        { divider: true, visible: onPhone },
+        { id: 'phone-style', label: 'Style', icon: '⚙', visible: onPhone, onClick: () => stylePanel.toggle() },
+        { id: 'phone-debug', label: 'Debug', icon: '⌨', visible: onPhone, onClick: () => document.getElementById('btn-debug-toggle').click() },
+        { id: 'phone-log', label: 'Log', icon: '☰', visible: onPhone, onClick: () => diagLog.toggle() },
+        { id: 'phone-tune', label: 'Tune solver', icon: '⚙', visible: () => onPhone() && !!document.getElementById('btn-tuning-toggle'), onClick: () => document.getElementById('btn-tuning-toggle').click() },
       ],
     }).el,
     tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
     actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
+    collapseActionsOnPhone: true, // TASK 562: Style + Debug move into the menu at <= 640 px
     activeTab: 'design',
     onStyle: () => stylePanel.toggle(),
     onTabChange: showView,

@@ -6,7 +6,7 @@
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
-import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
+import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
@@ -24,7 +24,9 @@ import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerM
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
-import { handleLineKeyDown } from '#ui/input-handlers/line-tool.js';
+import { handleLineKeyDown, finishLineChain } from '#ui/input-handlers/line-tool.js';
+import { createLongPress } from '#ui/long-press.js';
+import { createTouchDoneButton } from '#ui/touch-done-button.js';
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
@@ -130,8 +132,13 @@ let inputCtx = defaultInputCtx;
 // Default ()=>true → SketchStudio (passes no isActive) is byte-identical. Shaper passes () => Design visible.
 let isActiveFn = () => true;
 
-// Global flag for magnifier toggle
+// Global flag for magnifier toggle (the footer MAG LENS button, for mouse users)
 let magEnabled = false;
+// TASK 562: a finger is down on the canvas. The lens is then ON by itself while it draws or drags (no toggle on a phone): the finger
+// hides the point it works on, the lens shows it 80 px above. The MAG LENS button stays the switch for a mouse.
+let touchPointerDown = false;
+const LENS_RADIUS_PX = 50;
+const LENS_OFFSET_PX = 80;
 
 // Helper to sync magnifier portal: shows 1:1 view of the area under the finger,
 // offset above the pointer so touch users can see the snap area.
@@ -142,20 +149,25 @@ function updateMagnifier(svg, state) {
     const worldGroup = inputCtx.getWorldGroup ? inputCtx.getWorldGroup() : null;
     if (!mag || !magContent || !worldGroup) return;
 
-    // Show when: toggle ON + there is an active snap target with a point
+    // Show when: the toggle is ON and a snap target has a point, OR a finger is drawing / dragging (then it follows the finger's
+    // point, snapped when a snap is active)
     const snap = state && state.activeSnap;
     const hasSnap = snap && snap.pt && typeof snap.pt.x === 'number';
+    const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.BEZIER];
+    const fingerWorking = touchPointerDown && !!state && !!(state.drag || state.active || drawingTools.includes(state.currentTool)) && !!state.lastMouse;
+    const showLens = (magEnabled && hasSnap) || fingerWorking;
 
-    if (!magEnabled || !hasSnap) {
+    if (!showLens) {
         mag.style.display = 'none';
         // Clear any children only if populated (avoid unnecessary DOM write)
         if (magContent.firstChild) magContent.innerHTML = '';
         return;
     }
 
-    const focusX = snap.pt.x;
-    const focusY = snap.pt.y;
-    dbg.log('magnifier', 'focus', focusX, focusY, snap.type, snap.targetId);
+    const focus = hasSnap ? snap.pt : screenToWorld(svg, state.lastMouse.x, state.lastMouse.y);
+    const focusX = focus.x;
+    const focusY = focus.y;
+    dbg.log('magnifier', 'focus', focusX, focusY, hasSnap ? snap.type : 'finger', hasSnap ? snap.targetId : null);
 
     // Viewbox-units-per-pixel for zoom-independent sizing
     const vb = svg.viewBox.baseVal;
@@ -163,16 +175,18 @@ function updateMagnifier(svg, state) {
     const pxScale = vb.width / bRect.width;
 
     // Lens size: always ~50 screen pixels regardless of zoom
-    const lensR = 50 * pxScale;
+    const lensR = LENS_RADIUS_PX * pxScale;
     const clipR = lensR - 2 * pxScale;
     const strokeW = 2 * pxScale;
     const c1 = mag.querySelector(':scope > circle');
-    const c2 = mag.querySelector('clipPath circle');
+    const c2 = mag.querySelector('mask circle'); // the lens's clip: the page's #mag-mask circle (it used to be looked up as a clipPath that does not exist, so the copy of the drawing was never clipped to the lens)
     if (c1) { c1.setAttribute('r', lensR); c1.setAttribute('stroke-width', strokeW); }
     if (c2) { c2.setAttribute('r', clipR); }
 
-    // Position the lens above the snap point (80 screen pixels up)
-    const offY = 80 * pxScale;
+    // Position the lens above the point (80 screen pixels up); under it when the canvas top edge would cut it off
+    const focusScreenY = worldToScreen(svg, { x: focusX, y: focusY }).y;
+    const above = !fingerWorking || focusScreenY - LENS_OFFSET_PX - LENS_RADIUS_PX >= bRect.top;
+    const offY = (above ? LENS_OFFSET_PX : -LENS_OFFSET_PX) * pxScale;
     mag.setAttribute('transform', 'translate(' + focusX + ',' + (focusY - offY) + ')');
     mag.style.display = 'block';
 
@@ -412,8 +426,8 @@ function nearestGridPoint(svg, e) {
 // Helper: Centralized snap update logic
 function updateSnapTarget(e, svg, state) {
     const isTouch = e.isTouch || e.pointerType === 'touch';
-    const snapBoost = isTouch ? 2.0 : 1.0;
-    const constraintTol = isTouch ? 40 : 20;
+    const snapBoost = snapBoostFor(isTouch);
+    const constraintTol = 20 * snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
     const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
@@ -614,7 +628,7 @@ function handlePointerDown(e, svg, state) {
         // first point needs (a fresh findSnap below would return the bare, unlocked candidate).
         const keepLockedAxisSnap = !!(clickSnap && AXIS_SNAP_TARGETS[clickSnap.type]);
         if (!hitJoint && !hitShape && !keepLockedAxisSnap) {
-            const snapBoost = isTouch ? 2.0 : 1.0;
+            const snapBoost = snapBoostFor(isTouch);
             clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
             if (clickSnap) {
                 if (clickSnap.type === 'joint') {
@@ -655,7 +669,7 @@ function handlePointerDown(e, svg, state) {
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
-    const constraintTol = isTouch ? 40 : 20;
+    const constraintTol = 20 * snapBoostFor(isTouch);
     try { hitConstraint = hitConstraintAtScreen(state.constraints, svg, screenX, screenY, constraintTol); } catch(_) { hitConstraint = null; }
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
@@ -919,21 +933,74 @@ function handlePointerUp(e, svg, state) {
 function setupEventListeners(svg, state) {
     dbg.log('input', '[input-manager] Attaching pointer listeners to svg', !!svg);
     if(!svg) return;
+        // TASK 562: touch and hold = the right-click menu. ONE detector (#ui/long-press.js) owns the hold on every browser: iOS Safari fires no
+        // `contextmenu` for it and Android Chrome does (that one is swallowed in the contextmenu listener below, so the menu opens once).
+        // While a finger on a context target (shape / joint / dimension, Select or Dimension tool) is still a hold candidate its moves are
+        // not forwarded, so the press can neither start a drag / pan / marquee nor draw; once the finger leaves the slop circle the moves
+        // flow as always. When the hold fires, the press the pointerdown started is cancelled (no drag, no half-picked dimension) and the
+        // shared menu opens beside the finger. The release of a hold that fired is consumed here: it is not a click.
+        let holdWasPlacing = false;
+        let lastTouchAt = 0; // ms of the last touch pointer event: a `contextmenu` right after it belongs to the touch hold
+        const endTouchPress = () => { touchPointerDown = false; lastTouchAt = Date.now(); };
+        const hold = createLongPress({
+            onFire: (x, y, down) => {
+                if (!isActiveFn()) return;
+                try { svg.releasePointerCapture(down.pointerId); } catch (_) { }
+                state.drag = null; state.inference = null; state.snapTarget = null; state.activeSnap = null;
+                resetSelectionState();
+                stopEdgePan();
+                if (!holdWasPlacing && isDimensionPlacing(state)) resetDimensionState(state); // a dimension this press half-picked
+                try { updateMagnifier(svg, state); } catch (_) { }
+                openContextMenuFor({ clientX: x, clientY: y, target: down.target, pointerType: 'touch' }, svg, state, { touch: true });
+            },
+        });
+        // TASK 562: the touch "Done" button ends a Line chain exactly like Enter (finishLineChain); shown only while a finger is the input.
+        const doneButton = createTouchDoneButton({
+            svg,
+            isChainOpen: () => isActiveFn() && state.currentTool === TOOL_MODES.LINE && !!state.active && state.active.mode === TOOL_MODES.LINE,
+            onDone: () => finishLineChain(state),
+        });
+        const holdTools = () => state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION;
         svg.addEventListener('pointerdown', (e) => {
             dbg.log('input', '[input-manager] svg pointerdown', {x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName});
-            // debug: verify unified snap format on pointerdown
-            try{ /* noop */ }catch(_){ }
+            if (e.pointerType === 'touch') {
+                lastTouchAt = Date.now();
+                touchPointerDown = e.isPrimary; // a second finger is a pinch / pan, not a draw
+                if (!e.isPrimary) hold.cancel();
+            }
+            holdWasPlacing = isDimensionPlacing(state);
+            doneButton.sync(e.pointerType === 'touch');
             try{ handlePointerDown(e, svg, state); } catch(err){ 
                 console.error('[input-manager] handlePointerDown error', err);
                 showNotification("Input Error: " + err.message, "error");
             }
+            if (e.pointerType === 'touch' && e.isPrimary && isActiveFn() && holdTools() && pickContextTarget(svg, state, e)) hold.start(e);
         });
         svg.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'touch' && (hold.fired && hold.pointerId === e.pointerId || hold.move(e))) { e.preventDefault(); return; }
             try{ handlePointerMove(e, svg, state); } catch(err){ console.error('[input-manager] handlePointerMove error', err); }
         });
         svg.addEventListener('pointerup', (e) => {
             dbg.log('input', 'svg pointerup', {x: e.clientX, y: e.clientY});
+            if (e.pointerType === 'touch') {
+                endTouchPress();
+                const consumed = hold.fired && hold.pointerId === e.pointerId;
+                hold.cancel();
+                if (consumed) {
+                    e.preventDefault();
+                    try { handlePanZoomPointerUp(e, svg, state); } catch (_) { }
+                    try { svg.releasePointerCapture(e.pointerId); } catch (_) { }
+                    return;
+                }
+            }
             try{ handlePointerUp(e, svg, state); } catch(err){ console.error('[input-manager] handlePointerUp error', err); }
+            doneButton.sync(e.pointerType === 'touch');
+        });
+        svg.addEventListener('pointercancel', (e) => {
+            if (e.pointerType !== 'touch') return;
+            endTouchPress(); hold.cancel();
+            try { handlePanZoomPointerUp(e, svg, state); } catch (_) { }
+            try { updateMagnifier(svg, state); } catch (_) { }
         });
 svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-manager] svg wheel', {deltaY: e.deltaY, x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName}); try { handleWheel(e, svg, state); } catch(err) { console.warn('[input-manager] handleWheel failed:', err); } }, { passive: false });
 
@@ -964,6 +1031,9 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
         if (state.currentTool === TOOL_MODES.LINE && state.active) { e.preventDefault(); return; }
         if (!(state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION)) return;
         if (!(e.target instanceof Node) || !svg.contains(e.target)) return;
+        // TASK 562: a `contextmenu` that belongs to a finger (Android Chrome sends one during / just after a hold) is the browser's twin of
+        // the hold detector above, which owns touch: suppress the native menu and open nothing here, so the menu never opens twice.
+        if (e.pointerType === 'touch' || touchPointerDown || Date.now() - lastTouchAt < 700) { e.preventDefault(); return; }
         if (openContextMenuFor(e, svg, state)) e.preventDefault();
     });
 
@@ -1234,17 +1304,17 @@ function pickContextTarget(svg, state, e) {
         const c = state.constraints[parseInt(label.dataset.constraintIdx, 10)];
         if (c) return { kind: 'dimension', constraint: c };
     }
-    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, e.pointerType === 'touch' ? 2.0 : 1.0);
+    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
     if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
     if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
-    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20);
+    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20 * snapBoostFor(e.pointerType === 'touch'));
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     return null;
 }
 
 // Right click on a target: make it the selection (Fusion: an item outside the selection replaces it; one inside
 // keeps the whole selection), then open the menu declared for its kind.
-function openContextMenuFor(e, svg, state) {
+function openContextMenuFor(e, svg, state, { touch = false } = {}) {
     const target = pickContextTarget(svg, state, e);
     if (!target) return false;
     const sel = { j: state.selectedJoints, s: state.selectedShapes, c: state.selectedConstraints };
@@ -1268,7 +1338,7 @@ function openContextMenuFor(e, svg, state) {
         lockState: () => selectionLockState(state),
     };
     const items = contextMenuItems(target.kind === 'dimension' ? 'dimension' : 'geometry', { target, actions });
-    showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg });
+    showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg, touch });
     return true;
 }
 

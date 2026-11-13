@@ -28,6 +28,14 @@ function injectStyles() {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sk-header-action:hover, .sk-header-style:hover { background: var(--sk-header-hover, rgba(0,0,0,0.05)); opacity: 1; }
 .sk-header-ic { display: inline-flex; align-items: center; }
+/* TASK 562: a finger: tabs and actions >= 44 px high (a mouse keeps today's size). */
+@media (pointer: coarse) {
+  .sk-header-tab, .sk-header-action, .sk-header-style { min-height: 44px; min-width: 44px; justify-content: center; }
+}
+/* TASK 562: a host that declares collapseActionsOnPhone moves Style + the host actions into its menu at phone width. */
+@media (max-width: 640px) {
+  .sk-header-collapse-phone .sk-header-actions { display: none; }
+}
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -41,13 +49,14 @@ function injectStyles() {
  *   onTabChange(id): fired on a USER tab click (NOT on the programmatic setActiveTab, to avoid router loops).
  *   activeTab: initial active id (defaults to the first tab).
  *   onStyle(): the built-in Style button's click (host opens the shared style panel). styleButton:false hides it.
+ *   collapseActionsOnPhone: true hides the Style button + actions at <= 640 px (the host puts the same actions in its menu).
  *   icon strings are raw inline markup / text / emoji (kept app-agnostic; the host supplies them).
  */
 export function createAppHeader({ tabs = [], actions = [], onTabChange = null, activeTab = null,
-  onStyle = null, styleButton = true, styleLabel = 'Style', styleIcon = '⚙', leading = null } = {}) {
+  onStyle = null, styleButton = true, styleLabel = 'Style', styleIcon = '⚙', leading = null, collapseActionsOnPhone = false } = {}) {
   injectStyles();
 
-  const el = document.createElement('header'); el.className = 'sk-header';
+  const el = document.createElement('header'); el.className = 'sk-header' + (collapseActionsOnPhone ? ' sk-header-collapse-phone' : '');
   const tabsEl = document.createElement('nav'); tabsEl.className = 'sk-header-tabs';
   const spacer = document.createElement('span'); spacer.className = 'sk-header-spacer';
   const actionsEl = document.createElement('div'); actionsEl.className = 'sk-header-actions';

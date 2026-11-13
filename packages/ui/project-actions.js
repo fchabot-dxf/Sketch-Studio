@@ -8,8 +8,11 @@
 // Failures THROW (a readable message); the UI shows it and changes nothing.
 
 import { driveFileUrl } from './cloud/drive-adapter.js';
+import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {} }) {
+// `importFile(text, fileName)` (TASK 566): the host's SVG / DXF import into its Design canvas (it lands the shapes and shows its own status). A host
+// without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
 
@@ -65,6 +68,8 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   const saveAs = (name) => buf().saveAs(name);
   const newDesign = () => buf().newDesign();
   const openFile = () => buf().openFile();
+  // pick an SVG / DXF and hand its text to the host's importer; null = the picker was cancelled
+  const importDrawing = importFile ? () => pickAndImport(importFile) : null;
 
   /** The project manager's toolbar. */
   function toolbarItems() {
@@ -72,8 +77,9 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
       { id: 'new-project', label: 'New project', ask: { kind: 'prompt', label: 'New project', value: 'New project', okLabel: 'Create' }, run: (name) => store.createProject(name) },
       { id: 'new-design', label: 'New design', closes: true, run: () => newDesign() },
       { id: 'open-file', label: 'Open from file', closes: true, run: () => openFile() },
+      ...(importDrawing ? [{ id: 'import-file', label: IMPORT_ACTION_LABEL, closes: true, run: () => importDrawing() }] : []),
     ];
   }
 
-  return { duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems };
+  return { duplicateCurrent, saveCurrentToDrive, saveAs, newDesign, openFile, importDrawing, toolbarItems, openDesign, duplicateDesign, saveDesignToDrive, saveDesignToFile, designItems, projectItems };
 }

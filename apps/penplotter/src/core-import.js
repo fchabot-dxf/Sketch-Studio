@@ -1,122 +1,48 @@
-// apps/penplotter/src/core-import.js — UNIFY-5: import an SVG into the #core SKETCH (constrainable, shown in the
-// Design tab). MIRRORS Shaper's importSvgToSketch (no fork): a host DOM walk -> descriptors (with a composed CTM +
-// each element's resolved fill/stroke) -> the PURE #core/svg-import (importSvgGeometry + parsePathSubpaths +
-// computeImportScale + the matrix layer) -> the sketch's #core shapes. Per-element DIGITAL style -> state.shapeStyles
-// (plotter-side; the UNIFY-4c nearest-pen map derives the physical pen). DENSE imports are marked STATIC (the
-// UNIFY-throttle skip holds ~60 FPS); small imports stay LIVE/constrainable. Unsupported/degraded elements are
-// COUNTED + surfaced (IMPORT-3), never silently dropped.
+// apps/penplotter/src/core-import.js — UNIFY-5 / TASK 478 / TASK 566: import an SVG or a DXF into the #core SKETCH (constrainable, shown in the
+// Design tab) through the ONE shared importer (#ui/sketch-import.js). What is the plotter's own is declared as options: the paint resolver
+// (each element's fill / stroke), the extra structural tags, the shape-id prefix, and afterImport, which gives every imported shape its
+// DIGITAL style -> state.shapeStyles (the UNIFY-4c nearest-pen map derives the physical pen), a pen for every colour, marks the geometry
+// STATIC (imported art DISPLAYS in its pen colours via the underlay; select a subset to constrain it) and sets the paper size.
+// Unsupported / degraded elements are COUNTED + surfaced (IMPORT-3) by the shared message, never silently dropped.
 
-import { importSvgGeometry, computeImportScale, computeImportSize, parseTransform, multiplyMatrix, IDENTITY_MATRIX } from '#core/svg-import.js';
-import { importDxf, looksLikeDxf } from '#core/dxf-import.js';  // TASK 478: a Fusion sketch DXF -> #core shapes
-import { addSketch, activateSketch } from '#core/sketch-model.js';
+import { computeImportSize } from '#core/svg-import.js';
+import { importIntoSketch } from '#ui/sketch-import.js';
 import { state, findOrCreatePlotColor, makeShapeStyle, DEFAULT_STROKE_WIDTH } from './state.js';
-import { inheritPaint, penColorFor } from './svg-import.js'; // reuse the plotter's paint resolver (UNIFY-7 relocates)
+import { inheritPaint, penColorFor } from './svg-import.js'; // the plotter's paint resolver (UNIFY-7 relocates)
 import { setDocSize } from './settings.js';                  // IMPORT-DOC-SIZE: the import defines the paper size
-import { newShapeId } from '#core/shape-id.js';
 
-const TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
-const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style', 'clippath', 'lineargradient', 'radialgradient']);
-const DENSE_THRESHOLD = 200; // > this many imported shapes -> mark the whole import STATIC (perf); small stays LIVE
+const SILENT_TAGS = new Set(['metadata', 'title', 'desc', 'defs', 'style', 'clippath', 'lineargradient', 'radialgradient']);
 
-// Host DOM walk: per-element descriptors { tag, ctm, color, ...rawAttrs } threading the composed CTM + inherited
-// paint. Unsupported tags are counted (never silently dropped).
-function extract(svg) {
-  const descs = [], skipped = {};
-  const bump = (k) => { skipped[k] = (skipped[k] || 0) + 1; };
-  const walk = (parent, ctm, paint) => {
-    for (const el of parent.children) {
-      const tag = (el.tagName || '').toLowerCase();
-      const tf = (el.getAttribute && el.getAttribute('transform')) || '';
-      const elCtm = tf ? multiplyMatrix(ctm, parseTransform(tf)) : ctm;
-      const elPaint = inheritPaint(el, paint);
-      if (tag === 'g' || tag === 'svg') { walk(el, elCtm, elPaint); continue; }
-      if (!TAGS.has(tag)) { if (tag && !SKIP_SILENT.has(tag)) bump('<' + tag + '>'); continue; }
-      const a = (n) => el.getAttribute(n);
-      // STYLE-1: carry the element's RESOLVED stroke AND fill separately, not one collapsed colour. inheritPaint
-      // already computed both; penColorFor() was throwing the distinction away. The style record needs it — stroke
-      // becomes the outline pen, fill becomes the fill pen — so an imported FILLED path can still get a +Fill op.
-      // `color` stays for compatibility (the nearest-pen seeding below reads it) = the same value as before.
-      const base = { tag, ctm: elCtm, color: penColorFor(elPaint) || '#000000', stroke: elPaint.stroke || null, fill: elPaint.fill || null };
-      if (tag === 'line') descs.push({ ...base, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
-      else if (tag === 'rect') descs.push({ ...base, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
-      else if (tag === 'circle') descs.push({ ...base, cx: a('cx'), cy: a('cy'), r: a('r') });
-      else if (tag === 'ellipse') descs.push({ ...base, cx: a('cx'), cy: a('cy'), rx: a('rx'), ry: a('ry') });
-      else if (tag === 'polyline' || tag === 'polygon') descs.push({ ...base, points: a('points') });
-      else if (tag === 'path') descs.push({ ...base, d: a('d') });
+// returns the paper-size note of the status message when the import changed the paper (`paperSet` reports it to the caller)
+function afterImport({ format, descs, shapes, root }, paperSet) {
+  const byDesc = new Map(descs.map((d) => [d.descId, d]));
+  const styleOf = new Map(); // descId -> the style record of that element (one per element, copied per shape)
+  const black = makeShapeStyle('#000000', null, DEFAULT_STROKE_WIDTH); // a DXF carries no paint: every shape gets the default pen
+  for (const s of shapes) {
+    const d = byDesc.get(s.descId);
+    if (d && !styleOf.has(s.descId)) {
+      // STYLE-1: one style record from the element's RESOLVED paint. An element with neither fill nor stroke is black-filled per SVG's
+      // default (what penColorFor assumes), so fall back to that colour as the STROKE rather than leaving the shape paintless.
+      const color = penColorFor(d.paint) || '#000000';
+      const style = makeShapeStyle(d.paint.stroke || (d.paint.fill ? null : color), d.paint.fill || null, DEFAULT_STROKE_WIDTH);
+      styleOf.set(s.descId, style);
+      // ONE rule (TASK 465): every colour an element paints with gets a pen: its STROKE colour and its FILL colour.
+      for (const c of [style.stroke, style.fill]) if (c) findOrCreatePlotColor(c);
     }
-  };
-  walk(svg, IDENTITY_MATRIX, { fill: null, stroke: null });
-  return { descs, skipped };
-}
-
-// Import svgText into controller's #core sketch. Returns { imported, sketchName, scaleLabel, static, skippedSummary }.
-export function importSvgToCore(svgText, fileName, controller) {
-  const st = controller.state, engine = controller.engine;
-  let doc; try { doc = new DOMParser().parseFromString(svgText, 'image/svg+xml'); } catch (_) { return { error: 'parse failed' }; }
-  const svg = doc.documentElement;
-  if (!svg) return { error: 'no svg root' };
-  const { descs, skipped } = extract(svg);
-  const root = { width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') };
-  const { scale, label } = computeImportScale(root);
-  // IMPORT-DOC-SIZE (user-decided: "import svg would also define the canvas size, but overridable afterward").
-  // The size comes from the SAME scale the coords below are baked with, so the paper matches the geometry. null =
-  // unknowable size (no viewBox, no usable width/height) -> keep the current doc.
-  const size = computeImportSize(root);
-  const docSet = size ? setDocSize(size.w, size.h) : false;
-
-  // Land the import in a NEW named sketch (like Shaper). Each descriptor's idPrefix comes from THE shape-id generator (unique shape ids).
-  const sk = addSketch(st, (fileName || 'Imported').replace(/\.svg$/i, '') || 'Imported');
-  activateSketch(st, sk.id);
-
-  const importedIds = [];
-  // Per-descriptor so each element's DIGITAL color maps exactly to the shapes it produced. genJ is shared (unique
-  // joint ids); idPrefix is unique per descriptor (unique shape ids). importSvgGeometry stats carry ellipse/S-T-A skips.
-  for (const d of descs) {
-    const { joints, shapes, stats } = importSvgGeometry([d], { genJ: () => engine.genJ(), scale, idPrefix: newShapeId('imp') });
-    for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-    // STYLE-1: one style record per produced shape, from the element's RESOLVED paint. An element with neither fill
-    // nor stroke set is black-filled per SVG's default (that is what penColorFor already assumed), so fall back to
-    // `color` as the STROKE — the pre-STYLE-1 behaviour — rather than leaving the shape paintless.
-    const style = makeShapeStyle(d.stroke || (d.fill ? null : d.color), d.fill || null, DEFAULT_STROKE_WIDTH);
-    for (const s of shapes) { st.shapes.push(s); importedIds.push(s.id); state.shapeStyles.set(s.id, { ...style }); }
-    for (const r of (stats.skipped || [])) bumpInto(skipped, r.tag + ' ' + r.reason, r.count);
-    // ONE rule (TASK 465): every colour an element paints with gets a pen: its STROKE colour (outline pen) and its FILL
-    // colour (fill pen), the same two roles + Outline / + Fill bucket by. (It used to seed from the fill-first colour only.)
-    for (const c of [style.stroke, style.fill]) if (c) findOrCreatePlotColor(c);
+    const style = d ? styleOf.get(s.descId) : black;
+    state.shapeStyles.set(s.id, { ...style });
+    state.staticShapeIds.add(s.id);
   }
-
-  // UNIFY-6 (decided): mark ALL imports STATIC so imported art DISPLAYS in its PEN colors (via the underlay) by
-  // default; the user activates a subset (select) to constrain. Dense imports especially need this for the throttle.
-  for (const id of importedIds) state.staticShapeIds.add(id);
-  const dense = importedIds.length > DENSE_THRESHOLD; // (kept only to note "dense" in the status)
-
-  const skippedSummary = Object.entries(skipped).map(([k, n]) => `${k} x${n}`).join(', ');
-  return { imported: importedIds.length, sketchName: sk.name, scaleLabel: label, static: importedIds.length > 0, dense, skippedSummary,
-           docSet, docW: state.doc.w, docH: state.doc.h }; // IMPORT-DOC-SIZE: what the paper became (host re-fits the view)
+  if (format === 'dxf') findOrCreatePlotColor(black.stroke);
+  // IMPORT-DOC-SIZE: the SVG's size (from the SAME scale its coordinates were baked with) defines the paper; null = unknowable -> keep the doc
+  const size = root ? computeImportSize(root) : null;
+  if (size && setDocSize(size.w, size.h)) { paperSet(); return `paper ${state.doc.w}×${state.doc.h} mm`; }
+  return null;
 }
 
-function bumpInto(obj, k, n) { obj[k] = (obj[k] || 0) + n; }
-
-
-// TASK 478: import a DXF (Fusion: Save As DXF of a sketch) into the controller's #core sketch: the same result shape as importSvgToCore.
-// Geometry is static; a DXF carries no paint, so every shape gets the default black pen style (like an unpainted SVG element).
-export function importDxfToCore(dxfText, fileName, controller) {
-  const st = controller.state, engine = controller.engine;
-  const res = importDxf(dxfText, { genJ: () => engine.genJ(), idPrefix: newShapeId('imp') });
-  if (res.error) return { error: res.error };
-  const { joints, shapes, stats } = res;
-  const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
-  activateSketch(st, sk.id);
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  const style = makeShapeStyle('#000000', null, DEFAULT_STROKE_WIDTH);
-  for (const sh of shapes) { st.shapes.push(sh); state.staticShapeIds.add(sh.id); state.shapeStyles.set(sh.id, { ...style }); }
-  if (shapes.length) findOrCreatePlotColor(style.stroke);
-  const skippedSummary = (stats.skipped || []).map((x) => `${x.tag} ${x.reason} x${x.count}`).join(', ');
-  return { imported: shapes.length, sketchName: sk.name, scaleLabel: stats.label + (stats.assumed ? ' (assumed)' : ''), static: shapes.length > 0, dense: false, skippedSummary,
-           docSet: false, docW: state.doc.w, docH: state.doc.h };
-}
-
-// ONE import entry: the parser is picked by the file extension, else by the sniffed content.
+/** Import `text` (an SVG or a DXF) into controller's #core sketch. Returns the shared result plus `docSet` (the paper size was changed). */
 export function importFileToCore(text, fileName, controller) {
-  return looksLikeDxf(fileName, text) ? importDxfToCore(text, fileName, controller) : importSvgToCore(text, fileName, controller);
+  let docSet = false;
+  const res = importIntoSketch(text, fileName, controller, { idPrefix: 'imp', silentTags: SILENT_TAGS, inheritPaint, afterImport: (ctx) => afterImport(ctx, () => { docSet = true; }) });
+  return { ...res, docSet };
 }

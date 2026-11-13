@@ -21,6 +21,7 @@ import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
@@ -65,6 +66,13 @@ setConstraintNotifier(showNotification);
 // shared app state passed to input and ui modules
 const state = createSketchState(engine, view);
 // TASK 473: the sidebar's Download uses the same exporter as the Export view, with its default options.
+// TASK 566: Import SVG / DXF -> a new sketch, through the shared importer (the file menu's entry; a drop on the canvas is the second way in).
+// SketchStudio declares no options: its sketch state is what the importer works on, and the result is shown as a notification.
+function importDrawing(text, fileName) {
+  const res = importIntoSketch(text, fileName, { state }, {});
+  if (res.ok) fitToDrawing(svg, state); // frame the imported drawing (the render loop solves each frame)
+  showNotification(res.message, res.ok ? 'success' : 'error', 6000);
+}
 function sidebarExport(type) {
   const res = exportToFile(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' });
   try { showNotification(res && res.ok ? 'Export started' : 'Export failed: ' + (res && res.reason ? res.reason : 'unknown'), res && res.ok ? 'success' : 'error'); } catch (_) {}
@@ -166,7 +174,7 @@ function initApp(){
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
     leading: mountProjectSidebar({
-      appId: 'sketchstudio', getBuffer: () => docBuffer,
+      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importDrawing, // TASK 566: "Import SVG / DXF…" in the file menu
       hostActions: [
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
         { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
@@ -215,6 +223,7 @@ function initApp(){
   });
 
   setupInput(svg, state);
+  mountImportDrop(svg, importDrawing); // TASK 566: a drop on the canvas imports too
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
   window.addEventListener('focus', () => {

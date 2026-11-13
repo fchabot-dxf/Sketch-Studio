@@ -9,6 +9,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
@@ -49,10 +50,8 @@ await (async () => {
 
     // ---- A. Pen Plotter -> SketchStudio edit -> Pen Plotter
     await goto('/apps/penplotter/index.html');
-    await waitFor(`!!document.getElementById('importSvgFile') && !!window.__sketch`, 'the Pen Plotter page to load');
-    const root = await send('DOM.getDocument');
-    const q = await send('DOM.querySelector', { nodeId: root.root.nodeId, selector: '#importSvgFile' });
-    await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
+    await waitFor(`!!document.querySelector('.sk-sidebar-btn') && !!window.__sketch`, 'the Pen Plotter page to load');
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`window.__sketch.controller.state.shapes.length > 0`, 'the SVG import to add shapes');
     await clickEl('.stage-btn[data-stage="toolpath"]');
     await waitFor(`(() => { const b = document.getElementById('addPlotColor'); return !!b && b.offsetParent !== null; })()`, 'the toolpath stage (#addPlotColor visible)');
@@ -64,7 +63,7 @@ await (async () => {
       state.toolpaths = [a]; state.activeToolpathId = a.id;
       state.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2, export_files: 'pen' };
     })()`);
-    await waitFor(`${STORED}.then(s => { const r = s && JSON.parse(s); return !!(r && r.penplotter && r.penplotter.toolpaths && r.penplotter.toolpaths.length === 1); })`, 'Pen Plotter to autosave its toolpath sidecar');
+    await waitFor(`${STORED}.then(s => { const r = s && JSON.parse(s); return !!(r && r.penplotter && r.penplotter.toolpaths && r.penplotter.toolpaths.length === 1 && r.penplotter.toolpaths[0].name === 'Tri' && r.penplotter.settings.draw_feed === 1234); })`, 'Pen Plotter to autosave its toolpath sidecar (its own toolpath and settings, not the starter toolpath)');
     await waitSaved();
     const plotterBefore = await plotterDoc();
     const s1 = await stored();

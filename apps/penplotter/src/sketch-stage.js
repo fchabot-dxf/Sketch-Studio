@@ -19,7 +19,8 @@ import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/
 import { closedPolygonFor } from '#core/plot/fills/utils.js';          // STYLE-3: the pipeline's OWN closed-shape test
 import { state, shapeStyle, setShapeStyle, makeShapeStyle, docSizeLabel } from './state.js'; // UNIFY-4c/STYLE-1: the style record
 import { installFreehandTool } from './freehand-tool.js';               // UNIFY-4b: plotter-side Freehand -> #core beziers
-import { importFileToCore } from './core-import.js';                     // UNIFY-5 / TASK 478: import SVG or DXF -> #core sketch + colors
+import { importFileToCore } from './core-import.js';                     // UNIFY-5 / TASK 478 / TASK 566: import SVG or DXF -> #core sketch + colors (via the shared importer)
+import { mountImportDrop } from '#ui/sketch-import.js';               // TASK 566: the drop on the Design canvas
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { STYLE_WIDTH, keepNumber } from './fields.js';                  // TASK 453: declared width range
@@ -42,6 +43,11 @@ const PANEL_COLLAPSED_KEY = 'penplotter-sketch-panel-collapsed';
 let docBuffer = null; // TASK 474: the autosave buffer / project actions (created on mount); read it through getDocBuffer()
 /** The Pen Plotter's document buffer (openDesign / newDesign / saveAs / saveFile / openFile / store), or null before the Design stage mounted. */
 export const getDocBuffer = () => docBuffer;
+let designImport = null; // TASK 566: the Design tab's SVG / DXF import (set on mount); the sidebar's "Import SVG / DXF…" calls it through importDrawing()
+export const importDrawing = (text, name) => {
+  if (!designImport) throw new Error('This app is still starting. Try again in a moment.');
+  return designImport(text, name);
+};
 const FREEHAND_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 16 C 7 6, 10 6, 12 12 S 17 18, 21 8"/></svg>';
 
 // The Design-tab DOM: the shared ribbon on top, a collapsible panel (Freehand lives in the ribbon; Bake + the
@@ -63,8 +69,6 @@ const SCAFFOLD = `
         <button id="design-panel-toggle" title="Collapse panel" aria-label="Toggle panel">&#9654;</button>
         <div id="design-panel-actions">
           <button id="designDocBtn" class="dp-btn" title="Set the document size — opens the Document dialog">Document</button>
-          <button id="importSvgBtn" class="dp-btn dp-primary" title="Import an SVG or a Fusion sketch DXF as constrainable #core geometry">Import SVG / DXF</button>
-          <input id="importSvgFile" type="file" accept=".svg,image/svg+xml,.dxf" hidden>
           <div id="importStatus" class="dp-note"></div>
           <!-- STYLE-2: the Style section (legacy style-panel.js, ported to the #core style record). STROKE drives the
                OUTLINE pen, FILL drives the FILL pen. Width is DISPLAY-only. The preset-swatch popover + the "mixed"
@@ -370,55 +374,25 @@ export function mountSketchStage(view, ctx = {}) {
     lastMixSig = ''; // panelTick recomputes on next frame
   });
 
-  // UNIFY-5: Import SVG -> #core sketch (constrainable). Paint -> shapeStyles -> the underlay's mapped pen. Dense
-  // imports are marked static (fast). Surfaces the skipped/degraded count. Returns the result (dev/test seam).
+  // UNIFY-5 / TASK 566: Import SVG / DXF -> #core sketch (constrainable) through the shared importer (core-import.js). Paint -> shapeStyles ->
+  // the underlay's mapped pen; the geometry is static. The entry is the sidebar's "Import SVG / DXF…" (importDrawing -> here); a drop on the
+  // Design canvas is the second way in. The status line of the Design panel shows the result. Returns the result (dev/test seam).
   const importStatus = view.querySelector('#importStatus');
   const doImport = (text, name) => {
     const res = importFileToCore(text, name || 'Imported.svg', controller);
-    underlayDirty = true; // new static geometry -> redraw the underlay
+    if (res.ok) underlayDirty = true; // new static geometry -> redraw the underlay
     // IMPORT-DOC-SIZE: the import SET the paper size — re-fit this canvas to the new paper. The paper rect itself and
     // the Document button label refresh on the next panelTick (its doc-size signature changed).
     if (res.docSet) fitDesignView();
-    if (importStatus) importStatus.textContent = res.error ? ('Import failed: ' + res.error)
-      : `Imported ${res.imported} -> ${res.sketchName} @ ${res.scaleLabel}${res.docSet ? ` · paper ${res.docW}×${res.docH} mm` : ''}${res.static ? ' (static)' : ''}${res.skippedSummary ? ' · skipped ' + res.skippedSummary : ''}`;
+    if (importStatus) importStatus.textContent = res.message;
     return res;
   };
-  const readIntoImport = (f) => { const rd = new FileReader(); rd.onload = () => doImport(String(rd.result), f.name); rd.readAsText(f); };
-  const importBtn = view.querySelector('#importSvgBtn'), importFile = view.querySelector('#importSvgFile');
-  if (importBtn && importFile) {
-    importBtn.addEventListener('click', () => importFile.click());
-    importFile.addEventListener('change', () => {
-      const f = importFile.files && importFile.files[0]; if (!f) return;
-      readIntoImport(f);
-      importFile.value = '';
-    });
-  }
+  designImport = doImport;
 
-  // IMPORT-2B-4: DRAG-AND-DROP an .svg onto the Design canvas -> the SAME doImport path as the button (so it also
-  // sets the paper size, per item 1). The audit found #dropOverlay rendered but its listeners stranded in the
-  // never-called installSvgImport; both now live here, on the canvas the user actually drops onto. A dragover can
-  // only see that files are coming (names are readable at DROP), so the .svg filter + its message land on drop.
+  // IMPORT-2B-4: DRAG-AND-DROP a file onto the Design canvas -> the SAME doImport as the menu entry. #dropOverlay is the drop cue.
   const dropWrap = view.querySelector('#design-canvas-wrap');
   const dropOverlay = view.querySelector('#dropOverlay');
-  if (dropWrap) {
-    const showDrop = (on) => { if (dropOverlay) dropOverlay.classList.toggle('show', on); };
-    const isFileDrag = (e) => {
-      const dt = e.dataTransfer;
-      if (!dt) return false;
-      if (dt.items && dt.items.length) return [...dt.items].some((it) => it.kind === 'file');
-      return !!(dt.types && [...dt.types].includes('Files'));
-    };
-    dropWrap.addEventListener('dragover', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); showDrop(true); });
-    // dragleave also fires when the pointer crosses onto a CHILD (the canvas svg) — only hide when it truly left.
-    dropWrap.addEventListener('dragleave', (e) => { if (!dropWrap.contains(e.relatedTarget)) showDrop(false); });
-    dropWrap.addEventListener('drop', (e) => {
-      e.preventDefault(); showDrop(false);
-      const files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
-      const f = files.find((x) => /\.(svg|dxf)$/i.test(x.name) || x.type === 'image/svg+xml');
-      if (!f) { if (importStatus) importStatus.textContent = files.length ? 'Only .svg and .dxf files can be imported.' : ''; return; }
-      readIntoImport(f);
-    });
-  }
+  if (dropWrap) mountImportDrop(dropWrap, doImport, { onHover: (on) => { if (dropOverlay) dropOverlay.classList.toggle('show', on); } });
 
   // UNIFY-7: "Bake to Draw" REMOVED (punch #3) — one store now; toolpaths target #core geometry directly (UNIFY-2),
   // so the bake bridge is meaningless.

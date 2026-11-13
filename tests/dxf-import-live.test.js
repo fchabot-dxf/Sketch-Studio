@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser } from './helpers/cdp-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,15 +44,14 @@ await (async () => {
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
     await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Shaper to load');
     await openMode('design'); await waitForApp('design-canvas'); await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design tab to show');
-    const fileNode = async () => { let q = { nodeId: 0 }; for (let i = 0; i < 10 && !q.nodeId; i++) { const doc = await send('DOM.getDocument', { depth: -1 }); q = await send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: 'input[type=file]:not(#file)' }); if (!q.nodeId) await sleep(400); } assert(q.nodeId, 'the import file input exists'); return q.nodeId; };
-    const importFile = async (file) => { // clear the status line, import, wait for the app to write the import's result into it (the import reads and parses the file asynchronously)
+    const importFile = async (file) => { // clear the status line, import through the sidebar's entry + the real file chooser, wait for the app to write the import's result into it (the import reads and parses the file asynchronously)
       await evalJs(`(document.getElementById('group-status') || {}).textContent = ''`);
-      await send('DOM.setFileInputFiles', { nodeId: await fileNode(), files: [file] });
+      const { label } = await importViaMenu(cdp, file);
+      assert.strictEqual(label, 'Import SVG / DXF…', 'the ONE entry is in the file menu (TASK 566)');
       await waitFor(`!!document.getElementById('group-status') && document.getElementById('group-status').textContent !== ''`, 'the import result in #group-status');
       return evalJs(`document.getElementById('group-status').textContent`); };
-    // the ONE entry is labelled SVG / DXF and accepts both
-    assert.strictEqual(await evalJs(`document.getElementById('svg-import-btn').textContent`), '\u2b07 Import SVG / DXF');
-    assert.match(await evalJs(`document.querySelector('input[type=file]:not(#file)').accept`), /\.dxf/);
+    // the ONE entry is the file menu's "Import SVG / DXF…" (TASK 566; the old hand-built button is gone)
+    assert.strictEqual(await evalJs(`!!document.getElementById('svg-import-btn')`), false, 'the hand-built button is gone');
 
     // a malformed DXF: a readable status, no exception
     const bad = path.join(os.tmpdir(), 'sk-478-bad.dxf'); fs.writeFileSync(bad, 'hello world\nthis is not a dxf\n');

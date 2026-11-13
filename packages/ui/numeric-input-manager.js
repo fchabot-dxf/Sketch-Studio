@@ -4,9 +4,10 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { commitDimensionEdit, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
+import { applyParameterChange, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
 import SettingsManager from '#core/settings-manager.js';
-import { parse as parseUnit, format as formatUnit } from '#core/units.js';
+import { format as formatUnit } from '#core/units.js';
+import { previewDimensionInput, completionsFor } from '#core/parameters.js';
 
 // U2: the active document unit for LENGTH dimension display/parse. Defaults to 'mm' = the world base (1 unit = 1 mm),
 // so a bare number round-trips byte-identically to the old parseFloat/toFixed(1) until the U3 toggle changes it.
@@ -50,6 +51,48 @@ const NUMERIC_INPUT_CSS = `
     }
 }
 .dim-input.hidden { display: none; }
+/* TASK 535: the live hint under the dimension box and the autocomplete list (both are children of the box's own parent, placed by JS) */
+.dim-hint {
+    position: absolute;
+    box-sizing: border-box;
+    z-index: 101;
+    max-width: min(360px, calc(100vw - 16px));
+    padding: 3px 8px;
+    border-radius: 4px;
+    font: 11px/1.35 system-ui, sans-serif;
+    background: #1f2937;
+    color: #f9fafb;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+    overflow-wrap: anywhere;
+}
+.dim-hint.err { background: #7f1d1d; color: #fee2e2; }
+.dim-complete {
+    position: absolute;
+    box-sizing: border-box;
+    z-index: 102;
+    min-width: 150px;
+    max-width: min(320px, calc(100vw - 16px));
+    margin: 0;
+    padding: 2px 0;
+    list-style: none;
+    background: white;
+    color: #000000;
+    border: 1px solid var(--fusion-orange, #EA580C);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font: 12px system-ui, sans-serif;
+    overflow: hidden;
+}
+.dim-complete li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.dim-complete li[aria-selected="true"] { background: var(--fusion-orange, #EA580C); color: #ffffff; }
+.dim-complete .dc-name { font-weight: 700; }
+.dim-complete .dc-val { opacity: 0.8; font-variant-numeric: tabular-nums; }
+.dim-hint.hidden, .dim-complete.hidden { display: none; }
+@media (max-width: 640px) {
+    .dim-hint { font-size: 12px; }
+    .dim-complete li { min-height: 34px; align-items: center; font-size: 14px; }
+}
 .sk-dual-input {
     position: absolute;
     box-sizing: border-box;
@@ -123,7 +166,12 @@ let uiState = {
     // State
     rafId: null,
     svg: null,
-    appState: null
+    appState: null,
+
+    // TASK 535: the hint line and the autocomplete list under the dimension box (null where the host has no real DOM)
+    hintEl: null,
+    listEl: null,
+    complete: null // { from, to, prefix, items, index } while the list is open
 };
 
 export function setupNumericInput(svg, state) {
@@ -156,6 +204,7 @@ export function setupNumericInput(svg, state) {
         hideNumericInputEl(existingSingle);
     }
     uiState.singleInput = existingSingle;
+    createAssistElements(existingSingle);
 
     // --- 2. Create Dual Input (for Rectangles) ---
     let dualDiv, inputW, sep, inputH;
@@ -198,12 +247,17 @@ export function setupNumericInput(svg, state) {
 function setupListeners() {
     // Single Input Handler
     uiState.singleInput.addEventListener('keydown', (e) => {
+        // TASK 535 autocomplete: while the list is open Up / Down move, Enter / Tab insert, Esc closes the list (a second Esc is the box's own Esc)
+        if (uiState.mode === 'edit' && uiState.complete) {
+            const consumed = handleCompletionKey(e);
+            if (consumed) { e.stopImmediatePropagation(); return; }
+        }
         if (e.key === 'Enter') handleCommit();
         if (e.key === 'Escape') handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
     
-    uiState.singleInput.addEventListener('input', () => handlePreview());
+    uiState.singleInput.addEventListener('input', () => { handlePreview(); updateAssist(); });
 
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
@@ -239,7 +293,8 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     uiState.singleInput.style.transform = '';
     showNumericInputEl(uiState.singleInput);
     
-    // Value
+    // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
+    uiState.singleInput.inputMode = 'decimal';
     uiState.singleInput.value = initialKey || (typeof value === 'number' ? value.toFixed(1) : '');
     uiState.singleInput.focus();
     if (!initialKey) uiState.singleInput.select();
@@ -316,10 +371,16 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // U2: LENGTH dims format through the document unit; ANGLE dims stay in degrees (raw toFixed). docUnit defaults
     // 'mm' (= the world base), so for a LENGTH dim formatUnit(v,'mm') === v.toFixed(1) — byte-identical to before.
     const isAngleDim = constraint.type === CONSTRAINT_TYPES.ANGLE;
+    // TASK 535: a dimension driven by a formula opens with its FORMULA (the stored expression), otherwise with its value. O16: the box takes the full
+    // text keyboard (names and "=" must be typable): no numeric inputmode.
+    const hasFormula = typeof constraint.expression === 'string' && constraint.expression !== '';
+    uiState.singleInput.inputMode = 'text';
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey
+        : hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
             ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, getDocUnit()))
             : '');
+    updateAssist({ complete: typeof initialKey === 'string' });
 
     requestAnimationFrame(() => {
         uiState.singleInput.focus();
@@ -356,30 +417,30 @@ export function updateInputPosition(x, y) {
 function handleCommit() {
     if (!uiState.active) return;
     if (uiState.mode === 'edit' && uiState.target) {
-        // U2: LENGTH dims parse through the document unit (a suffix like '0.25in' overrides; a bare number = docUnit,
-        // default 'mm' = the world base); ANGLE dims parse raw degrees. parseUnit returns null on invalid → the
-        // (val != null && !isNaN) guard rejects it exactly as NaN did, and stays byte-identical for the angle path.
-        const isAngleDim = uiState.target.type === CONSTRAINT_TYPES.ANGLE;
-        const val = isAngleDim ? parseFloat(uiState.singleInput.value) : parseUnit(uiState.singleInput.value, getDocUnit());
-        if (val != null && !isNaN(val)) {
-            const isFirstValue = uiState.target.__newlyPlaced === true;
-            uiState.target.isDriven = false;
-            uiState.target.driven = false;
-            uiState.target.__newlyPlaced = false;
-            if (!isFirstValue && uiState.appState.saveState) uiState.appState.saveState(dimensionEditLabel(uiState.target, val));
-            uiState.target.__placing = false;
-            if (uiState.appState.placingConstraint === uiState.target) uiState.appState.placingConstraint = null;
-            // Edit logic lives in the shared headless seam (so the harness drives the EXACT same code).
-            // On a genuine over-constraint it refuses + reverts to the last valid shape; we just surface it.
-            const { reverted, clash, reason } = commitDimensionEdit(uiState.appState, uiState.target, val);
-            if (reverted) {
-                showNotification(
-                    `Can't set to ${val}${reason ? ` — ${reason}` : clash ? ` — conflicts with ${clash}` : ''}. Reverted.`,
-                    "warning"
-                );
+        // TASK 535: the box text goes through the ONE expression parser (a number, a unit, a formula, a name, `name = value`): previewDimensionInput
+        // plans it (pure), applyParameterChange commits THAT plan through the batch seam: one undo step, all-or-nothing, parameters included.
+        // A text that is not valid keeps the box open: the hint under it says why (the old box closed silently and dropped what was typed).
+        const target = uiState.target;
+        const state = uiState.appState;
+        const pv = previewDimensionInput(state, target, uiState.singleInput.value, { unit: getDocUnit() });
+        if (!pv.ok && !pv.empty) { updateAssist({ complete: false }); return; }
+        if (pv.ok) {
+            const isFirstValue = target.__newlyPlaced === true;
+            target.isDriven = false;
+            target.driven = false;
+            target.__newlyPlaced = false;
+            target.__placing = false;
+            if (state.placingConstraint === target) state.placingConstraint = null;
+            const label = pv.kind === 'create' ? `create parameter ${pv.name}` : pv.kind === 'set' ? `change parameter ${pv.name}` : dimensionEditLabel(target, pv.value);
+            // the FIRST value of a just-placed dimension rides the snapshot taken at its birth (no second undo step)
+            const res = applyParameterChange(state, pv.plan, label, { snapshot: !isFirstValue });
+            if (res.reverted) {
+                const why = res.reason || (res.clash ? `conflicts with ${res.clash}` : '');
+                const who = res.culprit && res.culprit.name && res.culprit.name !== target.name ? `${res.culprit.name}: ` : '';
+                showNotification(`Can't set to ${pv.kind === 'value' ? pv.value : uiState.singleInput.value.trim()}${why ? ` — ${who}${why}` : ''}. Reverted.`, "warning");
             }
         }
-        uiState.target.__editing = false;
+        target.__editing = false;
         hideInput();
     } else {
         // Dispatch event for Tool to handle
@@ -432,7 +493,163 @@ function handleCancel() {
     hideInput();
 }
 
+// ── TASK 535: the live hint and the autocomplete list under the dimension box (the views; the content comes from #core/parameters.js) ──
+function createAssistElements(single) {
+    if (typeof document.createElement !== 'function' || !single || !single.parentNode || typeof single.parentNode.appendChild !== 'function') return;
+    // setupNumericInput runs again for every tool that calls it: reuse the elements a first call made (one hint line and one list per page)
+    const made = typeof document.getElementById === 'function' ? [document.getElementById('dimHint'), document.getElementById('dimComplete')] : [null, null];
+    if (made[0] && made[1]) { uiState.hintEl = made[0]; uiState.listEl = made[1]; return; }
+    const hint = document.createElement('div');
+    hint.id = 'dimHint';
+    hint.className = 'dim-hint hidden';
+    hint.setAttribute('role', 'status');
+    const list = document.createElement('ul');
+    list.id = 'dimComplete';
+    list.className = 'dim-complete hidden';
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', 'Parameter names');
+    // a mouse press on a row inserts it (mousedown, not click: the box must keep focus); a touch tap produces the same mousedown
+    list.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const li = e.target && typeof e.target.closest === 'function' ? e.target.closest('li') : null;
+        if (li && uiState.complete) insertCompletion(Number(li.dataset.index));
+    });
+    single.parentNode.appendChild(list);
+    single.parentNode.appendChild(hint);
+    single.setAttribute('aria-describedby', 'dimHint');
+    single.setAttribute('aria-controls', 'dimComplete');
+    single.setAttribute('aria-autocomplete', 'list');
+    single.setAttribute('autocomplete', 'off');
+    single.setAttribute('autocapitalize', 'off');
+    single.setAttribute('spellcheck', 'false');
+    uiState.hintEl = hint;
+    uiState.listEl = list;
+}
+
+function closeList() {
+    uiState.complete = null;
+    if (uiState.listEl) { uiState.listEl.replaceChildren(); hideNumericInputEl(uiState.listEl); }
+    if (uiState.singleInput && typeof uiState.singleInput.removeAttribute === 'function') uiState.singleInput.removeAttribute('aria-activedescendant');
+}
+
+function hideAssist() {
+    closeList();
+    if (uiState.hintEl) hideNumericInputEl(uiState.hintEl);
+}
+
+function renderList() {
+    const L = uiState.complete;
+    const list = uiState.listEl;
+    list.replaceChildren();
+    L.items.forEach((it, i) => {
+        const li = document.createElement('li');
+        li.id = `dimComplete-${i}`;
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', i === L.index ? 'true' : 'false');
+        li.dataset.index = String(i);
+        const name = document.createElement('span');
+        name.className = 'dc-name';
+        name.textContent = it.kind === 'function' ? it.detail : it.name;
+        const val = document.createElement('span');
+        val.className = 'dc-val';
+        val.textContent = [it.value, it.unit].filter(Boolean).join(' ');
+        li.append(name, val);
+        list.appendChild(li);
+    });
+    if (L.index >= 0) uiState.singleInput.setAttribute('aria-activedescendant', `dimComplete-${L.index}`);
+    else uiState.singleInput.removeAttribute('aria-activedescendant');
+    showNumericInputEl(list);
+}
+
+// Up / Down move (no row is picked until one is moved to, so a plain Enter still commits), Enter / Tab insert the picked row (Tab: the first when none),
+// Esc closes the list. Returns true when the key was used.
+function handleCompletionKey(e) {
+    const L = uiState.complete;
+    if (!L) return false;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = L.items.length;
+        L.index = e.key === 'ArrowDown' ? (L.index + 1) % n : L.index <= 0 ? n - 1 : L.index - 1;
+        renderList();
+        placeAssist();
+        return true;
+    }
+    if (e.key === 'Tab' || (e.key === 'Enter' && L.index >= 0)) {
+        e.preventDefault();
+        insertCompletion(L.index >= 0 ? L.index : 0);
+        return true;
+    }
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        closeList();
+        placeAssist();
+        return true;
+    }
+    return false;
+}
+
+function insertCompletion(i) {
+    const L = uiState.complete;
+    const input = uiState.singleInput;
+    if (!L || !L.items[i]) return;
+    const v = input.value;
+    input.value = v.slice(0, L.from) + L.items[i].insert + v.slice(L.to);
+    const caret = L.from + L.items[i].insert.length;
+    input.setSelectionRange(caret, caret);
+    input.focus();
+    closeList(); // the list stays closed until the next keystroke, so Enter then commits
+    updateAssist({ complete: false });
+    placeAssist();
+}
+
+// hint = what Enter will do (value preview, the O4 change list) or why it will not; list = names under the caret
+function updateAssist({ complete = true } = {}) {
+    if (!uiState.hintEl) return;
+    if (uiState.mode !== 'edit' || !uiState.target) { hideAssist(); return; }
+    const input = uiState.singleInput;
+    const state = uiState.appState;
+    const unit = getDocUnit();
+    const pv = previewDimensionInput(state, uiState.target, input.value, { unit });
+    if (pv.empty) hideNumericInputEl(uiState.hintEl);
+    else {
+        uiState.hintEl.textContent = pv.hint;
+        uiState.hintEl.classList.toggle('err', !pv.ok);
+        showNumericInputEl(uiState.hintEl);
+    }
+    input.setAttribute('aria-invalid', !pv.ok && !pv.empty ? 'true' : 'false');
+    if (complete) {
+        const found = completionsFor(state, input.value, input.selectionStart, { unit, exclude: uiState.target.name ? [uiState.target.name] : [] });
+        if (found) { uiState.complete = { ...found, index: -1 }; renderList(); } else closeList();
+    }
+    placeAssist();
+}
+
+// the list sits right under the box, the hint under the list; when the bottom of the screen is too near both go above the box. Kept inside the viewport.
+function placeAssist() {
+    const input = uiState.singleInput;
+    if (!uiState.hintEl || !input || typeof input.getBoundingClientRect !== 'function') return;
+    const els = [uiState.listEl, uiState.hintEl].filter((el) => el && !el.classList.contains('hidden'));
+    if (!els.length) return;
+    const r = input.getBoundingClientRect();
+    // the room they may use: the screen, and the box's own container (the canvas area clips what sticks out of it)
+    const host = els[0].offsetParent ? els[0].offsetParent.getBoundingClientRect() : null;
+    const vw = Math.min(document.documentElement.clientWidth || window.innerWidth, host ? host.right : Infinity);
+    const vh = Math.min(document.documentElement.clientHeight || window.innerHeight, host ? host.bottom : Infinity);
+    const total = els.reduce((s, el) => s + el.offsetHeight + 2, 0);
+    const below = r.bottom + 2 + total <= vh - 4 || r.top - 2 - total < 0;
+    let y = below ? r.bottom + 2 : r.top - 2 - total;
+    for (const el of below ? els : els.slice().reverse()) {
+        const op = el.offsetParent;
+        const base = op ? op.getBoundingClientRect() : { left: -window.scrollX, top: -window.scrollY };
+        const left = Math.max(8, Math.min(r.left, vw - el.offsetWidth - 8));
+        el.style.left = `${left - base.left}px`;
+        el.style.top = `${y - base.top}px`;
+        y += el.offsetHeight + 2;
+    }
+}
+
 function resetState() {
+    hideAssist();
     if (uiState.target) uiState.target.__editing = false;
     uiState.active = false;
     uiState.mode = null;
@@ -460,6 +677,7 @@ function startTrackingLoop() {
                 uiState.singleInput.style.left = `${s.x}px`;
                 uiState.singleInput.style.top = `${s.y}px`;
             }
+            placeAssist();
             uiState.rafId = requestAnimationFrame(loop);
         }
     };

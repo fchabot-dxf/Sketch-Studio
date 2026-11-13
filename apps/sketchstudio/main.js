@@ -69,8 +69,7 @@ const state = createSketchState(engine, view);
 // TASK 566: Import SVG / DXF -> a new sketch, through the shared importer (the file menu's entry; a drop on the canvas is the second way in).
 // SketchStudio declares no options: its sketch state is what the importer works on, and the result is shown as a notification.
 function importDrawing(text, fileName) {
-  const res = importIntoSketch(text, fileName, { state }, {});
-  if (res.ok) fitToDrawing(svg, state); // frame the imported drawing (the render loop solves each frame)
+  const res = importIntoSketch(text, fileName, { state, svg }, {}); // the importer frames the imported shapes (the render loop solves each frame)
   showNotification(res.message, res.ok ? 'success' : 'error', 6000);
 }
 function sidebarExport(type) {

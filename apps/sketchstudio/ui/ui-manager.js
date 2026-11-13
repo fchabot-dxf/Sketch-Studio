@@ -9,6 +9,7 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { setupTrimTool, resetTrimState } from '#ui/input-handlers/trim-tool.js';
 import { setupBreakTool, resetBreakState } from '#ui/input-handlers/break-tool.js';
 import { setupFilletTool, resetFilletState } from '#ui/input-handlers/fillet-tool.js';
+import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { startDimensionFromSelection } from '#ui/input-handlers/dimension-tool.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 export function setupUI(state){
@@ -60,7 +61,7 @@ export function setupUI(state){
       if(t === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape'){
         const s = state.shapes.find(x => x.id === firstEl.id);
         if(s && s.type === 'line'){
-          ConstraintManager.addHorizontalOrVertical(state, s.joints);
+          recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
           setTool(TOOL_MODES.SELECT);
           return;
         }

@@ -24,7 +24,7 @@ import { mountImportDrop } from '#ui/sketch-import.js';               // TASK 56
 import { applyMix, clearMix, isMixed, mixSummary, mixColorFor } from './mix-toolpaths.js'; // COLOR-MIX-3: opt-in pen-mix -> fill toolpaths
 import { installDocModal, syncDocFields, loadDefaults } from './settings.js';                        // DOC-SIZE-IN-DESIGN: doc-size dialog trigger in the first tab
 import { STYLE_WIDTH, keepNumber } from './fields.js';                  // TASK 453: declared width range
-import { capturePlotterDoc, applyPlotterDoc, resetPlotterDoc } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
+import { capturePlotterDoc, applyPlotterDoc, resetPlotterDoc, captureImportState, applyImportState } from './plotter-doc.js';  // TASK 451: the plotter's own state, persisted via the host sidecar
 import { renderArt } from './render-art.js';
 import { recalcPreview } from './preview.js';
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
@@ -270,6 +270,8 @@ export function mountSketchStage(view, ctx = {}) {
   // Mount the shared sketcher ONCE into the stage's OWN svg (isActive gates its document-level input listeners).
   controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve, seedDemo: false }); // PERSIST-2: the autosave buffer below decides what geometry to show
   state.coreSketch = controller.state; // UNIFY-2: a toolpath can target this #core geometry directly
+  // TASK 570: one Ctrl+Z of an import also puts back the paper size, pens and styles it set (the import's snapshot only: `asked`).
+  controller.state.hostSnapshot = { asked: true, capture: captureImportState, restore: (d) => { applyImportState(d); underlayDirty = true; syncDocFields(); renderArt(); } };
   try { controller.engine.solve(500); } catch (_) {} // UNIFY-throttle: converge the seed once (per-frame solve is now gated)
 
   // PERSIST-2: restore the shared cross-app document (if any), then keep autosaving.
@@ -381,9 +383,9 @@ export function mountSketchStage(view, ctx = {}) {
   const doImport = (text, name) => {
     const res = importFileToCore(text, name || 'Imported.svg', controller);
     if (res.ok) underlayDirty = true; // new static geometry -> redraw the underlay
-    // IMPORT-DOC-SIZE: the import SET the paper size — re-fit this canvas to the new paper. The paper rect itself and
-    // the Document button label refresh on the next panelTick (its doc-size signature changed).
-    if (res.docSet) fitDesignView();
+    // TASK 570: the shared importer framed the imported shapes; the pen tabs keep that shared view. The paper rect itself and the
+    // Document button label refresh on the next panelTick (its doc-size signature changed).
+    if (res.fitted) markFitted();
     if (importStatus) importStatus.textContent = res.message;
     return res;
   };

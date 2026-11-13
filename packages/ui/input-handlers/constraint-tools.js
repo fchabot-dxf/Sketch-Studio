@@ -11,11 +11,28 @@ export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');
 }
 
+/**
+ * ONE undo step per constraint a constraint tool makes (task 571, like Fusion: one Undo removes one constraint). The document before the
+ * make is the step's "before", pushed only when the constraint list grew (a refused or half-picked make leaves no empty step), so Undo
+ * restores the constraint list AND the positions the solve moved; Redo gives the identical document. Every constraint tool goes through
+ * here (the pointer flow below and the immediate H / E applications on a pre-selection): no tool keeps its own copy.
+ */
+export function recordConstraintStep(state, label, makeConstraint) {
+    const before = state.captureUndoSnapshot();
+    const count = state.constraints.length;
+    const result = makeConstraint();
+    if (state.constraints.length > count) state.saveStateForce(label, before);
+    return result;
+}
+
 export function handleConstraintPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) {
     if (!CONSTRAINT_TOOLS.includes(state.currentTool)) {
         return false;
     }
-    
+    return recordConstraintStep(state, state.currentTool, () => dispatchConstraintPointerDown(e, svg, state, hitJoint, hitShape));
+}
+
+function dispatchConstraintPointerDown(e, svg, state, hitJoint, hitShape) {
     switch (state.currentTool) {
         case TOOL_MODES.HORIZONTAL_VERTICAL:
             return handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape);
@@ -335,11 +352,7 @@ function handleSymmetricPointerDown(e, svg, state, hitJoint, hitShape) {
     if (!line) return false;
     const [e1, e2] = buffer;
     const params = e1.type === 'joint' ? { joints: [e1.id, e2.id], line: line.id } : { shapes: [e1.id, e2.id], line: line.id };
-    // ONE undo step per symmetric, owned here in the tool layer (as the fillet / dimension tools do): the document before the add is the
-    // step's "before", pushed only when the constraint was created (a refusal leaves no empty step)
-    const before = state.captureUndoSnapshot();
-    const created = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.SYMMETRIC, params, { source: 'toolbar' });
-    if (created) state.saveStateForce('symmetric', before);
+    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.SYMMETRIC, params, { source: 'toolbar' });
     for (const x of buffer) selectionOf(x).delete(x.id);
     resetConstraintState(state);
     return true;

@@ -65,8 +65,9 @@ await (async () => {
       const { importIntoSketch } = await import('/packages/ui/sketch-import.js');
       const { createSketches } = await import('/packages/core/sketch-model.js');
       let n = 0; const saves = [];
-      const state = { ...createSketches(), joints: new Map(), shapes: [], genJ: () => 'j' + (++n), saveState: (l) => saves.push(l) };
-      const res = importIntoSketch(${JSON.stringify(text)}, ${JSON.stringify(name)}, { state }, { keepDescIds: ${keep} });
+      const state = { ...createSketches(), joints: new Map(), shapes: [], view: { x: 0, y: 0, w: 120, h: 90 }, genJ: () => 'j' + (++n), saveState: (l) => saves.push(l) };
+      const svg = { getBoundingClientRect: () => ({ width: 800, height: 600 }), setAttribute() {} }; // the canvas the importer fits the view on (TASK 570)
+      const res = importIntoSketch(${JSON.stringify(text)}, ${JSON.stringify(name)}, { state, svg }, { keepDescIds: ${keep} });
       const J = (id) => { const j = state.joints.get(id); return [Math.round(j.x * 1e6) / 1e6, Math.round(j.y * 1e6) / 1e6]; };
       return JSON.stringify({ ok: res.ok, message: res.message, saves, shapes: state.shapes.map((s) => ({ type: s.type, joints: s.joints.map(J), radius: s.radius == null ? null : Math.round(s.radius * 1e6) / 1e6, sweep: s.sweep == null ? null : s.sweep, isConstruction: !!s.isConstruction, descId: s.descId || null })), sketches: state.sketches.map((s) => s.name) });
     })()`).then(JSON.parse);

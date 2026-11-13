@@ -77,6 +77,29 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-13, turn 1093)
+- MERGED today (main 2c66d4d, FULL tier 348/348 in 469 s): 565 Open-from-file fix (detached file input was GC'd; the
+  sidebar-projects "flake" was this app bug), 564 unique joint ids, 563 symmetry, 566 Import SVG / DXF in every File menu
+  through ONE shared importer (packages/ui/sketch-import.js), 568 TIERED GATE, 558 document tabs slice 1 + save prompt (autosave
+  only once saved and named; live tests start from a named design), 567 Trace gets the shared File menu + project store
+  (hosts.trace = imageName + params, NO photo: owner yes), Trace Edit canvas render loop fixed.
+- NEW MERGE WORKFLOW (owner ruling 2026-11-13, "Do tiered suite"): merges run `gate.cjs --tier merge --base origin/main`
+  (quick + the live tests whose import closure touches the diff; shared helpers trigger all) - minutes, not 40 min; then
+  scratchpad full-main.sh runs `--tier full` on origin/main in D:\APPS\Sketch-Studio-fullmain (its node_modules is a junction
+  to the main checkout). Builders: gate:quick while iterating, gate:merge before REPORT. Machine-wide lock: two live/full runs
+  never overlap.
+- IN FLIGHT: 569 browser tests -> node (Opus, phase 1: docs/TEST-SORT.md + tests/helpers node kit + 3 proofs; owner decides a
+  DOM-shim dependency), 570 import fit-to-view in every app + Pen Plotter/Shaper import undo restores host data, 571 every
+  constraint tool owns one undo step + right-click on a glyph opens the glyph's menu.
+- FUSION MEASURED (API, new unsaved doc, closed unsaved): symmetry of two LINES mirrors only the infinite line (lengths stay free,
+  ends not mirrored) - OURS mirrors the ends (DIVERGENCE, owner asked: recommend Fusion's); arcs: centre mirrored + equal radius,
+  ends free (= ours); circles = ours; the SECOND pick moves (= ours).
+- OPEN FOR THE OWNER: two-line symmetry like Fusion (recommended yes).
+- LESSONS: NEVER `npm ci` / `npm install` in a worktree whose node_modules is a junction - it empties the main checkout's
+  node_modules (happened 10:03; restored with npm ci in the main checkout); a full-main run with 0.1 s failures = missing
+  node_modules, not main; subagent SubagentHandback is refused after the first report - tell long-running builders to report
+  follow-ups via SendMessage to "main".
+
 ### Update (2026-11-13, turn 1043)
 - MERGED since turn 955 (main d058485): 551 Fusion recorder (guarded keys, Cancel-only dismiss; owner rule now in win-mouse.py
   header), 543 angle sector up to 360 (DOCUMENT_VERSION 3: `sector {ray1,ray2,turn}` replaces supplement), 552 midpoint inference

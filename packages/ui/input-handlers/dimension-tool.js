@@ -7,7 +7,7 @@ import { SolverConfig } from '#core/solver-config.js';
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
-import { ConstraintManager } from '#core/constraint-manager.js';
+import { ConstraintManager, announceReference } from '#core/constraint-manager.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
@@ -61,6 +61,12 @@ function finalizeDimBirth(c, state){
     if (!c) return;
     try { c.__newlyPlaced = true; } catch(_) {}
     c.__birthHistoryLength = state && state.history ? state.history.length : null;
+}
+
+// TASK 589: a line's length preview is created quietly (startShapeDimension); when it is PLACED as a reference (a click, Enter, or the
+// release of a press-drag), the notice the solver's reference decision carries is shown now, once.
+function announcePlacedReference(c) {
+    if (c && c.__asksSecondPick && (c.isDriven || c.driven)) announceReference(c);
 }
 
 export function setupDimensionTool(svg, appState) {
@@ -136,59 +142,29 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         wOverride: !!wOverride
     });
 
-    // Case A: One selected line shape
-    if (selectedShapes.length === 1) {
-        const shape = sceneShapes(state.shapes).find(s => s && s.id === selectedShapes[0]);
-        if (shape && shape.type === 'line' && shape.joints && shape.joints.length >= 2) {
-            const j1 = sceneJoints(state.joints).get(shape.joints[0]);
-            const j2 = sceneJoints(state.joints).get(shape.joints[1]);
-            if (!j1 || !j2) return false;
+    // TASK 589: a selection the tool can take as its first pick(s) ends in the SAME function a click on those things in that order ends
+    // in (startShapeDimension / startPointPick / createPointLineDimension / lineLineDimension), so the result is what clicking them one after
+    // the other gives. Anything else (3+ items, line + circle, two circles, a joint + a circle...) returns false: the selection stays.
+    const shapes = selectedShapes.map(id => sceneShapes(state.shapes).find(s => s && s.id === id));
+    const isLine = (s) => !!s && s.type === 'line' && !!s.joints && s.joints.length >= 2 && sceneJoints(state.joints).has(s.joints[0]) && sceneJoints(state.joints).has(s.joints[1]);
+    const finishSelectionStart = () => {
+        if (state.selectedShapes) state.selectedShapes.clear();
+        if (state.selectedJoints) state.selectedJoints.clear();
+        if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
+        return true;
+    };
+    const at = (anchor) => placePos || anchor;
+    const mid = (s) => { const a = sceneJoints(state.joints).get(s.joints[0]); const b = sceneJoints(state.joints).get(s.joints[1]); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
 
-            // If this line already has a driving distance dimension, don't auto-create another.
-            if (hasDrivingDistanceForShape(state, shape.id) || hasDrivingDistanceForJoints(state, shape.joints[0], shape.joints[1])) {
-                dimensionState.pendingDimension = { type: 'line', firstShapeId: shape.id };
-                showNotification(
-                    'Line already dimensioned. Click another line to measure angle or click the label to edit existing dimension.',
-                    'info'
-                );
-                return true;
-            }
-
-            beginDimUndo(state);
-            const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-                joints: [shape.joints[0], shape.joints[1]],
-                value: getDist(j1, j2),
-                dimMode: 'auto',
-                isDriven: false
-            }, { autoSolve: false });
-            const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-            if (!c) { endDimUndo(state); return false; }
-
-            const w = placePos || { x: (j1.x + j2.x) / 2, y: (j1.y + j2.y) / 2 };
-
-            logDim('create-line-dim', { id: c.id || '(new)', keepPlacing, placePos: w, keyboardPlaced: !!opts.keyboardPlaced });
-
-            try { c.__placing = true; } catch(_){ }
-            try { c.__newlyPlaced = true; } catch(_){ }
-            c.__asksSecondPick = true; // a line's length preview: a second pick (line, axis, point) upgrades it (task 555)
-            updateConstraintOffset(state, c, w);
-            try { c.glyphPos = w; } catch(_){ }
-
-            if (keepPlacing) {
-                try { state.placingConstraint = c; } catch(_) {}
-                dimensionState.placingConstraint = c;
-                try { if (opts.keyboardPlaced) c.__keyboardPlaced = true; } catch(_) {}
-            } else {
-                try { c.__placing = false; } catch(_){ }
-                dimensionState.editingConstraint = c;
-                showEditInput(svg, state, c);
-            }
-            if (state.selectedShapes) state.selectedShapes.clear();
-            if (state.selectedJoints) state.selectedJoints.clear();
-            if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
-            finalizeDimBirth(c, state);
-            return true;
-        }
+    // Case E: a line and a point that is not one of its ends = the distance from the point to the line
+    if (shapes.length === 1 && isLine(shapes[0]) && selectedJoints.length === 1 && !shapes[0].joints.includes(selectedJoints[0])) {
+        return createPointLineDimension(svg, state, selectedJoints[0], shapes[0], null, at(mid(shapes[0]))) && finishSelectionStart();
+    }
+    // Case A: one line (with or without other selected points, as before) = its length preview, the label following the pointer; a second
+    // pick (line, axis, point) still upgrades it. A line whose length the sketch already determines gives a REFERENCE preview, exactly as
+    // a click on it does (task 589: no longer the "Line already dimensioned" stop, which kept a second line from giving the line-line distance).
+    if (shapes.length === 1 && isLine(shapes[0])) {
+        return startShapeDimension(svg, state, shapes[0], null, at(mid(shapes[0]))) && finishSelectionStart();
     }
 
     // Case B: Two selected joints
@@ -240,21 +216,7 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         return true;
     }
 
-    // Cases C - F (task 589): the other selections the tool can take as its first pick(s). Each one ends in the SAME function a click on those
-    // things in that order ends in (startShapeDimension / startPointPick / createPointLineDimension / lineLineDimension), so the result is
-    // what clicking them one after the other gives. Anything else (3+ items, line + circle, two circles, a joint + a circle...) returns false.
-    const shapes = selectedShapes.map(id => sceneShapes(state.shapes).find(s => s && s.id === id));
     if (shapes.some(s => !s)) return false;
-    const isLine = (s) => s.type === 'line' && s.joints && s.joints.length >= 2;
-    const finishSelectionStart = () => {
-        if (state.selectedShapes) state.selectedShapes.clear();
-        if (state.selectedJoints) state.selectedJoints.clear();
-        if (state.currentTool !== TOOL_MODES.DIMENSION) state.currentTool = TOOL_MODES.DIMENSION;
-        return true;
-    };
-    const at = (anchor) => placePos || anchor;
-    const mid = (s) => { const a = sceneJoints(state.joints).get(s.joints[0]); const b = sceneJoints(state.joints).get(s.joints[1]); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
-
     // Case C: one circle / arc = its radius
     if (shapes.length === 1 && selectedJoints.length === 0 && (shapes[0].type === 'circle' || shapes[0].type === 'arc')) {
         const center = sceneJoints(state.joints).get(shapes[0].joints[0]);
@@ -265,11 +227,6 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
     // Case D: two lines = the distance (parallel) or the angle
     if (shapes.length === 2 && selectedJoints.length === 0 && isLine(shapes[0]) && isLine(shapes[1])) {
         return lineLineDimension(svg, state, shapes[0], shapes[1], null, at(mid(shapes[0]))) && finishSelectionStart();
-    }
-    // Case E: a line and a point = the distance from the point to the line (not a point of that line)
-    if (shapes.length === 1 && selectedJoints.length === 1 && isLine(shapes[0])) {
-        if (shapes[0].joints.includes(selectedJoints[0])) return false;
-        return createPointLineDimension(svg, state, selectedJoints[0], shapes[0], null, at(mid(shapes[0]))) && finishSelectionStart();
     }
     // Case F: one point = the first pick; the second pick (point or line) is the next click
     if (shapes.length === 0 && selectedJoints.length === 1) {
@@ -352,6 +309,7 @@ export function anchorPlacingDimension(svg, state) {
     dimensionState.placingConstraint = null;
 
     if (pending.isDriven || pending.driven) {
+        announcePlacedReference(pending);
         return true;
     }
 
@@ -445,6 +403,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         // If it's a driven (reference) dimension, just drop it.
         if (pending.isDriven || pending.driven) {
             logDim('drop-driven', { id: pending.id || '(pending)' });
+            announcePlacedReference(pending);
             try { pending.__placing = false; } catch(_){ }
             try { if (state && state.placingConstraint === pending) state.placingConstraint = null; } catch(_){ }
             dimensionState.placingConstraint = null;
@@ -531,22 +490,6 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
 
     // 3. HANDLE PENDING DIMENSION (Second Click of a multi-click sequence)
     if (dimensionState.pendingDimension) {
-        // Case 0 (task 589): the pick is a LINE that already has its length dimension ("Line already dimensioned. Click another line..."):
-        // a second line gives the line-line distance / angle, a point the point-to-line distance, as for a length preview.
-        const pendingLine = dimensionState.pendingDimension.type === 'line'
-            ? sceneShapes(state.shapes).find(s => s.id === dimensionState.pendingDimension.firstShapeId) : null;
-        if (pendingLine) {
-            if (hitShape && hitShape.shape && hitShape.shape.type === 'line' && hitShape.shape.id !== pendingLine.id) {
-                dimensionState.pendingDimension = null;
-                state.active = null;
-                return lineLineDimension(svg, state, pendingLine, hitShape.shape, e, w);
-            }
-            if (hitJoint && !pendingLine.joints.includes(hitJoint.id)) {
-                dimensionState.pendingDimension = null;
-                state.active = null;
-                return createPointLineDimension(svg, state, hitJoint.id, pendingLine, e, w);
-            }
-        }
         // Case A: Clicked a Shape (Line) -> Create Point-to-Line Dimension
         if (hitShape && hitShape.shape && hitShape.shape.type === 'line') {
             logDim('create-point-to-line');
@@ -617,14 +560,16 @@ function startShapeDimension(svg, state, shape, e, w) {
         const j1 = sceneJoints(state.joints).get(shape.joints[0]);
         const j2 = sceneJoints(state.joints).get(shape.joints[1]);
         
+        // TASK 589: quietly: a second pick may still make it another dimension; a reference length says so when it is placed
+        // (announcePlacedReference), not on this pick, where it read as if the line-to-line distance picked next were the reference
         const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
             joints: [shape.joints[0], shape.joints[1]],
             value: getDist(j1, j2),
             dimMode: 'auto' // Bypass duplicate check to allow multiple dim types
-        });
+        }, { quietReference: true });
         const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
         if (!c) { endDimUndo(state); return false; }
-        
+        logDim('create-line-dim', { id: c.id || '(new)', driven: !!(c.isDriven || c.driven) });
         
         // Initialize placement state (Inline logic)
         try { c.__placing = true; } catch(_){ }
@@ -1134,6 +1079,7 @@ export function handleDimensionPointerUp(e, svg, state) {
             const duration = Date.now() - (state.drag.startTime || 0);
             // If dragging for a while, drop on release
             if (duration > 250) {
+                const placed = dimensionState.placingConstraint;
                 try { 
                     if (dimensionState.placingConstraint) { 
                         const c = dimensionState.placingConstraint;
@@ -1152,6 +1098,7 @@ export function handleDimensionPointerUp(e, svg, state) {
                     } 
                 } catch(_){ }
                 try { state.placingConstraint = null; } catch(_){ }
+                announcePlacedReference(placed); // outside the catch above: a throw here is not hidden
             }
             try { svg.releasePointerCapture(e.pointerId); } catch (_){ }
             state.drag = null;

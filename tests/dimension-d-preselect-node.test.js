@@ -66,6 +66,15 @@ try {
   assert.strictEqual(mine().length, 0, 'nothing created');
   console.log('3. nothing selected: ok');
 
+  // 3b. a line and a point (not one of its ends) selected + D: the point-to-line distance (what clicking the line, then the point, gives)
+  app.tool('select'); app.esc();
+  selectAt(mid(A)); st.selectedJoints.add(st.shapes.find((s) => s.type === 'line' && Math.abs(app.toScreen(st.joints.get(s.joints[0]).x, 0).x - C[0].x) < 2).joints[0]);
+  assert.strictEqual(st.selectedShapes.size + st.selectedJoints.size, 2, 'a line and a point selected');
+  app.key('d');
+  assert(pending() && st.placingConstraint.joints && st.placingConstraint.joints.length === 3, 'line + point + D: the point-to-line distance is pending');
+  app.esc();
+  console.log('3b. line + point: ok');
+
   // 4. Esc forgets the pick
   app.tool('select'); app.esc();
   selectAt(mid(A)); app.key('d');
@@ -98,17 +107,21 @@ try {
   await twoLines(A, C, 'angle');
   console.log('5. two lines: parallel distance, crossing angle: ok');
 
-  // 6. the "Line already dimensioned" path: A has its length dimension; a PARALLEL second line still gives the line-line distance
+  // 6. a line that already has its length dimension (was: the "Line already dimensioned" stop): D gives its REFERENCE length preview, as a
+  // click on it does, and a PARALLEL second line still gives the line-line distance, driving (owner, task 589)
   reset();
   selectAt(mid(A)); app.key('d'); app.click(EMPTY.x, EMPTY.y);
   await app.waitFor(boxOpen, 'the value box'); app.enter();
   assert.strictEqual(dims().length, 1, 'A has its length dimension');
   app.tool('select'); app.esc();
   selectAt(mid(A)); app.key('d');
-  assert(!st.placingConstraint, 'already dimensioned: no second length preview');
+  assert(pending() && st.placingConstraint.joints && st.placingConstraint.joints.length === 2 && (st.placingConstraint.isDriven || st.placingConstraint.driven),
+    'already dimensioned: a reference length preview, as a click on the line gives');
   app.click(mid(B).x, mid(B).y);
   assert(pending() && st.placingConstraint.shapes && st.placingConstraint.shapes.length === 2, 'a click on the parallel line made the line-line distance: ' + JSON.stringify(mine().map((c) => c.type)));
-  app.esc(); app.undo();
+  assert(!(st.placingConstraint.isDriven || st.placingConstraint.driven), 'the line-line distance is driving');
+  app.esc();
+  assert.strictEqual(dims().length, 1, 'Esc forgot the line-line distance; A keeps its length dimension');
   app.tool('select'); app.esc();
   selectAt(mid(A)); selectAt(mid(B), { shift: true }); app.key('d');
   assert(pending() && st.placingConstraint.shapes && st.placingConstraint.shapes.length === 2, 'both selected, the first already dimensioned: still the distance');

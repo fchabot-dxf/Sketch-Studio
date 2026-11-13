@@ -20,6 +20,17 @@ import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { legacyAngleSector } from '#core/angle-sector.js';
+import { sceneJoints } from '#core/reference-lines.js';
+import { dbg } from '#core/debug.js';
+
+// TASK 589: the reason a stored constraint cannot be loaded because of its joints (its `joints` list, or the single `joint` of a
+// point-on-line), or null. A joint id must name a joint of the drawing or a reserved axis end (#core/reference-lines.js).
+function unknownJointOf(c, scene) {
+  const ids = [...(Array.isArray(c && c.joints) ? c.joints : []), ...(c && 'joint' in c ? [c.joint] : [])]
+    .map((j) => (j && typeof j === 'object' ? j.id : j)); // a joint may be stored as {id} (addConstraintObject accepts both)
+  const bad = ids.find((id) => id == null || !scene.has(id));
+  return bad === undefined ? null : (bad == null ? 'a missing joint id' : `unknown joint ${bad}`);
+}
 
 // 2 (TASK 535, owner ruling O2): the version that carries dimension names, dimension formulas and geometry.parameters. Always written;
 // a version-1 file still loads (parameters absent -> none, every dimension is named on load) but an older build refuses a version-2 file.
@@ -114,7 +125,12 @@ export function deserializeDocument(doc, state) {
   state.shapes.push(...(g.shapes || []).map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })));
 
   state.constraints.length = 0;
+  const scene = sceneJoints(state.joints);
   for (const c of (g.constraints || [])) {
+    // TASK 589: a constraint that names a joint the drawing does not have (null, missing, unknown id), or a solver test constraint
+    // (`__temp`) a crash left in a saved drawing, is not loaded: it would stop every solve, so nothing could be dragged. Logged by name.
+    const why = c && c.__temp ? 'a temporary test constraint' : unknownJointOf(c, scene);
+    if (why) { dbg.warn('document', `[deserializeDocument] dropped constraint ${JSON.stringify(c)}: ${why}`); continue; }
     // TASK 553: an angle dimension saved by an older build (no `sector`) is converted here, the one load path, from the loaded geometry
     const proto = legacyAngleSector({ ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined }, state.joints, state.shapes);
     addConstraintObject(state, proto);

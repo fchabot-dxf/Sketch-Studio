@@ -1,6 +1,7 @@
 // TASK 535 slice 1b — parameters + dimension names/expressions PERSIST: save -> load -> save is byte-stable, and undo / redo /
 // cancelUndoGroup / the ops journal keep them, for EVERY dimension mode of tests/harness/coverage/inventory.js x {driving, reference}.
-// DATA ONLY: no solver runs (the constraints name joints/shapes that need not exist); the point is what the model carries.
+// DATA ONLY: no solver runs (the constraints name shapes that need not exist); the point is what the model carries. Their JOINTS exist (task 589:
+// a load drops a constraint naming a joint the document does not have).
 import { createEngine } from '#core/constraint-solver.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { serializeDocument, deserializeDocument, DOCUMENT_VERSION } from '#core/document.js';
@@ -53,6 +54,7 @@ function build() {
       if (params.shape) params.shape = `${params.shape}r`;
     }
     if (!reference) params.expression = m.angle ? 'turn / 3' : 'width / 12';
+    for (const j of params.joints || []) state.joints.set(j, { x: 0, y: 0 }); // the joints it names (task 589)
     const before = state.constraints.length;
     assert(addConstraint(state, m.type, params), `${m.key}/${reference ? 'reference' : 'driving'} was not added`);
     assert(state.constraints.length === before + 1, 'one constraint added');

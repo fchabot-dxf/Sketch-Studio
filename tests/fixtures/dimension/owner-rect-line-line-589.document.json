@@ -1,0 +1,252 @@
+{
+ "version": 3,
+ "geometry": {
+  "joints": [
+   [
+    "j_origin",
+    {
+     "x": 0,
+     "y": 0,
+     "fixed": true,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j41_1794606831265",
+    {
+     "x": -4.0937965098957415e-28,
+     "y": -121.91999999999909,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j42_1794606832787",
+    {
+     "x": 596.9,
+     "y": -142.2399999999999,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j43_1794606832787",
+    {
+     "x": -4.0937965098957415e-28,
+     "y": -121.91999999999909,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j44_1794606832787",
+    {
+     "x": 596.9,
+     "y": -121.91999999999909,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j45_1794606832787",
+    {
+     "x": 596.9,
+     "y": -121.91999999999909,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j46_1794606832787",
+    {
+     "x": 596.9,
+     "y": -142.2399999999999,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j47_1794606832787",
+    {
+     "x": -4.094335585962656e-28,
+     "y": -142.2399999999999,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j48_1794606832787",
+    {
+     "x": -4.094335585962656e-28,
+     "y": -142.2399999999999,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ]
+  ],
+  "shapes": [
+   {
+    "id": "s1794606832787_6_1",
+    "type": "line",
+    "joints": [
+     "j41_1794606831265",
+     "j44_1794606832787"
+    ],
+    "groupId": "rect_1794606832787_6",
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s1794606832787_6_2",
+    "type": "line",
+    "joints": [
+     "j45_1794606832787",
+     "j46_1794606832787"
+    ],
+    "groupId": "rect_1794606832787_6",
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s1794606832787_6_3",
+    "type": "line",
+    "joints": [
+     "j47_1794606832787",
+     "j42_1794606832787"
+    ],
+    "groupId": "rect_1794606832787_6",
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s1794606832787_6_4",
+    "type": "line",
+    "joints": [
+     "j43_1794606832787",
+     "j48_1794606832787"
+    ],
+    "groupId": "rect_1794606832787_6",
+    "isConstruction": false,
+    "sketchId": "sketch-1"
+   }
+  ],
+  "constraints": [
+   {
+    "type": "horizontal",
+    "joints": [
+     "j41_1794606831265",
+     "j44_1794606832787"
+    ],
+    "__visible": true,
+    "glyphPos": {
+     "x": 307.9181199864889,
+     "y": -131.388119986488
+    }
+   },
+   {
+    "type": "vertical",
+    "joints": [
+     "j45_1794606832787",
+     "j46_1794606832787"
+    ],
+    "__visible": true,
+    "glyphPos": {
+     "x": 606.3681199864889,
+     "y": -141.5481199864884
+    }
+   },
+   {
+    "type": "horizontal",
+    "joints": [
+     "j47_1794606832787",
+     "j42_1794606832787"
+    ],
+    "__visible": true,
+    "glyphPos": {
+     "x": 307.9181199864889,
+     "y": -151.70811998648878
+    }
+   },
+   {
+    "type": "vertical",
+    "joints": [
+     "j43_1794606832787",
+     "j48_1794606832787"
+    ],
+    "__visible": true,
+    "glyphPos": {
+     "x": 9.468119986488896,
+     "y": -141.5481199864884
+    }
+   },
+   {
+    "type": "coincident",
+    "joints": [
+     "j41_1794606831265",
+     "j43_1794606832787"
+    ],
+    "__visible": false,
+    "glyphPos": {
+     "x": 9.468119986488896,
+     "y": -112.45188001351019
+    }
+   },
+   {
+    "type": "coincident",
+    "joints": [
+     "j44_1794606832787",
+     "j45_1794606832787"
+    ],
+    "__visible": false
+   },
+   {
+    "type": "coincident",
+    "joints": [
+     "j42_1794606832787",
+     "j46_1794606832787"
+    ],
+    "__visible": false
+   },
+   {
+    "type": "coincident",
+    "joints": [
+     "j47_1794606832787",
+     "j48_1794606832787"
+    ],
+    "__visible": false
+   },
+   {
+    "type": "distance",
+    "joints": [
+     "j47_1794606832787",
+     "j42_1794606832787"
+    ],
+    "value": 596.9,
+    "isDriven": false,
+    "driven": false,
+    "dimMode": "aligned",
+    "name": "d1",
+    "offset": 20
+   }
+  ],
+  "sketches": [
+   {
+    "id": "sketch-1",
+    "name": "Sketch 1",
+    "visible": true
+   }
+  ],
+  "activeSketchId": "sketch-1",
+  "groups": [],
+  "profiles": [],
+  "parameters": [
+   {
+    "name": "plywood",
+    "unit": "in",
+    "expression": "(5 / 8) in"
+   }
+  ],
+  "vcarves": []
+ },
+ "hosts": {}
+}

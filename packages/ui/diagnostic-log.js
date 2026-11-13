@@ -20,6 +20,8 @@
 import { setDebugSink } from '#core/debug.js';
 import { serializeDocument } from '#core/document.js';
 import { buildJournal, DEFAULT_JOURNAL_MAX_BYTES } from '#core/journal.js'; // TASK 507: the ordered, replayable ops journal
+import SettingsManager from '#core/settings-manager.js'; // TASK 591: the report header lists the settings that differ from their defaults
+import { buildCompactReport } from '#ui/report-compact.js'; // TASK 591: the compact report ("Copy Report")
 import { browserFileSeam } from '#ui/project-file.js'; // TASK 544: the app's shared file-save helper (the Download fallback)
 
 const MAX_LOG_ENTRIES = 300;
@@ -135,7 +137,7 @@ function rectOf(sel) {
 // ── TASK 544: the REPORT is trimmed to what a human/agent needs; the in-app log view and the buffers are NOT.
 // Kept whole: app/url/ua/viewport, document, journal, every warn/error entry however old. Trimmed: `log` to the last
 // REPORT_LOG_KEEP meaningful entries, `touchTrace` to the last REPORT_TOUCH_KEEP events; consecutive noise / pointermove runs collapse
-// into one summary; `trimmed` says what was dropped, so nothing is silently lost. "Copy full report" skips all of this.
+// into one summary; `trimmed` says what was dropped, so nothing is silently lost. "Save full report" skips all of this.
 export const REPORT_LOG_KEEP = 50;
 export const REPORT_TOUCH_KEEP = 30;
 // The NOISE categories, as DATA: per-event / per-redraw dbg lines that say "something happened" but carry nothing a reader needs.
@@ -201,12 +203,37 @@ function reportLogEntries() {
   return alertBuffer.filter((e) => !live.has(e)).concat(logBuffer);
 }
 
+// TASK 591: what only the live state knows (the compact report's header reads it): the active tool, what is selected (ids, at most 20
+// each), the undo / redo depths and the undo labels. null for a host without a state.
+const SESSION_MAX_IDS = 20;
+const idOf = (x) => (x && typeof x === 'object' ? (x.id ?? x.type ?? null) : x);
+const idsOf = (set) => (set instanceof Set ? [...set].slice(0, SESSION_MAX_IDS).map(idOf) : null);
+function sessionOf(state) {
+  if (!state) return null;
+  const history = Array.isArray(state.history) ? state.history : [];
+  return {
+    tool: state.currentTool ?? null,
+    selection: { joints: idsOf(state.selectedJoints), shapes: idsOf(state.selectedShapes), constraints: idsOf(state.selectedConstraints) },
+    undoDepth: history.length, redoDepth: Array.isArray(state.redoStack) ? state.redoStack.length : 0,
+    undoLabels: history.map((s) => s.label ?? null),
+  };
+}
+
+// TASK 591: every user setting whose value differs from its default (display + behaviour: GLYPH_STYLE, DOC_UNIT, SHOW_GRID, AXIS_SNAP,
+// BACKGROUND, STYLE_TEMPLATE ...), { KEY: value }. Settings only; the manager holds no personal data.
+export function changedSettings() {
+  const defaults = SettingsManager.getDefaults(), out = {};
+  for (const k of Object.keys(defaults)) { const v = SettingsManager.get(k); if (JSON.stringify(v) !== JSON.stringify(defaults[k])) out[k] = v; }
+  return out;
+}
+
 export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL_MAX_BYTES, full = false }) {
   const vv = window.visualViewport;
   let doc = null;
-  let journal = null, journalError;
+  let journal = null, journalError, session = null;
   try {
     const state = typeof getState === 'function' ? getState() : getState;
+    session = sessionOf(state);
     if (state) doc = serializeDocument(state);
     // TASK 507: the ordered journal (base + one patch per undo step + the undone steps); null when the host has no state.
     if (state) {
@@ -230,6 +257,8 @@ export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL
     // load() already accepts — a phone bug becomes an exactly-replayable Node scenario, not a description.
     document: doc,
     journal,
+    session,
+    settings: changedSettings(),
     ...(journalError ? { journalError } : {}),
     trimmed: full ? null : { log: tl.trimmed, touchTrace: tt.trimmed },
   };
@@ -238,6 +267,9 @@ export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL
 // TASK 544: the text that goes on the clipboard / into the downloaded file: the WHOLE report as MINIFIED JSON (one line, so pasting
 // it into a chat is one paste). JSON.parse of it deep-equals the report.
 export function reportToText(report) { return JSON.stringify(report); }
+// TASK 591: "Copy Report" copies THIS: the compact report built from the untrimmed full one (see packages/ui/report-compact.js).
+// "Save full report" writes buildReport({ full: true }) untouched, so nothing is lost.
+export function buildCompactReportFor(opts) { return buildCompactReport(buildReport({ ...opts, full: true })); }
 export function formatBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B'; }
 
 // ── overlay UI (mirrors style-panel.js's open/close idiom for consistency) ─────────────────────────
@@ -290,7 +322,7 @@ export function createDiagnosticLog({ appId, state } = {}) {
   const spacer = document.createElement('span'); spacer.className = 'sk-diag-spacer';
   const clearBtn = document.createElement('button'); clearBtn.type = 'button'; clearBtn.className = 'sk-diag-btn'; clearBtn.textContent = 'Clear';
   const copyBtn = document.createElement('button'); copyBtn.type = 'button'; copyBtn.className = 'sk-diag-btn sk-diag-btn-primary'; copyBtn.textContent = 'Copy Report';
-  const copyFullBtn = document.createElement('button'); copyFullBtn.type = 'button'; copyFullBtn.className = 'sk-diag-btn'; copyFullBtn.textContent = 'Copy full report';
+  const copyFullBtn = document.createElement('button'); copyFullBtn.type = 'button'; copyFullBtn.className = 'sk-diag-btn'; copyFullBtn.textContent = 'Save full report';
   const downloadBtn = document.createElement('button'); downloadBtn.type = 'button'; downloadBtn.className = 'sk-diag-btn sk-diag-download sk-hidden'; downloadBtn.textContent = 'Download report (.json)';
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-diag-close'; closeBtn.textContent = '✕';
   head.append(title, status, spacer, clearBtn, copyFullBtn, copyBtn, downloadBtn, closeBtn);
@@ -319,8 +351,8 @@ export function createDiagnosticLog({ appId, state } = {}) {
   // TASK 544: ONE click puts the whole report on the clipboard as minified JSON. The confirmation (size) and any failure go in the
   // panel's status line; on failure the "Download report (.json)" button appears (same text, through the shared file-save helper).
   let lastText = null, copiedTimer = null;
-  async function copyReport(full) {
-    const text = reportToText(buildReport({ appId, getState: state, full }));
+  async function copyReport() {
+    const text = reportToText(buildCompactReportFor({ appId, getState: state }));
     lastText = text;
     const size = formatBytes(new TextEncoder().encode(text).length);
     let failure = null;
@@ -339,17 +371,19 @@ export function createDiagnosticLog({ appId, state } = {}) {
     status.textContent = `Copy failed (${failure}): download the ${size} report instead`;
     downloadBtn.classList.remove('sk-hidden');
   }
-  async function downloadReport() {
-    const text = lastText != null ? lastText : reportToText(buildReport({ appId, getState: state }));
-    const name = `sketch-studio-report-${appId || 'app'}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  // `full`: the untouched buildReport({ full: true }) as a file ("Save full report"); otherwise the last copied compact text (the fallback
+  // after a rejected clipboard write).
+  async function downloadReport(full) {
+    const text = full ? reportToText(buildReport({ appId, getState: state, full: true })) : (lastText != null ? lastText : reportToText(buildCompactReportFor({ appId, getState: state })));
+    const name = `sketch-studio-${full ? 'full-' : ''}report-${appId || 'app'}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     try {
       const r = await browserFileSeam.save(text, name);
       status.textContent = r ? `Saved ${r.name}` : 'Download cancelled';
     } catch (err) { status.textContent = `Download failed: ${(err && err.message) || err}`; }
   }
-  downloadBtn.addEventListener('click', () => { downloadReport(); });
-  copyBtn.addEventListener('click', () => { copyReport(false); });
-  copyFullBtn.addEventListener('click', () => { copyReport(true); });
+  downloadBtn.addEventListener('click', () => { downloadReport(false); });
+  copyBtn.addEventListener('click', () => { copyReport(); });
+  copyFullBtn.addEventListener('click', () => { downloadReport(true); });
 
   let isOpen = false, escHandler = null;
   function open() {

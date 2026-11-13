@@ -9,6 +9,7 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
 import { nextDimensionName } from './parameters.js';
+import { newJointId } from './shape-id.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -252,13 +253,7 @@ export function applyFillet(state, cornerInfo, radius = 5) {
   const cornerPt0 = { x: cornerInfo.cornerPt.x, y: cornerInfo.cornerPt.y };
   const finalRadius = geom.radius;
 
-  // Helper to generate joint IDs matching existing scheme
-  let counter = 1;
-  const genJ = () => {
-    let id;
-    do { id = 'j_fillet_' + Date.now().toString(36) + '_' + (counter++); } while (joints.has(id));
-    return id;
-  };
+  const genJ = newJointId;
 
   const jCenter = genJ();
   const jTA = genJ();

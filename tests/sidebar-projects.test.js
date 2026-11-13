@@ -31,7 +31,8 @@ async function sendRealKey(send, key, code, vk, modifiers = 0, text = '') {
 await (async () => {
   const cdp = await launchBrowser({ tag: '479', width: 1600, height: 900 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, once, evalJs, ws } = cdp;
+  const { port, send, once, evalJs, waitFor, ws } = cdp;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-479-'));
   try {
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
     const click = async (x, y) => {
@@ -142,16 +143,25 @@ await (async () => {
     // ── a refused file (newer version) shows its message and changes nothing ──
     await key('Escape', 'Escape', 27); await sleep(200);
     const before = JSON.stringify({ r: await recent(), s: await shapes(), t: await title() });
-    const bad = path.join(os.tmpdir(), 'sk-479-newer.sketch.json');
+    const bad = path.join(tmpDir, 'newer.sketch.json');
     fs.writeFileSync(bad, JSON.stringify({ format: 'sketch-studio-project', version: 1, app: 'shaper', name: 'Future', document: { version: 99, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} } }));
     await send('DOM.enable');
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
+    const fileInputs = () => evalJs(`document.querySelectorAll('input[type=file]').length`);
+    const inputsBefore = await fileInputs(); // the page owns some file inputs of its own: compare, don't expect zero
     const chooser = once('Page.fileChooserOpened');
     await openSb();
     await clickEl('[data-action="open-file"]');
     const fc = await Promise.race([chooser, sleep(4000).then(() => null)]);
     assert.ok(fc, 'the file chooser opened');
-    await send('DOM.setFileInputFiles', { files: [bad], backendNodeId: fc.backendNodeId }); await sleep(900);
+    // a garbage collection while the picker is open must not lose the chosen file (the open input has to stay referenced)
+    await send('HeapProfiler.enable'); await send('HeapProfiler.collectGarbage'); await sleep(200); await send('HeapProfiler.collectGarbage');
+    await send('DOM.setFileInputFiles', { files: [bad], backendNodeId: fc.backendNodeId });
+    // wait for the real condition (the async file read + refusal), not a fixed sleep; on timeout say what the drawer shows
+    await waitFor(`!!(document.querySelector('.sk-sidebar-msg.error') || {}).textContent`, 'the refusal message in the drawer', 10000).catch(async (e) => {
+      throw new Error(e.message + '; the drawer shows: ' + JSON.stringify(await evalJs(`(document.querySelector('.sk-sidebar') || {}).innerText || ''`)));
+    });
+    assert.strictEqual(await fileInputs(), inputsBefore, 'no stray file input is left in the DOM once the open settled');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), true, 'the drawer stays open on a refusal');
     const refused = await evalJs(`(document.querySelector('.sk-sidebar-msg.error') || {}).textContent || ''`);
     assert.ok(/newer version/i.test(refused), 'the refusal message is shown in the drawer: ' + refused);
@@ -159,6 +169,7 @@ await (async () => {
     await shot('479-file-refused');
     console.log('sidebar-projects: ok');
   } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
     await cdp.close();
   }
 })();

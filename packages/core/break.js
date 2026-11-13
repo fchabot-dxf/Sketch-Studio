@@ -35,7 +35,7 @@ export function breakShape(state, shapeId, t) {
   const my = jA.y + t * (jB.y - jA.y);
 
   // Mint a new joint for the midpoint
-  const midJointId = state.genJ?.() ?? ('jbrk_' + Date.now());
+  const midJointId = state.genJ();
   state.joints.set(midJointId, { x: mx, y: my });
 
   // Build the second segment (M→B), reusing the original shape's metadata

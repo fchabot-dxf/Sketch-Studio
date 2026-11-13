@@ -31,6 +31,7 @@ function injectStyles(breakpoint) {
     border: 1px solid currentColor; opacity: 0.75; border-radius: 6px; padding: 4px 10px;
     font: 12px system-ui, sans-serif; cursor: pointer; color: inherit; }
   .sk-drawer-toggle:hover { opacity: 1; }
+  @media (pointer: coarse) { .sk-drawer-toggle { min-height: 44px; min-width: 44px; justify-content: center; } } /* TASK 581: a finger */
   .sk-drawer-hide-mobile { display: none !important; }
   .sk-drawer-panel { position: fixed !important; top: 0; bottom: 0; left: 0; height: 100%; z-index: 9500;
     width: 280px; max-width: 85vw; overflow-y: auto; transform: translateX(-100%);

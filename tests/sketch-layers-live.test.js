@@ -154,12 +154,9 @@ await (async () => {
       if (h.enter) { await sleep(800); await evalJs(h.enter); }
       await waitFor(h.ready, h.name + ' (phone) has the tree'); await sleep(300);
       const toggle = await center('.sk-drawer-toggle'); assert(toggle, h.name + ': the drawer button is on the phone screen');
-      // Shaper's own header (existing, not touched here) is wider than a phone: its drawer button sits off-screen at 390 px; the two NEW mounts must be reachable
-      if (h.name === 'shaper') { console.log('NOTE shaper drawer button at x=' + toggle.x + ' of 390 (existing header overflow)'); await evalJs("document.querySelector('.sk-drawer-toggle').click()"); }
-      else {
-        assert(toggle.x > 0 && toggle.x < 390 && toggle.y > 0 && toggle.y < 844, h.name + ': the drawer button is inside the viewport: ' + JSON.stringify(toggle));
-        await T('touchStart', [toggle]); await sleep(40); await T('touchEnd', []);
-      }
+      // every host (Shaper too, since task 581): the real button is inside the screen and a real touch tap opens the drawer
+      assert(toggle.x > 0 && toggle.x < 390 && toggle.y > 0 && toggle.y < 844, h.name + ': the drawer button is inside the viewport: ' + JSON.stringify(toggle));
+      await T('touchStart', [toggle]); await sleep(40); await T('touchEnd', []);
       await sleep(500);
       const fit = await evalJs(`(() => { const p = document.querySelector('.sk-drawer-panel'); const r = p.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, vw: window.innerWidth, scrollW: document.documentElement.scrollWidth, open: p.classList.contains('sk-drawer-open') }; })()`);
       assert(fit.open && fit.left >= 0 && fit.right <= fit.vw + 0.5 && fit.scrollW <= fit.vw + 1, h.name + ': the drawer opens and fits the 390 px screen without page scroll: ' + JSON.stringify(fit));

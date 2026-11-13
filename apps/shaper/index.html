@@ -54,7 +54,7 @@
       --sk-ribbon-grouplabel: #6b7280;
       --sk-ribbon-menu-bg: #1b2030;
     }
-    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: 44px 0 0 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: var(--sk-header-h, 44px) 0 0 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
     #view-vcarve { flex-direction: row; }
@@ -287,16 +287,17 @@
     /* U3b: header Settings (gear) button → the shared style-panel modal. */
     .settings-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font: 15px system-ui, sans-serif; opacity: 0.75; }
     .settings-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
+    @media (pointer: coarse) { .settings-btn { min-height: 44px; min-width: 44px; } } /* TASK 581: a finger */
   </style>
 </head>
 <body>
-  <header class="toolbar">
+  <header class="toolbar sk-phone-header">
     <!-- TASK 473: the shared app sidebar button (mounted in main.js). -->
     <span id="app-sidebar-host"></span>
     <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
     <span id="save-status" class="save-status"></span>
     <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->
-    <nav id="mode-nav" class="mode-nav">
+    <nav id="mode-nav" class="mode-nav sk-phone-tabs">
       <button class="mode-btn" data-mode="explore">Explore</button>
       <button class="mode-btn" data-mode="design">Design</button>
       <button class="mode-btn" data-mode="vcarve">Vcarve</button>
@@ -305,7 +306,7 @@
     </nav>
     <span class="spacer"></span>
     <!-- Explore-mode actions (SVG editor file ops) — shown only while Explore is active (router toggles). -->
-    <span id="explore-actions">
+    <span id="explore-actions" class="sk-phone-collapse">
       <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
       <button id="open">Open SVG</button>
       <button id="fit">Fit</button>

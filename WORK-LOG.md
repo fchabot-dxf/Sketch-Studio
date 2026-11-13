@@ -14161,3 +14161,5 @@ Tests: NEW tests/trace-projects.test.js (File menus equal across the four apps m
 - BEHAVIOUR CHANGE for users: two lines made symmetric keep their own lengths (equal length now needs an Equal constraint, as in Fusion); the
   line's DOF count drops by 2 instead of 4; a line form loaded from a task-563 file frees its two lengths. Nothing else.
 - Divergence (Fusion parity, reported): where line 2 lands ALONG the mirrored line (ours 0.607 short of Fusion's in the measured case; a free DOF).
+- Gates: `GATE tier=quick ... files=256 pass=256 fail=0`; `GATE tier=merge jobs=quick=22,live=6 files=326 pass=326 fail=0` (base origin/main 806c1fe,
+  70 of 92 live tests affected), `SMOKE 12/12`, `HEADLESS-LEFT 0`.

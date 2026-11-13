@@ -2,16 +2,7 @@
 
 import { SHAPER_NS, hasAnyShaperAttr } from './shaper.js';
 
-export function parseSvg(text) {
-  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
-  const err = doc.querySelector('parsererror');
-  if (err) throw new Error(err.textContent.replace(/\s+/g, ' ').trim().slice(0, 200));
-  const svg = doc.documentElement;
-  if (!svg || svg.tagName.toLowerCase() !== 'svg') {
-    throw new Error('Root element is not <svg>');
-  }
-  return svg;
-}
+export { parseSvgText as parseSvg } from '#ui/sketch-import.js'; // TASK 566: one SVG parser (the shared importer's), not a copy
 
 export function serializeSvg(svg) {
   // Only declare the shaper namespace if we actually emitted shaper:* attrs.

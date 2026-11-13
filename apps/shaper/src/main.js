@@ -37,10 +37,7 @@ applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops, findOpenChains } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
-import { importDxf, looksLikeDxf } from '#core/dxf-import.js'; // TASK 478: a Fusion sketch DXF -> #core shapes (true lines / arcs / circles)
-import { computeImportScale, importSvgGeometry, multiplyMatrix, parseTransform, IDENTITY_MATRIX } from '#core/svg-import.js'; // IMPORT-2: SVG → #core shapes
-import { addSketch, activateSketch } from '#core/sketch-model.js';           // IMPORT-2: land each import in a new sketch
-import { newShapeId } from '#core/shape-id.js';                            // THE shape-id generator (import id prefixes)
+import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -52,6 +49,7 @@ const _swHost = document.getElementById('app-sidebar-host');
 if (_swHost) {
   _swHost.appendChild(mountProjectSidebar({
     appId: 'shaper', getBuffer: () => { ensureSketch(); return docBuffer; }, // the buffer is created with the sketch (lazily)
+    importFile: (text, name) => importFileToSketch(text, name), // TASK 566: "Import SVG / DXF…" in the file menu
     hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
         const payload = generateShaperSvgPayload();
@@ -274,110 +272,29 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// SKETCH/IMPORT-2: SVG IMPORT → a NEW sketch (Shaper-only). The host (has the DOM) extracts per-element descriptors +
-// the root size; the PURE #core/svg-import maps them → STATIC joints/shapes (no auto-constraints). Each import = one
-// named sketch (addSketch → activate → push; the wrap stamps sketchId). v1 subset: unsupported elements/features are
-// COUNTED + surfaced, never silently dropped.
-const SVG_IMPORT_TAGS = new Set(['line', 'rect', 'circle', 'ellipse', 'polyline', 'polygon', 'path']);
-const SKIP_SILENT = new Set(['metadata', 'title', 'desc', 'defs', 'style']); // structural, not dropped geometry
-function svgImportDescriptors(svg) {
-  const descs = [], skippedEls = [];
-  let descSeq = 0;
-  // GRIEVANCE-2: recurse the tree threading a composed CTM down it, so nested group art (potrace / Illustrator /
-  // Inkscape wrap ALL art in one transformed group) imports placed + un-flipped instead of empty. Each element's
-  // CTM = the parent CTM composed with its own transform=; leaf descriptors carry it so #core can bake it in.
-  const walk = (parent, ctm) => {
-    for (const el of parent.children) {
-      const tag = (el.tagName || '').toLowerCase();
-      const tf = (el.getAttribute && el.getAttribute('transform')) || '';
-      const elCtm = tf ? multiplyMatrix(ctm, parseTransform(tf)) : ctm;
-      if (tag === 'g' || tag === 'svg') { walk(el, elCtm); continue; } // groups (and a nested svg) recurse
-      if (!SVG_IMPORT_TAGS.has(tag)) { if (tag && !SKIP_SILENT.has(tag)) skippedEls.push('<' + tag + '>'); continue; }
-      const a = (n) => el.getAttribute(n);
-      const descId = 'desc_' + (descSeq++);
-      const cutRecord = extractCutRecord(el, getDocUnit());
-      const base = { tag, ctm: elCtm, descId, cutRecord };
-      if (tag === 'line') descs.push({ ...base, x1: a('x1'), y1: a('y1'), x2: a('x2'), y2: a('y2') });
-      else if (tag === 'rect') descs.push({ ...base, x: a('x'), y: a('y'), width: a('width'), height: a('height'), rx: a('rx'), ry: a('ry') });
-      else if (tag === 'circle') descs.push({ ...base, cx: a('cx'), cy: a('cy'), r: a('r') });
-      else if (tag === 'ellipse') descs.push({ ...base, cx: a('cx'), cy: a('cy'), rx: a('rx'), ry: a('ry') });
-      else if (tag === 'polyline' || tag === 'polygon') descs.push({ ...base, points: a('points') });
-      else if (tag === 'path') descs.push({ ...base, d: a('d') });
-    }
-  };
-  walk(svg, IDENTITY_MATRIX);
-  return { descs, skippedEls };
-}
-// A finished import (joints + shapes) becomes one NEW named, active sketch: shared by the SVG and the DXF parsers (TASK 478).
-function landImport(st, fileName, joints, shapes) {
-  try { st.saveState && st.saveState('import ' + (fileName || 'file')); } catch (_) {}
-  const sk = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
-  activateSketch(st, sk.id);
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  for (const s of shapes) st.shapes.push(s);
-  return sk;
-}
-// DXF import (Fusion: right-click the sketch > Save As DXF): true lines / arcs / circles / beziers, static, units from $INSUNITS,
-// DASHED lines = construction geometry. A malformed file is a readable status, never a throw into the UI.
-function importDxfToSketch(text, fileName) {
-  ensureSketch();
-  const st = designController.state;
-  const res = importDxf(text, { genJ: () => st.genJ(), idPrefix: newShapeId('dxf') });
-  if (res.error) { groupStatus('Import failed: ' + res.error); return; }
-  const { joints, shapes, stats } = res;
-  const skipN = (stats.skipped || []).reduce((n, s) => n + s.count, 0);
-  if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
-  const sk = landImport(st, fileName, joints, shapes);
-  if (infoPanel) infoPanel.refresh();
-  const detail = (stats.skipped || []).map((s) => `${s.tag} ${s.reason} ×${s.count}`).join('; ');
-  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${stats.label}${stats.assumed ? ' (assumed)' : ''}${stats.construction ? ` · ${stats.construction} construction` : ''}${skipN ? ` · ${skipN} skipped/degraded: ${detail}` : ''}`);
-}
-// ONE import entry: the parser is picked by the file extension, else by the sniffed content.
+// SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js). What is
+// Shaper's own is declared as options: each element's cut record (describeElement), kept descIds, and connecting those records to the in-memory
+// CUT_PLAN after the shapes are in (afterImport; a compound <path> becomes ONE pocket-with-hole profile: see assignImportedCuts).
+// The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop on the Design view is the second way in.
 function importFileToSketch(text, fileName) {
-  if (looksLikeDxf(fileName, text)) importDxfToSketch(text, fileName); else importSvgToSketch(text, fileName);
-}
-function importSvgToSketch(svgText, fileName) {
   ensureSketch();
-  const st = designController.state;
-  let svg; try { svg = parseSvg(svgText); } catch (e) { groupStatus('Import failed: ' + e.message); return; }
-  const { descs, skippedEls } = svgImportDescriptors(svg);
-  const { scale, label, assumed } = computeImportScale({ width: svg.getAttribute('width'), height: svg.getAttribute('height'), viewBox: svg.getAttribute('viewBox') });
-  const { joints, shapes, stats } = importSvgGeometry(descs, { genJ: () => st.genJ(), scale, idPrefix: newShapeId('svg') });
-  const skipN = skippedEls.length + (stats.skipped || []).reduce((n, s) => n + s.count, 0);
-  if (!shapes.length) { groupStatus('Nothing imported' + (skipN ? ` · ${skipN} skipped` : '')); return; }
-  const sk = landImport(st, fileName, joints, shapes);
-
-  // Connect imported cut metadata to the in-memory CUT_PLAN (a compound <path> becomes ONE pocket-with-hole profile): see assignImportedCuts.
-  const cutRecordByDesc = new Map();
-  for (const d of descs) {
-    if (d.descId && d.cutRecord && (d.cutRecord.cutType || (d.cutRecord.cutDepth != null && d.cutRecord.cutDepth !== 'unset'))) {
-      cutRecordByDesc.set(d.descId, d.cutRecord);
-    }
-  }
-  const cutsAssigned = assignImportedCuts(st, cutRecordByDesc, CUT_PLAN);
-
-  if (infoPanel) infoPanel.refresh();
-  const cutsMsg = cutsAssigned ? ` · ${cutsAssigned} cut${cutsAssigned === 1 ? '' : 's'} kept` : '';
-  groupStatus(`Imported ${shapes.length} shapes → ${sk.name} @ ${label}${assumed ? ' (assumed)' : ''}${cutsMsg}${skipN ? ` · ${skipN} skipped` : ''}`);
+  const res = importIntoSketch(text, fileName, designController, {
+    describeElement: (el) => ({ cutRecord: extractCutRecord(el, getDocUnit()) }),
+    keepDescIds: true,
+    afterImport: ({ state, descs }) => {
+      const cutRecordByDesc = new Map();
+      for (const d of descs) {
+        if (d.cutRecord && (d.cutRecord.cutType || (d.cutRecord.cutDepth != null && d.cutRecord.cutDepth !== 'unset'))) cutRecordByDesc.set(d.descId, d.cutRecord);
+      }
+      const n = assignImportedCuts(state, cutRecordByDesc, CUT_PLAN);
+      return n ? `${n} cut${n === 1 ? '' : 's'} kept` : null;
+    },
+  });
+  if (res.ok && infoPanel) infoPanel.refresh();
+  groupStatus(res.message);
 }
-// The Import ACTION: a button at the TOP of the left side panel (#design-panel-info) + a drag-drop on the Design
-// canvas. Wired in buildDesignUI (after the panel renders). The button sits ABOVE the info panel's content (it's a
-// sibling, so the panel's refresh() — which only rebuilds its own root — never removes it).
-function wireSvgImport() {
-  const dropHost = VIEWS.design;
-  const panel = document.getElementById('design-panel-info');
-  if (!dropHost || !panel || panel.querySelector('#svg-import-btn')) return;
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.svg,image/svg+xml,.dxf'; input.style.display = 'none';
-  input.addEventListener('change', async () => { const f = input.files && input.files[0]; if (f) { importFileToSketch(await f.text(), f.name); input.value = ''; } });
-  const btn = document.createElement('button');
-  btn.id = 'svg-import-btn'; btn.textContent = '⬇ Import SVG / DXF'; btn.title = 'Import an SVG (e.g. the Shaper Fusion add-in) or a Fusion sketch DXF into a new sketch';
-  btn.style.cssText = 'display:block; width:calc(100% - 16px); box-sizing:border-box; margin:8px 8px 6px; padding:7px 10px; background:#1b2030; color:#cbd5e1; border:1px solid #2a2d31; border-radius:7px; font:13px system-ui,sans-serif; cursor:pointer; text-align:left;';
-  btn.addEventListener('click', () => input.click());
-  panel.insertBefore(btn, panel.firstChild); // top of the sidebar, above the SKETCHES tree
-  panel.appendChild(input);
-  dropHost.addEventListener('dragover', (e) => { e.preventDefault(); });
-  dropHost.addEventListener('drop', async (e) => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) importFileToSketch(await f.text(), f.name); });
+function wireImportDrop() {
+  if (VIEWS.design) mountImportDrop(VIEWS.design, importFileToSketch);
 }
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());
@@ -535,7 +452,7 @@ function buildDesignUI() {
   if (header) header.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
 
-  wireSvgImport(); // IMPORT-2: the Import-SVG button + a drop on the Design view
+  wireImportDrop(); // a drop on the Design view (the menu entry is mounted with the sidebar)
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view

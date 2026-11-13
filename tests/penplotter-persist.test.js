@@ -6,6 +6,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
@@ -60,9 +61,7 @@ await (async () => {
 
     await load();
     // Import the SVG through the real file input (a real file chooser result).
-    const root = await send('DOM.getDocument');
-    const q = await send('DOM.querySelector', { nodeId: root.nodeId !== undefined ? root.nodeId : root.root.nodeId, selector: '#importSvgFile' });
-    await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`window.__sketch.controller.state.shapes.length > 0`, 'SVG import produced geometry');
     // Build the plotter state: a real click on + Pen, then toolpaths/settings/styles (test setup, not the gesture under test).
     await clickEl('.stage-btn[data-stage="toolpath"]');

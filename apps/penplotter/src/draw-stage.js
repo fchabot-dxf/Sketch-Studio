@@ -32,7 +32,7 @@ const SCAFFOLD = `
     </div>
     <aside id="drawPanel">
       <!-- IMPORT-2B-4: the dead Import SVG button/#importFile + #dropOverlay are GONE from this hidden panel. The
-           real importer lives on the Design tab (button + drag-drop, both -> importSvgToCore). -->
+           real importer lives on the Design tab (the sidebar's Import SVG / DXF… + drag-drop, both -> importFileToCore). -->
       <section class="dp-sec">
         <div class="dp-head">Layers</div>
         <div class="dp-row">

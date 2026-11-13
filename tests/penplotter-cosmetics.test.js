@@ -6,6 +6,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
@@ -81,9 +82,7 @@ await (async () => {
     assert(/needs pens/.test(mix.status) && /\+ Pen/.test(mix.status), 'and it says why: ' + mix.status);
 
     // ---- item 2: ONE colour -> pen rule. Import seeds a pen for every STROKE and FILL colour; + Outline then adds none.
-    const root = await send('DOM.getDocument');
-    const q = await send('DOM.querySelector', { nodeId: root.root.nodeId, selector: '#importSvgFile' });
-    await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.plotColors.length === 3)`, 'import seeded 3 pens');
     const pens = (await st('state.plotColors.map(p => p.color)')).sort();
     console.log('pens after import:', JSON.stringify(pens));

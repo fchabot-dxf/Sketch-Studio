@@ -13,6 +13,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
+import { DESIGN_CANVAS_OPTIONS, plotterBufferOptions } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
 import { needsFit, markFitted, fitRectForDoc, fitViewport } from './viewport.js';   // UNIFY-6: one shared doc-fit across the 4 tabs
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js'; // PP-7b/UNIFY-4c: #core shape -> polyline
@@ -268,7 +269,7 @@ export function mountSketchStage(view, ctx = {}) {
   };
 
   // Mount the shared sketcher ONCE into the stage's OWN svg (isActive gates its document-level input listeners).
-  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve, seedDemo: false }); // PERSIST-2: the autosave buffer below decides what geometry to show
+  controller = mountSketch(designCanvas, { isActive: ctx.isActive || (() => true), onRender: panelTick, isStatic, shouldSolve, ...DESIGN_CANVAS_OPTIONS }); // design-canvas.js (PERSIST-2: seedDemo false, the autosave buffer below decides what geometry to show)
   state.coreSketch = controller.state; // UNIFY-2: a toolpath can target this #core geometry directly
   // TASK 570: one Ctrl+Z of an import also puts back the paper size, pens and styles it set (the import's snapshot only: `asked`).
   controller.state.hostSnapshot = { asked: true, capture: captureImportState, restore: (d) => { applyImportState(d); underlayDirty = true; syncDocFields(); renderArt(); } };
@@ -278,17 +279,11 @@ export function mountSketchStage(view, ctx = {}) {
   const saveStatusEl = document.getElementById('save-status');
   // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored); a design with no
   // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
-  docBuffer = createDocumentBuffer({
-    state: controller.state,
-    app: 'penplotter', canvas: designCanvas,
-    onRestored: ({ hosts }) => {
-      try { controller.engine.solve(500); if (infoPanel) infoPanel.refresh(); } catch (_) {}
-      if (hosts && hosts.penplotter) applyPlotterDoc(hosts.penplotter); else resetPlotterDoc();
-      refreshAfterPlotterRestore();
-    },
-    hostName: 'penplotter', getHostData: capturePlotterDoc, // TASK 451: doc size, pens, toolpaths, settings, styles ride in doc.hosts.penplotter
-    onStatusChange: (s) => { if (saveStatusEl) saveStatusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
-  });
+  docBuffer = createDocumentBuffer(plotterBufferOptions({ // design-canvas.js: the restore, the plotter sidecar, the status
+    controller, canvas: designCanvas, statusEl: saveStatusEl,
+    refreshPanels: () => { if (infoPanel) infoPanel.refresh(); },
+    afterSidecar: refreshAfterPlotterRestore,
+  }));
   docBuffer.restore();
   docBuffer.start();
 

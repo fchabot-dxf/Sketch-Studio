@@ -8,13 +8,13 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
-import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { undoRedoKeyAction } from '#ui/input-manager.js'; // TASK 463: the shared history key mapping
-import { captureShaperDoc, applyShaperDoc, captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
+import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, shaperBufferOptions } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
+import { captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
@@ -426,7 +426,7 @@ function buildDesignUI() {
   infoPanel.render(document.getElementById('design-panel-info'));
   ribbon = createToolRibbon({
     state,
-    profiles: true,
+    ...RIBBON_OPTIONS, // design-canvas.js
     notify: groupStatus,
   });
   ribbon.render(document.getElementById('design-ribbon'));
@@ -459,12 +459,10 @@ function buildDesignUI() {
 // visibility, so the input layer's document listeners no-op unless Design is the current mode.
 function ensureSketch() {
   if (designController) return;
-  designController = mountSketch(document.getElementById('design-canvas'), {
+  designController = mountSketch(document.getElementById(DESIGN_CANVAS_ID), {
     isActive: () => currentMode === 'design',
     onRender: panelTick, // S5c/S6b/S7b: refresh the ribbon + info panel on change, in sync with the render loop
-    seedDemo: false, // PERSIST-2: the autosave buffer below decides what geometry (if any) to show
-    grid: true,      // GRID-1: the shared GRID_MODE-driven canvas grid (Grid / None / Draft points in the settings modal)
-    profiles: true,
+    ...DESIGN_CANVAS_OPTIONS, // design-canvas.js: seedDemo false (the autosave buffer decides), the shared grid, profiles
     notify: groupStatus,
   });
   window.__designController = designController; // for test/evidence inspection
@@ -474,29 +472,18 @@ function ensureSketch() {
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
   // keep autosaving. statusEl is optional-safe (older cached HTML without #save-status just no-ops).
   const statusEl = document.getElementById('save-status');
-  // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored), and a design
-  // without a Shaper sidecar resets the cut plan and stock to their defaults instead of inheriting the previous design's.
-  const applyRestored = ({ hosts }) => {
-    try {
-      designController.engine.solve(500);
-      fitToDrawing(document.getElementById('design-canvas'), designController.state); // TASK 494: frame the restored drawing (armed until the canvas has a size)
-      if (infoPanel) infoPanel.refresh();
-      if (vcarveView) vcarveView.refresh();
-    } catch (_) {}
-    // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable), then
-    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts. No sidecar (an old buffer): defaults.
-    applyShaperDoc(hosts && hosts.shaper);
-    if (currentMode === 'prepare') mountPrepare();
-    else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
-    showStockThickness();
-    if (currentMode === 'review') enterReview(designController.state);
-  };
-  docBuffer = createDocumentBuffer({
-    state: designController.state,
-    app: 'shaper', canvas: document.getElementById('design-canvas'), onRestored: applyRestored,
-    hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
-    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
-  });
+  // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the status
+  docBuffer = createDocumentBuffer(shaperBufferOptions({
+    controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID), statusEl,
+    refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
+    // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
+    afterSidecar: () => {
+      if (currentMode === 'prepare') mountPrepare();
+      else if (prepareView) { prepareView.destroy(); prepareView = null; } // re-mounted from the restored state on next entry
+      showStockThickness();
+      if (currentMode === 'review') enterReview(designController.state);
+    },
+  }));
   docBuffer.restore();
   docBuffer.start();
 }

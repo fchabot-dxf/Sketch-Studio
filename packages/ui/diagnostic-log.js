@@ -266,6 +266,7 @@ function injectStyles() {
 .sk-diag-btn.sk-hidden { display: none; }
 .sk-diag-toggle { background: transparent; border: 1px solid currentColor; opacity: 0.7; border-radius: 6px; padding: 4px 10px; font: 12px system-ui, sans-serif; cursor: pointer; color: inherit; }
 .sk-diag-toggle:hover { opacity: 1; }
+@media (pointer: coarse) { .sk-diag-toggle { min-height: 44px; min-width: 44px; white-space: nowrap; } } /* TASK 581: a finger */
 `;
   document.head.appendChild(s);
   stylesInjected = true;

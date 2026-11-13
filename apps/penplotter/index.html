@@ -245,13 +245,13 @@
   </style>
 </head>
 <body>
-  <header class="toolbar">
+  <header class="toolbar sk-phone-header">
     <!-- TASK 473: the shared app sidebar button (mounted in main.js): document actions + GO TO the other apps. -->
     <span id="app-sidebar-host"></span>
     <!-- PERSIST-2: a passive autosave status indicator (never a blocking prompt) -->
     <span id="save-status" class="save-status"></span>
     <!-- The 5-stage pipeline nav — built by ITERATING the STAGES registry in main.js (never hardcoded). -->
-    <nav id="mode-nav" class="mode-nav"></nav>
+    <nav id="mode-nav" class="mode-nav sk-phone-tabs"></nav>
     <span class="spacer"></span>
   </header>
   <!-- Stage bodies are created from STAGES in main.js (one source of truth), then shown/hidden by the router. -->

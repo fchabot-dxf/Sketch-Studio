@@ -47,6 +47,7 @@ inspector.init(document.getElementById('inspector'));
 // TASK 473: the shared app sidebar (hamburger, document actions, GO TO) in the header brand slot. This host declares ITS actions:
 // Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
 const _swHost = document.getElementById('app-sidebar-host');
+const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint (the header's .sk-phone-header rules)
 if (_swHost) {
   _swHost.appendChild(mountProjectSidebar({
     appId: 'shaper', getBuffer: () => { ensureSketch(); return docBuffer; }, // the buffer is created with the sketch (lazily)
@@ -57,6 +58,12 @@ if (_swHost) {
         if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
         download('shaper-export.svg', payload.svg);
       } },
+      // TASK 581: at phone width (<= 640 px) the header's Explore actions (Open SVG / Fit / Export) are hidden (.sk-phone-collapse) and live here
+      // while Explore shows (the same buttons' own handlers run: nothing is rebuilt). A wider screen keeps them in the header.
+      { divider: true, visible: () => onPhone() && currentMode === 'explore' },
+      { id: 'phone-open', label: 'Open SVG', visible: () => onPhone() && currentMode === 'explore', onClick: () => document.getElementById('open').click() },
+      { id: 'phone-fit', label: 'Fit', visible: () => onPhone() && currentMode === 'explore', onClick: () => document.getElementById('fit').click() },
+      { id: 'phone-export', label: 'Export', visible: () => onPhone() && currentMode === 'explore', onClick: () => document.getElementById('export').click() },
     ],
   }).el);
 }

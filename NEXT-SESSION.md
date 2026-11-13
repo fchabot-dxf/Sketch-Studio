@@ -77,6 +77,32 @@ if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-
   "parallel RR/shared analytic Jacobian error" noted by 511. LESSON: never start a second merge.sh while one runs (same merge worktree):
   chain them in ONE script.
 
+### Update (2026-11-13, turn 1043)
+- MERGED since turn 955 (main d058485): 551 Fusion recorder (guarded keys, Cancel-only dismiss; owner rule now in win-mouse.py
+  header), 543 angle sector up to 360 (DOCUMENT_VERSION 3: `sector {ray1,ray2,turn}` replaces supplement), 552 midpoint inference
+  in screen px, 553 origin restored on every load (one ORIGIN_JOINT), 554 Ctrl+C/V/X, 535-3 canvas formulas (`name = value`
+  creates a parameter, autocomplete), 557 Open recent -> Projects modal, dead X/Y readout removed, header buttons fixed,
+  539 X/Y axes as built-in reference lines (pickable only while a constraint/dimension asks for a target), 541 sparse solver
+  (400 constraints 3043 -> 38 ms, bit-identical), 560 shared test launcher (free CDP port + own profile; ROOT CAUSE of the
+  load-flaky live tests and SMOKE 0/12), 562 mobile step 1 (touch-and-hold menu, magnifier, Done button, 44 px targets),
+  555 Dimension tool picks like Fusion (line + point / line + axis second pick).
+- IN FLIGHT (2026-11-13): 564 unique joint ids (shape-id.js newJointId; gate red ONLY on sidebar-projects flake -> remerge after
+  565), 565 sidebar-projects flake fix (fixed 900 ms sleep + shared temp path; Sonnet), 563 symmetry constraint (Opus; points /
+  lines / circles-arcs about a line or axis; conflict in reference-lines.js with 555 being resolved), 558 document tabs slice 1 +
+  save prompt (conflicts with 560 launcher being resolved). Merge order once green: 565, 564, 563, 558.
+- FOUND by 563, not fixed: parallel / perpendicular / coincident tools create no undo step of their own (Ctrl+Z also undoes the
+  step before); right-click on a glyph lying over geometry opens the geometry menu.
+- TO VERIFY IN FUSION: symmetry of two lines mirrors the ends (ours) or only the infinite lines; arc symmetry mirrors arc ends
+  (ours: centre + radius only); who moves at symmetry creation (ours: declared rule, second pick gives way unless held more).
+- NEXT QUEUE: tabs slices 2-7; parameter slices 5 (window editing, rename dN) and 6 (deleting a dim keeps its dN param, replaces
+  freezeReferencesTo); mobile step 2 (Shaper / Pen Plotter layouts) after the owner tries step 1; 526 refuse like Fusion; 529
+  tools vs Fusion; K548-1 chain fold convergence; who-moves "how the mover moves" (54 divergences); perpendicular stretch vs
+  Fusion rotate; re-record 7 conflicting which-moves cells; toggleDriving not undoable; fillet orphan joint; EA-4..EA-9.
+- OWNER SIDE: run "Check Google Drive connection"; delete SESSION_KEY.txt from Downloads; Fusion "Document limit reached".
+- LESSONS: chain merges with `until grep -q -E "gate exit|MERGE CONFLICT" log`; a branch built before a launcher/infra merge will
+  conflict in every live runner: tell builders to fetch right before the final gate; Agent isolation:worktree fails in this repo
+  (core.worktree redirect) -> create worktrees under D:\APPS\Sketch-Studio.worktrees yourself.
+
 ### Update (2026-11-12, turn 955)
 - MERGED since turn 871 (main 94ee50e, gate 297/297): 537 axis snap, 538 body drag (Opus), 542 doc-restore input gate (data-doc-ready),
   535-1b/535-2/535-4 parameters (storage v2, batch edit seam, read-only Params window), 544 Copy Report (trimmed one-line JSON),

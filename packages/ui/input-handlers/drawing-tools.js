@@ -15,6 +15,7 @@ import { handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointe
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { handleJointSelection } from '#ui/input-handlers/selection-tools.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
+import { newShapeId } from '#core/shape-id.js';
 
 // Local state for drawing tools
 let continueFrom = null;
@@ -207,7 +208,7 @@ export function makeCircle(joints, centerId, radiusPtId, genJ) {
     }
     
     return {
-        id: 'circle_' + Date.now(),
+        id: newShapeId('circle_'),
         type: 'circle',
         joints: [centerId, radiusPtId]
     };

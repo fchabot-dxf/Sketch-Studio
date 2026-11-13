@@ -47,7 +47,6 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
     const r = applyFillet(state, findCornerAtPoint(state, { x, y }, 3), 0.8);
     assert(r && r.success, 'fillet applied');
     vs.push(r.virtualSharp);
-    await new Promise(res => setTimeout(res, 5)); // arc ids are Date.now()-based
   }
   assert(engine.solve(500).converged, 'solve after fillets converged');
 

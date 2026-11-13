@@ -15,6 +15,7 @@
 
 import { TOOL_MODES, SNAP, TIME } from '#core/constants.js';
 import { makeBezier } from '#core/shapes.js';
+import { newShapeId } from '#core/shape-id.js';
 import { clearPreview } from '#ui/preview-manager.js';
 
 // Module-level pen session (mirrors the other create tools' module state). anchors: committed anchors of the
@@ -29,7 +30,6 @@ const pen = {
   lastDownTime: 0,
   lastAnchorScreen: null,  // screen px of the last placed anchor (for double-click-to-end)
 };
-let bezierSeq = 0;          // monotonic id/group suffix (Date.now() alone can collide within a ms)
 
 // No persistent listeners: the shared input-manager dispatches pointer/keydown to the handlers below by tool mode.
 export function setupBezierTool(/* svg, state */) {}
@@ -67,7 +67,7 @@ export function handleBezierPointerDown(e, svg, state, w) {
 
   // Fresh path: open an undo group + a new shared groupId for the whole stroke.
   if (pen.finished) {
-    pen.anchors = []; pen.groupId = 'bezier_' + (++bezierSeq) + '_' + now; pen.finished = false;
+    pen.anchors = []; pen.groupId = newShapeId('bezier_'); pen.finished = false;
     try { state.beginDrawStep && state.beginDrawStep(); } catch (_) {}
   }
 
@@ -122,7 +122,6 @@ export function handleBezierPointerUp(e, svg, state, w) {
       [prev.hOutX, prev.hOutY], [anchor.hInX, anchor.hInY]
     );
     const shp = shapes[0];
-    shp.id = 's_bezier_' + (++bezierSeq) + '_' + Date.now();  // guaranteed-unique (Date.now() alone can collide)
     shp.groupId = pen.groupId;
     if (state.isConstructionMode) shp.isConstruction = true;
     state.shapes.push(shp);

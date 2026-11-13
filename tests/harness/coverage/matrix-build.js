@@ -40,7 +40,6 @@ export function build(S, k, ox, oy, dir = [60, 20]) {
       return { k, shape: side.id, joints: side.joints.slice(), jn: side.joints[0], extra: { centre: c } };
     }
     case 'R': {   // the top side of a rect-tool rectangle (2-point mode): its H/V + corner joints come with it
-      { const t = Date.now(); while (Date.now() === t) { /* two rects in one millisecond share an id base (finding F7's family): wait like a person would */ } }
       const r = L.rect(S, ox, oy, ox + Math.max(Math.abs(dir[0]), 40), oy + 40);
       const top = L.shape(S, r.top);
       return { k, shape: r.top, joints: top.joints.slice(), jn: top.joints[0], extra: { rect: r } };

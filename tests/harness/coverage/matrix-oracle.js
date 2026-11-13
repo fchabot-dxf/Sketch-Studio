@@ -5,7 +5,7 @@ import { GcsWrapper } from '@salusoft89/planegcs';
 import { measureResidual, measureShapeSizes, COLLAPSE_RATIO } from '#core/constraint-verifier.js';
 import { referenceShape, REFERENCE_JOINTS } from '#core/reference-lines.js';
 import { symmetricOperands } from '#core/symmetric.js';
-import { sceneShapes } from '#core/reference-lines.js';
+import { sceneShapes, sceneJoints } from '#core/reference-lines.js';
 
 export async function oracleState(S) {
   const mod = await L.planegcs();
@@ -32,6 +32,15 @@ export async function oracleState(S) {
       // p2p_symmetric_ppl of a point with itself has an identically zero equation (it reports it conflicting), so it is given as point-on-line
       for (const [p, q] of o.pairs) prims.push(p === q ? { id: `x_sym_${++n}`, type: 'point_on_line_ppp', p_id: p, lp1_id: o.line[0], lp2_id: o.line[1] }
         : { id: `x_sym_${++n}`, type: 'p2p_symmetric_ppl', p1_id: p, p2_id: q, l_id: c.line });
+      // task 572, the line form: mirror(q) on line a1-a2, per end q of line 2. PlaneGCS has no such primitive: a FREE helper point m mirrors q
+      // (p2p_symmetric_ppl, 2 equations) and lies on the line (point_on_line_ppp, 1): +2 unknowns, 3 equations = the one row per end
+      for (const [q, a1, a2] of o.onLine) {
+        const mid = `x_symm_${++n}`, Q = S.state.joints.get(q), A = sceneJoints(S.state.joints);
+        const s1 = A.get(o.line[0]), s2 = A.get(o.line[1]), ux = s2.x - s1.x, uy = s2.y - s1.y, k = ((Q.x - s1.x) * ux + (Q.y - s1.y) * uy) / (ux * ux + uy * uy);
+        prims.push({ id: mid, type: 'point', x: 2 * (s1.x + k * ux) - Q.x, y: 2 * (s1.y + k * uy) - Q.y, fixed: false });
+        prims.push({ id: `x_sym_${++n}`, type: 'p2p_symmetric_ppl', p1_id: q, p2_id: mid, l_id: c.line });
+        prims.push({ id: `x_sym_${++n}`, type: 'point_on_line_ppp', p_id: mid, lp1_id: a1, lp2_id: a2 });
+      }
       if (o.sizes) prims.push({ id: `x_sym_${++n}`, type: 'equal_radius_cc', c1_id: c.shapes[0], c2_id: c.shapes[1] });
     } else left.push(c);
   }

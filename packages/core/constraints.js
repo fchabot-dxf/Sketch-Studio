@@ -120,7 +120,7 @@ export function getConstrainedGeometry(constraint, shapes) {
             break;
 
         case CONSTRAINT_TYPES.SYMMETRIC:
-            // the two entities (points / end pairs, or shapes) and the symmetry line
+            // the two entities (points, or shapes) and the symmetry line
             if (constraint.joints) for (const jid of constraint.joints) constraintJoints.add(jid);
             if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
             if (constraint.line) constraintShapes.add(constraint.line);
@@ -294,16 +294,11 @@ export function createConstraint(type, params) {
             return { type: CONSTRAINT_TYPES.MIDPOINT, joints: params.joints.slice() };
 
         case CONSTRAINT_TYPES.SYMMETRIC: {
-            // task 563 (#core/symmetric.js): points { joints: [p, q], line }; lines { joints: [p1, q1, p2, q2], shapes, line }; circles
-            // { shapes, line }. Fields in this one order (byte-stable saves).
+            // task 563 (#core/symmetric.js): points { joints: [p, q], line }; lines and circles / arcs { shapes, line }. Fields in this one order
+            // (byte-stable saves). Task 572: the line form mirrors the infinite lines, so it has no end pairs; the joints a task-563 file stored
+            // with two lines ([p1, q1, p2, q2]) are dropped here, where every stored constraint (load, undo, paste) becomes one.
             if (!params.line) return null;
-            if (Array.isArray(params.shapes) && params.shapes.length === 2) {
-                const out = { type: CONSTRAINT_TYPES.SYMMETRIC };
-                if (Array.isArray(params.joints) && params.joints.length === 4) out.joints = params.joints.slice();
-                out.shapes = params.shapes.slice();
-                out.line = params.line;
-                return out;
-            }
+            if (Array.isArray(params.shapes) && params.shapes.length === 2) return { type: CONSTRAINT_TYPES.SYMMETRIC, shapes: params.shapes.slice(), line: params.line };
             if (Array.isArray(params.joints) && params.joints.length === 2) return { type: CONSTRAINT_TYPES.SYMMETRIC, joints: params.joints.slice(), line: params.line };
             return null;
         }

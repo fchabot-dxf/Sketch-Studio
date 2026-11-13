@@ -470,11 +470,13 @@ export class NewtonSolver {
       // Point-to-line dimension: joints [P, A, B] -> the perpendicular distance from P to line AB (the line-line row).
       if (c.type === 'distance' && isPointLineDistance(c)) params.__lineLine = true;
 
-      // Symmetric (task 563): ONE operand reader (#core/symmetric.js) -> joints [line a, line b, p1, q1, (p2, q2)] and, for circles / arcs,
-      // the two size terms of the radius equality. Unresolved -> no joints: the Definition returns no rows (and counted none).
+      // Symmetric (task 563): ONE operand reader (#core/symmetric.js) -> joints [line s1, line s2, the mirrored pairs (nPairs), the points on a
+      // mirrored line (task 572: q, a1, a2 each)] and, for circles / arcs, the two size terms of the radius equality. Unresolved -> no joints:
+      // the Definition returns no rows (and counted none).
       if (c.type === 'symmetric') {
         const o = symmetricOperands(c, this.shapes);
-        params.joints = o ? [...o.line, ...o.pairs.flat()].map(id => jointIndexMap.get(id)) : [];
+        params.joints = o ? [...o.line, ...o.pairs.flat(), ...o.onLine.flat()].map(id => jointIndexMap.get(id)) : [];
+        params.nPairs = o ? o.pairs.length : 0;
         if (o && o.sizes) params.terms = o.sizes.map(sh => this._sizeTerm(sh, jointIndexMap));
       }
 

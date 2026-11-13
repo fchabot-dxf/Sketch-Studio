@@ -14130,6 +14130,44 @@ Tests: NEW tests/trace-projects.test.js (File menus equal across the four apps m
 - Environment: the old serial full gate (gate-11) failed 3 solver files with "Cannot find package '@salusoft89/planegcs'": the main checkout's node_modules this worktree was junctioned to is now empty. The junction link was removed (target untouched) and the worktree has its own `npm ci` install; the 3 files then pass alone.
 - Gate: `npm run gate:merge -- --base origin/main` (cdp-browser.js changed: all 91 live tests): "GATE tier=merge jobs=quick=22,live=6 files=347 pass=347 fail=0 elapsed=480s", "SMOKE 12/12", "HEADLESS-LEFT 0" (.evidence/558/gate-merge-1.txt).
 
+## TURN 572 (symmetric of two lines = the INFINITE lines mirror, like Fusion; owner ruling 2026-11-13)
+- FUSION (advisor, API): a (-4,0)-(-1,3) and b (1.5,0.5)-(6,2.5) about the Y axis -> a unchanged, b (1.8132,2.1868)-(5.2953,-1.2953), length
+  kept 4.9244, on y = -x + 4 (mirror of a's line); ends not mirrored; the second pick moves. Arcs / circles: as ours.
+- ROWS (definitions.js mirrorOnLine*): per end q of line 2, the reflection R(q) across the symmetry line lies on line 1: r = ((R - A) x v)/|v|.
+  2 rows, 2 DOF. Why this form: the pair rule (q - mirror(p)) does not fit (no point of line 1 corresponds to an end of line 2); the
+  reflection is an isometry, so dr/dq has unit length and each row owns its own end of line 2 (the two rows are independent in q1, q2: as
+  conditioned as two point-on-line rows, world units). Full derivative on the symmetry line's ends and line 1's ends (they can move). addGrad
+  only, operands only (the joints list [s1, s2, pairs..., q a1 a2 ...] + params.nPairs). Points and circles keep the pair rule.
+- SHARED END (a V, re-derived): V is an end of both lines; R(V) on line 1 (which passes through V) means V on the symmetry line (or line 1
+  perpendicular to it); the other end fixes the mirrored direction: 2 DOF (was 3 with end pairs). Tested (V on the axis, 2 DOF).
+- REMOVED (no caller left, grep): symmetric.js pairLineEnds (ConstraintManager's end pairing at creation) and creation-placement.js
+  similarityTaking (the line placement). The line placement is now the collinear one onto the anchor line's MIRROR: ontoLine(M, mover, line)
+  factored out of PLACE.collinear (same code path: collinear unchanged, fusion-oracle OK).
+- SAVED FORMAT: lines are { type, shapes, line } (no joints). A task-563 file (version 3) with { joints: [p1,q1,p2,q2], shapes, line } loads as
+  the new form: constraints.js createConstraint (every stored constraint: load, undo, paste) keeps no joints for a shapes form. No
+  DOCUMENT_VERSION bump: the new build reads the old form cleanly (tested: loads, solves without moving anything, DOF +2 (the lengths), re-saves
+  as the new form, loads and saves byte-identically); the only older build that knows symmetric (563, main since 2026-11-13) keeps a no-joints
+  line form stored (its createConstraint) but solves no rows for it (its operand reader wants 4 joints): it does not lose it.
+- Harness: coverage-matrix nominal lines 4 -> 2; the PlaneGCS oracle maps the line form with a free helper point per end (p2p_symmetric_ppl +
+  point_on_line_ppp); two cells judged by our finite-difference nullity where PlaneGCS miscounts (SR shared: 1 DOF, derivation
+  .evidence/572/sr-shared-derivation.txt; RR shared: refused as redundant, raw add leaves the fd nullity unchanged, PlaneGCS says 6 -> 4).
+- Tests: symmetric.test.js (164 checks: Fusion's case with its numbers, two lines of different lengths keep them + a length dimension on line 2 is
+  driving, V case 2 DOF, the task-563 file loads), jacobian-fd-guard (line cases 4 -> 2 rows, + a line sharing an end with the symmetry line: 188
+  cases), coverage-matrix (row PASS=178 N/A=2, whole matrix counts unchanged), live studio + shaper (line 2 on the mirror of line 1, each keeps its
+  length, they differ). extreme-arcs passed; coverage-properties: I1..I8 as on main except I7 297 -> 298 (one F4 case fewer).
+- Evidence: before (563 code, same scene) .evidence/572/before/sketchstudio-symmetric-glyphs.png md5 798cff7fc9c81677a3d48196cda24131 (line 2 is
+  a's exact mirror image, equal length); after .evidence/572/sketchstudio-symmetric-glyphs.png md5 ea8a00a19ed697a0e89cabbc033f4ae6 (line 2
+  shorter, on the mirrored line), shaper a2106df801e19004a52eae8c1ca8af21. docs/FUSION-COMPARISON.md "Symmetric (task 572)" table.
+- BEHAVIOUR CHANGE for users: two lines made symmetric keep their own lengths (equal length now needs an Equal constraint, as in Fusion); the
+  line's DOF count drops by 2 instead of 4; a line form loaded from a task-563 file frees its two lengths. Nothing else.
+- Divergence (Fusion parity, reported): where line 2 lands ALONG the mirrored line (ours 0.607 short of Fusion's in the measured case; a free DOF).
+- Gates: `GATE tier=quick ... files=256 pass=256 fail=0`; `GATE tier=merge jobs=quick=22,live=6 files=326 pass=326 fail=0` (base origin/main 806c1fe,
+  70 of 92 live tests affected), `SMOKE 12/12`, `HEADLESS-LEFT 0`.
+- Merged origin/main 571 (constraint undo steps, glyph right-click) and 570 (import framing): clean. symmetric 164 checks, symmetric-live studio +
+  shaper (same md5), constraint-tool-undo, constraint-tools pass. gate:merge on aec4c8f: `GATE tier=merge files=329 pass=328 fail=1`,
+  `FAIL tests/mobile-touch-live.test.js`, `SMOKE 12/12`, `HEADLESS-LEFT 0`. That test fails the same way on origin/main 72d4dac's own code (checked
+  out here, exit 1): a touch-hold on a shape's midpoint expects ['Lock', 'Delete'] and gets ['Delete constraint'] (571 makes a glyph win over
+  the geometry under it; the H/V glyph sits there). Not this branch (it changes no menu / picker file); reported.
 ## TURN 571 (constraint tools own one undo step; right-click on a glyph picks the glyph)
 - BUG 1: `recordConstraintStep(state, label, make)` in packages/ui/input-handlers/constraint-tools.js is the ONE place: it captures the document before, runs the make, and pushes the step (saveStateForce) only when the constraint list grew (a refusal / a half-picked make leaves no step). `handleConstraintPointerDown` wraps every tool in CONSTRAINT_TOOLS with it (hv, parallel, perp, coincident, collinear, tangent, equal, midpoint, symmetric; the symmetric tool's own saveStateForce was removed, it is this one now). The immediate applications on a pre-selection (H key and H on tool activation in input-manager.js, H on activation in apps/sketchstudio/ui/ui-manager.js, E key) call the same helper. Undo restores constraints AND the positions the solve moved (one snapshot); Redo gives the identical document.
 - Already own a step, unchanged: the Dimension tool (beginDimUndo/endDimUndo group, tests/dimension-undo-step.test.js); snap / inference constraints belong to the draw step (549). Not touched: drawing, dragging, snapping undo. There is no Fix tool in CONSTRAINT_TOOLS (Lock is the context-menu / ribbon action, "not undoable" per task 493: left as is, flagged).

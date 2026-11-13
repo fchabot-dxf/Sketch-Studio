@@ -9,7 +9,7 @@ import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
-import { pairLineEnds, symmetricImpossible } from './symmetric.js';
+import { symmetricImpossible } from './symmetric.js';
 
 // Notification seam: the shell injects a notifier via setConstraintNotifier(); the
 // brain stays headless (default no-op) so core never imports the UI layer.
@@ -173,12 +173,6 @@ export class ConstraintManager {
         // branch is undefined there and the user can re-add once it's clearer.
         if (type === CONSTRAINT_TYPES.PERPENDICULAR && normalized.shapes && normalized.shapes.length === 2 && normalized.branch == null) {
             this.lockPerpendicularBranch(state, normalized);
-        }
-
-        // SYMMETRIC of two lines (task 563): which end mirrors which is fixed now, from the current geometry (#core/symmetric.js pairLineEnds).
-        if (type === CONSTRAINT_TYPES.SYMMETRIC && normalized.shapes && normalized.shapes.length === 2 && !(normalized.joints && normalized.joints.length === 4)) {
-            const ends = pairLineEnds(state.joints, state.shapes, normalized.shapes[0], normalized.shapes[1], normalized.line);
-            if (ends) normalized.joints = ends;
         }
 
         // Tangent branch auto-detect is intentionally OFF for now. Even with the
@@ -1015,7 +1009,7 @@ export class ConstraintManager {
             case CONSTRAINT_TYPES.MIDPOINT:
                 return params.joints && Array.isArray(params.joints) && params.joints.length === 3;
             case CONSTRAINT_TYPES.SYMMETRIC:
-                // two points { joints: [p, q] } or two shapes { shapes: [s1, s2] } (+ the end pairs of two lines), and the symmetry line
+                // two points { joints: [p, q] } or two shapes { shapes: [s1, s2] }, and the symmetry line
                 return !!params.line && ((Array.isArray(params.shapes) && params.shapes.length === 2)
                     || (!params.shapes && Array.isArray(params.joints) && params.joints.length === 2));
             case CONSTRAINT_TYPES.ANGLE:

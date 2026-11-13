@@ -80,30 +80,55 @@ for (const axis of ['ref_axis_x', 'ref_axis_y']) { // about each axis (the built
 }
 
 // ---------------------------------------------------------------------------------------------------------------- B. lines
-{ // two lines about a sketch line: the end pairs mirror (the segments are mirror images); a line drawn the other way is paired crossed; 4 DOF
+// task 572 (owner ruling, Fusion measured): the INFINITE lines mirror; each line keeps its own length; 2 DOF; the second pick moves
+const lineLen = (S, id) => { const s = L.shape(S, id); return Math.hypot(P(S, s.joints[1]).x - P(S, s.joints[0]).x, P(S, s.joints[1]).y - P(S, s.joints[0]).y); };
+const onMirrorOf = (S, q, l1, lineId) => { const s = L.shape(S, l1), [a, b] = ends(S, lineId), A = mirrorPoint(at(S, s.joints[0]), a, b), B = mirrorPoint(at(S, s.joints[1]), a, b), Q = at(S, q); return Math.abs(((Q.x - A.x) * (B.y - A.y) - (Q.y - A.y) * (B.x - A.x)) / Math.hypot(B.x - A.x, B.y - A.y)); };
+{ // Fusion's own measurement case (task 572): a (-4,0)-(-1,3) len 4.2426, b (1.5,0.5)-(6,2.5) len 4.9244, about the Y axis. Fusion: a unchanged,
+  // b (1.8132,2.1868)-(5.2953,-1.2953) len 4.9244, on y = -x + 4 (the mirror of a's line).
+  const S = L.newSketch();
+  const a1 = L.point(S, -4, 0), a2 = L.point(S, -1, 3), la = L.line(S, a1, a2);
+  const b1 = L.point(S, 1.5, 0.5), b2 = L.point(S, 6, 2.5), lb = L.line(S, b1, b2);
+  const d0 = dof(S, 'Fusion case before');
+  const c = create(S, { shapes: [la, lb], line: 'ref_axis_y' });
+  ok(c && JSON.stringify(c) === JSON.stringify({ type: SYM, shapes: [la, lb], line: 'ref_axis_y' }), `lines: stored { type, shapes, line } (no end pairs): ${JSON.stringify(c)}`);
+  ok(solve(S).converged, 'Fusion case: converged');
+  ok(near(at(S, a1), { x: -4, y: 0 }, 1e-9) && near(at(S, a2), { x: -1, y: 3 }, 1e-9), 'Fusion case: a (first pick) unchanged, as in Fusion');
+  ok([b1, b2].every(q => Math.abs(P(S, q).x + P(S, q).y - 4) < 1e-6), 'Fusion case: both ends of b on y = -x + 4, as in Fusion');
+  ok(Math.abs(lineLen(S, lb) - 4.92443) < 1e-4 && Math.abs(lineLen(S, la) - 4.24264) < 1e-4, `Fusion case: lengths kept (a ${lineLen(S, la).toFixed(4)}, b ${lineLen(S, lb).toFixed(4)}), as in Fusion`);
+  ok(P(S, b1).y > P(S, b2).y, 'Fusion case: b turned the same way as in Fusion (its start went to the upper end)');
+  console.log(`Fusion case: ours b (${P(S, b1).x.toFixed(4)},${P(S, b1).y.toFixed(4)})-(${P(S, b2).x.toFixed(4)},${P(S, b2).y.toFixed(4)}), Fusion (1.8132,2.1868)-(5.2953,-1.2953)`);
+  ok(dof(S, 'Fusion case after') === d0 - 2, 'lines: removes 2 DOF (the lengths and the positions along the lines stay free)');
+}
+{ // two lines of DIFFERENT lengths about a construction line (fixed): mirrored in direction and position, each keeps its length
   const S = L.newSketch();
   const a1 = L.point(S, 10, 0), a2 = L.point(S, 40, 20), l1 = L.line(S, a1, a2);
-  const b1 = L.point(S, -45, 18), b2 = L.point(S, -12, 3), l2 = L.line(S, b1, b2);   // drawn from the far end: crossed pairing
+  const b1 = L.point(S, -30, 12), b2 = L.point(S, -12, 3), l2 = L.line(S, b1, b2);   // 20.1 long (line 1: 36.1)
   const s1 = L.point(S, 0, -50), s2 = L.point(S, 0, 60), axisLine = L.line(S, s1, s2, true);   // a CONSTRUCTION line as the symmetry line
   P(S, s1).fixed = true; P(S, s2).fixed = true;
+  const len1 = lineLen(S, l1), len2 = lineLen(S, l2);
   const d0 = dof(S, 'lines before');
   const c = create(S, { shapes: [l1, l2], line: axisLine });
-  ok(c && JSON.stringify(c.joints) === JSON.stringify([a1, b2, a2, b1]), `lines: crossed end pairs stored ${JSON.stringify(c && c.joints)}`);
-  ok(JSON.stringify(Object.keys(c)) === JSON.stringify(['type', 'joints', 'shapes', 'line']), 'stored form { type, joints, shapes, line }');
-  ok(solve(S).converged, 'lines: converged');
-  ok(near(at(S, b2), mirrorOf(S, a1, axisLine), 1e-6) && near(at(S, b1), mirrorOf(S, a2, axisLine), 1e-6), 'lines: each end is the mirror of its pair');
+  ok(c && solve(S).converged, 'lines: created, converged');
+  ok(onMirrorOf(S, b1, l1, axisLine) < 1e-6 && onMirrorOf(S, b2, l1, axisLine) < 1e-6, 'lines: both ends of line 2 on the mirror of line 1');
+  ok(Math.abs(lineLen(S, l1) - len1) < 1e-9 && Math.abs(lineLen(S, l2) - len2) < 1e-6 && Math.abs(len1 - len2) > 5, `lines: unequal lengths kept (${len1.toFixed(3)}, ${lineLen(S, l2).toFixed(3)})`);
   ok(near(at(S, a1), { x: 10, y: 0 }, 1e-9) && near(at(S, a2), { x: 40, y: 20 }, 1e-9), 'lines: the first line stayed');
-  ok(dof(S, 'lines after') === d0 - 4, 'lines: removes 4 DOF');
+  ok(dof(S, 'lines after') === d0 - 2, 'lines: removes 2 DOF');
+  // the lengths stay free: a length dimension on line 2 is accepted driving and drives
+  const dm = ConstraintManager.createConstraint(S.state, CONSTRAINT_TYPES.DISTANCE, { joints: L.shape(S, l2).joints.slice(), value: lineLen(S, l2) }, { source: 'test' });
+  ok(dm && !dm.isDriven, 'lines: a length dimension on line 2 is driving (its length is free)');
+  ok(dof(S, 'lines + length') === d0 - 3, 'lines: + its length dimension removes 1 more');
 }
-{ // two lines about the Y axis, sharing an end (a V): the shared end lies on the axis, 3 DOF
+{ // two lines about the Y axis, sharing an end (a V). task 572: the shared end V is on line 1 and mirror(V) must be on line 1 too, so V lies on
+  // the axis (or line 1 is perpendicular to the axis); the other end puts line 2 on the mirror of line 1's direction: 2 DOF (was 3)
   const S = L.newSketch();
   const v = L.point(S, 2, 30), a = L.point(S, 30, 0), b = L.point(S, -26, 4);
   const l1 = L.line(S, v, a), l2 = L.line(S, v, b);
   const d0 = dof(S, 'V before');
   const c = create(S, { shapes: [l1, l2], line: 'ref_axis_y' });
-  ok(c && JSON.stringify(c.joints) === JSON.stringify([v, v, a, b]), 'V: the shared end pairs with itself');
-  ok(solve(S).converged && Math.abs(P(S, v).x) < 1e-6 && near(at(S, b), { x: -P(S, a).x, y: P(S, a).y }, 1e-6), 'V: the shared end on the axis, the other ends mirrored');
-  ok(dof(S, 'V after') === d0 - 3, 'V: removes 3 DOF (the shared pair is one row: on the axis)');
+  ok(c && !c.joints, 'V: stored without end pairs');
+  ok(solve(S).converged && Math.abs(P(S, v).x) < 1e-6, 'V: the shared end on the axis');
+  ok(onMirrorOf(S, b, l1, 'ref_axis_y') < 1e-6, 'V: line 2 on the mirror of line 1');
+  ok(dof(S, 'V after') === d0 - 2, 'V: removes 2 DOF (V on the axis, the mirrored direction)');
 }
 
 // ---------------------------------------------------------------------------------------------------------------- C. circles / arcs
@@ -152,11 +177,11 @@ for (const axis of ['ref_axis_x', 'ref_axis_y']) { // about each axis (the built
   ok(/same line/.test(refused({ shapes: [l1, l1], line: 'ref_axis_y' }, 'the same line twice')), 'the same line twice: says so');
   ok(/symmetry line cannot be one of/.test(refused({ shapes: [l1, l2], line: l1 }, 'the symmetry line is an entity')), 'the line as an entity: says so');
   refused({ joints: [p, q], line: 'no_such_line' }, 'an unknown symmetry line');
-  // lines symmetric about the Y axis; a SECOND identical one is a duplicate; a point pair it already makes symmetric is redundant
-  const c = create(S, { shapes: [l1, l2], line: 'ref_axis_y' }); extra++;
-  ok(c && solve(S).converged, 'lines about Y: created');
-  refused({ shapes: [l2, l1], line: 'ref_axis_y' }, 'the same symmetric again (other pick order): a duplicate');
-  ok(/already symmetric/.test(refused({ joints: [a1, c.joints[1]], line: 'ref_axis_y' }, 'an end pair the line symmetric already holds')), 'redundant: "already symmetric"');
+  // the end pairs of two lines made symmetric as POINTS about the Y axis: the lines are then already symmetric (redundant); a duplicate is refused
+  ok(create(S, { joints: [a1, b1], line: 'ref_axis_y' }) && create(S, { joints: [a2, b2], line: 'ref_axis_y' }), 'two point pairs about Y: created'); extra += 2;
+  ok(solve(S).converged, 'point pairs: converged');
+  refused({ joints: [b1, a1], line: 'ref_axis_y' }, 'the same symmetric again (other pick order): a duplicate');
+  ok(/already symmetric/.test(refused({ shapes: [l1, l2], line: 'ref_axis_y' }, 'two lines whose ends already mirror')), 'redundant: "already symmetric"');
   // both points fixed and not mirrored: nothing can move
   const f1 = L.point(S, 5, 5), f2 = L.point(S, 9, 9); P(S, f1).fixed = true; P(S, f2).fixed = true;
   ok(/fixed and not symmetric/.test(refused({ joints: [f1, f2], line: 'ref_axis_x' }, 'two fixed points that are not mirrored')), 'fixed + not mirrored: says so');
@@ -211,6 +236,31 @@ for (const axis of ['ref_axis_x', 'ref_axis_y']) { // about each axis (the built
   resetConstraintState(st);
   click(p, null); click(q, null); click(null, referenceShape('ref_axis_y'));   // the same symmetric again: a duplicate
   ok(st.history.length === h1, 'a refused creation leaves no undo step');
+}
+
+// ---------------------------------------------------------------------------------------------------------------- E2. a task-563 file (old line form)
+{ // task 563 saved two lines as END PAIRS { joints: [p1, q1, p2, q2], shapes, line } (DOCUMENT_VERSION 3, unchanged). It loads as the infinite-line
+  // form: the joints are dropped where the stored constraint becomes one; the drawing does not move (mirrored ends are mirrored lines); the two
+  // lengths become free (2 DOF more); the re-save writes the new form and loads again identically.
+  const geometry = {
+    joints: [['j_origin', { x: 0, y: 0, fixed: true }], ['a1', { x: 10, y: 0, fixed: false }], ['a2', { x: 40, y: 20, fixed: false }],
+      ['b1', { x: -10, y: 0, fixed: false }], ['b2', { x: -40, y: 20, fixed: false }]],
+    shapes: [{ id: 'L1', type: 'line', joints: ['a1', 'a2'] }, { id: 'L2', type: 'line', joints: ['b1', 'b2'] }],
+    constraints: [{ type: 'symmetric', joints: ['a1', 'b1', 'a2', 'b2'], shapes: ['L1', 'L2'], line: 'ref_axis_y' }],
+  };
+  const oldDoc = { version: 3, geometry, hosts: {} };
+  const S = L.newSketch();
+  const res = deserializeDocument(JSON.parse(JSON.stringify(oldDoc)), S.state);
+  ok(res.ok, 'a task-563 document (version 3, line form with end pairs) loads');
+  const c = S.state.constraints.find(x => x.type === SYM);
+  ok(c && JSON.stringify(c) === JSON.stringify({ type: SYM, shapes: ['L1', 'L2'], line: 'ref_axis_y' }), `loaded as the infinite-line form: ${JSON.stringify(c)}`);
+  const before = { a1: at(S, 'a1'), a2: at(S, 'a2'), b1: at(S, 'b1'), b2: at(S, 'b2') };
+  ok(solve(S).converged && Object.entries(before).every(([id, p]) => near(at(S, id), p, 1e-9)), 'it solves and nothing moves');
+  ok(dof(S, 'old file loaded') === 4 + 4 - 2, 'DOF 6: two free lines (8) minus the 2 rows (was 4 with the end pairs: the two lengths are free now)');
+  const text = JSON.stringify(serializeDocument(S.state));
+  ok(!/"joints":\["a1","b1","a2","b2"\]/.test(text) && JSON.parse(text).version === 3, 're-saved as the new form, still version 3');
+  const T = L.newSketch();
+  ok(deserializeDocument(JSON.parse(text), T.state).ok && JSON.stringify(serializeDocument(T.state)) === text, 're-saved file loads and saves identically');
 }
 
 // ---------------------------------------------------------------------------------------------------------------- F. save / load

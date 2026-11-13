@@ -663,7 +663,8 @@ Same test after task 550: 2880 cells = **PASS 1839, N/A 177, NA-BUILD 788, FAIL 
 
 ## Symmetric (task 563)
 New row `symmetric (about the Y axis)` (tests/harness/coverage/matrix-run.js): the real Symmetric tool, entity 1, entity 2, then the Y axis as the
-third pick. Two line-likes are picked as LINES (their end pairs mirror, 4 DOF), two circle-likes as CIRCLES (centres + radius, 3 DOF; two fillet
+third pick. Two line-likes are picked as LINES (task 572: both ends of line 2 on the mirror of line 1's infinite line, 2 DOF; task 563 mirrored
+the end pairs, 4), two circle-likes as CIRCLES (centres + radius, 3 DOF; two fillet
 arcs already carry their driving R: 2), any other pair as two POINTS (2 DOF). PlaneGCS oracle: `p2p_symmetric_ppl` per pair + `equal_radius_cc`; a
 pair that is ONE joint (two lines sharing an end, two circles sharing a centre) is given as point-on-line (PlaneGCS's symmetric of a point with
 itself has an identically zero equation and reports it conflicting). The finite-difference Jacobian of the harness (audit/lib.js fdJacobian) now
@@ -677,3 +678,10 @@ resolves operands in the scene, as the app's engine does, so a constraint naming
   PPPP  PPPP  PPPP  PPPP  PnPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PPPP  PnPP
   N/A=2  PASS=178   (the 2 N/A: the shared variant picks the same joint twice, refused by the tool)
 ```
+
+Task 572 (line form = infinite lines): the row's line cells now remove 2 (implied 1 where line 2 is a rect top held horizontal, or the lines share a
+corner). Two cells needed a harness rule, both judged by our finite-difference nullity because PlaneGCS's translation (a free helper point per end:
+`p2p_symmetric_ppl` + `point_on_line_ppp`) miscounts at these degenerate poses: SR/shared removes 1 (ours = fd, PlaneGCS 2; hand derivation in
+.evidence/572/sr-shared-derivation.txt: line 2's horizontal line mirrors onto itself, so only line 1's direction is fixed), and RR/shared is
+refused as redundant (two rect tops sharing a corner are one horizontal line; the raw add leaves the fd nullity unchanged; PlaneGCS says 6 -> 4).
+Row after task 572: `PASS=178 N/A=2`; whole matrix `3564 cells: N/A=1418 NA-BUILD=163 NEW-10=3 NEW-6=2 PASS=1978` (unchanged counts).

@@ -1961,3 +1961,20 @@ New classes (RULES in `tests/harness/fusion-oracle/dim-edit.js`):
 - A "start-geometry" class (45 runs) existed in round 3 of task 525, while the placement also moved one end of a single line (an H / V on one line in the cells' level setup), which changed our start geometry against the recorded one; with no placement between two points of one shape the start geometry matches again and those runs agree with Fusion.
 
 Proposed follow-up (tried in task 525, reverted): moving only the picked POINT when the first pick gives way for an H / V dimension. It fixes point-alone and helps the other oracles (which-moves 287 -> 299, graded 1996 -> 2011, this test 644 -> 654 same), but it re-opens coverage-properties N-F6 (a tangent circle flips sides on a horizontal dimension edit). It needs the N-F6 branch lock (the tangent side recorded at creation) first.
+
+## Symmetric (task 572)
+Measured by the advisor through the Fusion API (new unsaved document, `addSymmetry`, entity 1, entity 2, then the symmetry line; cm). Ours =
+tests/symmetric.test.js (the same numbers through ConstraintManager.createConstraint and the solver).
+
+| case | Fusion | ours (task 572) | same? |
+|---|---|---|---|
+| two lines about the Y axis: a (-4,0)-(-1,3) len 4.2426, b (1.5,0.5)-(6,2.5) len 4.9244 | a unchanged; b (1.8132,2.1868)-(5.2953,-1.2953), len 4.9244 | a unchanged; b (1.3840,2.6160)-(4.8660,-0.8660), len 4.9244 | rule yes; pose differs along the line |
+| what the line form holds | b on the mirror of a's INFINITE line (y = -x + 4); ends NOT mirrored; both lengths free | both ends of b on the mirror of a's line (2 rows, 2 DOF); lengths free | yes |
+| who moves (lines) | the SECOND pick (b) | the second pick (the declared who-moves row, task 563) | yes |
+| arcs | centre mirrored, equal radius, ends free (sweeps 90 vs 167.4) | centre mirrored, equal radius (3 rows), ends free | yes |
+| circles | centre mirrored, equal radius | centre mirrored, equal radius (3 rows) | yes |
+
+Divergence (reported, owner decides): where b lands ALONG the mirrored line. Both turn b by -69 degrees (its start goes to the upper end) and keep
+its length; ours slides it straight onto the line from its turned midpoint (the collinear placement: midpoint (3.125, 0.875)), Fusion's lands
+0.607 further along the line (midpoint (3.554, 0.446)). The position along the line is a free DOF of the constraint.
+Before task 572 (task 563) the line form mirrored the END PAIRS (4 rows: b became exactly a's mirror image, equal length): not Fusion's.

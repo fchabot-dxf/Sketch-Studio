@@ -200,9 +200,9 @@ for (const [, label, c, extra, uses] of BODY_CASES) {
   for (const id of uses) assert.ok(col[id] > 0.5, `body drag: ${label}: the ${id} column is ${col[id]} (expected it in the row)`);
   checked++;
 }
-// SYMMETRIC (task 563): every form (points 2 rows, lines 4, circles / arcs 3) about a sketch line and about each axis, both end pairings of two
-// lines, and the patterns where a joint repeats inside the row (a point that is an end of the symmetry line, the same point twice, two lines
-// sharing an end, two circles sharing a centre). The symmetry line's own ends are free here, so their columns must be in the rows (a free line
+// SYMMETRIC (task 563): every form (points 2 rows, lines 2 (task 572: both ends of line 2 on the mirror of line 1's infinite line), circles /
+// arcs 3) about a sketch line and about each axis, and the patterns where a joint repeats inside the row (a point that is an end of the symmetry
+// line, the same point twice, two lines sharing an end, a line that shares an end with the symmetry line, two circles sharing a centre). The symmetry line's own ends are free here, so their columns must be in the rows (a free line
 // can move); about an axis they are fixed (no column).
 const SYM = (extra) => ({ type: 'symmetric', ...extra });
 const SYMMETRIC_CASES = [
@@ -212,10 +212,11 @@ const SYMMETRIC_CASES = [
   ['points, one is the symmetry line start', SYM({ joints: ['a', 'm'], line: 'L1' }), [], false, 2, ['a', 'b', 'm']],
   ['points, one is the symmetry line end', SYM({ joints: ['n', 'b'], line: 'L1' }), [], false, 2, ['a', 'b', 'n']],
   ['points, the same point twice', SYM({ joints: ['m', 'm'], line: 'L1' }), [], false, 2, ['a', 'b', 'm']],
-  ['lines, straight end pairs', SYM({ joints: ['c', 'm', 'd', 'n'], shapes: ['L2', 'LX'], line: 'L1' }), LX('m', 'n'), false, 4, ['a', 'b', 'c', 'd', 'm', 'n']],
-  ['lines, crossed end pairs', SYM({ joints: ['c', 'n', 'd', 'm'], shapes: ['L2', 'LX'], line: 'L1' }), LX('m', 'n'), false, 4, ['c', 'd', 'm', 'n']],
-  ['lines sharing an end', SYM({ joints: ['c', 'ae', 'd', 'd'], shapes: ['L2', 'L3'], line: 'L1' }), [], false, 4, ['a', 'b', 'c', 'd', 'ae']],
-  ['lines about the Y axis', SYM({ joints: ['c', 'm', 'd', 'n'], shapes: ['L2', 'LX'], line: 'ref_axis_y' }), LX('m', 'n'), true, 4, ['c', 'd', 'm', 'n']],
+  ['lines about a sketch line', SYM({ shapes: ['L2', 'LX'], line: 'L1' }), LX('m', 'n'), false, 2, ['a', 'b', 'c', 'd', 'm', 'n']],
+  ['lines, the other pick order', SYM({ shapes: ['LX', 'L2'], line: 'L1' }), LX('m', 'n'), false, 2, ['a', 'b', 'c', 'd', 'm', 'n']],
+  ['lines sharing an end', SYM({ shapes: ['L2', 'L3'], line: 'L1' }), [], false, 2, ['a', 'b', 'c', 'd', 'ae']],
+  ['lines, one shares an end with the symmetry line', SYM({ shapes: ['L2', 'LX'], line: 'L1' }), LX('b', 'n'), false, 2, ['a', 'b', 'c', 'd', 'n']],
+  ['lines about the Y axis', SYM({ shapes: ['L2', 'LX'], line: 'ref_axis_y' }), LX('m', 'n'), true, 2, ['c', 'd', 'm', 'n']],
   ['circles about a sketch line', SYM({ shapes: ['C1', 'C2'], line: 'L1' }), [], false, 3, ['C1', 'C2', 'm', 'n', 'a', 'b']],
   ['circle and arc about a sketch line', SYM({ shapes: ['C1', 'A1'], line: 'L2' }), [], false, 3, ['C1', 'm', 'ac', 'as', 'c', 'd']],
   ['arc and arc about the X axis', SYM({ shapes: ['A1', 'A2'], line: 'ref_axis_x' }), [], true, 3, ['ac', 'as', 'bc', 'bs']],

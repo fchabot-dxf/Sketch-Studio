@@ -12,7 +12,7 @@ await (async () => {
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], // software WebGL for the headless run
   });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     const mouse = async (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: (buttons || type === 'mouseReleased') ? 'left' : 'none', buttons, clickCount: (buttons || type === 'mouseReleased') ? 1 : 0 });
     const clickEl = async (sel) => {
@@ -37,6 +37,7 @@ await (async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
     await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
     await openMode('design');
+    await waitForApp('design-canvas');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     // seed: A = 40x40 square (Inside, depth unset -> through), B = 50x60 pocket 8 deep with a 20x20 ISLAND
     await evalJs(`(() => {

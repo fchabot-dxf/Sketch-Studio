@@ -11,7 +11,7 @@ import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '520' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const click = async (x, y) => { await mouse('mouseMoved', x, y, 0); await sleep(40); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y, 0); await sleep(250); };
@@ -36,7 +36,7 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('tool-dim'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     const cv = await centerOf('#svgCanvas');
 
     const drawLine = async (x1, y1, x2, y2) => { await clickEl('#tool-line'); await click(x1, y1); await click(x2, y2); await key('Escape', 'Escape', 27); await sleep(200); };

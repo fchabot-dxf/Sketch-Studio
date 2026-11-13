@@ -7,7 +7,7 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '557r', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
     const S = '(await import("/packages/ui/project-store.js")).getProjectStore()';
     const DOC = { version: 2, geometry: { joints: [['j0', { x: 0, y: 0 }], ['j1', { x: 50, y: 0 }]], shapes: [{ id: 's0', type: 'line', joints: ['j0', 'j1'] }], constraints: [] }, hosts: {} };
@@ -16,7 +16,7 @@ await (async () => {
         await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false });
         await navigate(`http://127.0.0.1:${port}/apps/${host}/index.html`, 10000);
         await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, `${host} sidebar button`);
-        await sleep(1200);
+        if (host === 'sketchstudio') await waitForApp('svgCanvas'); // Shaper and Pen Plotter create their autosave buffer only when the Design tab is entered
         await evalJs(`(async () => { const s = ${S}; const a = await s.newDesign('Recent probe ${host}', { app: ${JSON.stringify(host)} }); await s.save(${JSON.stringify(DOC)}, { id: a.id, app: ${JSON.stringify(host)} }); return true; })()`);
         const label = `${host} @${width}`;
         await evalJs(`document.querySelector('.sk-sidebar-btn').click()`);

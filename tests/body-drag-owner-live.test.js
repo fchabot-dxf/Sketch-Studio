@@ -12,7 +12,7 @@ import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '538' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   const EV = process.env.EVIDENCE_DIR;
   try {
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -52,7 +52,7 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-arc') && !!document.getElementById('tool-select'); })()`, 'SketchStudio to load');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     // pan the view up 250 px (a real middle-button drag) so the arc below the origin sits clear of the canvas edges (a drag near an edge pans the view)
     const cv = await centerOf('#svgCanvas');
     const mid = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: 'middle', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });

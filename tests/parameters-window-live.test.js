@@ -16,7 +16,7 @@ import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-4', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   const url = (p) => `http://127.0.0.1:${port}${p}`;
   try {
     const mouse = (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: (type === 'mouseMoved' && !buttons) ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -51,7 +51,7 @@ await (async () => {
     // ================================================================== B. SketchStudio
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
     await waitFor(`(() => { const c = document.getElementById('svgCanvas'); return !!c && c.getBoundingClientRect().width > 0 && !!document.getElementById('tool-line') && !!document.getElementById('btn-parameters'); })()`, 'SketchStudio to load with its Parameters button');
-    await sleep(1500);
+    await waitForApp('svgCanvas');
     assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'the button has a label, a title, a pressed state and announces a dialog');
     assert.strictEqual(await evalJs(`document.querySelector('#btn-parameters .sk-ribbon-lbl').textContent`), 'Params');
     assert.strictEqual(await winOpen(), false, 'before the first click no window is shown');
@@ -181,10 +181,10 @@ await (async () => {
     // ================================================================== C. Shaper
     await navigate(url('/apps/shaper/index.html'), 8000);
     await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'Shaper to load');
-    await sleep(1200);
     for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab with its Parameters button');
-    await sleep(1500);
+    await waitForApp('design-canvas');
+    await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design canvas to show');
     assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Shaper: the same declared button');
     const seed = () => evalJs(`(() => {
       const st = window.__designController.state;

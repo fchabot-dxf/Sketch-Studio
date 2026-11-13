@@ -3,20 +3,14 @@
 // Loads apps/sketchstudio/index.html in headless Edge/Chrome (the no-build app needs the repo served so its
 // #core/#ui importmap resolves), asserts console errors=0, and exercises the integrated shell: the shared header
 // (Design|Export tabs + Style + Debug), the Design default (shared ribbon groups + canvas), the Design↔Export
-// router, and the shared style panel (17 controls, open/close). Self-contained: a tiny static server + the CDP
-// protocol over Node's built-in WebSocket — no puppeteer / npm deps. Exit 0 = pass, non-zero = fail.
+// router, and the shared style panel (17 controls, open/close). Browser launch + static server + CDP come from the shared
+// tests/helpers/cdp-browser.js (port 0, unique profile) — no puppeteer / npm deps. Exit 0 = pass, non-zero = fail.
 
-const http = require('http');
-const fs = require('fs');
-const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { spawn, execSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const APP_PATH = '/apps/sketchstudio/index.html';
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // The shell assertions, run in-page (async IIFE → an object of observations).
 const CHECK_EXPR = `(async () => {
@@ -47,117 +41,30 @@ const CHECK_EXPR = `(async () => {
   return out;
 })()`;
 
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) { if (fs.existsSync(c)) return c; }
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
-
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(250);
-  }
-  return false;
-}
-
-async function cdpRun(dbgPort, url) {
-  let page;
-  for (let i = 0; i < 40; i++) {
-    try { const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json(); page = list.find(t => t.type === 'page' && t.webSocketDebuggerUrl); if (page) break; } catch (_) {}
-    await sleep(250);
-  }
-  if (!page) throw new Error('no CDP page target');
-
-  const ws = new WebSocket(page.webSocketDebuggerUrl);
-  let id = 0; const pending = new Map(); const evs = {}; const errors = [];
-  const send = (m, p = {}) => new Promise(res => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-  const once = (m) => new Promise(res => { (evs[m] = evs[m] || []).push(res); });
-  ws.addEventListener('message', e => {
+async function cdpRun(cdp, url) {
+  const errors = [];
+  cdp.ws.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-    else if (m.method) {
-      if (m.method === 'Runtime.exceptionThrown') { const d = m.params.exceptionDetails; errors.push('EXC: ' + ((d.exception && d.exception.description) || d.text)); }
-      if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push('CONSOLE.ERR: ' + (m.params.args || []).map(a => a.value || a.description || '').join(' '));
-      if (evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    }
+    if (m.method === 'Runtime.exceptionThrown') { const d = m.params.exceptionDetails; errors.push('EXC: ' + ((d.exception && d.exception.description) || d.text)); }
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push('CONSOLE.ERR: ' + (m.params.args || []).map(a => a.value || a.description || '').join(' '));
   });
-  await new Promise(r => ws.addEventListener('open', r));
-  await send('Runtime.enable'); await send('Page.enable');
-  const loaded = once('Page.loadEventFired');
-  await send('Page.navigate', { url });
-  await Promise.race([loaded, sleep(8000)]);
-  await sleep(800);
-  const r = await send('Runtime.evaluate', { expression: CHECK_EXPR, returnByValue: true, awaitPromise: true });
-  ws.close();
-  if (r && r.exceptionDetails) throw new Error('check expr threw: ' + (r.exceptionDetails.text || ''));
-  return { errors, check: r && r.result ? r.result.value : null };
-}
-
-// Close the headless browser PROPERLY. On Windows msedge.exe re-launches into a separate real browser process, so
-// `proc.kill()` only kills the short-lived launcher and the real browser (plus its locked userDir) leaks on every
-// run. Ask the browser itself to quit over its browser-level CDP websocket, wait for exit, and fall back to a
-// process-tree kill.
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) { /* browser already gone or CDP unreachable: fall through to the kill */ }
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) { /* already exited */ }
+  await cdp.navigate(url, 8000);
+  await cdp.waitForApp('svgCanvas');
+  const check = await cdp.evalJs(CHECK_EXPR);
+  return { errors, check };
 }
 
 (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.error('shell-smoke: no Edge/Chrome found — install one or set the path.'); process.exit(2); }
-
-  const { server, port } = await startServer();
-  const dbgPort = 9300 + Math.floor((Date.now() % 600)); // avoid clashing with a parallel run
-  const userDir = path.join(os.tmpdir(), 'sk-shell-smoke-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  // the shared launcher (tests/helpers/cdp-browser.js): CDP port 0 read from the profile, never a clock-picked port that two parallel runs can share.
+  // The profile dir keeps the name scripts/gate.cjs searches for to count leaked browsers: sk-shell-smoke-<pid>.
+  const { launchBrowser } = await import('../tests/helpers/cdp-browser.js');
+  const cdp = await launchBrowser({ tag: 'shell-smoke', width: 800, height: 600, userDir: path.join(os.tmpdir(), 'sk-shell-smoke-' + process.pid) });
+  if (!cdp) { console.error('shell-smoke: no Edge/Chrome found — install one or set the path.'); process.exit(2); }
 
   let code = 0;
   try {
-    if (!(await waitForJson(dbgPort))) throw new Error('headless browser did not expose the CDP port');
-    const url = `http://127.0.0.1:${port}${APP_PATH}`;
-    const { errors, check } = await cdpRun(dbgPort, url);
+    const url = `http://127.0.0.1:${cdp.port}${APP_PATH}`;
+    const { errors, check } = await cdpRun(cdp, url);
 
     const c = check || {};
     const checks = [
@@ -186,9 +93,7 @@ async function closeBrowser(proc, dbgPort) {
     console.error('shell-smoke error:', e.message);
     code = 1;
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
   process.exit(code);
 })();

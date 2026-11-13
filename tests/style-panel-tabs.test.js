@@ -2,81 +2,23 @@
 // Units tab (DOC_UNIT) in every host, the tab is keyboard-accessible and persisted per host, and flipping the unit re-labels the
 // Shaper cut panel live. Headless Edge against the real Shaper + SketchStudio pages (real reload for persistence).
 import assert from 'node:assert';
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchBrowser } from './helpers/cdp-browser.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const findBrowser = () => [
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].find((c) => fs.existsSync(c)) || null;
 
-const startServer = () => new Promise((resolve) => {
-  const server = http.createServer(async (req, res) => {
-    try {
-      let url = (req.url || '/').split('?')[0];
-      if (url.endsWith('/')) url += 'index.html';
-      const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-      if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-      const data = await fsp.readFile(file);
-      res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-      res.end(data);
-    } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-  });
-  server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-});
 
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    const ws = new WebSocket(v.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-    ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-    await Promise.race([exited, sleep(3000)]);
-    try { ws.close(); } catch (_) {}
-  } catch (_) {}
-  try { if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); else proc.kill(); } catch (_) {}
-}
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9910 + Math.floor(Date.now() % 300);
-  const userDir = path.join(os.tmpdir(), 'sk-test-481tabs-' + process.pid);
-  const proc = spawn(browser, ['--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank'], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '481tabs', width: 800, height: 600 });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, once, evalJs } = cdp;
   try {
-    for (let i = 0; i < 40; i++) { try { if ((await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).ok) break; } catch (_) {} await sleep(200); }
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    assert(page, 'no CDP page target');
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0; const pending = new Map(); const evs = {};
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      else if (m.method && evs[m.method]) { const f = evs[m.method].shift(); if (f) f(m.params); }
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable'); await send('Page.enable');
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
     const goto = async (url) => {
-      const loaded = new Promise((res) => { (evs['Page.loadEventFired'] = evs['Page.loadEventFired'] || []).push(res); });
+      const loaded = once('Page.loadEventFired');
       await send('Page.navigate', { url }); await loaded;
       for (let i = 0; i < 50; i++) { if (await evalJs(`!!document.querySelector('.sk-style-panel')`)) return; await sleep(200); }
       throw new Error('no .sk-style-panel on ' + url);
@@ -163,8 +105,6 @@ await (async () => {
     assert(unitLabels.options.includes('Inches') && unitLabels.options.includes('Millimetres'), 'Inches / Millimetres offered: ' + unitLabels.options);
     console.log('style-panel-tabs.test.js passed');
   } finally {
-    await closeBrowser(proc, dbgPort);
-    server.close();
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) { /* temp profile already gone */ }
+    await cdp.close();
   }
 })();

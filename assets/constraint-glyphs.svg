@@ -107,4 +107,10 @@
         <path d="M702.244,212.345C714.399,212.345 724.269,222.216 724.269,234.371C724.269,246.526 714.399,256.396 702.244,256.396C690.089,256.396 680.218,246.526 680.218,234.371C680.218,222.216 690.089,212.345 702.244,212.345ZM702.244,215.595C691.883,215.595 683.468,224.01 683.468,234.371C683.468,244.732 691.883,253.146 702.244,253.146C712.605,253.146 721.019,244.732 721.019,234.371C721.019,224.01 712.605,215.595 702.244,215.595Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
         <path d="M702.244,221.01C709.618,221.01 715.604,226.996 715.604,234.371C715.604,241.745 709.618,247.731 702.244,247.731C694.869,247.731 688.883,241.745 688.883,234.371C688.883,226.996 694.869,221.01 702.244,221.01ZM702.244,224.26C696.663,224.26 692.133,228.79 692.133,234.371C692.133,239.951 696.663,244.481 702.244,244.481C707.824,244.481 712.354,239.951 712.354,234.371C712.354,228.79 707.824,224.26 702.244,224.26Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
     </g>
+    <!-- task 563: no symmetry glyph existed in the set; a declared one (two triangles mirrored across a bar), the style of the others -->
+    <g id="glyph-symmetric">
+        <rect x="544.375" y="371" width="3.25" height="38" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M539.5,376L539.5,404L524,390L539.5,376Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M552.5,376L552.5,404L568,390L552.5,376Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
 </svg>

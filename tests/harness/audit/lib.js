@@ -17,6 +17,8 @@ import { makeRectFromTwoJoints, makeArc, makePolygon } from '#core/shapes.js';
 import { addConstraint } from '#core/constraints.js';
 import { perpendicularDistance } from '#core/geometry.js';
 import { createNewtonSolver, hasRadiusUnknown } from '#core/solver/engine.js';
+import { sceneJoints, sceneShapes } from '#core/reference-lines.js';
+import { symmetricRowCount } from '#core/symmetric.js';
 import { findCornerBetweenLines, applyFillet } from '#core/fillet.js';
 import { init_planegcs_module, GcsWrapper } from '@salusoft89/planegcs';
 
@@ -541,10 +543,12 @@ export async function runDrawing(drawing, { oracleOn = true, buildOpts = {} } = 
 // different nullity. Rows are attributed to constraints in order (coincident/midpoint 2 rows, every other type 1).
 export function fdJacobian(S) {
   const nonDriven = S.state.constraints.filter(c => c && !isDriven(c) && c.type !== 'mouse_spring');
-  const solver = createNewtonSolver(S.state.joints, S.state.constraints, S.state.shapes, { maxIter: ITER, tol: 1e-6, lambdaInit: 1e-3, lambdaUp: 10, lambdaDown: 0.1 });
+  // the operands resolve in the SCENE, as the app's engine does (constraint-solver.js): a constraint naming an axis (task 539) gets its rows
+  // (the two reserved axis joints are fixed: no column, so every other sketch is assembled exactly as before)
+  const solver = createNewtonSolver(sceneJoints(S.state.joints), S.state.constraints, sceneShapes(S.state.shapes), { maxIter: ITER, tol: 1e-6, lambdaInit: 1e-3, lambdaUp: 10, lambdaDown: 0.1 });
   const x0 = solver._pack(), n = x0.length, asm = solver._assemble(x0), m = asm.m;
   const owners = [];
-  for (const c of nonDriven) { const k = (c.type === 'coincident' || c.type === 'midpoint') ? 2 : 1; for (let i = 0; i < k; i++) owners.push(c); }
+  for (const c of nonDriven) { const k = c.type === 'symmetric' ? symmetricRowCount(c, sceneShapes(S.state.shapes)) : (c.type === 'coincident' || c.type === 'midpoint') ? 2 : 1; for (let i = 0; i < k; i++) owners.push(c); }
   const eps = 1e-6, Jfd = [];
   for (let i = 0; i < m; i++) Jfd.push(new Float64Array(n));
   for (let k = 0; k < n; k++) {

@@ -35,7 +35,7 @@ export function constraintReferencesAxis(c) {
 export const REFERENCE_PICK_TOOLS = Object.freeze([
   TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
-// (DIMENSION is not in this list: see dimensionAsksSecondTarget.)
+// (DIMENSION and SYMMETRIC are not in this list: they ask for an axis at ONE step of their picks, REFERENCE_PICK_STEP below.)
 // The DIMENSION tool asks for an axis only for its SECOND pick (task 555, Fusion's sequence), so a first dimension click near an axis
 // picks real geometry: after a real first JOINT (state.active.mode 'dim': a pending joint), or while a LINE's length preview follows the
 // cursor (placingConstraint.__asksSecondPick, set by the dimension tool when it makes that preview). A click on an axis then PICKS it
@@ -43,7 +43,13 @@ export const REFERENCE_PICK_TOOLS = Object.freeze([
 const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION && (
   (!!(state.active && state.active.mode === TOOL_MODES.DIMENSION) && !state.placingConstraint)
   || !!(state.placingConstraint && state.placingConstraint.__placing && state.placingConstraint.__asksSecondPick));
-export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool) || dimensionAsksSecondTarget(state));
+// The SYMMETRIC tool (task 563) asks for an axis only for its THIRD pick, the symmetry line: entity 1 and entity 2 are real geometry.
+const symmetricAsksLine = (state) => state.currentTool === TOOL_MODES.SYMMETRIC && !!(state.pendingConstraint && Array.isArray(state.pendingConstraint.selectionBuffer)
+  && state.pendingConstraint.selectionBuffer.length === 2);
+// THE declaration of the tools that ask for an axis at ONE step of their picks: tool mode -> "is it that step now?" (state).
+export const REFERENCE_PICK_STEP = Object.freeze({ [TOOL_MODES.DIMENSION]: dimensionAsksSecondTarget, [TOOL_MODES.SYMMETRIC]: symmetricAsksLine });
+export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool)
+  || (Object.prototype.hasOwnProperty.call(REFERENCE_PICK_STEP, state.currentTool) && REFERENCE_PICK_STEP[state.currentTool](state)));
 // The shapes a target pick may hit now: the real ones, then (only while pickable) the two axes LAST, so real geometry wins a tie.
 export function pickableShapes(state) {
   return referenceLinesPickable(state) ? [...state.shapes, ...REFERENCE_SHAPES] : state.shapes;

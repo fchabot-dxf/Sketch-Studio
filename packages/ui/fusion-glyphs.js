@@ -10,7 +10,7 @@ export const CONSTRAINT_GLYPH = {
   horizontal: 'glyph-horizontal', vertical: 'glyph-vertical', parallel: 'glyph-parallel',
   perpendicular: 'glyph-perpendicular', coincident: 'glyph-coincident', pointOnLine: 'glyph-coincident',
   collinear: 'glyph-collinear', tangent: 'glyph-tangent', equal: 'glyph-equal', midpoint: 'glyph-midpoint',
-  concentric: 'glyph-concentric', polygon: 'glyph-polygon',
+  concentric: 'glyph-concentric', polygon: 'glyph-polygon', symmetric: 'glyph-symmetric',
 };
 
 // Fetch the sheet once (idempotent); every host calls this at start. Reports a failed load / missing glyph once.

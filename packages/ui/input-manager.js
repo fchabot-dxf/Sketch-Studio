@@ -6,7 +6,7 @@
 
 import { pickableShapes } from '#core/reference-lines.js';
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
+import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
@@ -14,7 +14,7 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from '#ui/dimension-seams.js';
-import { showContextMenu, contextMenuItems } from '#ui/context-menu.js';
+import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
 import { updateHover } from '#ui/hover-manager.js';
@@ -716,6 +716,7 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.TANGENT:
         case TOOL_MODES.EQUAL:
         case TOOL_MODES.MIDPOINT:
+        case TOOL_MODES.SYMMETRIC:
             handled = handleConstraintPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint);
             // EXIT ON INVALID CLICK: If the constraint tool didn't handle the click (empty space or invalid target),
             // switch back to Select tool immediately.
@@ -1317,6 +1318,7 @@ function pickContextTarget(svg, state, e) {
     if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
     const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20 * snapBoostFor(e.pointerType === 'touch'));
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
+    if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     return null;
 }
 
@@ -1327,7 +1329,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
     if (!target) return false;
     const sel = { j: state.selectedJoints, s: state.selectedShapes, c: state.selectedConstraints };
     const replaceSelection = () => { sel.j.clear(); sel.s.clear(); sel.c.clear(); };
-    if (target.kind === 'dimension') {
+    if (target.kind === 'dimension' || target.kind === 'constraint') {
         if (!(sel.c.has(target.constraint) && sel.c.size === 1 && !sel.j.size && !sel.s.size)) { replaceSelection(); sel.c.add(target.constraint); }
     } else if (target.kind === 'joint') {
         const onSelectedShape = [...sel.s].some(sid => { const s = state.shapes.find(x => x.id === sid); return s && s.joints && s.joints.includes(target.id); });
@@ -1345,7 +1347,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         toggleLock: () => toggleFixedSelection(state),
         lockState: () => selectionLockState(state),
     };
-    const items = contextMenuItems(target.kind === 'dimension' ? 'dimension' : 'geometry', { target, actions });
+    const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });
     showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg, touch });
     return true;
 }
@@ -1451,17 +1453,7 @@ export function switchToTool(state, toolName) {
         inputCtx.highlightActiveTool?.(toolName);
 
         // Fallback preselection for constraint tools (matches toolbar behavior)
-        const constraintTools = [
-            TOOL_MODES.COINCIDENT,
-            TOOL_MODES.MIDPOINT,
-            TOOL_MODES.HORIZONTAL_VERTICAL,
-            TOOL_MODES.PARALLEL,
-            TOOL_MODES.PERPENDICULAR,
-            TOOL_MODES.COLLINEAR,
-            TOOL_MODES.TANGENT,
-            TOOL_MODES.EQUAL
-        ];
-        if (constraintTools.includes(toolName)) {
+        if (CONSTRAINT_TOOLS.includes(toolName)) {
             let firstEl = null;
             if (state.selectedJoints && state.selectedJoints.size === 1 && (!state.selectedShapes || state.selectedShapes.size === 0)) {
                 firstEl = { type: 'joint', id: [...state.selectedJoints][0] };

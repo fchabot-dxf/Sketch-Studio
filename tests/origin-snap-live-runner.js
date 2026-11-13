@@ -14,12 +14,9 @@
 
 import assert from 'node:assert';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchBrowser } from './helpers/cdp-browser.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -29,99 +26,18 @@ const ZOOMS = (process.env.ZOOMS || '0').split(',').map(Number);
 const AWAY = process.env.AWAY === '1';
 const EVID = process.env.EVIDENCE_DIR || '';
 
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
-};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function findBrowser() {
-  const candidates = [
-    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) {
-    try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {}
-  }
-  return null;
-}
 
-function startServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        let url = (req.url || '/').split('?')[0];
-        if (url.endsWith('/')) url += 'index.html';
-        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
-        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
-        const data = await fsp.readFile(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-        res.end(data);
-      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
-    });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
 
-async function waitForJson(dbgPort) {
-  for (let i = 0; i < 40; i++) {
-    try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {}
-    await sleep(200);
-  }
-  return false;
-}
 
-async function closeBrowser(proc, dbgPort) {
-  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
-  try {
-    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
-    if (v && v.webSocketDebuggerUrl) {
-      const ws = new WebSocket(v.webSocketDebuggerUrl);
-      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
-      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
-      await Promise.race([exited, sleep(3000)]);
-      try { ws.close(); } catch (_) {}
-    }
-  } catch (_) {}
-  try {
-    if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' });
-    else proc.kill();
-  } catch (_) {}
-}
 
 await (async () => {
-  const browser = findBrowser();
-  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { server, port } = await startServer();
-  const dbgPort = 9200 + Math.floor((Date.now() % 90));
-  const userDir = path.join(os.tmpdir(), 'sk-test-554-' + process.pid);
-  const proc = spawn(browser, [
-    '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions',
-    `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  const cdp = await launchBrowser({ tag: '554', width: 1600, height: 900 });
+  if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { port, send, evalJs, ws, waitFor, navigate, waitForApp, flushAutosave } = cdp;
   try {
-    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
-    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
-    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0; const pending = new Map();
-    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      if (m.method === 'Runtime.exceptionThrown') console.log('PAGE ERROR:', JSON.stringify(m.params.exceptionDetails.exception && m.params.exceptionDetails.exception.description || m.params.exceptionDetails.text));
-    });
-    await new Promise((r) => ws.addEventListener('open', r));
-    await send('Runtime.enable'); await send('Page.enable');
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    const evalJs = async (expression) => {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails));
-      return r && r.result ? r.result.value : undefined;
-    };
+    ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.method === 'Runtime.exceptionThrown') console.log('PAGE ERROR:', JSON.stringify(m.params.exceptionDetails.exception && m.params.exceptionDetails.exception.description || m.params.exceptionDetails.text)); });
     const CANVAS = HOST === 'shaper' ? 'design-canvas' : 'svgCanvas';
     const url = `http://127.0.0.1:${port}/apps/${HOST}/index.html`;
     const mouse = (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: (buttons || type === 'mouseReleased') ? 'left' : 'none', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -148,25 +64,24 @@ await (async () => {
       open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
         m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
     })`).then((s) => s && JSON.parse(s));
-    const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) { await sleep(200); return; } await sleep(200); } };
     // Shaper's Design tab has the test hook window.__designController (the live state); SketchStudio is read from its autosaved store.
     const readDoc = async () => {
       if (HOST === 'shaper') return JSON.parse(await evalJs(`(() => { const s = window.__designController.state; return JSON.stringify({ shapes: s.shapes, constraints: s.constraints, joints: [...s.joints.entries()] }); })()`));
-      await sleep(1800); await waitSaved(); return storedDoc(); // the buffer polls every 1500 ms
+      await flushAutosave(); return storedDoc(); // the autosave writes through the app's own page-hide path, then the store holds the current state
     };
     const jmap = (d) => { const out = {}; for (const e of (Array.isArray(d.joints) ? d.joints : Object.entries(d.joints))) { if (Array.isArray(e)) out[e[0]] = e[1]; else out[e.id] = e; } return out; };
-    const waitReady = async () => { for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('${CANVAS}').dataset.docReady === '1'`)) return; await sleep(150); } };
 
     // boot: no stored design, the AXIS_SNAP setting as asked
-    await send('Page.navigate', { url }); await sleep(2000);
+    await navigate(url, 8000); await waitFor(`!!document.querySelector('#' + ${JSON.stringify(CANVAS)}) || !!document.querySelector('[data-mode="design"]')`, 'the app to load');
     await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
     await evalJs(`localStorage.setItem('sketch-studio-settings', JSON.stringify({ AXIS_SNAP: ${AXIS === 'on'} }))`);
-    await send('Page.navigate', { url }); await sleep(2500);
+    await navigate(url, 8000);
     if (HOST === 'shaper') {
+      await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Shaper to load');
       for (let i = 0; i < 6; i++) { await evalJs(`document.querySelector('[data-mode="design"]').click()`); await sleep(500); if (await evalJs(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`)) break; }
       await sleep(800);
     }
-    await waitReady();
+    await waitForApp(CANVAS);
 
     // "New design" from the app menu (the Projects modal's toolbar runs the same projectActions.newDesign)
     const newDesign = async () => {
@@ -272,10 +187,7 @@ await (async () => {
     }
 
     console.log(`origin-snap-live ${HOST} axis ${AXIS} zooms ${ZOOMS.join(',')}: ok (${rows.length} cells)`);
-    ws.close();
   } finally {
-    await closeBrowser(proc, dbgPort);
-    try { server.close(); } catch (_) {}
-    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+    await cdp.close();
   }
 })();

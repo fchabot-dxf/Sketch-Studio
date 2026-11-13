@@ -5,6 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
+import { pickScene, pickableConstraints, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
@@ -425,6 +426,18 @@ function nearestGridPoint(svg, e) {
 }
 
 // Helper: Centralized snap update logic
+// TASK 577: the snap a tool gets. The tools that DRAW (a new shape's point) may snap to a locked or hidden sketch as a REFERENCE: the
+// pointer lands on its place (a position-only snap) and binds to nothing, so no point is shared and no constraint ties the new shape to
+// it. Every other tool (select, dimension, constraints, ...) searches only what is editable and visible.
+const DRAW_SNAP_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON];
+function toolSnap(state, svg, pt, excludeIds, boost) {
+    const shapes = pickableShapes(state);
+    const scene = pickScene(state, shapes);
+    if (!DRAW_SNAP_TOOLS.includes(state.currentTool)) return findSnap(scene.joints, scene.shapes, svg, pt, excludeIds, false, false, boost);
+    const snap = findSnap(state.joints, shapes, svg, pt, excludeIds, false, false, boost);
+    return snapIsInert(scene.inert, snap) ? asPositionSnap(snap) : snap;
+}
+
 function updateSnapTarget(e, svg, state) {
     const isTouch = e.isTouch || e.pointerType === 'touch';
     const snapBoost = snapBoostFor(isTouch);
@@ -441,7 +454,7 @@ function updateSnapTarget(e, svg, state) {
     if (needsSnap) {
         // ACTIVE OPERATION: Compute snap targets for magnetic attraction
         const excludeIds = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
-        let snapResult = findSnap(state.joints, pickableShapes(state), svg, {x: e.clientX, y: e.clientY}, excludeIds, false, false, snapBoost);
+        let snapResult = toolSnap(state, svg, { x: e.clientX, y: e.clientY }, excludeIds, snapBoost);
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
         // This ensures the origin is always snappable even if findSnap logic skips it.
@@ -457,7 +470,7 @@ function updateSnapTarget(e, svg, state) {
         // Check for constraints only when not dragging
         let hitConstraint = null;
         if (!state.drag) {
-            hitConstraint = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, constraintTol);
+            hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, e.clientX, e.clientY, constraintTol);
         }
 
         const isDrawing = isDrawingTool;
@@ -630,7 +643,7 @@ function handlePointerDown(e, svg, state) {
         const keepLockedAxisSnap = !!(clickSnap && AXIS_SNAP_TARGETS[clickSnap.type]);
         if (!hitJoint && !hitShape && !keepLockedAxisSnap) {
             const snapBoost = snapBoostFor(isTouch);
-            clickSnap = findSnap(state.joints, pickableShapes(state), svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
+            clickSnap = toolSnap(state, svg, { x: screenX, y: screenY }, [], snapBoost);
             if (clickSnap) {
                 if (clickSnap.type === 'joint') {
                     const jid = clickSnap.targetId;
@@ -671,7 +684,7 @@ function handlePointerDown(e, svg, state) {
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
     const constraintTol = 20 * snapBoostFor(isTouch);
-    try { hitConstraint = hitConstraintAtScreen(state.constraints, svg, screenX, screenY, constraintTol); } catch(_) { hitConstraint = null; }
+    try { hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, screenX, screenY, constraintTol); } catch(_) { hitConstraint = null; }
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){
@@ -1313,16 +1326,17 @@ function pickContextTarget(svg, state, e) {
     const label = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-label') : null;
     if (label) {
         const c = state.constraints[parseInt(label.dataset.constraintIdx, 10)];
-        if (c) return { kind: 'dimension', constraint: c };
+        if (c && !isConstraintInert(inertEntities(state), c)) return { kind: 'dimension', constraint: c };
     }
     // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
     // shape under it. ON = inside the drawn badge (radius GLYPH_BG_DIAMETER_PX / 2, the same on touch: the badge is not bigger there) plus
     // GLYPH_PICK_MARGIN_PX; a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
     // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, SettingsManager.getAll().GLYPH_BG_DIAMETER_PX / 2 + GLYPH_PICK_MARGIN_PX);
+    const glyph = hitConstraintAtScreen(pickableConstraints(state), svg, e.clientX, e.clientY, SettingsManager.getAll().GLYPH_BG_DIAMETER_PX / 2 + GLYPH_PICK_MARGIN_PX);
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
-    const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
+    const scene = pickScene(state);
+    const snap = findSnap(scene.joints, scene.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
     if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
     if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
     return null;
@@ -1352,6 +1366,8 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         deleteSelection: () => handleDelete(state),
         toggleLock: () => toggleFixedSelection(state),
         lockState: () => selectionLockState(state),
+        sketchTargets: () => moveTargets(state), // TASK 577: sketches as layers
+        moveToSketch: (id) => { const r = moveSelectionToSketch(state, id); if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning'); },
     };
     const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });
     showContextMenu({ x: e.clientX, y: e.clientY, items, returnFocusTo: svg, touch });

@@ -125,7 +125,8 @@ export const CONSTRAINT_MENU_TYPES = Object.freeze(Object.values(CONSTRAINT_TYPE
 
 /**
  * The declared item list per target kind. `actions` are the EXISTING functions (see input-manager.js):
- *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked }.
+ *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked };
+ *   sketchTargets() → the sketches a selection can move to, moveToSketch(id) (TASK 577).
  */
 export function contextMenuItems(kind, { target, actions }) {
   if (kind === 'dimension') {
@@ -146,6 +147,8 @@ export function contextMenuItems(kind, { target, actions }) {
     return [
       { id: 'geo-lock', label: locked ? 'Unlock' : 'Lock', checked: locked, onSelect: () => actions.toggleLock() },
       { id: 'geo-delete', label: 'Delete', onSelect: () => actions.deleteSelection() },
+      // TASK 577: sketches as layers: one entry per sketch the selection can move to (a flat list: the menu has no submenus)
+      ...(actions.sketchTargets ? actions.sketchTargets().map((sk) => ({ id: 'geo-move-' + sk.id, label: 'Move to sketch ▸ ' + sk.name, onSelect: () => actions.moveToSketch(sk.id) })) : []),
     ];
   }
   return [];

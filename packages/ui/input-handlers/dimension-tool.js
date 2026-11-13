@@ -18,6 +18,7 @@ import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js'
 import { showNotification } from '#ui/notification-manager.js';
 // Constraint / dimension operands resolve through the scene (task 539): the real containers + the two built-in reference lines.
 import { sceneJoints, sceneShapes, pickableShapes, referenceEnds } from '#core/reference-lines.js';
+import { inertEntities, isConstraintInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
 
 function logDim() { /* logging disabled */ }
 
@@ -353,7 +354,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
     if (dimLabel) {
         const cIdx = parseInt(dimLabel.dataset.constraintIdx);
         const constraint = state.constraints && state.constraints[cIdx];
-        if (!constraint) return false;
+        if (!constraint || isConstraintInert(inertEntities(state), constraint)) return false;
         const now = Date.now();
         // Compare INDICES to handle DOM replacement
         const isDoubleClick = (now - (dimensionState.lastClickTime || 0) < 400) && (dimensionState.lastClickedIndex === cIdx);
@@ -870,8 +871,9 @@ export function handleDimensionPointerMove(e, svg, state, w) {
                  let bestLine = null;
                  let minD = 20; // 20px hit tolerance
                  
+                 const inertNow = inertEntities(state);
                  for (const s of pickableShapes(state)) {
-                     if (s.id === sourceLine.id) continue;
+                     if (s.id === sourceLine.id || isShapeInert(inertNow, s.id)) continue;
                      if (s.type !== 'line') continue;
                      
                      // an axis is an endless line (task 539): measured on the whole line, from its declared two points

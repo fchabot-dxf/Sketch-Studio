@@ -5,6 +5,7 @@
 import { screenToWorld } from '#ui/coords.js';
 import { trimShape } from '#core/trim.js';
 import { SNAP } from '#core/constants.js';
+import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed
 
 let hover = null; // { shapeId, t, segStart, segEnd } current hover interval
 const OVERLAY_ID = 'trim-tool-overlay';
@@ -79,8 +80,9 @@ function findTrimInterval(worldPt, state, svg, viewState) {
   const thresh = SNAP.LINE_PX / scale;
   let bestShape = null, bestDist = thresh, bestT = 0;
 
+  const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
-    if (shape.type !== 'line') continue;
+    if (shape.type !== 'line' || isShapeInert(inert, shape.id)) continue;
     const [aId, bId] = shape.joints;
     const jA = state.joints.get(aId);
     const jB = state.joints.get(bId);

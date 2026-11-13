@@ -10,9 +10,10 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
 class MockNode {
   constructor(tag = 'div') {
     this.tagName = tag.toUpperCase(); this.children = []; this.listeners = new Map(); this.textContent = ''; this.title = '';
-    this._cls = new Set(); this._html = '';
+    this._cls = new Set(); this._html = ''; this.dataset = {}; this.options = []; // TASK 577: the sketch rows use dataset / setAttribute
     this.classList = { add: (c) => this._cls.add(c), remove: (c) => this._cls.delete(c), contains: (c) => this._cls.has(c) };
   }
+  setAttribute() {}
   set className(v) { this._cls = new Set(String(v || '').split(/\s+/).filter(Boolean)); }
   get className() { return [...this._cls].join(' '); }
   appendChild(c) { this.children.push(c); return c; }

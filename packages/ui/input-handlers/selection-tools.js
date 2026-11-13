@@ -51,6 +51,7 @@ function showCoincidentGlyphsForCluster(state, cluster){
 
 // Import shared helpers from hover-manager (single source of truth)
 import { findClosestConstraintGlyph, getScreenDist } from '#ui/hover-manager.js';
+import { pickableConstraints, inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INPUT MASKING HELPER (Rigid Drag Logic)
@@ -140,7 +141,7 @@ export function updateHoverFeedback(svg, hitJoint, hitShape, _e, state) {
 
     // Compute screen distances
     const dJoint = hitJoint ? getScreenDist(svg, px, py, hitJoint.j) : Infinity;
-    const constraintsList = state.constraints || [];
+    const constraintsList = pickableConstraints(state) || [];
     const best = findClosestConstraintGlyph(svg, px, py, constraintsList);
     const dConstraint = best.constraint ? best.dist : Infinity;
 
@@ -203,7 +204,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     if (dimLabel) {
         const cIdx = parseInt(dimLabel.dataset.constraintIdx);
         const constraint = state.constraints[cIdx];
-        if (constraint) {
+        if (constraint && !isConstraintInert(inertEntities(state), constraint)) {
             if(!state.selectedConstraints) state.selectedConstraints = new Set();
             // TASK 485: selecting a dimension selects ONLY the dimension (unless Shift extends the selection), exactly like every other
             // route to a constraint (handleConstraintSelection, the empty-space clear above). This branch used to clear only the
@@ -274,7 +275,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
 
     // Compute screen distances for constraint glyphs and joint before considering shapes
     const dJoint = hitJoint ? getScreenDist(svg, e.clientX, e.clientY, hitJoint.j) : Infinity;
-    const constraintsList = state.constraints || [];
+    const constraintsList = pickableConstraints(state) || [];
     // First, check for a VISIBLE glyph and capture the click immediately to prevent click-through
     const bestVisible = findClosestConstraintGlyph(svg, e.clientX, e.clientY, constraintsList, true);
     dbg.log('selection', '[selection-tools] bestVisible check', { bestVisible: bestVisible && bestVisible.constraint ? { type: bestVisible.constraint.type, dist: bestVisible.dist, visible: bestVisible.constraint && (bestVisible.constraint.__isPreview ? true : !!bestVisible.constraint.__visible) } : null });
@@ -892,8 +893,9 @@ export function handleSelectionPointerUp(e, svg, state) {
         const inRect = (p) => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
         
         // Select Shapes
+        const inert = inertEntities(state); // TASK 577: a marquee selects nothing of a locked or hidden sketch
         state.shapes.forEach(s => {
-            if (s.joints) {
+            if (s.joints && !isShapeInert(inert, s.id)) {
                 const joints = s.joints.map(jid => state.joints.get(jid)).filter(j => j);
                 if (joints.length > 0) {
                     const allIn = joints.every(j => inRect(j));
@@ -910,7 +912,7 @@ export function handleSelectionPointerUp(e, svg, state) {
         
         // Select Joints
         state.joints.forEach((j, id) => {
-            if (id === 'j_origin') return;
+            if (id === 'j_origin' || isJointInert(inert, id)) return;
             if (inRect(j)) state.selectedJoints.add(id);
         });
         

@@ -1,0 +1,142 @@
+{
+ "version": 3,
+ "geometry": {
+  "joints": [
+   [
+    "j_origin",
+    {
+     "x": 0,
+     "y": 0,
+     "fixed": true,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "ja1",
+    {
+     "x": 0,
+     "y": 10,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "ja2",
+    {
+     "x": 40,
+     "y": 10,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "jb1",
+    {
+     "x": 0,
+     "y": 30,
+     "fixed": false,
+     "sketchId": "sketch-2"
+    }
+   ],
+   [
+    "jb2",
+    {
+     "x": 40,
+     "y": 30,
+     "fixed": false,
+     "sketchId": "sketch-2"
+    }
+   ],
+   [
+    "jc1",
+    {
+     "x": 5,
+     "y": 50,
+     "fixed": false,
+     "sketchId": "sketch-3"
+    }
+   ],
+   [
+    "jc2",
+    {
+     "x": 25,
+     "y": 50,
+     "fixed": false,
+     "sketchId": "sketch-3"
+    }
+   ]
+  ],
+  "shapes": [
+   {
+    "id": "L_a",
+    "type": "line",
+    "joints": [
+     "ja1",
+     "ja2"
+    ],
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "L_b",
+    "type": "line",
+    "joints": [
+     "jb1",
+     "jb2"
+    ],
+    "sketchId": "sketch-2"
+   },
+   {
+    "id": "L_c",
+    "type": "line",
+    "joints": [
+     "jc1",
+     "jc2"
+    ],
+    "sketchId": "sketch-3"
+   }
+  ],
+  "constraints": [
+   {
+    "type": "horizontal",
+    "joints": [
+     "ja1",
+     "ja2"
+    ]
+   },
+   {
+    "type": "distance",
+    "joints": [
+     "ja1",
+     "ja2"
+    ],
+    "value": 40,
+    "offset": 30,
+    "isRadius": false,
+    "isDriven": false,
+    "driven": false,
+    "name": "d1"
+   }
+  ],
+  "sketches": [
+   {
+    "id": "sketch-1",
+    "name": "Sketch 1",
+    "visible": true
+   },
+   {
+    "id": "sketch-2",
+    "name": "Plate",
+    "visible": true
+   },
+   {
+    "id": "sketch-3",
+    "name": "Holes",
+    "visible": false
+   }
+  ],
+  "activeSketchId": "sketch-1",
+  "groups": [],
+  "vcarves": []
+ },
+ "hosts": {}
+}

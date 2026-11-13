@@ -7,7 +7,9 @@
 // App-agnostic: imports only #core (constraint-status). Themed via --sk-*/--sk-dock-*. Self-contained styles.
 
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch
+import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME,
+  recordUndo, setSketchLocked, soloSketch, isSoloed, moveSketchBy, reorderSketch, moveSelectionToSketch, moveTargets } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
+import { showNotification } from '#ui/notification-manager.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
 import { labelGeometry, constraintGeometryText } from '#ui/geometry-labels.js';
 
@@ -79,6 +81,18 @@ function injectStyles() {
 .sk-sketch-eye:hover { opacity: 1; }
 .sk-sketch-node.is-hidden .sk-sketch-name { opacity: 0.5; font-style: italic; }
 .sk-sketch-name { flex: 1; }
+/* TASK 577: sketches as layers: the per-sketch buttons (move up / down, solo, lock), the drag handle and the move-selection menu. */
+.sk-sketch-btn { background: transparent; border: 0; color: inherit; cursor: pointer; opacity: 0.55; font-size: 0.95em; padding: 0 2px; line-height: 1; }
+.sk-sketch-btn:hover:not(:disabled) { opacity: 1; }
+.sk-sketch-btn:disabled { opacity: 0.2; cursor: default; }
+.sk-sketch-btn.on { opacity: 1; color: var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
+.sk-sketch-grip { cursor: grab; touch-action: none; opacity: 0.45; font-size: 0.9em; width: 1em; text-align: center; }
+.sk-sketch-node.is-locked .sk-sketch-name { opacity: 0.75; }
+.sk-sketch-node.drop-before > .sk-sketch-head { box-shadow: inset 0 2px 0 var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
+.sk-sketch-node.drop-after > .sk-sketch-head { box-shadow: inset 0 -2px 0 var(--sk-dock-accent, var(--sk-selection, #4c9aff)); }
+.sk-sketch-node.dragging { opacity: 0.5; }
+.sk-tree-move { flex: 0 1 auto; max-width: 10em; font: inherit; font-size: 0.85em; color: inherit; background: var(--sk-info-head, rgba(127,127,127,0.12));
+  border: 1px solid var(--sk-info-head, rgba(127,127,127,0.3)); border-radius: 5px; padding: 1px 2px; }
 .sk-sketch-children { display: flex; flex-direction: column; gap: 2px; margin-left: 7px; padding-left: 7px;
   border-left: 1px solid var(--sk-info-head, rgba(127,127,127,0.18)); }
 .sk-sketch-empty { opacity: 0.5; padding: 3px 6px; font-style: italic; font-size: 0.95em; }
@@ -172,6 +186,39 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
     return row;
   }
 
+  // TASK 577: drag a sketch's grip to reorder (pointer events: a mouse and a finger alike). The drop position is read from the sketch
+  // nodes' rectangles; the order change is reorderSketch (one undo step), the same function the up / down buttons use.
+  function startReorder(e, grip, node, sk) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const nodes = () => [...listEl.querySelectorAll('.sk-sketch-node')];
+    let drop = null; // { index } = the final index in state.sketches
+    node.classList.add('dragging');
+    try { grip.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic pointer has no capture: the move / up listeners below still run on the grip */ }
+    const slot = (y) => {
+      const list = nodes(); const from = state.sketches.findIndex((s) => s.id === sk.id);
+      let to = list.length - 1;
+      for (let i = 0; i < list.length; i++) { const r = list[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { to = i > from ? i - 1 : i; break; } }
+      return Math.max(0, to);
+    };
+    const mark = (to) => {
+      const list = nodes(); const from = state.sketches.findIndex((s) => s.id === sk.id);
+      list.forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+      if (to === from || !list[to]) return;
+      list[to].classList.add(to < from ? 'drop-before' : 'drop-after');
+    };
+    const onMove = (ev) => { drop = { index: slot(ev.clientY) }; mark(drop.index); };
+    const finish = (ev) => {
+      grip.removeEventListener('pointermove', onMove); grip.removeEventListener('pointerup', finish); grip.removeEventListener('pointercancel', cancel);
+      try { grip.releasePointerCapture(ev.pointerId); } catch (_) { /* nothing captured */ }
+      const to = drop ? drop.index : null;
+      if (to != null) reorderSketch(state, sk.id, to);
+      refresh();
+    };
+    const cancel = (ev) => { drop = null; finish(ev); };
+    grip.addEventListener('pointermove', onMove); grip.addEventListener('pointerup', finish); grip.addEventListener('pointercancel', cancel);
+  }
+
   function refresh() {
     const cons = (state && Array.isArray(state.constraints)) ? state.constraints : [];
     const sel = (state && state.selectedConstraints instanceof Set) ? state.selectedConstraints : null;
@@ -207,8 +254,19 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
       const hdr = document.createElement('div'); hdr.className = 'sk-tree-hdr';
       const title = document.createElement('span'); title.className = 'sk-tree-title'; title.textContent = 'Sketches';
       const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'sk-tree-add'; addBtn.title = 'New sketch'; addBtn.textContent = '+';
-      addBtn.addEventListener('click', () => { try { state.saveState && state.saveState('new sketch'); } catch (_) {} const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
-      hdr.append(title, addBtn); listEl.appendChild(hdr);
+      addBtn.addEventListener('click', () => { recordUndo(state, 'new sketch'); const sk = addSketch(state); activateSketch(state, sk.id); refresh(); });
+      // TASK 577: "Move selection to sketch": the same moveSelectionToSketch the canvas context menu runs
+      const moveSel = document.createElement('select'); moveSel.className = 'sk-tree-move'; moveSel.title = 'Move the selected shapes to a sketch';
+      moveSel.setAttribute('aria-label', 'Move selection to sketch');
+      const ph = document.createElement('option'); ph.value = ''; ph.textContent = 'Move to sketch…'; moveSel.appendChild(ph);
+      for (const t of moveTargets(state)) { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; moveSel.appendChild(o); }
+      moveSel.addEventListener('change', () => {
+        const target = moveSel.value; if (!target) return;
+        const r = moveSelectionToSketch(state, target);
+        if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning');
+        refresh();
+      });
+      hdr.append(title, moveSel, addBtn); listEl.appendChild(hdr);
 
       const sketches = (state && Array.isArray(state.sketches) && state.sketches.length) ? state.sketches : [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME }];
       const activeId = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
@@ -217,7 +275,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         if (!knownSketchIds.has(sk.id)) { knownSketchIds.add(sk.id); collapsedSketchIds.add(sk.id); } // collapsed by default
         const kids = cons.filter((c) => { const s = constraintSketch(c, state); return s === sk.id || (s instanceof Set && s.has(sk.id)); });
         const collapsed = collapsedSketchIds.has(sk.id);
-        const node = document.createElement('div'); node.className = 'sk-sketch-node' + (sk.visible === false ? ' is-hidden' : '');
+        const node = document.createElement('div'); node.className = 'sk-sketch-node' + (sk.visible === false ? ' is-hidden' : '') + (sk.locked === true ? ' is-locked' : ''); node.dataset.sketchId = sk.id;
         // FOUR clean targets (each sub-element stops propagation): CARET → collapse; NAME dbl-click → rename; EYE →
         // visibility; the HEAD single-click → activate; the nested ROWS → select.
         const head = document.createElement('div'); head.className = 'sk-sketch-head' + (sk.id === activeId ? ' is-active' : '');
@@ -231,7 +289,7 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
           const finish = (save) => {
             if (done) return; done = true;
             const v = input.value.trim();
-            if (save && v && v !== sk.name) { try { state.saveState && state.saveState('rename sketch'); } catch (_) {} sk.name = v; }
+            if (save && v && v !== sk.name) { recordUndo(state, 'rename sketch'); sk.name = v; }
             refresh();
           };
           input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); } });
@@ -241,10 +299,30 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
         const dot = document.createElement('span'); dot.className = 'sk-sketch-dot'; dot.textContent = '●';
         const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'sk-sketch-eye';
         eye.textContent = sk.visible === false ? '◌' : '◉'; eye.title = sk.visible === false ? 'Show sketch' : 'Hide sketch';
-        eye.addEventListener('click', (e) => { e.stopPropagation(); try { state.saveState && state.saveState('toggle sketch visibility'); } catch (_) {} sk.visible = sk.visible === false; refresh(); });
+        eye.addEventListener('click', (e) => { e.stopPropagation(); recordUndo(state, 'toggle sketch visibility'); sk.visible = sk.visible === false; state.soloMemory = null; refresh(); });
         const count = document.createElement('span'); count.className = 'sk-info-val'; count.textContent = String(kids.length);
-        head.append(caret, name, dot, eye, count);
-        head.addEventListener('click', () => { activateSketch(state, sk.id); refresh(); }); // activate (sub-elements stop their own clicks)
+        // TASK 577: grip (drag to reorder), up / down (touch + keyboard twins of the drag), solo, lock. Each acts through the model.
+        const stop = (fn) => (e) => { e.stopPropagation(); fn(); refresh(); };
+        const idx = sketches.indexOf(sk);
+        const grip = document.createElement('span'); grip.className = 'sk-sketch-grip'; grip.textContent = '⠿'; grip.title = 'Drag to reorder';
+        grip.addEventListener('click', (e) => e.stopPropagation());
+        grip.addEventListener('pointerdown', (e) => startReorder(e, grip, node, sk));
+        const mkBtn = (cls, text, title, onClick, disabled) => {
+          const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sketch-btn ' + cls; b.textContent = text; b.title = title; b.setAttribute('aria-label', title);
+          if (disabled) b.disabled = true; b.addEventListener('click', stop(onClick)); return b;
+        };
+        const up = mkBtn('sk-sketch-up', '▴', 'Move sketch up', () => moveSketchBy(state, sk.id, -1), idx === 0);
+        const down = mkBtn('sk-sketch-down', '▾', 'Move sketch down', () => moveSketchBy(state, sk.id, 1), idx === sketches.length - 1);
+        const soloed = isSoloed(state, sk.id);
+        const solo = mkBtn('sk-sketch-solo' + (soloed ? ' on' : ''), '◎', soloed ? 'Show all sketches again' : 'Show only this sketch', () => soloSketch(state, sk.id));
+        const locked = sk.locked === true;
+        const lock = mkBtn('sk-sketch-lock' + (locked ? ' on' : ''), locked ? '🔒' : '🔓', locked ? 'Unlock sketch' : 'Lock sketch', () => {
+          const r = setSketchLocked(state, sk.id, !locked);
+          if (!r.ok) showNotification('Cannot lock "' + sk.name + '": ' + r.reason + '.', 'warning');
+        });
+        head.append(grip, caret, name, dot, up, down, solo, lock, eye, count);
+        // activating = new geometry goes here: a LOCKED sketch refuses (activateSketch); its lock button unlocks it
+        head.addEventListener('click', () => { if (locked) showNotification('"' + sk.name + '" is locked: unlock it to draw in it.', 'info'); activateSketch(state, sk.id); refresh(); }); // activate (sub-elements stop their own clicks)
         node.appendChild(head);
         if (!collapsed) {
           const childWrap = document.createElement('div'); childWrap.className = 'sk-sketch-children';

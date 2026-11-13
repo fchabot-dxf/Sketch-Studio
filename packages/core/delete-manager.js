@@ -1,5 +1,6 @@
 import { removeOrphanJoints } from './joints.js';
 import { SolverConfig } from './solver-config.js';
+import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from './sketch-model.js'; // TASK 577
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
@@ -175,9 +176,11 @@ export function deleteSelection(state) {
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
 
   // 1. Identify explicit selections
-  const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints) : [];
-  const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
-  const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints) : [];
+  // TASK 577: nothing of a LOCKED sketch is deleted (a pick cannot select it; this is the same rule for a selection made some other way)
+  const inert = inertEntities(state);
+  const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
+  const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
+  const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
 
   // Add explicitly selected constraints (dimensions, etc.) to the delete list
   if (state.selectedConstraints && state.selectedConstraints.size > 0) {

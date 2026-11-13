@@ -115,6 +115,7 @@ export function deserializeDocument(doc, state) {
     state.sketches.push(...restored.map((s) => ({ ...s })));
   }
   if ('activeSketchId' in state) state.activeSketchId = g.activeSketchId || DEFAULT_SKETCH_ID;
+  if ('soloMemory' in state) state.soloMemory = null; // TASK 577: the "show only this sketch" memory belongs to the document it was made in
 
   if (Array.isArray(state.groups)) {
     state.groups.length = 0;

@@ -9,6 +9,7 @@ import * as inspector from './inspector.js';
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
+import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
@@ -411,7 +412,7 @@ function panelTick() {
   // Include shapes/joints counts so DRAWING geometry (which may add no constraint) still refreshes the DOF readout.
   const nShapes = (s.shapes && s.shapes.length) || 0;
   const nJoints = (s.joints && s.joints.size) || 0;
-  const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool;
+  const sig = s.constraints.length + ':' + nShapes + ':' + nJoints + ':' + vsum.toFixed(1) + ':' + (s.selectedConstraints ? s.selectedConstraints.size : 0) + ':' + s.currentTool + ':' + sketchesSignature(s);
   if (sig !== lastSig) { lastSig = sig; if (ribbon) ribbon.refresh(); if (infoPanel) infoPanel.refresh(); }
 }
 

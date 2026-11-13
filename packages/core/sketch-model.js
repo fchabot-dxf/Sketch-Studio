@@ -14,7 +14,7 @@ export const DEFAULT_SKETCH_NAME = 'Sketch 1';
 export function createSketches() {
   // VCARVE-3b: `vcarves` = the V-carve records (a region + a V-bit + params); like `groups`, additive DATA, unread by
   // SketchStudio → byte-identical. The contour stack is DERIVED (vcarveContours), never materialized.
-  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID, groups: [], vcarves: [], soloMemory: null };
+  return { sketches: [{ id: DEFAULT_SKETCH_ID, name: DEFAULT_SKETCH_NAME, visible: true }], activeSketchId: DEFAULT_SKETCH_ID, groups: [], vcarves: [] };
 }
 
 // An entity's sketch — its stored `sketchId`, or the default (untagged entities belong to Sketch 1; load-safe).
@@ -90,7 +90,7 @@ export function entitiesInSketch(state, id) {
   return { joints, shapes };
 }
 
-// ───────────────────────── TASK 577: sketches as LAYERS — lock, move to sketch, reorder, solo ─────────────────────────
+// ───────────────────────── TASK 577: sketches as LAYERS — lock, move to sketch, reorder, show only ─────────────────────────
 // Everything a host's Design tab does with sketches goes through these functions (the panel and the canvas context menu call the
 // SAME ones). Each action that changes the document records ONE undo step (state.saveState, the shared snapshot that already carries
 // `sketches` + `activeSketchId` + every entity's sketchId), so Ctrl+Z reverts the whole action. The saved format only GAINS: a sketch
@@ -203,9 +203,10 @@ export function asPositionSnap(snap) {
  * a constraint (some operands move, some stay), or leave a point shared with a shape that stays, is REFUSED and nothing changes.
  * The origin and the axes belong to no sketch (neutral). Returns { ok, reason?, shapes, joints, constraints }.
  */
-export function moveToSketch(state, { shapeIds = [], jointIds = [] } = {}, targetId) {
+export function moveToSketch(state, { shapeIds = [], jointIds = [] } = {}, targetId, { newSketch = false } = {}) {
   const fail = (reason) => ({ ok: false, reason, shapes: 0, joints: 0, constraints: 0 });
-  const target = state && Array.isArray(state.sketches) ? state.sketches.find((s) => s.id === targetId) : null;
+  // newSketch: the target is created only once the move is known to be allowed (a refused move leaves no empty sketch behind)
+  const target = newSketch ? { name: 'new sketch' } : (state && Array.isArray(state.sketches) ? state.sketches.find((s) => s.id === targetId) : null);
   if (!target) return fail('no such sketch');
   if (target.locked === true) return fail(`"${target.name}" is locked`);
   const move = new Set(), moveJ = new Set();
@@ -231,26 +232,40 @@ export function moveToSketch(state, { shapeIds = [], jointIds = [] } = {}, targe
   }
   if (split) return fail(`${split} constraint${split === 1 ? '' : 's'} / dimension${split === 1 ? '' : 's'} tie${split === 1 ? 's' : ''} these shapes to geometry that stays in its sketch (a constraint stays inside one sketch)`);
   recordUndo(state, 'move to sketch');
+  if (newSketch) targetId = addSketch(state).id;
   for (const id of move) shapeById.get(id).sketchId = targetId;
   for (const jid of moveJ) state.joints.get(jid).sketchId = targetId;
-  return { ok: true, shapes: move.size, joints: moveJ.size, constraints: along };
+  return { ok: true, shapes: move.size, joints: moveJ.size, constraints: along, sketchId: targetId };
 }
 
 /** Move the CURRENT SELECTION (selected shapes + points) to a sketch: moveToSketch on what state.selectedShapes / selectedJoints hold. */
 export function moveSelectionToSketch(state, targetId) {
   return moveToSketch(state, { shapeIds: [...(state.selectedShapes || [])], jointIds: [...(state.selectedJoints || [])] }, targetId);
 }
-/** The sketches a selection may be moved to: every unlocked sketch (none when the document has one sketch). */
+/**
+ * The sketches a selection may be moved to, for a menu: every sketch as { id, name, disabled, reason }; a LOCKED sketch and the sketch the
+ * whole selection already lives in are disabled (with the reason). Empty when the document has one sketch.
+ */
 export function moveTargets(state) {
-  return state && Array.isArray(state.sketches) && state.sketches.length > 1 ? state.sketches.filter((s) => s.locked !== true) : [];
+  if (!state || !Array.isArray(state.sketches) || state.sketches.length < 2) return [];
+  const shapes = new Set([...(state.selectedShapes || [])]);
+  const homes = new Set();
+  for (const s of (state.shapes || [])) if (shapes.has(s.id)) homes.add(sketchOf(s));
+  for (const jid of (state.selectedJoints || [])) { const j = state.joints.get(jid); if (j) homes.add(sketchOf(j)); }
+  return state.sketches.map((s) => ({ id: s.id, name: s.name,
+    disabled: s.locked === true || (homes.size === 1 && homes.has(s.id)), reason: s.locked === true ? 'locked' : (homes.size === 1 && homes.has(s.id) ? 'current' : undefined) }));
+}
+/** "New sketch…": move the selection into a NEW sketch (created only when the move is allowed; one undo step). */
+export function moveSelectionToNewSketch(state) {
+  return moveToSketch(state, { shapeIds: [...(state.selectedShapes || [])], jointIds: [...(state.selectedJoints || [])] }, null, { newSketch: true });
 }
 
-/** A cheap string that changes when anything the sketch tree shows changes (order, names, visibility, lock, active, solo, how many shapes each holds). */
+/** A cheap string that changes when anything the sketch tree shows changes (order, names, visibility, lock, active, how many shapes each holds). */
 export function sketchesSignature(state) {
   if (!state || !Array.isArray(state.sketches)) return '';
   const n = new Map();
   for (const s of (state.shapes || [])) { const k = sketchOf(s); n.set(k, (n.get(k) || 0) + 1); }
-  return state.sketches.map((s) => s.id + '|' + s.name + '|' + (s.visible === false ? 'h' : 'v') + (s.locked === true ? 'L' : '') + '|' + (n.get(s.id) || 0)).join(',') + '|' + state.activeSketchId + '|' + (state.soloMemory ? state.soloMemory.soloId : '');
+  return state.sketches.map((s) => s.id + '|' + s.name + '|' + (s.visible === false ? 'h' : 'v') + (s.locked === true ? 'L' : '') + '|' + (n.get(s.id) || 0)).join(',') + '|' + state.activeSketchId;
 }
 
 /** REORDER: put a sketch at an index of state.sketches (the saved order; one undo step). Returns true when it moved. */
@@ -270,28 +285,13 @@ export function moveSketchBy(state, id, delta) {
   return i < 0 ? false : reorderSketch(state, id, i + delta);
 }
 
-/** True while `id` is the only visible sketch AND a solo memory of it exists (what "solo'd" shows in the panel). */
-export function isSoloed(state, id) {
-  const m = state && state.soloMemory;
-  return !!m && m.soloId === id && state.sketches.every((s) => (s.id === id) === (s.visible !== false));
-}
 /**
- * SOLO: "show only this sketch" hides every other one (the soloed one is shown); a second call on it restores the visibility
- * exactly as it was. The memory lives on the state for the document SESSION only (not saved, not part of undo snapshots): after a
- * reload, or when the visibility was changed in between, the second call falls back to "show all". One undo step each way.
+ * "Show only this sketch": NOT a mode. It sets visible=false on every OTHER sketch (and makes this one visible), exactly what clicking
+ * their eyes would do; there is no memory and no "show all again" (the eyes bring sketches back). One undo step, like an eye toggle.
  */
-export function soloSketch(state, id) {
+export function showOnlySketch(state, id) {
   if (!state || !Array.isArray(state.sketches) || !state.sketches.some((s) => s.id === id)) return false;
-  // already the ONLY visible sketch: this click undoes the solo: back to the remembered visibility, or (no memory: a reload, or a change since) all shown
-  if (state.sketches.every((s) => (s.id === id) === (s.visible !== false))) {
-    const before = state.soloMemory && state.soloMemory.soloId === id ? state.soloMemory.visibleById : null;
-    recordUndo(state, 'restore sketch visibility');
-    for (const s of state.sketches) s.visible = before && before.has(s.id) ? before.get(s.id) : true;
-    state.soloMemory = null;
-    return true;
-  }
   recordUndo(state, 'show only sketch');
-  state.soloMemory = { soloId: id, visibleById: new Map(state.sketches.map((s) => [s.id, s.visible !== false])) };
   for (const s of state.sketches) s.visible = s.id === id;
   return true;
 }

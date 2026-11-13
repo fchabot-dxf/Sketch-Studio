@@ -1,15 +1,16 @@
-// tests/sketch-layers-node.test.js — TASK 577: sketches work like LAYERS in the shared Design tab: LOCK, MOVE TO SKETCH, REORDER, SOLO.
+// tests/sketch-layers-node.test.js — TASK 577: sketches work like LAYERS in the shared Design tab: LOCK, MOVE TO SKETCH, REORDER, SHOW ONLY.
 // Through the node test kit (tests/helpers/node-app.js): each host's own canvas code (pointer events, the ribbon, the autosave buffer) and
 // the shared sketch panel (packages/ui/design-info-panel.js) on the same state. The real-pointer twins (a real drag, a real reorder drag in
 // the tree) are tests/sketch-layers-live.test.js.
 
 import fs from 'node:fs';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
-import { addSketch, activateSketch, setSketchLocked, moveToSketch, moveSelectionToSketch, moveSketchBy, reorderSketch, soloSketch, isSoloed,
-  lockedSketchIds, pickScene, isConstraintInert, constraintSketch, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
+import { addSketch, activateSketch, setSketchLocked, moveToSketch, moveSelectionToSketch, moveSketchBy, reorderSketch, showOnlySketch,
+  lockedSketchIds, moveTargets, moveSelectionToNewSketch, pickScene, isConstraintInert, constraintSketch, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { contextMenuItems } from '#ui/context-menu.js';
+import { mountDesignSidePanel } from '#ui/design-side-panel.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 
 const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); };
@@ -121,22 +122,18 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
     app.frames(2);
     const mid = (l) => { const a = jointXY(app, l.a), b = jointXY(app, l.b); return app.toScreen((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); };
 
-    // ---- SOLO: hides the others; the second call restores the previous visibility exactly (one sketch was hidden before)
-    sk3.visible = false; // Holes hidden before the solo
+    // ---- SHOW ONLY THIS SKETCH is NOT a mode: it sets visible=false on every other sketch (plain eye toggles), nothing is remembered
+    sk3.visible = false; // Holes hidden before
     const vis0 = S.sketches.map((s) => s.visible);
-    assert(soloSketch(S, 'sketch-2') && eq(S.sketches.map((s) => s.visible), [false, true, false], 'solo shows only Plate') === undefined, 'solo');
-    assert(isSoloed(S, 'sketch-2'), 'isSoloed');
-    app.undo(); eq(S.sketches.map((s) => s.visible), vis0, 'ONE undo reverts the solo');
-    app.redo(); eq(S.sketches.map((s) => s.visible), [false, true, false], 'redo re-solos');
-    soloSketch(S, 'sketch-2');
-    eq(S.sketches.map((s) => s.visible), vis0, 'the second solo click restores the previous visibility EXACTLY (Holes stays hidden)');
-    assert(!S.soloMemory, 'memory cleared');
-    row(`solo: [v,v,h] -> only Plate -> restored ${JSON.stringify(vis0)}; undo/redo each one step`);
-    // not saved: the session memory is not in the document; after a reload the second click shows all
-    const d = serializeDocument(S);
-    assert(!('soloMemory' in d.geometry) && !JSON.stringify(d).includes('soloMemory'), 'solo memory is not saved');
-    soloSketch(S, 'sketch-2'); S.soloMemory = null; soloSketch(S, 'sketch-2');
-    eq(S.sketches.map((s) => s.visible), [true, true, true], 'no memory (after a reload): the second click shows all');
+    assert(showOnlySketch(S, 'sketch-2'), 'show only');
+    eq(S.sketches.map((s) => s.visible), [false, true, false], 'show only: Plate visible, every other sketch hidden');
+    app.undo(); eq(S.sketches.map((s) => s.visible), vis0, 'ONE undo reverts it (as an eye toggle)');
+    app.redo(); eq(S.sketches.map((s) => s.visible), [false, true, false], 'redo re-applies it');
+    showOnlySketch(S, 'sketch-2');
+    eq(S.sketches.map((s) => s.visible), [false, true, false], 'a second call changes nothing: no "show all again", no restore');
+    assert(!('soloMemory' in S) && !JSON.stringify(serializeDocument(S)).includes('solo'), 'no solo memory exists, in the session or in the saved document');
+    row(`show only this sketch: ${JSON.stringify(vis0)} -> only Plate (others visible=false); undo/redo one step each; no memory`);
+    S.sketches.forEach((s) => { s.visible = true; });
     S.sketches[2].visible = false;
 
     // ---- HIDDEN sketches are not pickable (task: "stay unpickable")
@@ -238,64 +235,133 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
   } finally { await app.close(); }
 }
 
-// ---------------------------------------------------------------- the PANEL (shared): the controls per host, and each control drives the model
+// ---------------------------------------------------------------- the PANEL (shared): the same row controls in ALL FOUR hosts, and each drives the model
 {
   const results = {};
-  // host -> does its page mount the sketch tree? (read from the host's own source: showSketchTree: true at the createDesignInfoPanel call)
-  const declared = { sketchstudio: fs.readFileSync(new URL('../apps/sketchstudio/main.js', import.meta.url), 'utf8'), trace: fs.readFileSync(new URL('../apps/trace/src/app.js', import.meta.url), 'utf8'),
-    shaper: fs.readFileSync(new URL('../apps/shaper/src/main.js', import.meta.url), 'utf8'), penplotter: fs.readFileSync(new URL('../apps/penplotter/src/sketch-stage.js', import.meta.url), 'utf8') };
-  const CONTROLS = ['.sk-tree-add', '.sk-tree-move', '.sk-sketch-grip', '.sk-sketch-up', '.sk-sketch-down', '.sk-sketch-solo', '.sk-sketch-lock', '.sk-sketch-eye'];
-  for (const host of ['shaper', 'penplotter']) {
+  // How each host mounts the tree (read from the host's own source): Shaper and Pen Plotter call createDesignInfoPanel({ showSketchTree: true });
+  // SketchStudio and Trace mount the same panel through the ONE shared mount (#ui/design-side-panel.js, which sets showSketchTree: true).
+  const src = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  const declared = { sketchstudio: src('apps/sketchstudio/main.js'), trace: src('apps/trace/src/edit-view.js'), shaper: src('apps/shaper/src/main.js'), penplotter: src('apps/penplotter/src/sketch-stage.js') };
+  assert(/showSketchTree:\s*true/.test(src('packages/ui/design-side-panel.js')), 'the shared side-panel mount opts into the tree');
+  for (const host of ['sketchstudio', 'trace']) assert(/mountDesignSidePanel\(/.test(declared[host]), host + ' mounts the sketch tree through mountDesignSidePanel');
+  for (const host of ['shaper', 'penplotter']) assert(/showSketchTree:\s*true/.test(declared[host]), host + ' declares the sketch tree');
+  // Trace has no node-kit host (its Edit tab is the same createDesignInfoPanel on the same sketch state); its real page is in sketch-layers-live.test.js
+  const CONTROLS = ['.sk-tree-add', '.sk-sketch-eye', '.sk-sketch-icon', '.sk-sketch-name', '.sk-sketch-radio'];
+  const GONE = ['.sk-sketch-grip', '.sk-sketch-up', '.sk-sketch-down', '.sk-sketch-solo', '.sk-sketch-lock', '.sk-tree-move', 'select'];
+  const WANT = { '.sk-tree-add': 1, '.sk-sketch-eye': 3, '.sk-sketch-icon': 3, '.sk-sketch-name': 3, '.sk-sketch-radio': 3 };
+  for (const host of ['shaper', 'penplotter', 'sketchstudio']) {
     const profile = await createProfile();
     const app = await open({ host, profile });
     try {
-      const S = app.state; const doc = app.document;
-      assert(/showSketchTree:\s*true/.test(declared[host]), host + ' declares the sketch tree');
+      const S = app.state; const doc = app.document; const win = doc.defaultView;
       const addL = (x, y) => addLine(app, x, y, x + 20, y);
-      addL(0, 10); const sk2 = addSketch(S, 'Plate'); activateSketch(S, sk2.id); const B = addL(0, 30); const sk3 = addSketch(S, 'Holes'); activateSketch(S, sk3.id); addL(0, 50);
-      const panel = createDesignInfoPanel({ state: S, engine: app.engine, showSketchTree: true });
-      const holder = doc.createElement('div'); doc.body.appendChild(holder); panel.render(holder);
+      const A = addL(0, 10); const sk2 = addSketch(S, 'Plate'); activateSketch(S, sk2.id); const B = addL(0, 30); const sk3 = addSketch(S, 'Holes'); activateSketch(S, sk3.id); const C = addL(0, 50);
+      const holder = doc.createElement('div'); doc.body.appendChild(holder);
+      let panel;
+      if (host === 'sketchstudio') { const side = mountDesignSidePanel({ container: holder, state: S, engine: app.engine, storageKey: 'test-side' }); panel = side.panel; }
+      else { panel = createDesignInfoPanel({ state: S, engine: app.engine, showSketchTree: true }); panel.render(holder); }
       results[host] = Object.fromEntries(CONTROLS.map((c) => [c, holder.querySelectorAll(c).length]));
-      eq(results[host], { '.sk-tree-add': 1, '.sk-tree-move': 1, '.sk-sketch-grip': 3, '.sk-sketch-up': 3, '.sk-sketch-down': 3, '.sk-sketch-solo': 3, '.sk-sketch-lock': 3, '.sk-sketch-eye': 3 }, host + ' panel controls');
+      eq(results[host], WANT, host + ' panel controls');
+      eq(Object.fromEntries(GONE.map((c) => [c, holder.querySelectorAll(c).length])), Object.fromEntries(GONE.map((c) => [c, 0])), host + ': no grip, up/down, solo, lock buttons, no select');
+      assert(![...holder.querySelectorAll('.sk-sketch-head, .sk-tree-hdr')].some((h) => /[🌀-🫿☀-➿◎◉◌⠇▴▾]/u.test(h.textContent)), host + ': no emoji or glyph icon in the sketch rows');
       const node = (id) => holder.querySelector(`.sk-sketch-node[data-sketch-id="${id}"]`);
       const names = () => [...holder.querySelectorAll('.sk-sketch-node .sk-sketch-name')].map((n) => n.textContent);
-      // lock button: locks sketch 2; the active sketch (3) is untouched
-      node('sketch-2').querySelector('.sk-sketch-lock').click();
-      assert(S.sketches[1].locked === true && node('sketch-2').classList.contains('is-locked'), host + ': lock button locks + marks the node');
-      assert(node('sketch-2').querySelector('.sk-sketch-lock').textContent === '🔒', host + ': lock icon');
-      // lock the ACTIVE sketch via the panel: the active one moves away; the last unlocked cannot be locked
-      node('sketch-3').querySelector('.sk-sketch-lock').click(); eq(S.activeSketchId, 'sketch-1', host + ': locking the active sketch hands activation to an unlocked one');
-      node('sketch-1').querySelector('.sk-sketch-lock').click(); assert(S.sketches[0].locked !== true, host + ': the last unlocked sketch cannot be locked');
-      node('sketch-3').querySelector('.sk-sketch-lock').click(); node('sketch-2').querySelector('.sk-sketch-lock').click();
-      assert(lockedSketchIds(S).size === 0, host + ': unlocked again');
-      // clicking a locked sketch's head does not activate it
-      node('sketch-2').querySelector('.sk-sketch-lock').click(); node('sketch-2').querySelector('.sk-sketch-head').click();
-      assert(S.activeSketchId !== 'sketch-2', host + ': a locked sketch is not activated by a click'); node('sketch-2').querySelector('.sk-sketch-lock').click();
-      // up / down
-      node('sketch-3').querySelector('.sk-sketch-up').click(); eq(S.sketches.map((s) => s.id), ['sketch-1', 'sketch-3', 'sketch-2'], host + ': up button');
-      assert(node('sketch-1').querySelector('.sk-sketch-up').disabled && holder.querySelectorAll('.sk-sketch-down')[2].disabled, host + ': up disabled at the top, down at the bottom');
-      eq(names(), ['Sketch 1', 'Holes', 'Plate'], host + ': the tree shows the new order');
-      node('sketch-3').querySelector('.sk-sketch-down').click(); eq(S.sketches.map((s) => s.id), ['sketch-1', 'sketch-2', 'sketch-3'], host + ': down button');
-      // solo button: on, then off
-      node('sketch-2').querySelector('.sk-sketch-solo').click(); eq(S.sketches.map((s) => s.visible), [false, true, false], host + ': solo button');
-      assert(node('sketch-2').querySelector('.sk-sketch-solo').classList.contains('on'), host + ': solo marked');
-      node('sketch-2').querySelector('.sk-sketch-solo').click(); eq(S.sketches.map((s) => s.visible), [true, true, true], host + ': solo again restores');
-      // move selection select
+      const ctx = (id) => { node(id).querySelector('.sk-sketch-head').dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 })); };
+      const menuItems = () => [...doc.querySelectorAll('.sk-context-menu .sk-context-item')].map((r) => r.dataset.id + '=' + r.textContent.replace('✓', '').trim());
+      const pick = (itemId) => { doc.querySelector(`.sk-context-menu .sk-context-item[data-id="${itemId}"]`).click(); };
+
+      // ROW parts: eye (inline SVG), sketch icon (inline SVG), name = plain text (not a button), radio on the right
+      const n1 = node('sketch-1').querySelector('.sk-sketch-head');
+      eq([...n1.children].filter((c) => !c.classList.contains('sk-sketch-tw')).map((c) => c.className.split(' ')[0]), ['sk-sketch-eye', 'sk-sketch-icon', 'sk-sketch-name', 'sk-sketch-radio'], host + ': row order eye, icon, name, radio');
+      assert(n1.querySelector('.sk-sketch-eye svg') && n1.querySelector('.sk-sketch-icon svg') && n1.querySelector('.sk-sketch-name').tagName === 'SPAN', host + ': inline SVG icons; the name is plain text');
+      assert(/.sk-sketch-lockbadge {[^}]*background: #7c3aed/.test(src('packages/ui/design-info-panel.js')), host + ': the lock badge is purple (#7c3aed), not red');
+
+      // RADIO: the active sketch (3) is filled; a click on an empty radio activates; the NAME and the row do not
+      eq(holder.querySelectorAll('.sk-sketch-radio[aria-checked="true"]').length, 1, host + ': one filled radio');
+      assert(node('sketch-3').querySelector('.sk-sketch-radio').getAttribute('aria-checked') === 'true', host + ': the active sketch has the filled radio');
+      node('sketch-1').querySelector('.sk-sketch-name').click(); node('sketch-1').querySelector('.sk-sketch-head').click();
+      eq(S.activeSketchId, 'sketch-3', host + ': clicking the name / row does not activate');
+      node('sketch-2').querySelector('.sk-sketch-radio').click(); eq(S.activeSketchId, 'sketch-2', host + ': clicking an empty radio activates that sketch');
+      node('sketch-3').querySelector('.sk-sketch-radio').click(); eq(S.activeSketchId, 'sketch-3', host + ': and back');
+
+      // RIGHT-CLICK menu: Lock / Unlock, Show only this sketch, Rename, Delete
+      ctx('sketch-2');
+      eq(menuItems(), ['sk-lock=Lock', 'sk-only=Show only this sketch', 'sk-rename=Rename', 'sk-delete=Delete'], host + ': the row menu');
+      pick('sk-lock');
+      assert(S.sketches[1].locked === true && node('sketch-2').classList.contains('is-locked'), host + ': Lock locks + marks the node');
+      assert(node('sketch-2').querySelector('.sk-sketch-lockbadge') && !node('sketch-1').querySelector('.sk-sketch-lockbadge'), host + ': the purple badge is on the locked sketch icon only');
+      assert(node('sketch-2').querySelector('.sk-sketch-radio').disabled, host + ': the radio of a locked sketch is disabled');
+      node('sketch-2').querySelector('.sk-sketch-radio').click(); assert(S.activeSketchId !== 'sketch-2', host + ': a locked sketch cannot be activated');
+      ctx('sketch-2'); eq(menuItems()[0], 'sk-lock=Unlock', host + ': the menu now offers Unlock'); pick('sk-lock');
+      assert(S.sketches[1].locked !== true && !node('sketch-2').querySelector('.sk-sketch-lockbadge'), host + ': Unlock removes the lock and the badge');
+      // locking the ACTIVE sketch hands activation on; the last unlocked sketch cannot be locked
+      ctx('sketch-3'); pick('sk-lock'); eq(S.activeSketchId, 'sketch-2', host + ': locking the active (last) sketch hands activation to the previous unlocked one');
+      ctx('sketch-2'); pick('sk-lock'); ctx('sketch-1'); pick('sk-lock'); assert(S.sketches[0].locked !== true, host + ': the last unlocked sketch cannot be locked');
+      ctx('sketch-3'); pick('sk-lock'); ctx('sketch-2'); pick('sk-lock'); assert(lockedSketchIds(S).size === 0, host + ': all unlocked again');
+
+      // EYE: a plain toggle, ONE undo step (eye toggles were undo steps before this task, through the panel's saveState; kept, now via recordUndo)
+      const h0 = S.history.length;
+      node('sketch-1').querySelector('.sk-sketch-eye').click(); eq(S.sketches[0].visible, false, host + ': the eye hides'); eq(S.history.length, h0 + 1, host + ': an eye toggle is one undo step');
+      app.undo(); eq(S.sketches[0].visible !== false, true, host + ': undo shows it again');
+      // SHOW ONLY THIS SKETCH: the others' visible=false, nothing else (no banner, no restore memory)
+      ctx('sketch-2'); pick('sk-only'); eq(S.sketches.map((s) => s.visible), [false, true, false], host + ': Show only this sketch = the others visible false');
+      assert(!/show all|only this/i.test(holder.textContent), host + ': no banner, no "show all again"');
+      node('sketch-1').querySelector('.sk-sketch-eye').click(); node('sketch-3').querySelector('.sk-sketch-eye').click();
+      eq(S.sketches.map((s) => s.visible), [true, true, true], host + ': the eyes bring the sketches back (plain toggles)');
+
+      // RENAME from the menu: the inline field, Enter saves, one undo step
+      ctx('sketch-2'); pick('sk-rename');
+      const inp = holder.querySelector('.sk-sketch-rename'); assert(inp, host + ': Rename opens the inline field');
+      inp.value = 'Base'; inp.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      eq(S.sketches[1].name, 'Base', host + ': renamed'); app.undo(); eq(S.sketches[1].name, 'Plate', host + ': one undo reverts the rename');
+
+      // DRAG-REORDER by the NAME: a mouse drag of Holes above Sketch 1 (rects stubbed: happy-dom has no layout), one undo step
+      const nodesEls = [...holder.querySelectorAll('.sk-sketch-node')];
+      nodesEls.forEach((n, i) => { n.getBoundingClientRect = () => ({ top: i * 30, height: 30, bottom: i * 30 + 30, left: 0, right: 100, width: 100, x: 0, y: i * 30 }); });
+      const nm = node('sketch-3').querySelector('.sk-sketch-name'); const hR = S.history.length;
+      const ptr = (type, y, tgt = nm) => tgt.dispatchEvent(new win.PointerEvent(type, { bubbles: true, cancelable: true, clientX: 20, clientY: y, pointerId: 7, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+      ptr('pointerdown', 75); ptr('pointermove', 60); ptr('pointermove', 10); assert(node('sketch-1').classList.contains('drop-before'), host + ': a blue insertion line while dragging'); ptr('pointerup', 10);
+      eq(S.sketches.map((s) => s.id), ['sketch-3', 'sketch-1', 'sketch-2'], host + ': dragging the name reordered'); eq(S.history.length, hR + 1, host + ': one undo step');
+      eq(names(), ['Holes', 'Sketch 1', 'Plate'], host + ': the tree shows the new order'); app.undo();
+      eq(S.sketches.map((s) => s.id), ['sketch-1', 'sketch-2', 'sketch-3'], host + ': undo restores the order');
+      // a click on the name (no movement) neither reorders nor activates
+      const nm2 = node('sketch-1').querySelector('.sk-sketch-name'); ptr('pointerdown', 15, nm2); ptr('pointerup', 15, nm2);
+      eq(S.sketches.map((s) => s.id), ['sketch-1', 'sketch-2', 'sketch-3'], host + ': a click on the name reorders nothing');
+
+      // DELETE from the menu: the sketch and its geometry go in ONE undo step; a locked sketch refuses; the only sketch refuses
+      const nShapes = S.shapes.length, hD = S.history.length;
+      ctx('sketch-3'); pick('sk-delete');
+      eq(S.sketches.map((s) => s.id), ['sketch-1', 'sketch-2'], host + ': Delete removed the sketch'); assert(!shapeOf(app, C.id) && S.shapes.length === nShapes - 1, host + ': its line went with it');
+      assert(S.activeSketchId !== 'sketch-3', host + ': the active sketch moved off the deleted one'); eq(S.history.length, hD + 1, host + ': one undo step');
+      app.undo(); eq(S.sketches.length, 3, host + ': undo brings the sketch back'); assert(shapeOf(app, C.id), host + ': and its line');
+      setSketchLocked(S, 'sketch-2', true); ctx('sketch-2'); pick('sk-delete'); assert(S.sketches.some((s) => s.id === 'sketch-2'), host + ': a locked sketch is not deleted'); setSketchLocked(S, 'sketch-2', false);
+
+      // MOVE TO SKETCH lives in the right-click menu on geometry, not in the panel
       S.selectedShapes.add(B.id);
-      const sel = holder.querySelector('.sk-tree-move');
-      eq([...sel.options].map((o) => o.value), ['', 'sketch-1', 'sketch-2', 'sketch-3'], host + ': move targets');
-      sel.value = 'sketch-1'; sel.dispatchEvent(new app.window.Event('change', { bubbles: true }));
-      eq(sketchIdOf(app, B.id), 'sketch-1', host + ': the panel moves the selection');
-      // the context-menu items are the same list
-      const items = contextMenuItems('geometry', { target: { kind: 'shape', id: B.id }, actions: { lockState: () => ({ locked: false }), toggleLock() {}, deleteSelection() {}, sketchTargets: () => S.sketches, moveToSketch(id) { S.__moved = id; } } });
-      eq(items.filter((i) => i.id.startsWith('geo-move-')).map((i) => i.label), ['Move to sketch ▸ Sketch 1', 'Move to sketch ▸ Plate', 'Move to sketch ▸ Holes'], host + ': context menu move items');
-      items.find((i) => i.id === 'geo-move-sketch-3').onSelect(); eq(S.__moved, 'sketch-3', host + ': menu item runs moveToSketch'); delete S.__moved;
+      const targets = moveTargets(S);
+      eq(targets.map((x) => [x.id, !!x.disabled, x.reason || null]), [['sketch-1', false, null], ['sketch-2', true, 'current'], ['sketch-3', false, null]], host + ': the sketch the selection is in is greyed as current');
+      setSketchLocked(S, 'sketch-1', true);
+      eq(moveTargets(S).find((x) => x.id === 'sketch-1'), { id: 'sketch-1', name: 'Sketch 1', disabled: true, reason: 'locked' }, host + ': a locked sketch is greyed');
+      setSketchLocked(S, 'sketch-1', false);
+      const items = contextMenuItems('geometry', { target: { kind: 'shape', id: B.id }, actions: { lockState: () => ({ locked: false }), toggleLock() {}, deleteSelection() {}, sketchTargets: () => moveTargets(S), moveToSketch(id) { S.__moved = id; }, moveToNewSketch() { S.__moved = 'NEW'; } } });
+      const parent = items.find((i) => i.id === 'geo-move');
+      assert(parent && parent.label === 'Move to sketch' && Array.isArray(parent.submenu), host + ': one "Move to sketch" row with a submenu');
+      eq(parent.submenu.map((i) => i.label), ['Sketch 1', 'Plate', 'Holes', 'New sketch…'], host + ': submenu = the sketch names + New sketch…');
+      eq(parent.submenu.map((i) => !!i.disabled), [false, true, false, false], host + ': the current sketch is greyed, New sketch… is not');
+      parent.submenu.find((i) => i.id === 'geo-move-sketch-3').onSelect(); eq(S.__moved, 'sketch-3', host + ': submenu item runs moveToSketch');
+      // New sketch…: moves the selection into a NEW sketch, one undo step; a refused move leaves no empty sketch
+      const nSk = S.sketches.length; const histN = S.history.length;
+      const rn = moveSelectionToNewSketch(S);
+      assert(rn.ok && S.sketches.length === nSk + 1 && sketchIdOf(app, B.id) === rn.sketchId && S.history.length === histN + 1, host + ': New sketch… moved the selection into a new sketch in one step');
+      app.undo(); assert(S.sketches.length === nSk && sketchIdOf(app, B.id) === 'sketch-2', host + ': one undo removes the new sketch and moves back');
+      delete S.__moved;
       panel.destroy();
     } finally { await app.close(); }
   }
-  results.sketchstudio = { tree: /showSketchTree:\s*true/.test(declared.sketchstudio) ? 'yes' : 'NO sketch tree mounted' };
-  results.trace = { tree: /showSketchTree:\s*true/.test(declared.trace) ? 'yes' : 'NO sketch tree mounted' };
-  row('panel controls per host: ' + JSON.stringify(results));
+  results.shaper_penplotter_sketchstudio_equal = results.shaper && JSON.stringify(results.shaper) === JSON.stringify(results.penplotter) && JSON.stringify(results.shaper) === JSON.stringify(results.sketchstudio);
+  assert(results.shaper_penplotter_sketchstudio_equal, 'the same controls in Shaper, Pen Plotter and SketchStudio');
+  row('panel controls per host (Trace: same panel code, real page in the live test): ' + JSON.stringify(results));
 }
 
 console.log('SKETCH-LAYERS-NODE OK (' + rows.length + ' rows)');
+

@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, pickableConstraints, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, pickableConstraints, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
@@ -1367,6 +1367,7 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         toggleLock: () => toggleFixedSelection(state),
         lockState: () => selectionLockState(state),
         sketchTargets: () => moveTargets(state), // TASK 577: sketches as layers
+        moveToNewSketch: () => { const r = moveSelectionToNewSketch(state); if (!r.ok) showNotification('Cannot move to a new sketch: ' + r.reason + '.', 'warning'); },
         moveToSketch: (id) => { const r = moveSelectionToSketch(state, id); if (!r.ok) showNotification('Cannot move to that sketch: ' + r.reason + '.', 'warning'); },
     };
     const items = contextMenuItems(target.kind === 'dimension' || target.kind === 'constraint' ? target.kind : 'geometry', { target, actions });

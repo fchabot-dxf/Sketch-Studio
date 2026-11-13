@@ -152,7 +152,6 @@ export function createSketchState(engine, view) {
       this.sketches.length = 0;
       this.sketches.push(...fresh.sketches);
       this.activeSketchId = fresh.activeSketchId;
-      this.soloMemory = null; // TASK 577: the solo memory is session state of THIS document
       this.groups.length = 0;
       this.profiles.length = 0;
       this.parameters.length = 0; // TASK 535

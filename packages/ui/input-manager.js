@@ -1305,6 +1305,8 @@ function setupKeyboardShortcuts(state, opts = {}) {
     });
 }
 
+const GLYPH_PICK_MARGIN_PX = 3; // screen px around the drawn glyph badge that still count as ON it (right-click / touch hold)
+
 // What a right click at (clientX, clientY) is on: a dimension label, a joint, a shape, or a dimension's glyph
 // position. null = empty canvas (no menu, the native / line-tool right-click behaviour stays).
 function pickContextTarget(svg, state, e) {
@@ -1313,9 +1315,11 @@ function pickContextTarget(svg, state, e) {
         const c = state.constraints[parseInt(label.dataset.constraintIdx, 10)];
         if (c) return { kind: 'dimension', constraint: c };
     }
-    // A constraint GLYPH is drawn on top of the geometry, so the pointer on one means the glyph (task 571): it is picked before the joint /
-    // shape it sits on. (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, 20 * snapBoostFor(e.pointerType === 'touch'));
+    // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
+    // shape under it. ON = inside the drawn badge (radius GLYPH_BG_DIAMETER_PX / 2, the same on touch: the badge is not bigger there) plus
+    // GLYPH_PICK_MARGIN_PX; a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
+    // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
+    const glyph = hitConstraintAtScreen(state.constraints, svg, e.clientX, e.clientY, SettingsManager.getAll().GLYPH_BG_DIAMETER_PX / 2 + GLYPH_PICK_MARGIN_PX);
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     const snap = findSnap(state.joints, state.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));

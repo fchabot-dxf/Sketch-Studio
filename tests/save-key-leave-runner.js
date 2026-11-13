@@ -10,7 +10,7 @@ import { HOSTS } from './unsaved-prompt-runner.js';
 
 export async function runSaveKeyLeave({ host }) {
   const H = HOSTS[host];
-  const cdp = await launchBrowser({ tag: 'savekey-' + host, width: 1400, height: 850 });
+  const cdp = await launchBrowser({ tag: 'savekey-' + host, width: 1400, height: 850, leaveDialog: 'stay' }); // the leave-page warning: answered "stay"
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, once, evalJs, waitFor, navigate } = cdp;
   try {
@@ -36,11 +36,9 @@ export async function runSaveKeyLeave({ host }) {
       await key('Escape', 'Escape', 27); await sleep(250);
       await waitFor(`document.querySelectorAll('#${H.canvas} .shape-elem').length === ${before + 1}`, 'the drawn line');
     };
-    // a page-initiated reload: did the browser raise its leave-page dialog? Every dialog is recorded by ONE persistent listener (a one-shot
-    // listener left unconsumed would swallow the next dialog) and answered "stay", so the page with its drawing is kept.
-    const dialogs = [];
-    const armDialog = () => once('Page.javascriptDialogOpening').then(async (d) => { dialogs.push(d.type); await send('Page.handleJavaScriptDialog', { accept: false }); armDialog(); });
-    armDialog();
+    // a page-initiated reload: did the browser raise its leave-page dialog? The helper records every dialog and answers it "stay", so the page
+    // with its drawing is kept.
+    const { dialogs } = cdp;
     const leaveWarns = async () => {
       const n0 = dialogs.length;
       await evalJs(`setTimeout(() => { location.reload(); }, 0), 1`);

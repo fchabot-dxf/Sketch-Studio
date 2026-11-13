@@ -38,11 +38,9 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
     await send('DOM.enable');
     await send('Page.addScriptToEvaluateOnNewDocument', { source: 'delete window.showOpenFilePicker; delete window.showSaveFilePicker;' }); // the <input type=file> path
     await send('Page.setInterceptFileChooserDialog', { enabled: true });
-    // every JS dialog is recorded and answered "leave" (a Cancel case leaves the unsaved drawing behind: the next navigation raises the
-    // armed leave-page warning, which is right and is counted below)
-    const dialogs = [];
-    const armDialog = () => once('Page.javascriptDialogOpening').then(async (d) => { dialogs.push(d.type); await send('Page.handleJavaScriptDialog', { accept: true }); armDialog(); });
-    armDialog();
+    // every JS dialog is recorded by the helper, a leave-page warning answered "leave" (a Cancel case leaves the unsaved drawing behind: the
+    // next navigation raises the armed leave-page warning, which is right and is counted below)
+    const { dialogs } = cdp;
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const click = async (x, y) => { await mouse('mouseMoved', x, y, 0); await sleep(30); await mouse('mousePressed', x, y, 1); await sleep(30); await mouse('mouseReleased', x, y, 0); await sleep(150); };
     const centre = (sel) => evalJs(`(() => { const e = ${sel.startsWith('[...') ? sel : `document.querySelector(${JSON.stringify(sel)})`}; if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);

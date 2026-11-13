@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -162,6 +163,8 @@ await (async () => {
     await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
     await evalJs(`localStorage.setItem('sketch-studio-settings', JSON.stringify({ AXIS_SNAP: ${AXIS === 'on'} }))`);
     await send('Page.navigate', { url }); await sleep(2500);
+    await evalJs(CREATE_NAMED_DESIGN(HOST)); // TASK 558: only a NAMED design autosaves (this test reads the autosave); the next load restores it
+    await send('Page.navigate', { url }); await sleep(2500);
     if (HOST === 'shaper') {
       for (let i = 0; i < 6; i++) { await evalJs(`document.querySelector('[data-mode="design"]').click()`); await sleep(500); if (await evalJs(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`)) break; }
       await sleep(800);
@@ -171,9 +174,19 @@ await (async () => {
     // "New design" from the app menu (the Projects modal's toolbar runs the same projectActions.newDesign)
     const newDesign = async () => {
       await evalJs(`document.querySelector('.sk-sidebar-btn').click()`); await sleep(300);
-      await evalJs(`document.querySelector('.sk-sidebar-item[data-action="new-design"]').click()`); await sleep(1200);
+      await evalJs(`document.querySelector('.sk-sidebar-item[data-action="new-design"]').click()`); await sleep(400);
+      // TASK 558: the previous scenario's drawing may be an unsaved Untitled: New design asks Save… / Don't save / Cancel. It is not needed: Don't save.
+      if (await evalJs(`!!document.querySelector('.sk-sidebar-ask [data-choice="discard"]')`)) { await evalJs(`document.querySelector('.sk-sidebar-ask [data-choice="discard"]').click()`); }
+      await sleep(800);
       await esc(); // the drawer, if it stayed open
-      if (HOST !== 'shaper') return null; // SketchStudio is read from its autosave (seconds per read): its origin is checked by the marker, which is drawn only for a j_origin in the state
+      if (HOST !== 'shaper') {
+        // TASK 558: a New design is an unsaved Untitled that is never autosaved; SketchStudio is read from its autosave, so name it (Save as)
+        await evalJs(`document.querySelector('.sk-sidebar-btn').click()`); await sleep(300);
+        await evalJs(`document.querySelector('.sk-sidebar-item[data-action="save-as"]').click()`); await sleep(200);
+        await evalJs(`(() => { const i = document.querySelector('.sk-sidebar-confirm input'); i.value = 'Snap ' + Date.now(); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`); await sleep(600);
+        await esc();
+        return null;
+      } // SketchStudio is read from its autosave (seconds per read): its origin is checked by the marker, which is drawn only for a j_origin in the state
       const d = await readDoc();
       assert.deepStrictEqual(d.shapes, [], 'New design starts empty');
       return d;

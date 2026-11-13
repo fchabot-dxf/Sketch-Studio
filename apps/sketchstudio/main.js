@@ -184,7 +184,7 @@ function initApp(){
   // PERSIST-2: a passive autosave status indicator (never a blocking prompt).
   const saveStatusEl = document.createElement('span');
   saveStatusEl.id = 'save-status';
-  saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;';
+  saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;display:inline-block;width:3.7em;white-space:nowrap;'; // fixed width = "Saving…" (the widest text) so the header buttons before it never move (TASK 557); Pen Plotter and Shaper own their toolbars (not createAppHeader), so each host keeps its own copy of this rule
   header.el.appendChild(saveStatusEl);
   docBuffer = createDocumentBuffer({
     state,

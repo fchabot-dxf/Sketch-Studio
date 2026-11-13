@@ -95,8 +95,9 @@ export function setupLiveDimensionInput() {
         }
         inputState.inputs.single = singleInput;
 
-        // Attach events
-        [widthInput, heightInput, lengthInput, angleInput, singleInput].forEach(input => {
+        // Attach events to the four draw-time inputs ONLY: #dimInput's keys (Enter commit, Esc, autocomplete) belong to numeric-input-manager.js
+        // (setupListeners); a second Enter listener here committed every Enter twice (task 593)
+        [widthInput, heightInput, lengthInput, angleInput].forEach(input => {
             input.addEventListener('keydown', (e) => handleInputKey(e, input));
             input.addEventListener('input', (e) => handleInputInput(e, input));
             input.addEventListener('focus', (e) => {

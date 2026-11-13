@@ -13,6 +13,11 @@
 //      16 ms clock. Events follow each other with no pause (the browser tests sleep 40 - 200 ms between them).
 //   3. ResizeObserver: happy-dom's never reports; a browser reports each observed element once when observed (layout never changes here).
 //   4. fetch stays Node's: the glyph sheet's relative URL fails at once (the renderer draws without the sheet) instead of going to a network.
+//   5. hit testing (task 576): happy-dom has no layout, so a pointer event goes to the canvas, where the app's own hit-testing (snap, glyphs)
+//      reads it. The app also reads WHICH ELEMENT a browser's hit test found (e.target.closest('.dim-label')): a test names that element in
+//      the `target` option (an element, or a function returning it: the renderer replaces them), as the browser's hit test would find it.
+//   6. focus (task 576): a browser cannot focus an <svg> element that has no tabindex (the app calls svg.focus() on every pointerdown and must
+//      not take the focus from the value box it just opened); happy-dom can. SVGElement.focus is made to follow the browser's rule.
 // The host page script itself (main.js / sketch-stage.js) is not run: its page-only hooks (panels, Prepare, Review, the Freehand ribbon
 // button, the header) are absent; open() calls the declared pieces in the page script's order.
 
@@ -28,7 +33,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // ------------------------------------------------------------------------------------------------ KIT_OVERRIDES
 // 1. layout: the canvas rect in the real page at 1600 x 900 (getBoundingClientRect, measured)
 const MEASURED_CANVAS_RECT = {
-  sketchstudio: { left: 17, top: 143, width: 1566, height: 701 },
+  sketchstudio: { left: 17, top: 143, width: 1314, height: 701 },
   shaper: { left: 0, top: 124, width: 1356, height: 776 },
   penplotter: { left: 0, top: 124, width: 1356, height: 776 },
 };
@@ -60,6 +65,8 @@ function installPage(host, { width, height, storage }) {
     setGlobal(k, k === 'window' || k === 'self' ? win : (typeof v === 'function' && /^[a-z]/.test(k) ? v.bind(win) : v));
   }
   for (const k of TIMER_GLOBALS) setGlobal(k, win[k].bind(win)); // page timers: cancelled with the page (a 10 s toast must not keep Node running)
+  const svgFocus = win.SVGElement.prototype.focus; // override 6
+  win.SVGElement.prototype.focus = function (o) { if (this.hasAttribute('tabindex')) svgFocus.call(this, o); };
   win.requestAnimationFrame = requestFrame; win.cancelAnimationFrame = cancelFrame; setGlobal('requestAnimationFrame', requestFrame); setGlobal('cancelAnimationFrame', cancelFrame);
   win.ResizeObserver = FirstObservationResizeObserver; setGlobal('ResizeObserver', FirstObservationResizeObserver);
   rafQueue = new Map();
@@ -109,8 +116,9 @@ const HOSTS = {
     const ribbon = (ui && ui.ribbon) || null;
     const statusEl = doc.createElement('span'); doc.body.appendChild(statusEl); // main.js puts it in the app header
     const buffer = createDocumentBuffer({ ...D.studioBufferOptions({ state, engine, svg, statusEl }), store, doc, win });
-    await buffer.restore(); buffer.start();
-    setupInput(svg, state);
+    const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
+    setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
+    await restored;
     const frame = () => D.studioFrame({ engine, state, svg, worldGroup, ribbon });
     return { svg, state, engine, ribbon, buffer, statusEl, frame };
   },
@@ -176,7 +184,8 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   const pointer = (type, x, y, o = {}) => {
     const e = new win.PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: o.pointerId ?? 1, pointerType: o.pointerType || 'mouse', isPrimary: true,
       button: o.button ?? (type === 'pointermove' ? -1 : 0), buttons: o.buttons ?? (type === 'pointerup' ? 0 : 1), shiftKey: !!o.shift, ctrlKey: !!o.ctrl });
-    svg.dispatchEvent(e); frames();
+    const t = typeof o.target === 'function' ? o.target() : o.target; // override 5: the element a browser's hit test would find
+    (t || svg).dispatchEvent(e); frames();
     return e;
   };
   // keys go where the browser sends them: the focused element (the body when nothing is focused), bubbling to document + window
@@ -197,6 +206,14 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
     down: (x, y, o) => pointer('pointerdown', x, y, o),
     up: (x, y, o) => pointer('pointerup', x, y, o),
     click(x, y, o) { this.move(x, y, o); this.down(x, y, o); this.up(x, y, o); },
+    /** two clicks on the same spot (the app pairs them by their time, so there is no pause between them) */
+    dblclick(x, y, o) { this.move(x, y, o); this.down(x, y, o); this.up(x, y, o); this.down(x, y, o); this.up(x, y, o); },
+    /** the right button: press, release, then the `contextmenu` event on the target (the Windows order), which opens the shared menu */
+    rightClick(x, y, o = {}) {
+      this.move(x, y, o); this.down(x, y, { ...o, button: 2, buttons: 2 }); this.up(x, y, { ...o, button: 2 });
+      const t = typeof o.target === 'function' ? o.target() : o.target;
+      (t || svg).dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2, buttons: 0 })); frames();
+    },
     drag(a, b, steps = 8, o) { this.move(a.x, a.y, o); this.down(a.x, a.y, o); for (let i = 1; i <= steps; i++) pointer('pointermove', a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, { buttons: 1, ...o }); this.up(b.x, b.y, o); },
     key,
     esc: () => key('Escape'), enter: () => key('Enter'), undo: () => key('z', { ctrl: true }), redo: () => key('y', { ctrl: true }),

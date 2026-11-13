@@ -36,6 +36,13 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
     // later in each case (e.g., verifying targetJointId isn't in excludeJoints).
 
     const addViaManager = (type, params) => {
+        // A point the sketch ALREADY holds on the target adds nothing (task 537's rule; TASK 575: the owner's drag added
+        // pointOnLine(line end, construction line) beside the collinear that already implies it). The engine's rank test decides:
+        // the snap's rows raise no rank over the existing driving constraints = already determined.
+        if (state.engine && typeof state.engine.isDistanceRedundant === 'function' && state.engine.isDistanceRedundant({ type, ...params })) {
+            dbg.debug('app', '[snap-constraints] snap already held by the sketch: nothing added', { type, params });
+            return false;
+        }
         const created = ConstraintManager.createConstraint(state, type, params, { source: 'snap' });
         return !!created;
     };

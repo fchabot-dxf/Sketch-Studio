@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '460' });
@@ -48,6 +49,8 @@ await (async () => {
     const shot = async (name) => { const s = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 44, width: 1500, height: 700, scale: 1 } }); if (process.env.EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, name + '.png'), Buffer.from(s.data, 'base64')); };
 
     // ── 1. build a design + cut plan (several types, with cutter shapes) + a non-default stock, then let the autosave run ──
+    await nav(url);
+    await evalJs(CREATE_NAMED_DESIGN('shaper', 'Persist test')); // TASK 558: only a NAMED design autosaves; the next load restores it
     await nav(url);
     await openMode('design');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');

@@ -200,6 +200,8 @@ What is stored when, path by path (slice 1 = built now; slice 4 = the prompts an
 | Close a tab: named design | - | No prompt, unless `needsSavePrompt()` says `'save-failed'` (T4). |
 | Reload / leave the page with an unsaved Untitled with content | (stored, restored) | The browser's leave-page warning (beforeunload, slice 4); it is not restored. Named tabs are restored (T9, slice 6). |
 | Switch tabs | - | The active NAMED design is saved before it is put aside; an unsaved Untitled stays in its tab, in memory. |
+| Sidebar name / browser tab title of an unsaved Untitled | "Untitled" / "Untitled — <App>" (it was stored) | "Untitled" / "<App> · Sketch Studio" (no design is current). Slice 4 adds a "not saved" status. |
+| "Saving… / Saved" status of an unsaved Untitled | Saving… then Saved | Empty (nothing is written). |
 
 The DDCS Studio lesson "no beforeunload" (`document-buffer.js` header) still holds for named designs; the unsaved Untitled with
 content is the one case that warns.
@@ -488,3 +490,12 @@ Tests (node unless marked live):
 - **F4** The `poll()` rebind hazard (4.4): latent today, real once tabs switch often. FIXED in slice 1 (failing test first:
   `tests/document-tabs.test.js`, block F4).
 - **F5** The module-level engine store (3.1), already known from 535-1b; measured again here.
+- **F6** (found in slice 1) The origin joint of a page that was never restored has no `sketchId`; the first undo restore stamps one
+  (`sketch-state.js` joints.set wrapper, `:319-320`, through `_restoreSnapshot`). Undo is therefore not byte-exact on `j_origin`.
+  `tests/draw-undo-runner.js` already normalised it; `tests/drag-undo-live.test.js` now does too (before the save rule its pages
+  were restored from an autosave, which stamped the origin first).
+- **F7** (found in slice 1) A design made by New design has NO origin joint: `emptyDocument()` (`project-store.js:67`) has no
+  joints and `deserializeDocument` clears them; only `engine.init()` creates `j_origin` (`constraint-solver.js:21`). True before
+  slice 1 (the stored empty design) and after it (the unsaved Untitled loads the same document). Origin snapping does nothing in
+  such a design. Not fixed (one place to fix: the empty document, or the load path); the test helper `tests/helpers/named-design.js`
+  stores the origin as a fresh page's first named save does.

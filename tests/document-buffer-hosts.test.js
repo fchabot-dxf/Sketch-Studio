@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="80mm" viewBox="0 0 100 80">'
   + '<path d="M10 10 L40 10 L40 30 Z" stroke="#ff0000" fill="none"/>'
@@ -50,6 +51,9 @@ await (async () => {
     // ---- A. Pen Plotter -> SketchStudio edit -> Pen Plotter
     await goto('/apps/penplotter/index.html');
     await waitFor(`!!document.getElementById('importSvgFile') && !!window.__sketch`, 'the Pen Plotter page to load');
+    await evalJs(CREATE_NAMED_DESIGN('penplotter', 'Hosts test')); // TASK 558: only a NAMED design autosaves; the reload restores it
+    await goto('/apps/penplotter/index.html');
+    await waitFor(`!!document.getElementById('importSvgFile') && !!window.__sketch && document.getElementById('design-canvas').dataset.docReady === '1'`, 'the Pen Plotter page to restore the named design');
     const root = await send('DOM.getDocument');
     const q = await send('DOM.querySelector', { nodeId: root.root.nodeId, selector: '#importSvgFile' });
     await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
@@ -96,11 +100,13 @@ await (async () => {
       const mk = () => ({ joints: new Map(), shapes: [], constraints: [] });
       const wait = (ms) => new Promise(r => setTimeout(r, ms));
       const read = () => new Promise((res) => { const o = indexedDB.open('sketch-studio-projects', 1); o.onsuccess = () => { const db = o.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign'); m.onsuccess = () => { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => res(g.result.document.hosts); }; }; });
-      const a = { v: 1 }, b = { v: 1 };
+      const a = { v: 0 }, b = { v: 0 }; // set to 1 after the restore: a buffer writes only what CHANGED since it was bound (TASK 558)
       const sa = mk(), sb = mk(), sc = mk();
       const A = createDocumentBuffer({ state: sa, hostName: 'hostA', getHostData: () => a, pollMs: 40 });
       const B = createDocumentBuffer({ state: sb, hostName: 'hostB', getHostData: () => b, pollMs: 40 });
       const C = createDocumentBuffer({ state: sc, pollMs: 40 });
+      await A.restore(); await B.restore(); await C.restore(); // TASK 558: bound to the current NAMED design (an unbound buffer never writes)
+      a.v = 1; b.v = 1;
       const out = [];
       A.start(); await wait(250); out.push(['A saves', Object.keys(await read()).sort()]);
       A.stop(); B.start(); await wait(250); out.push(['B saves', Object.keys(await read()).sort()]);

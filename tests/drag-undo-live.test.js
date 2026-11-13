@@ -31,7 +31,11 @@ try {
     await evalJs(`document.querySelector('.sk-diag-close').click()`); await sleep(100);
     return JSON.parse(text);
   };
-  const joints = (r) => JSON.stringify(r.document.geometry.joints);
+  // the origin's sketchId is presentation noise an undo restore stamps (draw-undo-runner.js normalises it the same way): since TASK 558 a
+  // fresh page is never restored from an autosave, so its origin starts unstamped (finding F6, docs/DOCUMENT-TABS-DESIGN.md)
+  const joints = (r) => JSON.stringify(r.document.geometry.joints.map(([k, v]) => { if (k !== 'j_origin') return [k, v]; const { sketchId, ...rest } = v; return [k, rest]; }));
+  // a circle-rim drag changes the RADIUS (a solver unknown, task 515), not a joint: the drag result is the joints AND the shapes
+  const geom = (r) => joints(r) + JSON.stringify(r.document.geometry.shapes);
   const labelsOf = (r) => r.journal.steps.map((s) => s.label);
 
   for (const host of [
@@ -70,18 +74,18 @@ try {
       const [from, to] = await plan();
       await dragPath(from, to);
       const after = await takeReport();
-      assert.notStrictEqual(joints(after), joints(prev), `${host.name} ${kind}: the drag moved something`);
+      assert.notStrictEqual(geom(after), geom(prev), `${host.name} ${kind}: the drag moved something`);
       const result = { stepsBefore: labelsOf(prev).length, stepsAfterDrag: labelsOf(after).length, newLabels: labelsOf(after).slice(labelsOf(prev).length) };
       measured[host.name][kind] = result;
       assert.deepStrictEqual(result.newLabels, [label], `${host.name} ${kind}: ONE new undo step labelled "${label}": ${JSON.stringify(result)}`);
       await key('z', 'KeyZ', 90, 2); await sleep(300);
       const undone = await takeReport();
       result.stepsAfterUndo = labelsOf(undone).length;
-      assert.strictEqual(joints(undone), joints(prev), `${host.name} ${kind}: Ctrl+Z restores exactly the pre-drag joints`);
+      assert.strictEqual(geom(undone), geom(prev), `${host.name} ${kind}: Ctrl+Z restores exactly the pre-drag joints and shapes`);
       assert.strictEqual(labelsOf(undone).length, labelsOf(prev).length, `${host.name} ${kind}: the step is gone from the history`);
       await key('y', 'KeyY', 89, 2); await sleep(300);
       const redone = await takeReport();
-      assert.strictEqual(joints(redone), joints(after), `${host.name} ${kind}: Ctrl+Y re-applies the drag`);
+      assert.strictEqual(geom(redone), geom(after), `${host.name} ${kind}: Ctrl+Y re-applies the drag`);
       prev = redone;
     }
     // a click on a joint without movement: no step

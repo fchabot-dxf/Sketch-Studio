@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
 const HOST = process.env.HOST || 'sketchstudio';
 const h = await launchBrowser({ tag: 'sym-' + HOST, width: 1600, height: 900 });
@@ -50,6 +51,8 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       await sleep(1500);
     } else {
       await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
+      await navigate(url); await sleep(2500);
+      await evalJs(CREATE_NAMED_DESIGN('sketchstudio')); // TASK 558: only a NAMED design autosaves (SketchStudio is read from its autosave); the next load restores it
       await navigate(url); await sleep(2500);
     }
     const toScreen = (wx, wy) => evalJs(`(() => { const s = document.getElementById('${canvas}'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);

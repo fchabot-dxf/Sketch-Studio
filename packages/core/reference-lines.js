@@ -35,15 +35,18 @@ export function constraintReferencesAxis(c) {
 export const REFERENCE_PICK_TOOLS = Object.freeze([
   TOOL_MODES.PARALLEL, TOOL_MODES.PERPENDICULAR, TOOL_MODES.COLLINEAR, TOOL_MODES.TANGENT, TOOL_MODES.COINCIDENT
 ]);
-// (DIMENSION and SYMMETRIC are not in this list: they ask for an axis only at one step, REFERENCE_PICK_STEP below.)
-// The DIMENSION tool asks for an axis only for its SECOND pick after a real first JOINT (state.active.mode 'dim': a pending joint), so a
-// first dimension click near an axis picks real geometry. NOT while a line's length dimension is being placed: that click is also the
-// label drop, and a drop near an axis would turn into a line-line / angle upgrade (it broke fusion-drag-live and journal-live).
-const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION && !!(state.active && state.active.mode === TOOL_MODES.DIMENSION) && !state.placingConstraint;
+// (DIMENSION and SYMMETRIC are not in this list: they ask for an axis at ONE step of their picks, REFERENCE_PICK_STEP below.)
+// The DIMENSION tool asks for an axis only for its SECOND pick (task 555, Fusion's sequence), so a first dimension click near an axis
+// picks real geometry: after a real first JOINT (state.active.mode 'dim': a pending joint), or while a LINE's length preview follows the
+// cursor (placingConstraint.__asksSecondPick, set by the dimension tool when it makes that preview). A click on an axis then PICKS it
+// (line-to-axis distance or angle); a label is dropped by a click that is not on an axis, a line or a point.
+const dimensionAsksSecondTarget = (state) => state.currentTool === TOOL_MODES.DIMENSION && (
+  (!!(state.active && state.active.mode === TOOL_MODES.DIMENSION) && !state.placingConstraint)
+  || !!(state.placingConstraint && state.placingConstraint.__placing && state.placingConstraint.__asksSecondPick));
 // The SYMMETRIC tool (task 563) asks for an axis only for its THIRD pick, the symmetry line: entity 1 and entity 2 are real geometry.
 const symmetricAsksLine = (state) => state.currentTool === TOOL_MODES.SYMMETRIC && !!(state.pendingConstraint && Array.isArray(state.pendingConstraint.selectionBuffer)
   && state.pendingConstraint.selectionBuffer.length === 2);
-// The tools that ask for an axis at ONE step of their picks: tool mode -> "is it that step now?" (state).
+// THE declaration of the tools that ask for an axis at ONE step of their picks: tool mode -> "is it that step now?" (state).
 export const REFERENCE_PICK_STEP = Object.freeze({ [TOOL_MODES.DIMENSION]: dimensionAsksSecondTarget, [TOOL_MODES.SYMMETRIC]: symmetricAsksLine });
 export const referenceLinesPickable = (state) => !!state && (REFERENCE_PICK_TOOLS.includes(state.currentTool)
   || (Object.prototype.hasOwnProperty.call(REFERENCE_PICK_STEP, state.currentTool) && REFERENCE_PICK_STEP[state.currentTool](state)));

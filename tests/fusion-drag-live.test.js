@@ -97,7 +97,7 @@ await (async () => {
     const lenD = Math.hypot(D[1].x - D[0].x, D[1].y - D[0].y), uD = { x: (D[1].x - D[0].x) / lenD, y: (D[1].y - D[0].y) / lenD };
     await run('line-len-end-across', async () => {
       await drawLine(D[0], D[1]);
-      await clickEl('#tool-dim'); await click((D[0].x + D[1].x) / 2, (D[0].y + D[1].y) / 2); await click(cv.x, cv.y + 100);
+      await clickEl('#tool-dim'); await click((D[0].x + D[1].x) / 2, (D[0].y + D[1].y) / 2); await click(cv.x + 60, cv.y + 40); // the drop is a click on EMPTY space, clear of both axes (the origin is at about cv + (-117, +117); a click on an axis is the second pick, task 555)
       await waitFor(`(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`, 'the dimension input', 8000);
       await key('Enter', 'Enter', 13); await sleep(400);
       console.log('dimension labels:', await evalJs(`JSON.stringify([...document.querySelectorAll('#svgCanvas .dim-label')].map(e => e.textContent.trim()))`));

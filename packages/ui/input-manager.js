@@ -1489,8 +1489,8 @@ export function handleDelete(state) {
 function handleEscape(state) {
     // If a dimension placement is in progress, cancel it and remove the temporary constraint
     try {
-        if (isDimensionPlacing(state)) {
-            resetDimensionState(state);
+        if (state.currentTool === TOOL_MODES.DIMENSION) {
+            resetDimensionState(state); // a placing preview or a first pick waiting for the second: Esc drops both (task 555)
         }
     } catch(_) {}
 

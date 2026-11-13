@@ -148,8 +148,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
 
     // ---- SketchStudio: right-click a symmetric glyph -> "Delete constraint"
     if (HOST === 'sketchstudio') {
-      // the glyph of the LEFT point (Q1): it sits left of Q1, clear of any geometry (a joint or a shape under the pointer wins a right-click, as for
-      // every glyph; the right point's glyph lies on its own line)
+      // the glyph of the LEFT point (Q1): it sits left of Q1, clear of any geometry (since task 571 the glyph wins a right-click over any geometry under it)
       const g = await evalJs(`(() => { const r = [...document.querySelectorAll('#${canvas} .constraint-glyph[data-ctype="symmetric"][data-cline="ref_axis_y"]')].map(e => e.getBoundingClientRect()).sort((a, b) => a.x - b.x)[0]; return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`);
       await rightClick(g);
       const items = await evalJs(`[...document.querySelectorAll('.sk-context-menu .sk-context-item')].map(e => e.dataset.id)`);

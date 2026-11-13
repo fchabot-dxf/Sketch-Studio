@@ -12,7 +12,8 @@
         genJ: () => 'j' + (counter++),
         genS: (t) => 's' + (counter++),
         selectedJoints: new Set(),
-        selectedShapes: new Set()
+        selectedShapes: new Set(),
+        captureUndoSnapshot: () => ({}), saveStateForce: () => {}
     });
 
     // Coincident: Joint-to-Joint only

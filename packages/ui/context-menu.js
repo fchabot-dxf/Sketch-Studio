@@ -119,9 +119,9 @@ export function showContextMenu({ x, y, items, returnFocusTo = null, touch = fal
   return el;
 }
 
-// The geometric constraints whose GLYPH opens a menu (kind 'constraint': its Delete). Task 563 added Symmetric; the other geometric glyphs
-// open none (unchanged), a type joins with one entry here.
-export const CONSTRAINT_MENU_TYPES = Object.freeze([CONSTRAINT_TYPES.SYMMETRIC]);
+// The constraints whose GLYPH opens the 'constraint' menu (its Delete): every geometric constraint. (A distance / angle is a dimension:
+// its own menu.) Task 571: the glyph wins the right-click over the geometry under it, so a geometric glyph must always open a menu.
+export const CONSTRAINT_MENU_TYPES = Object.freeze(Object.values(CONSTRAINT_TYPES).filter(t => t !== CONSTRAINT_TYPES.DISTANCE && t !== CONSTRAINT_TYPES.ANGLE));
 
 /**
  * The declared item list per target kind. `actions` are the EXISTING functions (see input-manager.js):

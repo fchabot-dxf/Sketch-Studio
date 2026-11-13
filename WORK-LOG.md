@@ -14011,6 +14011,12 @@ Proof: each of numeric-input-self-hiding, draw-undo-live-esc, axis-snap-live-sha
   weight 1, a generator (two points / two lines / two circles, about an axis or another sketch line) and its apply; 49 symmetric ops in the 300
   cases (30 points, 12 lines, 7 circles; 25 about an axis); `coverage-properties: passed`, every invariant failure explained by the pinned
   findings. The random sequences of the other kinds changed with the new total weight (tallies differ from main's run, still all explained).
+- Merged origin/main bc06caa (560 shared launcher / ready signals, 562 mobile step 1): conflicts only in input-manager.js imports (CONSTRAINT_TOOLS +
+  snapBoostFor) and the context-menu call (kind 'constraint' + 562's `touch`), both kept. After the merge: symmetric 136 checks, symmetric-glyph,
+  jacobian-fd-guard 187, coverage-matrix, coverage-properties, creation-placement-table, live SketchStudio + Shaper all pass (screenshots identical
+  md5). Final gate on 7e7df3b: `GATE files=332 pass=331 fail=1` (tests/sidebar-projects.test.js), `SMOKE 12/12`, `HEADLESS-LEFT 0`. That file is
+  not touched by this branch (git diff origin/main..HEAD: 0 sidebar / project files); alone it passes 7 of 9 runs, the failing assertion is "the
+  refusal message is shown in the drawer" (a timing flake on main, reported, not fixed).
 - FOUND, not fixed: the other constraint tools (parallel, perpendicular, coincident, ...) create NO undo step of their own (probe: parallel through the
   tool, history stays 0, Ctrl+Z then also removes the step before it); a right-click on any glyph lying over geometry opens the geometry menu (a
   joint / shape wins the pick; seen live on a point glyph lying on its own line).

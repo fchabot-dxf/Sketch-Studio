@@ -183,12 +183,12 @@ await (async () => {
     // ── Open recent switches the canvas ──
     await openSb();
     await clickEl('[data-action="open-recent"]'); await sleep(500);
-    const rows = await evalJs(`[...document.querySelectorAll('.sk-sidebar-view .sk-recent')].map((r) => r.querySelector('.sk-row-name').textContent + '|' + r.querySelector('.sk-row-sub').textContent)`);
-    assert.ok(rows[0].startsWith('DoorB|My Designs · Shaper · '), 'newest first, with the project name + relative time: ' + rows[0]);
+    const rows = await evalJs(`[...document.querySelectorAll('.sk-pm .sk-pm-tile')].map((r) => r.querySelector('[data-name]').textContent + '|' + r.querySelector('.sk-pm-sub').textContent)`);
+    assert.ok(rows[0].startsWith('DoorB|'), 'newest first, with the relative time: ' + rows[0]);
     assert.ok(/just now|min ago/.test(rows[0]), 'relative time shown');
     assert.ok(rows[1].startsWith('Door A|'), 'then the older one');
     await shot('479-recent-view');
-    await clickEl('.sk-sidebar-view .sk-recent[data-design]:nth-of-type(2)'); await sleep(900);
+    await clickEl('.sk-pm .sk-pm-tile:nth-of-type(2)'); await sleep(900);
     assert.strictEqual(await shapes(), 4, 'opening Door A switches the canvas content');
     assert.strictEqual(await title(), 'Door A — Shaper', 'and the title follows');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`), false, 'the drawer closes after an open');

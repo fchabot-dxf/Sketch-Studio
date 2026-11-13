@@ -75,7 +75,7 @@ await (async () => {
         state.joints.set('j_a', { x: -25, y: 0, fixed: true });
         state.joints.set('j_b', { x: 25, y: 0, fixed: false });
         state.shapes.push({ id: 's_1', type: 'line', joints: ['j_a', 'j_b'] });
-        const c = { id: 'c_1', type: 'distance', joints: ['j_a', 'j_b'], value: 50, offset: -15, glyphPos: { x: 0, y: -15 } };
+        const c = { id: 'c_1', name: 'd1', type: 'distance', joints: ['j_a', 'j_b'], value: 50, offset: -15, glyphPos: { x: 0, y: -15 } }; // a real dimension always has its automatic name (TASK 535)
         state.constraints.push(c);
         engine.solve(500);
         state.saveState();

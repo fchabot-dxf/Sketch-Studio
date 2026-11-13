@@ -104,9 +104,9 @@ await (async () => {
       for (const d of [SMALL, HUGE]) {
         await clickEl('.sk-sidebar-btn');
         await clickEl('.sk-sidebar-item[data-action="open-recent"]');
-        await waitFor(`[...document.querySelectorAll('.sk-recent')].some(e => e.textContent.includes('${d.name}'))`, 'recent list to show ' + d.name);
+        await waitFor(`[...document.querySelectorAll('.sk-pm .sk-pm-tile')].some(e => e.textContent.includes('${d.name}'))`, 'Recent pane to show ' + d.name);
         const vbBefore = await evalJs(`document.querySelector('${h.canvas}').getAttribute('viewBox')`);
-        await clickEl('.sk-recent', d.name);
+        await clickEl('.sk-pm .sk-pm-tile', d.name);
         await waitFor(`document.querySelector('${h.canvas}').getAttribute('viewBox') !== ${JSON.stringify(vbBefore)}`, h.app + ' to fit the opened design ' + d.name);
         await settle();
         assertFramed(await viewBoxOf(h.canvas), d.bbox, h.app + ' Open recent -> ' + d.name);

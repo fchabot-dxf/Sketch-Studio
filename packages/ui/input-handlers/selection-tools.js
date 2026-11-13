@@ -51,7 +51,7 @@ function showCoincidentGlyphsForCluster(state, cluster){
 } 
 
 // Import shared helpers from hover-manager (single source of truth)
-import { findClosestConstraintGlyph, selectPick, applyHoverPriority } from '#ui/hover-manager.js';
+import { selectPick, applyHoverPriority } from '#ui/hover-manager.js';
 import { findConnectedChain } from '#core/loop-finder.js'; // TASK 588: the double-click chain
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach
 
@@ -290,11 +290,12 @@ function inGeometrySelection(state, kind, id) {
 }
 
 // TASK 588: a GROUP drag moves the whole selection: a CLUSTER drag (the existing point-drag step: DOF mask, drag step, solve) whose members
-// are every joint of the selected shapes and every selected point, each pulled toward its start + the CURSOR's displacement by its own
-// spring (pullDrag marks the targets `group`, the solver springs every one of them). The constraints still hold: the ones inside the
+// are every joint of the selected shapes and every selected point, all CARRIED (no drag.carried: pullDrag carries jointIds), so each is
+// pulled toward its start + the CURSOR's displacement by its own spring (task 584's engine._jointDragSprings). The constraints still hold: the ones inside the
 // selection keep it as drawn, the ones to unselected geometry pull that geometry along or hold the selection back, as the solver decides; a
 // held member (fixed, 0 DOF, or coincident with such a point) locks the whole group and an axis lock of any member masks that axis for all
-// (getDragDOF, the rule of every cluster drag). It neither snaps nor infers, and adds no constraint on release. It moves once the pointer
+// (getDragDOF, the rule of every cluster drag). It neither snaps (dragToward) nor infers (a cluster drag, task 584), and adds no constraint on
+// release. drag.group serves only the undo label, the no-snap rule and the click handling. It moves once the pointer
 // leaves the click radius (5 px, handleSelectionPointerMove's isDragging), so a click on a member stays a click: its release selects the
 // pressed entity alone (drag.click), what the press selected before.
 function startGroupDrag(e, svg, state, primaryId, click) {
@@ -391,6 +392,11 @@ export function handleJointSelection(e, svg, state, hitJoint) {
         startWorld: { x: hitJoint.j.x, y: hitJoint.j.y },
         lastTarget: { x: hitJoint.j.x, y: hitJoint.j.y },
         arcRims,
+        // TASK 584: the joints the drag CARRIES, each pulled toward its own target by every solve while the drag lasts (pullDrag; the engine
+        // pulls every joint carrying a dragTarget): the grabbed point (its coincident cluster) and the rims an arc-centre grab adds (the arc
+        // translates whole, like Fusion; a held rim makes it a pivot instead, getDragDOF). The other members (a centre-point rectangle's
+        // group) are masked with the grab and follow the constraints.
+        carried: Array.from(new Set([...cluster, ...arcRims])),
         pointerId: e.pointerId
     };
 
@@ -767,7 +773,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
         target = { x: startPos.x + dx, y: startPos.y + dy };
 
         // TASK 582: an arc turning about its held rim (getDragDOF pivot): the grabbed centre keeps its distance to the pivot, so its target is
-        // the point of that circle nearest the cursor (the radius stays; the rest of the arc turns with it, pullDrag).
+        // the point of that circle nearest the cursor (the radius stays; the rims are not carried, the other one follows the constraints, pullDrag).
         if (pivot) {
             const R = Math.hypot(startPos.x - pivot.x, startPos.y - pivot.y), vx = wpt.x - pivot.x, vy = wpt.y - pivot.y, len = Math.hypot(vx, vy);
             target = len > 0 ? { x: pivot.x + vx / len * R, y: pivot.y + vy / len * R } : { x: startPos.x, y: startPos.y };
@@ -824,7 +830,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
     // TASK 582: a point drag takes the snap only when the dragged point REACHES it: its solved position within the snap magnet of the snap
     // point (the release distance when the previous step held this same target, as input-manager's hysteresis). A candidate it does not take
     // is no lock: the renderer shows none, the release adds no constraint, and input-manager's release-jitter recovery has no lock to restore.
-    // TASK 588: a GROUP drag (the selection moving) takes no snap and no inference: it is a solver move only.
+    // TASK 588: a GROUP drag (the selection moving) takes no snap: it is a solver move only (and, a cluster drag, it infers nothing: task 584).
     if (state.drag.group) {
         if (state.lastLockedSnap === state.activeSnap) state.lastLockedSnap = null;
         state.snapTarget = null;
@@ -865,13 +871,18 @@ function dragToward(e, svg, state, wpt, atPointer) {
         // at-pointer pass is the quick one (task 548), so on a stiff drawing (the owner's 2.7 km arcs at the framed view, about 40 units per 4 px
         // event) it leaves the point behind the cursor; an inference found there pins it behind, the frame solve holds that pin and the drag
         // stalls (j3 stopped after 3 events). An inference the sketch already implies pins nothing (canApplyInference).
-        if (pointDrag && !state.drag.group) {
+        // TASK 584: a CLUSTER drag (a corner of coincident joints, an arc by its centre, a centre-point rectangle's centre) infers NOTHING.
+        // findInference has the attached-line tests for a single dragged joint only; for any other drag it read the displacement start ->
+        // cursor as a line being DRAWN (tangent to a circle the start lies on, parallel / perpendicular to a nearby line): the point's
+        // motion, not a line of the sketch, so the inferred pose is one the point cannot take (the owner's j3 corner, its side radial, showed
+        // a tangent to the arc it sits on). Fusion: to verify; the conservative choice (no inference the point cannot satisfy).
+        if (state.drag.type === DRAG_TYPES.CLUSTER) state.inference = null;
+        else if (pointDrag) {
             const primaryId = state.drag.id;
             const initialPos = state.drag.initial.get(primaryId);
             if (initialPos) {
                 // Check inference relative to start position (allow full geometry-based inference)
-                const draggedType = state.drag.type === DRAG_TYPES.JOINT ? 'joint' : 'other';
-                const inf = findInference(initialPos, target, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType, worldPerPx: getZoomFactor(svg), constraints: state.constraints });
+                const inf = findInference(initialPos, target, state.shapes || [], state.joints || new Map(), state.snapTarget || null, { draggedId: primaryId, draggedType: 'joint', worldPerPx: getZoomFactor(svg), constraints: state.constraints });
                 if (inf) {
                     const infState = { type: inf.type, pos: inf.pos, origin: initialPos, targetId: inf.targetId || null, ref: inf };
                     if (canApplyInference(state, primaryId, infState, { full: false })) {
@@ -885,8 +896,6 @@ function dragToward(e, svg, state, wpt, atPointer) {
                     state.inference = null;
                 }
             }
-        } else if (state.drag.group) {
-            state.inference = null;
         }
     }
 
@@ -913,29 +922,25 @@ function snapIdOf(snap) {
     return snap.targetId || snap.id || ((snap.type === 'line' || snap.type === 'shape') && snap.shape ? snap.shape.id : null) || null;
 }
 
-// Pull the drag toward the world point `to`: the drag targets of its member joints and a solver pass of `iters` iterations.
-// pivot (TASK 582, getDragDOF): the members turn about it (an arc grabbed by its centre with one held rim); else they translate with the grab.
+// Pull the drag toward the world point `to`: the drag targets of the joints it carries and a solver pass of `iters` iterations.
+// pivot (TASK 582, getDragDOF: an arc grabbed by its centre with one held rim): the rims are not carried, the arc turns about the held one
+// as its constraints require (radius kept).
 function pullDrag(state, to, iters, pivot) {
     // NATIVE SOLVER DRAG: Set drag targets on joints instead of forcing positions
     // This tells the solver "try to be here", but allows constraints to override.
-    // Set dragTarget on every member of the drag (fixed joints included) so the
-    // renderer can show them and downstream tests/inspections can see what the
-    // mask actually allows. The solver's auto-detect path already skips fixed
-    // joints, so fixed joints never produce a mouse_spring.
+    // TASK 584: every joint the drag CARRIES (state.drag.carried; a shape drag with no body point carries all its members) gets the grab's
+    // displacement as its target, and every solve while the drag lasts pulls each of them (engine._jointDragSprings; a fixed joint never
+    // produces a spring). Before, the targets were set but the solver pulled only one joint, so the rims of an arc dragged by its centre
+    // lagged and the radius changed.
     const start = state.drag.startWorld;
     const dx = to.x - start.x, dy = to.y - start.y;
-    const turn = pivot ? Math.atan2(to.y - pivot.y, to.x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x) : 0;
-    const cos = Math.cos(turn), sin = Math.sin(turn);
+    const rims = pivot ? (state.drag.arcRims || []) : [];
     console.log('[DRAG] smoothed:', to, 'startWorld:', start, 'dx/dy:', dx, dy);
-    // TASK 588: a GROUP drag marks its targets `group`: every member is a spring of its own (engine.solve), not only the grabbed one
-    const group = !!state.drag.group;
-    for (const id of state.drag.jointIds) {
+    for (const id of (state.drag.carried || state.drag.jointIds)) {
+        if (rims.includes(id)) continue;
         const init = state.drag.initial.get(id), j = state.joints.get(id);
         if (j && init) {
-            if (group) j.dragTarget = { x: init.x + dx, y: init.y + dy, group: true };
-            else if (!pivot) j.dragTarget = { x: init.x + dx, y: init.y + dy };
-            else if (id === state.drag.id) j.dragTarget = { x: to.x, y: to.y };
-            else j.dragTarget = { x: pivot.x + cos * (init.x - pivot.x) - sin * (init.y - pivot.y), y: pivot.y + sin * (init.x - pivot.x) + cos * (init.y - pivot.y) };
+            j.dragTarget = { x: init.x + dx, y: init.y + dy };
             console.log('[DRAG] Joint', id, 'init:', init, 'dragTarget:', j.dragTarget);
         }
     }
@@ -947,8 +952,7 @@ function pullDrag(state, to, iters, pivot) {
         const primary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
         if (state.engine && primary) {
             const dt = { jointId: primary, x: to.x, y: to.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
-            // a GROUP drag passes no explicit target: the solver springs every member from its `group` target (engine.solve, as its frame solve)
-            try { state.engine.solve(iters, group ? {} : { dragTarget: dt }); } catch (_) { /* fail-open */ }
+            try { state.engine.solve(iters, { dragTarget: dt }); } catch (_) { /* fail-open */ }
         }
     } catch (_) { }
 }
@@ -1263,4 +1267,3 @@ export function resetSelectionState() {
 }
 
 // Re-export for external diagnostics (canonical source is hover-manager.js)
-export { findClosestConstraintGlyph };

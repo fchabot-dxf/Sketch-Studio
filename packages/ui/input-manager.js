@@ -458,7 +458,8 @@ function updateSnapTarget(e, svg, state) {
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
         // This ensures the origin is always snappable even if findSnap logic skips it.
-        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin')) {
+        // TASK 584: except for a drag that holds the origin itself (a joint coincident with it: its cluster includes j_origin), as findSnap.
+        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin') && !excludeIds.includes('j_origin')) {
             const origin = state.joints.get('j_origin');
             const sOrigin = worldToScreen(svg, origin);
             const dOrigin = Math.hypot(e.clientX - sOrigin.x, e.clientY - sOrigin.y);

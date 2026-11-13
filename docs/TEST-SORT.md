@@ -358,3 +358,69 @@ Two faithfulness fixes in the kit itself, found by these conversions (batch A's 
 | axis highlight | an axis is always lit (`packages/ui/svg-renderer.js`) | reference-lines-glyph-node | `AssertionError [ERR_ASSERTION]: parallel X: the axis is not left lit` |
 | diagnostic key ring | typed characters recorded as typed (`packages/ui/diagnostic-log.js`) | journal-node | `AssertionError [ERR_ASSERTION]: characters typed into the number input are recorded only as "char"` |
 | parameters hint | the `creates` hint reads `makes` (`packages/core/parameters.js`) | parameters-canvas-node | `AssertionError [ERR_ASSERTION]: the live hint before Enter: makes width = 6.0 mm` |
+
+## Phase 2, batches C and D: converted (task 583)
+
+Batch C (host stages): 10 browser files, 8 replaced by node tests and deleted, 2 split (stock-loop-live and studio-encoding keep their browser-only halves), plus the Pen Plotter half
+of recentre-on-reload (its node test now covers Pen Plotter; recentre-on-reload-live deleted). Batch D (save rule): 8 browser files (save-key-leave-live-penplotter / -sketchstudio,
+unsaved-prompt-live-{penplotter,sketchstudio}-{save,discard,cancel}) and their 2 runners: 7 deleted, save-key-leave-live-sketchstudio trimmed to the browser-only half; 2 node runners
+(`save-key-leave-node-runner.js`, `unsaved-prompt-node-runner.js`) and 8 node tests replace them.
+`node scripts/gate.cjs --list`: before 301 quick + 61 live = 362 files (origin/main ddfc6f3); after 319 quick + 45 live = 364 files (the file count did not drop). Browser seconds removed
+(TEST-SORT estimate): batch C about 180 s, batch D about 209 s. Node seconds added (measured, one process each): C files 0.07 to 0.6 s each (recentre-on-reload 11.8 s, it keeps its real
+3.2 s autosave waits), D files 0.5 s (save-key-leave) and 1.2 to 3.1 s (unsaved-prompt, 5 paths each).
+
+### App change (declared, no behaviour change): the host stages the page and the kit both call
+- `apps/penplotter/src/stages.js` (new): the stage list (DATA), the nav, the stage bodies, the router, the Design mount and the hidden Draw host, moved out of `main.js` unchanged
+  (`mountStages({ nav, stagesHost, bufferSeams })`; the page passes no `bufferSeams`, the kit passes its profile's store). main.js keeps the sidebar and the Diagnostic Log.
+- `apps/shaper/src/modes.js` (the mode router and its views), `prepare-stage.js` (Prepare, its cut card, `hostSnapshot`: the cut plan in the shared undo snapshots, now declared for the kit),
+  `stock-card.js` (the Review stock thickness card), `cut-import.js` (what the File menu's import runs after its chooser): moved out of `main.js`; main.js calls them.
+  `review-wiring.test.js` reads the router from modes.js.
+- Pen Plotter's hostSnapshot (task 570, `sketch-stage.js`) is reached by the kit through the real stage (`mountSketchStage`): not copied.
+
+### Kit additions (tests/helpers/node-app.js, declared in its header)
+13. **change event**: a browser fires `change` on a text field the user edited when it loses the focus or Enter is pressed in it (pen name, Toolpath settings, stock thickness commit on it);
+    happy-dom fires neither. Also: Ctrl+A selects the field text; typing into a number field keeps the raw text (a browser's box keeps "-" which the value reads as ""); Tab takes the focus
+    off a text field; a press on a text field focuses it.
+14. **sidebar**: `open({ sidebar: true })` mounts `mountProjectSidebar({ appId, getBuffer, store })` (what every page script does) on the profile's store: Ctrl+S, New, Open, Open recent,
+    Projects, Open from file, GO TO and the Save... / Don't save / Cancel question are the app's own code.
+15. **file chooser**: a click on an `<input type=file>` is noted; `app.hasFileChooser()` / `app.chooseFile({ name, text })` answer it as the user does (the input gets a File, change fires).
+16. **navigation**: `location.href = ...` is not loaded by happy-dom; the test reads the new location and opens the next page on the same profile.
+Also `CSS` is a page global (the Projects modal calls `CSS.escape`), the Pen Plotter node host is now the REAL stages (it was a bare sketcher), the Shaper host mounts the real mode router + Prepare,
+and each hidden stage / mode reports a 0 x 0 box (as the page does) while the one showing reports its measured box.
+
+### Split: what stays in the browser
+- **stock-loop-live** (trimmed): the Stock edge's drawn look in Prepare (CSS: tan, dashed) and the Review's 3D board (WebGL) with its thickness card.
+- **studio-encoding** (trimmed): the browser filling the two exported compound paths under its default fill rule (the hole stays empty).
+- **save-key-leave-live-sketchstudio** (trimmed): the browser's own leave-page dialog (a page-initiated reload raising `beforeunload`, answered "stay") for an unsaved Untitled with content and
+  none for a clean / named one; a REAL Ctrl+S opens the Save as prompt and it TAKES THE KEYBOARD FOCUS; the typed name stores it. Node asserts the same warning as "the page's `beforeunload`
+  is prevented" (the buffer arms it).
+
+### Same asserts, old vs new (assert-like lines, old -> new; the new files assert everything the old did, extra lines are the kit's setup checks)
+| converted (new file) | old browser test | asserts | what it checks (same in both) |
+|---|---|---|---|
+| cut-offset-types-node | cut-offset-types | 16 -> 18 | On line / Guide params declared, the export and preview rule, the cut card rows per type |
+| penplotter-active-panel-node | penplotter-active-panel | 26 -> 38 | the Active Toolpath panel follows state.activeToolpathId: + Outline / + Fill, row click, delete, Esc, undo / redo |
+| penplotter-pen-undo-node | penplotter-pen-undo | 14 -> 15 | add / rename / delete a pen is undoable and redoable, the toolpath keeps its pen |
+| penplotter-persist-node | penplotter-persist | 18 -> 23 | the plotter document, G-code (byte-identical) and panels survive a reload; an old document gets defaults |
+| penplotter-stage-undo-node | penplotter-stage-undo | 18 -> 20 | one keystroke, one history chosen by the stage (Design = sketch history, Toolpath / Export = history.js) |
+| penplotter-validation-node | penplotter-validation-live | 14 -> 22 | a bad document / machine / spacing / passes / pen width value is clamped or refused and the box shows the kept value; no F0 / NaN in the G-code |
+| shaper-cut-undo-node | shaper-cut-undo | 27 -> 49 | every cut-plan edit is one step of the shared history; Ctrl+Z / Y on Prepare; undoing an SVG import restores the earlier plan |
+| shaper-persist-node | shaper-persist | 17 -> 25 | cut plan + stock survive a reload, an old document gets defaults, a SketchStudio save keeps the sidecar, export byte-identical |
+| stock-loop-node (+ stock-loop-live trimmed) | stock-loop-live | 19 -> 19 (node) | Stock picked on a loop, role moves with a notice, exactly one Stock, Ctrl+Z, one Thickness row, 0.5in stored in mm; drawn look + 3D stay |
+| studio-encoding-node (+ studio-encoding trimmed) | studio-encoding | 10 -> 9 (node) | encoding of the export vs Shaper Studio (pure functions of a state); the fill-rule picture stays |
+| recentre-on-reload-node (Pen Plotter added) | recentre-on-reload-live | 15 -> 15 | framed after a reload and after Open recent; no re-fit on autosave / zoom (the node test flushes the buffer where the browser had waited two settle pauses) |
+| save-key-leave-{sketchstudio,penplotter}-node | save-key-leave-live-{sketchstudio,penplotter} | steps 1-5 | clean Untitled: no warning; unsaved with content: armed; Ctrl+S opens the prompt (starts "Untitled"), the name stores it and is current, no tool switch; Ctrl+S on a named design writes now, no prompt; named: no warning, reload restores |
+| unsaved-prompt-{sketchstudio,penplotter}-{save,discard,cancel}-node | unsaved-prompt-live-* | 5 paths x 3 choices x 2 hosts | the question (3 answers, "not saved", nothing changes while it asks), then per choice what is stored / which design is open / the page left, for open-projects, open-recent, open-file, new, goto |
+
+Differences noted: Pen Plotter in `sketch-layers-node` starts from the 120-unit view Shaper opens with (its real Design stage frames the whole 200 mm paper); the old runner's real file chooser is
+`app.chooseFile`; the goto check waits for the title (the sidebar sets it once the store answers).
+
+### Bites (a behaviour broken on purpose, the node test fails, reverted with `git checkout`; `git status` shows tests / docs only)
+| break | test | failure |
+|---|---|---|
+| the cut plan left out of the undo snapshots (`prepare-stage.js` hostSnapshot) | shaper-cut-undo-node | `AssertionError [ERR_ASSERTION]: Ctrl+Z on Prepare removes the cut type (the Design-only gate does not block it)` |
+| `applyPlotterDoc` does nothing (`plotter-doc.js`) | penplotter-persist-node | `AssertionError [ERR_ASSERTION]: the whole plotter document (doc, pens, toolpaths, settings, styles, static ids) is equal after reload` |
+| the toolpath history ignores the active stage (`history.js` onKey) | penplotter-stage-undo-node | `AssertionError [ERR_ASSERTION]: Design Ctrl+Z must NOT undo the toolpath (toolpath history)` |
+| Ctrl+S on a named design no longer flushes (`sidebar-projects.js`) | save-key-leave-sketchstudio-node | `Error: node-app: timed out waiting for Ctrl+S on a named design wrote the new line at once` |
+| "Don't save" does nothing (`document-buffer.js` discardUnsaved) | unsaved-prompt-penplotter-discard-node | `Error: node-app: timed out waiting for open-projects: the action goes on after discard` |
+| the leave-page warning never armed (`document-buffer.js` onBeforeUnload) | save-key-leave-penplotter-node | `AssertionError [ERR_ASSERTION]: an unsaved Untitled with content: the leave-page warning is armed` (`false !== true`) |

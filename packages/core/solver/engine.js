@@ -816,20 +816,9 @@ export class NewtonSolver {
         }
       }
     }
-    if (!dragOpt) {
-      // a JOINT drag: auto-detect first joint carrying a dragTarget set by UI input handlers (a body drag never sets one, task 538)
-      // A GROUP drag (task 588: the select tool moving a selection) marks its member targets `group`: every one of them is a spring.
-      for (const [id, j] of this.joints.entries()) {
-        if (j && j.dragTarget && !j.fixed) {
-          dragOpt = j.dragTarget.group
-            ? { springs: this._groupSprings(), stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 }
-            : { jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 };
-          break;
-        }
-      }
-    }
-
     const x0 = this._pack();
+    // a JOINT drag: the springs of every joint carrying a dragTarget (set by the UI input handlers; a body drag never sets one, task 538)
+    if (!dragOpt || !dragOpt.body) dragOpt = this._jointDragSprings(dragOpt);
     if (x0.length === 0) {
       // No free variables — every joint is pinned (all fixed, or merged into a
       // fixed coincident cluster). The sketch can't move, but its constraints
@@ -978,13 +967,25 @@ export class NewtonSolver {
     return out;
   }
 
-  // TASK 588: the springs of a GROUP drag: every free joint whose dragTarget is marked `group`, toward its own target.
-  _groupSprings() {
-    const out = [];
+  // THE springs of a JOINT drag (TASK 584): the explicit one (the select tool's grabbed joint, solve's options.dragTarget) and one for every
+  // other joint carrying a dragTarget, the members the drag CARRIES (selection-tools pullDrag: the grabbed point's coincident cluster, and
+  // an arc grabbed by its centre carries both rims, so it translates whole like Fusion). One spring per solver variable: coincident joints
+  // are one point (_pack), a second spring on it would only weigh the pull double. Before, only the FIRST joint carrying a target (joint
+  // insertion order) was pulled, so an arc dragged by its centre stretched: the rims followed the radius constraints, not the drag.
+  // Returns the list of springs, or null when there is none. Call after _pack (it reads _varIndex).
+  _jointDragSprings(explicit) {
+    const springs = explicit ? [explicit] : [];
+    const seen = new Set();
+    const pointOf = (id) => (this._varIndex.has(id) ? 'v' + this._varIndex.get(id) : 'j' + id); // a joint with no variable (anchored) is its own
+    if (explicit) seen.add(pointOf(explicit.jointId));
     for (const [id, j] of this.joints.entries()) {
-      if (j && j.dragTarget && j.dragTarget.group && !j.fixed) out.push({ jointId: id, x: j.dragTarget.x, y: j.dragTarget.y });
+      if (!j || !j.dragTarget || j.fixed) continue;
+      const p = pointOf(id);
+      if (seen.has(p)) continue;
+      seen.add(p);
+      springs.push({ jointId: id, x: j.dragTarget.x, y: j.dragTarget.y, stiffness: (SolverConfig.DRAG_STRENGTH || 1.0) * 1e4 });
     }
-    return out;
+    return springs.length ? springs : null;
   }
 
   _hasMouseSpring() {

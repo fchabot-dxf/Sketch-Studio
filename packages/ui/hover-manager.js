@@ -3,7 +3,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap, hitConstraintAtScreen } from '#ui/snap-detection.js';
 import SettingsManager from '#core/settings-manager.js';
-import { worldToScreen } from '#ui/coords.js';
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
 
@@ -33,41 +32,6 @@ export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY) {
     if (hitShape) return { shape: hitShape };
     return null;
 }
-
-// Helper: compute screen-space distance (pixels) between mouse and a world point
-export const getScreenDist = (svg, mx, my, worldPt) => {
-    if (!worldPt) return Infinity;
-    const s = worldToScreen(svg, worldPt);
-    if (!s || typeof s.x !== 'number' || typeof s.y !== 'number') return Infinity;
-    return Math.hypot(mx - s.x, my - s.y);
-};
-
-// Helper: find the closest constraint glyph (by glyphPos) to screen point
-export const findClosestConstraintGlyph = (svg, mx, my, constraints = [], requireVisible = true) => {
-    let best = { constraint: null, dist: Infinity, pt: null };
-    
-    for (const c of constraints) {
-        if (requireVisible && !c) continue;
-        if (requireVisible && !c.__isPreview && c.__visible === false) continue;
-        if (!c || !c.glyphPos) continue;
-        
-        if (Array.isArray(c.glyphPos)) {
-            for (const gp of c.glyphPos) {
-                const d = getScreenDist(svg, mx, my, gp);
-                if (d < best.dist) {
-                    best = { constraint: c, dist: d, pt: gp };
-                }
-            }
-        } else {
-            const d = getScreenDist(svg, mx, my, c.glyphPos);
-            if (d < best.dist) {
-                best = { constraint: c, dist: d, pt: c.glyphPos };
-            }
-        }
-    }
-    
-    return best;
-};
 
 /**
  * Set state.hovered* from the select tool's pick (selectPick: hover = click).

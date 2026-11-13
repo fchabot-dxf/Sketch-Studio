@@ -3,23 +3,21 @@ import { SolverConfig } from './solver-config.js';
 import { createNewtonSolver } from './solver/engine.js';
 import { sceneJoints, sceneShapes } from './reference-lines.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from './constants.js';
+import { newJointId } from './shape-id.js';
 
 
 // Embedded store (was store.js)
 const joints = new Map();
 const shapes = [];
 const constraints = [];
-let jid = 0;
 
 // Solver metrics for tuning wizard
 let lastSolveStats = { maxDelta: 0, iterations: 0, converged: false, constraintErrors: [] };
 
-function _genJ(){ return 'j'+(++jid)+'_'+Date.now(); }
 function _initStore(){
   joints.clear();
   shapes.length = 0;
   constraints.length = 0;
-  jid = 0;
   joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
 }
 
@@ -40,7 +38,7 @@ export function createEngine(options = {}){
     prepassHandoffResidual: SolverConfig.RELAX_PREPASS_HANDOFF != null ? SolverConfig.RELAX_PREPASS_HANDOFF : 1e-2
   });
   function init(){ _initStore(); }
-  function genJ(){ return _genJ(); }
+  function genJ(){ return newJointId(); }
   function getJoints(){ return joints; }
   function getShapes(){ return shapes; }
   function getConstraints(){ return constraints; }

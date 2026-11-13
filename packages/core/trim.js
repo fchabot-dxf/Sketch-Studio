@@ -88,7 +88,7 @@ export function trimShape(state, shapeId, clickPt) {
   } else if (t0 <= EPS) {
     // Leading interval [0, t1] → truncate start to t1
     const newPt = lerpPt(jA, jB, t1);
-    const mId = state.genJ?.() ?? ('jtrim_' + Date.now().toString(36) + '_0');
+    const mId = state.genJ();
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [mId, bId];
     removeOrphanJoints(state);
@@ -97,7 +97,7 @@ export function trimShape(state, shapeId, clickPt) {
   } else if (t1 >= 1 - EPS) {
     // Trailing interval [t0, 1] → truncate end to t0
     const newPt = lerpPt(jA, jB, t0);
-    const mId = state.genJ?.() ?? ('jtrim_' + Date.now().toString(36) + '_1');
+    const mId = state.genJ();
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [aId, mId];
     removeOrphanJoints(state);
@@ -111,8 +111,8 @@ export function trimShape(state, shapeId, clickPt) {
     const pt1 = lerpPt(jA, jB, t1);
 
     // Mint two new boundary joints
-    const m0Id = state.genJ?.() ?? ('jtrim0_' + Date.now());
-    const m1Id = state.genJ?.() ?? ('jtrim1_' + Date.now() + 1);
+    const m0Id = state.genJ();
+    const m1Id = state.genJ();
     state.joints.set(m0Id, { x: pt0.x, y: pt0.y });
     state.joints.set(m1Id, { x: pt1.x, y: pt1.y });
 

@@ -9,6 +9,16 @@ import { dbg } from '#core/debug.js';
 import { createSketches, stampSketch } from '#core/sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
 import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js'; // TASK 535: the document's user parameters ride every snapshot
+import { withoutDragTarget } from '#core/document.js'; // TASK 575: a drag target is not part of the drawing (never in a snapshot)
+
+// TASK 575: removes the solver targets a drag set (its member joints' dragTarget, a BODY drag's shape.dragTarget). The ONE release: the
+// select tool calls it at pointer-up (before a snap-on-release solves) and the state's `drag` setter calls it when a drag is replaced
+// or cleared by any other path.
+export function releaseDragTargets(state, drag) {
+  if (!drag) return;
+  if (drag.body) { const s = (state.shapes || []).find(x => x.id === drag.body.shape); if (s) delete s.dragTarget; }
+  for (const id of (drag.jointIds || [])) { const j = state.joints && state.joints.get(id); if (j) delete j.dragTarget; }
+}
 
 // TASK 466: THE undo depth, declared once and shared by every app (one shared state). It was 5, far too shallow for a CAD tool.
 // Measured snapshot cost (headless Edge): the owner's 8x11 dewalt SVG imported in Shaper (1693 shapes, 33 cuts) = 384 KB JSON /
@@ -33,7 +43,13 @@ export function createSketchState(engine, view) {
     mergeJoints: (a,b) => engine.mergeJoints(a,b),
     currentTool: 'select',
     active: null,
-    drag: null,
+    // TASK 575: the drag in progress. Its solver targets (joint.dragTarget / shape.dragTarget, which every solve pulls toward while
+    // they exist) live exactly as long as the drag: replacing or clearing state.drag releases them, whatever ends the drag (pointer-up,
+    // Esc, a touch hold, a new press after a lost release, clearing the document). Until then a target left behind kept pulling its
+    // joint toward an old cursor position in every later solve.
+    _drag: null,
+    get drag() { return this._drag; },
+    set drag(d) { if (this._drag && this._drag !== d) releaseDragTargets(this, this._drag); this._drag = d; },
     snapTarget: null,
     inference: null,  // Track inference hints (horizontal, vertical, perpendicular)
     lastMouse: null,
@@ -69,8 +85,8 @@ export function createSketchState(engine, view) {
     _captureSnapshot: function(withHost){
       const hs = this.hostSnapshot;
       return {
-        joints: new Map(Array.from(this.joints.entries()).map(([k,v]) => [k, {...v}])),
-        shapes: this.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})),
+        joints: new Map(Array.from(this.joints.entries()).map(([k,v]) => [k, withoutDragTarget(v)])),
+        shapes: this.shapes.map(s => ({...withoutDragTarget(s), joints: s.joints ? [...s.joints] : []})),
         constraints: this.constraints.map(c => ({...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined})),
         // SKETCH-2a: capture the sketch container so new-sketch + active changes undo/redo correctly
         sketches: Array.isArray(this.sketches) ? this.sketches.map(s => ({...s})) : undefined,

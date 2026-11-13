@@ -14325,3 +14325,4 @@ Removed the "midpoint between two lines" snap (owner: a drag moved the whole fra
 - Bites: 6 (3 of 10 in C, 3 of 8 in D), failures quoted in TEST-SORT.md, all reverted.
 - `node scripts/gate.cjs --list`: before 301 quick + 61 live = 362; after 319 quick + 45 live = 364.
 - Review of the first agent's (interrupted) work: kept; its D runners called a kit that had no sidebar / file chooser / CSS global yet: added; the goto title check now waits for the sidebar's async title.
+- Gate (merge of origin/main 1fea1ec into the branch, then): "GATE tier=merge jobs=quick=22,live=6 files=369 pass=369 fail=0 elapsed=627s", SMOKE 12/12, HEADLESS-LEFT 0 (.evidence/589/gate-merge2.log; the run before the merge: files=367 pass=367 fail=0).

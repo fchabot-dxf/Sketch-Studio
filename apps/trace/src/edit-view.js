@@ -44,9 +44,9 @@ export function mountEdit({ isActive, getHostData, applyHost, onStatusChange }) 
   docBuffer = createDocumentBuffer({
     state: designController.state, app: 'trace', canvas: svgEl,
     hostName: 'trace', getHostData,
-    onRestored: ({ hosts }) => {
+    onRestored: ({ hosts, reason }) => {
       try { designController.engine.solve(500); } catch (e) { console.error('solve after restore failed', e); }
-      fitToDrawing(svgEl, designController.state); // the restored drawing is framed (armed until the hidden Edit canvas has a size)
+      if (reason !== 'switch') fitToDrawing(svgEl, designController.state); // TASK 587: a tab switch keeps the tab's own view
       applyHost(hosts && hosts.trace);
     },
     onStatusChange,

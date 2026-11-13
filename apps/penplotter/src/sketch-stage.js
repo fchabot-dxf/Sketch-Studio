@@ -163,14 +163,17 @@ export function mountSketchStage(view, ctx = {}) {
   // TASK 451: after the saved plotter state is applied, repaint everything that was built from the defaults at mount.
   // The stage that is showing may be Design OR a pen tab (the active stage is restored too), so fit whichever canvas has
   // a size; the Toolpath settings inputs exist only once that stage has mounted (it hydrates them itself on mount).
-  const refreshAfterPlotterRestore = () => {
+  const refreshAfterPlotterRestore = ({ reason } = {}) => {
     underlayDirty = true;
     syncDocFields();
     if (document.getElementById('penUpZ')) loadDefaults();
     // TASK 494: a restored sketch is framed (the Design canvas shows the drawing; the paper stays visible when it is near);
     // a design with no geometry keeps the paper fit.
-    if (fitToDrawing(designCanvas, controller.state)) markFitted(); // the pen tabs then keep this shared view
-    else if (!fitDesignView()) fitViewport();
+    // TASK 587: a tab switch keeps the tab's own view (the buffer put it back): nothing is refitted.
+    if (reason !== 'switch') {
+      if (fitToDrawing(designCanvas, controller.state)) markFitted(); // the pen tabs then keep this shared view
+      else if (!fitDesignView()) fitViewport();
+    }
     if (state.preview.showToolpath) recalcPreview();
     renderArt();
   };

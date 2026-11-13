@@ -190,13 +190,7 @@ export const PLACE = {
     place: (state, M, A) => {
       const ms = shapeOf(state, M.op.id), as = shapeOf(state, A.id);
       if (!isLine(ms) || !isLine(as)) return null;
-      const [p, q] = lineEnds(state, ms), [a, b] = lineEnds(state, as);
-      if (M.pivots.length > 1) return null;
-      const P = M.pivots.length ? M.pivots[0] : mid(p, q);
-      const turn = motion(P, 1, parallelTurn(sub(q, p), sub(b, a)));
-      if (M.pivots.length) return turn;
-      const m2 = moveTo(turn, mid(p, q)), n = unitNormal(a, b), off = (m2.x - a.x) * n.x + (m2.y - a.y) * n.y;
-      return { ...turn, t: { x: -off * n.x, y: -off * n.y } };
+      return ontoLine(M, lineEnds(state, ms), lineEnds(state, as));
     },
   },
   // equal lines: scale the mover about its held point (else its single attached end, else its start): one end slides along the line
@@ -278,9 +272,9 @@ export const PLACE = {
   // tangent circles: the mover alone by least change (Fusion slides and resizes a free circle, resizes one whose centre is held)
   'tangent-circle-circle': { operands: (s, c) => shapesOp(c), place: () => SOLVE_ALONE },
   // symmetric (task 563, #core/symmetric.js): the mover becomes the MIRROR IMAGE of the anchor across the symmetry line (the line stays). A point
-  // goes to the anchor point's mirror (its body translates, or turns + scales about its one held point); a free line / circle / arc is taken
-  // by ONE similarity onto the anchor's mirror image (a line: its two paired ends; a circle / arc: centre and radius); a mover that is held
-  // somewhere takes it by the least-change solve of the mover alone.
+  // goes to the anchor point's mirror (its body translates, or turns + scales about its one held point); a line goes onto the anchor line's
+  // mirrored INFINITE line like a collinear mover (turned about its held point, else its midpoint, then slid on: its length kept); a free circle
+  // / arc is taken by ONE similarity (centre and radius); a held circle / arc by the least-change solve of the mover alone.
   symmetric: {
     body: 'component',
     operands: (s, c) => {
@@ -293,22 +287,23 @@ export const PLACE = {
       const la = pos(state, o.line[0]), lb = pos(state, o.line[1]);
       const R = (id) => mirrorPoint(pos(state, id), la, lb);
       if (o.form === 'points') return pointMotion(M, pos(state, M.op.id), R(A.id));
+      // lines (task 572): the mover goes onto the anchor line's MIRROR the way a collinear mover goes onto its anchor (same length)
+      if (o.form === 'lines') { const as = shapeOf(state, A.id); return ontoLine(M, lineEnds(state, shapeOf(state, M.op.id)), [R(as.joints[0]), R(as.joints[1])]); }
       if (M.pivots.length) return SOLVE_ALONE;
-      if (o.form === 'lines') {
-        const moverIsFirst = M.op.id === c.shapes[0];
-        const [[m1, a1], [m2, a2]] = o.pairs.map(([p, q]) => (moverIsFirst ? [p, q] : [q, p]));   // [the mover's end, the anchor's end]
-        return similarityTaking(pos(state, m1), pos(state, m2), R(a1), R(a2));
-      }
       const ms = shapeOf(state, M.op.id), as = shapeOf(state, A.id), C = pos(state, ms.joints[0]), rm = radiusOf(state, ms);
       return rm < EPS_POS ? null : motion(C, radiusOf(state, as) / rm, 0, sub(R(as.joints[0]), C));
     },
   },
 };
-// The direct similarity that takes p1 -> t1 and p2 -> t2 (a turn + scale about p1, then a translation), or null for a zero-length mover.
-function similarityTaking(p1, p2, t1, t2) {
-  const d = sub(p2, p1), e = sub(t2, t1);
-  if (len(d) < EPS_POS) return null;
-  return motion(p1, len(e) / len(d), ang(e) - ang(d), sub(t1, p1));
+// THE motion that puts a mover line [p, q] onto the infinite line through [a, b] (collinear, and symmetric's mirrored line): turn it parallel
+// about its one hard pivot (else its midpoint); with no pivot, then slide it along the normal onto the line. Two pivots: none.
+function ontoLine(M, [p, q], [a, b]) {
+  if (M.pivots.length > 1) return null;
+  const P = M.pivots.length ? M.pivots[0] : mid(p, q);
+  const turn = motion(P, 1, parallelTurn(sub(q, p), sub(b, a)));
+  if (M.pivots.length) return turn;
+  const m2 = moveTo(turn, mid(p, q)), n = unitNormal(a, b), off = (m2.x - a.x) * n.x + (m2.y - a.y) * n.y;
+  return { ...turn, t: { x: -off * n.x, y: -off * n.y } };
 }
 function toRow(state, M, A) { const Q = pos(state, M.op.id); return pointMotion(M, Q, { x: Q.x, y: pos(state, A.id).y }); }
 function toColumn(state, M, A) { const Q = pos(state, M.op.id); return pointMotion(M, Q, { x: pos(state, A.id).x, y: Q.y }); }

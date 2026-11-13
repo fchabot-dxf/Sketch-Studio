@@ -126,6 +126,17 @@ function classify(files) {
 
 // ---------------------------------------------------------------- merge tier: which live tests does the change affect
 const FILE_LITERAL_RE = /['"`]([A-Za-z0-9_@#./-]+\.(?:js|mjs|cjs|html|css|json|svg))['"`]/g;
+// A repo path inside a URL or template literal: `http://127.0.0.1:${port}/apps/sketchstudio/index.html`, '/tests/x.html'.
+// It starts after a non-path character (so `myapps/x.js` does not count) and runs through path characters, where a `${...}`
+// placeholder stands for one path segment (`/apps/${app}/index.html` -> every apps/<dir>/index.html that exists). Over-picking is fine.
+const URL_PATH_RE = /(?:^|[^A-Za-z0-9_.-])\/((?:apps|packages|tests)\/(?:[A-Za-z0-9_@#./-]|\$\{[^}]*\})+)/g;
+// path.join(REPO_ROOT, 'tests', 'fixtures', 'dxf', 'a.dxf'): a run of string literals that starts at a top-level repo directory.
+const SEGMENT_CHAIN_RE = /['"](apps|packages|tests|assets)['"]((?:\s*,\s*['"][^'",]+['"])+)/g;
+// What a static scan cannot see, declared per test: a changed file whose path starts with an entry picks the test. One comment per entry.
+const DECLARED_DEPS = {
+  'tests/sketch-import.test.js': ['tests/fixtures/'], // FIX('svg', name) / FIX('dxf', name): a helper builds the fixture path, the names are never one literal
+  'tests/import-polish.test.js': ['tests/fixtures/'], // the same FIX(...) helper
+};
 const HTML_REF_RE = /(?:src|href)\s*=\s*["']([^"'#?]+)["']/g;
 
 function existingFile(rel) {
@@ -139,7 +150,24 @@ function resolveRef(fromFile, spec) {
     if (spec.startsWith(alias)) return existingFile(path.posix.join(dir, spec.slice(alias.length)));
   }
   if (spec.startsWith('./') || spec.startsWith('../')) return existingFile(path.posix.join(path.posix.dirname(fromFile), spec));
-  return existingFile(spec.replace(/^\/+/, ''));
+  // a bare path is repo-root relative when it begins with a slash or names a repo path, else relative to the file (`<script src="src/main.js">` in an html page)
+  return existingFile(spec.replace(/^\/+/, '')) || (spec.startsWith('/') ? null : existingFile(path.posix.join(path.posix.dirname(fromFile), spec)));
+}
+
+// `apps/${app}/index.html` -> the existing files that fit; a placeholder segment matches any directory entry
+function expandPlaceholders(rel) {
+  let paths = [''];
+  for (const seg of rel.split('/')) {
+    const next = [];
+    for (const base of paths) {
+      if (/\$\{/.test(seg)) {
+        const dir = path.join(REPO_ROOT, base);
+        if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) for (const e of fs.readdirSync(dir)) next.push(base ? `${base}/${e}` : e);
+      } else next.push(base ? `${base}/${seg}` : seg);
+    }
+    paths = next;
+  }
+  return paths;
 }
 
 function refsOf(file) {
@@ -147,6 +175,8 @@ function refsOf(file) {
   const out = new Set();
   const specs = [];
   for (const m of src.matchAll(FILE_LITERAL_RE)) specs.push(m[1]);
+  for (const m of src.matchAll(URL_PATH_RE)) specs.push(...expandPlaceholders(m[1].replace(/\.+$/, '')));
+  for (const m of src.matchAll(SEGMENT_CHAIN_RE)) specs.push([m[1], ...[...m[2].matchAll(/['"]([^'"]+)['"]/g)].map(x => x[1])].join('/'));
   if (file.endsWith('.html')) for (const m of src.matchAll(HTML_REF_RE)) specs.push(m[1]);
   for (const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"]([^'"]+)['"]/g)) specs.push(m[1]);
   for (const spec of specs) {
@@ -182,6 +212,7 @@ function affectedLive(liveFiles, base, head) {
   const picked = [];
   for (const file of liveFiles) {
     const why = [...reachable(file)].filter(f => changedSet.has(f));
+    for (const prefix of DECLARED_DEPS[file] || []) why.push(...changed.filter(c => c.startsWith(prefix) && !why.includes(c)));
     if (why.length) picked.push({ file, why });
   }
   return { picked, everything: null, changed };

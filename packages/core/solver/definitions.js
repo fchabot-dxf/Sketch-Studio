@@ -84,6 +84,37 @@ const mirrorPairGrad = (positions, a, b, p, q, row1, row2) => {
   addGrad(row2, b, g2ux, g2uy);
 };
 
+// THE mirrored-point-ON-a-line row (task 572, the line form of symmetric): the reflection R of point q across the symmetry line s1-s2 lies on
+// the line A-B. r = ((R - A) x v) / |v|, v = B - A, with R = s1 + 2 k u - w, w = q - s1, u = s2 - s1, k = (w . u) / |u|^2. One row per end of
+// the second line: both ends on the mirror of the first line's INFINITE line (Fusion's two-line symmetry, measured), lengths free.
+// World units like point_on_line; the reflection is an isometry, so d r / d q has unit length and the two rows of a line (one per end) are
+// independent of each other's end: as well-conditioned as two point-on-line rows. (The pair rule does not fit: no point of the first line
+// corresponds to an end of the second.) Full derivative on the symmetry line's ends and the first line's ends: they can move too.
+const reflectAcross = (positions, s1, s2, q) => {
+  const sx = positions[s1*2], sy = positions[s1*2+1], ux = positions[s2*2] - sx, uy = positions[s2*2+1] - sy;
+  const l2 = (ux * ux + uy * uy) || 1e-24, wx = positions[q*2] - sx, wy = positions[q*2+1] - sy, k = (wx * ux + wy * uy) / l2;
+  return { x: sx + 2 * k * ux - wx, y: sy + 2 * k * uy - wy, ux, uy, l2, wx, wy, k };
+};
+const mirrorOnLineError = (positions, s1, s2, q, a, b) => {
+  const R = reflectAcross(positions, s1, s2, q);
+  const ax = positions[a*2], ay = positions[a*2+1], vx = positions[b*2] - ax, vy = positions[b*2+1] - ay;
+  return ((R.x - ax) * vy - (R.y - ay) * vx) / (Math.hypot(vx, vy) || 1e-12);
+};
+const mirrorOnLineGrad = (positions, s1, s2, q, a, b, row) => {
+  const R = reflectAcross(positions, s1, s2, q);
+  const ax = positions[a*2], ay = positions[a*2+1], vx = positions[b*2] - ax, vy = positions[b*2+1] - ay;
+  const lv = Math.hypot(vx, vy) || 1e-12, wx = R.x - ax, wy = R.y - ay, r = (wx * vy - wy * vx) / lv;
+  // the line A-B: point_on_line's derivative with the point R held
+  const dd = (dvx, dvy) => (dvx * vx + dvy * vy) / lv;
+  addGrad(row, a, ((-vy + wy) - r * dd(-1, 0)) / lv, ((-wx + vx) - r * dd(0, -1)) / lv);
+  addGrad(row, b, ((-wy) - r * dd(1, 0)) / lv, ((wx) - r * dd(0, 1)) / lv);
+  // through R: g = d r / d R = (vy, -vx) / |v|;  dR = ds1 + 2 dk u + 2 k du - dw,  dk = (dw . u + w . du) / |u|^2 - 2 k (u . du) / |u|^2
+  const gx = vy / lv, gy = -vx / lv, gu = 2 * (gx * R.ux + gy * R.uy) / R.l2;
+  addGrad(row, q, -gx + gu * R.ux, -gy + gu * R.uy);
+  addGrad(row, s2, gu * (R.wx - 2 * R.k * R.ux) + 2 * R.k * gx, gu * (R.wy - 2 * R.k * R.uy) + 2 * R.k * gy);
+  addGrad(row, s1, 2 * gx - 2 * R.k * gx + gu * (-R.ux - R.wx + 2 * R.k * R.ux), 2 * gy - 2 * R.k * gy + gu * (-R.uy - R.wy + 2 * R.k * R.uy));
+};
+
 // THE angle row (task 553): the measured SECTOR (#core/angle-sector.js: rays of line 1 and line 2 + the way it turns) holds the CCW angle
 // alpha from u (line 1's direction) to v (line 2's) at  turn * value + (ray1 != ray2 ? 180 : 0)  modulo 360. With k = ray1 * ray2 = +-1:
 //   S = |u||v| sin(theta - alpha) = k (cross cos t - turn dot sin t),   C = |u||v| cos(theta - alpha) = k (dot cos t + turn cross sin t)
@@ -643,22 +674,25 @@ export const Definitions = {
     }
   },
 
-  // Symmetric (task 563, #core/symmetric.js): params.joints = [a, b (the symmetry line), p1, q1, (p2, q2)] from engine.js, every (p_i, q_i)
-  // a mirrored pair (mirrorPair*: 2 rows each); the circle form adds params.terms = [size 1, size 2] and one row size 1 - size 2 (radii equal).
-  // 2 rows for points, 4 for lines (both end pairs), 3 for circles / arcs (centres + radius).
+  // Symmetric (task 563, #core/symmetric.js): params.joints = [s1, s2 (the symmetry line), the nPairs mirrored pairs p, q (mirrorPair*: 2 rows
+  // each), then the points-on-a-mirrored-line q, a1, a2 (mirrorOnLine*: 1 row each, task 572)] from engine.js; the circle form adds
+  // params.terms = [size 1, size 2] and one row size 1 - size 2 (radii equal). 2 rows for points, 2 for lines (one per end of the second
+  // line), 3 for circles / arcs (centres + radius).
   symmetric: {
     rows: (c, shapes) => symmetricRowCount(c, shapes),
     computeError: (params, positions) => {
-      const j = params.joints || [];
+      const j = params.joints || [], pairEnd = 2 + 2 * (params.nPairs || 0);
       const out = [];
-      for (let k = 2; k + 1 < j.length; k += 2) out.push(...mirrorPairError(positions, j[0], j[1], j[k], j[k + 1]));
+      for (let k = 2; k + 1 < pairEnd; k += 2) out.push(...mirrorPairError(positions, j[0], j[1], j[k], j[k + 1]));
+      for (let k = pairEnd; k + 2 < j.length; k += 3) out.push(mirrorOnLineError(positions, j[0], j[1], j[k], j[k + 1], j[k + 2]));
       if (params.terms) out.push(sizeValue(params.terms[0], positions) - sizeValue(params.terms[1], positions));
       return out;
     },
     computeJacobian: (params, positions, outRows) => {
-      const j = params.joints || [];
+      const j = params.joints || [], pairEnd = 2 + 2 * (params.nPairs || 0);
       let r = 0;
-      for (let k = 2; k + 1 < j.length; k += 2, r += 2) mirrorPairGrad(positions, j[0], j[1], j[k], j[k + 1], outRows[r], outRows[r + 1]);
+      for (let k = 2; k + 1 < pairEnd; k += 2, r += 2) mirrorPairGrad(positions, j[0], j[1], j[k], j[k + 1], outRows[r], outRows[r + 1]);
+      for (let k = pairEnd; k + 2 < j.length; k += 3, r += 1) mirrorOnLineGrad(positions, j[0], j[1], j[k], j[k + 1], j[k + 2], outRows[r]);
       if (params.terms) { addSizeGrad(outRows[r], params.terms[0], 1, positions); addSizeGrad(outRows[r], params.terms[1], -1, positions); }
     }
   },

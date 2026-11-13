@@ -104,6 +104,21 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     await rightClick(along(P1, P2, Math.hypot(g.x - P1.x, g.y - P1.y) < Math.hypot(g.x - P2.x, g.y - P2.y) ? 0.9 : 0.1));
     assert.deepStrictEqual(await menuIds(), ['geo-lock', 'geo-delete'], 'right-click on the line away from the glyph: the line menu');
     await esc();
+    // a pointer NEAR the glyph but not on its badge (a point of the line 24 px from the glyph centre; the badge is 16 px + 3 px margin) keeps the line menu
+    const ux = (P2.x - P1.x) / Math.hypot(P2.x - P1.x, P2.y - P1.y), uy = (P2.y - P1.y) / Math.hypot(P2.x - P1.x, P2.y - P1.y);
+    const t0 = (g.x - P1.x) * ux + (g.y - P1.y) * uy, dLine = segDist(g, P1, P2), dt = Math.sqrt(24 * 24 - dLine * dLine);
+    const nearPt = [t0 + dt, t0 - dt].map((t) => ({ x: Math.round(P1.x + ux * t), y: Math.round(P1.y + uy * t) })).find((q) => segDist(q, P1, P2) < 1 && Math.hypot(q.x - g.x, q.y - g.y) > 22);
+    assert.ok(nearPt, 'a point of the line 24 px from the glyph');
+    await rightClick(nearPt);
+    assert.deepStrictEqual(await menuIds(), ['geo-lock', 'geo-delete'], `mouse: right-click on the line ${Math.hypot(nearPt.x - g.x, nearPt.y - g.y).toFixed(1)} px from the glyph centre opens the line menu`);
+    await esc();
+    // the same by touch and hold (the finger on the glyph: its menu; the finger on the line beside it: the line's)
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    const hold = async (p) => { await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, id: 1 }] }); await sleep(800); const ids = await menuIds(); await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await sleep(300); return ids; };
+    assert.deepStrictEqual(await hold(g), ['con-delete'], 'touch hold on the glyph: the constraint menu');
+    await esc();
+    assert.deepStrictEqual(await hold(nearPt), ['geo-lock', 'geo-delete'], 'touch hold on the line beside the glyph: the line menu');
+    await esc();
     console.log('LIVE glyph over geometry: right-click picks the glyph, the line away from it keeps the line menu');
     console.log('constraint-undo-glyph-live: ok');
   } catch (e) { failed = e; } finally {

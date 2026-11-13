@@ -43,10 +43,11 @@ export const ROWS = [
     hits: (X, Y) => (lineLike(X.k) ? [{ shape: X }, { joint: Y.jn }] : [{ shape: Y }, { joint: X.jn }]), produces: c => c.type === 'midpoint' },
   { id: 'midpoint-3pt', label: 'midpoint (3 joints)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: () => true, nominal: () => 2, extraPoint: true,
     hits: (X, Y, Z) => [{ joint: X.jn }, { joint: Y.jn }, { joint: Z.jn }], produces: c => c.type === 'midpoint' },
-  // task 563: symmetric about the Y axis (the third pick, a built-in reference line): two lines (their end pairs), two circles / arcs (centres +
-  // radius), any other pair as two points. nominal = 4 / 3 / 2 rows; two fillet arcs each carry a driving R, so their radius row is not new.
+  // task 563: symmetric about the Y axis (the third pick, a built-in reference line): two lines (task 572: the infinite lines mirror, lengths
+  // free), two circles / arcs (centres + radius), any other pair as two points. nominal = 2 / 3 / 2 rows; two fillet arcs each carry a driving R,
+  // so their radius row is not new.
   { id: 'symmetric', label: 'symmetric (about the Y axis)', type: 'symmetric', arity: 2, tool: TOOL_MODES.SYMMETRIC, ui: () => true,
-    nominal: (x, y) => (lineLike(x) && lineLike(y) ? 4 : circleLike(x) && circleLike(y) ? ((x === 'F' && y === 'F') ? 2 : 3) : 2),
+    nominal: (x, y) => (lineLike(x) && lineLike(y) ? 2 : circleLike(x) && circleLike(y) ? ((x === 'F' && y === 'F') ? 2 : 3) : 2),
     hits: (X, Y) => [...((lineLike(X.k) && lineLike(Y.k)) || (circleLike(X.k) && circleLike(Y.k)) ? [{ shape: X }, { shape: Y }] : [{ joint: X.jn }, { joint: Y.jn }]), { ref: 'ref_axis_y' }],
     produces: c => c.type === 'symmetric' },
   // ---- dimensions (the Dimension tool)
@@ -201,7 +202,12 @@ export async function runCell(row, cols, variant) {
         rec.oracleMapped = o.mapped;
         // restore
         st.constraints.length = nC0 + added.length;
-        if (rec.oracleFeasible && o.mapped) rec.issues.push('refused-feasible');
+        // a SYMMETRIC the app refuses as redundant ("already symmetric", task 563) whose raw add leaves the finite-difference nullity unchanged:
+        // refused by rule, rightly (task 572: two rect tops sharing a corner lie on ONE horizontal line, which mirrors onto itself, so the
+        // constraint holds for every motion). PlaneGCS's helper-point translation counts it as removing 2 there (.evidence/572/probe-rr.mjs).
+        const redundantByRule = row.id === 'symmetric' && rawOk && S.msgs.some(m => /already symmetric/.test(m)) && fdNull(S).nullity === fd0;
+        if (redundantByRule) rec.notes.push('refused as redundant (already symmetric): the raw add leaves the finite-difference nullity unchanged');
+        else if (rec.oracleFeasible && o.mapped) rec.issues.push('refused-feasible');
       } else rec.issues.push('ui-refused-without-attempt');
     }
     rec.refusedCleanly = docOf(S) === doc0;
@@ -246,11 +252,15 @@ export async function runCell(row, cols, variant) {
   // one DOF (ours = finite differences). PlaneGCS's tangent_cc is degenerate there and counts 0 (dof 4 -> 4, while equal_radius_cc on the same
   // two concentric circles counts 4 -> 3: .evidence/515/planegcs-concentric-probe.txt), so it is not the oracle for this case (task 515).
   const concentricTangent = row.id === 'tangent' && kx === 'O' && ky === 'O' && X.joints[0] === Y.joints[0];
-  if (rec.oracleMapped && rec.delta !== rec.oracleDelta && !preCollinear && !concentricTangent) rec.issues.push('nullity!=oracle');
+  // symmetric of two LINES sharing a corner where line 2 is a rect top (held horizontal), task 572: line 2's line mirrors onto itself, so the two
+  // rows only fix line 1's direction: 1 DOF (ours = finite differences, hand derivation .evidence/572/sr-shared-derivation.txt). PlaneGCS's
+  // helper-point translation counts 2 at that pose (SR shared), so it is not the oracle for these cells.
+  const symmetricHeldLine = row.id === 'symmetric' && variant === 'shared' && lineLike(kx) && ky === 'R' && rec.delta === rec.fdDelta;
+  if (rec.oracleMapped && rec.delta !== rec.oracleDelta && !preCollinear && !concentricTangent && !symmetricHeldLine) rec.issues.push('nullity!=oracle');
   if (rec.oracleMapped && rec.oracleConflict > 0 && !rec.driven) rec.issues.push('accepted-conflict');
   if (preCollinear) { if (rec.delta !== 0) rec.issues.push('nominal'); else rec.notes.push('lines already collinear: the row is redundant, DOF unchanged'); }
   else if (rec.nominal != null && !rec.driven && rec.delta !== -rec.nominal) {   // nominal is set for the sep variant only
-    if ((variant !== 'sep' || kx === 'R' || ky === 'R' || (kx === 'F' && ky === 'F')) && rec.delta === rec.fdDelta && (!rec.oracleMapped || rec.delta === rec.oracleDelta) && rec.delta > -rec.nominal) rec.notes.push(`implied: removes ${-rec.delta} of ${rec.nominal}`);
+    if ((variant !== 'sep' || kx === 'R' || ky === 'R' || (kx === 'F' && ky === 'F')) && rec.delta === rec.fdDelta && (!rec.oracleMapped || rec.delta === rec.oracleDelta || symmetricHeldLine) && rec.delta > -rec.nominal) rec.notes.push(`implied: removes ${-rec.delta} of ${rec.nominal}`);
     else rec.issues.push('nominal');
   }
   if (row.dim && prod[0] && row.mode !== 'linesline' && row.mode !== 'angle' && row.mode !== 'radius' && row.mode !== 'length' && row.mode !== 'pointline') {

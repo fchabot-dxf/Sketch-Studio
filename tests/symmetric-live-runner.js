@@ -1,7 +1,7 @@
 // tests/symmetric-live-runner.js -- TASK 563 live (headless browser through tests/helpers/cdp-browser.js, REAL pointer events and keys). NOT a test
 // file: symmetric-live-sketchstudio.test.js / symmetric-live-shaper.test.js set HOST and import it (the gate runs each *.test.js under 90 s).
 // In the app: draw a vertical sketch line S, two lines, two circles and two short lines; with the ribbon's Symmetric tool pick
-//   line 1, line 2, then S            -> the end pairs mirror across S
+//   line 1, line 2, then S            -> line 2 lies on the mirror of line 1's line; both keep their (different) lengths (task 572, like Fusion)
 //   circle 1, circle 2, then S        -> centres mirror, radii equal
 //   a point, a point, then the Y axis -> mirror across the axis; the axis lights up ONLY at the third pick
 // then: 6 glyphs (two per constraint) on the canvas, a cropped screenshot of them; Ctrl+Z removes the last one in ONE step and Ctrl+Y brings it
@@ -65,7 +65,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     // ---- the drawing (screen offsets from the origin, all >= 60 px from the axes so no axis snap)
     const S1 = at(330, -300), S2 = at(330, -40);                 // the symmetry line (vertical)
     const A1 = at(390, -270), A2 = at(500, -190);                 // line 1 (right of S)
-    const B1 = at(150, -250), B2 = at(250, -150);                 // line 2 (left of S, not yet mirrored)
+    const B1 = at(180, -230), B2 = at(250, -150);                 // line 2 (left of S, not yet mirrored; shorter than line 1)
     const C1 = at(440, -95), C2 = at(190, -110);                  // circle centres
     const P1 = at(120, 120), P2 = at(200, 150), Q1 = at(-210, 190), Q2 = at(-130, 230);   // two short lines either side of the Y axis
     await line(S1, S2); await line(A1, A2); await line(B1, B2);
@@ -89,15 +89,23 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     assert.strictEqual(sym.length, 1, 'lines: one symmetric stored: ' + JSON.stringify(d.constraints.slice(nCons0)));
     const lineSym = sym[0];
     const Sline = d.shapes.find(s => s.id === lineSym.line);
-    assert.ok(lineSym.shapes && lineSym.shapes.length === 2 && lineSym.joints.length === 4 && Sline && Sline.type === 'line', 'lines form { joints: 4 end pairs, shapes, line: the sketch line }');
+    assert.ok(lineSym.shapes && lineSym.shapes.length === 2 && !lineSym.joints && Sline && Sline.type === 'line', 'lines form { shapes, line: the sketch line } (no end pairs)');
     let jm = J(d), sa = jm[Sline.joints[0]], sb = jm[Sline.joints[1]];
-    for (let k = 0; k < 4; k += 2) assert.ok(near(jm[lineSym.joints[k + 1]], mirror(jm[lineSym.joints[k]], sa, sb)), `lines: end pair ${k / 2 + 1} mirrored across S`);
+    const lenOf = (doc, id) => { const s = doc.shapes.find(x => x.id === id), m = J(doc); return Math.hypot(m[s.joints[1]].x - m[s.joints[0]].x, m[s.joints[1]].y - m[s.joints[0]].y); };
+    const [l1, l2] = lineSym.shapes.map(id => d.shapes.find(s => s.id === id));
+    // direction AND position: both ends of line 2 lie on the mirror of line 1's infinite line
+    const M1 = mirror(jm[l1.joints[0]], sa, sb), M2 = mirror(jm[l1.joints[1]], sa, sb);
+    const offMirror = (q) => Math.abs(((q.x - M1.x) * (M2.y - M1.y) - (q.y - M1.y) * (M2.x - M1.x)) / Math.hypot(M2.x - M1.x, M2.y - M1.y));
+    assert.ok(l2.joints.every(q => offMirror(jm[q]) < 1e-3), `lines: line 2 on the mirror of line 1 (${l2.joints.map(q => offMirror(jm[q]).toExponential(1))})`);
+    const [len1a, len2a] = [lenOf(d0, l1.id), lenOf(d0, l2.id)], [len1b, len2b] = [lenOf(d, l1.id), lenOf(d, l2.id)];
+    assert.ok(Math.abs(len1a - len1b) < 1e-6 && Math.abs(len2a - len2b) < 1e-6 && Math.abs(len1b - len2b) > 0.05 * len1b,
+      `lines: each keeps its own length, and they differ (${len1a.toFixed(3)} -> ${len1b.toFixed(3)}, ${len2a.toFixed(3)} -> ${len2b.toFixed(3)})`);
     console.log(`LIVE ${HOST} lines about a sketch line ok`);
 
     // ---- 2. two circles about S
     await click({ x: C1.x + 30, y: C1.y }); await click({ x: C2.x - 45, y: C2.y }); await click(along(S1, S2, 0.6));
     d = await readDoc(); sym = symAll(d);
-    const circSym = sym.find(c => c.shapes && !c.joints);
+    const circSym = sym.find(c => c.shapes && c.shapes.every(id => (d.shapes.find(x => x.id === id) || {}).type === 'circle'));
     assert.ok(circSym, 'circles: a symmetric of two circles stored: ' + JSON.stringify(sym));
     jm = J(d); sa = jm[Sline.joints[0]]; sb = jm[Sline.joints[1]];
     const [k1, k2] = circSym.shapes.map(id => d.shapes.find(s => s.id === id));

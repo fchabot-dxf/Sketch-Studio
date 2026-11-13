@@ -30,7 +30,7 @@ const shapes = [
 ];
 const cons = [
   { type: 'symmetric', joints: ['p', 'q'], line: 'ref_axis_y' },
-  { type: 'symmetric', joints: ['a1', 'b1', 'a2', 'b2'], shapes: ['L1', 'L2'], line: 'ref_axis_y' },
+  { type: 'symmetric', shapes: ['L1', 'L2'], line: 'ref_axis_y' },
   { type: 'symmetric', shapes: ['C1', 'C2'], line: 'SL' },
 ];
 const render = () => {

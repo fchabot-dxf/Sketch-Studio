@@ -26,6 +26,7 @@
     "#ui/*": "./packages/ui/*"
   },
   "devDependencies": {
-    "@salusoft89/planegcs": "^1.1.7"
+    "@salusoft89/planegcs": "^1.1.7",
+    "happy-dom": "21.0.4"
   }
 }

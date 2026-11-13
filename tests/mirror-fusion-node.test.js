@@ -145,6 +145,20 @@ try {
   ok(Math.abs(rK.radius - 8) < 1e-4 && near(P(rK.joints[0]), { x: 15, y: 20 }, 1e-4), 'the copy circle: r 0.8 (Fusion\'s), centre (1.5,2)');
   ok(dims().length === 2, 'still 2 dimensions: the copy has none of its own');
 
+  // ---- Esc CANCELS at either step (Fusion's Esc): nothing is made, no undo step, the tool ends (Select), nothing stays selected
+  const escText = docText(), escHist = st().history.length;
+  app.tool('mirror');
+  click(at(-15 + 8, 20));                                              // the circle's rim (r 8 now): an object
+  ok(st().selectedShapes.has(ids.K), 'Esc case: the circle clicked as an object');
+  app.esc();
+  ok(st().currentTool === 'select' && docText() === escText && st().history.length === escHist && st().selectedShapes.size === 0,
+    'Esc at the OBJECTS step: nothing made, no undo step, Select, nothing selected');
+  app.tool('mirror'); click(at(-15 + 8, 20)); app.enter(); click(at(-22, 0)); // the circle, Enter, the X axis
+  ok(st().mirror && st().mirror.step === 'line' && st().mirror.line === 'ref_axis_x', 'Esc case: the LINE step with the X axis picked');
+  app.esc();
+  ok(st().currentTool === 'select' && docText() === escText && st().history.length === escHist && st().selectedShapes.size === 0,
+    'Esc at the LINE step: nothing made, no undo step, Select, nothing selected (the lit axis included)');
+
   // ---- TOUCH: the Done button (task 562's) ends each step as Enter does. Mirror the circle about the X axis with taps only.
   const tap = (p) => app.click(p.x, p.y, { pointerType: 'touch' });
   const done = () => app.document.querySelector('.sk-touch-done');

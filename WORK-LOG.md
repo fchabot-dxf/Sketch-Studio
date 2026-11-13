@@ -14328,9 +14328,10 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
   mirror, A 30 -> 40 mm: line to (1.040,-10.034)-(5.253,49.826), A's start (4.569,40.104); with the mirror: (-1.905,-9.953)-(1.270,49.972), A's start
   (0.802,41.146)); Fusion's stayed. The test holds the line on x = 0 (vertical + start on the Y axis): copy (40, 40.0082), (40, 9.9824), r 8 (A's height
   drifts 0.008 mm: the same least-change spread; 0.026 mm without the mirror).
-- TESTS (fail-first: .evidence/585/fail-first.txt, every file fails on origin/main ddfc6f3's code): tests/mirror-fusion-node.test.js (44 checks, the node kit,
+- TESTS (fail-first: .evidence/585/fail-first.txt, every file fails on origin/main ddfc6f3's code): tests/mirror-fusion-node.test.js (48 checks, the node kit,
   SketchStudio: the Fusion case by clicks + Enter, curves, the 4 links, nothing else copied, points +4, DOF panel = engine = finite difference unchanged,
-  one undo step, redo identical, autosave + reload identical, the dimension edits drive the copy, touch Done button flow about the X axis),
+  one undo step, redo identical, autosave + reload identical, the dimension edits drive the copy, Esc at the OBJECTS and at the LINE step (nothing made,
+  no undo step, Select, nothing left selected: the lit axis included), touch Done button flow about the X axis),
   tests/mirror.test.js (114 checks: Y axis + free point, a slanted sketch line, shared corner, coincident chain, RECTANGLE -> closed copy, circle, arc
   (true mirror, sweep flipped, a radius edit drives the copy), bezier, save / load, every refusal, the ACTIVE sketch, the tool's steps and axis rule, a
   refused confirm leaves no step), tests/mirror-hosts-node.test.js (Shaper + Pen Plotter: the same button and flow), tests/mirror-live-sketchstudio.test.js
@@ -14343,3 +14344,9 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
 - BEHAVIOUR CHANGES for existing users: (1) a Mirror button at the end of the Create group in every host of the shared ribbon; (2) the touch Done button sets
   its title / aria-label each time it shows (the Line chain's text is unchanged) and also shows in the Mirror tool; (3) a new `mirror: null` field on the
   sketch state (not saved, not in undo snapshots). Nothing else.
+- KINDS (the brief's "decide per kind"): every shape kind the tools make is covered: line, circle, arc, bezier (MIRROR_KINDS); a RECTANGLE and a POLYGON are
+  lines (their sides, joined corners, a groupId): mirrored as lines by the same corner rule, the copy closed and in its own group (tested for the
+  rectangle; the polygon's shared-joint corners follow the shared-corner case, not separately tested); a polygon's construction radials mirror only if
+  selected. Points (joints) mirror as points.
+- RELAUNCH (the first agent was stopped by an owner interrupt after bfaa0e2, before its gate:merge finished): reviewed bfaa0e2 against the brief, kept it;
+  added the Esc checks above (Esc was not asserted anywhere); origin/main had not moved (ddfc6f3).

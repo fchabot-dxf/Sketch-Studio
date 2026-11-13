@@ -29,3 +29,14 @@ export const typeValue = async (app, text) => {
   i.focus(); i.select(); i.value = text; i.dispatchEvent(new app.window.Event('input', { bubbles: true }));
   app.enter();
 };
+/** the screen point of a constraint glyph (<g class="constraint-glyph" transform="translate(x,y)">, world units: the renderer places it) */
+export const glyphPoint = (app, el) => {
+  const m = /translate\(\s*([-\d.e]+)[ ,]+([-\d.e]+)\s*\)/.exec(el.getAttribute('transform') || '');
+  if (!m) throw new Error('glyphPoint: the glyph has no translate()');
+  const p = px(app, +m[1], +m[2]); return { x: Math.round(p.x), y: Math.round(p.y) };
+};
+/** the centre of the label's box (<g class="dim-label"><rect/>, as a browser's getBoundingClientRect centre): screen px and the world point it was drawn at */
+export const labelBoxCenter = (app, el = app.svg.querySelector('.dim-label')) => {
+  const r = el.querySelector('rect'); const w = { x: +r.getAttribute('x') + +r.getAttribute('width') / 2, y: +r.getAttribute('y') + +r.getAttribute('height') / 2 };
+  const p = px(app, w.x, w.y); return { idx: +el.getAttribute('data-constraint-idx'), x: Math.round(p.x), y: Math.round(p.y), world: w };
+};

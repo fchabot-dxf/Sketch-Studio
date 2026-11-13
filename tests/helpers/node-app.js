@@ -18,6 +18,20 @@
 //      the `target` option (an element, or a function returning it: the renderer replaces them), as the browser's hit test would find it.
 //   6. focus (task 576): a browser cannot focus an <svg> element that has no tabindex (the app calls svg.focus() on every pointerdown and must
 //      not take the focus from the value box it just opened); happy-dom can. SVGElement.focus is made to follow the browser's rule.
+//   7. clipboard (task 580): happy-dom's navigator.clipboard is not a text clipboard. The page gets the browser tests' one: the system clipboard
+//      with the permission granted (CDP grantPermissions), as a text the profile keeps across page loads: `app.clipboard.text` reads / sets it.
+//      The app's own seam (packages/ui/clipboard.js defaultIo) reads navigator.clipboard.writeText / readText, so the app runs unchanged.
+// KIT API ADDED in task 580 (not overrides; each is what a browser test did through CDP, shared by the files that need it):
+//   8. hidden focus (task 580): a browser takes the focus off an element that stops being rendered; see dropFocusIfHidden below (key() and type()).
+//   focus (task 580, in the pointer helper): a press on anything but the focused text field blurs the field first, as a browser's mousedown does.
+//   type(text): types into the focused text field as a user does (per character: keydown on the field, the value grows, an input event, keyup).
+//   pause(ms): a real pause, for the one thing the app measures in time: two clicks on the same label within 500 ms are a double click.
+//   press(el): a mouse click on a DOM element (the value box's autocomplete row): pointer + mouse events, and the focus stays where the page's mousedown leaves it.
+//   wheel(x, y, deltaY): a WheelEvent on the canvas (the page's own wheel zoom).
+//   report(): the Diagnostic Log's own report object (packages/ui/diagnostic-log.js buildReport, what its Copy Report button puts on the clipboard),
+//     the page's state as appId = the host. The module is imported right after the page exists, so its key / pointer capture listens on THIS
+//     page's document (a module loads once per process: it listens on the first page a process opens).
+//   createNamedDesign(profile, app, name, document?): also stores a given document (the owner's file) as the current design.
 // The host page script itself (main.js / sketch-stage.js) is not run: its page-only hooks (panels, Prepare, Review, the Freehand ribbon
 // button, the header) are absent; open() calls the declared pieces in the page script's order.
 
@@ -54,7 +68,7 @@ const TIMER_GLOBALS = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterv
 const nodeTimers = Object.fromEntries(TIMER_GLOBALS.map((k) => [k, globalThis[k]]));
 const setGlobal = (k, v) => Object.defineProperty(globalThis, k, { value: v, writable: true, configurable: true });
 
-function installPage(host, { width, height, storage }) {
+function installPage(host, { width, height, storage, clipboard }) {
   const win = new Window({ url: `http://127.0.0.1/apps/${host}/index.html`, width, height, settings: {
     disableJavaScriptEvaluation: true, disableJavaScriptFileLoading: true, disableCSSFileLoading: true, handleDisabledFileLoadingAsSuccess: true,
     disableIframePageLoading: true } });
@@ -69,12 +83,14 @@ function installPage(host, { width, height, storage }) {
   win.SVGElement.prototype.focus = function (o) { if (this.hasAttribute('tabindex')) svgFocus.call(this, o); };
   win.requestAnimationFrame = requestFrame; win.cancelAnimationFrame = cancelFrame; setGlobal('requestAnimationFrame', requestFrame); setGlobal('cancelAnimationFrame', cancelFrame);
   win.ResizeObserver = FirstObservationResizeObserver; setGlobal('ResizeObserver', FirstObservationResizeObserver);
+  // override 7: the system clipboard of the profile, a text, permission granted
+  Object.defineProperty(win.navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { clipboard.text = String(t); }, readText: async () => clipboard.text } });
   rafQueue = new Map();
   return win;
 }
 // shared modules touch document / localStorage while they load (input-manager.js applyVisualSettings, settings-manager.js): a page exists
 // from the start. open() replaces it.
-let bootPage = installPage('sketchstudio', { width: 1600, height: 900, storage: new Map() });
+let bootPage = installPage('sketchstudio', { width: 1600, height: 900, storage: new Map(), clipboard: { text: '' } });
 
 // ------------------------------------------------------------------------------------------------ profiles
 // The PROFILE = what a browser profile keeps across page loads: localStorage and the project store's records (IndexedDB in the page).
@@ -82,18 +98,18 @@ let bootPage = installPage('sketchstudio', { width: 1600, height: 900, storage: 
 let profileCount = 0;
 export async function createProfile() {
   const { createProjectStore, createMemoryAdapter } = await import('#ui/project-store.js');
-  return { storage: new Map(), adapter: createMemoryAdapter(), createProjectStore, channelName: 'sketch-studio-projects#' + (++profileCount) };
+  return { storage: new Map(), clipboard: { text: '' }, adapter: createMemoryAdapter(), createProjectStore, channelName: 'sketch-studio-projects#' + (++profileCount) };
 }
 
 // TASK 558 save rule: a fresh page shows an UNSAVED Untitled and stores nothing until its first named save. A test that reads the autosaved
 // design or carries a drawing across apps / reloads first gives the profile a NAMED current design, as tests/helpers/named-design.js
 // CREATE_NAMED_DESIGN does in a page (the same steps, on the profile's store): a new named design holding exactly what a fresh page's first
 // named save stores (its fixed origin joint, in Sketch 1), made current. The next open() restores it and autosaves into it.
-export async function createNamedDesign(profile, app, name = 'Test design') {
+export async function createNamedDesign(profile, app, name = 'Test design', document = null) {
   const { emptyDocument } = await import('#ui/project-store.js');
   const store = profile.createProjectStore({ adapter: profile.adapter, legacySource: async () => null, channel: null });
   const d = await store.newDesign(name, { app });
-  const doc = emptyDocument(); doc.geometry.joints = [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }]];
+  const doc = document || emptyDocument(); if (!document) doc.geometry.joints = [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }]];
   await store.save(doc, { app, id: d.id });
   return d.id;
 }
@@ -119,7 +135,7 @@ const HOSTS = {
     const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
-    const frame = () => D.studioFrame({ engine, state, svg, worldGroup, ribbon });
+    const frame = () => { D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
     return { svg, state, engine, ribbon, buffer, statusEl, frame };
   },
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer
@@ -171,7 +187,8 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   if (current) throw new Error('node-app: close the open app first (one engine store per process)');
   profile = profile || await createProfile();
   if (bootPage) { await bootPage.happyDOM.close(); bootPage = null; }
-  const win = installPage(host, { width, height, storage: profile.storage });
+  const win = installPage(host, { width, height, storage: profile.storage, clipboard: profile.clipboard });
+  const { buildReport } = await import('#ui/diagnostic-log.js'); // task 580: its capture listens on this page's document (first page of the process)
   const doc = win.document;
   // the store's cross-tab channel is a real BroadcastChannel (as in the page), named per profile and closed with the app
   const channel = new BroadcastChannel(profile.channelName);
@@ -185,12 +202,21 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
     const e = new win.PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: o.pointerId ?? 1, pointerType: o.pointerType || 'mouse', isPrimary: true,
       button: o.button ?? (type === 'pointermove' ? -1 : 0), buttons: o.buttons ?? (type === 'pointerup' ? 0 : 1), shiftKey: !!o.shift, ctrlKey: !!o.ctrl });
     const t = typeof o.target === 'function' ? o.target() : o.target; // override 5: the element a browser's hit test would find
+    // a press on anything that is not the focused text field takes the focus off it (the browser's mousedown default action; none in happy-dom)
+    if (type === 'pointerdown' && doc.activeElement && /^(INPUT|TEXTAREA)$/.test(doc.activeElement.tagName) && doc.activeElement !== (t || svg)) doc.activeElement.blur();
     (t || svg).dispatchEvent(e); frames();
     return e;
   };
   // keys go where the browser sends them: the focused element (the body when nothing is focused), bubbling to document + window
+  // override 8 (task 580): a browser takes the focus off an element that stops being rendered (the value box hides itself after Enter). happy-dom has no
+  // layout and loads no stylesheet, so "not rendered" is the [hidden] attribute, the `hidden` class the apps' CSS maps to display:none, or style display none.
+  const dropFocusIfHidden = () => {
+    const a = doc.activeElement;
+    for (let e = a; e && e !== doc.body; e = e.parentElement) if (e.hidden || (e.classList && e.classList.contains('hidden')) || (e.style && e.style.display === 'none')) { a.blur(); return; }
+  };
   const key = (k, o = {}) => {
     for (const type of ['keydown', 'keyup']) {
+      dropFocusIfHidden();
       const target = doc.activeElement || doc.body;
       target.dispatchEvent(new win.KeyboardEvent(type, { bubbles: true, cancelable: true, key: k, code: k.length === 1 ? 'Key' + k.toUpperCase() : k, ctrlKey: !!o.ctrl, shiftKey: !!o.shift, altKey: !!o.alt, metaKey: !!o.meta }));
       frames();
@@ -198,7 +224,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   };
 
   const app = {
-    host, state, engine: m.engine, svg, document: doc, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc,
+    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc,
     frames,
     /** world -> screen through the app's own transform (#ui/coords.js worldToScreen, the svg's live viewBox) */
     toScreen: (wx, wy) => { const p = worldToScreen(svg, { x: wx, y: wy }); return { x: Math.round(p.x), y: Math.round(p.y) }; },
@@ -216,12 +242,43 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
     },
     drag(a, b, steps = 8, o) { this.move(a.x, a.y, o); this.down(a.x, a.y, o); for (let i = 1; i <= steps; i++) pointer('pointermove', a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, { buttons: 1, ...o }); this.up(b.x, b.y, o); },
     key,
+    type(text) {
+      dropFocusIfHidden();
+      const t = doc.activeElement;
+      if (!t || !/^(INPUT|TEXTAREA)$/.test(t.tagName)) throw new Error('node-app: type() needs a focused text field');
+      for (const ch of text) {
+        const back = ch === '\b'; // '\b' (a backspace character) is the Backspace key
+        const k = back ? 'Backspace' : ch;
+        const down = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: k, code: back ? 'Backspace' : /[a-z]/i.test(ch) ? 'Key' + ch.toUpperCase() : /\d/.test(ch) ? 'Digit' + ch : ch });
+        t.dispatchEvent(down);
+        if (!down.defaultPrevented) { // the default action of the key: the text changes
+          const at = t.selectionStart ?? t.value.length, end = t.selectionEnd ?? at;
+          const from = back && at === end ? Math.max(0, at - 1) : at;
+          t.value = t.value.slice(0, from) + (back ? '' : ch) + t.value.slice(end); t.setSelectionRange(from + (back ? 0 : 1), from + (back ? 0 : 1));
+          t.dispatchEvent(new win.InputEvent('input', { bubbles: true, data: back ? null : ch, inputType: back ? 'deleteContentBackward' : 'insertText' }));
+        }
+        t.dispatchEvent(new win.KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: k }));
+        frames();
+      }
+    },
+    /** a mouse click on a DOM element (not the canvas): pointerdown, mousedown, pointerup, mouseup, click, as the browser sends them (the focus rule as for the canvas) */
+    press(el) {
+      const mk = (C, type) => new C(type, { bubbles: true, cancelable: true, button: 0, buttons: type.endsWith('down') ? 1 : 0, isPrimary: true, pointerId: 1, pointerType: 'mouse' });
+      el.dispatchEvent(mk(win.PointerEvent, 'pointerdown'));
+      const md = mk(win.MouseEvent, 'mousedown'); el.dispatchEvent(md);
+      if (!md.defaultPrevented && doc.activeElement && doc.activeElement !== el && /^(INPUT|TEXTAREA)$/.test(doc.activeElement.tagName)) doc.activeElement.blur();
+      el.dispatchEvent(mk(win.PointerEvent, 'pointerup')); el.dispatchEvent(mk(win.MouseEvent, 'mouseup')); el.dispatchEvent(mk(win.MouseEvent, 'click')); frames();
+    },
+    wheel(x, y, deltaY, o = {}) { svg.dispatchEvent(new win.WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x, clientY: y, deltaY, ctrlKey: !!o.ctrl })); frames(); },
+    report: () => buildReport({ appId: host, getState: () => state }),
     esc: () => key('Escape'), enter: () => key('Enter'), undo: () => key('z', { ctrl: true }), redo: () => key('y', { ctrl: true }),
     /** a click on the tool's ribbon button (#tool-<name>): the host's own tool activation */
     tool(name) { const b = doc.getElementById('tool-' + name); if (!b) throw new Error('node-app: no ribbon button #tool-' + name + ' in ' + host); b.click(); frames(); },
     /** the autosave writes now (the page-hide path, as cdp-browser.js flushAutosave does); returns the stored current design's document */
     async storedDoc() { win.dispatchEvent(new win.Event('pagehide')); await buffer.flush(); const d = await store.loadCurrent({ app: host }); return d ? d.document : null; },
     saveStatus: () => m.statusEl.textContent,
+    /** a real pause (the app pairs clicks into a double click by their time: 500 ms; the kit sends events with no pause, a person does not) */
+    async pause(ms) { await new Promise((r) => nodeTimers.setTimeout(r, ms)); frames(1); },
     /** polls cond() (timers and the app's setTimeout(0) work run in between), like cdp-browser.js waitFor; throws after timeoutMs */
     async waitFor(cond, what, timeoutMs = 2000) {
       const end = Date.now() + timeoutMs;

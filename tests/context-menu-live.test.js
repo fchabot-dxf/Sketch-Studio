@@ -1,5 +1,7 @@
 // tests/context-menu-live.test.js — TASK 493: the driven dot is gone; right click opens ONE shared context menu
 // (dimension: Driving / Reference / Delete; geometry: Lock-Unlock / Delete). Real pointer (right button) + real keys.
+// TASK 580: ONLY the real-input and screenshot half stays here (the real right button opens the menu, a real click on an item, Escape, the screenshots).
+// The actions, group selection, joints, the line tool's right click, the keyboard, the ribbon button state moved to tests/context-menu-node.test.js.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -73,84 +75,28 @@ await (async () => {
     assert.strictEqual(m[0].checked, 'true'); assert.strictEqual(m[1].checked, 'false');
     console.log('md5 dim menu (driving):', await shot('menu-dimension-driving.png'));
     await key('Escape', 'Escape', 27); await noMenu('Escape closes the menu');
-    const startText = await labelText(0);
-    assert(!/^\(/.test(startText), 'driving label is not parenthesised: ' + startText);
 
-    await rightClick(await labelPt(0)); await chooseItem('dim-reference');
-    assert(await state(`return !!(st.constraints[0].isDriven || st.constraints[0].driven);`), 'Reference makes it driven');
-    assert(/^\(/.test(await labelText(0)), 'the reference label is parenthesised: ' + await labelText(0));
-    await noMenu('choosing an item closes the menu');
-    await rightClick(await labelPt(0));
-    m = await menu(); assert.strictEqual(m[0].checked, 'false'); assert.strictEqual(m[1].checked, 'true');
-    console.log('md5 dim menu (reference):', await shot('menu-dimension-reference.png'));
-    await chooseItem('dim-driving');
-    assert(!(await state(`return !!(st.constraints[0].isDriven || st.constraints[0].driven);`)), 'Driving restores it');
-    assert(!/^\(/.test(await labelText(0)), 'the driving label is restored');
-
-    // keyboard: arrows + Enter picks Reference
-    await rightClick(await labelPt(0)); await key('ArrowDown', 'ArrowDown', 40); await key('ArrowDown', 'ArrowDown', 40); await key('Enter', 'Enter', 13);
-    assert(await state(`return !!(st.constraints[0].isDriven || st.constraints[0].driven);`), 'arrows + Enter choose an item');
-
-    // --- empty canvas: nothing opens
+    // --- geometry (the real right button on a line): the menu opens, a REAL click on Lock fixes the joints
     await seed(); await sleep(500);
-    await rightClick(await W2S(0, 40)); await noMenu('right click on empty canvas opens nothing');
-
-    // --- geometry: unselected line gets selected, Lock + Delete offered
     const L3 = await W2S(30, -20);
     await rightClick(L3);
     m = await menu(); assert(m, 'right click on a line opens the menu');
     assert.deepStrictEqual(m.map((r) => r.label), ['Lock', 'Delete']);
-    assert.deepStrictEqual((await summary()).sel, ['L3'], 'the unselected line is selected first');
+    console.log('md5 geometry menu:', await shot('menu-geometry.png'));
     await chooseItem('geo-lock');
     assert.deepStrictEqual((await summary()).fixed, ['d', 'e'], 'Lock fixes the line joints');
     await rightClick(L3); m = await menu(); assert.strictEqual(m[0].label, 'Unlock'); assert.strictEqual(m[0].checked, 'true');
     console.log('md5 geometry menu (unlock):', await shot('menu-geometry-unlock.png'));
-    await chooseItem('geo-lock'); assert.deepStrictEqual((await summary()).fixed, [], 'Unlock releases it');
+    await key('Escape', 'Escape', 27); await noMenu('Escape closes the menu');
 
-    // Delete: one undo step
-    await rightClick(L3); await chooseItem('geo-delete');
-    assert(!(await summary()).shapes.includes('L3'), 'Delete removes the line');
-    await key('z', 'KeyZ', 90, 2);
-    assert((await summary()).shapes.includes('L3'), 'ONE Ctrl+Z restores the line');
-
-    // group selection: right click on a selected member acts on the whole selection
-    await state(`st.selectedShapes.clear(); st.selectedShapes.add('L1'); st.selectedShapes.add('L3'); return true;`);
-    await rightClick(L3);
-    assert.deepStrictEqual((await summary()).sel.sort(), ['L1', 'L3'], 'the selection is kept');
-    await chooseItem('geo-lock');
-    assert.deepStrictEqual((await summary()).fixed, ['a', 'b', 'd', 'e'], 'Lock acts on the whole selection');
-
-    // joint
+    // --- ribbon Lock button (a real click; the screenshot of the bar)
     await seed(); await sleep(400);
-    await rightClick(await W2S(-5, 10));
-    m = await menu(); assert(m, 'right click on a joint opens the menu');
-    assert.deepStrictEqual((await summary()).selJ, ['c'], 'the joint is selected');
-    await chooseItem('geo-lock'); assert.deepStrictEqual((await summary()).fixed, ['c']);
-
-    // --- line tool: right click still ends the segment
-    await seed(); await sleep(400);
-    await clickEl('#tool-line');
-    await click(await W2S(0, 30)); await mouse('mouseMoved', (await W2S(20, 30)).x, (await W2S(20, 30)).y); await sleep(200);
-    assert(await state(`return !!st.active;`), 'the line tool is mid-segment');
-    await rightClick(await W2S(20, 30));
-    assert(!(await state(`return !!st.active;`)), 'right click ends the segment');
-    await noMenu('the line tool right click opens no menu');
-
-    // --- ribbon Lock button
-    await clickEl('#tool-select'); await seed(); await sleep(400);
-    await state(`st.selectedShapes.clear(); st.selectedJoints.clear(); st.selectedConstraints.clear(); return true;`);
-    await key('Escape', 'Escape', 27);
-    await click(await W2S(0, 40)); await sleep(200);
-    assert(await evalJs(`document.querySelector('#btn-lock').disabled`), 'Lock is disabled with nothing selected');
-    await click(await W2S(30, -20));
-    assert(!(await evalJs(`document.querySelector('#btn-lock').disabled`)), 'Lock is enabled with a selection');
+    await clickEl('#tool-select');
+    await click(L3);
     await clickEl('#btn-lock');
-    assert.deepStrictEqual((await summary()).fixed, ['d', 'e'], 'the ribbon Lock fixes the joints');
     assert.strictEqual(await evalJs(`document.querySelector('#btn-lock').getAttribute('aria-pressed')`), 'true');
     const bar = await evalJs(`(() => { const r = document.querySelector('#btn-lock').parentElement.getBoundingClientRect(); return { x: Math.floor(r.left) - 4, y: Math.floor(r.top) - 4, width: Math.ceil(r.width) + 8, height: Math.ceil(r.height) + 24 }; })()`);
     console.log('md5 ribbon lock:', await shot('ribbon-lock.png', bar));
-    await clickEl('#btn-lock');
-    assert.deepStrictEqual((await summary()).fixed, [], 'the ribbon Lock again unlocks');
 
     console.log('context-menu-live OK');
   } finally {

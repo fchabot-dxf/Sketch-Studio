@@ -1,7 +1,9 @@
 // tests/clipboard-live-runner.js -- TASK 559 live scenarios (headless browser through tests/helpers/cdp-browser.js; REAL pointer events and REAL
 // Ctrl+C / Ctrl+X / Ctrl+V / Ctrl+Z keys; the browser's clipboard permission granted over CDP). NOT a test file: the gate runs every *.test.js under a
 // 90 s limit, so clipboard-live-*.test.js each set HOST (and CROSS) and import this runner.
-//   HOST=sketchstudio | shaper : draw a rectangle, marquee-select it, Ctrl+C, Ctrl+V twice, Ctrl+Z, Ctrl+Y, Ctrl+X, Ctrl+Z, text fields keep copy / paste.
+//   HOST=sketchstudio | shaper : draw a rectangle, marquee-select it, Ctrl+C, then ONLY the browser-native half: text fields keep the browser's own
+//     copy / paste (the key is not consumed, the native copy puts the field text on the system clipboard). The cut / paste / undo / redo / foreign text
+//     scenarios moved to tests/clipboard-node.test.js (task 580).
 //   CROSS=1 (HOST = the SOURCE app, the destination is the other one): copy in the source, RELOAD into the other app, Ctrl+V there.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -101,41 +103,6 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     console.log('LIVE copy: system clipboard holds', JSON.stringify({ format: payload.format, version: payload.version, shapes: payload.document.geometry.shapes.length, constraints: payload.document.geometry.constraints.length, bytes: text.length }));
 
     if (!CROSS) {
-      // ---- Ctrl+X on the selected rectangle = copy + delete (the Delete key's step); Ctrl+Z brings it back exactly
-      await cutKey();
-      const c1 = await readDoc(SOURCE);
-      assert.strictEqual(c1.shapes.length, d0.shapes.length, 'Ctrl+X removed the selected rectangle');
-      assert.strictEqual(c1.constraints.length, d0.constraints.length, 'with its constraints');
-      assert.strictEqual(JSON.parse(await sysClipboard()).document.geometry.shapes.length, 4, 'and put it on the clipboard');
-      await undoKey(); const cu = await readDoc(SOURCE);
-      assert.strictEqual(canon(cu), canon(drawn), 'Ctrl+Z after the cut restores the geometry exactly (one step)');
-      console.log('LIVE cut/undo ok');
-      // ---- Ctrl+V twice (each one more step), then Ctrl+Z, Ctrl+Y: ONE undo step each, exact
-      await pasteKey();
-      const p1 = await readDoc(SOURCE);
-      assert.strictEqual(p1.shapes.length, drawn.shapes.length + 4, 'Ctrl+V pasted 4 shapes');
-      assert.strictEqual(p1.constraints.length, drawn.constraints.length + nCons, 'and every constraint');
-      assert.strictEqual(p1.joints.length, drawn.joints.length + nJoints, 'and every joint');
-      const o1 = Object.values(jmap(drawn)).find((j) => j.x !== 0 || j.y !== 0), ids0 = new Set(Object.keys(jmap(drawn)));
-      const fresh = Object.entries(jmap(p1)).filter(([k]) => !ids0.has(k));
-      assert.strictEqual(fresh.length, nJoints, 'new joint ids');
-      const dx = (a, b) => Math.round((b - a) * 1e3) / 1e3;
-      const shift = new Set(Object.values(jmap(drawn)).filter((j) => true).flatMap((j) => fresh.filter(([, f]) => Math.abs(f.x - j.x - 10) < 1e-3 && Math.abs(f.y - j.y - 10) < 1e-3).map(() => 1)));
-      assert.ok(shift.size > 0, 'the copy is the original moved by (+10, +10) (right and down)');
-      await pasteKey();
-      const p2 = await readDoc(SOURCE);
-      assert.strictEqual(p2.shapes.length, drawn.shapes.length + 8, 'a second Ctrl+V pastes again');
-      const fresh2 = Object.entries(jmap(p2)).filter(([k]) => !ids0.has(k) && !(k in jmap(p1)));
-      assert.ok(fresh2.some(([, f]) => Object.values(jmap(drawn)).some((j) => Math.abs(f.x - j.x - 20) < 1e-3 && Math.abs(f.y - j.y - 20) < 1e-3)), 'the second paste is one more step (+20, +20)');
-      await undoKey(); const u1 = await readDoc(SOURCE);
-      assert.strictEqual(canon(u1), canon(p1), 'ONE Ctrl+Z removes exactly the last paste');
-      await undoKey(); const u2 = await readDoc(SOURCE);
-      assert.strictEqual(canon(u2), canon(drawn), 'the second Ctrl+Z removes the first paste: back to the drawn rectangle');
-      await redoKey(); const r1 = await readDoc(SOURCE);
-      assert.strictEqual(canon(r1), canon(p1), 'Ctrl+Y brings the first paste back exactly');
-      console.log('LIVE paste/undo/redo ok: 4 shapes +', nCons, 'constraints per paste, offset (+10,+10) then (+20,+20), one undo step each');
-
-
       // ---- text fields keep the browser's own copy / paste: the key is not consumed, the clipboard and the document are untouched
       await setSysClipboard(text);
       await evalJs(`(() => { for (const tag of ['input', 'textarea']) { const e = document.createElement(tag); e.id = 'probe-' + tag; if (tag === 'input') e.type = 'text'; e.value = 'abc'; e.style.cssText = 'position:fixed;left:4px;top:4px;z-index:99999;width:160px'; document.body.appendChild(e); } const d = document.createElement('div'); d.id = 'probe-ce'; d.contentEditable = 'true'; d.textContent = 'abc'; d.style.cssText = 'position:fixed;left:4px;top:40px;z-index:99999;width:160px;background:#fff'; document.body.appendChild(d); })()`);
@@ -153,12 +120,6 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       assert.deepStrictEqual(canvasPrevented, [true], 'on the canvas Ctrl+C is the app\'s');
       console.log('LIVE text fields keep copy/paste ok');
 
-      // ---- text that is not ours: nothing happens
-      await setSysClipboard('hello, not a sketch');
-      const h0 = await readDoc(SOURCE);
-      await pasteKey();
-      assert.strictEqual(canon(await readDoc(SOURCE)), canon(h0), 'foreign clipboard text: Ctrl+V does nothing');
-      console.log('LIVE foreign text ignored ok');
     } else {
       // ---- the system clipboard survives a RELOAD into the OTHER app (shared Design tab): Ctrl+V there
       const dest = SOURCE === 'shaper' ? 'sketchstudio' : 'shaper';

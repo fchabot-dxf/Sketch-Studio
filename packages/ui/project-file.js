@@ -80,11 +80,18 @@ export const browserFileSeam = {
       const file = await handles[0].getFile();
       return { name: file.name, text: await file.text() };
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const input = document.createElement('input');
       input.type = 'file'; input.accept = PROJECT_FILE_EXT + ',.json,application/json';
-      input.onchange = async () => { const f = input.files && input.files[0]; resolve(f ? { name: f.name, text: await f.text() } : null); };
-      input.oncancel = () => resolve(null);
+      // Attached (hidden) while the picker is open: a detached input can be garbage-collected and its change event then never fires.
+      input.hidden = true;
+      document.body.appendChild(input);
+      const settle = (done, value) => { input.remove(); done(value); };
+      input.onchange = async () => {
+        const f = input.files && input.files[0];
+        try { settle(resolve, f ? { name: f.name, text: await f.text() } : null); } catch (e) { settle(reject, e); }
+      };
+      input.oncancel = () => settle(resolve, null);
       input.click();
     });
   },

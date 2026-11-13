@@ -1,7 +1,7 @@
 // tests/design-browser-live.test.js — TASK 586: the SKETCHES browser FLOATS over the top-left of the canvas in all four hosts (SketchStudio, Shaper,
 // Pen Plotter, Trace), one shared mount (#ui/design-browser.js). Real browser, real mouse / touch.
 //  1440 px, per host: the box sits at the canvas's top-left (inside it, 0-16 px in), it is out of the layout (absolute: SketchStudio and Trace
-//  have the canvas at full width again, no side panel), it shows the status line (constraints · DOF · free · solved), the row controls work (new sketch, radio, eye,
+//  have the canvas at full width again, no side panel), it holds only the header and the tree (no constraints / DOF / solved status line, owner 2026-11-13), the row controls work (new sketch, radio, eye,
 //  drag-reorder, right-click menu), a click inside the box does not reach the canvas (Line tool: no point is drawn), a click outside it does (a
 //  line under where the old right-hand panel was).
 //  Collapse: the box shrinks to its header; the state is the per-user setting BROWSER_COLLAPSED (SettingsManager, local), remembered across a
@@ -49,7 +49,7 @@ await (async () => {
       assert(box.left - cv.left >= 0 && box.left - cv.left <= 16 && box.top - cv.top >= 0 && box.top - cv.top <= 16, `${h.name}: the box is at the canvas's top-left: box ${box.left},${box.top} canvas ${cv.left},${cv.top}`);
       assert(box.right < cv.left + 300 && box.bottom < cv.top + 300, h.name + ': the box is small, in the corner');
       if (h.full) assert(cv.right >= 1440 - 40, `${h.name}: the canvas is full width again (right edge ${cv.right} of 1440)`);
-      assert.strictEqual(await evalJs(`/constraints? · DOF [0-9]+/.test(document.querySelector('.sk-browser .sk-info-dof').textContent)`), true, h.name + ': the status line (constraints · DOF) is in the box');
+      assert.strictEqual(await evalJs(`!document.querySelector('.sk-browser .sk-info-dof') && !/constraints? ·|DOF|solved|solving/.test(document.querySelector('.sk-browser').textContent)`), true, h.name + ': no constraints / DOF status line in the box');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').textContent.includes('Sketch 1')`), true, h.name + ': Sketch 1 row');
       assert.strictEqual(await evalJs(`document.elementFromPoint(${box.x}, ${Math.round(box.top) + 12}).closest('.sk-browser') !== null`), true, h.name + ': the box is on top of the canvas at its own place');
 

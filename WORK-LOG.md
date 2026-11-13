@@ -14301,7 +14301,7 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
 - Evidence (local): .evidence/582/ (before-node.txt / after-node.txt, probe-owner*.txt, probe-framed-*.txt, oracle-before/after.txt, gate-merge*.log).
 
 ## TURN 586 (floating SKETCHES browser)
-- The status line (constraints · DOF · free · solved) and the SKETCHES tree move from the right-hand panel (577b) into ONE floating card over the canvas's top-left, `mountDesignBrowser` in `packages/ui/design-browser.js` (renamed from design-side-panel.js). All four apps mount it; the row design / menus / layer behaviour are untouched (createDesignInfoPanel unchanged).
+- The SKETCHES tree moves from the right-hand panel (577b) into ONE floating card over the canvas's top-left, `mountDesignBrowser` in `packages/ui/design-browser.js` (renamed from design-side-panel.js). All four apps mount it; the row design / menus / layer behaviour are untouched (createDesignInfoPanel unchanged).
 - SketchStudio and Trace: the side panel is gone, the canvas is full width (1440 px: right edge 1423 / 1440). Shaper: its design aside was only the tree, so it is removed (canvas 1600 at 1600 px). Pen Plotter keeps its aside (Document button + style controls), only the tree left it.
 - Card: absolute, 8 px in from the canvas corner, 248 px wide, translucent white; the canvas ribbon is outside the canvas element so is not covered. Axis numbers are drawn along the axes at the origin, not at a screen corner, so the card only overlaps them when the user pans an axis under it (a Fusion-style overlay).
 - Collapse: header bar only; per-user setting BROWSER_COLLAPSED (SettingsManager, local), not in the document.

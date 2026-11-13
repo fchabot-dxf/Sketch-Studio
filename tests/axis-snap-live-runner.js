@@ -144,8 +144,9 @@ await (async () => {
       const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 2 } });
       if (EVID) { fs.mkdirSync(EVID, { recursive: true }); fs.writeFileSync(path.join(EVID, name), Buffer.from(r.data, 'base64')); }
     };
-    const isAxisH = (c) => String(c.type) === 'horizontal' && (c.joints || []).includes('j_origin');
-    const isAxisV = (c) => String(c.type) === 'vertical' && (c.joints || []).includes('j_origin');
+    // task 539: the snap leaves a POINT-ON-LINE with the built-in axis line (ref_axis_x / ref_axis_y)
+    const isAxisH = (c) => String(c.type) === 'pointOnLine' && c.shape === 'ref_axis_x';
+    const isAxisV = (c) => String(c.type) === 'pointOnLine' && c.shape === 'ref_axis_y';
     const readDesign = async () => { await sleep(1500); await waitSaved(); return stored(); };
     const drawBase = async (o) => { await click(o.x + 300, o.y + 200); await esc(); };
 
@@ -175,7 +176,7 @@ await (async () => {
       const h = d.constraints.filter(isAxisH), v = d.constraints.filter(isAxisV);
       const onX = Object.entries(J).filter(([id, p]) => id !== 'j_origin' && Math.abs(p.y) < 1e-6 && Math.abs(p.x) > 1).map(([id]) => id);
       const onY = Object.entries(J).filter(([id, p]) => id !== 'j_origin' && Math.abs(p.x) < 1e-6 && Math.abs(p.y) > 1).map(([id]) => id);
-      results[name] = { shapes: d.shapes.length, h: h.length, v: v.length, onX, onY, constraints: d.constraints.map((c) => c.type + ':' + (c.joints || []).join('+')) };
+      results[name] = { shapes: d.shapes.length, h: h.length, v: v.length, onX, onY, constraints: d.constraints.map((c) => c.type + ':' + (c.joints || [c.joint]).join('+')) };
       console.log(name.padEnd(26), JSON.stringify(results[name]));
     }
     const R = results;
@@ -210,16 +211,15 @@ await (async () => {
       const line = d.shapes.find((s) => s.type === 'line');
       const [aId, bId] = line.joints;
       assert(J[bId].y === 0, 'end joint y is exactly 0: ' + J[bId].y);
-      assert(d.constraints.some((c) => isAxisH(c) && c.joints.includes(bId)), 'horizontal(end, j_origin) stored');
-      const glyphs = await evalJs("document.querySelectorAll('.constraint-glyph').length");
-      assert(glyphs >= 1, 'the horizontal glyph is drawn; got ' + glyphs);
+      assert(d.constraints.some((c) => isAxisH(c) && c.joint === bId), 'pointOnLine(end, ref_axis_x) stored');
+      // a point-on-line glyph is hidden by design until its joint is selected: nothing to assert here
       await shot('after-glyph.png', { x: o.x + 60, y: o.y - 60, w: 280, h: 160 });
       // undo removes the axis constraint (the line is one undo group), redo brings it back with the end joint on the axis
       let gone = false;
-      for (let i = 0; i < 4 && !gone; i++) { await key('z', 'KeyZ', 90, 2); d = await readDesign(); gone = !d || !d.constraints.some((c) => isAxisH(c) && c.joints.includes(bId)); }
+      for (let i = 0; i < 4 && !gone; i++) { await key('z', 'KeyZ', 90, 2); d = await readDesign(); gone = !d || !d.constraints.some((c) => isAxisH(c) && c.joint === bId); }
       assert(gone, 'undo removes the axis constraint');
       await key('y', 'KeyY', 89, 2); d = await readDesign(); J = jointsOf(d);
-      assert(d.constraints.some((c) => isAxisH(c) && c.joints.includes(bId)), 'redo brings the axis constraint back');
+      assert(d.constraints.some((c) => isAxisH(c) && c.joint === bId), 'redo brings the axis constraint back');
       assert(Math.abs(J[bId].y) < 1e-6, 'redo: the end joint is back on the axis: ' + J[bId].y);
       // drag the first point
       await letter('s');
@@ -231,10 +231,8 @@ await (async () => {
       // save / load
       await send('Page.navigate', { url }); await sleep(3000);
       d = await stored(); J = jointsOf(d);
-      assert(d.constraints.some((c) => isAxisH(c) && c.joints.includes(bId)), 'the constraint survives save/load');
+      assert(d.constraints.some((c) => isAxisH(c) && c.joint === bId), 'the constraint survives save/load');
       assert(Math.abs(J[bId].y) < 1e-6, 'the end joint is still on the axis after load: ' + J[bId].y);
-      const glyphs2 = await evalJs("document.querySelectorAll('.constraint-glyph').length");
-      assert(glyphs2 >= 1, 'the glyph is drawn after load; got ' + glyphs2);
       console.log('line end: undo-redo / drag-first-point / save-load ok');
     }
 
@@ -249,7 +247,7 @@ await (async () => {
       assert(await evalJs('document.querySelectorAll(\'[data-snap-axis]\').length') === 0, 'setting off: no axis highlight');
       await click(o.x + 200, o.y + 9); await esc();
       const d = await readDesign();
-      assert(!d.constraints.some((c) => isAxisH(c) || isAxisV(c)), 'setting off: no axis constraint; got ' + JSON.stringify(d.constraints.map((c) => c.type + ':' + (c.joints || []).join('+'))));
+      assert(!d.constraints.some((c) => isAxisH(c) || isAxisV(c)), 'setting off: no axis constraint; got ' + JSON.stringify(d.constraints.map((c) => c.type + ':' + (c.joints || [c.joint]).join('+'))));
       await evalJs("localStorage.removeItem('sketch-studio-settings')");
       console.log('setting off: ok');
     }

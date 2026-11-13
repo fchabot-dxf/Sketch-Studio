@@ -4,6 +4,7 @@
 // Shared UI (#ui/input-manager.js). Relocated from apps/sketchstudio in slice S4f (the cluster ROOT).
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
+import { pickableShapes } from '#core/reference-lines.js';
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { hitConstraintAtScreen, findSnap } from '#ui/snap-detection.js';
@@ -426,7 +427,7 @@ function updateSnapTarget(e, svg, state) {
     if (needsSnap) {
         // ACTIVE OPERATION: Compute snap targets for magnetic attraction
         const excludeIds = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
-        let snapResult = findSnap(state.joints, state.shapes, svg, {x: e.clientX, y: e.clientY}, excludeIds, false, false, snapBoost);
+        let snapResult = findSnap(state.joints, pickableShapes(state), svg, {x: e.clientX, y: e.clientY}, excludeIds, false, false, snapBoost);
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
         // This ensures the origin is always snappable even if findSnap logic skips it.
@@ -615,7 +616,7 @@ function handlePointerDown(e, svg, state) {
         const keepLockedAxisSnap = !!(clickSnap && AXIS_SNAP_TARGETS[clickSnap.type]);
         if (!hitJoint && !hitShape && !keepLockedAxisSnap) {
             const snapBoost = isTouch ? 2.0 : 1.0;
-            clickSnap = findSnap(state.joints, state.shapes, svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
+            clickSnap = findSnap(state.joints, pickableShapes(state), svg, { x: screenX, y: screenY }, [], false, false, snapBoost);
             if (clickSnap) {
                 if (clickSnap.type === 'joint') {
                     const jid = clickSnap.targetId;

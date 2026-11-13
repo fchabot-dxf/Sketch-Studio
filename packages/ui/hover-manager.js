@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
+import { pickableShapes } from '#core/reference-lines.js';
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
@@ -120,7 +121,7 @@ export function setHoverFromSnap(state) {
 
 export function updateHover(svg, screenX, screenY, state) {
     // Find potential targets via snap system
-    const hoverSnapResult = findSnap(state.joints, state.shapes, svg, {x: screenX, y: screenY}, [], false, false, 1.0);
+    const hoverSnapResult = findSnap(state.joints, pickableShapes(state), svg, {x: screenX, y: screenY}, [], false, false, 1.0);
     
     // Extract hits
     let hitJoint = null;

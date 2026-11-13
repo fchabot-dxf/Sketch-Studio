@@ -1,0 +1,154 @@
+// tests/reference-lines-glyph-live-runner.js - TASK 539 live: a constraint on an axis shows its usual glyph next to the real line, and nothing but the glyph is drawn for it.
+import assert from 'node:assert';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..');
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function findBrowser() {
+  for (const c of ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']) if (fs.existsSync(c)) return c;
+  for (const cmd of ['google-chrome', 'chromium', 'chromium-browser']) { try { const p = execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); if (p) return p; } catch (_) {} }
+  return null;
+}
+function startServer() {
+  return new Promise((resolve) => {
+    const server = http.createServer(async (req, res) => {
+      try {
+        let url = (req.url || '/').split('?')[0]; if (url.endsWith('/')) url += 'index.html';
+        const file = path.normalize(path.join(REPO_ROOT, decodeURIComponent(url)));
+        if (!file.startsWith(REPO_ROOT)) { res.writeHead(403); res.end('forbidden'); return; }
+        const data = await fsp.readFile(file);
+        res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' }); res.end(data);
+      } catch (e) { res.writeHead(404); res.end('nf ' + e.message); }
+    });
+    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
+  });
+}
+async function waitForJson(dbgPort) { for (let i = 0; i < 40; i++) { try { const r = await fetch(`http://127.0.0.1:${dbgPort}/json/version`); if (r.ok) return true; } catch (_) {} await sleep(200); } return false; }
+async function closeBrowser(proc, dbgPort) {
+  const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', () => res()); });
+  try {
+    const v = await (await fetch(`http://127.0.0.1:${dbgPort}/json/version`)).json();
+    if (v && v.webSocketDebuggerUrl) {
+      const ws = new WebSocket(v.webSocketDebuggerUrl);
+      await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); setTimeout(rej, 2000); });
+      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' })); await Promise.race([exited, sleep(3000)]); try { ws.close(); } catch (_) {}
+    }
+  } catch (_) {}
+  try { if (process.platform === 'win32' && proc.pid) execSync(`taskkill /PID ${proc.pid} /T /F`, { stdio: 'ignore' }); else proc.kill(); } catch (_) {}
+}
+
+await (async () => {
+  const browser = findBrowser();
+  if (!browser) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
+  const { server, port } = await startServer();
+  const dbgPort = 9990 + Math.floor((Date.now() % 80));
+  const userDir = path.join(os.tmpdir(), 'sk-test-539-' + process.pid);
+  const proc = spawn(browser, ['--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--disable-extensions', `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userDir}`, 'about:blank'], { stdio: 'ignore' });
+  try {
+    assert(await waitForJson(dbgPort), 'headless browser did not expose CDP port');
+    const list = await (await fetch(`http://127.0.0.1:${dbgPort}/json/list`)).json();
+    const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    let id = 0; const pending = new Map();
+    const send = (m, p = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
+    ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); } });
+    await new Promise((r) => ws.addEventListener('open', r));
+    await send('Runtime.enable'); await send('Page.enable');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+    const evalJs = async (expression) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails)); return r && r.result ? r.result.value : undefined; };
+    const mouse = (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: (buttons || type === 'mouseReleased') ? 'left' : 'none', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
+    const move = async (x, y) => { await mouse('mouseMoved', x, y); await sleep(80); };
+    const click = async (x, y) => { await move(x, y); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y, 0); await sleep(150); };
+    const drag = async (a, b) => { await move(a.x, a.y); await mouse('mousePressed', a.x, a.y, 1); await sleep(60); for (let i = 1; i <= 8; i++) { await mouse('mouseMoved', a.x + (b.x - a.x) * i / 8, a.y + (b.y - a.y) * i / 8, 1); await sleep(30); } await mouse('mouseReleased', b.x, b.y, 0); await sleep(200); };
+    const key = async (k, code, vk) => { await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); await sleep(120); };
+    const esc = () => key('Escape', 'Escape', 27);
+    const tool = async (t) => { await evalJs(`document.getElementById('tool-${t}').click()`); await sleep(200); };
+    const EVID = process.env.EVIDENCE_DIR || '';
+    const shot = async (name, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 2 } }); if (EVID) { fs.mkdirSync(EVID, { recursive: true }); fs.writeFileSync(path.join(EVID, name), Buffer.from(r.data, 'base64')); } };
+    const litCount = (axis) => evalJs(`document.querySelectorAll('[data-ref-axis${axis ? `="${axis}"` : ''}]').length`);
+    const stored = () => evalJs(`new Promise((res) => {
+      const open = indexedDB.open('sketch-studio-projects', 1); open.onerror = () => res(null);
+      open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
+        m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
+    })`).then((s) => s && JSON.parse(s));
+    const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) { await sleep(300); return; } await sleep(250); } };
+    const toScreen = (canvas, wx, wy) => evalJs(`(() => { const s = document.querySelector('${canvas}'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
+
+    const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
+    const fresh = async () => {
+      await send('Page.navigate', { url }); await sleep(2500);
+      await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
+      await send('Page.navigate', { url }); await sleep(2500);
+      return toScreen('#svgCanvas', 0, 0);
+    };
+    const glyphs = () => evalJs(`document.querySelectorAll('.constraint-glyph').length`);
+    const worldChildren = () => evalJs(`(() => { const s = document.getElementById('svgCanvas'); return [...s.querySelectorAll('line,path,circle,rect')].filter(e => !e.closest('.constraint-glyph') && !e.closest('defs')).length; })()`);
+    const drawLine = async (o) => { await tool('line'); await click(o.x + 200, o.y - 150); await click(o.x + 380, o.y - 60); await esc(); };
+    const scenarios = {
+      'parallel X': async (o) => { await drawLine(o); await tool('parallel'); await click(o.x + 290, o.y - 105); await click(o.x + 250, o.y + 3); },
+      'parallel Y': async (o) => { await drawLine(o); await tool('parallel'); await click(o.x + 290, o.y - 105); await click(o.x + 3, o.y - 300); },
+      'perpendicular X': async (o) => { await drawLine(o); await tool('perp'); await click(o.x + 290, o.y - 105); await click(o.x + 250, o.y + 3); },
+      'perpendicular Y': async (o) => { await drawLine(o); await tool('perp'); await click(o.x + 290, o.y - 105); await click(o.x + 3, o.y - 300); },
+      'collinear X': async (o) => { await drawLine(o); await tool('collinear'); await click(o.x + 290, o.y - 105); await click(o.x + 250, o.y + 3); },
+      'collinear Y': async (o) => { await drawLine(o); await tool('collinear'); await click(o.x + 290, o.y - 105); await click(o.x + 3, o.y - 300); },
+      'point on X': async (o) => { await drawLine(o); await tool('coincident'); await click(o.x + 200, o.y - 150); await click(o.x + 250, o.y + 3); },
+      'point on Y': async (o) => { await drawLine(o); await tool('coincident'); await click(o.x + 380, o.y - 60); await click(o.x + 3, o.y - 300); },
+      'tangent X': async (o) => { await tool('circle'); await click(o.x + 300, o.y - 100); await click(o.x + 350, o.y - 100); await esc(); await tool('tangent'); await click(o.x + 300, o.y - 150); await click(o.x + 250, o.y + 3); },
+      'tangent Y': async (o) => { await tool('circle'); await click(o.x + 300, o.y - 100); await click(o.x + 350, o.y - 100); await esc(); await tool('tangent'); await click(o.x + 300, o.y - 150); await click(o.x + 3, o.y - 300); },
+    };
+    const SCEN = process.env.SCEN ? new RegExp(process.env.SCEN) : null; // the gate runs each *.test.js under 90 s: three wrappers set SCEN
+    for (const [name, run] of Object.entries(scenarios)) {
+      if (SCEN && !SCEN.test(name)) continue;
+      const o = await fresh();
+      await run(o);
+      await tool('select'); await move(o.x + 700, o.y + 300); await sleep(400);
+      const g = await glyphs();
+      // a point-on-line glyph is hidden by design until its joint is selected (same for a real line): no glyph is asserted for it
+      if (!name.startsWith('point on'))
+        assert(g === 1, name + ': exactly one glyph (on the real line, none on the axis); got ' + g);
+      assert((await litCount()) === 0, name + ': the axis is not left lit');
+      await shot('glyph-' + name.replace(' ', '-') + '.png', { x: o.x - 60, y: o.y - 330, w: 520, h: 400 });
+      await waitSaved(); const d = await stored();
+      assert(d.constraints.some((c) => JSON.stringify(c).includes('ref_axis')), name + ': stored against an axis: ' + JSON.stringify(d.constraints));
+      console.log(name.padEnd(18), 'glyphs', g, 'constraints', d.constraints.map((c) => c.type).join(','));
+    }
+    // dimension tool: the second pick may be an axis (point-line distance, angle); a first pick near an axis still picks real geometry
+    const dimScenarios = {
+      'dimension point-X': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 200, o.y - 150); await click(o.x + 250, o.y + 3); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_x') },
+      'dimension point-Y': { run: async (o) => { await drawLine(o); await tool('dim'); await click(o.x + 380, o.y - 60); await click(o.x + 3, o.y - 300); }, want: (c) => c.type === 'distance' && (c.joints || []).includes('j_ref_y') },
+    };
+    for (const [name, sc] of Object.entries(dimScenarios)) {
+      if (SCEN && !SCEN.test(name)) continue;
+      const o = await fresh();
+      await sc.run(o);
+      await click(o.x + 330, o.y - 30); await key('Enter', 'Enter', 13); await sleep(300); // drop the label, accept the value
+      const label = await evalJs(`document.querySelectorAll('.dim-label').length`);
+      assert(label >= 1, name + ': the dimension label is drawn; got ' + label);
+      await shot('dim-' + name.replace(' ', '-') + '.png', { x: o.x - 60, y: o.y - 330, w: 520, h: 400 });
+      await esc(); await tool('select'); await sleep(300); await waitSaved(); const d = await stored();
+      assert(d.constraints.some(sc.want), name + ': stored: ' + JSON.stringify(d.constraints));
+      assert(d.shapes.length === 1, name + ': the axis is not a shape');
+      console.log(name.padEnd(20), 'labels', label, d.constraints.map((c) => c.type).join(','));
+    }
+    if (!SCEN || SCEN.test('dimension')) { // a FIRST dimension click on an axis picks nothing (no axis dimension is started)
+      const o = await fresh(); await drawLine(o); await tool('dim'); await click(o.x + 250, o.y + 3); await sleep(200);
+      assert((await litCount()) === 0, 'dimension: the first click near an axis does not light or pick it');
+      await esc(); await tool('select'); await sleep(300); await waitSaved(); const d = await stored();
+      assert(!d.constraints.some((c) => JSON.stringify(c).includes('ref_')), 'no axis dimension from a first click');
+    }
+    console.log('reference-lines-glyph-live: ok');
+    ws.close();
+  } finally {
+    await closeBrowser(proc, dbgPort);
+    try { server.close(); } catch (_) {}
+    try { fs.rmSync(userDir, { recursive: true, force: true }); } catch (_) {}
+  }
+})();

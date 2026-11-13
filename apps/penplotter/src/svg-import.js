@@ -10,7 +10,7 @@
 
 // IMPORT-2B-4: installSvgImport + its loadSvgFile helper are DELETED — the binder was never called (it wired
 // #importBtn/#importFile and a #canvasWrap drop, all in the permanently hidden Draw panel), so the whole chain was
-// dead. The live importer is the Design tab: #importSvgBtn + drag-drop on #design-canvas-wrap -> importSvgToCore.
+// dead. The live importer is the Design tab: the sidebar's Import SVG / DXF… + drag-drop on #design-canvas-wrap -> importFileToCore (core-import.js).
 // STILL SHARED, do not touch: inheritPaint + penColorFor below — core-import.js resolves per-element paint through
 // them. importSvgText and its art-store helpers are kept deliberately (see the WORK-LOG note): they are the
 // reference implementation for the still-open S6 [D] "Inkscape-layer split" decision.

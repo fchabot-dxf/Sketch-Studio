@@ -5,6 +5,7 @@
 //              [the host's own Download actions] · GO TO (+ the account row: the Drive default toggle and connection check)
 // The project manager (modal, thumbnail grid: projects, designs, every per-design / per-project action) is #ui/project-manager.js; what
 // can be done with a design or a project is declared once in #ui/project-actions.js and used by both.
+// A host with a Design canvas also passes `importFile(text, fileName)`: that adds "Import SVG / DXF…" next to Open from file (TASK 566).
 // The host passes `getBuffer()` (its createDocumentBuffer result; it may be created lazily, so it is read at click time) and
 // its own `hostActions` array. A refused open / file / delete shows the store's message in the drawer and changes nothing.
 // The tab title follows the current design through the registry (appTitle).
@@ -19,18 +20,19 @@ import { applyAppIdentity } from './app-registry.js';
 import { getGoogleAccount } from './cloud/google-account.js';
 import { driveErrorText } from './cloud/drive-adapter.js';
 import { createProjectActions } from './project-actions.js';
+import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
 import SettingsManager from '#core/settings-manager.js';
 
 export { relativeTime };
 
-export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
   let manager = null;   // the open project manager modal, if any
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = createProjectActions({ store, getBuffer, account, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
+  const projectActions = createProjectActions({ store, getBuffer, account, importFile, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
@@ -65,6 +67,7 @@ export function mountProjectSidebar({ appId, getBuffer, hostActions = [], store 
       visible: () => !!(account && account.state().signedIn && store.cloud),
       onClick: act(async () => { await projectActions.saveCurrentToDrive(); }, { close: false }) },
     { id: 'open-file', label: 'Open from file', icon: SIDEBAR_ICONS.open, keepOpen: true, onClick: act(async () => { await projectActions.openFile(); }) },
+    ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
   ];
 

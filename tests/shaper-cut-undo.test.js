@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
 await (async () => {
@@ -144,13 +145,9 @@ await (async () => {
     const planBeforeImport = JSON.stringify(await plan());
     const shapesBefore = await shapeCount();
     await openMode('design');
-    await waitFor(`!!document.querySelector('#design-panel-info input[type=file]')`, 'the Design import control');
     const svgPath = path.join(os.tmpdir(), 'sk-463-import.svg');
     fs.writeFileSync(svgPath, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:shaper="http://www.shapertools.com/namespaces/shaper" width="100mm" height="100mm" viewBox="0 0 100 100"><path d="M 200 0 L 240 0 L 240 30 L 200 30 Z" fill="#7F7F7F" shaper:cutType="pocket" shaper:cutDepth="6.350 mm" shaper:cutOffset="0mm" shaper:toolDia="3.175 mm"/></svg>');
-    await send('DOM.enable');
-    const root = await send('DOM.getDocument');
-    const node = await send('DOM.querySelector', { nodeId: root.root.nodeId, selector: '#design-panel-info input[type=file]' });
-    await send('DOM.setFileInputFiles', { files: [svgPath], nodeId: node.nodeId });
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`window.__designController.state.shapes.length > ${shapesBefore}`, 'the imported shapes');
     const planAfterImport = JSON.stringify(await plan());
     assert.ok(JSON.parse(planAfterImport).length > JSON.parse(planBeforeImport).length, 'the import added a cut record');

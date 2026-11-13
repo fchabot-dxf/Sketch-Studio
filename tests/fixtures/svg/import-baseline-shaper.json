@@ -1,0 +1,1448 @@
+{
+ "import-basic.svg": {
+  "status": "Imported 10 shapes → import-basic @ 1 mm/unit · 1 skipped",
+  "shapes": [
+   {
+    "type": "line",
+    "joints": [
+     [
+      5,
+      5
+     ],
+     [
+      95,
+      5
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_0"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      10,
+      10
+     ],
+     [
+      40,
+      10
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      40,
+      10
+     ],
+     [
+      40,
+      30
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      40,
+      30
+     ],
+     [
+      10,
+      30
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      10,
+      30
+     ],
+     [
+      10,
+      10
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "circle",
+    "joints": [
+     [
+      60,
+      35
+     ]
+    ],
+    "radius": 8,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      60,
+      60
+     ],
+     [
+      80,
+      60
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      80,
+      70
+     ],
+     [
+      80,
+      60
+     ],
+     [
+      90,
+      70
+     ]
+    ],
+    "radius": null,
+    "sweep": true,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      90,
+      70
+     ],
+     [
+      60,
+      70
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      60,
+      70
+     ],
+     [
+      60,
+      60
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   }
+  ],
+  "sketches": [
+   "Sketch 1",
+   "import-basic"
+  ]
+ },
+ "dxf:part-mm.dxf": {
+  "status": "Imported 7 shapes → part-mm @ mm · 1 skipped/degraded: TEXT text not imported ×1",
+  "shapes": [
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      0
+     ],
+     [
+      40,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      40,
+      0
+     ],
+     [
+      40,
+      -10
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      30,
+      -10
+     ],
+     [
+      40,
+      -10
+     ],
+     [
+      30,
+      -20
+     ]
+    ],
+    "radius": null,
+    "sweep": false,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      30,
+      -20
+     ],
+     [
+      0,
+      -20
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      -20
+     ],
+     [
+      0,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "circle",
+    "joints": [
+     [
+      10,
+      -10
+     ]
+    ],
+    "radius": 3,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "bezier",
+    "joints": [
+     [
+      50,
+      0
+     ],
+     [
+      70,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   }
+  ],
+  "sketches": [
+   "Sketch 1",
+   "part-mm"
+  ]
+ },
+ "dxf:fusion-sketch4.dxf": {
+  "status": "Imported 26 shapes → fusion-sketch4 @ inches · 4 construction · 5 skipped/degraded: POINT sketch point (a reference / centre point: nothing to cut) ×5",
+  "shapes": [
+   {
+    "type": "line",
+    "joints": [
+     [
+      -27.940001,
+      -71.120002
+     ],
+     [
+      -27.940001,
+      -17.780001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -27.940001,
+      -17.780001
+     ],
+     [
+      60.960002,
+      -17.780001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      60.960002,
+      -17.780001
+     ],
+     [
+      60.960002,
+      -71.120002
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      60.960002,
+      -71.120002
+     ],
+     [
+      -27.940001,
+      -71.120002
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      26.482542,
+      -30.780012
+     ],
+     [
+      -25.4,
+      -30.780012
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -25.4,
+      -30.780012
+     ],
+     [
+      -25.4,
+      -59.297707
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -25.4,
+      -59.297707
+     ],
+     [
+      26.482542,
+      -59.297707
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      26.482542,
+      -59.297707
+     ],
+     [
+      26.482542,
+      -30.780012
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      26.482542,
+      -30.780012
+     ],
+     [
+      -25.4,
+      -59.297707
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": true,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -25.4,
+      -30.780012
+     ],
+     [
+      26.482542,
+      -59.297707
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": true,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      26.482542,
+      -45.038859
+     ],
+     [
+      31.092727,
+      -33.632725
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      31.092727,
+      -33.632725
+     ],
+     [
+      43.275822,
+      -31.922196
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      43.275822,
+      -31.922196
+     ],
+     [
+      50.848731,
+      -41.617801
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      50.848731,
+      -41.617801
+     ],
+     [
+      46.238546,
+      -53.023935
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      46.238546,
+      -53.023935
+     ],
+     [
+      34.055451,
+      -54.734464
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      34.055451,
+      -54.734464
+     ],
+     [
+      26.482542,
+      -45.038859
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      27.969056,
+      -41.361051
+     ],
+     [
+      26.482542,
+      -41.361051
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      26.482542,
+      -49.836742
+     ],
+     [
+      30.230006,
+      -49.836742
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      30.868513,
+      -41.328782
+     ],
+     [
+      20.179866,
+      -50.37027
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": true,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      20.827515,
+      -40.295704
+     ],
+     [
+      31.550119,
+      -49.289291
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": true,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -22.190331,
+      -37.799681
+     ],
+     [
+      -22.190331,
+      -52.278038
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      -18.380331,
+      -52.278038
+     ],
+     [
+      -22.190331,
+      -52.278038
+     ],
+     [
+      -18.380331,
+      -56.088038
+     ]
+    ],
+    "radius": null,
+    "sweep": true,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      -18.380331,
+      -56.088038
+     ],
+     [
+      23.272873,
+      -56.088038
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      23.272873,
+      -56.088038
+     ],
+     [
+      23.272873,
+      -33.989681
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      23.272873,
+      -33.989681
+     ],
+     [
+      -18.380331,
+      -33.989681
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": null
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      -18.380331,
+      -37.799681
+     ],
+     [
+      -18.380331,
+      -33.989681
+     ],
+     [
+      -22.190331,
+      -37.799681
+     ]
+    ],
+    "radius": null,
+    "sweep": true,
+    "isConstruction": false,
+    "descId": null
+   }
+  ],
+  "sketches": [
+   "Sketch 1",
+   "fusion-sketch4"
+  ]
+ },
+ "svg:fusion-shaper-addin-arcs.svg": {
+  "status": "Imported 39 shapes → fusion-shaper-addin-arcs @ 10 mm/unit · 6 cuts kept",
+  "shapes": [
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      53.340001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_0"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      53.340001
+     ],
+     [
+      88.900003,
+      53.340001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_0"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      88.900003,
+      53.340001
+     ],
+     [
+      88.900003,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_0"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      88.900003,
+      0
+     ],
+     [
+      0,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_0"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      32.993679,
+      32.385001
+     ],
+     [
+      35.560001,
+      32.385001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      32.385001
+     ],
+     [
+      35.560001,
+      27.940001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      27.940001
+     ],
+     [
+      32.993679,
+      32.385001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_1"
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      69.180334,
+      32.483674
+     ],
+     [
+      69.180334,
+      36.293674
+     ],
+     [
+      72.990334,
+      32.483674
+     ]
+    ],
+    "radius": null,
+    "sweep": false,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      72.990334,
+      32.483674
+     ],
+     [
+      72.990334,
+      23.396327
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "arc",
+    "joints": [
+     [
+      69.180334,
+      23.396327
+     ],
+     [
+      72.990334,
+      23.396327
+     ],
+     [
+      69.180334,
+      19.586327
+     ]
+    ],
+    "radius": null,
+    "sweep": false,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      69.180334,
+      19.586327
+     ],
+     [
+      38.76967,
+      19.586327
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      38.76967,
+      19.586327
+     ],
+     [
+      38.76967,
+      36.293674
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      38.76967,
+      36.293674
+     ],
+     [
+      69.180334,
+      36.293674
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_2"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      27.940001
+     ],
+     [
+      35.560001,
+      23.495
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      23.495
+     ],
+     [
+      32.993679,
+      23.495
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      32.993679,
+      23.495
+     ],
+     [
+      35.560001,
+      27.940001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_3"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      17.463747,
+      38.387878
+     ],
+     [
+      11.431662,
+      27.940001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      11.431662,
+      27.940001
+     ],
+     [
+      17.463747,
+      17.492123
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      17.463747,
+      17.492123
+     ],
+     [
+      29.527917,
+      17.492123
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      29.527917,
+      17.492123
+     ],
+     [
+      35.560001,
+      27.940001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      27.940001
+     ],
+     [
+      29.527917,
+      38.387878
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      29.527917,
+      38.387878
+     ],
+     [
+      17.463747,
+      38.387878
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_4"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      53.340001
+     ],
+     [
+      0,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      0,
+      0
+     ],
+     [
+      88.900003,
+      0
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      88.900003,
+      0
+     ],
+     [
+      88.900003,
+      53.340001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      88.900003,
+      53.340001
+     ],
+     [
+      0,
+      53.340001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      76.200003,
+      39.503344
+     ],
+     [
+      76.200003,
+      16.376657
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      76.200003,
+      16.376657
+     ],
+     [
+      35.560001,
+      16.376657
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      16.376657
+     ],
+     [
+      35.560001,
+      23.495
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      23.495
+     ],
+     [
+      32.993679,
+      23.495
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      32.993679,
+      23.495
+     ],
+     [
+      29.527917,
+      17.492123
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      29.527917,
+      17.492123
+     ],
+     [
+      17.463747,
+      17.492123
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      17.463747,
+      17.492123
+     ],
+     [
+      11.431662,
+      27.940001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      11.431662,
+      27.940001
+     ],
+     [
+      17.463747,
+      38.387878
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      17.463747,
+      38.387878
+     ],
+     [
+      29.527917,
+      38.387878
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      29.527917,
+      38.387878
+     ],
+     [
+      32.993679,
+      32.385001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      32.993679,
+      32.385001
+     ],
+     [
+      35.560001,
+      32.385001
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      32.385001
+     ],
+     [
+      35.560001,
+      39.503344
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   },
+   {
+    "type": "line",
+    "joints": [
+     [
+      35.560001,
+      39.503344
+     ],
+     [
+      76.200003,
+      39.503344
+     ]
+    ],
+    "radius": null,
+    "sweep": null,
+    "isConstruction": false,
+    "descId": "desc_5"
+   }
+  ],
+  "sketches": [
+   "Sketch 1",
+   "fusion-shaper-addin-arcs"
+  ]
+ }
+}

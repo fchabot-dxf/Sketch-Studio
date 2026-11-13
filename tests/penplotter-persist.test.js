@@ -6,6 +6,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
@@ -64,9 +65,7 @@ await (async () => {
     await load();
     await waitFor(`document.getElementById('design-canvas').dataset.docReady === '1'`, 'the named design to be restored (before the import, so the restore cannot replace it)');
     // Import the SVG through the real file input (a real file chooser result).
-    const root = await send('DOM.getDocument');
-    const q = await send('DOM.querySelector', { nodeId: root.nodeId !== undefined ? root.nodeId : root.root.nodeId, selector: '#importSvgFile' });
-    await send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [svgPath] });
+    await importViaMenu(cdp, svgPath); // TASK 566: the sidebar's "Import SVG / DXF…" and the real file chooser
     await waitFor(`window.__sketch.controller.state.shapes.length > 0`, 'SVG import produced geometry');
     // Build the plotter state: a real click on + Pen, then toolpaths/settings/styles (test setup, not the gesture under test).
     await clickEl('.stage-btn[data-stage="toolpath"]');

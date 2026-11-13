@@ -50,14 +50,17 @@ export function projectFileName(name) {
 }
 
 // ---- the real browser seam -------------------------------------------------------------------------------------------
-const PICKER_TYPES = [{ description: 'Sketch Studio project', accept: { 'application/json': [PROJECT_FILE_EXT, '.json'] } }];
+// What a picker offers: { description, mime, exts }. The project file is the default; Import SVG / DXF (project-actions.js) passes its own.
+export const PROJECT_FILE_PICK = { description: 'Sketch Studio project', mime: 'application/json', exts: [PROJECT_FILE_EXT, '.json'] };
+export const IMPORT_FILE_PICK = { description: 'SVG or DXF drawing', mime: 'image/svg+xml', exts: ['.svg', '.dxf'] };
+const pickerTypes = (spec) => [{ description: spec.description, accept: { [spec.mime]: spec.exts } }];
 
 export const browserFileSeam = {
   /** Write `text`. Resolves { name } or null when the user cancelled the picker. */
   async save(text, suggestedName) {
     if (typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function') {
       let handle;
-      try { handle = await window.showSaveFilePicker({ suggestedName, types: PICKER_TYPES }); }
+      try { handle = await window.showSaveFilePicker({ suggestedName, types: pickerTypes(PROJECT_FILE_PICK) }); }
       catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
       const w = await handle.createWritable();
       await w.write(text);
@@ -72,17 +75,17 @@ export const browserFileSeam = {
     return { name: suggestedName };
   },
   /** Pick and read a file. Resolves { name, text } or null when the user cancelled. */
-  async open() {
+  async open(spec = PROJECT_FILE_PICK) {
     if (typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function') {
       let handles;
-      try { handles = await window.showOpenFilePicker({ types: PICKER_TYPES, multiple: false }); }
+      try { handles = await window.showOpenFilePicker({ types: pickerTypes(spec), multiple: false }); }
       catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
       const file = await handles[0].getFile();
       return { name: file.name, text: await file.text() };
     }
     return new Promise((resolve, reject) => {
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = PROJECT_FILE_EXT + ',.json,application/json';
+      input.type = 'file'; input.accept = spec.exts.join(',') + ',' + spec.mime;
       // Attached (hidden) while the picker is open: a detached input can be garbage-collected and its change event then never fires.
       input.hidden = true;
       document.body.appendChild(input);

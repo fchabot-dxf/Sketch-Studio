@@ -12,6 +12,7 @@ import { TOOL_MODES, RECT_MODES, POLYGON_SIDES } from '#core/constants.js';
 import { clampPolygonSides } from '#core/shapes.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
+import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
 
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
 const CREATE = [
@@ -22,6 +23,8 @@ const CREATE = [
   { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon', label: 'Polygon', polygonField: true }, // TASK 483: regular polygon, Sides field in its menu
   { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
+  // TASK 585: like Fusion's Create > Mirror (owner: "always the create menu"). `begin` runs when the button starts the tool (the pre-selection).
+  { tool: TOOL_MODES.MIRROR, icon: 'icon-tool-mirror',  label: 'Mirror', title: 'Mirror: the objects, then the mirror line, then Enter', begin: beginMirror },
 ];
 // TRACE-1: Edit/modify tools — trim + break. No cursor-manager symbols yet; icons provided as SVG inline.
 const EDIT = [
@@ -167,10 +170,11 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   }));
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
-  function selectTool(tool) {
+  function selectTool(tool, begin = null) {
     state.closeDrawStep(); // TASK 549: picking a tool in the middle of a draw cancels it (nothing committed: no orphan point, no undo step)
     if (typeof onToolClick === 'function') { try { onToolClick(tool); } catch (_) {} } // host owns activation
     else { try { switchToTool(state, tool); } catch (_) {} }                            // default: shared tool-switch
+    if (begin) begin(state); // TASK 585: a tool declared with `begin` (Mirror) starts its pick from the state the switch left
     fire('tool', tool);
     refresh();
   }
@@ -205,7 +209,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
         else if (t.action === 'parameters') { parametersWindow().toggle(); refresh(); }
         fire('action', { id: b.id, action: t.action });
       } else {
-        selectTool(t.tool);
+        selectTool(t.tool, t.begin);
       }
     });
     if (t.tool) toolBtns.push({ btn: b, tool: t.tool });

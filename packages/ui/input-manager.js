@@ -29,6 +29,7 @@ import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager
 import { handleLineKeyDown, finishLineChain } from '#ui/input-handlers/line-tool.js';
 import { createLongPress } from '#ui/long-press.js';
 import { createTouchDoneButton } from '#ui/touch-done-button.js';
+import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
@@ -458,7 +459,8 @@ function updateSnapTarget(e, svg, state) {
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
         // This ensures the origin is always snappable even if findSnap logic skips it.
-        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin')) {
+        // TASK 584: except for a drag that holds the origin itself (a joint coincident with it: its cluster includes j_origin), as findSnap.
+        if ((!snapResult || snapResult.type !== 'joint') && state.joints.has('j_origin') && !excludeIds.includes('j_origin')) {
             const origin = state.joints.get('j_origin');
             const sOrigin = worldToScreen(svg, origin);
             const dOrigin = Math.hypot(e.clientX - sOrigin.x, e.clientY - sOrigin.y);
@@ -715,6 +717,9 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.FILLET:
             try { handled = handleFilletPointerDown(e, svg, state, state.view); } catch(_) {}
             break;
+        case TOOL_MODES.MIRROR: // TASK 585: the objects, then the mirror line (a click on nothing pans)
+            handled = handleMirrorPointerDown(e, svg, state, hitJoint, hitShape);
+            break;
         case TOOL_MODES.COINCIDENT:
         case TOOL_MODES.HORIZONTAL_VERTICAL:
         case TOOL_MODES.PARALLEL:
@@ -963,15 +968,22 @@ function setupEventListeners(svg, state) {
                 openContextMenuFor({ clientX: x, clientY: y, target: down.target, pointerType: 'touch' }, svg, state, { touch: true });
             },
         });
-        // TASK 562: the touch "Done" button ends a Line chain exactly like Enter (finishLineChain); shown only while a finger is the input.
+        // TASK 562: the touch "Done" button does what Enter does, shown only while a finger is the input: it ends a Line chain
+        // (finishLineChain) and, TASK 585, ends a Mirror step (mirrorDone). TOUCH_DONE declares, per tool, when it shows and what it does.
         // Built on the first touch press, so a host / test that never sees a finger never gets the element.
+        const TOUCH_DONE = {
+            [TOOL_MODES.LINE]: { open: () => !!state.active && state.active.mode === TOOL_MODES.LINE, done: () => finishLineChain(state), label: 'Finish the line chain' },
+            [TOOL_MODES.MIRROR]: { open: () => mirrorStep(state) !== null, done: () => finishMirrorStep(state), label: 'Mirror: next step' },
+        };
+        const touchDone = () => (isActiveFn() ? TOUCH_DONE[state.currentTool] || null : null);
         let doneButton = null;
         const syncDone = (e) => {
             if (!doneButton && e.pointerType === 'touch') {
                 doneButton = createTouchDoneButton({
                     svg,
-                    isChainOpen: () => isActiveFn() && state.currentTool === TOOL_MODES.LINE && !!state.active && state.active.mode === TOOL_MODES.LINE,
-                    onDone: () => finishLineChain(state),
+                    isChainOpen: () => !!touchDone() && touchDone().open(),
+                    onDone: () => touchDone().done(),
+                    label: () => touchDone().label,
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');
@@ -1222,6 +1234,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (state.currentTool === TOOL_MODES.FILLET) {
             try{ if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
+        if (state.currentTool === TOOL_MODES.MIRROR && e.key === 'Enter') { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
@@ -1492,6 +1505,11 @@ export function switchToTool(state, toolName) {
             state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
         }
     } catch(_) {}
+}
+
+// TASK 585: Enter / the touch Done button in the Mirror tool. The tool ends (back to Select) once the copy is made, like Fusion's command.
+function finishMirrorStep(state) {
+    if (mirrorDone(state) === 'mirrored') switchToTool(state, TOOL_MODES.SELECT);
 }
 
 export function handleDelete(state) {

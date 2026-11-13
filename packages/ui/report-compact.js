@@ -261,6 +261,7 @@ export function buildCompactReport(full, { now = Date.parse(full.t) || Date.now(
   const summary = {
     app: full.app, url: full.url, ua: full.ua, t: full.t,
     build: null, // the build exposes no sha / version to the page: the url (deploy host) and the time are all there is
+    settings: full.settings || {}, // every user setting that differs from its default (glyph style, units, grid / snap, theme ...)
     tool: session.tool ?? null,
     selection: session.selection ?? null,
     counts: g ? { shapes: g.shapes.length, joints: g.joints.length, constraints: g.constraints.length, journalSteps: full.journal ? full.journal.steps.length : 0, redoSteps: full.journal ? (full.journal.redo || []).length : 0 } : null,

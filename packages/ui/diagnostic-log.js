@@ -20,6 +20,7 @@
 import { setDebugSink } from '#core/debug.js';
 import { serializeDocument } from '#core/document.js';
 import { buildJournal, DEFAULT_JOURNAL_MAX_BYTES } from '#core/journal.js'; // TASK 507: the ordered, replayable ops journal
+import SettingsManager from '#core/settings-manager.js'; // TASK 591: the report header lists the settings that differ from their defaults
 import { buildCompactReport } from '#ui/report-compact.js'; // TASK 591: the compact report ("Copy Report")
 import { browserFileSeam } from '#ui/project-file.js'; // TASK 544: the app's shared file-save helper (the Download fallback)
 
@@ -218,6 +219,14 @@ function sessionOf(state) {
   };
 }
 
+// TASK 591: every user setting whose value differs from its default (display + behaviour: GLYPH_STYLE, DOC_UNIT, SHOW_GRID, AXIS_SNAP,
+// BACKGROUND, STYLE_TEMPLATE ...), { KEY: value }. Settings only; the manager holds no personal data.
+export function changedSettings() {
+  const defaults = SettingsManager.getDefaults(), out = {};
+  for (const k of Object.keys(defaults)) { const v = SettingsManager.get(k); if (JSON.stringify(v) !== JSON.stringify(defaults[k])) out[k] = v; }
+  return out;
+}
+
 export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL_MAX_BYTES, full = false }) {
   const vv = window.visualViewport;
   let doc = null;
@@ -249,6 +258,7 @@ export function buildReport({ appId, getState, journalMaxBytes = DEFAULT_JOURNAL
     document: doc,
     journal,
     session,
+    settings: changedSettings(),
     ...(journalError ? { journalError } : {}),
     trimmed: full ? null : { log: tl.trimmed, touchTrace: tt.trimmed },
   };

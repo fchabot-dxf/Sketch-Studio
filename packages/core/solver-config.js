@@ -31,7 +31,7 @@ const DEFAULTS = {
     // ── Snap (screen-space pixels) ───────────────────────────────────
     SNAP_RADIUS: 30,             // Pixel distance to detect a snap candidate
     SNAP_MAGNETISM: 10,          // Pixel distance to "Lock" the snap (factory default; the one source: SettingsManager and snap-magnet read it)
-    SNAP_RELEASE_MULT: 2.0,      // Hysteresis: release = magnetism * this (prevents jitter)
+    SNAP_RELEASE_MULT: 3.2,      // Hysteresis: a held lock releases at magnetism * this = 32 px at the default 10 (grab distance stays 10; prevents jitter)
     GRID_MAGNETISM: 10,          // Pixel distance to lock to grid
 
     // ── Dimensions (world-space) ─────────────────────────────────────

@@ -14861,3 +14861,18 @@ Rename of a Drive design + "Open in Drive" (folder).
 - Plain-label (DIM_LABEL_BOX off) radius value now sits beside its leader by the same rule as linear/angle values: the radius call sites in `packages/ui/svg-renderer.js` (draw + the glyph-overlap bounds) pass the leader direction to `placeDimLabel` (was null = centred on the leader end, struck through). Measured before: min text-to-leader gap 0.35 px; after 3.00 = linear 3.00.
 - Diameter: there is no leader branch for it (`dimMode 'diameter'` is drawn by the linear dimension code), so it already follows the linear rule (gap 3.00); nothing changed there.
 - Behaviour change: plain-label radius text is now rotated along its leader, moved 3px beside it, and its overlap bounds follow. Label-box (Default) markup unchanged. Test `tests/radius-diameter-label-beside-leader.test.js` (fails before). Evidence `.evidence/636/{before,after}.png`.
+## TURN 637
+
+SNAP_RELEASE_MULT 2.0 -> 3.2 in packages/core/solver-config.js (the one source; snap-magnet.js getMagnetThreshold is the only reader): a held snap lock releases at 10 x 3.2 = 32 px (was 20 after 630). SNAP_MAGNETISM 10 (grab) and SNAP_RADIUS/JOINT_PX 30 unchanged; grid magnetism untouched (hysteresis is only used for 'snap').
+
+Real-mouse measurement (Line end locked on origin, slip along 35 deg, fast release; each case on a fresh view):
+| slip px | before (release 20): end lands | coincident | after (release 32): end lands | coincident |
+|---|---|---|---|---|
+| 15 | origin (0) | yes | origin (0) | yes |
+| 25 | 24.4 px off | no | origin (0) | yes |
+| 31 | 23.6 px off | no | origin (0) | yes |
+| 35 | 35.4 px off | no | 35.2 px off | no |
+
+Behaviour change for existing users: a locked snap (and the release-slip recovery) holds out to 32 px instead of 20 px, in every host sharing the input layer. Nothing else.
+
+Tests: tests/snap-release-distance-node.test.js (new, fail-first: release 32, lock 10); tests/snap-release-slip-live.test.js case 2 now covers the classic slip (reach+1 px, release ends on the origin) and the drag-out-and-back case, distances from the live lock/release/reach numbers.

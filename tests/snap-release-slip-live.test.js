@@ -90,29 +90,46 @@ await (async () => {
     //         and the release distance (too far to lock afresh), release fast -> the recovery puts the end ON the origin
     await clickEl('#tool-line');
     const start = { x: origin.x - 200, y: origin.y - 120 };
-    // a held lock survives to the release distance; a point between the lock and the release distance does not lock afresh, so only the
-    // recovery (release within the release distance of the lost snap, < 200 ms after it was held) can put the end on the origin
-    assert(magnet.lock < magnet.release, 'a slip band exists between the lock and the release distance: ' + JSON.stringify(magnet));
+    // A held lock survives to the release distance. A release between the lock distance and the release distance never locks afresh, so only the
+    // recovery (release within the release distance of the lost snap, < 200 ms after it was held) can put the end on the origin.
+    assert(magnet.lock < magnet.reach && magnet.reach < magnet.release, 'the slip band exists: lock < joint reach < release: ' + JSON.stringify(magnet));
+    const lineCase = async (label, start, targets) => {
+      await mouse('mouseMoved', start.x, start.y, 0); await sleep(60);
+      await mouse('mousePressed', start.x, start.y, 1);
+      await mouse('mouseMoved', (start.x + origin.x) / 2, (start.y + origin.y) / 2, 1);
+      await arm();
+      await mouse('mouseMoved', origin.x, origin.y, 1);
+      for (const t of targets) await mouse('mouseMoved', t.x, t.y, 1);
+      const last = targets[targets.length - 1];
+      await mouse('mouseReleased', last.x, last.y, 0); await sleep(300);
+      const r2 = await record();
+      const moves = r2.filter((r) => r.type === 'pointermove'), up2 = r2.find((r) => r.type === 'pointerup');
+      assert(moves.length === targets.length + 1 && moves[0].origin, label + ': the line end locks on the origin: ' + JSON.stringify(r2));
+      assert(up2.t - moves[0].t < 200, label + ': ran inside the 200 ms recovery window (lock -> release ' + (up2.t - moves[0].t) + ' ms)');
+      return { r2, moves };
+    };
+    const endsOnOrigin = (n) => evalJs(`(() => { const s = ${S}; const ls = s.shapes.filter((x) => x.type === 'line'); const l = ls[${n} - 1]; if (!l) return { lines: ls.length, shapes: s.shapes.map((x) => x.type) }; const o = s.joints.get('j_origin'); const ends = l.joints.map((j) => s.joints.get(j)); const onOrigin = l.joints.some((j, i) => j === 'j_origin' || Math.hypot(ends[i].x - o.x, ends[i].y - o.y) < 1e-6 || s.constraints.some((c) => c.type === 'coincident' && c.joints && c.joints.includes('j_origin') && c.joints.includes(j))); return { lines: ls.length, onOrigin }; })()`);
+
+    // 2a. the classic slip: straight from the lock to just past the joint reach (inside the release distance), fast release -> ON the origin
+    const reachAt = await clearPoint(magnet.reach + 1);
+    assert(magnet.reach + 1 <= magnet.release, 'the classic slip point is inside the release distance');
+    const a = await lineCase('classic slip', start, [reachAt]);
+    const lineA = await endsOnOrigin(1);
+    console.log('classic slip (' + (magnet.reach + 1) + ' px, release ' + magnet.release + ' px):', JSON.stringify(lineA), JSON.stringify(a.moves.map((m) => m.snap)));
+    assert(lineA && lineA.lines === 1 && lineA.onOrigin, 'a slip just past the reach, inside the release distance, still ends the line on the origin: ' + JSON.stringify(lineA));
+    // 2b. drag out past the release distance (the snap is lost), come back to a point between the lock and the release distance (too far to
+    //     lock afresh), fast release -> the recovery puts the end ON the origin
+    for (let i = 0; i < 3 && (await endsOnOrigin(1)).lines; i++) await clickEl('#btn-undo'); // the line and its coincident constraint undo as separate steps
+    assert.strictEqual((await endsOnOrigin(1)).lines, 0, 'Undo removes the classic-slip line');
+    await clickEl('#tool-line');
     const outAt = await clearPoint(magnet.release + 4);
     const slip = Math.ceil((magnet.lock + magnet.release) / 2);
     const slipAt = await clearPoint(slip);
-    await mouse('mouseMoved', start.x, start.y, 0); await sleep(60);
-    await mouse('mousePressed', start.x, start.y, 1);
-    await mouse('mouseMoved', origin.x - 100, origin.y - 60, 1);
-    await arm();
-    await mouse('mouseMoved', origin.x, origin.y, 1);
-    await mouse('mouseMoved', outAt.x, outAt.y, 1);
-    await mouse('mouseMoved', slipAt.x, slipAt.y, 1);
-    await mouse('mouseReleased', slipAt.x, slipAt.y, 0); await sleep(300);
-    const r2 = await record();
-    const moves = r2.filter((r) => r.type === 'pointermove'), up2 = r2.find((r) => r.type === 'pointerup');
-    assert(moves.length === 3 && moves[0].origin, 'the line end locks on the origin: ' + JSON.stringify(r2));
-    assert(moves[1].none && moves[2].none, `dragging out to ${magnet.release + 4} px (release ${magnet.release} px) loses the snap and the ${slip} px return (lock ${magnet.lock} px) does not lock afresh, so the release relies on the recovery: ` + JSON.stringify(r2));
-    const slipMs = up2.t - moves[0].t;
-    assert(slipMs < 200, 'the slip ran inside the 200 ms recovery window (lock -> release ' + slipMs + ' ms)');
-    const line = await evalJs(`(() => { const s = ${S}; const l = s.shapes.find((x) => x.type === 'line'); if (!l) return null; const o = s.joints.get('j_origin'); const ends = l.joints.map((j) => s.joints.get(j)); const onOrigin = l.joints.some((j, i) => j === 'j_origin' || Math.hypot(ends[i].x - o.x, ends[i].y - o.y) < 1e-6 || s.constraints.some((c) => c.type === 'coincident' && c.joints && c.joints.includes('j_origin') && c.joints.includes(j))); return { lines: s.shapes.filter((x) => x.type === 'line').length, onOrigin }; })()`);
-    console.log('slip release on the origin:', JSON.stringify(line));
-    assert(line && line.lines >= 1 && line.onOrigin, 'a slip within the release distance still ends the line on the origin: ' + JSON.stringify(line));
+    const b = await lineCase('drag out and back', start, [outAt, slipAt]);
+    assert(b.moves[1].none && b.moves[2].none, `dragging out to ${magnet.release + 4} px (release ${magnet.release} px) loses the snap and the ${slip} px return (lock ${magnet.lock} px) does not lock afresh, so the release relies on the recovery: ` + JSON.stringify(b.r2));
+    const lineB = await endsOnOrigin(1);
+    console.log('drag-out-and-back release on the origin:', JSON.stringify(lineB));
+    assert(lineB && lineB.onOrigin, 'a slip within the release distance still ends the line on the origin: ' + JSON.stringify(lineB));
     console.log('snap-release-slip-live: ok');
   } finally {
     await cdp.close();

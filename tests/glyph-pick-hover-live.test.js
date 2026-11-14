@@ -122,7 +122,7 @@ await (async () => {
       s = await geo();
       out.push(`2. glyph hovered: glyph tokens [${s.glyphToks.join(' ')}], halo [${s.haloToks.join(' ')}], lines in glyph-hover [${linesIn(s, '--sk-glyph-hover').join(' ')}], blue [${blueLines(s).join(' ')}]`);
       assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-hover'], 'the hovered glyph is lit in the glyph-hover colour');
-      assert.deepStrictEqual(s.haloToks, ['--sk-glyph-hover'], 'behind it a filled glyph-hover halo (not only the outline tint)');
+      assert.deepStrictEqual(s.haloToks, [], 'no halo disc behind a hovered glyph');
       assert.deepStrictEqual(linesIn(s, '--sk-glyph-hover'), BOUND, 'the lines its constraint binds glow in the glyph-hover colour');
       assert.deepStrictEqual(blueLines(s), [], 'no line is blue');
       await shot('588-hover-glyph.png', G);
@@ -130,7 +130,7 @@ await (async () => {
       await away(g); s = await geo();
       out.push(`   click on it: glyph tokens [${s.glyphToks.join(' ')}], halo [${s.haloToks.join(' ')}], lines in glyph-selected [${linesIn(s, '--sk-glyph-selected').join(' ')}], blue [${blueLines(s).join(' ')}]`);
       assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-selected'], 'the click selects the constraint: its glyph shows selected');
-      assert.deepStrictEqual(s.haloToks, ['--sk-glyph-selected'], 'behind it a filled glyph-selected halo');
+      assert.deepStrictEqual(s.haloToks, [], 'no halo disc behind a selected glyph');
       assert.deepStrictEqual(linesIn(s, '--sk-glyph-selected'), BOUND, 'its lines in the glyph-selected colour');
       assert.deepStrictEqual(blueLines(s), [], 'no blue on its lines');
       await shot('588-selected-glyph.png', G);

@@ -135,9 +135,8 @@ try {
   s = await readCanvas();
   const r3Dot = s.points.find((p) => p.cx === 50 && p.cy === 40);
   assert.ok(r3Dot, 'hovering hidden rectangle corner reveals it');
-  assert.match(r3Dot.styleStroke, /--sk-geo-fixed.*#202020/, 'hovered corner keeps dark outline');
-  assert.strictEqual(s.halos.length, 1, 'hovered corner draws 1 hover halo');
-  assert.strictEqual(s.halos[0].styleStroke.toLowerCase(), HOVER_COLOR, 'hover halo uses true-blue HOVER_COLOR');
+  assert.match(r3Dot.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'hovered corner ring uses bright Fusion blue');
+  assert.strictEqual(s.halos.length, 0, 'hovered corner draws no outer halo');
 
   // 3. Move away -> r3 hides again
   await mouse('mouseMoved', s.away.x, s.away.y, 0); await sleep(200);
@@ -149,7 +148,7 @@ try {
   s = await readCanvas();
   assert.ok(s.points.some((p) => p.cx === 85 && p.cy === 35), 'hovering hidden polyline middle corner reveals it');
 
-  // 5. Click open polyline end p1 (65, 10) to select it, move away, verify blue-tinted fill + dark outline
+  // 5. Click open polyline end p1 (65, 10) to select it, move away, verify blue-tinted fill + bright-blue ring outline
   await mouse('mouseMoved', s.p1.x, s.p1.y, 0); await sleep(120);
   await mouse('mousePressed', s.p1.x, s.p1.y, 1, 1); await sleep(60);
   await mouse('mouseReleased', s.p1.x, s.p1.y, 0, 1); await sleep(180);
@@ -158,7 +157,8 @@ try {
   const p1Dot = s.points.find((p) => p.cx === 65 && p.cy === 10);
   assert.ok(p1Dot, 'selected open end visible');
   assert.match(p1Dot.styleFill, /--sk-joint-selected/, 'selected point has blue-tinted fill');
-  assert.match(p1Dot.styleStroke, /--sk-geo-fixed.*#202020/, 'selected point keeps dark ring outline');
+  assert.match(p1Dot.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'selected point ring uses bright Fusion blue');
+  assert.strictEqual(s.halos.length, 0, 'selected point draws no outer halo');
 
   if (EVID) {
     // Capture p1 selected alone first, then hover r3 simultaneously for full desktop comparison with before-desktop.png
@@ -180,7 +180,7 @@ try {
   const r3Sel = s.points.find((p) => p.cx === 50 && p.cy === 40);
   assert.ok(r3Sel, 'hidden corner clicked remains visible while selected');
   assert.match(r3Sel.styleFill, /--sk-joint-selected/, 'selected corner uses blue-tinted fill');
-  assert.match(r3Sel.styleStroke, /--sk-geo-fixed.*#202020/, 'selected corner keeps dark ring');
+  assert.match(r3Sel.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'selected corner ring uses bright Fusion blue');
 
   console.log('joint-display-live.test.js passed' + (md5s.length ? ' [' + md5s.join(', ') + ']' : ''));
 } finally {

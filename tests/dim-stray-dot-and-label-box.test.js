@@ -78,7 +78,7 @@ assert(restLabelText && restLabelText.includes('fill:var(--sk-constraint-stroke,
 const hoverHtml = renderSvg(joints, shapes, [linDim], { hovered: linDim });
 assert(!hoverHtml.includes('<rect'), 'hovered linear dimension emits no glow <rect>');
 const hoverLabelText = (hoverHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50\.0<\/text>/) || [])[1];
-assert(hoverLabelText && hoverLabelText.includes('fill:#5B96E8'), `hovered label text uses HOVER_COLOR (#5B96E8), got: ${hoverLabelText}`);
+assert(hoverLabelText && hoverLabelText.includes('fill:var(--sk-selection, #017AFD)'), `hovered label text uses HOVER_COLOR (#017AFD), got: ${hoverLabelText}`);
 
 const selHtml = renderSvg(joints, shapes, [linDim], { selected: new Set([linDim]) });
 assert(!selHtml.includes('<rect'), 'selected linear dimension emits no pale-blue glow <rect>');
@@ -99,7 +99,7 @@ assert.strictEqual(selCirclesOnDimLine.length, 0, 'selected linear dimension emi
   const rHover = renderSvg(rJoints, rShapes, [radDim], { hovered: radDim });
   const rSel = renderSvg(rJoints, rShapes, [radDim], { selected: new Set([radDim]) });
   assert(!rHover.includes('<rect') && !rSel.includes('<rect'), 'radius dimension emits no glow <rect> when hovered or selected');
-  assert(rHover.includes('fill:#5B96E8'), 'hovered radius label uses HOVER_COLOR');
+  assert(rHover.includes('fill:var(--sk-selection, #017AFD)'), 'hovered radius label uses HOVER_COLOR');
   assert(rSel.includes('fill:var(--sk-selection, #1e40af)'), 'selected radius label uses --sk-selection');
 }
 
@@ -117,7 +117,7 @@ assert.strictEqual(selCirclesOnDimLine.length, 0, 'selected linear dimension emi
   const aHover = renderSvg(aJoints, aShapes, [angDim], { hovered: angDim });
   const aSel = renderSvg(aJoints, aShapes, [angDim], { selected: new Set([angDim]) });
   assert(!aHover.includes('<rect') && !aSel.includes('<rect'), 'angle dimension emits no glow <rect> when hovered or selected');
-  assert(aHover.includes('fill:#5B96E8'), 'hovered angle label uses HOVER_COLOR');
+  assert(aHover.includes('fill:var(--sk-selection, #017AFD)'), 'hovered angle label uses HOVER_COLOR');
   assert(aSel.includes('fill:var(--sk-selection, #1e40af)'), 'selected angle label uses --sk-selection');
 }
 

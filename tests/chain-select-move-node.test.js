@@ -9,7 +9,8 @@
 //  3. Today's rules kept: a click INSIDE a closed profile (not on an edge) starts a box selection (no region pick); two slow clicks are two clicks.
 // The scenes are declared documents (mm) opened in SketchStudio, 130 mm across the canvas (about 10 px per mm); no grid magnet.
 import assert from 'node:assert';
-import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
+import { open, createProfile, createNamedDesign, loadGlyphSheetFromDisk } from './helpers/node-app.js';
+await loadGlyphSheetFromDisk(); // task 603: a glyph is picked where its icon is drawn
 import SettingsManager from '#core/settings-manager.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { findConnectedChain } from '#core/loop-finder.js';
@@ -244,8 +245,7 @@ const dragBy = quiet(async (app, a, dx, dy) => {
 
 // ---- 3. THE glyph pick (task 588, owner 2026-11-13: two clicks on a rectangle's vertical edge 14.3 / 15.9 px from its V glyph selected the
 // glyph, never the line). Left click, hover and right click share ONE rule (hover-manager glyphAt): a glyph is picked only when the pointer is
-// ON the glyph as drawn (the outlined icon, GLYPH_SYMBOL_SIZE_PX / 2 = 10 px)
-// + 3 px. HOVER = CLICK: what the hover lights is what the click selects. The V glyph is placed 12 px beside its line (its __pos).
+// ON the drawn icon (its box + a 2 px margin, task 603). HOVER = CLICK: what the hover lights is what the click selects. The V glyph is placed 12 px beside its line (its __pos).
 {
   const R = rect('r', [0, 0, 40, 30]);
   const doc = design({ ...R.joints, s1: [55, 0], s2: [70, 25] }, [...R.shapes, { id: 'S', type: 'line', joints: ['s1', 's2'] }], R.constraints);

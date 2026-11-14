@@ -1,4 +1,8 @@
 (async () => {
+  const fs = await import('node:fs'); // task 603: a glyph is drawn (and picked) only with the real sheet loaded
+  const { loadGlyphSheet } = await import('#ui/glyph-sheet.js');
+  const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
+  await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
   const { draw } = await import('../packages/ui/svg-renderer.js');
   const { handleSelectionPointerDown } = await import('#ui/input-handlers/selection-tools.js');
   const { CONSTRAINT_TYPES, TOOL_MODES } = await import('#core/constants.js');

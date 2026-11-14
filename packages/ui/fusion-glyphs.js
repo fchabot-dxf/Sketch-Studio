@@ -28,3 +28,18 @@ export function fusionGlyphMarkup(type, iconPx, screenPx, outlinePx, fill, strok
   const paths = g.paths.map((d) => `<path d="${d}"/>`).join('');
   return `<g class="fusion-glyph" transform="scale(${+k.toFixed(5)}) translate(${+(-g.centre.x).toFixed(3)},${+(-g.centre.y).toFixed(3)})" style="fill:${fill}; stroke:${stroke}" stroke-width="${w}" stroke-linejoin="round">${paths}</g>`;
 }
+
+// THE glyph pick box (task 603): a glyph is picked only when the pointer is on its DRAWN icon, never on a disc around its centre. The icon is
+// the sheet glyph's bbox scaled so its larger side = `symbolPx` (the same k as fusionGlyphMarkup), plus half the outline stroke, plus a margin:
+// a small one for a mouse, a larger one for a finger. Icons are never drawn rotated, so the box is axis-aligned and centred on the glyph.
+// Returns { hw, hh } (half width / half height, screen px) or null while the sheet has no such glyph (nothing is drawn, so nothing is picked).
+// hover-manager glyphAt (hover, left click, right click) and svg-renderer (the cursor:pointer hit rect) are its only callers.
+export const GLYPH_PICK_MARGIN_PX = 2;
+export const GLYPH_PICK_MARGIN_TOUCH_PX = 6;
+export function glyphPickHalfSize(type, symbolPx, outlinePx, touch = false) {
+  const g = getGlyph(CONSTRAINT_GLYPH[type]);
+  if (!g) return null;
+  const k = symbolPx / Math.max(g.bbox.w, g.bbox.h);
+  const pad = outlinePx / 2 + (touch ? GLYPH_PICK_MARGIN_TOUCH_PX : GLYPH_PICK_MARGIN_PX);
+  return { hw: g.bbox.w * k / 2 + pad, hh: g.bbox.h * k / 2 + pad };
+}

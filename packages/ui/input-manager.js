@@ -1340,10 +1340,10 @@ function pickContextTarget(svg, state, e) {
         if (c && !isConstraintInert(inertEntities(state), c)) return { kind: 'dimension', constraint: c };
     }
     // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
-    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the glyph as drawn plus a 3 px margin, the same on touch; task 588: the
+    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the drawn icon's box plus a small margin, a larger one on touch; task 588: the
     // left click and the hover use it too); a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
     // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = glyphAt(svg, state, e.clientX, e.clientY);
+    const glyph = glyphAt(svg, state, e.clientX, e.clientY, e.pointerType === 'touch');
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     const scene = pickScene(state);

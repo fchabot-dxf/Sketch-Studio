@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // HOVER MANAGER - Single source of truth for hover state
 // ═══════════════════════════════════════════════════════════════════════════════
-import { findSnap, hitConstraintAtScreen } from '#ui/snap-detection.js';
+import { findSnap } from '#ui/snap-detection.js';
+import { screenToWorld, getZoomFactor } from '#ui/coords.js';
+import { glyphPickHalfSize } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
@@ -9,25 +11,32 @@ import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
 
-// THE glyph pick (task 571b right click; task 588 left click and hover): a constraint glyph is under the pointer only when the pointer is ON
-// the glyph AS DRAWN (glyphDrawnRadiusPx, the same on touch: the glyph is not bigger there) plus GLYPH_PICK_MARGIN_PX. A pointer merely NEAR a
-// glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click and hover all call glyphAt.
-export const GLYPH_PICK_MARGIN_PX = 3;
-// The screen radius of a glyph as drawn (svg-renderer drawUnifiedGlyph): the outlined icon, GLYPH_SYMBOL_SIZE_PX on its longer side
-// (fusion-glyphs.js fusionGlyphMarkup), so 10 px at the default size.
-export function glyphDrawnRadiusPx(settings = SettingsManager.getAll()) {
-    return Number(settings.GLYPH_SYMBOL_SIZE_PX || 20) / 2;
-}
-export function glyphAt(svg, state, screenX, screenY) {
-    return hitConstraintAtScreen(pickableConstraints(state) || [], svg, screenX, screenY, glyphDrawnRadiusPx() + GLYPH_PICK_MARGIN_PX);
+// THE glyph pick (task 571b right click; task 588 left click and hover; task 603 the box): a constraint glyph is under the pointer only when the
+// pointer is ON its drawn icon: the icon's bounding box plus a small margin (fusion-glyphs glyphPickHalfSize; a larger margin on touch). A
+// pointer merely NEAR a glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click and hover all call glyphAt.
+export function glyphAt(svg, state, screenX, screenY, touch = false) {
+    const settings = SettingsManager.getAll();
+    const symbolPx = Number(settings.GLYPH_SYMBOL_SIZE_PX || 20), outlinePx = Number(settings.GLYPH_OUTLINE_PX ?? 1);
+    const mouseW = screenToWorld(svg, screenX, screenY);
+    const zoomFactor = getZoomFactor(svg);
+    for (const c of pickableConstraints(state) || []) {
+        if (c.__visible === false || !c.glyphPos) continue;
+        const box = glyphPickHalfSize(c.type, symbolPx, outlinePx, touch);
+        if (!box) continue;
+        for (const pos of Array.isArray(c.glyphPos) ? c.glyphPos : [c.glyphPos]) {
+            if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+            if (Math.abs(mouseW.x - pos.x) <= box.hw * zoomFactor && Math.abs(mouseW.y - pos.y) <= box.hh * zoomFactor) return c;
+        }
+    }
+    return null;
 }
 
 // THE select tool's pick (task 588: HOVER = CLICK, so what lights up on hover is exactly what a click selects): a joint in snap reach
 // (hitJoint), else a glyph the pointer is ON (glyphAt), else a shape (hitShape). Returns { joint } | { constraint } | { shape } | null.
 // selection-tools handleSelectionPointerDown (the click) and applyHoverPriority (the hover) both call it.
-export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY) {
+export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY, touch = false) {
     if (hitJoint) return { joint: hitJoint };
-    const constraint = glyphAt(svg, state, screenX, screenY);
+    const constraint = glyphAt(svg, state, screenX, screenY, touch);
     if (constraint) return { constraint };
     if (hitShape) return { shape: hitShape };
     return null;

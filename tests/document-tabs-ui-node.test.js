@@ -287,27 +287,68 @@ for (const host of ['shaper', 'penplotter']) {
   } finally { await app.close(); }
 }
 
-// ---- I. TASK 605, Trace: the photo session (the page has no node kit: the session is pure over its parts) -------------------------------------------------
+// ---- I. TASK 605 / 609, Trace: the photo session (the page has no node kit: the session is pure over its parts) ------------------------------------------------
 {
-  const { createTraceSession } = await import('../apps/trace/src/trace-session.js');
+  const { createTraceSession, heldBytes } = await import('../apps/trace/src/trace-session.js');
   const log = [];
-  const state = { imageCanvas: null, imageW: 0, imageH: 0, imageName: 'trace', svgString: null, params: { threshold: 128 } };
+  const state = { imageCanvas: null, imageBlob: null, imageW: 0, imageH: 0, imageName: 'trace', svgString: null, params: { threshold: 128 } };
   let maskOf = null, scaleOf = { mode: 'global', unit: 'mm', globalWidth: '' };
   const preview = { getMask: () => maskOf, setMask: (m) => { maskOf = m; }, clear: () => log.push('clear'), setImage: (c) => log.push('image:' + c.name), setSVG: (v) => log.push('svg:' + v), updateThresholdOverlay: () => {} };
   const scale = { getState: () => ({ ...scaleOf }), setState: (v) => { scaleOf = v ? { ...v } : { mode: 'global', unit: 'mm', globalWidth: '' }; }, setImageSize: () => {} };
-  const ui = { cancelTrace: () => log.push('cancel'), showPhotoUi: (has) => log.push('ui:' + has), fallbackName: () => 'fromSidecar', onNoPhoto: () => log.push('nophoto') };
-  const session = createTraceSession({ state, preview, scale, ui });
-  const photo = { name: 'canvasA' };
-  Object.assign(state, { imageCanvas: photo, imageW: 40, imageH: 30, imageName: 'A', svgString: '<svg A/>' }); maskOf = { name: 'maskA' }; scaleOf = { mode: 'global', unit: 'in', globalWidth: '8' };
+  const ui = { cancelTrace: () => log.push('cancel'), showPhotoUi: (has) => log.push('ui:' + has), fallbackName: () => 'fromSidecar', onNoPhoto: () => log.push('nophoto'), onDecodeError: (e) => log.push('error:' + e.message) };
+  // the codec is the page's canvas <-> file bridge: here a "file" is { name, size } and decoding it yields a "canvas" named after it (a 4000 x 3000 canvas is 48 MB, its file 4 MB)
+  const decoded = [];
+  const codec = {
+    decode: async (f) => { decoded.push(f.name); return { canvas: { name: 'canvas:' + f.name, width: f.px ? f.px[0] : 4000, height: f.px ? f.px[1] : 3000 } }; },
+    encode: async (c) => ({ name: 'png:' + c.name, size: 2000, px: [c.width, c.height] }),
+  };
+  const session = createTraceSession({ state, preview, scale, ui, codec });
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+  const file = { name: 'A.jpg', size: 4_000_000 };
+  Object.assign(state, { imageCanvas: { name: 'canvasA' }, imageBlob: file, imageW: 4000, imageH: 3000, imageName: 'A', svgString: '<svg A/>' }); maskOf = { name: 'maskA', width: 4000, height: 3000 }; scaleOf = { mode: 'global', unit: 'in', globalWidth: '8' };
   const a = session.capture();
+  assert.strictEqual(a.canvas, undefined, 'a tab put aside holds no decoded photo');
+  assert.strictEqual(a.blob, file, 'it holds the original compressed file');
+  await settle();
+  assert.strictEqual(a.mask, null, 'the full-size mask copy is dropped once it is encoded'); assert.strictEqual(a.maskBlob.size, 2000, 'and the encoded mask is held');
+  const decodedBytes = 4000 * 3000 * 4;
+  assert.strictEqual(heldBytes(a), 4_000_000 + 2000 + '<svg A/>'.length * 2, 'bytes held = the compressed file + the encoded mask + the svg text');
+  assert(heldBytes(a) < decodedBytes / 10, 'about 4 MB held, not the 48 MB (x2 with the mask) of the decode');
+  // N inactive tabs: the memory held is N x the compressed size, never N x the decoded size
+  const tabs = Array.from({ length: 10 }, () => session.capture());
+  await settle();
+  const held = tabs.reduce((n, t) => n + heldBytes(t), 0);
+  assert(held < 10 * 4_100_000, '10 tabs hold ' + held + ' bytes (10 decodes would be ' + 10 * decodedBytes * 2 + ')');
   session.restore(undefined); // a new tab
-  assert.strictEqual(state.imageCanvas, null, 'a new tab has no photo'); assert.strictEqual(state.svgString, null);
+  assert.strictEqual(state.imageCanvas, null, 'a new tab has no photo'); assert.strictEqual(state.imageBlob, null); assert.strictEqual(state.svgString, null);
   assert.strictEqual(state.imageName, 'fromSidecar'); assert.strictEqual(scaleOf.globalWidth, '', 'and the scale is back to its first-run state');
   assert(log.includes('clear') && log.includes('nophoto'), 'the preview is cleared and the page is told: ' + log);
+  assert.strictEqual(session.capture().blob, null, 'a photo-less tab captures no photo');
   session.restore(a);
-  assert.strictEqual(state.imageCanvas, photo, "tab A's photo is back"); assert.strictEqual(state.svgString, '<svg A/>'); assert.strictEqual(state.imageName, 'A');
-  assert.deepStrictEqual(maskOf, { name: 'maskA' }, 'its mask'); assert.deepStrictEqual(scaleOf, { mode: 'global', unit: 'in', globalWidth: '8' }, 'its scale');
+  assert.strictEqual(state.imageCanvas, null, 'the photo is decoded again, not at once'); assert.strictEqual(state.imageBlob, file); assert.strictEqual(state.svgString, '<svg A/>', 'its traced drawing is there at once');
+  const midSwitch = session.capture(); assert.strictEqual(midSwitch.blob, file, 'a tab put aside while its photo still decodes keeps its file (nothing lost)');
+  await settle();
+  assert.strictEqual(state.imageCanvas.name, 'canvas:A.jpg', "tab A's photo is back, decoded from its file"); assert.strictEqual(state.imageName, 'A');
+  assert.strictEqual(maskOf.name, 'canvas:png:maskA', 'its mask'); assert.deepStrictEqual(scaleOf, { mode: 'global', unit: 'in', globalWidth: '8' }, 'its scale');
   assert(log.includes('svg:<svg A/>'), 'its traced SVG is shown again (not re-traced)');
+  // another tab shown while a photo decodes: the late decode must not land
+  session.restore(a); session.restore(undefined); await settle();
+  assert.strictEqual(state.imageCanvas, null, 'a decode that finishes after another tab was shown is dropped');
+  // a photo that cannot be decoded is reported, and the tab still owns its file
+  const bad = { ...a, blob: { name: 'bad.jpg', size: 10 } }; codec.decode = async () => { throw new Error('unreadable'); };
+  session.restore(bad); await settle();
+  assert(log.includes('error:unreadable'), 'the page is told: ' + log.slice(-3)); assert.strictEqual(session.capture().blob, bad.blob, 'the file stays with the tab');
+}
+
+// ---- J. TASK 609, Trace: a design with a drawing but no photo, switched to while the Trace tab shows, opens in Edit with a toast (the page's onNoPhoto) --------------
+{
+  const { createTraceSession } = await import('../apps/trace/src/trace-session.js');
+  const calls = [];
+  const state = { imageCanvas: null, imageBlob: null, imageW: 0, imageH: 0, imageName: 'trace', svgString: null, params: {} };
+  const session = createTraceSession({ state, preview: { getMask: () => null, clear() {}, setImage() {}, setMask() {}, setSVG() {}, updateThresholdOverlay() {} }, scale: { getState: () => ({}), setState() {}, setImageSize() {} },
+    ui: { cancelTrace() {}, showPhotoUi() {}, fallbackName: () => 'x', onNoPhoto: () => calls.push('onNoPhoto'), onDecodeError() {} }, codec: { decode: async () => ({}), encode: async () => null } });
+  session.restore(undefined);
+  assert.deepStrictEqual(calls, ['onNoPhoto'], 'a photo-less design tells the page, which owns the Edit-tab rule (covered live in document-tabs-stages-live)');
 }
 console.log('document-tabs-ui-node: ok');
 process.exit(0);

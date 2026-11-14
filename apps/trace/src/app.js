@@ -14,7 +14,7 @@ getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
-import { initUpload }                     from './upload.js';
+import { initUpload, decodeImageBlob }     from './upload.js';
 import { initControls, DEFAULT_PARAMS }    from './controls.js';
 import { initScale }                      from './scale.js';
 import { initPreview }                    from './preview.js';
@@ -60,7 +60,8 @@ const eventBus = {
 
 // ── App state ─────────────────────────────────────────────────────────────────
 const state = {
-  imageCanvas: null,
+  imageCanvas: null,   // the SHOWN tab's photo, decoded
+  imageBlob: null,     // its compressed original file: what a tab put aside keeps (TASK 609)
   imageW: 0,
   imageH: 0,
   imageName: 'trace',
@@ -111,7 +112,12 @@ let sidecarName = null; // the image name of the design shown, from its sidecar
 let traceTimer = null;
 const traceSession = createTraceSession({
   state, preview, scale: scaleCtl,
+  codec: {
+    decode: decodeImageBlob,
+    encode: (canvas) => new Promise((res) => canvas.toBlob(res, 'image/png')), // null when the browser cannot encode: the session then keeps the canvas
+  },
   ui: {
+    onDecodeError: (err) => toast("This tab's photo could not be shown: " + err.message, 'error'),
     cancelTrace: () => { traceGen++; clearTimeout(traceTimer); preview.showTracing(false); },
     showPhotoUi: (has, traced) => {
       const originalEmpty = document.getElementById('original-empty');
@@ -141,8 +147,10 @@ mountEdit({
 preview.onMaskChanged(() => scheduleTrace());
 
 // ── Event handlers ────────────────────────────────────────────────────────────
-eventBus.on('imageLoaded', ({ canvas, width, height, name }) => {
+eventBus.on('imageLoaded', ({ blob, canvas, width, height, name }) => {
+  traceSession.cancelPending();
   state.imageCanvas = canvas;
+  state.imageBlob   = blob;
   state.imageW      = width;
   state.imageH      = height;
   state.imageName   = name;

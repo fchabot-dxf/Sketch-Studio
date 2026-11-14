@@ -25,6 +25,8 @@ const J = (id, x, y) => joints.set(id, { x, y });
 J('a', 100, 100); J('b', 300, 100); J('c', 300, 200); J('d', 100, 200);
 for (const [i, [p, q]] of [['a', 'b'], ['b', 'c'], ['c', 'd'], ['d', 'a']].entries()) shapes.push({ id: 'r' + i, type: 'line', joints: [p, q] });
 shapes.push({ id: 'diag', type: 'line', joints: ['a', 'c'], construction: true });
+J('o1', 20, 20); J('o2', 60, 20);
+shapes.push({ id: 'open', type: 'line', joints: ['o1', 'o2'] });
 const hex = [];
 for (let i = 0; i < 6; i++) { J('h' + i, 500 + 60 * Math.cos(i * Math.PI / 3), 300 + 60 * Math.sin(i * Math.PI / 3)); hex.push('h' + i); }
 hex.forEach((p, i) => shapes.push({ id: 'hx' + i, type: 'line', joints: [p, hex[(i + 1) % 6]] }));
@@ -114,8 +116,9 @@ applyStyleTemplate('fusion');
 const f2 = render2();
 assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
 assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
-assert(/#5B6CF0/i.test(render2('freeLine')), 'Fusion hover colour is blue-violet');
-assert(/#5B6CF0/i.test(render2('freeLine')) === (SettingsManager.get('HOVER_COLOR').toUpperCase() === '#5B6CF0'), 'Default hover colour = the factory HOVER_COLOR');
+const defHover = SettingsManager.getDefault('HOVER_COLOR');
+assert(new RegExp(defHover, 'i').test(render2('freeLine')), 'Fusion hover colour matches factory true-blue HOVER_COLOR');
+assert(new RegExp(defHover, 'i').test(render2('freeLine')) === (SettingsManager.get('HOVER_COLOR').toUpperCase() === defHover.toUpperCase()), 'Default hover colour = the factory HOVER_COLOR');
 applyStyleTemplate('default');
 assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round trip');
 

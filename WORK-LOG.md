@@ -14856,3 +14856,19 @@ Rename of a Drive design + "Open in Drive" (folder).
 - The anchor (`labelX/labelY`, `c.glyphPos`, theta) is untouched; the sector comes from `angleLabelAngle`/`angleDimensionSector` and `c.labelAngle`, never from drawn text, so it cannot change. Label-box markup unchanged (test asserts).
 - Radius/diameter: leader runs edge -> label CENTRE, so it crosses the text (same defect). NOT changed; asked in REPORT.
 - Test `tests/angle-label-beside-arc.test.js` (fails before: gap 0.18, after: 3.00 = linear 3.00). Evidence `.evidence/634/{before,after}.png`.
+
+## TURN 637
+
+SNAP_RELEASE_MULT 2.0 -> 3.2 in packages/core/solver-config.js (the one source; snap-magnet.js getMagnetThreshold is the only reader): a held snap lock releases at 10 x 3.2 = 32 px (was 20 after 630). SNAP_MAGNETISM 10 (grab) and SNAP_RADIUS/JOINT_PX 30 unchanged; grid magnetism untouched (hysteresis is only used for 'snap').
+
+Real-mouse measurement (Line end locked on origin, slip along 35 deg, fast release; each case on a fresh view):
+| slip px | before (release 20): end lands | coincident | after (release 32): end lands | coincident |
+|---|---|---|---|---|
+| 15 | origin (0) | yes | origin (0) | yes |
+| 25 | 24.4 px off | no | origin (0) | yes |
+| 31 | 23.6 px off | no | origin (0) | yes |
+| 35 | 35.4 px off | no | 35.2 px off | no |
+
+Behaviour change for existing users: a locked snap (and the release-slip recovery) holds out to 32 px instead of 20 px, in every host sharing the input layer. Nothing else.
+
+Tests: tests/snap-release-distance-node.test.js (new, fail-first: release 32, lock 10); tests/snap-release-slip-live.test.js case 2 now covers the classic slip (reach+1 px, release ends on the origin) and the drag-out-and-back case, distances from the live lock/release/reach numbers.

@@ -431,7 +431,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
       if (c.isRadius) {
         const p = radiusLabelPos(c, j1, offset);
-        dimLabelBounds.push(placeDimLabel(p.x, p.y, null, null, formatConstraintValue(c, { value: typeof c.value === 'number' ? c.value : 0 }), scale(50)).bounds);
+        const ang = Number.isFinite(c.labelAngle) ? c.labelAngle : Math.atan2(p.y - j1.y, p.x - j1.x);
+        dimLabelBounds.push(placeDimLabel(p.x, p.y, Math.cos(ang), Math.sin(ang), formatConstraintValue(c, { value: typeof c.value === 'number' ? c.value : 0 }), scale(50)).bounds);
       } else if (j2) {
         const g = linearDimGeom(c, j1, j2, offset);
         dimLabelBounds.push(placeDimLabel(g.annotX, g.annotY, g.adx, g.ady, g.displayVal, undefined, g.centred).bounds);
@@ -2377,7 +2378,7 @@ switch(c.type){
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text ${placeDimLabel(labelX, labelY, null, null, displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
+            <text ${placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }

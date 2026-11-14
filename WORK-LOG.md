@@ -14856,3 +14856,8 @@ Rename of a Drive design + "Open in Drive" (folder).
 - The anchor (`labelX/labelY`, `c.glyphPos`, theta) is untouched; the sector comes from `angleLabelAngle`/`angleDimensionSector` and `c.labelAngle`, never from drawn text, so it cannot change. Label-box markup unchanged (test asserts).
 - Radius/diameter: leader runs edge -> label CENTRE, so it crosses the text (same defect). NOT changed; asked in REPORT.
 - Test `tests/angle-label-beside-arc.test.js` (fails before: gap 0.18, after: 3.00 = linear 3.00). Evidence `.evidence/634/{before,after}.png`.
+
+## TURN 636
+- Plain-label (DIM_LABEL_BOX off) radius value now sits beside its leader by the same rule as linear/angle values: the radius call sites in `packages/ui/svg-renderer.js` (draw + the glyph-overlap bounds) pass the leader direction to `placeDimLabel` (was null = centred on the leader end, struck through). Measured before: min text-to-leader gap 0.35 px; after 3.00 = linear 3.00.
+- Diameter: there is no leader branch for it (`dimMode 'diameter'` is drawn by the linear dimension code), so it already follows the linear rule (gap 3.00); nothing changed there.
+- Behaviour change: plain-label radius text is now rotated along its leader, moved 3px beside it, and its overlap bounds follow. Label-box (Default) markup unchanged. Test `tests/radius-diameter-label-beside-leader.test.js` (fails before). Evidence `.evidence/636/{before,after}.png`.

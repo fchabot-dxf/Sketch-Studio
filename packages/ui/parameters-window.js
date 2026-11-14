@@ -1,7 +1,9 @@
 // packages/ui/parameters-window.js — TASK 535 slice 4: the "fx Parameters" pop-up (docs/PARAMETERS-DESIGN.md F, O13).
 // The shared tabbed dock panel as a modeless floating window over the canvas, holding the read-only Parameters table.
 //   createParametersWindow({ state, anchorEl, onClose }) -> { open, close, toggle, isOpen, destroy, el }
-//   - anchorEl: the ribbon element. First run the window opens just below it (never over it); while the anchor is not on screen (a host's
+//   - anchorEl: the ribbon element. First run the window opens just below it (never over it); when there is no room below it (the
+//     phone-landscape rail runs to the bottom of the screen, TASK 602) it opens at the anchor's top instead, right-aligned (beside the rail), and
+//     no taller than the screen leaves; while the anchor is not on screen (a host's
 //     Design tab is hidden behind another tab) the window is hidden with it.
 //   - Live: while OPEN a requestAnimationFrame tick compares a cheap signature of the rows (the same per-frame signature check the hosts' panelTick
 //     does for the side panel); it rebuilds only on a change and otherwise only re-lights the hovered / selected rows. Closed = no tick.
@@ -14,6 +16,7 @@ import SettingsManager from '#core/settings-manager.js';
 
 export const PARAMETERS_PERSIST_KEY = 'sk-parameters';
 const SIZE = { w: 460, h: 360 };
+const MIN_ROOM = 160; // the least height the first-run window opens with (below the anchor when that much room is left there)
 
 let stylesInjected = false;
 function injectStyles() {
@@ -39,7 +42,9 @@ export function createParametersWindow({ state, anchorEl = null, onClose = null 
   // first run: right-aligned just below the anchor (the ribbon); a remembered position wins (the dock merges it over this)
   const a = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
   const w = Math.min(SIZE.w, Math.max(280, window.innerWidth - 24));
-  const initial = { w, h: SIZE.h, left: Math.max(8, window.innerWidth - w - 16), top: a ? Math.round(a.bottom + 8) : 80 };
+  const below = a ? Math.round(a.bottom + 8) : 80;
+  const top = a && window.innerHeight - below < MIN_ROOM ? Math.round(a.top + 8) : below; // TASK 602: no room under a tall anchor (the rail): open at its top
+  const initial = { w, h: Math.min(SIZE.h, Math.max(MIN_ROOM, window.innerHeight - top - 8)), left: Math.max(8, window.innerWidth - w - 16), top };
 
   const dock = createTabbedDockPanel({
     tabs: [{ label: 'Parameters', render: (body) => body.appendChild(table.el) }],

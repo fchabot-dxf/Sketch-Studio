@@ -37,13 +37,12 @@ export function applyInitialView(state, svgEl) {
   }
 }
 
-/** The options createDocumentBuffer gets from SketchStudio (no host sidecar). statusEl: the passive autosave indicator. */
-export function studioBufferOptions({ state, engine, svg, statusEl }) {
+/** The options createDocumentBuffer gets from SketchStudio (no host sidecar). No status text (TASK 602, owner): the document tab's dot shows the save state. */
+export function studioBufferOptions({ state, engine, svg }) {
   return {
     state,
     app: 'sketchstudio', canvas: svg, // TASK 474: the design records who saved it last
     onRestored: ({ reason }) => { try { engine.solve(500); } catch (_) {} if (reason !== 'switch') fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view). TASK 587: a TAB SWITCH keeps the tab's own view (the buffer already put it back)
-    onStatusChange: (s) => { statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   };
 }
 

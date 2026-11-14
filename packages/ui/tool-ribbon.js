@@ -12,6 +12,7 @@ import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
+import { SHORT_VIEWPORT_QUERY } from '#ui/short-viewport.js';
 
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
 const CREATE = [
@@ -133,6 +134,31 @@ function injectStyles() {
   .sk-ribbon[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px); mask-image: linear-gradient(to right, transparent 0, #000 28px); }
   .sk-ribbon[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
 }
+/* TASK 602: a SHORT viewport (a phone in landscape, #ui/short-viewport.js) has width to spare and no height: the ribbon is a vertical ICON RAIL on
+   the LEFT of its design frame. render(container) marks the container sk-ribbon-host and the container's parent sk-ribbon-frame (every host's
+   Design view: [ribbon container, then the work area]). The frame becomes two columns: the rail, then the work area. Icons only, 48 x 48 buttons; the label stays in the button (visually hidden) so it is
+   still the accessible name, and the button's title. The rail scrolls vertically under a finger. Nothing changes outside this query.
+   display needs !important: each host styles its frame by id (#design-view { display: flex }), and an id beats any class; :not([hidden])
+   keeps a host's own hidden frame hidden. */
+@media ${SHORT_VIEWPORT_QUERY} {
+  .sk-ribbon-frame:not([hidden]) { display: grid !important; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 auto; min-height: 0; }
+  .sk-ribbon-frame > * { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; }
+  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; width: auto; padding: 0;
+    overflow: hidden; border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+  .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; gap: 0; padding: 2px;
+    overflow-x: hidden; overflow-y: auto; touch-action: pan-y; -webkit-mask-image: none; mask-image: none; }
+  .sk-ribbon-group { flex-direction: column; padding: 4px 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
+  .sk-ribbon-group:last-child { border-bottom: 0; }
+  .sk-ribbon-btns { flex-direction: column; }
+  .sk-ribbon-group-label { display: none; }
+  .sk-ribbon-btn { width: 48px; height: 48px; }
+  .sk-ribbon-ic { width: 24px; height: 24px; }
+  .sk-ribbon-lbl { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  /* the rail is a scroll container, which clips an absolute menu: the variant menu opens beside its button, fixed to the viewport (the
+     button's place is written to --sk-menu-x / --sk-menu-y when the menu opens) */
+  .sk-ribbon-menu { position: fixed; left: var(--sk-menu-x, 56px); top: var(--sk-menu-y, 0px); max-height: calc(100vh - var(--sk-menu-y, 0px) - 4px); overflow-y: auto; }
+}
 `;
   document.head.appendChild(s);
   stylesInjected = true;
@@ -238,7 +264,13 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       });
       menu.appendChild(item);
     });
-    b.addEventListener('click', (ev) => { ev.stopPropagation(); selectTool(t.tool); menu.classList.toggle('show'); });
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation(); selectTool(t.tool);
+      const r = b.getBoundingClientRect(); // where the rail's fixed menu opens: beside the button (only the rail's CSS reads these)
+      menu.style.setProperty('--sk-menu-x', Math.round(r.right + 4) + 'px');
+      menu.style.setProperty('--sk-menu-y', Math.round(r.top) + 'px');
+      menu.classList.toggle('show');
+    });
     document.addEventListener('click', () => menu.classList.remove('show')); // close on outside click
     wrap.append(b, menu);
     return wrap;
@@ -335,7 +367,15 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   refresh();
   return {
     el,
-    render: (container) => { if (container) container.appendChild(el); refresh(); syncFade(); return el; },
+    // TASK 602: the container is the ribbon's host and its parent the design frame (the short-viewport rail layout above keys on both classes)
+    render: (container) => {
+      if (container) {
+        container.appendChild(el);
+        container.classList.add('sk-ribbon-host');
+        if (container.parentElement) container.parentElement.classList.add('sk-ribbon-frame');
+      }
+      refresh(); syncFade(); return el;
+    },
     refresh,
     destroy: () => {
       if (unlistenHistory) unlistenHistory();

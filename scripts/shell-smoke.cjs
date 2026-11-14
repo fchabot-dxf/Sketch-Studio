@@ -25,8 +25,9 @@ const CHECK_EXPR = `(async () => {
   out.ribbonGroups = ribbon ? [...ribbon.querySelectorAll('.sk-ribbon-group-label')].map(g => g.textContent).join(',') : '';
   const canvas = document.getElementById('svgCanvas');
   out.canvasVisible = !!canvas && getComputedStyle(canvas).display !== 'none' && canvas.getBoundingClientRect().width > 0;
-  // Router: Design -> Export -> Design
-  header.querySelector('.sk-header-tab[data-tab="export"]').click(); await sl(90);
+  // Router: Design -> Export (TASK 602: Export is an entry of the menu) -> Design (the header's one mode button)
+  document.querySelector('.sk-sidebar-btn').click(); await sl(90);
+  document.querySelector('.sk-sidebar-item[data-action="export"]').click(); await sl(90);
   out.exportShows = !document.getElementById('export-panel').classList.contains('hidden');
   out.designHidesOnExport = getComputedStyle(document.getElementById('toolsRibbon')).display === 'none';
   header.querySelector('.sk-header-tab[data-tab="design"]').click(); await sl(90);
@@ -69,7 +70,7 @@ async function cdpRun(cdp, url) {
     const c = check || {};
     const checks = [
       ['console errors = 0', errors.length === 0, errors.slice(0, 5).join(' | ')],
-      ['header tabs = design,export', c.headerTabs === 'design,export', c.headerTabs],
+      ['header tabs = design (Export is in the menu, TASK 602)', c.headerTabs === 'design', c.headerTabs],
       ['header Style button', c.hasStyle === true, c.hasStyle],
       ['header Debug action', c.hasDebug === true, c.hasDebug],
       ['ribbon groups = Create,Modify,Inspect,Constrain,Edit,Actions', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Edit,Actions', c.ribbonGroups],

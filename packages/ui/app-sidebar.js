@@ -64,6 +64,8 @@ function injectStyles() {
   background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
   font: 14px system-ui, sans-serif; box-shadow: 2px 0 20px rgba(0,0,0,0.4); transform: translateX(-100%); transition: transform 0.18s ease; visibility: hidden; }
 .sk-sidebar.open { transform: translateX(0); visibility: visible; }
+/* TASK 602: a menu taller than the screen (a phone in landscape: 360 px) scrolls under a finger instead of cutting its last entries off */
+.sk-sidebar { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
 .sk-sidebar-top { padding: 16px 16px 8px; }
 .sk-sidebar-doc { font-size: 17px; font-weight: 600; margin: 0 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sk-sidebar-actions { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px; }

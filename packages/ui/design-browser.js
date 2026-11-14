@@ -10,6 +10,9 @@
 // Collapsed: the card shrinks to its header bar. The state is the per-user setting BROWSER_COLLAPSED (SettingsManager, local), not a document field.
 // Phones (<= 640 px, the one phone breakpoint, tasks 562 / 581): the card does not fit over the canvas, so the SAME element becomes a
 // slide-over drawer (createMobileDrawer, breakpoint 641) opened by a header button (browser.drawer.toggleEl, placed in toggleHost).
+// Phone LANDSCAPE (the short viewport, #ui/short-viewport.js, TASK 602): the card starts COLLAPSED (the canvas is short), and collapses again each time the
+// phone turns into landscape; the user can expand it (that choice is stored like any other). Turning back to portrait / a tall window brings back the stored
+// setting. Expanded, it stays inside the canvas (max-height) and scrolls. Its controls are 44 px finger targets there.
 // Position: 8 px in from the canvas's top-left corner. The axis numbers (#ui/canvas-grid.js) are drawn along the X and Y axes at the origin,
 // not at a fixed screen corner, so they only sit under the card when the user pans an axis there; the card is a Fusion-style overlay.
 
@@ -17,6 +20,7 @@ import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
 import { sketchesSignature } from '#core/sketch-model.js';
 import SettingsManager from '#core/settings-manager.js';
+import { SHORT_VIEWPORT_QUERY, isShortViewport, onShortViewportChange } from '#ui/short-viewport.js';
 
 export const BROWSER_PHONE_BREAKPOINT = 641; // drawer below this width: the app's one phone breakpoint is max-width 640
 
@@ -42,6 +46,12 @@ function injectStyles() {
 .sk-browser .sk-tree-title { display: none; }
 @media (min-width: ${BROWSER_PHONE_BREAKPOINT}px) {
   .sk-browser { position: absolute; top: 8px; left: 8px; z-index: 20; width: 248px; max-height: calc(100% - 16px); backdrop-filter: blur(3px); }
+}
+@media ${SHORT_VIEWPORT_QUERY} {
+  .sk-browser-head { min-height: 44px; padding: 0 52px 0 2px; }
+  .sk-browser .sk-tree-hdr { top: 0; right: 4px; }
+  .sk-browser .sk-browser-toggle, .sk-browser .sk-tree-add, .sk-browser .sk-sketch-eye, .sk-browser .sk-sketch-radio { min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center; }
 }
 @media (max-width: ${BROWSER_PHONE_BREAKPOINT - 1}px) {
   .sk-browser { border-radius: 0; background: var(--sk-browser-solid, #f8fafc); }
@@ -73,7 +83,9 @@ export function mountDesignBrowser({ container, state, engine, toggleHost = null
     toggle.textContent = c ? '▸' : '▾';
     toggle.title = c ? 'Expand' : 'Collapse';
   };
-  apply(SettingsManager.get('BROWSER_COLLAPSED') === true);
+  const stored = () => SettingsManager.get('BROWSER_COLLAPSED') === true;
+  apply(isShortViewport() || stored());
+  onShortViewportChange((short) => apply(short || stored())); // a rotation: landscape collapses, portrait brings back the stored state (never written here)
   toggle.addEventListener('click', () => { const c = !el.classList.contains('collapsed'); apply(c); SettingsManager.set('BROWSER_COLLAPSED', c); });
 
   const drawer = createMobileDrawer({ panelEl: el, label, breakpoint: BROWSER_PHONE_BREAKPOINT, hideOnMobile: [toggle], side: 'right' });

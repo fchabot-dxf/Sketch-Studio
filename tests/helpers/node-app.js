@@ -174,13 +174,12 @@ const HOSTS = {
     D.initStudioCanvas(state, engine, svg);
     const ui = setupUI(state);
     const ribbon = (ui && ui.ribbon) || null;
-    const statusEl = doc.createElement('span'); doc.body.appendChild(statusEl); // main.js puts it in the app header
-    const buffer = createDocumentBuffer({ ...D.studioBufferOptions({ state, engine, svg, statusEl }), store, doc, win });
+    const buffer = createDocumentBuffer({ ...D.studioBufferOptions({ state, engine, svg }), store, doc, win }); // no status text (TASK 602): the tab dot shows it
     const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
     const frame = () => { D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
-    return { svg, state, engine, ribbon, buffer, statusEl, frame };
+    return { svg, state, engine, ribbon, buffer, frame };
   },
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
   // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Explore, Vcarve and Review views are not mounted.

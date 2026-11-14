@@ -1,6 +1,10 @@
 // tests/document-tabs-strip-live.test.js — TASK 587 (docs/DOCUMENT-TABS-DESIGN.md slice 3): the strip in the REAL SketchStudio page, real pointer.
-// Its own row above the header (no header control moves sideways or changes size), click / + / close x, THE question on an unsaved tab,
-// the 11th tab (T7), phone width (one line, scrolls), and the other hosts (Shaper, Pen Plotter, Trace) show NO strip.
+// Its own row BELOW the header, above the ribbon (TASK 602, owner; no header control moves sideways or changes size, nothing overlaps it: the header,
+// the ribbon, the SKETCHES box, the Construction / Recenter buttons), click / + / close x, THE question on an unsaved tab, the 11th tab (T7), and the
+// other hosts (Shaper, Pen Plotter, Trace) show NO strip.
+// TASK 602 sizes (owner: "tabs can be minimal size"): a 26 px row with a mouse, a 45 px row under a finger (44 px tabs, close x and "+": real 44 px
+// targets). Widths like browser tabs: 1 or 2 tabs at the full 240 px, shrinking evenly as more open, never below the minimum (72 px mouse, 104 px finger),
+// then the row scrolls sideways with the active tab in view; measured with 1, 2, 5 and 10 tabs at 1400 px (mouse) and 390 px (touch).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +32,17 @@ await (async () => {
     };
     const clickEl = async (sel, i = 0) => { const c = await center(sel, i); await click(c.x, c.y); };
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
+    const widths = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((e) => Math.round(e.getBoundingClientRect().width))`);
+    // TASK 602: the strip is between the header's bottom and the ribbon's top, and overlaps none of the header, the ribbon, the SKETCHES box, the canvas buttons
+    const checkPlace = async (what) => {
+      const b = await evalJs(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const x = e.getBoundingClientRect(); return { top: x.top, bottom: x.bottom, left: x.left, right: x.right }; };
+        return { strip: r('.sk-doctabs'), header: r('header'), ribbon: r('#toolsRibbon'), box: r('.sk-browser'), construct: r('#btn-construct-toggle'), recenter: r('#btn-recenter-view') }; })()`);
+      assert(Math.abs(b.strip.top - b.header.bottom) < 0.5 && b.strip.bottom <= b.ribbon.top + 0.5, what + ': the strip is right under the header, above the ribbon: ' + JSON.stringify(b));
+      for (const k of ['box', 'construct', 'recenter']) {
+        const o = b[k]; if (!o) continue;
+        assert(o.top >= b.strip.bottom - 0.5 || o.bottom <= b.strip.top + 0.5 || o.left >= b.strip.right - 0.5 || o.right <= b.strip.left + 0.5, `${what}: the strip does not overlap ${k}: ` + JSON.stringify(b));
+      }
+    };
     const headerRects = () => evalJs(`[...document.querySelector('header').querySelectorAll('button, select, input')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), Math.round(r.height)]; })`);
     const url = (h) => `http://127.0.0.1:${port}/apps/${h}/index.html`;
 
@@ -39,8 +54,8 @@ await (async () => {
     await waitFor(`!!document.querySelector('.sk-doctabs')`, 'the strip');
     await waitFor(`document.querySelector('.sk-doctab-name') && document.querySelector('.sk-doctab-name').textContent === 'Beta'`, 'the restored design as the first tab');
     assert.deepStrictEqual(await names(), ['Beta']);
-    // the strip is its own row immediately above the header; hiding it moves NO header control sideways or resizes one
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').nextElementSibling.tagName`), 'HEADER');
+    // the strip is its own row immediately below the header; hiding it moves NO header control sideways or resizes one
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').previousElementSibling.tagName`), 'HEADER');
     const withStrip = await headerRects();
     await evalJs(`document.querySelector('.sk-doctabs').hidden = true`); await sleep(100);
     const without = await headerRects();
@@ -48,15 +63,16 @@ await (async () => {
     assert.deepStrictEqual(withStrip, without, 'every header control keeps its x, width and height');
 
     // the row's height is fixed: 1 tab or 10, the page below does not move (and not when the tabs first appear)
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 32, 'the strip row is 32 px tall with one tab');
-    // TASK 586 + 587: the SKETCHES box floats at the canvas's top-left; the strip is its own row ABOVE the header, so the two never overlap
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 26, 'the strip row is 26 px tall with one tab (TASK 602)');
+    // TASK 602: the strip sits between the header's bottom and the ribbon's top, and overlaps nothing (header, ribbon, SKETCHES box, Construction / Recenter)
     await waitFor(`!!document.querySelector('.sk-browser') && document.querySelector('.sk-browser').getClientRects().length > 0`, 'the floating SKETCHES box');
-    const boxes = await evalJs(`(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; }; return { strip: r('.sk-doctabs'), box: r('.sk-browser'), header: r('header') }; })()`);
-    assert(boxes.strip.bottom <= boxes.header.top + 0.5 && boxes.box.top >= boxes.strip.bottom, 'the SKETCHES box is below the strip: ' + JSON.stringify(boxes));
+    await checkPlace('1400 px');
     await shot('strip-with-sketches-box-1440.png', { x: 0, y: 0, width: 760, height: 260 });
+    assert.deepStrictEqual(await widths(), [240], '1 tab: full width (240 px)');
     // "+" opens an Untitled tab; a click on a tab switches
     await clickEl('.sk-doctab-new');
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled']);
+    assert.deepStrictEqual(await widths(), [240, 240], '2 tabs: both at full width');
     await clickEl('.sk-doctab-main', 0);
     await waitFor(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent === 'Beta'`, 'Beta active');
     await clickEl('.sk-doctab-main', 1);
@@ -77,20 +93,48 @@ await (async () => {
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled', 'Untitled'], 'Cancel keeps the tab');
 
-    // the 11th tab (T7)
-    for (let i = 0; i < 8; i++) await clickEl('.sk-doctab-new');
+    // the 11th tab (T7); widths at 5 and 10 tabs
+    for (let i = 0; i < 2; i++) await clickEl('.sk-doctab-new');
+    assert.strictEqual((await names()).length, 5);
+    assert.deepStrictEqual(await widths(), [240, 240, 240, 240, 240], '5 tabs fit at 1400 px: full width');
+    for (let i = 0; i < 5; i++) await clickEl('.sk-doctab-new');
     assert.strictEqual((await names()).length, 10);
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 32, 'still 32 px with ten tabs');
+    const w10 = await widths();
+    assert(w10.every((w) => w === w10[0]) && w10[0] < 240 && w10[0] >= 72, '10 tabs shrink evenly, not below 72 px: ' + JSON.stringify(w10));
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').scrollWidth <= document.querySelector('.sk-doctabs').clientWidth`), true, '10 tabs fit at 1400 px without scrolling');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 26, 'still 26 px with ten tabs');
+    await checkPlace('1400 px, 10 tabs');
     await clickEl('.sk-doctab-new');
     assert.strictEqual((await names()).length, 10, 'no 11th tab');
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');
 
-    // phone width: one line that scrolls
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
-    await sleep(300);
-    const phone = await evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const tops = [...s.querySelectorAll('.sk-doctab')].map((e) => Math.round(e.getBoundingClientRect().top)); return { oneLine: new Set(tops).size === 1, scrolls: s.scrollWidth > s.clientWidth, w: s.clientWidth }; })()`);
-    assert(phone.oneLine && phone.scrolls && phone.w <= 390, 'phone: ' + JSON.stringify(phone));
-    await shot('strip-phone.png', { x: 0, y: 0, width: 390, height: 130 });
+    // phone (390 x 844, a finger): a 45 px row, 44 px targets; widths at 1, 2, 5, 10 tabs (real taps on "+"); one line that scrolls, the active tab in view
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await navigate(url('sketchstudio'), 10000);
+    await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1`, 'phone: one restored tab');
+    await waitFor(`!!document.querySelector('.sk-ribbon .sk-ribbon-btn')`, 'phone: the ribbon');
+    const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
+    const tapNew = async () => { await evalJs(`document.querySelector('.sk-doctab-new').scrollIntoView({ inline: 'nearest', block: 'nearest' })`); await sleep(80); const c = await center('.sk-doctab-new'); await T('touchStart', [c]); await sleep(40); await T('touchEnd', []); await sleep(350); };
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 45, 'phone: the strip row is 45 px (44 px tabs + its line)');
+    await checkPlace('phone');
+    const phoneW = { 1: await widths() };
+    await tapNew(); phoneW[2] = await widths();
+    for (let i = 0; i < 3; i++) await tapNew();
+    phoneW[5] = await widths();
+    for (let i = 0; i < 5; i++) await tapNew();
+    phoneW[10] = await widths();
+    assert.deepStrictEqual(phoneW[1], [240], 'phone, 1 tab: full width');
+    assert(phoneW[2].length === 2 && phoneW[2][0] === phoneW[2][1] && phoneW[2][0] < 240 && phoneW[2][0] > 104, 'phone, 2 tabs share the row evenly: ' + JSON.stringify(phoneW[2]));
+    assert(phoneW[5].every((w) => w === 104) && phoneW[10].length === 10 && phoneW[10].every((w) => w === 104), 'phone, 5 and 10 tabs stop at the 104 px minimum: ' + JSON.stringify([phoneW[5], phoneW[10]]));
+    const phone = await evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const tops = [...s.querySelectorAll('.sk-doctab')].map((e) => Math.round(e.getBoundingClientRect().top)); const a = s.querySelector('.sk-doctab.active').getBoundingClientRect(); const sr = s.getBoundingClientRect();
+      const targets = [...s.querySelectorAll('.sk-doctab-main, .sk-doctab-x, .sk-doctab-new')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+      return { oneLine: new Set(tops).size === 1, scrolls: s.scrollWidth > s.clientWidth, w: s.clientWidth, activeInView: a.left >= sr.left - 0.5 && a.right <= sr.right + 0.5, small: targets.filter(([w, h]) => w < 44 || h < 44) }; })()`);
+    assert(phone.oneLine && phone.scrolls && phone.w <= 390 && phone.activeInView, 'phone: one line that scrolls, the active tab in view: ' + JSON.stringify(phone));
+    assert.deepStrictEqual(phone.small, [], 'phone: every tab, close x and "+" is a 44 px target');
+    await shot('strip-phone.png', { x: 0, y: 0, width: 390, height: 200 });
+    console.log('strip widths: 1400 px 1/2/5 tabs 240, 10 tabs ' + w10[0] + '; phone ' + JSON.stringify(phoneW));
+    await send('Emulation.setTouchEmulationEnabled', { enabled: false });
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
 
     // the other hosts have no strip

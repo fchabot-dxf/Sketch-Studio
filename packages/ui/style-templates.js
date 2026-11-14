@@ -28,36 +28,9 @@ const factory = (overrides = {}) => {
 };
 
 export const STYLE_TEMPLATES = [
-  // The factory values (task 614: the owner's look). No tokens: the canvas colours are the CSS --sk-* defaults (sketcher.css), which a host may theme.
-  { id: 'default', name: 'Default', settings: factory() },
-
-  // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
-  // 25px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
-  // hover, solid dark dots for fixed joints. `tokens` = the canvas colours (CSS --sk-* custom properties set on the
-  // canvas HOST element only): free lines sketch blue, fully constrained black, brown construction, pale blue plane.
-  {
-    id: 'fusion', name: 'Fusion',
-    settings: factory({
-      LINE_STROKE: 0.25, JOINT_RADIUS: 1.0, JOINT_STROKE_MULT: 0.67,
-      SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2,
-      GLYPH_SYMBOL_SIZE_PX: 25, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
-      DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
-      DIM_LABEL_BOX: false,
-            LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
-          }),
-    tokens: {
-      '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
-      '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
-      '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
-      '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
-      '--sk-construction': '#A9744F',
-      '--sk-constraint-stroke': '#1F2937', // dimension lines + text
-      '--sk-selection': '#017AFD',         // hovered / selected geometry + joint ring outline
-      '--sk-profile-fill': '#5B9BF0',
-      '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
-      '--sk-joint-fill': '#FFFFFF',
-    },
-  },
+  // The factory values = the Fusion look (task 630). No tokens: the Fusion colours are the CSS --sk-* defaults (sketcher.css), which a host may theme.
+  // A stored STYLE_TEMPLATE of 'fusion' (the former separate template) falls back to this entry via getStyleTemplate.
+  { id: 'default', name: 'Fusion (default)', settings: factory() },
 
   // Dense drawings: thin lines, small joints and glyphs.
   {
@@ -68,7 +41,8 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
-      HOVER_FEEDBACK_MULT: 3,       GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true,    }),
+      HOVER_FEEDBACK_MULT: 3, GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '',
+    }),
   },
 
   // Screenshots / teaching: heavy lines, big joints and glyphs.
@@ -80,8 +54,8 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56,
       DASH_LENGTH_PX: 14, DASH_GAP_PX: 8,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Presentation)
-      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true,
-    }),
+      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '',
+          }),
   },
 ];
 
@@ -92,7 +66,11 @@ export const CUSTOM_TEMPLATE_ID = 'custom';
 export const USER_PRESETS_KEY = 'STYLE_PRESETS';
 export const USER_PRESETS_VERSION = 1;
 export const PRESET_NAME_MAX = 40;
-const ALL_TOKEN_NAMES = [...new Set(STYLE_TEMPLATES.flatMap((t) => Object.keys(t.tokens || {})))];
+// The colour tokens a saved preset may carry (presets saved from the former Fusion template hold them). No built-in template sets tokens any more.
+const ALL_TOKEN_NAMES = [
+  '--sk-canvas-bg', '--sk-canvas-bg-snapping', '--sk-grid-minor', '--sk-grid-major', '--sk-constraint-fill', '--sk-geo-fixed',
+  '--sk-construction', '--sk-constraint-stroke', '--sk-selection', '--sk-profile-fill', '--sk-profile-tint', '--sk-joint-fill',
+];
 
 // Why a stored preset is not valid, or null. Every look knob must be present with the type of its factory value; tokens
 // (optional) may only use the --sk-* names a built-in template declares.

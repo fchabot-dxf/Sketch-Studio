@@ -48,34 +48,42 @@ const strokeWidths = (m) => [...m.matchAll(/stroke-width="([\d.]+)"/g)].map((x) 
 const before = render();
 assert(before.length > 200, 'the fixed sketch renders markup');
 
-// 1. declaration: every template covers the same keys; only Fusion declares colour tokens (--sk-*)
+// 1. declaration: every template covers the same keys; no built-in template declares colour tokens (the Fusion colours are the stylesheet defaults)
 for (const t of STYLE_TEMPLATES) {
-  assert(t.id === 'fusion' ? Object.keys(t.tokens || {}).length > 5 : !t.tokens, t.id + ' tokens declaration');
+  assert(!t.tokens, t.id + ' declares no tokens');
   assert.deepStrictEqual(Object.keys(t.settings).sort(), [...STYLE_SETTING_KEYS].sort(), t.id + ' covers every template key');
 }
-assert.deepStrictEqual(STYLE_TEMPLATES.map((t) => t.id), ['default', 'fusion', 'compact', 'presentation']);
+assert.deepStrictEqual(STYLE_TEMPLATES.map((t) => t.id), ['default', 'compact', 'presentation']);
+assert.strictEqual(STYLE_TEMPLATES[0].name, 'Fusion (default)');
 const defaults = SettingsManager.getDefaults();
 assert.strictEqual(defaults.STYLE_TEMPLATE, 'default', 'the chosen template reuses the old PRESET slot');
 assert(!('PRESET' in defaults), 'PRESET is gone (renamed)');
 for (const k of STYLE_SETTING_KEYS) assert.strictEqual(getStyleTemplate('default').settings[k], defaults[k], 'Default = factory ' + k);
+// the factory values ARE the former Fusion template's (task 630)
+assert.strictEqual(defaults.LINE_STROKE, 0.25); assert.strictEqual(defaults.JOINT_RADIUS, 1.0);
+assert.strictEqual(defaults.GLYPH_SYMBOL_SIZE_PX, 25); assert.strictEqual(defaults.SELECTION_FEEDBACK_MULT, 2.33);
+// a stored STYLE_TEMPLATE 'fusion' (a removed id) loads as the default, with no error
+assert.strictEqual(getStyleTemplate('fusion'), getStyleTemplate('default'), 'a stored fusion id falls back to the default template');
+SettingsManager.set('STYLE_TEMPLATE', 'fusion');
+assert.strictEqual(activeStyleTemplateId(SettingsManager.getAll()), 'default', 'a stored fusion id reads as the default look');
 
-// 2. Fusion sets the expected settings and renders thinner lines; Default restores today's markup exactly
-applyStyleTemplate('fusion');
+// 2. Compact renders thinner markup; Default restores the original markup exactly
+applyStyleTemplate('compact');
 const f = SettingsManager.getAll();
-assert.strictEqual(f.STYLE_TEMPLATE, 'fusion');
-assert.strictEqual(f.LINE_STROKE, 0.25); assert.strictEqual(f.JOINT_RADIUS, 1.0);
-assert.strictEqual(f.HOVER_FEEDBACK_MULT, 2); assert.strictEqual(f.SELECTION_FEEDBACK_MULT, 2.33);
-assert.strictEqual(activeStyleTemplateId(f), 'fusion');
-const fusion = render();
-assert.notStrictEqual(fusion, before, 'Fusion changes the look');
-assert(Math.max(...strokeWidths(fusion)) < Math.max(...strokeWidths(before)), 'Fusion strokes are thinner');
-applyStyleTemplate('compact'); applyStyleTemplate('presentation');
+assert.strictEqual(f.STYLE_TEMPLATE, 'compact');
+assert.strictEqual(f.LINE_STROKE, 0.3); assert.strictEqual(f.JOINT_RADIUS, 1);
+assert.strictEqual(f.HOVER_FEEDBACK_MULT, 3); assert.strictEqual(f.SELECTION_FEEDBACK_MULT, 2.5);
+assert.strictEqual(activeStyleTemplateId(f), 'compact');
+const compact = render();
+assert.notStrictEqual(compact, before, 'Compact changes the look');
+applyStyleTemplate('presentation');
+assert(Math.max(...strokeWidths(render())) > Math.max(...strokeWidths(before)), 'Presentation strokes are heavier');
 applyStyleTemplate('default');
 assert.strictEqual(render(), before, 'Default restores the original markup byte-for-byte');
 assert.strictEqual(activeStyleTemplateId(SettingsManager.getAll()), 'default');
 
 // 3. Custom after an edit (the edit is kept)
-applyStyleTemplate('fusion');
+applyStyleTemplate('default');
 SettingsManager.set('LINE_STROKE', 0.5);
 assert.strictEqual(activeStyleTemplateId(SettingsManager.getAll()), CUSTOM_TEMPLATE_ID);
 assert.strictEqual(SettingsManager.get('LINE_STROKE'), 0.5);
@@ -112,27 +120,27 @@ const d2 = render2();
 assert(/fusion-glyph/.test(d2) && !/<use /.test(d2), 'Default glyphs are the outlined glyphs (the only style)');
 assert(/var\(--sk-geo-fixed, #202020\)/.test(d2), 'Default: fixed line uses the geo-fixed token');
 assert(/var\(--sk-construction, #f97316\)/.test(d2), 'Default: construction line uses the construction token');
-applyStyleTemplate('fusion');
+applyStyleTemplate('compact');
 const f2 = render2();
-assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
-assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
-assert(/stroke:var\(--sk-selection, #017AFD\)/i.test(render2('freeLine')), 'Fusion hover draws the --sk-selection token');
+assert(/fusion-glyph/.test(f2), 'Compact renders outlined glyphs');
+assert(f2 !== d2, 'Compact differs from Default on the same sketch');
+assert(/stroke:var\(--sk-selection, #017AFD\)/i.test(render2('freeLine')), 'hover draws the --sk-selection token');
 applyStyleTemplate('default');
-assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round trip');
+assert.strictEqual(render2(), d2, 'Default markup identical after a Compact round trip');
 
-// tokens go on the host element only and Default clears them
+// tokens go on the host element only: no built-in sets any; a saved preset that carries tokens still applies them
 const mkHost = () => { const props = {}; return { props, style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } } }; };
 const host = mkHost(), chrome = mkHost();
 const unbind = bindTemplateTokens(host);
 assert.strictEqual(Object.keys(host.props).length, 0, 'Default sets no tokens');
-applyStyleTemplate('fusion');
-assert.strictEqual(host.props['--sk-geo-fixed'], '#000000', 'Fusion: fully constrained lines are black');
-assert.strictEqual(host.props['--sk-constraint-fill'], '#2B9BD6', 'Fusion: free lines are sketch blue');
-assert.strictEqual(host.props['--sk-construction'], '#A9744F', 'Fusion: brown construction');
+SettingsManager.set('STYLE_PRESETS', { v: 1, presets: [{ id: 'user-old', name: 'Old Fusion', settings: { ...getStyleTemplate('default').settings }, tokens: { '--sk-geo-fixed': '#000000', '--sk-constraint-fill': '#2B9BD6' } }] });
+applyStyleTemplate('user-old');
+assert.strictEqual(host.props['--sk-geo-fixed'], '#000000', 'a preset with tokens sets them on the host');
+assert.strictEqual(host.props['--sk-constraint-fill'], '#2B9BD6');
 assert.strictEqual(Object.keys(chrome.props).length, 0, 'tokens never touch another element');
 applyStyleTemplate('compact');
 assert.strictEqual(Object.keys(host.props).length, 0, 'Compact clears the tokens');
-applyStyleTemplate('fusion'); SettingsManager.resetToDefaults();
+applyStyleTemplate('user-old'); SettingsManager.resetToDefaults();
 assert.strictEqual(Object.keys(host.props).length, 0, 'reset to defaults clears the tokens');
 unbind();
 

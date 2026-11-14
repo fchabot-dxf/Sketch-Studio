@@ -2,6 +2,8 @@
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 
+const SELECTION_MULT = (await import('../packages/core/settings-manager.js')).default.getDefault('SELECTION_FEEDBACK_MULT');
+
 const J = (x, y, fixed = false) => ({ x, y, fixed, sketchId: 'sketch-1' });
 const DOC = {
   version: 3,
@@ -146,7 +148,7 @@ try {
   await mouse('mouseMoved', s.pts.empty.x, s.pts.empty.y); await sleep(200);
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'selected constrained line: 0 glow elements');
-  assert.ok(Math.abs(s.shapes.rE2.sw - restLineSw * 1.5) < 1e-5, 'selected constrained line stroke-width is 1.5x rest');
+  assert.ok(Math.abs(s.shapes.rE2.sw - restLineSw * SELECTION_MULT) < 1e-5, 'selected constrained line stroke-width is SELECTION_FEEDBACK_MULT x rest');
   assert.strictEqual(s.shapes.rE2.stroke, 'rgb(1, 122, 253)', 'selected constrained line turns bright Fusion blue #017AFD');
 
   // 3. Hover corner point r2 (80, 60): revealed with 2x ring in bright Fusion blue, white fill, 0 halos
@@ -165,7 +167,7 @@ try {
   await mouse('mouseMoved', s.pts.empty.x, s.pts.empty.y); await sleep(200);
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'selected point: 0 halo elements');
-  assert.ok(Math.abs(s.points['185,65'].sw - restJointSw * 1.5) < 1e-5, 'selected point ring is 1.5x rest joint stroke');
+  assert.ok(Math.abs(s.points['185,65'].sw - restJointSw * SELECTION_MULT) < 1e-5, 'selected point ring is SELECTION_FEEDBACK_MULT x rest joint stroke');
   assert.strictEqual(s.points['185,65'].stroke, 'rgb(1, 122, 253)', 'selected point ring is bright Fusion blue #017AFD');
   assert.strictEqual(s.points['185,65'].fill, 'rgb(118, 164, 228)', 'selected point fill is blue tint #76A4E4');
 

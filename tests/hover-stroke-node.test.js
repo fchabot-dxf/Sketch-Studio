@@ -81,7 +81,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const restHtml = renderState();
   noGlowUnderStrokes(restHtml);
   const restLineSw = shapeTag(restHtml, 'line_free').sw;
-  assert.match(shapeTag(restHtml, 'line_constrained').style, /--sk-geo-fixed.*#202020/, 'constrained line at rest is black');
+  assert.match(shapeTag(restHtml, 'line_constrained').style, /stroke:#8DB84A/i, 'fully locked line at rest is Fusion green (LOCKED_LINE_COLOR)');
   assert.match(shapeTag(restHtml, 'line_free').style, /--sk-constraint-fill.*#60A5FA/, 'free line at rest uses cyan-blue token');
 
   const hoverMult = SettingsManager.getDefault('HOVER_FEEDBACK_MULT');
@@ -186,7 +186,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   app.click(p1s.x, p1s.y);
   app.move(away.x, away.y);
   const selOpenDot = getPointAt(90, 10);
-  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) - restJointSw * 1.5) < 1e-6, 'selected point ring is 1.5x thicker');
+  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) - restJointSw * SettingsManager.getDefault('SELECTION_FEEDBACK_MULT')) < 1e-6, 'selected point ring is SELECTION_FEEDBACK_MULT thicker');
   assert.match(selOpenDot.getAttribute('style'), /fill:var\(--sk-joint-selected/, 'selected point has blue-tinted fill');
   assert.match(selOpenDot.getAttribute('style'), /stroke:var\(--sk-selection, #017AFD\)/i, 'selected point ring is bright Fusion blue');
 

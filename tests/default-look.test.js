@@ -13,10 +13,10 @@ const smUrl = new URL('../packages/core/settings-manager.js', import.meta.url);
 const freshSM = async (n) => (await import(pathToFileURL(smUrl.pathname.replace(/^\/([A-Za-z]:)/, '$1')).href + '?p' + n)).default; // a new page load
 const T = await import('../packages/ui/style-templates.js');
 
-const OWNER = { LINE_STROKE: 0.25, JOINT_RADIUS: 1.4, JOINT_STROKE_MULT: 1.4, SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2,
-  GLYPH_SYMBOL_SIZE_PX: 23, GLYPH_INFERENCE_SIZE_PX: 21, GLYPH_OFFSET_PX: 19, GLYPH_OUTLINE_PX: 0.7,
+const OWNER = { LINE_STROKE: 0.25, JOINT_RADIUS: 1.0, JOINT_STROKE_MULT: 0.67, SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2,
+  GLYPH_SYMBOL_SIZE_PX: 25, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
   DASH_LENGTH_PX: 7, DASH_GAP_PX: 4, DIM_LABEL_BOX: false,
-  LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
+  LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A' };
 assert.deepStrictEqual(Object.keys(OWNER).sort(), [...T.STYLE_SETTING_KEYS].sort(), 'the owner values cover every look knob');
 const looks = (all) => Object.fromEntries(T.STYLE_SETTING_KEYS.map((k) => [k, all[k]]));
 const FUSION_TOKENS = { '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB', '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
@@ -32,7 +32,9 @@ assert.strictEqual(sm.get('STYLE_TEMPLATE'), 'default');
 const def = T.STYLE_TEMPLATES.find((t) => t.id === 'default');
 assert.deepStrictEqual(def.settings, OWNER, 'the built-in Default template gives the owner look');
 assert.strictEqual(def.tokens, undefined, 'Default declares no tokens (a host theme, e.g. Shaper cream, is not overridden)');
-assert.deepStrictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'fusion').tokens, FUSION_TOKENS, 'Fusion keeps its tokens');
+assert.strictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'fusion'), undefined, 'the separate Fusion template is gone (Default is Fusion)');
+assert.strictEqual(def.name, 'Fusion (default)');
+assert.deepStrictEqual(T.getStyleTemplate('fusion'), def, 'a stored fusion id still loads (as the default)');
 const css = fs.readFileSync(new URL('../packages/ui/sketcher.css', import.meta.url), 'utf8').match(/:root\s*\{[\s\S]*?\n\}/)[0];
 for (const [n, v] of Object.entries(FUSION_TOKENS)) if (!/profile/.test(n)) assert(new RegExp(n + ':\\s*' + v + '\\b', 'i').test(css), 'sketcher.css default ' + n + ' = ' + v);
 // Compact / Presentation: resolved settings identical to what origin/main gave them (the old factory filled the keys they did not set)
@@ -45,7 +47,7 @@ assert.deepStrictEqual(host.props, {}, 'a fresh profile: the host gets no inline
 
 // 2. reset gives the same, from any other look
 T.applyStyleTemplate('presentation', sm);
-T.applyStyleTemplate('fusion', sm); assert.deepStrictEqual(host.props, FUSION_TOKENS, 'Fusion sets its tokens');
+T.applyStyleTemplate('compact', sm); assert.deepStrictEqual(host.props, {}, 'no built-in template sets inline tokens');
 sm.resetToDefaults();
 assert.deepStrictEqual(looks(sm.getAll()), OWNER, 'Reset to factory defaults: the owner values');
 assert.deepStrictEqual(host.props, {}, 'Reset clears the tokens');

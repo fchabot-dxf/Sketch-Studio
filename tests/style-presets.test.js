@@ -32,15 +32,14 @@ assert.strictEqual(after.LINE_STROKE, 0.7); assert.strictEqual(after.DASH_GAP_PX
 for (const k of Object.keys(after)) if (!['LINE_STROKE', 'DASH_GAP_PX', 'STYLE_TEMPLATE'].includes(k)) assert.deepStrictEqual(after[k], before[k], k + ' unchanged');
 assert.strictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'default').settings.LINE_STROKE, SettingsManager.getDefault('LINE_STROKE'), 'the built-in Default is unchanged by saving or applying a preset');
 
-// tokens: a preset saved while Fusion is the template keeps Fusion's tokens
-T.applyStyleTemplate('fusion');
+// a preset saved from the default look carries no tokens
+T.applyStyleTemplate('default');
 const f = T.saveUserPreset('Fusion plus');
-assert.deepStrictEqual(f.tokens, T.getStyleTemplate('fusion').tokens);
-assert.notStrictEqual(f.tokens, T.getStyleTemplate('fusion').tokens, 'a copy, not the built-in object');
+assert.strictEqual(f.tokens, undefined, 'no tokens: the Fusion colours are the stylesheet defaults');
 
 // names: empty, long, a built-in's, a duplicate (rename), overwrite keeps the id
-assert(T.presetNameProblem('') && T.presetNameProblem('x'.repeat(41)) && T.presetNameProblem('fusion'), 'empty / long / built-in names are refused');
-assert.throws(() => T.saveUserPreset('Default'));
+assert(T.presetNameProblem('') && T.presetNameProblem('x'.repeat(41)) && T.presetNameProblem('compact'), 'empty / long / built-in names are refused');
+assert.throws(() => T.saveUserPreset('Fusion (default)'));
 assert.throws(() => T.renameUserPreset(f.id, 'mine'), /already exists/, 'a rename onto another preset is refused (case-insensitive)');
 SettingsManager.set('LINE_STROKE', 2);
 const again = T.saveUserPreset('MINE');

@@ -19,6 +19,9 @@ import { snapshotSolverState, restoreSolverState, hasRadiusUnknown } from './sol
 import { SolverConfig } from './solver-config.js';
 import { WHO_MOVES } from './creation-placement-table.js';
 import { symmetricOperands, mirrorPoint } from './symmetric.js';
+import { getCoincidentJoints } from './joints.js';
+import { findShapeById } from './reference-lines.js';
+import { isPointLineDistance } from './geometry.js';
 
 const EPS_SAT = 1e-6;     // a residual at or below this (mm or rad) is satisfied
 const EPS_WORSE = 1e-7;   // a placement may not raise an existing constraint's residual by more than this
@@ -448,4 +451,151 @@ export function placeForCreation(state, type, normalized) {
   // neither operand can satisfy it alone: the solve starts from the giving operand's placement (it repairs the rest; from the unplaced
   // pose the solve may not leave a stationary start, e.g. a perpendicular from exactly parallel lines)
   return !!start && tryMotion(state, start.M, start.mo, cand, before, true);
+}
+
+// ---------------------------------------------------------------------------------------------------------- 4. editing a dimension's value
+// TASK 611 -- WHO MOVES when the value of an existing dimension is typed, like Fusion (measured with the real mouse in Fusion 2706.1.17,
+// docs/FUSION-COMPARISON.md "Dimension edit: what moves (task 611)"): the operand that GIVES WAY moves, with what must follow it; the rest of
+// the sketch stays. A free construction line that a line's end sits on stays where it is (before, the least-change solve of the whole sketch
+// turned it: every free unknown took a share of the change). Measured: a line's length moves its FREE end (the end attached to other geometry
+// stays; both attached: the line's end point gives way, whichever was picked first); what is joined to the moving end follows (a chain corner,
+// a mirror copy); the end slides along a line it sits on; a point-to-line distance moves the operand the point-on-line ranking gives way.
+//
+// The giving operand of an edit: { joints, circles (radius unknowns that may change), anchor (joints that stay) } or null (no rule: the
+// plain solve). The freedom is read with the edited dimension lifted out (what could move if this value changes).
+const isCircleShape = (s) => !!s && s.type === 'circle';
+const operandJoints = (state, op) => (op.kind === 'joint' ? [op.id] : ((shapeOf(state, op.id) || {}).joints || []).slice());
+const operandCircles = (state, op) => (op.kind === 'shape' && isCircleShape(shapeOf(state, op.id)) ? [op.id] : []);
+// the point-to-line distance has the operands of a point on a line: it reads the pointOnLine ranking of the table (measured for a distance:
+// a lone free point gives way, a line's end point vs a free line is a tie and the line, the second operand, gives way)
+const EDIT_RANK_KEY = Object.freeze({ 'dim-point-line': 'pointOnLine' });
+
+// How held ONE point of a shape is, for the two points of one shape: 2 = cannot move, 1 = attached to geometry outside the shape (another
+// shape's joint, a coincident partner, a point on another curve, a dimension or symmetry to another point), 0 = free.
+function pointHold(state, fr, id, sh, edited) {
+  if (!jointFree(fr, id)) return 2;
+  const cs = state.constraints.filter(isDriving);
+  const cluster = getCoincidentJoints(id, cs);
+  const own = new Set(sh.joints);
+  if (state.shapes.some(s => s !== sh && Array.isArray(s.joints) && s.joints.some(j => cluster.has(j)))) return 1;
+  for (const c of cs) {
+    if (c === edited) continue;
+    const o = constraintOperands(state, c);
+    if ([...o.joints].some(j => cluster.has(j)) && ([...o.joints].some(j => !own.has(j) && !cluster.has(j)) || o.references.size)) return 1;
+  }
+  return 0;
+}
+
+export function editGiver(state, c) {
+  if (!state || !state.engine || typeof state.engine.jointFreedom !== 'function' || !isDriving(c)) return null;
+  const idx = state.constraints.indexOf(c);
+  if (idx !== -1) state.constraints.splice(idx, 1);
+  let fr;
+  try { fr = freedomOf(state); } finally { if (idx !== -1) state.constraints.splice(idx, 0, c); }
+  const pick = (mover, anchor) => ({ joints: operandJoints(state, mover), circles: operandCircles(state, mover), anchor: operandJoints(state, anchor) });
+  // a radius: the rim gives way, the centre stays (a circle's radius unknown; an arc's two ends)
+  if (c.type === T.DISTANCE && c.isRadius) {
+    const sh = shapeOf(state, c.shape);
+    if (!sh || !Array.isArray(sh.joints) || !sh.joints.length) return null;
+    return isCircleShape(sh) ? { joints: [], circles: [sh.id], anchor: [sh.joints[0]] } : { joints: sh.joints.slice(1), circles: [], anchor: [sh.joints[0]] };
+  }
+  // a point-to-line distance: the point or the line, by the table's point-on-line ranking
+  if (c.type === T.DISTANCE && isPointLineDistance(c)) {
+    const line = lineOfPair(state, c.joints[1], c.joints[2]);
+    if (!line) return null;
+    const P = { kind: 'joint', id: c.joints[0] }, Lop = { kind: 'shape', id: line.id };
+    return firstGivesWay(EDIT_RANK_KEY['dim-point-line'], holdClass(state, fr, P), holdClass(state, fr, Lop)) ? pick(P, Lop) : pick(Lop, P);
+  }
+  // two different bodies: the who-moves table (the creation order)
+  const co = creationOperands(state, c.type, c);
+  if (co) {
+    const [first, second] = co.ops;
+    return firstGivesWay(co.key, holdClass(state, fr, first), holdClass(state, fr, second)) ? pick(first, second) : pick(second, first);
+  }
+  // two points of ONE shape (a line's length, its H / V extent): the less held point gives way; a tie, the later point of the shape
+  if (Array.isArray(c.joints) && c.joints.length === 2 && placementKey(state, c.type, c)) {
+    const [a, b] = c.joints;
+    const sh = state.shapes.find(s => Array.isArray(s.joints) && s.joints.includes(a) && s.joints.includes(b));
+    if (!sh) return null;
+    const ha = pointHold(state, fr, a, sh, c), hb = pointHold(state, fr, b, sh, c);
+    const aGives = ha !== hb ? ha < hb : sh.joints.indexOf(a) > sh.joints.indexOf(b);
+    return aGives ? { joints: [a], circles: [], anchor: [b] } : { joints: [b], circles: [], anchor: [a] };
+  }
+  return null;
+}
+
+// What a constraint reads: its joints, the circles whose radius unknown it reads, and its REFERENCES (a symmetric's line: the symmetry line
+// stays, as the symmetric placement keeps it, task 563).
+export function constraintOperands(state, c) {
+  const joints = new Set(), circles = new Set(), references = new Set();
+  const addShape = (id) => {
+    const s = findShapeById(state.shapes, id);
+    if (!s) return;
+    for (const j of s.joints || []) joints.add(j);
+    if (hasRadiusUnknown(s)) circles.add(s.id);
+  };
+  if (c.type === T.SYMMETRIC) {
+    const o = symmetricOperands(c, state.shapes);
+    if (o) {
+      for (const p of o.pairs) for (const j of p) joints.add(j);
+      for (const [q, a1, a2] of o.onLine) { joints.add(q); joints.add(a1); joints.add(a2); }
+      for (const s of o.sizes || []) if (hasRadiusUnknown(s)) circles.add(s.id);
+      for (const j of o.line) references.add(j);
+    }
+  } else {
+    for (const j of Array.isArray(c.joints) ? c.joints : []) joints.add(j);
+    if (c.joint) joints.add(c.joint);
+    for (const id of [c.shape, c.line, c.circle, ...(Array.isArray(c.shapes) ? c.shapes : [])]) if (id) addShape(id);
+  }
+  for (const j of [...joints]) if (!state.joints.has(j)) joints.delete(j);   // an axis's reserved points: never unknowns
+  return { joints, circles, references };
+}
+
+// THE solve of one step of a dimension's value edit (commitDimensionEdits, a single edit). Stage by stage: only the GIVING operand and what has
+// had to follow it so far are unknowns (every other joint held, every other circle radius held), the sketch solved; when that cannot satisfy
+// every driving constraint, the constraints left unsatisfied bring their operands in (never a symmetric's line; the anchor only through a
+// constraint of its own, never through the edited dimension) and the stage is solved again; when nothing more can come in, the anchor gives
+// way too; when even that cannot, the plain solve of the whole sketch (least change over every unknown, as before task 611).
+// memo (one per edit, kept across its value steps): { giver, joints, circles, anchor } -- the giver read once, the unknowns grown so far.
+// Returns the solve result of the stage that was kept.
+export function solveGivingWay(state, c, memo, iter = SolverConfig.ITERATIONS || 500) {
+  if (!('giver' in memo)) memo.giver = editGiver(state, c);
+  const g = memo.giver;
+  if (!g) return state.engine.solve(iter);
+  const cs = () => state.constraints.filter(isDriving);
+  const cluster = (ids) => { const out = new Set(); const list = cs(); for (const id of ids) for (const j of getCoincidentJoints(id, list)) out.add(j); return out; };
+  if (!memo.joints) { memo.joints = cluster(g.joints); memo.circles = new Set(g.circles); memo.anchor = cluster(g.anchor); }
+  const anchor = memo.anchor;
+  for (;;) {
+    const snap = snapshotSolverState(state.joints, state.shapes);
+    const held = [...state.joints].filter(([id, j]) => j && !j.fixed && !memo.joints.has(id)).map(([, j]) => [j, j.fixed]);
+    const temps = state.shapes.filter(s => hasRadiusUnknown(s) && !memo.circles.has(s.id)).map(s => ({ type: T.DISTANCE, shape: s.id, isRadius: true, value: s.radius }));
+    let res = null;
+    try {
+      for (const [j] of held) j.fixed = true;
+      state.constraints.push(...temps);
+      res = state.engine.solve(iter);
+    } finally {
+      for (const [j, was] of held) j.fixed = was;
+      for (const t of temps) { const i = state.constraints.indexOf(t); if (i >= 0) state.constraints.splice(i, 1); }
+    }
+    const unsatisfied = cs().filter(k => measureResidual(k, state.joints, state.shapes) > EPS_SAT);
+    if (res && res.converged && !res.stalled && !unsatisfied.length) return res;
+    // bring in the operands of what could not be kept
+    const n = memo.joints.size + memo.circles.size;
+    for (const k of unsatisfied) {
+      if (k === c) continue;   // the edited dimension: its operands are the giver and the anchor
+      const o = constraintOperands(state, k);
+      for (const j of o.joints) if (!o.references.has(j)) for (const m of cluster([j])) { memo.joints.add(m); anchor.delete(m); }
+      for (const s of o.circles) memo.circles.add(s);
+    }
+    restoreSolverState(state.joints, state.shapes, snap);
+    if (memo.joints.size + memo.circles.size > n) continue;
+    // nothing more can come in: the anchor gives way too (it could not stay)
+    if (!anchor.size) break;
+    for (const j of anchor) memo.joints.add(j);
+    anchor.clear();
+  }
+  memo.giver = null;   // the rest of this edit is the plain solve
+  return state.engine.solve(iter);
 }

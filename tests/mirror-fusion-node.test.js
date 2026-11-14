@@ -11,12 +11,12 @@
 // construction line by a point-on-line (our coincident-to-line). The line tool joins a chain's corner with a coincident (two joints), not one shared
 // joint: the copy's corner is ONE shared joint (the cluster rule, #core/mirror.js). Point counts differ from Fusion's for that reason: ours adds 4 (as
 // Fusion), from our own total.
-// The construction line is HELD on x = 0 here (vertical + its start on the Y axis), as a line drawn along the Y axis is: the measurement does not
-// say how it was held, and Fusion's line did not move under the edits. A FREE construction line turns under our dimension edit, mirror or no
-// mirror (the edit's least-change solve, task 528; measured in WORK-LOG TURN 585): reported as a divergence, not asserted here.
+// The construction line is FREE (no vertical, no point on an axis), as measured: Fusion keeps a free mirror line still under the edits (task 611
+// measured it again with the real mouse); ours holds it since task 611 (a typed value moves only the operand that gives way and what must follow
+// it, #core/creation-placement.js solveGivingWay). The two values are typed one after the other, as in Fusion (A 3 -> 4, then the circle).
 // The flow, as a user does it: the ribbon's Mirror (nothing selected: the OBJECTS step), click A, B and the circle, Enter (the LINE step), click the
 // construction line, Enter. Then Ctrl+Z / Ctrl+Y, the panel DOF, a save + reload (the autosave and the app's own restore), the dimension edits (the
-// dimension box's seam, commitDimensionEdits) in the reloaded app.
+// dimension box's seam, commitDimensionEdits, one value at a time) in the reloaded app.
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
@@ -36,8 +36,6 @@ const k0 = L.point(S, 0, -10), k1 = L.point(S, 0, 50);
 const CL = L.line(S, k0, k1, true);                                   // the construction line x = 0
 const [A, B] = L.polyline(S, [[0, 40], [-30, 40], [-30, 10]], false); // A then B, the line tool's chain (corner = a coincident)
 const make = (type, p) => ConstraintManager.createConstraint(S.state, type, p, { source: 'test' });
-make('vertical', { joints: [k0, k1] });
-make('pointOnLine', { joint: k0, shape: 'ref_axis_y' });
 make('pointOnLine', { joint: A.a, shape: CL });
 make('horizontal', { joints: [A.a, A.b] });
 make('vertical', { joints: [B.a, B.b] });
@@ -130,19 +128,25 @@ try {
 
   // ---- driving: Fusion's dimension edits move the copy; the copy has no dimension of its own
   const dimA = dims().find((c) => c.joints && c.joints.includes(ids.Aa)), dimK = dims().find((c) => c.isRadius && c.shape === ids.K);
-  const res = commitDimensionEdits(st(), [{ c: dimA, value: 40 }, { c: dimK, value: 8 }]);
-  ok(!res.reverted, 'the dimension edits are accepted: ' + JSON.stringify(res));
+  const CL0 = shape(ids.CL).joints.map(P);
+  for (const [c, value] of [[dimA, 40], [dimK, 8]]) {
+    const res = commitDimensionEdits(st(), [{ c, value }]);
+    ok(!res.reverted, `the edit to ${value} is accepted: ` + JSON.stringify(res));
+  }
   app.frames(5);
   const [rA, rB, rK] = st().shapes.slice(before.shapes);
   const fmt = (id) => `(${J(id).x.toFixed(4)},${J(id).y.toFixed(4)})`;
-  console.log(`after 30 -> 40, R 5 -> 8: original A ${fmt(ids.Aa)} ${fmt(ids.Ab)}, B end ${fmt(ids.Bb)}; copy ${fmt(rA.joints[0])} ${fmt(rA.joints[1])} ${fmt(rB.joints[1])} r ${rK.radius.toFixed(4)}`);
+  const [c0, c1] = shape(ids.CL).joints;
+  console.log(`after 30 -> 40, R 5 -> 8: mirror line ${fmt(c0)} ${fmt(c1)}; original A ${fmt(ids.Aa)} ${fmt(ids.Ab)}, B end ${fmt(ids.Bb)}; copy ${fmt(rA.joints[0])} ${fmt(rA.joints[1])} ${fmt(rB.joints[1])} r ${rK.radius.toFixed(4)}`);
   const CLends = shape(ids.CL).joints.map(P);
+  // Fusion: the FREE mirror line stays where it was, (0,-1)-(0,5) cm
+  ok(near(CL0[0], { x: 0, y: -10 }) && near(CL0[1], { x: 0, y: 50 }) && CLends.every((p, i) => near(p, CL0[i])), `the free construction line stays on x = 0: ${fmt(c0)} ${fmt(c1)}`);
   ok([rA.joints[0], rA.joints[1], rB.joints[1]].every((q, i) => near(P(q), mirrorPoint(P([ids.Aa, ids.Ab, ids.Bb][i]), ...CLends), 1e-6)),
     'the copy is still the exact mirror image of A and B (the on-line copy point included)');
-  // Fusion: (4,4), (4,1). x exactly; y within 0.05 mm (our edit's least-change solve lets A's height drift by a few hundredths, mirror or not)
-  ok(Math.abs(J(rA.joints[1]).x - 40) < 1e-4 && Math.abs(J(rB.joints[1]).x - 40) < 1e-4, 'the copy\'s corner and end moved to x = 4 cm (Fusion\'s numbers, x10)');
-  ok(Math.abs(J(rA.joints[1]).y - 40) < 0.05 && Math.abs(J(rB.joints[1]).y - 10) < 0.05, 'the copy\'s corner is at y = 4 cm and its end at y = 1 cm (within 0.05 mm)');
-  ok(Math.abs(rK.radius - 8) < 1e-4 && near(P(rK.joints[0]), { x: 15, y: 20 }, 1e-4), 'the copy circle: r 0.8 (Fusion\'s), centre (1.5,2)');
+  // Fusion (cm, x10): A (0,4)->(-4,4), B's end (-4,1); the copy (4,4), (4,1), r 0.8 at (1.5,2); the original circle stays at (-1.5,2)
+  ok(near(P(ids.Aa), { x: 0, y: 40 }) && near(P(ids.Ab), { x: -40, y: 40 }) && near(P(ids.Bb), { x: -40, y: 10 }), `A (0,4)->(-4,4) and B's end (-4,1), Fusion's: ${fmt(ids.Aa)} ${fmt(ids.Ab)} ${fmt(ids.Bb)}`);
+  ok(near(P(rA.joints[0]), { x: 0, y: 40 }) && near(P(rA.joints[1]), { x: 40, y: 40 }) && near(P(rB.joints[1]), { x: 40, y: 10 }), 'the copy\'s corner (4,4) and end (4,1), Fusion\'s numbers x10');
+  ok(Math.abs(rK.radius - 8) < 1e-6 && near(P(rK.joints[0]), { x: 15, y: 20 }) && near(P(ids.Kc), { x: -15, y: 20 }), 'the copy circle: r 0.8 (Fusion\'s), centre (1.5,2); the original stays at (-1.5,2)');
   ok(dims().length === 2, 'still 2 dimensions: the copy has none of its own');
 
   // ---- Esc CANCELS at either step (Fusion's Esc): nothing is made, no undo step, the tool ends (Select), nothing stays selected

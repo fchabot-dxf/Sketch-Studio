@@ -23,9 +23,6 @@
  "dim-vertical.B_fixfull.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
  "dim-vertical.B_hv.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
  "dim-vertical.B_dim.AB": "after task 525: Fusion moves the picked point alone (the line stretches); ours translates the line (the graded cells translate it)",
- "dim-length.free.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
  "dim-length.A_fixfull.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
- "dim-length.A_hv.A": "same shape (the two ends of one line): no pre-placement (task 525 rule), the solve moves both ends where Fusion moves one; on a fully fixed line Fusion refuses the dimension, ours adds it as a reference (task 526)",
- "dim-radius-arc.free.A": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve moves the centre too where Fusion keeps it; on a fully fixed arc Fusion refuses the dimension, ours adds it as a reference (task 526)",
  "dim-radius-arc.A_fixfull.A": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve moves the centre too where Fusion keeps it; on a fully fixed arc Fusion refuses the dimension, ours adds it as a reference (task 526)"
 }

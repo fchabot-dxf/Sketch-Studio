@@ -225,57 +225,6 @@
    "dim-vertical|LL|3,0#zero"
   ]
  },
- "both-operands": {
-  "reason": "Fusion moves ONE operand of the dimension (the second picked, or the one that is not held); ours spreads the change over both ends / both lines (least change)",
-  "runs": [
-   "dim-length|L|0#grow2",
-   "dim-length|L|0#shrink05",
-   "dim-length|L|0#tiny",
-   "dim-length|L|0#huge20",
-   "dim-length|L|3#grow2",
-   "dim-length|L|3#shrink05",
-   "dim-length|L|3#tiny",
-   "dim-length|L|3#huge20",
-   "dim-length|C|0#grow2",
-   "dim-length|C|0#shrink05",
-   "dim-length|C|0#tiny",
-   "dim-length|C|0#huge20",
-   "dim-length|R|0#grow2",
-   "dim-length|R|0#shrink05",
-   "dim-length|R|0#tiny",
-   "dim-length|R|0#huge20",
-   "dim-point-line|PL|0,0#grow2",
-   "dim-point-line|PL|0,0#shrink05",
-   "dim-point-line|PL|0,0#tiny",
-   "dim-point-line|PL|0,0#huge20",
-   "dim-point-line|PL|0,0#zero",
-   "dim-point-line|PL|0,3#grow2",
-   "dim-point-line|PL|0,3#shrink05",
-   "dim-point-line|PL|0,3#tiny",
-   "dim-point-line|PL|0,3#huge20",
-   "dim-point-line|PL|0,3#zero",
-   "dim-point-line|PL|0,4#grow2",
-   "dim-point-line|PL|0,4#shrink05",
-   "dim-point-line|PL|0,4#tiny",
-   "dim-point-line|PL|0,4#huge20",
-   "dim-point-line|PL|0,4#zero",
-   "dim-point-line|LL|0,0#grow2",
-   "dim-point-line|LL|0,0#shrink05",
-   "dim-point-line|LL|0,0#tiny",
-   "dim-point-line|LL|0,0#huge20",
-   "dim-point-line|LL|0,0#zero",
-   "dim-line-line|LL|0,0#grow2",
-   "dim-line-line|LL|0,0#shrink05",
-   "dim-line-line|LL|0,0#tiny",
-   "dim-line-line|LL|0,0#huge20",
-   "dim-line-line|LL|0,0#zero",
-   "dim-line-line|LL|4,0#grow2",
-   "dim-line-line|LL|4,0#shrink05",
-   "dim-line-line|LL|4,0#tiny",
-   "dim-line-line|LL|4,0#huge20",
-   "dim-line-line|LL|4,0#zero"
-  ]
- },
  "zero-length": {
   "reason": "a zero value: Fusion cannot solve it (the sketch goes to an error state, the geometry stays); ours accepts 0 for the edited dimension and collapses the length",
   "runs": [
@@ -293,14 +242,19 @@
    "dim-radius|O|c#negative"
   ]
  },
- "arc-centre": {
-  "reason": "arc radius: Fusion keeps the arc centre and moves the end points; ours moves the centre as well (least change over the whole arc)",
+ "both-operands": {
+  "reason": "Fusion moves ONE operand of the dimension (the second picked, or the one that is not held); ours spreads the change over both ends / both lines (least change)",
   "runs": [
-   "dim-radius|A|0#grow2",
-   "dim-radius|A|0#shrink05",
-   "dim-radius|A|0#tiny",
-   "dim-radius|A|0#huge20",
-   "dim-radius|A|0#zero"
+   "dim-line-line|LL|0,0#grow2",
+   "dim-line-line|LL|0,0#shrink05",
+   "dim-line-line|LL|0,0#tiny",
+   "dim-line-line|LL|0,0#huge20",
+   "dim-line-line|LL|0,0#zero",
+   "dim-line-line|LL|4,0#grow2",
+   "dim-line-line|LL|4,0#shrink05",
+   "dim-line-line|LL|4,0#tiny",
+   "dim-line-line|LL|4,0#huge20",
+   "dim-line-line|LL|4,0#zero"
   ]
  }
 }

@@ -12,6 +12,7 @@ import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier
 import { seedFilletForRadius, filletHasCollapsedLine, filletLines } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
 import { replaceParameters, usersOf } from '#core/parameters.js';
 
@@ -107,13 +108,16 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     // (bit-identical to the old single edit); a batch of several edits is a re-solve of the sketch at new values (what Fusion does for a
     // parameter change) and does NOT place. Known consequence: N independent single edits may land a different (equally valid) pose than the batch.
     const placing = list.length === 1;
+    // TASK 611: a single edit's solve moves the operand that gives way and what must follow it, the rest of the sketch held (solveGivingWay,
+    // Fusion measured); a batch, and a fillet radius (seeded above), keep the plain solve of the whole sketch.
+    const giving = placing && !fillets[0] ? {} : null;
     let result;
     for (let k = 1; k <= steps; k++) {
       list.forEach((e, i) => {
         e.c.value = (fillets[i] || k === steps) ? e.value : from[i] + (e.value - from[i]) * (k / steps);
         if (placing && !fillets[i]) ConstraintManager.placeForCreation(state, e.c.type, e.c);
       });
-      result = engine.solve(ITER());
+      result = giving ? solveGivingWay(state, list[0].c, giving, ITER()) : engine.solve(ITER());
       if (result && result.converged === false) break;
     }
     list.forEach(e => { e.c.value = e.value; });

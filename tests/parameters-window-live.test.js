@@ -80,10 +80,11 @@ await (async () => {
     await mouse('mouseMoved', (A.x + B.x) / 2, A.y - 50); await sleep(200); await click((A.x + B.x) / 2, A.y - 50);
     await waitFor(`(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`, 'the dimension value box', 8000);
     await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`);
-    await send('Input.insertText', { text: '150' }); await key('Enter', 'Enter', 13); await sleep(600);
+    // 3 mm: about the drawn length (200 px), so the line and its label stay on screen; a typed length moves the line's END (Fusion, task 611)
+    await send('Input.insertText', { text: '3' }); await key('Enter', 'Enter', 13); await sleep(600);
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 1`, 'a dimension row to appear');
     let r = await rows();
-    assert.deepStrictEqual(r.map((x) => [x.kind, x.name, x.cells[1], x.cells[2], x.cells[3]]), [['dimension', 'd1', '150.0', '150.0', 'mm']], 'the row: name d1, plain value, value, unit: ' + JSON.stringify(r));
+    assert.deepStrictEqual(r.map((x) => [x.kind, x.name, x.cells[1], x.cells[2], x.cells[3]]), [['dimension', 'd1', '3.0', '3.0', 'mm']], 'the row: name d1, plain value, value, unit: ' + JSON.stringify(r));
     assert(/Distance/.test(r[0].cells[4]), 'the row says what it measures: ' + r[0].cells[4]);
     assert.deepStrictEqual(await groupHeads(), ['User parameters(0)', 'Sketch dimensions(1)']);
     // canvas selection lights the row; clicking empty canvas clears it

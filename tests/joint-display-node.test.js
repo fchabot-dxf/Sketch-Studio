@@ -97,7 +97,7 @@ const makeDoc = (joints, shapes, constraints = []) => ({
   assert.strictEqual(dots[0].cx, 50);
   assert.strictEqual(dots[0].cy, 40);
   assert.match(dots[0].fill, /--sk-joint-fill/, 'hovered unselected point stays white fill');
-  assert.match(dots[0].stroke, /--sk-joint-ring.*#333333/i, 'hovered point ring is the normal rest ring (no blue)');
+  assert.match(dots[0].stroke, /--sk-joint-ring-hover.*#000000/i, 'hovered point ring is 100% black (no blue)');
   assert.ok(!/--sk-selection/.test(dots[0].stroke), 'hovered point is not blue');
   const halos = hoverHaloDots(app.svg);
   assert.strictEqual(halos.length, 0, 'hovered point draws no outer halo');

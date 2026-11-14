@@ -14766,3 +14766,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 - Addition: the ring of a point drawn at rest (open ends, centres, lone points, hovered points) is 80% black #333333 via a new token --sk-joint-ring (sketcher.css default; svg-renderer.js JOINT_RING + SK_VAR). Hosts that override --sk-geo-fixed per theme also set it so their look is unchanged: Shaper dark root #e6e6e6, Shaper cream Design #333333 (was #202020), Trace Edit canvas #333333 (was #202020). Selected points keep the blue ring; origin keeps its own look. Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual, style-templates.
 
+
+- Refinement: a HOVERED point's ring is 100% black via --sk-joint-ring-hover (#000000, declared next to --sk-joint-ring in sketcher.css; Shaper dark root #ffffff, Shaper cream and Trace #000000). Same thickness, white fill, no blue; hover set = hovered cluster, highlighted joint, active snap (as before). Used as a full var() string in the joint loop, not through SK_VAR (that map is by hex and #000000 is used elsewhere). Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual.
+

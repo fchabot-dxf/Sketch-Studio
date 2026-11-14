@@ -203,6 +203,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
   const HOVER_COLOR = '#017AFD'; // not a setting: skv() maps this hex to the shared --sk-selection token
   const JOINT_RING = '#333333'; // ring of a point at rest: skv() maps it to --sk-joint-ring
+  const JOINT_RING_HOVER = 'var(--sk-joint-ring-hover, #000000)'; // hovered point (not in SK_VAR: that map is by hex and #000000 is used elsewhere)
 
   // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
   function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
@@ -1336,10 +1337,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
     if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
 
-    // Hover only makes a hidden point appear (isPointVisible); a visible point is drawn the same hovered or not. Selected: blue ring, tinted fill.
+    // Hover only makes a hidden point appear (isPointVisible); a hovered visible point differs from rest only by a 100% black ring. Selected: blue ring, tinted fill.
     const r = scale(BASE_JOINT_RADIUS);
     const fill = isSelected ? SELECTED_JOINT_FILL : 'white';
-    const stroke = isSelected ? '#017AFD' : JOINT_RING;
+    const isHighlight = (highlight.kind === 'joint' && highlight.id === leader);
+    const isPointHovered = isHovered || isHighlight || isActiveSnap;
+    const stroke = isSelected ? '#017AFD' : isPointHovered ? JOINT_RING_HOVER : JOINT_RING;
     const strokeW = scale(isSelected ? BASE_JOINT_STROKE_SELECTED : BASE_JOINT_STROKE);
 
     // Main joint circle

@@ -180,7 +180,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const hovOpenDot = getPointAt(90, 10);
   assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw) < 1e-6, 'hovered point ring is the rest width');
   assert.match(hovOpenDot.getAttribute('style'), /fill:var\(--sk-joint-fill, white\)/, 'hovered point keeps white fill');
-  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring, #333333\)/i, 'hovered point ring is the normal rest ring');
+  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring-hover, #000000\)/i, 'hovered point ring is 100% black');
 
   // Click open end p1: ring is 1.5x thicker and bright Fusion blue, fill is blue-tinted
   app.click(p1s.x, p1s.y);

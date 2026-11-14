@@ -27,6 +27,8 @@ function injectStyles() {
   if (document.getElementById('sk-doctabs-styles')) { stylesInjected = true; return; }
   const s = document.createElement('style'); s.id = 'sk-doctabs-styles';
   s.textContent = `
+:root { --sk-doctabs-row: 26px; } /* TASK 605: the strip's whole row height (the 25 px tabs + the 1 px line), for a host whose views are placed absolutely under the header (Shaper) */
+@media (pointer: coarse) { :root { --sk-doctabs-row: 45px; } }
 .sk-doctabs { --sk-doctabs-h: 25px; --sk-doctab-inset: 3px; --sk-doctabs-gap: 2px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 18px;
   --sk-doctabs-font: 11px; --sk-doctab-dot: 6px; }
 @media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 44px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; } }

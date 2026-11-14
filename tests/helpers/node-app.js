@@ -184,14 +184,13 @@ const HOSTS = {
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
   // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Explore, Vcarve and Review views are not mounted.
   async shaper({ win, store }) {
-    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }] = await Promise.all([
+    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
-      import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js')]);
+      import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js'), import('../../apps/shaper/src/shaper-session.js')]);
     const doc = win.document;
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
     let controller = null, modes = null, ribbon = null, buffer = null;
-    const statusEl = doc.getElementById('save-status');
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(),
       panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
@@ -204,14 +203,14 @@ const HOSTS = {
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, statusEl, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win });
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
       buffer.restore(); buffer.start();
     };
     modes = M.createModeRouter({ views: M.findViews(doc), modeBtns: [...doc.querySelectorAll('.mode-btn')], exploreActions: doc.getElementById('explore-actions'),
       getController: () => controller, ensureSketch, enter: { prepare: prepare.enter } });
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
-    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, statusEl, modes, prepare, frame: () => runFrames(1) };
+    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => runFrames(1) };
   },
   // apps/penplotter/src/main.js: the stage pipeline = mountStages() (apps/penplotter/src/stages.js, which the page calls too): the nav, the stage
   // bodies, the router, the Design stage (mountSketchStage: the sketcher, the ribbon, the buffer, the plotter sidecar) and the hidden Draw host. The
@@ -237,7 +236,7 @@ const HOSTS = {
       const poll = () => { if (svg.dataset.docReady === '1') res(); else if (Date.now() > end) rej(new Error('node-app: the Pen Plotter restore did not finish')); else nodeTimers.setTimeout(poll, 5); };
       poll();
     });
-    return { svg, state: controller.state, engine: controller.engine, ribbon: null, buffer, statusEl: doc.getElementById('save-status'), plotterDoc, plotter: pstate.state, router, frame: () => runFrames(1) };
+    return { svg, state: controller.state, engine: controller.engine, ribbon: null, buffer, plotterDoc, plotter: pstate.state, router, frame: () => runFrames(1) };
   },
 };
 
@@ -295,7 +294,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   };
 
   const app = {
-    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, prepare: m.prepare, controller: m.controller,
+    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, router: m.router, prepare: m.prepare, controller: m.controller,
     frames,
     /** world -> screen through the app's own transform (#ui/coords.js worldToScreen, the svg's live viewBox) */
     toScreen: (wx, wy) => { const p = worldToScreen(svg, { x: wx, y: wy }); return { x: Math.round(p.x), y: Math.round(p.y) }; },
@@ -359,7 +358,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
     tool(name) { const b = doc.getElementById('tool-' + name); if (!b) throw new Error('node-app: no ribbon button #tool-' + name + ' in ' + host); b.click(); frames(); },
     /** the autosave writes now (the page-hide path, as cdp-browser.js flushAutosave does); returns the stored current design's document */
     async storedDoc() { win.dispatchEvent(new win.Event('pagehide')); await buffer.flush(); const d = await store.loadCurrent({ app: host }); return d ? d.document : null; },
-    saveStatus: () => m.statusEl.textContent,
+    saveStatus: () => m.svg.dataset.saveState, // TASK 605: the canvas's data-save-state ('saving' | 'saved' | 'error' | 'idle'; no header text any more)
     /** override 15: is a file chooser open (an <input type=file> was clicked and not answered)? */
     hasFileChooser: () => { const c = fileChoosers.get(win); return !!(c.input && c.input.isConnected); },
     /** override 15: answer the open chooser with a file { name, text }: the input holds that File and its change fires */

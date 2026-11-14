@@ -15,6 +15,7 @@ import { sampleArc, loopPolygon, polyArea, pointInPolygon, loopToPathD, chainToP
 import { resolveProfileViews, resolveProfileForLoop, resolveProfileAtPoint, derivedProfileForLoop, resolveTargetKey, deriveCutTravel, nearestPointOnPaths } from '#core/profile-model.js';
 import { handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, handlePanZoomWheel, fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { screenToWorld } from '#ui/coords.js';
+import { updateViewBox } from '#ui/input-manager.js'; // TASK 605: put a document tab's own Prepare view back
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 // TASK 455: every colour/width of the Prepare look is a CSS class + --sk-prep-* token in apps/shaper/index.html (no hex here).
@@ -487,11 +488,19 @@ export function mountPrepareView(state, svgEl, opts = {}) {
     return last;
   };
   const selectedTargets = () => [...selection.values()];
+  // TASK 605: a document tab keeps its Prepare selection and view aside while another tab shows (prepare-session.js); these put them back on a fresh mount.
+  const setSelection = (targets) => {
+    selection.clear();
+    for (const t of targets) selection.set(targetKey(t), t);
+    renderSelection(); renderHover();
+    onSelectionChange(selectedTarget());
+  };
+  const setView = (v) => { Object.assign(view, v); updateViewBox(svgEl, view); };
 
   refreshLook(); // paint the persisted cut plan — flat tint + tool-aware look
 
   return {
-    loops, selection, resolveTarget, selectedTarget, selectedTargets, profileLoopsForTarget,
+    loops, selection, resolveTarget, selectedTarget, selectedTargets, profileLoopsForTarget, setSelection, setView,
     view, viewState,
     recordFor: (t) => (t ? getCutRecord(targetKey(t)) : null),
     availableTypesFor: (t) => (t ? availableTypes(t.kind) : []),

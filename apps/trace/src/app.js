@@ -20,6 +20,7 @@ import { initScale }                      from './scale.js';
 import { initPreview }                    from './preview.js';
 import { trace }                          from './tracer.js';
 import { downloadSVG, downloadDXF, copySVG } from './export.js';
+import { createTraceSession }          from './trace-session.js'; // TASK 605: a document tab's photo, mask, trace and scale, declared once
 import { mountEdit, getEditBuffer, getEditState, startEdit, stopEdit, importToEdit } from './edit-view.js';
 import { mountImportDrop }                from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's drop on the Edit tab
 
@@ -30,7 +31,8 @@ import { mountImportDrop }                from '#ui/sketch-import.js'; // TASK 5
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
   swHost.appendChild(mountProjectSidebar({
-    appId: 'trace', getBuffer: () => getEditBuffer(), importFile: (text, name) => importDrawing(text, name),
+    appId: 'trace', getBuffer: () => getEditBuffer(), documentTabs: true, // TASK 605: the document tab strip under the header, in every tab
+     importFile: (text, name) => importDrawing(text, name),
     hostActions: [
       { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
       { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
@@ -83,6 +85,7 @@ function switchTab(id) {
   Object.entries(tabPanes).forEach(([k, el]) => {
     if (el) el.hidden = k !== id;
   });
+  if (id === 'trace') scaleCtl.redrawLine(); // the reference line is drawn in display pixels: it needs the tab showing
   if (id === 'edit') { startEdit(); updateExportButtons(); } // the shared Design canvas draws only while its tab shows (idempotent start)
   else stopEdit();
   if (id === 'export') {
@@ -95,22 +98,44 @@ tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab))
 
 // ── Modules init ──────────────────────────────────────────────────────────────
 const preview = initPreview(eventBus);
-const { setImageSize } = initScale(eventBus);
+const scaleCtl = initScale(eventBus);
+const { setImageSize } = scaleCtl;
 initUpload(eventBus);
 const { getParams, setParams } = initControls(eventBus);
 
 // TASK 567: the Edit canvas is mounted now and bound to the project store. What Trace keeps of a design in its sidecar (doc.hosts.trace) is the
 // trace PARAMETERS and the image name; NOT the photo (see WORK-LOG TURN 567: the traced geometry in the sketch IS the design, the photo is a
 // 3-25 MB re-trace source), and not the scale (mm per photo pixel: meaningless without the photo's pixel size).
+let traceGen = 0; // bumped when a tab switch replaces the photo: a trace still running for the old photo must not land in the new one
+let sidecarName = null; // the image name of the design shown, from its sidecar
+let traceTimer = null;
+const traceSession = createTraceSession({
+  state, preview, scale: scaleCtl,
+  ui: {
+    cancelTrace: () => { traceGen++; clearTimeout(traceTimer); preview.showTracing(false); },
+    showPhotoUi: (has, traced) => {
+      const originalEmpty = document.getElementById('original-empty');
+      if (originalEmpty) originalEmpty.style.display = has ? 'none' : '';
+      const btn = document.getElementById('btn-send-to-edit');
+      if (btn) btn.disabled = !traced;
+      updateExportButtons(); updateScaleNote();
+    },
+    fallbackName: () => sidecarName || 'trace',
+    // the Trace tab shows no photo for this design: if the design is a drawing, show it (the same rule as opening a stored design: a design is its sketch)
+    onNoPhoto: () => { if (!tabPanes.trace.hidden && getEditState().shapes.length) { switchTab('edit'); toast('This design has no photo: showing its drawing in Edit', 'info'); } },
+  },
+});
 mountEdit({
   isActive: () => !tabPanes.edit.hidden,
   getHostData: () => ({ imageName: state.imageName, params: getParams() }),
-  applyHost: (side) => { // a design without a trace sidecar gets the defaults: it must not inherit the previous design's controls
+  session: traceSession, // TASK 605
+  applyHost: (side, reason) => { // a design without a trace sidecar gets the defaults: it must not inherit the previous design's controls
     setParams({ ...DEFAULT_PARAMS, ...(side && side.params) });
-    if (side && side.imageName && !state.imageCanvas) state.imageName = side.imageName;
-    if (getEditState().shapes.length) switchTab('edit'); // a stored design is its sketch: show it (the photo is not kept, so the Trace tab would be empty)
+    sidecarName = side && side.imageName ? side.imageName : null;
+    // the name rides the sidecar: a new / switched-to design shows ITS name before the unsaved baseline is taken (an Untitled's name is part of what "changed" means)
+    if (reason === 'new' || reason === 'switch' || !state.imageCanvas) { if (sidecarName || reason === 'new' || reason === 'switch') state.imageName = sidecarName || 'trace'; }
+    if (reason !== 'switch' && getEditState().shapes.length) switchTab('edit'); // TASK 605: a tab switch stays in the tab the user is in (the photo session decides below) // a stored design is its sketch: show it (the photo is not kept, so the Trace tab would be empty)
   },
-  onStatusChange: (st) => setStatus(st === 'saving' ? 'Saving…' : st === 'saved' ? 'Saved' : ''),
 });
 
 preview.onMaskChanged(() => scheduleTrace());
@@ -143,8 +168,6 @@ eventBus.on('scaleChanged', ({ scale, unit }) => {
 });
 
 // ── Trace (debounced) ─────────────────────────────────────────────────────────
-let traceTimer = null;
-
 function scheduleTrace() {
   if (!state.imageCanvas) return;
   clearTimeout(traceTimer);
@@ -155,9 +178,11 @@ async function runTrace() {
   const maskedImageData = preview.getMaskedImageData();
   if (!maskedImageData) return;
   
+  const gen = traceGen;
   preview.showTracing(true);
   try {
     const svg = await trace(maskedImageData, state.params);
+    if (gen !== traceGen) return; // a tab switch replaced the photo while this trace ran
     state.svgString = svg;
     preview.setSVG(svg);
     // Enable "Send to Editor"
@@ -246,12 +271,6 @@ function toast(msg, type = 'info') {
   el.innerHTML = `<span>${icon}</span> ${msg}`;
   container.appendChild(el);
   setTimeout(() => el.remove(), 3000);
-}
-
-// ── Status bar helper ─────────────────────────────────────────────────────────
-function setStatus(msg) {
-  const el = document.getElementById('tr-status');
-  if (el) el.textContent = msg;
 }
 
 // Boot on first tab

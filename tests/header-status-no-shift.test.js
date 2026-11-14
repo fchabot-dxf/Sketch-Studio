@@ -1,37 +1,31 @@
-// tests/header-status-no-shift.test.js -- TASKS 522 + 557: the autosave status text ("", "Saving…", "Saved") must never move anything beside it
-// (a control that jumps sideways between the mouse move and the press makes the click land beside it).
-//  - Pen Plotter and Shaper own an #save-status before #mode-nav: the left edge of EVERY tab is identical for all three texts, and the
-//    "Saving…" text (the widest) ends left of the first tab by >= 4 px (a clean gap, not text touching the tab).
-//  - SketchStudio has NO status text (TASK 602, owner: "don't need a saved label"): its document tab's dot shows unsaved / saving / failed, and
-//    the save state is on the canvas (data-save-state, document-buffer.js); the header's controls are the menu button, Design, Style and Debug.
-//  - SketchStudio's static "X: 0 Y: 0" pointer readout (#coords-text, nothing ever updated it) is gone.
-// (The text is set on the element the app's onStatusChange closure writes: that closure is not exported.)
+// tests/header-status-no-shift.test.js -- TASKS 522 + 557, reworked by TASKS 602 + 605: NO app has an autosave status text in its header any more. The save state is the
+// document tab's dot (document-tabs.js: unsaved / saving / failed) and the canvas's data-save-state (document-buffer.js); a failed save also shows in the menu's status
+// line ("Not saved to Google Drive..."). So nothing in a header can move when the state changes, which is what the old text had to be measured for (a control that jumps
+// sideways between the mouse move and the press makes the click land beside it).
+//  - Pen Plotter, Shaper, Trace (TASK 605): no #save-status / #tr-status; the header's mode buttons keep their x / width / height when the tab strip is hidden and shown
+//    (the strip is its own row below the header); the strip is the next sibling of the header.
+//  - SketchStudio (TASK 602): the header's controls are the menu button, Design, Style and Debug; Design is the one mode button (Export is in the menu); the static
+//    "X: 0 Y: 0" pointer readout (#coords-text) is gone.
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
-
-const TEXTS = ['', 'Saving…', 'Saved'];
-const MIN_GAP_PX = 4;
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '522s' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { evalJs, waitFor, navigate, port } = cdp;
-  // for each text: the left edges of the `sel` elements, the status text's right edge, the next element's left edge, and the box's fit
-  const measure = (sel) => evalJs(`(() => { const s = document.getElementById('save-status'); const o = {};
-    for (const t of ${JSON.stringify(TEXTS)}) { s.textContent = t; const r = document.createRange(); r.selectNodeContents(s);
-      o[t || 'empty'] = { lefts: [...document.querySelectorAll(${JSON.stringify(sel)})].map((b) => b.getBoundingClientRect().left),
-        textRight: t ? r.getBoundingClientRect().right : null, boxRight: s.getBoundingClientRect().right,
-        nextLeft: s.nextElementSibling ? s.nextElementSibling.getBoundingClientRect().left : null }; } return o; })()`);
+  const headerRects = () => evalJs(`[...document.querySelector('header').querySelectorAll('button, select, input')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; })`);
   try {
-    for (const app of ['penplotter', 'shaper']) {
+    for (const [app, tabs] of [['penplotter', '#mode-nav button'], ['shaper', '#mode-nav button'], ['trace', '.tr-tab']]) {
       await navigate(`http://127.0.0.1:${port}/apps/${app}/index.html`, 8000);
-      await waitFor(`!!document.querySelector('#save-status') && document.querySelectorAll('#mode-nav button').length > 1`, app + ' header ready');
-      const m = await measure('#mode-nav button');
-      assert.deepStrictEqual(m['Saving…'].lefts, m.empty.lefts, `${app}: "Saving…" moves the tabs`);
-      assert.deepStrictEqual(m.Saved.lefts, m.empty.lefts, `${app}: "Saved" moves the tabs`);
-      const gap = m['Saving…'].nextLeft - m['Saving…'].textRight;
-      assert.ok(gap >= MIN_GAP_PX, `${app}: "Saving…" ends ${gap.toFixed(1)} px before the first tab (need >= ${MIN_GAP_PX})`);
-      console.log(app, 'tab lefts identical for all status texts:', m.empty.lefts.map(Math.round).join(','), '; gap after "Saving…":', gap.toFixed(1), 'px');
+      await waitFor(`!!document.querySelector('.sk-doctabs') && document.querySelectorAll(${JSON.stringify(tabs)}).length > 1`, app + ' header + strip ready');
+      assert.strictEqual(await evalJs(`document.getElementById('save-status') || document.getElementById('tr-status')`), null, app + ': no header status text (TASK 605: the tab dot shows the save state)');
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').previousElementSibling === document.querySelector('header')`), true, app + ': the strip is the next sibling of the header');
+      const withStrip = await headerRects();
+      await evalJs(`document.querySelector('.sk-doctabs').hidden = true`); await new Promise((r) => setTimeout(r, 100));
+      const without = await headerRects();
+      await evalJs(`document.querySelector('.sk-doctabs').hidden = false`);
+      assert.deepStrictEqual(withStrip, without, app + ': every header control keeps its x, y, width and height with or without the strip');
+      console.log(app, 'no status text; header controls fixed:', withStrip.length, 'controls');
     }
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);

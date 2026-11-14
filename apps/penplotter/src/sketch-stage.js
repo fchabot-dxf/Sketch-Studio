@@ -279,11 +279,11 @@ export function mountSketchStage(view, ctx = {}) {
   try { controller.engine.solve(500); } catch (_) {} // UNIFY-throttle: converge the seed once (per-frame solve is now gated)
 
   // PERSIST-2: restore the shared cross-app document (if any), then keep autosaving.
-  const saveStatusEl = document.getElementById('save-status');
   // TASK 474: the SAME restore runs after the initial restore and after Open / New / Open from file (onRestored); a design with no
   // plotter sidecar resets the plotter state to defaults (it must not inherit the previous design's pens and toolpaths).
   docBuffer = createDocumentBuffer({ ...plotterBufferOptions({ // design-canvas.js: the restore, the plotter sidecar, the status
-    controller, canvas: designCanvas, statusEl: saveStatusEl,
+    controller, canvas: designCanvas,
+    afterSession: () => renderArt(), // TASK 605: the Toolpath panels + canvas show the tab's own selection
     refreshPanels: () => { if (infoPanel) infoPanel.refresh(); },
     afterSidecar: refreshAfterPlotterRestore,
   }), ...ctx.bufferSeams }); // TASK 583: ctx.bufferSeams = the buffer's own store / doc / win seams (the page passes none: stages.js)

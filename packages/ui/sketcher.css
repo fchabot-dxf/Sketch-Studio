@@ -62,7 +62,6 @@
 @media (max-width: 640px) {
   :root { --sk-header-h: 92px; }
   body > header.sk-phone-header { flex-wrap: wrap; height: var(--sk-header-h); gap: 4px; padding: 0 12px; box-sizing: border-box; }
-  body > header.sk-phone-header .save-status { margin-left: 0; }
   body > header.sk-phone-header .sk-phone-collapse { display: none; }
   body > header.sk-phone-header .sk-phone-tabs { order: 9; flex: 1 0 100%; height: 44px; gap: 4px; align-items: stretch; }
   body > header.sk-phone-header .sk-phone-tabs > button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 2px; }

@@ -17,7 +17,7 @@ import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mo
 const swHost = document.getElementById('app-sidebar-host');
 if (swHost) {
   swHost.appendChild(mountProjectSidebar({
-    appId: 'penplotter', getBuffer: () => getDocBuffer(), importFile: importDrawing, // TASK 566: "Import SVG / DXF…" in the file menu
+    appId: 'penplotter', getBuffer: () => getDocBuffer(), importFile: importDrawing, documentTabs: true, // TASK 605: the document tab strip under the header, in every stage // TASK 566: "Import SVG / DXF…" in the file menu
     hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the G-code (.zip)', onClick: () => onExportClick() },
     ],

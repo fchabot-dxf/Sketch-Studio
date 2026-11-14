@@ -14,6 +14,7 @@ import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
+import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { MODE_KEY, findViews, createModeRouter } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
@@ -42,13 +43,17 @@ canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
 inspector.init(document.getElementById('inspector'));
 
+let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
+let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
+
 // TASK 473: the shared app sidebar (hamburger, document actions, GO TO) in the header brand slot. This host declares ITS actions:
 // Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
 const _swHost = document.getElementById('app-sidebar-host');
 const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint (the header's .sk-phone-header rules)
 if (_swHost) {
   _swHost.appendChild(mountProjectSidebar({
-    appId: 'shaper', getBuffer: () => { ensureSketch(); return docBuffer; }, // the buffer is created with the sketch (lazily)
+    appId: 'shaper', getBuffer: () => docBuffer, // the buffer is created with the sketch, at boot (ensureSketch() before the first showMode, below); null until then
+    documentTabs: true, // TASK 605: the document tab strip under the header, in every mode
     importFile: (text, name) => importFileToSketch(text, name), // TASK 566: "Import SVG / DXF…" in the file menu
     hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
@@ -327,8 +332,6 @@ const modeBtns = [...document.querySelectorAll('.mode-btn')];
 const exploreActions = document.getElementById('explore-actions');
 let modes = null; // the mode router (created below, once the views it enters exist)
 
-let designController = null; // sketcher mounted once; RAF started while Design is active, paused otherwise
-let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); a sidebar reads it lazily
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
 let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thickness field after a document restore (assigned below)
 let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
@@ -397,11 +400,11 @@ function ensureSketch() {
   buildDesignUI();
 
   // PERSIST-2: restore the shared cross-app document (if any) before the RAF loop's first solve, then
-  // keep autosaving. statusEl is optional-safe (older cached HTML without #save-status just no-ops).
-  const statusEl = document.getElementById('save-status');
-  // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the status
+  // keep autosaving. The save state is the document tab's dot (TASK 605); a failed save also shows in the menu's status line.
+  // design-canvas.js shaperBufferOptions: the restore (solve, frame, the views below, then the cut plan + stock sidecar), the sidecar, the tab's stage state
   docBuffer = createDocumentBuffer(shaperBufferOptions({
-    controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID), statusEl,
+    controller: designController, canvas: document.getElementById(DESIGN_CANVAS_ID),
+    session: createShaperSession({ prepare, getVcarveView: () => vcarveView }), // shaper-session.js: Explore SVG, Prepare selection + view, Vcarve view
     refreshViews: () => { if (infoPanel) infoPanel.refresh(); if (vcarveView) vcarveView.refresh(); },
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
     afterSidecar: () => {
@@ -469,4 +472,5 @@ async function enterReview(st) {
 let initMode = 'explore';
 try { initMode = localStorage.getItem(MODE_KEY) || 'explore'; } catch (_) { /* storage blocked */ }
 if (initMode === 'simexport') initMode = 'review'; // TASK 459: the tab was renamed Simulate/Export -> Review
+ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
 showMode(initMode);

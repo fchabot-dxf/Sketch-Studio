@@ -21,10 +21,10 @@ let sidePanel        = null;
 /**
  * Mount the shared sketch canvas into the Edit tab ONCE, at boot (the project buffer must exist before the first tab visit so a saved design
  * is restored whichever tab the page opens on), and bind it to the shared project store through createDocumentBuffer, exactly as Pen Plotter's
- * and Shaper's Design canvases are. The host declares ITS sidecar (doc.hosts.trace): `getHostData()` at save time, `applyHost(hosts.trace | undefined)`
- * after every restore (initial, Open, New, Open from file). `isActive()`: the Edit tab is the showing one (gates the canvas's document-level input).
+ * and Shaper's Design canvases are. The host declares ITS sidecar (doc.hosts.trace): `getHostData()` at save time, `applyHost(hosts.trace | undefined, reason)`
+ * after every restore (initial, Open, New, Open from file, a tab switch). `isActive()`: the Edit tab is the showing one (gates the canvas's document-level input).
  */
-export function mountEdit({ isActive, getHostData, applyHost, onStatusChange }) {
+export function mountEdit({ isActive, getHostData, applyHost, session = null }) {
   const svgEl     = document.getElementById('design-canvas');
   const ribbonEl  = document.getElementById('design-ribbon');
   const bodyEl    = document.getElementById('design-body');
@@ -43,13 +43,12 @@ export function mountEdit({ isActive, getHostData, applyHost, onStatusChange }) 
 
   docBuffer = createDocumentBuffer({
     state: designController.state, app: 'trace', canvas: svgEl,
-    hostName: 'trace', getHostData,
+    hostName: 'trace', getHostData, session, // TASK 605: the tab's photo / mask / trace / scale (trace-session.js)
     onRestored: ({ hosts, reason }) => {
       try { designController.engine.solve(500); } catch (e) { console.error('solve after restore failed', e); }
       if (reason !== 'switch') fitToDrawing(svgEl, designController.state); // TASK 587: a tab switch keeps the tab's own view
-      applyHost(hosts && hosts.trace);
+      applyHost(hosts && hosts.trace, reason);
     },
-    onStatusChange,
   });
   docBuffer.restore();
   docBuffer.start();

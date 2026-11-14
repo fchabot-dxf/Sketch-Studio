@@ -206,8 +206,30 @@ export function initScale(eventBus) {
     recalcAndEmit();
   }
 
+  // TASK 605: a document tab keeps its own scale (the mode, the unit, both inputs and the reference line) while another tab shows (trace-session.js).
+  // setState(undefined) = a design with none yet: the first-run state. The reference line is drawn in display pixels, so it is (re)drawn by redrawLine()
+  // when the Trace tab shows (the tab is hidden while another one is open: the canvas has no size then).
+  function getState() { return { mode, unit, globalWidth: globalWidthInput.value, refLength: refLengthInput.value, p1, p2, linePxLen }; }
+  function setState(st) {
+    const v = st || { mode: 'global', unit: 'mm', globalWidth: '', refLength: '', p1: null, p2: null, linePxLen: 0 };
+    unit = v.unit;
+    unitBtns.forEach(b => b.classList.toggle('active', b.dataset.unit === unit));
+    updateUnitLabels();
+    globalWidthInput.value = v.globalWidth;
+    refLengthInput.value = v.refLength;
+    p1 = v.p1; p2 = v.p2; linePxLen = v.linePxLen;
+    refLineStatus.textContent = linePxLen > 0 ? `Line drawn: ${Math.round(linePxLen)} image-px` : 'No line drawn yet';
+    refLineStatus.classList.toggle('has-line', linePxLen > 0);
+    redrawLine();
+    setMode(v.mode); // recalculates and emits the scale
+  }
+  function redrawLine() {
+    clearRefLine();
+    if (p1 && p2 && imageW > 0 && canvas.getBoundingClientRect().width > 0) renderRefLine(p1, p2);
+  }
+
   // Init
   setMode('global');
 
-  return { setImageSize };
+  return { setImageSize, getState, setState, redrawLine };
 }

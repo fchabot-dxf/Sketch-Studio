@@ -52,7 +52,7 @@ let before, storedId;
     const saved = await app.storedDoc();
     const p = saved.hosts && saved.hosts.penplotter;
     assert(!!p && p.toolpaths.length === 2 && p.settings.draw_feed === 1234 && p.plotColors[0].name === 'Fine red', 'the setup is persisted');
-    assert.strictEqual(app.saveStatus(), 'Saved', 'autosave reports Saved');
+    assert.strictEqual(app.saveStatus(), 'saved', 'autosave reports saved (the canvas data-save-state)');
     before = observe(app);
     assert(before.plotter.toolpaths.length === 2 && before.plotter.plotColors.length >= 2, 'setup built the plotter state');
     assert(before.gcode.length === 2, 'two exportable toolpaths before reload: ' + before.gcode.length);

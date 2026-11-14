@@ -301,7 +301,26 @@ export function initPreview(eventBus) {
     tCtx.putImageData(tOut, 0, 0);
   }
 
+  // TASK 605: a document tab keeps its photo's mask while another tab shows (trace-session.js); clear() = a design with no photo
+  function getMask() {
+    if (originalCanvas.width === 0 || originalCanvas.height === 0) return null;
+    const c = document.createElement('canvas');
+    c.width = maskDataCanvas.width; c.height = maskDataCanvas.height;
+    c.getContext('2d').drawImage(maskDataCanvas, 0, 0);
+    return c;
+  }
+  function setMask(c) { if (c) maskDataCanvas.getContext('2d').drawImage(c, 0, 0); }
+  function clear() {
+    for (const c of [originalCanvas, thresholdOverlay, maskDataCanvas]) { c.width = 0; c.height = 0; }
+    const refSvg = document.getElementById('ref-svg');
+    if (refSvg) refSvg.innerHTML = '';
+    svgOutput.innerHTML = '';
+    if (emptyState) emptyState.style.display = '';
+    showTracing(false);
+  }
+
   return { 
+    getMask, setMask, clear,
     setImage, 
     setSVG, 
     showTracing, 

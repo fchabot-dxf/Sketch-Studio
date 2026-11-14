@@ -12,15 +12,47 @@ import { findNearbyJoint } from '#core/joints.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
-import { hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
+import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
-import { handleLiveLineKeyDown, updateLiveLinePreview, hideLiveInputs } from '#ui/input-handlers/live-dimension-input.js';
 
-let lineState = { lockedLength: null, lockedAngle: null, isDriven: false };
+// TASK 597: lockedLength / lockedAngle (degrees) are what the user TYPED in the length + angle boxes (null = the cursor sets it)
+let lineState = { lockedLength: null, lockedAngle: null };
+// the boxes shown since the segment's first click (base-tool's shared creation-box path); `cursor` = the last world point, `screen` = the last pointer
+const live = { boxOpen: false, cursor: null, screen: null };
+const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', digits: [1, 1] } };
+const MIN_LEN = 1e-4;
+
+const startOf = (state) => (state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null))) || null;
+const hasLock = () => lineState.lockedLength !== null || lineState.lockedAngle !== null;
+/** The segment's end: the cursor, but a typed length holds the length and a typed angle the angle (the other still follows the cursor). */
+function lockedEnd(spt, pt) {
+    if (!hasLock()) return pt;
+    const dx = pt.x - spt.x, dy = pt.y - spt.y;
+    const len = lineState.lockedLength !== null ? lineState.lockedLength : Math.hypot(dx, dy);
+    const ang = lineState.lockedAngle !== null ? lineState.lockedAngle * Math.PI / 180 : Math.atan2(dy, dx);
+    return { x: spt.x + Math.cos(ang) * len, y: spt.y + Math.sin(ang) * len };
+}
+function openLineBoxes(x, y) {
+    lineState.lockedLength = null; lineState.lockedAngle = null;
+    live.boxOpen = true; live.cursor = null; live.screen = { x, y };
+    openCreationBoxes({ clientX: x, clientY: y }, BOX, [0, 0]);
+}
+function closeLineBoxes() {
+    lineState.lockedLength = null; lineState.lockedAngle = null;
+    if (live.boxOpen) hideInput();
+    live.boxOpen = false; live.cursor = null; live.screen = null;
+}
+function redrawLinePreview(state) {
+    const spt = startOf(state);
+    if (!spt || !state.active || state.active.mode !== TOOL_MODES.LINE) return;
+    if (hasLock()) { state.activeInference = null; state.inference = null; }   // a typed size beats the inferred H / V / parallel
+    const pt = lockedEnd(spt, live.cursor || spt);
+    safeUpdatePreview(state, 'line', [state.active.start], pt, { lockedLength: lineState.lockedLength || undefined });
+}
 
 const SNAP_DEBUG = false;
 const localState = { isDragging: false, dragStartScreen: null };
@@ -125,32 +157,34 @@ function canApplyLineInference(state, startId, endId, newShapeId, activeInf) {
 }
 
 export function setupLineTool(svg, state) {
-    // Listen for live dimension commit from the unified input system (guarded for test envs)
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-        window.addEventListener('live-line-commit', (e) => {
-            dbg.log('line-tool', '[DEBUG LINE] live-line-commit event:', e.detail);
-            if (state.currentTool === TOOL_MODES.LINE && state.active) {
-                lineState.lockedLength = e.detail.length;
-                lineState.lockedAngle = e.detail.angle;
-                lineState.isDriven = !!e.detail.isDriven;
-                dbg.log('line-tool', '[DEBUG LINE] Locked state updated:', lineState);
-                try { finalizeLineFromActive(svg, state); } catch (err) { console.error('[DEBUG LINE] Finalize error:', err); }
-            }
-        });
-    }
+    setupNumericInput(svg, state);
+    state.onDrawCancelled(() => closeLineBoxes());   // another tool picked / Undo mid-draw: the boxes go with the draw
+    setupDimensionListeners(state, TOOL_MODES.LINE, {
+        guard: (detail) => detail.mode === 'dual' && detail.kind === 'line',
+        onPreview: (detail) => {
+            if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;   // only a TYPED field locks; the other shows the live cursor value
+            if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
+            redrawLinePreview(state);
+        },
+        onApply: (detail) => {
+            if (detail.confirmedBy !== 'enter') return;
+            if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;
+            if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
+            const spt = startOf(state);
+            if (!spt) return;
+            const end = lockedEnd(spt, live.cursor || spt);
+            if (!(Math.hypot(end.x - spt.x, end.y - spt.y) > MIN_LEN)) { detail.keepOpen = true; return; }   // no length yet (cursor still on the start, none typed): the boxes stay open
+            redrawLinePreview(state);
+            try { finalizeLineFromActive(svg, state); } catch (err) { console.error('[line-tool] Enter finalize error:', err); }
+            detail.keepOpen = true;   // the next segment of the chain has its boxes (opened by finalize), or the draw ended and hid them
+        }
+    });   // Esc inside the boxes is the canvas Esc (input-manager handleEscape)
 }
 
 export function handleLineKeyDown(e, svg, state) {
     dbg.log('line-tool', '[DEBUG LINE] KeyDown:', e.key);
     if (state.currentTool !== TOOL_MODES.LINE) return false;
     if (!state.active || !state.active.start) return false;
-
-    // Use unified live dimension input first — if a length is being typed,
-    // Enter belongs to that input.
-    if (handleLiveLineKeyDown(e, svg, state)) {
-        dbg.log('line-tool', '[DEBUG LINE] Handled by live input');
-        return true;
-    }
 
     // Enter: end the polyline chain, keeping only segments that were already
     // committed by clicks. The current preview segment (the rubber-band from
@@ -170,10 +204,7 @@ export function resetLineState(state) {
     justCreatedActive = false;
     lastLineCommitTime = 0;
     pendingStepSnapshot = null;
-    lineState.lockedLength = null;
-    lineState.lockedAngle = null;
-    lineState.isDriven = false;
-    hideLiveInputs();
+    closeLineBoxes();
     resetToolState(state, TOOL_MODES.LINE, localState);
 }
 
@@ -233,10 +264,7 @@ export function handleLinePointerDown(e, svg, state, hitSnap, w) {
 }
 
 export function handleLinePointerMove(e, svg, state, w) {
-    if (isInputActive()) {
-        updateInputPosition(e.clientX, e.clientY);
-    }
-
+    live.screen = { x: e.clientX, y: e.clientY };
     if (localState.dragStartScreen && state.active) {
         if (checkDragThreshold(e, localState.dragStartScreen, SNAP.DRAG_THRESHOLD || 2)) localState.isDragging = true;
     }
@@ -255,25 +283,11 @@ export function handleLinePointerMove(e, svg, state, w) {
 
         let previewPt = rawPreviewPt;
         
-        // If using live dimensions, let the input handler calculate the preview point
-        // This handles both length and angle locking
-        if (typeof document !== 'undefined' && document.getElementById('live-dim-length') && !document.getElementById('live-dim-length').classList.contains('hidden')) {
-            updateLiveLinePreview(svg, state);
-            // The preview point is updated in state.active.preview by updateLiveLinePreview
-            return true;
-        }
-        
-        if (lineState.lockedLength !== null) {
-            const spt = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
-            if (spt) {
-                const dx = rawPreviewPt.x - spt.x;
-                const dy = rawPreviewPt.y - spt.y;
-                const angle = Math.atan2(dy, dx);
-                previewPt = {
-                    x: spt.x + Math.cos(angle) * (lineState.lockedLength || 0),
-                    y: spt.y + Math.sin(angle) * (lineState.lockedLength || 0)
-                };
-            }
+        live.cursor = rawPreviewPt;
+        if (hasLock()) {   // a typed length / angle holds (the other still follows the cursor); no inference then
+            const spt = startOf(state);
+            if (spt) previewPt = lockedEnd(spt, rawPreviewPt);
+            state.activeInference = null; state.inference = null;
         } else {
             try {
                 const spt = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
@@ -296,6 +310,10 @@ export function handleLinePointerMove(e, svg, state, w) {
         }
 
         safeUpdatePreview(state, 'line', [state.active.start], previewPt, { lockedLength: lineState.lockedLength || undefined });
+        if (live.boxOpen) {   // the boxes follow the cursor and show the length / angle it would have (until typed)
+            const spt = startOf(state);
+            if (spt) followCreationBoxes(e, [Math.hypot(previewPt.x - spt.x, previewPt.y - spt.y), Math.atan2(previewPt.y - spt.y, previewPt.x - spt.x) * 180 / Math.PI]);
+        }
     }
     return true;
 }
@@ -348,11 +366,12 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
             // segment creation instead of re-entering this "place start" branch forever.
             state.active._tempStart = false;
             // This pointerup was the click that created the start joint; do not finalize a line now.
+            openLineBoxes(e.clientX, e.clientY);   // TASK 597: length and angle show now, after the first click
             return true;
         }
 
         // If the pointerUp is essentially at the same point as the start, treat it as a click (no end created).
-        if (!movedSinceStart) return true;
+        if (!movedSinceStart) { openLineBoxes(e.clientX, e.clientY); return true; }   // TASK 597: the first click on an existing point: the boxes show now
         // Otherwise fall through and allow the normal pointerUp logic to create the end joint
         // (this covers the UX case: click to start on an existing joint, then release elsewhere to create a line).
     }
@@ -373,7 +392,10 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     }
 
     const snap = state.activeSnap || hitSnap;
-    const endPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
+    const typedLock = hasLock();   // a typed length / angle holds the segment (a click places it along the cursor)
+    const clickPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
+    const startForLock = startOf(state);
+    const endPt = (typedLock && startForLock) ? lockedEnd(startForLock, clickPt) : clickPt;
     const endId = state.genJ();
     state.joints.set(endId, { x: endPt.x, y: endPt.y, fixed: false });
     dbg.log('line-tool', '[line-tool] created end joint', { endId, endPt });
@@ -408,19 +430,12 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     if (lineState.lockedLength !== null) {
         addConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
             joints: [startId, endId],
-            value: lineState.lockedLength,
-            isDriven: !!lineState.isDriven
+            value: lineState.lockedLength
         });
-    }
-    
-    if (lineState.lockedAngle !== null) {
-        // Angle locking logic (placeholder)
     }
     
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
-    lineState.isDriven = false;
-    try{ hideLiveInputs(); }catch(_){ }
 
     try{
         if (state.active && state.active.startSnapTarget && state.active.startSnapTarget.isLocked) {
@@ -434,7 +449,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         }
     }catch(_){ }
     try{
-        if (hitSnap && hitSnap.isLocked) {
+        if (hitSnap && hitSnap.isLocked && !typedLock) {
             dbg.log('line-tool', '[line-tool] applying end snap', { endId, snap: hitSnap });
             if (hitSnap.type !== 'grid') {
                 applySnapConstraint(state, endId, hitSnap, { excludeJoints: [startId] });
@@ -503,6 +518,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
             polylineOrigin: state.polylineOrigin || newStart
         };
         justCreatedActive = false;
+        openLineBoxes(e.clientX, e.clientY);   // TASK 597: the next segment of the chain has its boxes at once
         localState.dragStartScreen = null;
     }catch(_){ }
 
@@ -511,7 +527,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
 
 /**
  * Finalize the currently active line segment programmatically.
- * Used by live-dimension `Enter` confirmation to create the segment and start the next one.
+ * Used by the Enter in the length / angle boxes to create the segment and start the next one.
  */
 export function finalizeLineFromActive(svg, state) {
     dbg.log('line-tool', '[DEBUG LINE] Finalizing line. Locked:', lineState);
@@ -555,15 +571,12 @@ export function finalizeLineFromActive(svg, state) {
         dbg.log('line-tool', '[DEBUG LINE] Adding distance constraint:', lineState.lockedLength);
         addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { 
             joints: [startId, endId], 
-            value: lineState.lockedLength,
-            isDriven: !!lineState.isDriven // Use it
+            value: lineState.lockedLength
         });
     }
     
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
-    lineState.isDriven = false;
-    try{ hideLiveInputs(); }catch(_){ }
     
     try{
         const activeInf = state.activeInference || state.inference || null;
@@ -618,6 +631,7 @@ export function finalizeLineFromActive(svg, state) {
             polylineOrigin: state.polylineOrigin || newStart
         };
         justCreatedActive = false;
+        if (live.screen) openLineBoxes(live.screen.x, live.screen.y);   // TASK 597: the next segment of the chain has its boxes at once
         localState.dragStartScreen = null;
     }catch(_){ }
 
@@ -629,6 +643,7 @@ export function deactivateLineTool(state) {
     try{
         if(!state) return;
         pendingStepSnapshot = null;
+        closeLineBoxes();   // the length / angle boxes go with the chain (Esc, Enter with no length, another tool)
         if(!state.active || state.active.mode !== TOOL_MODES.LINE){
             state.active = null; state.continueFrom = null; state.polylineOrigin = null; return;
         }

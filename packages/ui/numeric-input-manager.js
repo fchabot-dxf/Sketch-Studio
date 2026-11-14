@@ -261,7 +261,7 @@ function setupListeners() {
             e.stopImmediatePropagation(); return;
         }
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape') handleCancel();
+        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
     
@@ -270,7 +270,7 @@ function setupListeners() {
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape') handleCancel();
+        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
         if (e.key === 'Tab') {
             e.preventDefault();
             const next = field === 'width' ? uiState.dualInputH : uiState.dualInputW;
@@ -287,9 +287,15 @@ function setupListeners() {
     uiState.dualInputH.addEventListener('input', () => { uiState.typed[1] = true; handlePreview(); });
 }
 
+/** TASK 597: Ctrl/Cmd+Z in a box of a drawing tool (not the dimension edit box) is the canvas's own Ctrl+Z mid-draw: it ends the draw like Esc (task 549). */
+function drawUndoKey(e) {
+    return (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && uiState.mode !== 'edit';
+}
+
 // --- Public API ---
 
 export function showSingleInput(x, y, value, field, initialKey = null) {
+    if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
     uiState.mode = 'live-single';
@@ -314,6 +320,7 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
  * ({ kind, labels: [first, second], separator, digits: [first, second] }), the same element, keys and events, so Tab, Enter, Esc are ONE code path.
  */
 export function showDualInput(x, y, w, h, opts = {}) {
+    if (!uiState.dualContainer) return;   // no DOM, no boxes (see showSingleInput)
     resetState();
     uiState.active = true;
     uiState.mode = 'live-dual';

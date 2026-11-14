@@ -22,15 +22,11 @@ let inputState = {
     inputs: {
         width: null,
         height: null,
-        length: null,
-        angle: null,
         single: null // Re-using single input for edit mode
     },
     locked: {
         width: null,
-        height: null,
-        length: null,
-        angle: null
+        height: null
     },
     activeField: 'width', // 'width' or 'height'
     svg: null,
@@ -66,24 +62,6 @@ export function setupLiveDimensionInput() {
         document.body.appendChild(heightInput);
         inputState.inputs.height = heightInput;
 
-        const lengthInput = document.createElement('input');
-        lengthInput.id = 'live-dim-length';
-        lengthInput.type = 'text';
-        lengthInput.className = 'dim-input hidden';
-        lengthInput.placeholder = 'L';
-        hideNumericInputEl(lengthInput);
-        document.body.appendChild(lengthInput);
-        inputState.inputs.length = lengthInput;
-
-        const angleInput = document.createElement('input');
-        angleInput.id = 'live-dim-angle';
-        angleInput.type = 'text';
-        angleInput.className = 'dim-input hidden';
-        angleInput.placeholder = '°';
-        hideNumericInputEl(angleInput);
-        document.body.appendChild(angleInput);
-        inputState.inputs.angle = angleInput;
-
         // Reuse or create single input for editing
         let singleInput = findById('dimInput');
         if (!singleInput) {
@@ -97,21 +75,17 @@ export function setupLiveDimensionInput() {
 
         // Attach events to the four draw-time inputs ONLY: #dimInput's keys (Enter commit, Esc, autocomplete) belong to numeric-input-manager.js
         // (setupListeners); a second Enter listener here committed every Enter twice (task 593)
-        [widthInput, heightInput, lengthInput, angleInput].forEach(input => {
+        [widthInput, heightInput].forEach(input => {
             input.addEventListener('keydown', (e) => handleInputKey(e, input));
             input.addEventListener('input', (e) => handleInputInput(e, input));
             input.addEventListener('focus', (e) => {
                 if (input.id === 'live-dim-width') inputState.activeField = 'width';
                 else if (input.id === 'live-dim-height') inputState.activeField = 'height';
-                else if (input.id === 'live-dim-length') inputState.activeField = 'length';
-                else if (input.id === 'live-dim-angle') inputState.activeField = 'angle';
             });
         });
     } else {
         inputState.inputs.width = findById('live-dim-width');
         inputState.inputs.height = findById('live-dim-height');
-        inputState.inputs.length = findById('live-dim-length');
-        inputState.inputs.angle = findById('live-dim-angle');
         inputState.inputs.single = findById('dimInput');
     }
 
@@ -309,7 +283,7 @@ function processCommit(detail) {
     // 1. Prepare Validation Config
     let valConfig = { 
         mode: inputState.mode, 
-        value: detail.value || detail.length // Primary dimension to check
+        value: detail.value // Primary dimension to check
     };
     if (inputState.mode === 'edit') {
         valConfig.constraint = inputState.target;
@@ -348,11 +322,7 @@ function processCommit(detail) {
     } else {
         // --- CREATE MODE ---
         // Dispatch event with isDriven flag
-        if (detail.width !== undefined || detail.height !== undefined) {
-            window.dispatchEvent(new CustomEvent('live-rect-commit', { detail }));
-        } else {
-            window.dispatchEvent(new CustomEvent('live-line-commit', { detail }));
-        }
+        window.dispatchEvent(new CustomEvent('live-rect-commit', { detail }));
     }
 
     // 5. Cleanup UI
@@ -367,12 +337,7 @@ function handleInputKey(e, input) {
     if (e.key === 'Tab') {
         e.preventDefault();
         // Cycle focus logic
-        let next;
-        if (input.id === 'live-dim-width' || input.id === 'live-dim-height') {
-            next = input.id === 'live-dim-width' ? inputState.inputs.height : inputState.inputs.width;
-        } else {
-            next = input.id === 'live-dim-length' ? inputState.inputs.angle : inputState.inputs.length;
-        }
+        const next = input.id === 'live-dim-width' ? inputState.inputs.height : inputState.inputs.width;
         showNumericInputEl(next);
         next.focus();
         setTimeout(() => next.select(), 0);
@@ -387,8 +352,6 @@ function handleInputKey(e, input) {
             detail.value = parseFloat(input.value);
         } else {
             // Live Drawing: gather locked values
-            if (inputState.locked.length !== null) detail.length = inputState.locked.length;
-            if (inputState.locked.angle !== null) detail.angle = inputState.locked.angle;
             if (inputState.locked.width !== null) detail.width = inputState.locked.width;
             if (inputState.locked.height !== null) detail.height = inputState.locked.height;
         }
@@ -410,21 +373,13 @@ function handleInputInput(e, input) {
     let field;
     if (input.id === 'live-dim-width') field = 'width';
     else if (input.id === 'live-dim-height') field = 'height';
-    else if (input.id === 'live-dim-length') field = 'length';
-    else if (input.id === 'live-dim-angle') field = 'angle';
 
     if (!isNaN(val)) {
         inputState.locked[field] = val;
     } else {
         inputState.locked[field] = null;
     }
-    if (inputState.svg && inputState.state) {
-        if (field === 'width' || field === 'height') {
-            updateLiveRectPreview(inputState.svg, inputState.state);
-        } else {
-            updateLiveLinePreview(inputState.svg, inputState.state);
-        }
-    }
+    if (inputState.svg && inputState.state) updateLiveRectPreview(inputState.svg, inputState.state);
 }
 
 // Re-export showEditInput to replace numeric-input-manager's version
@@ -516,12 +471,6 @@ export function handleLiveRectKeyDown(e, svg, state) {
     }
     
     const handled = activateLiveInput(e.key, state, primary, secondary, () => updateLiveRectPreview(svg, state));
-    if (handled) { e.preventDefault(); return true; }
-    return false;
-}
-
-export function handleLiveLineKeyDown(e, svg, state) {
-    const handled = activateLiveInput(e.key, state, 'length', 'angle', () => updateLiveLinePreview(svg, state));
     if (handled) { e.preventDefault(); return true; }
     return false;
 }
@@ -656,54 +605,9 @@ function update3PointPreview(svg, state, c1, mousePt) {
     }
 }
 
-export function updateLiveLinePreview(svg, state) {
-    inputState.svg = svg;
-    inputState.state = state;
-    if (!state.active || !state.active.start) {
-        if (inputState.active) hideLiveInputs();
-        return;
-    }
-    const startPt = state.active.startPt || state.joints.get(state.active.start);
-    if (!startPt) return;
-    let mousePt = state.snapTarget ? state.snapTarget.pt : state.tempMousePos;
-    if (!mousePt && state.lastMouse) {
-        mousePt = screenToWorld(svg, state.lastMouse.x, state.lastMouse.y);
-    }
-    if (!mousePt) mousePt = { x: startPt.x + 10, y: startPt.y };
-    let dx = mousePt.x - startPt.x;
-    let dy = mousePt.y - startPt.y;
-    let len = Math.hypot(dx, dy);
-    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    if (inputState.locked.length !== null) len = inputState.locked.length;
-    if (inputState.locked.angle !== null) angle = inputState.locked.angle;
-    const rad = angle * Math.PI / 180;
-    const endPt = {
-        x: startPt.x + Math.cos(rad) * len,
-        y: startPt.y + Math.sin(rad) * len
-    };
-    state.active.preview = { type: 'line', pt: endPt };
-    state.tempMousePos = endPt;
-    if (inputState.active && inputState.inputs.length && inputState.inputs.angle) {
-        const mid = { x: (startPt.x + endPt.x) / 2, y: (startPt.y + endPt.y) / 2 };
-        const scr = worldToScreen(svg, mid);
-        const lEl = inputState.inputs.length;
-        lEl.style.left = `${scr.x - lEl.offsetWidth / 2}px`;
-        lEl.style.top = `${scr.y - lEl.offsetHeight - 20}px`;
-        const aEl = inputState.inputs.angle;
-        aEl.style.left = `${scr.x + 20}px`; 
-        aEl.style.top = `${scr.y - aEl.offsetHeight / 2}px`;
-        if (document.activeElement !== lEl && inputState.locked.length === null) {
-            lEl.value = len.toFixed(1);
-        }
-        if (document.activeElement !== aEl && inputState.locked.angle === null) {
-            aEl.value = angle.toFixed(1);
-        }
-    }
-}
-
 export function getLiveLockedPoint(state) {
     if (!state.active || !state.active.preview || !state.active.preview.pt) return null;
-    if (inputState.locked.width !== null || inputState.locked.height !== null || inputState.locked.length !== null || inputState.locked.angle !== null) {
+    if (inputState.locked.width !== null || inputState.locked.height !== null) {
         return state.active.preview.pt;
     }
     return null;
@@ -713,8 +617,6 @@ function dismissLiveInputUI() {
     inputState.active = false;
     if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
     if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
-    if (inputState.inputs.length) hideNumericInputEl(inputState.inputs.length);
-    if (inputState.inputs.angle) hideNumericInputEl(inputState.inputs.angle);
     const svg = document.querySelector('svg');
     if (svg) svg.focus();
 }
@@ -724,12 +626,8 @@ export function hideLiveInputs() {
     inputState.mode = null; // Clear mode
     inputState.locked.width = null;
     inputState.locked.height = null;
-    inputState.locked.length = null;
-    inputState.locked.angle = null;
     if (inputState.inputs.width) hideNumericInputEl(inputState.inputs.width);
     if (inputState.inputs.height) hideNumericInputEl(inputState.inputs.height);
-    if (inputState.inputs.length) hideNumericInputEl(inputState.inputs.length);
-    if (inputState.inputs.angle) hideNumericInputEl(inputState.inputs.angle);
     if (inputState.inputs.single) hideNumericInputEl(inputState.inputs.single);
     const svg = document.querySelector('svg');
     if (svg) svg.focus();

@@ -32,7 +32,6 @@ import { createTouchDoneButton } from '#ui/touch-done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
-import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
@@ -1164,7 +1163,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
     // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
     window.addEventListener('liveDimensionCancelled', () => {
         if (!isActiveFn()) return;
-        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) handleEscape(state);
+        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
     });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
@@ -1229,9 +1228,6 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
         if (state.currentTool === TOOL_MODES.CIRCLE) {
             try{ if (handleCircleKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
-        }
-        if (state.currentTool === TOOL_MODES.ARC) {
-            try{ if (handleArcKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.BEZIER) {
             try{ if (handleBezierKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }

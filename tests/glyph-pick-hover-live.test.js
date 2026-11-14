@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const J = (x, y) => ({ x, y, fixed: false, sketchId: 'sketch-1' });
 const DOC = { version: 3, hosts: {}, geometry: {
@@ -30,6 +31,7 @@ await (async () => {
   const cdp = await launchBrowser({ tag: '588g' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, navigate, waitForApp } = cdp;
+  await installFakeDriveSession(cdp);
   const md5s = [], out = [];
   try {
     const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;

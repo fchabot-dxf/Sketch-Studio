@@ -3,12 +3,14 @@
 // the list, not the Recent pane). The drawer closes, the Recent pane lists the design newest first, clicking a tile opens it.
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '557r', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
+    await installFakeDriveSession(cdp);
     const S = '(await import("/packages/ui/project-store.js")).getProjectStore()';
     const DOC = { version: 2, geometry: { joints: [['j0', { x: 0, y: 0 }], ['j1', { x: 50, y: 0 }]], shapes: [{ id: 's0', type: 'line', joints: ['j0', 'j1'] }], constraints: [] }, hosts: {} };
     for (const host of ['sketchstudio', 'shaper', 'penplotter']) {

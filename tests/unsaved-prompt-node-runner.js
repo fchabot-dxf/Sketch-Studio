@@ -16,6 +16,7 @@
 // The test files (unsaved-prompt-<host>-<choice>-node.test.js) only call runUnsavedPrompt({ host, choice }).
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
+import { resetBuffer } from './helpers/reset-buffer.js';
 
 export const HOSTS = {
   sketchstudio: { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas', name: 'Sketch', goto: 'penplotter', gotoUrl: '/apps/penplotter/' },
@@ -55,16 +56,15 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
 
   // ---- once: a stored design "Other" to open, then the page shows an unsaved Untitled
   const otherId = await createNamedDesign(profile, host, 'Other');
-  const fresh = async () => { if (app) { await app.store.setCurrent(null); await app.close(); } else { const s = profile.createProjectStore({ adapter: profile.adapter, legacySource: async () => null, channel: null }); await s.setCurrent(null); } await openApp(host); };
+  const fresh = async () => { if (app) { await resetBuffer(app.store); await app.close(); } else { const s = profile.createProjectStore({ adapter: profile.adapter, legacySource: async () => null, channel: null }); await resetBuffer(s); } await openApp(host); };
 
-  let afterCancel = false;
   for (const p of paths) {
-    if (app) assert.strictEqual(leaveWarns(app), afterCancel, `${p}: leaving the page the previous case left ${afterCancel ? '(an unsaved drawing) raises the leave-page warning' : 'with nothing unsaved raises none'}`);
+    if (app) assert.strictEqual(leaveWarns(app), false, `${p}: leave-page warning is not armed when working buffer holds the state`);
     await fresh();
     assert.strictEqual(leaveWarns(app), false, `${p}: a fresh page with nothing unsaved raises no leave-page warning`);
     assert.strictEqual(title(), appTitle(H.name), `${p}: the page shows an unsaved Untitled`);
     drawLine();
-    assert.strictEqual(leaveWarns(app), true, `${p}: an unsaved Untitled with content arms the leave-page warning`);
+    assert.strictEqual(leaveWarns(app), false, `${p}: an unsaved Untitled with content is buffered across refresh (no beforeunload)`);
     const keptName = 'Kept' + PATHS.indexOf(p);
     // 1. the entry path
     if (p === 'open-projects') {
@@ -145,7 +145,6 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       assert.strictEqual(r.title, appTitle(H.name), `${p}: then a new unsaved Untitled`);
       assert.strictEqual(shapesOnCanvas(H.canvas), 0, `${p}: the new design is empty`);
     }
-    afterCancel = choice === 'cancel';
     results[p] = r;
     console.log(`${host} ${choice} ${p.padEnd(13)} ${JSON.stringify(r)}`);
     if (q('.sk-pm')) { app.key('Escape'); await settle(); }

@@ -37,7 +37,7 @@ function fakeAccount(st, info) {
 const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; };
 
 function fakeStore() {
-  const s = { moves: [], locals: [], failNext: null,
+  const s = { moves: [], failNext: null,
     projects: [{ id: 'p1', name: 'Kitchen', updatedAt: Date.now(), pinned: false }, { id: 'drive:p2', name: 'Garage', updatedAt: Date.now(), pinned: false, location: 'drive' }],
     subs: new Set() };
   s.subscribe = (f) => { s.subs.add(f); return () => s.subs.delete(f); };
@@ -45,7 +45,6 @@ function fakeStore() {
   s.cloud = {
     isEnabled: async () => false,
     moveProjectToDrive: async (id) => { s.moves.push(id); if (s.failNext) throw new Error(s.failNext); },
-    makeProjectLocal: async (id) => { s.locals.push(id); },
   };
   return s;
 }
@@ -186,7 +185,7 @@ await (async () => {
     assert.strictEqual(await ev(`[...document.querySelectorAll('.sk-pm-rowbtn')].filter((b) => b.querySelector('[data-project]')).map((b) => !!b.querySelector('[data-cloud=drive]'))`).then((a) => JSON.stringify(a)), '[false,true]', 'only the Drive project has the cloud marker');
     const on = await menus();
     assert(on.p1.includes('Use Google Drive') && !on.p1.includes('Make local'), JSON.stringify(on));
-    assert(on['drive:p2'].includes('Make local') && !on['drive:p2'].includes('Use Google Drive'), JSON.stringify(on));
+    assert(!on['drive:p2'].includes('Make local') && !on['drive:p2'].includes('Use Google Drive'), JSON.stringify(on));
     await ev(`document.querySelector('[data-project="p1"]').closest('.sk-pm-prow').querySelector('.sk-pm-more').click(); document.querySelector('.sk-pm-menu [data-menu=use-drive]').click()`);
     const conf = await ev(`(() => { const c = document.querySelector('.sk-pm-ask:not([hidden])'); return c && c.textContent; })()`);
     assert(conf && /copied to your Google Drive/.test(conf) && /checked/.test(conf) && /removed/.test(conf), 'the confirm says copy, verify, then remove the local copy: ' + conf);
@@ -204,17 +203,10 @@ await (async () => {
     await sleep(400);
     assert.deepStrictEqual(await ev(`store.moves`), ['p1']);
     assert.strictEqual(await ev(`(document.querySelector('.sk-pm-msg.error') || {}).textContent`), 'Could not verify the copy on Drive.', "the store's message shows in the manager");
-    // Make local on the Drive project asks first too
-    await menus();
-    await ev(`document.querySelector('[data-project="drive:p2"]').closest('.sk-pm-prow').querySelector('.sk-pm-more').click(); document.querySelector('.sk-pm-menu [data-menu=make-local]').click()`);
-    assert(/copied from Google Drive to this device/.test(await ev(`document.querySelector('.sk-pm-ask').textContent`)));
-    await ev(`document.querySelector('.sk-pm-ask .ok').click()`);
-    await sleep(300);
-    assert.deepStrictEqual(await ev(`store.locals`), ['drive:p2']);
 
     // 9. signing in alone moves nothing: the sign-in click never touches the store
     await ev(`T.mountProjects({ signedIn: false, lapsed: false })`);
-    assert.deepStrictEqual(await ev(`store.moves.concat(store.locals)`), [], 'signing in/out never moves a project');
+    assert.deepStrictEqual(await ev(`store.moves`), [], 'signing in/out never moves a project');
 
     console.log('sidebar-account: all checks passed');
   } finally {

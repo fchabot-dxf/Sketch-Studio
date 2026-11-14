@@ -10,6 +10,7 @@ import { createDocumentBuffer, MAX_TABS } from '../packages/ui/document-buffer.j
 import { createSketchState } from '../packages/ui/sketch-state.js';
 import { createEngine } from '../packages/core/constraint-solver.js';
 import { buildJournal } from '../packages/core/journal.js';
+import { resetBuffer } from './helpers/reset-buffer.js';
 
 let t = 5000;
 const mkStore = (adapter = createMemoryAdapter()) => { let n = 0; return createProjectStore({ adapter, legacySource: async () => null, idFn: () => 'd' + (++n), now: () => ++t, channel: null }); };
@@ -121,7 +122,7 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   const store = mkStore();
   const a = await store.newDesign('Alpha'); await store.save(docWith('ja'), { id: a.id });
   const b = await store.newDesign('Beta'); await store.save(docWith('jb'), { id: b.id });
-  await store.setCurrent(null);                                  // a fresh page: nothing current
+  await resetBuffer(store);                                      // a fresh page: nothing current
   const st = mkState();
   const restored = []; const sessions = { cap: [], res: [] };
   let hostCounter = 0;
@@ -209,9 +210,10 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   await assert.rejects(() => buf.openTab(a.id), /Close a tab first/);
 }
 
-// ---- beforeunload: armed exactly while leaving would lose work ------------------------------------------------------------------------
+// ---- beforeunload + local open-tabs working buffer (TASK 624 Decision 3) --------------------------------------------------------------
 {
-  const store = mkStore();
+  const adapter = createMemoryAdapter();
+  const store = mkStore(adapter);
   const win = new EventTarget();
   const st = mkState();
   const buf = mkBuffer(st, store, { win, doc: null });
@@ -219,7 +221,19 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   const leave = () => { const e = new Event('beforeunload', { cancelable: true }); win.dispatchEvent(e); return e.defaultPrevented; };
   assert.strictEqual(leave(), false, 'a clean Untitled: no leave-page warning');
   step(st, 'line', 'ju');
-  assert.strictEqual(leave(), true, 'an unsaved Untitled with content: the warning is armed');
+  assert.strictEqual(buf.needsSavePrompt(), 'unsaved', 'close-tab still asks about an Untitled with content');
+  assert.strictEqual(leave(), false, 'Untitled with content lives in the working buffer: refresh does NOT raise beforeunload');
+  await buf.flush();
+  // Simulated refresh on a new buffer instance restores the Untitled drawing (still unnamed/unsaved)
+  const stReload = mkState();
+  const bufReload = mkBuffer(stReload, mkStore(adapter), { win: null, doc: null });
+  const resReload = await bufReload.restore();
+  assert.strictEqual(resReload.restored, true, 'reload restores open Untitled from local working buffer');
+  assert.strictEqual(bufReload.designId(), null, 'restored Untitled stays unnamed (never saved as a local named design)');
+  assert.deepStrictEqual(ids(stReload), ['ju'], 'Untitled geometry survived reload');
+  assert.strictEqual(bufReload.needsSavePrompt(), 'unsaved', 'restored Untitled with content still prompts on close-tab');
+  bufReload.stop();
+
   buf.discardUnsaved();
   assert.deepStrictEqual(ids(st), [], 'Don\'t save discards the Untitled');
   assert.strictEqual(leave(), false, 'after Don\'t save: no warning');
@@ -228,6 +242,26 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   assert.strictEqual(leave(), false, 'a named, saved design: no warning');
   buf.discardUnsaved();
   assert.deepStrictEqual(ids(st), ['jv'], 'a stored design is never discarded');
+
+  // beforeunload DOES arm when writing the local working buffer failed
+  let failBuf = true;
+  const flakyStore = { ...store, writeBuffer: async (p) => { if (failBuf) throw new Error('quota exceeded'); return store.writeBuffer(p); } };
+  const bufFlaky = mkBuffer(st, flakyStore, { win, doc: null });
+  await bufFlaky.restore(); bufFlaky.start();
+  step(st, 'line', 'jw');
+  await bufFlaky.flush();
+  assert.strictEqual(leave(), true, 'beforeunload arms when local working-buffer persistence fails');
+  failBuf = false;
+  await bufFlaky.flush();
+  assert.strictEqual(leave(), false, 'beforeunload disarms once buffer write succeeds');
+  bufFlaky.stop();
+
+  // beforeunload DOES arm when Drive has unconfirmed/pending writes
+  const driveStore = { ...store, hasPendingDrive: (id) => !!id };
+  const bufDrive = mkBuffer(st, driveStore, { win, doc: null });
+  await bufDrive.restore(); bufDrive.start();
+  assert.strictEqual(leave(), true, 'beforeunload arms when Drive writes are pending');
+  bufDrive.stop();
   buf.stop();
   assert.strictEqual(leave(), false, 'stopped: nothing listens');
 }

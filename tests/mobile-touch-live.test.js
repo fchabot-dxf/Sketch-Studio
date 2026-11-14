@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 import { findSnap, snapBoostFor, TOUCH_SNAP_BOOST } from '#ui/snap-detection.js';
 import { SNAP } from '#core/constants.js';
 
@@ -30,6 +31,7 @@ if (EVID) fs.mkdirSync(EVID, { recursive: true });
 const cdp = await launchBrowser({ tag: '562', width: 1400, height: 900 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, navigate } = cdp;
+await installFakeDriveSession(cdp);
 const shot = async (name) => { if (!EVID) return; const r = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(EVID, name + '.png'), Buffer.from(r.data, 'base64')); };
 
 try {

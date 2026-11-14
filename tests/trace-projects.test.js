@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SVG = path.join(REPO_ROOT, 'tests', 'fixtures', 'svg', 'import-basic.svg');
@@ -19,6 +20,7 @@ await (async () => {
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
   try {
+    const driveSession = await installFakeDriveSession(cdp, { signedIn: false });
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
     await send('Page.addScriptToEvaluateOnNewDocument', { source: 'delete window.showOpenFilePicker; delete window.showSaveFilePicker;' });
     const goto = (url) => navigate(`http://127.0.0.1:${port}${url}`, 8000);
@@ -79,8 +81,12 @@ await (async () => {
     await sleep(300);
     await openMenu();
     await clickEl('[data-action="save-as"]'); await sleep(250);
+    await waitFor(`!!document.querySelector('.sk-sidebar-ask [data-choice="signin"]')`, 'signed out Save as asks to sign in first');
+    await clickEl('.sk-sidebar-ask [data-choice="signin"]');
+    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as name prompt after sign-in');
     await evalJs(`document.querySelector('.sk-sidebar-input').value = 'T1'`);
     await clickEl('.sk-sidebar-confirm-btns .ok'); await sleep(900);
+    assert.strictEqual(driveSession.drive.byName('T1.sketch.json').length, 1, 'T1 saved ONLY to fake Google Drive');
     assert.ok((await recent()).includes('T1'), 'Save as T1: ' + JSON.stringify(await recent()));
     const saved = await storedCurrent();
     assert.strictEqual(saved.name, 'T1'); assert.strictEqual(saved.app, 'trace');

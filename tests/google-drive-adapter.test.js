@@ -128,28 +128,33 @@ const mkStore = (adapter) => createProjectStore({ adapter, now: () => ++t, chann
   assert.strictEqual(await adapter.refresh(), true); assert.strictEqual(pings, 1, 'a remote change fires onChange');
 }
 
-// ===================== the ROUTER: local stays local, Drive only by explicit choice =====================
-const mkRouter = () => {
+// ===================== the ROUTER: named saves go to Drive; legacy local projects keep working until moved =====================
+const mkRouter = ({ signedIn = false } = {}) => {
   const drive = createFakeDrive();
   const local = createMemoryAdapter();
-  let built = 0;
-  const router = createRouterAdapter({ local, getRemote: () => { built++; return createDriveAdapter({ account: accountFor(drive), meta: local }); } });
-  return { drive, local, router, store: mkStore(router), built: () => built };
+  let built = 0; let isSigned = signedIn;
+  const router = createRouterAdapter({ local, getRemote: () => { built++; return createDriveAdapter({ account: accountFor(drive), meta: local }); }, signedIn: () => isSigned });
+  return { drive, local, router, store: mkStore(router), built: () => built, setSignedIn: (v) => { isSigned = v; } };
+};
+const seedLegacy = async (local, pid, pname, did, dname, document = doc(1)) => {
+  await local.putProject({ id: pid, name: pname, pinned: false, updatedAt: 1000 });
+  await local.putDesign({ id: did, projectId: pid, name: dname, app: 'shaper', updatedAt: 1000, document });
 };
 
-// 6. local-only use never touches Drive (and never even builds the Drive adapter)
+// 6. legacy local-only work never touches Drive (and never even builds the Drive adapter); new creations require sign-in
 {
-  const { drive, store, built } = mkRouter();
-  const p = await store.createProject('Local'); const d = await store.newDesign('Mine', { projectId: p.id, app: 'shaper' });
-  await store.save(doc(1), { id: d.id }); await store.listProjects(); await store.listRecent(); await store.rename(d.id, 'Mine 2'); await store.remove(d.id);
-  assert.strictEqual(drive.calls.length, 0, 'zero Drive calls for local work');
+  const { drive, local, store, built } = mkRouter({ signedIn: false });
+  await seedLegacy(local, 'lp1', 'Local', 'ld1', 'Mine');
+  await store.save(doc(1), { id: 'ld1' }); await store.listProjects(); await store.listRecent(); await store.rename('ld1', 'Mine 2'); await store.remove('ld1');
+  assert.strictEqual(drive.calls.length, 0, 'zero Drive calls for legacy local work');
   assert.strictEqual(built(), 0, 'the Drive adapter is never constructed');
+  await assert.rejects(() => store.createProject('NewLocal'), /cloud-auth|Google Drive/, 'signed out: cannot create a new local named project');
 }
 
-// 7. SIGNING IN CHANGES NO PROJECT: the account signs in; nothing moves, lists or syncs
+// 7. SIGNING IN CHANGES NO PROJECT: the account signs in; nothing moves or syncs automatically
 {
-  const { drive, store, local } = mkRouter();
-  const p = await store.createProject('Local'); await store.newDesign('Mine', { projectId: p.id });
+  const { drive, local, store } = mkRouter({ signedIn: false });
+  await seedLegacy(local, 'lp1', 'Local', 'ld1', 'Mine');
   const before = JSON.stringify([await store.listProjects(), await store.listRecent(), await local.getMeta('driveEnabled')]);
   const storage = new Map();
   const fetchLog = [];
@@ -162,67 +167,59 @@ const mkRouter = () => {
   await account.signIn();
   assert.strictEqual(account.state().signedIn, true, 'the account is signed in');
   const after = JSON.stringify([await store.listProjects(), await store.listRecent(), await local.getMeta('driveEnabled')]);
-  assert.strictEqual(after, before, 'sign-in changed no project and did not turn Drive on');
+  assert.strictEqual(after, before, 'sign-in changed no legacy project and did not turn Drive on');
   assert.strictEqual(drive.calls.length, 0, 'sign-in made no Drive file call');
   assert.strictEqual(await store.cloud.isEnabled(), false);
 }
 
-// 8. the explicit move: copy, verify, delete local LAST; ids prefixed; current pointer follows; autosave goes to Drive
+// 8. the explicit move of a legacy local project: copy, verify, delete local LAST; ids prefixed; current pointer follows; makeProjectLocal removed
 {
-  const { drive, store, local } = mkRouter();
-  const keep = await store.createProject('Stays local'); await store.newDesign('Local design', { projectId: keep.id });
-  const proj = await store.createProject('To Drive');
-  const a = await store.newDesign('A', { projectId: proj.id, app: 'penplotter' });
-  await store.save(doc(1, { penplotter: { pens: 3 } }), { id: a.id, app: 'penplotter' });
-  const b = await store.newDesign('B', { projectId: proj.id, app: 'shaper' });
-  await store.open(a.id);
-  const res = await store.cloud.moveProjectToDrive(proj.id);
+  const { drive, store, local, setSignedIn } = mkRouter({ signedIn: false });
+  await seedLegacy(local, 'keep-p', 'Stays local', 'keep-d', 'Local design');
+  await seedLegacy(local, 'proj-p', 'To Drive', 'a', 'A', doc(1, { penplotter: { pens: 3 } }));
+  await local.putDesign({ id: 'b', projectId: 'proj-p', name: 'B', app: 'shaper', updatedAt: 1000, document: doc(2) });
+  await store.open('a');
+  setSignedIn(true);
+  const res = await store.cloud.moveProjectToDrive('proj-p');
   assert(isRemoteId(res.projectId) && res.projectId.startsWith(DRIVE_PREFIX), 'the project now lives on Drive');
-  assert.deepStrictEqual(Object.keys(res.designIds).sort(), [a.id, b.id].sort());
+  assert.deepStrictEqual(Object.keys(res.designIds).sort(), ['a', 'b'].sort());
   assert(Object.values(res.designIds).every(isRemoteId), 'moved designs have Drive ids');
-  assert.strictEqual(await local.getProject(proj.id), null, 'the local copy is gone (after the verified remote copy)');
-  assert.strictEqual((await local.listDesigns()).filter((d) => d.projectId === proj.id).length, 0);
-  assert.strictEqual((await store.current()).id, res.designIds[a.id], 'the current pointer follows the moved design');
+  assert.strictEqual(await local.getProject('proj-p'), null, 'the local copy is gone (after the verified remote copy)');
+  assert.strictEqual((await local.listDesigns()).filter((d) => d.projectId === 'proj-p').length, 0);
+  assert.strictEqual((await store.current()).id, res.designIds.a, 'the current pointer follows the moved design');
   assert.strictEqual(await store.cloud.isEnabled(), true, 'moving turned Drive on (the explicit choice)');
   assert.strictEqual(drive.byName('Sketch Studio').length, 1); assert.strictEqual(drive.byName('To Drive').length, 1);
   assert.strictEqual(drive.byName('A.sketch.json').length, 1);
   const projects = await store.listProjects();
-  assert.deepStrictEqual(projects.map((p) => [p.name, p.location || 'local']).sort(), [['My Designs', 'local']].filter(() => false).concat([['Stays local', 'local'], ['To Drive', 'drive']]).sort(), 'one local, one Drive project');
+  assert.deepStrictEqual(projects.map((p) => [p.name, p.location || 'local']).sort(), [['Stays local', 'local'], ['To Drive', 'drive']].sort(), 'one legacy local, one Drive project');
   const recent = await store.listRecent();
-  assert(recent.some((r) => r.id === res.designIds[a.id] && r.projectName === 'To Drive'), 'recent shows the Drive design with its project');
+  assert(recent.some((r) => r.id === res.designIds.a && r.projectName === 'To Drive'), 'recent shows the Drive design with its project');
   // reading, autosave into a Drive design (host merge), the local project untouched
-  const got = await store.get(res.designIds[a.id]);
+  const got = await store.get(res.designIds.a);
   assert.deepStrictEqual(got.document.hosts.penplotter, { pens: 3 }, 'the document and its sidecar moved intact');
-  await store.save(doc(7, { shaper: { cut: 'inside' } }), { id: res.designIds[a.id], app: 'shaper' });
-  await store.flushDrive(res.designIds[a.id]); // TASK 506: a design on Drive is written THROTTLED in the background; flush = write it now
-  const after = await store.get(res.designIds[a.id]);
+  await store.save(doc(7, { shaper: { cut: 'inside' } }), { id: res.designIds.a, app: 'shaper' });
+  await store.flushDrive(res.designIds.a);
+  const after = await store.get(res.designIds.a);
   assert.deepStrictEqual(Object.keys(after.document.hosts).sort(), ['penplotter', 'shaper'], 'autosave to Drive keeps every sidecar');
-  assert.strictEqual(parseProjectFile(drive.files.get(res.designIds[a.id].slice(DRIVE_PREFIX.length)).content).document.geometry.joints[0][1].x, 7, 'the Drive file holds the autosave');
-  assert.strictEqual((await store.listDesigns(keep.id)).length, 1, 'the other local project is untouched');
-  // one design cannot cross between device and Drive on its own
-  const localDesign = (await store.listDesigns(keep.id))[0];
-  await assert.rejects(() => store.moveDesign(localDesign.id, res.projectId), /move the whole project/i);
+  assert.strictEqual(parseProjectFile(drive.files.get(res.designIds.a.slice(DRIVE_PREFIX.length)).content).document.geometry.joints[0][1].x, 7, 'the Drive file holds the autosave');
+  assert.strictEqual((await store.listDesigns('keep-p')).length, 1, 'the other legacy local project is untouched');
+  // one design cannot cross between device and Drive on its own; makeProjectLocal is removed
+  await assert.rejects(() => store.moveDesign('keep-d', res.projectId), /move the whole project/i);
   await assert.rejects(() => store.cloud.moveProjectToDrive(res.projectId), /already on Drive/);
-  // and back: copy down, verify, trash the Drive copy
-  const back = await store.cloud.makeProjectLocal(res.projectId);
-  assert(!isRemoteId(back.projectId));
-  assert.strictEqual((await store.current()).id, back.designIds[res.designIds[a.id]], 'the pointer follows back too');
-  assert.deepStrictEqual(Object.keys((await store.get(back.designIds[res.designIds[a.id]])).document.hosts).sort(), ['penplotter', 'shaper']);
-  assert.strictEqual(drive.byName('To Drive')[0].trashed, true, 'the Drive copy is TRASHED, not deleted');
-  assert.strictEqual((await store.listProjects()).filter((p) => p.location === 'drive').length, 0);
+  assert.strictEqual(store.cloud.makeProjectLocal, undefined, 'makeProjectLocal is removed');
 }
 
 // 9. a failing copy leaves the original untouched; Drive off hides Drive projects without a call; offline Drive never hides local work
 {
-  const { drive, store, local } = mkRouter();
-  const proj = await store.createProject('P'); const d = await store.newDesign('D', { projectId: proj.id }); await store.save(doc(4), { id: d.id });
+  const { drive, store, local } = mkRouter({ signedIn: false });
+  await seedLegacy(local, 'proj-2', 'P', 'd2', 'D', doc(4));
   drive.failWrites = 1000;
-  await assert.rejects(() => store.cloud.moveProjectToDrive(proj.id), /Drive 500/);
-  assert.notStrictEqual(await local.getProject(proj.id), null, 'a failed move keeps the local project');
-  assert.strictEqual((await store.get(d.id)).document.geometry.joints[0][1].x, 4, 'with its content');
+  await assert.rejects(() => store.cloud.moveProjectToDrive('proj-2'), /Drive 500/);
+  assert.notStrictEqual(await local.getProject('proj-2'), null, 'a failed move keeps the local project');
+  assert.strictEqual((await store.get('d2')).document.geometry.joints[0][1].x, 4, 'with its content');
   drive.failWrites = 0;
   // now a successful move, then disable: Drive projects vanish from the lists with NO remote call, nothing is deleted on Drive
-  await store.cloud.moveProjectToDrive(proj.id);
+  await store.cloud.moveProjectToDrive('proj-2');
   await store.cloud.disable();
   const calls = drive.calls.length;
   assert.deepStrictEqual((await store.listProjects()).filter((p) => p.location === 'drive'), [], 'Drive off: its projects are hidden');
@@ -230,11 +227,11 @@ const mkRouter = () => {
   assert.strictEqual(drive.byName('P').length, 1, 'nothing was removed from Drive');
   await store.cloud.enable();
   assert.strictEqual((await store.listProjects()).filter((p) => p.location === 'drive').length, 1);
-  // offline: the remote listing fails, local projects are still listed, the error is available
-  await store.createProject('Still here');
+  // offline: the remote listing fails, legacy local projects are still listed, the error is available
+  await seedLegacy(local, 'still-p', 'Still here', 'still-d', 'Still d', doc(1));
   drive.offline = true;
   const list = await store.listProjects();
-  assert(list.some((p) => p.name === 'Still here'), 'local work is listed even when Drive is unreachable');
+  assert(list.some((p) => p.name === 'Still here'), 'legacy local work is listed even when Drive is unreachable');
   assert(store.cloud.lastError(), 'the remote error is kept for the UI');
 }
 console.log('google-drive-adapter: ok');

@@ -7,6 +7,7 @@
 // are tests/save-key-leave-sketchstudio-node.test.js and tests/save-key-leave-penplotter-node.test.js.
 import assert from 'node:assert';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const H = { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas', name: 'Sketch' };
 
@@ -15,6 +16,7 @@ await (async () => {
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
   try {
+    const driveSession = await installFakeDriveSession(cdp, { signedIn: false });
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const click = async (x, y) => { await mouse('mouseMoved', x, y, 0); await sleep(30); await mouse('mousePressed', x, y, 1); await sleep(30); await mouse('mouseReleased', x, y, 0); await sleep(150); };
     const clickEl = async (sel) => { const c = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); assert(c, sel + ' not found'); await click(c.x, c.y); };
@@ -47,19 +49,22 @@ await (async () => {
 
     // 1. a clean Untitled: no leave-page warning
     await load();
-    await evalJs(`(async () => { await ${S}.setCurrent(null); })()`); await load();
-    await clickEl('#tool-select'); // a user gesture on the page (the browser shows the warning only after one)
+    await evalJs(`(async () => { const s = ${S}; await s.setCurrent(null); await s.writeBuffer(null); })()`); await load();
+    await clickEl('#tool-select'); // a user gesture on the page
     assert.strictEqual(await leaveWarns(), false, 'a clean Untitled: no leave-page warning');
-    // 2. an unsaved Untitled with content: the warning is raised (stay: the drawing is still there)
+    // 2. an unsaved Untitled with content: kept in local working buffer across reload (no beforeunload!)
     await drawLine();
-    assert.strictEqual(await leaveWarns(), true, 'an unsaved Untitled with content: the leave-page warning is raised');
-    assert.strictEqual(await shapes(), 1, 'stayed: the drawing is kept');
-    // 3. a real Ctrl+S on the unsaved Untitled: the Save as name prompt, in the sidebar, TAKES THE KEYBOARD FOCUS; the typed name stores it
+    assert.strictEqual(await leaveWarns(), false, 'an unsaved Untitled with content is buffered: no leave-page warning on reload');
+    assert.strictEqual(await shapes(), 1, 'reload reopened the Untitled drawing from the working buffer');
+    // 3. signed out -> a real Ctrl+S on the unsaved Untitled first asks to sign in; clicking Sign in continues seamlessly to the focused Save as prompt and saves ONLY to Drive
     await clickEl('#tool-line'); await sleep(150);
     await ctrlS();
-    await waitFor(`(() => { const a = document.querySelector('.sk-sidebar-ask input'); return !!a && document.activeElement === a; })()`, 'Ctrl+S on an unsaved design: the Save as name prompt, focused', 5000);
-    await key('a', 'KeyA', 65, 2); await typeText('Saved1'); await key('Enter', 'Enter', 13); await sleep(700);
+    await waitFor(`(() => { const b = document.querySelector('.sk-sidebar-ask [data-choice="signin"]'); return !!b && b.getBoundingClientRect().left >= 0; })()`, 'signed out Ctrl+S asks to sign in first', 5000);
+    await clickEl('.sk-sidebar-ask [data-choice="signin"]');
+    await waitFor(`(() => { const a = document.querySelector('.sk-sidebar-ask input'); return !!a && document.activeElement === a; })()`, 'after sign-in: the Save as name prompt, focused', 5000);
+    await key('a', 'KeyA', 65, 2); await typeText('Saved1'); await key('Enter', 'Enter', 13); await sleep(800);
     assert.strictEqual(await storedShapes('Saved1'), 1, 'the typed name stores the drawing');
+    assert.strictEqual(driveSession.drive.byName('Saved1.sketch.json').length, 1, 'Saved1 was saved ONLY on Google Drive');
     // 4. a named, saved design: no leave-page warning; the reload restores it
     assert.strictEqual(await leaveWarns(), false, 'a named, saved design: no leave-page warning');
     assert.strictEqual(await shapes(), 1, 'the reload restored the named design');

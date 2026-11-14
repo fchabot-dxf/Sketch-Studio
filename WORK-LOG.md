@@ -14757,3 +14757,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 - Addition: Compact template GLYPH_SYMBOL_SIZE_PX 12 -> 15 (Compact only; rest pinned as 614). tests/default-look.test.js updated. gate:quick run below.
 
+
+- Correction: Compact GLYPH_SYMBOL_SIZE_PX 16 (not 15) and GLYPH_OUTLINE_PX 0.5 (was 1). Compact only. default-look.test.js updated.
+

@@ -10,6 +10,7 @@
 // GLYPH_SYMBOL_SIZE_PX on its longer side.
 
 import SettingsManager from '#core/settings-manager.js';
+import { dbg } from '#core/debug.js';
 
 // The look knobs a template owns. (Snap/grid behaviour and grid look are not touched.)
 export const STYLE_SETTING_KEYS = [
@@ -83,35 +84,131 @@ export const STYLE_TEMPLATES = [
 
 export const CUSTOM_TEMPLATE_ID = 'custom';
 
-export function getStyleTemplate(id) {
-  return STYLE_TEMPLATES.find((t) => t.id === id) || STYLE_TEMPLATES[0];
+// ── USER PRESETS: named copies of the current look, kept per user in the STYLE_PRESETS setting ({ v: 1, presets: [...] }).
+// A preset has the same { id, name, settings, tokens? } shape as a built-in, so it applies through the SAME applyStyleTemplate.
+export const USER_PRESETS_KEY = 'STYLE_PRESETS';
+export const USER_PRESETS_VERSION = 1;
+export const PRESET_NAME_MAX = 40;
+const ALL_TOKEN_NAMES = [...new Set(STYLE_TEMPLATES.flatMap((t) => Object.keys(t.tokens || {})))];
+
+// Why a stored preset is not valid, or null. Every look knob must be present with the type of its factory value; tokens
+// (optional) may only use the --sk-* names a built-in template declares.
+function presetProblem(p) {
+  if (!p || typeof p !== 'object') return 'not an object';
+  if (typeof p.id !== 'string' || !p.id) return 'no id';
+  if (typeof p.name !== 'string' || !p.name.trim() || p.name.length > PRESET_NAME_MAX) return 'bad name';
+  if (!p.settings || typeof p.settings !== 'object') return 'no settings';
+  for (const k of STYLE_SETTING_KEYS) {
+    const v = p.settings[k];
+    if (typeof v !== typeof FACTORY[k] || (typeof v === 'number' && !Number.isFinite(v))) return 'bad value for ' + k;
+  }
+  if (p.tokens !== undefined) {
+    if (!p.tokens || typeof p.tokens !== 'object') return 'bad tokens';
+    for (const [n, v] of Object.entries(p.tokens)) if (!ALL_TOKEN_NAMES.includes(n) || typeof v !== 'string') return 'bad token ' + n;
+  }
+  return null;
+}
+
+// The valid user presets inside a raw STYLE_PRESETS value, in stored order. Each invalid entry is dropped with a dbg.warn naming
+// it. Cached per raw object, so the warning is printed once per stored value, not on every read.
+const validated = new WeakMap();
+let warnedRaw;
+export function userPresetsOf(raw) {
+  if (!raw || typeof raw !== 'object') {
+    if (raw != null && warnedRaw !== raw) { warnedRaw = raw; dbg.warn('style-presets', '[style-presets] STYLE_PRESETS is not an object; no user presets loaded', raw); }
+    return [];
+  }
+  if (validated.has(raw)) return validated.get(raw);
+  const out = [], seen = new Set();
+  if (raw.v !== USER_PRESETS_VERSION || !Array.isArray(raw.presets)) {
+    dbg.warn('style-presets', '[style-presets] STYLE_PRESETS has an unknown shape (v=' + raw.v + '); no user presets loaded');
+  } else {
+    for (const p of raw.presets) {
+      const why = presetProblem(p) || (seen.has(p.id) ? 'duplicate id' : null);
+      if (why) dbg.warn('style-presets', '[style-presets] dropping user preset ' + JSON.stringify(p && p.name !== undefined ? p.name : p) + ': ' + why);
+      else { seen.add(p.id); out.push(p); }
+    }
+  }
+  validated.set(raw, out);
+  return out;
+}
+export const listUserPresets = (settings = SettingsManager) => userPresetsOf(settings.get(USER_PRESETS_KEY));
+export const isUserPresetId = (id, settings = SettingsManager) => listUserPresets(settings).some((p) => p.id === id);
+
+export function getStyleTemplate(id, settings = SettingsManager) {
+  return STYLE_TEMPLATES.find((t) => t.id === id) || listUserPresets(settings).find((p) => p.id === id) || STYLE_TEMPLATES[0];
 }
 
 // The id the Style panel shows: the chosen template while every look knob still equals it, else 'custom'.
 export function activeStyleTemplateId(all) {
-  const t = getStyleTemplate(all.STYLE_TEMPLATE);
+  const t = STYLE_TEMPLATES.find((x) => x.id === all.STYLE_TEMPLATE) || userPresetsOf(all[USER_PRESETS_KEY]).find((p) => p.id === all.STYLE_TEMPLATE) || STYLE_TEMPLATES[0];
   return STYLE_SETTING_KEYS.every((k) => all[k] === t.settings[k]) ? t.id : CUSTOM_TEMPLATE_ID;
 }
 
-// Write a template's settings through the store (live: the renderer reads them on the next frame).
+// Write a template's (built-in or user preset) settings through the store (live: the renderer reads them on the next frame).
 export function applyStyleTemplate(id, settings = SettingsManager) {
-  const t = getStyleTemplate(id);
+  const t = getStyleTemplate(id, settings);
   settings.set('STYLE_TEMPLATE', t.id, { persist: 'local' });
   for (const k of STYLE_SETTING_KEYS) settings.set(k, t.settings[k], { persist: 'local' });
 }
 
+// Why `name` can not be a user preset's name, or null. A built-in's name is taken; an existing user preset's name is taken
+// unless `allowExisting` (a save may overwrite it); `exceptId` = the preset being renamed.
+export function presetNameProblem(name, settings = SettingsManager, { exceptId = null, allowExisting = false } = {}) {
+  const n = String(name).trim();
+  if (!n) return 'Enter a name.';
+  if (n.length > PRESET_NAME_MAX) return 'Use at most ' + PRESET_NAME_MAX + ' characters.';
+  const same = (a) => a.name.trim().toLowerCase() === n.toLowerCase();
+  if (STYLE_TEMPLATES.some(same)) return '"' + n + '" is a built-in style; pick another name.';
+  if (!allowExisting && listUserPresets(settings).some((p) => p.id !== exceptId && same(p))) return 'A preset named "' + n + '" already exists.';
+  return null;
+}
+export const findUserPresetByName = (name, settings = SettingsManager) => listUserPresets(settings).find((p) => p.name.trim().toLowerCase() === String(name).trim().toLowerCase()) || null;
+
+const writeUserPresets = (settings, presets) => settings.set(USER_PRESETS_KEY, { v: USER_PRESETS_VERSION, presets }, { persist: 'local' });
+
+// Save the CURRENT values of every look knob (plus the colour tokens of the active template, if it has any) as a user preset
+// named `name`, then make it the chosen template. A preset with that name (any case) is overwritten in place (same id, same name). Returns the preset.
+export function saveUserPreset(name, settings = SettingsManager) {
+  const problem = presetNameProblem(name, settings, { allowExisting: true });
+  if (problem) throw new Error(problem);
+  const all = settings.getAll();
+  const snapshot = {};
+  for (const k of STYLE_SETTING_KEYS) snapshot[k] = all[k];
+  const tokens = getStyleTemplate(all.STYLE_TEMPLATE, settings).tokens;
+  const existing = findUserPresetByName(name, settings);
+  const preset = { id: existing ? existing.id : 'user-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), name: existing ? existing.name : String(name).trim(), settings: snapshot };
+  if (tokens) preset.tokens = { ...tokens };
+  const rest = listUserPresets(settings);
+  writeUserPresets(settings, existing ? rest.map((p) => (p.id === preset.id ? preset : p)) : [...rest, preset]);
+  settings.set('STYLE_TEMPLATE', preset.id, { persist: 'local' });
+  return preset;
+}
+
+export function renameUserPreset(id, name, settings = SettingsManager) {
+  const problem = presetNameProblem(name, settings, { exceptId: id });
+  if (problem) throw new Error(problem);
+  if (!isUserPresetId(id, settings)) throw new Error('No user preset ' + id);
+  writeUserPresets(settings, listUserPresets(settings).map((p) => (p.id === id ? { ...p, name: String(name).trim() } : p)));
+}
+
+// Delete a user preset. The look stays as it is (the panel then shows Custom or the matching built-in).
+export function deleteUserPreset(id, settings = SettingsManager) {
+  if (!isUserPresetId(id, settings)) throw new Error('No user preset ' + id);
+  writeUserPresets(settings, listUserPresets(settings).filter((p) => p.id !== id));
+}
+
 // Template colour tokens: --sk-* custom properties set on the canvas HOST element ONLY (never app chrome). Every token any
 // template declares is cleared first, so Default (no tokens) leaves the host with its own CSS values.
-const ALL_TOKEN_NAMES = [...new Set(STYLE_TEMPLATES.flatMap((t) => Object.keys(t.tokens || {})))];
-export function applyTemplateTokens(host, id) {
+export function applyTemplateTokens(host, id, settings = SettingsManager) {
   if (!host || !host.style) return;
-  const tokens = getStyleTemplate(id).tokens || {};
+  const tokens = getStyleTemplate(id, settings).tokens || {};
   for (const name of ALL_TOKEN_NAMES) host.style.removeProperty(name);
   for (const [name, value] of Object.entries(tokens)) host.style.setProperty(name, value);
 }
 
 // Keep a host's tokens in step with the chosen template (now, and on every later template change or reset).
 export function bindTemplateTokens(host, settings = SettingsManager) {
-  applyTemplateTokens(host, settings.get('STYLE_TEMPLATE'));
-  return settings.subscribe((key) => { if (key === null || key === 'STYLE_TEMPLATE') applyTemplateTokens(host, settings.get('STYLE_TEMPLATE')); });
+  applyTemplateTokens(host, settings.get('STYLE_TEMPLATE'), settings);
+  return settings.subscribe((key) => { if (key === null || key === 'STYLE_TEMPLATE' || key === USER_PRESETS_KEY) applyTemplateTokens(host, settings.get('STYLE_TEMPLATE'), settings); });
 }

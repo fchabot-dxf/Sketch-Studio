@@ -99,6 +99,9 @@ const DEFAULT_SETTINGS = {
 
     // The Style panel's chosen template id (#ui/style-templates.js); replaces the never-read PRESET: 'CAD'.
     STYLE_TEMPLATE: 'default',
+    // The user's own named style presets (#ui/style-templates.js): { v: 1, presets: [{ id, name, settings, tokens? }] }. Per user, local
+    // (never in a drawing document, never on Drive). The shape is validated on read there; an entry that fails is dropped with a warning.
+    STYLE_PRESETS: { v: 1, presets: [] },
 
     // Document unit (U1, INERT): the display/input unit for dimension + cut-param fields. Base = 1 world unit = 1 mm
     // (see #core/units.js); switching RE-LABELS (no resize). Default 'mm' = the base, so a bare number is unchanged.

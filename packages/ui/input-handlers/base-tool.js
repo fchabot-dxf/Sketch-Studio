@@ -2,8 +2,8 @@
 // BASE TOOL - Shared utilities for all drawing tools
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition, hideInput } from '#ui/numeric-input-manager.js';
+import { updatePreview } from '#ui/preview-manager.js';
+import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition } from '#ui/numeric-input-manager.js';
 
 /**
  * Check if pointer movement exceeds drag threshold.
@@ -72,7 +72,7 @@ export function safeUpdatePreview(state, type, jointIds, pt, opts) {
  * ({ dual: { kind, labels, separator, digits } } for two fields, { single: { field } } for one) and calls these:
  * openCreationBoxes on the first click (the boxes show at once, beside the cursor, the first field focused: a digit typed now goes in it),
  * followCreationBoxes on every move (the box follows the cursor and each field shows the live value unless the user typed in it),
- * and cancelCreation for Esc inside a box (nothing is made, no undo step).
+ * Esc inside a box is NOT handled here: the box raises 'liveDimensionCancelled' and input-manager runs the canvas Esc (handleEscape) for it.
  */
 export function openCreationBoxes(e, box, values) {
     const x = e.clientX + 15, y = e.clientY + 15;
@@ -82,12 +82,6 @@ export function openCreationBoxes(e, box, values) {
 export function followCreationBoxes(e, values) {
     updateInputPosition(e.clientX, e.clientY);
     values.forEach((v, i) => setLiveInputValue(i, v));
-}
-export function cancelCreation(state) {
-    state.closeDrawStep();   // nothing committed: the centre / corner joint made by the first click goes with the cancelled step
-    clearPreview(state);
-    state.active = null;
-    hideInput();
 }
 
 /**
@@ -112,6 +106,6 @@ export function setupDimensionListeners(state, toolMode, config) {
     });
     window.addEventListener('liveDimensionCancelled', () => {
         if (state.currentTool !== toolMode) return;
-        config.onCancel();
+        if (config.onCancel) config.onCancel();
     });
 }

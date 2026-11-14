@@ -9,7 +9,7 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, cancelCreation } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
 const localState = { isDragging: false, dragStartScreen: null, boxes: false, cursor: null };
@@ -43,11 +43,7 @@ export function setupRectTool(svg, state){
                 safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1), { mode: RECT_MODES.TWO_POINT });
             }
         },
-        onCancel: () => {
-            rectState.lockedWidth = null; rectState.lockedHeight = null; localState.boxes = false;
-            // Esc inside the box (open since the first click): nothing is made and no undo step, as Esc on the canvas
-            if (state.active && state.active.mode === TOOL_MODES.RECT && state.active.waitingForSecondClick) cancelCreation(state);
-        }
+        onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 

@@ -6,7 +6,7 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, cancelCreation } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 
 let circleState = { lockedRadius: null, boxOpen: false };
@@ -37,11 +37,7 @@ export function setupCircleTool(svg, state){
                 try { state.tempMousePos = pt; } catch (_) { }
             }
         },
-        onCancel: () => {
-            circleState.lockedRadius = null;
-            // Esc inside the box (open since the first click): nothing is made and no undo step, as Esc on the canvas
-            if (state.active && state.active.mode === TOOL_MODES.CIRCLE && state.active.waitingForSecondClick) cancelCreation(state);
-        }
+        onCancel: () => { circleState.lockedRadius = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 

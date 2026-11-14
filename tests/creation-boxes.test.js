@@ -72,6 +72,20 @@ try {
   assert.strictEqual(st.active, null, 'polygon: Esc cancels the draw');
   assert.strictEqual(hist(), base, 'polygon: Esc leaves nothing and no undo step');
   assert.strictEqual(st.polygonSides, 8, 'polygon: an Esc keeps the remembered count');
+  // Esc inside the box is the SAME Esc as on the canvas: both cancel the draw AND go to Select
+  const escState = () => JSON.stringify({ tool: st.currentTool, active: st.active, hist: hist(), boxes: !idleBoxes() });
+  app.tool('polygon'); clickAt(P(0, 0)); app.esc(); const viaBox = escState();
+  app.tool('polygon'); clickAt(P(0, 0)); doc.activeElement.blur(); app.esc(); const viaCanvas = escState();
+  assert.strictEqual(viaBox, viaCanvas, 'Esc in the box = Esc on the canvas: ' + viaBox + ' vs ' + viaCanvas);
+  assert.strictEqual(st.currentTool, 'select', 'Esc goes to Select');
+  // Enter with no size (cursor still on the centre, nothing typed): a no-op, the box stays open and the draw waits
+  app.tool('polygon'); clickAt(P(0, 0)); app.enter();
+  assert(dualBox() && st.active && st.active.waitingForSecondClick, 'polygon: Enter with radius 0 keeps the box open and the draw waiting');
+  app.type('15'); app.enter();
+  assert.strictEqual(edges().length, 8, 'polygon: then a typed R places it (8 = the remembered count)');
+  app.undo();
+  assert.strictEqual(hist(), base);
+  app.tool('polygon');
   // a click places it too (no Enter), at the cursor
   clickAt(P(0, 0)); app.move(P(50, 0).x, P(50, 0).y); app.click(P(50, 0).x, P(50, 0).y);
   assert.strictEqual(edges().length, 8, 'polygon: a second click places it (8 sides, the remembered count)');
@@ -154,5 +168,9 @@ try {
     app.undo(); assert.strictEqual(hist(), base);
   }
   console.log('tool switch: ok');
+  // the tools' setups made ONE value box each of #dualInput and #dimInput (duplicate ids break focus and queries)
+  assert.strictEqual(doc.querySelectorAll('#dualInput').length, 1, 'exactly one #dualInput');
+  assert.strictEqual(doc.querySelectorAll('#dimInput').length, 1, 'exactly one #dimInput');
+  assert.strictEqual(doc.querySelectorAll('.sk-dual-input').length, 1, 'exactly one dual box element');
 } catch (e) { failed = e; } finally { await app.close(); }
 if (failed) { console.error(failed.stack || failed.message || failed); process.exitCode = 1; } else console.log('creation-boxes: ok');

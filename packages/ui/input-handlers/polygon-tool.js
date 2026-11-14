@@ -11,7 +11,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, cancelCreation } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
@@ -46,16 +46,12 @@ export function setupPolygonTool(svg, state) {
             if (detail.confirmedBy !== 'enter') return;
             if (Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
             const center = state.joints.get(state.active.start);
+            const end = sizedEnd(center, live.cursor || center);
+            if (!(Math.hypot(end.x - center.x, end.y - center.y) > MIN_RADIUS)) { detail.keepOpen = true; return; } // no size yet (cursor still on the centre, none typed): the box stays open
             live.boxOpen = false;
-            createPolygon(state, sizedEnd(center, live.cursor || center)); // Enter places it at the typed size, else at the cursor
-        },
-        onCancel: () => {   // Esc inside the box: nothing is made and no undo step (as Esc on the canvas)
-            if (!live.boxOpen || !state.active || state.active.mode !== TOOL_MODES.POLYGON) return;
-            cancelCreation(state);
-            live.boxOpen = false;
-            resetLive();
+            createPolygon(state, end); // Enter places it at the typed size, else at the cursor
         }
-    });
+    });   // Esc inside the box is the canvas Esc (input-manager handleEscape -> resetPolygonState)
 }
 
 function resetLive() {

@@ -162,7 +162,6 @@ let uiState = {
     field: null, // 'length', 'radius', 'width', 'height' (for live mode)
     
     // DOM Elements
-    container: null,
     singleInput: null,
     dualContainer: null,
     dualInputW: null,
@@ -191,10 +190,10 @@ export function setupNumericInput(svg, state) {
         return;
     }
 
-    if (uiState.container) return; // Already setup
-    ensureNumericInputStyles();
     uiState.svg = svg;
-    uiState.appState = state;
+    uiState.appState = state;   // always the latest page / state; the elements and their listeners are made ONCE per document
+    if (uiState.dualContainer && uiState.dualContainer.isConnected) return; // TASK 596: already set up in THIS document (the old `uiState.container` guard was never assigned, so every tool's setup built another hidden #dualInput)
+    ensureNumericInputStyles();
 
     // --- 1. Create Single/Edit Input (Reuses #dimInput if present, or creates one) ---
     let existingSingle = (typeof document.getElementById === 'function') ? document.getElementById('dimInput') : null;
@@ -492,6 +491,7 @@ function handleCommit() {
             detail.value = parseFloat(uiState.singleInput.value);
         }
         window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
+        if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
     }
 }

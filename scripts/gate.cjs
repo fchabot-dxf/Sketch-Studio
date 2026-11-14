@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // scripts/gate.cjs — the ONE test runner, in tiers (TASK 568).
 //   node scripts/gate.cjs [--tier quick|live|full|merge] [--base REF] [--head REF] [--plan] [--jobs N] [--list]     (npm run gate / gate:quick / gate:live)
-//   quick = every test that launches no browser, run wide in parallel. For builders while they iterate. No lock.
+//   quick = every test that launches no browser, run wide in parallel. For builders while they iterate. NEVER WAITS for the lock (TASK 606): it takes
+//           the lock only if free, for the exclusive tests; if another gate holds it, it DEFERS the exclusive tests (see below) and exits on what ran.
 //   live  = the browser tests + shell-smoke, run side by side at LIVE_JOBS. Takes the machine-wide lock.
 //   full  = quick + live + the headless-left check. What the gate has always covered (default). Takes the lock.
 //   merge = quick + shell-smoke + only the live tests AFFECTED by the branch's changes (see AFFECTED below). Takes the lock.
@@ -10,7 +11,8 @@
 // EXCLUSIVE tests (TASK 579): a test whose pass/fail depends on wall time (a ms limit, a per-frame budget, a runtime budget) declares it with a first-column
 //   comment line `// gate: exclusive` in its own file. Such a test keeps its tier but does not run in the parallel batch: after the batch of its tier
 //   it runs ALONE, one at a time, with nothing else from this gate running, while this gate holds the machine-wide lock (so another worktree's live run
-//   cannot load the CPU under it either). quick takes the lock for that exclusive part only (and releases it right after); live/full/merge already hold it.
+//   cannot load the CPU under it either). quick takes the lock for that exclusive part only (and releases it right after) if it is free, else prints `DEFERRED <file> (lock held by ...)` per
+//   test and runs none of them (the merge / full tier runs them); live/full/merge already hold the lock, waiting for it.
 //   Each prints `EXCLUSIVE <file> <seconds>`. Why a marker and not a list here: the declaration stays next to the test whose limit needs it.
 // Exit 0 only if no file failed, smoke is 12/12 (live/full) and no headless browser is left (live/full).
 //
@@ -248,7 +250,8 @@ function releaseLock() {
   if (holder.pid === process.pid) fs.unlinkSync(LOCK_FILE);
 }
 
-function acquireLock(tier) {
+// wait=false (the quick tier, TASK 606): never waits; returns the live holder's record if another gate holds the lock, else null once it is ours.
+function acquireLock(tier, wait = true) {
   const mine = { pid: process.pid, worktree: REPO_ROOT, tier, started: new Date().toISOString() };
   let lastShown = '';
   let lastShownAt = 0;
@@ -257,7 +260,7 @@ function acquireLock(tier) {
       fs.writeFileSync(LOCK_FILE, JSON.stringify(mine), { flag: 'wx' });
       heldLock = true;
       if (lastShown) console.log('LOCK acquired: running');
-      return;
+      return null;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
     }
@@ -271,6 +274,7 @@ function acquireLock(tier) {
       fs.unlinkSync(LOCK_FILE);
       continue;
     }
+    if (!wait) return holder;
     const msg = `LOCK held by pid ${holder.pid}: ${holder.tier} in ${holder.worktree} since ${holder.started}; waiting`;
     if (msg !== lastShown || Date.now() - lastShownAt > 60000) { console.log(msg); lastShown = msg; lastShownAt = Date.now(); }
     sleepSync(3000);
@@ -333,10 +337,18 @@ async function runPool(files, tier, jobs, timings, longestFirst) {
 }
 
 // the exclusive tests of one tier, one at a time, nothing else of this gate running; under the machine-wide lock (taken here only if the tier did not already)
-async function runExclusive(files, tier, results, lockSeconds) {
+async function runExclusive(files, tier, results, lockSeconds, deferred) {
   if (!files.length) return;
   const tookLock = !heldLock;
-  if (tookLock) acquireLock(tier);
+  if (tookLock) {
+    const holder = acquireLock(tier, tier !== 'quick'); // the quick tier never waits (TASK 606)
+    if (holder) {
+      for (const file of files) console.log(`DEFERRED ${file} (lock held by ${holder.tier} in ${holder.worktree}, pid ${holder.pid}; the merge / full tier runs it)`);
+      console.log(`DEFERRED ${files.length}`);
+      deferred.push(...files);
+      return;
+    }
+  }
   const t0 = Date.now();
   try {
     for (const file of files) {
@@ -412,17 +424,18 @@ async function main() {
   let smoke = null;
   let counts = null;
   const timings = loadTimings();
+  const deferred = []; // quick: exclusive tests not run because another gate held the lock
   const lockSeconds = []; // quick: how long the exclusive part held the lock
   try {
     if (wantQuick) {
       const q = splitExclusive(tiers.quick);
       results.push(...await runPool(q.parallel, 'quick', jobs || QUICK_JOBS, timings, true));
-      await runExclusive(q.exclusive, 'quick', results, lockSeconds);
+      await runExclusive(q.exclusive, 'quick', results, lockSeconds, deferred);
     }
     if (wantLive) {
       const l = splitExclusive(liveFiles);
       results.push(...await runPool(l.parallel, 'live', jobs || LIVE_JOBS, timings, true));
-      await runExclusive(l.exclusive, 'live', results, lockSeconds);
+      await runExclusive(l.exclusive, 'live', results, lockSeconds, deferred);
       smoke = runSmoke();
       counts = headlessCheck(smoke.pid);
     }
@@ -439,7 +452,7 @@ async function main() {
   for (const r of [...results].sort((a, b) => b.ms - a.ms).slice(0, 15)) console.log(`  ${(r.ms / 1000).toFixed(1).padStart(6)}  ${r.tier.padEnd(5)}  ${r.file}`);
 
   const jobsText = [wantQuick ? `quick=${jobs || QUICK_JOBS}` : null, wantLive ? `live=${jobs || LIVE_JOBS}` : null].filter(Boolean).join(',');
-  console.log(`GATE tier=${tier} jobs=${jobsText} files=${results.length} pass=${results.length - failed.length} fail=${failed.length} elapsed=${((Date.now() - started) / 1000).toFixed(0)}s`);
+  console.log(`GATE tier=${tier} jobs=${jobsText} files=${results.length} pass=${results.length - failed.length} fail=${failed.length}${deferred.length ? ` deferred=${deferred.length}` : ''} elapsed=${((Date.now() - started) / 1000).toFixed(0)}s`);
   for (const f of failed) console.log(`FAIL ${f.file}`);
   if (lockSeconds.length) console.log(`LOCK held for the exclusive tests only: ${lockSeconds.join(' ')}`);
   for (const k of KNOWN_FAILURES) if (!failed.some(f => f.file === k)) console.log(`KNOWN-NOW-PASSING ${k}`);

@@ -416,9 +416,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const leadLines = (lead, strokeColor, visualOpacity) => [lead.extension, lead.leader].filter(Boolean).map(s =>
     `<line class="dim-lead" x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${visualOpacity}"/>`);
 
-  // The blue dot on a selected dimension that moves the dimension LINE (its offset); the value itself drags freely.
-  const dimHandle = (cIdx, x, y) => `<circle class="dim-offset-handle" data-constraint-idx="${cIdx}" cx="${x}" cy="${y}" r="${scale(4)}" style="cursor:move; fill:${skv('#2563eb')}; stroke:${skv('white')}" stroke-width="${scale(1)}"/>`;
-
   // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
   const dimLabelBounds = [];
   {
@@ -2459,7 +2456,6 @@ switch(c.type){
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
           if (!c.__editing) {
             out.push(labelHtml);
-            if (isSelected && canEdit) out.push(dimHandle(cIdx, dimLineStart.x + (dimLineEnd.x - dimLineStart.x) * 0.2, dimLineStart.y + (dimLineEnd.y - dimLineStart.y) * 0.2));
           }
         }
       }
@@ -2562,7 +2558,6 @@ switch(c.type){
             try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
             if (!c.__editing) {
               out.push(labelHtml);
-              if (isSelected && canEdit) out.push(dimHandle(cIdx, sx, sy));
             }
           }
         }

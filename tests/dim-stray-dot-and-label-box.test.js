@@ -85,7 +85,10 @@ assert(!selHtml.includes('<rect'), 'selected linear dimension emits no pale-blue
 assert(!selHtml.includes('stroke-opacity="0.28"'), 'selected linear dimension emits no 0.28 glow');
 const selLabelText = (selHtml.match(/<g class="dim-label"[\s\S]*?<text([^>]*)>50\.0<\/text>/) || [])[1];
 assert(selLabelText && selLabelText.includes('fill:var(--sk-selection, #1e40af)'), `selected label text uses --sk-selection, got: ${selLabelText}`);
-assert(selHtml.includes('class="dim-offset-handle" data-constraint-idx="0" cx="17" cy="-10"'), 'selected linear dimension retains .dim-offset-handle at 20% along dim line');
+assert(!selHtml.includes('dim-offset-handle'), 'selected linear dimension emits no .dim-offset-handle dot');
+const selCirclesOnDimLine = [...selHtml.matchAll(/<circle\b[^>]*cx="([-\d.e]+)"[^>]*cy="([-\d.e]+)"[^>]*>/g)]
+  .filter((m) => Math.abs(Number(m[1]) - 17) < 1e-3);
+assert.strictEqual(selCirclesOnDimLine.length, 0, 'selected linear dimension emits no circle/dot on its dimension line x=17');
 
 // ── 3. Radius & angle dimensions: hover/selected colour change, no glow box ──
 {

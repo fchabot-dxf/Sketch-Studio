@@ -53,9 +53,9 @@ const EVERY_TEST_TRIGGERS = [
 const ALIASES = { '#core/': 'packages/core/', '#ui/': 'packages/ui/', '#app/': 'apps/sketchstudio/' };
 
 const FILE_LIMIT_MS = 90000;
-// Concurrency per tier. node tests: cores - 2. live: 6, the fastest of 1/2/4/6 with zero failures (TASK 568 measurement, WORK-LOG TURN 568).
+// Concurrency per tier. node tests: cores - 2. live: 12, 0 failures in 3 runs at 12 (and at 10) after TASK 613 made the two load-sensitive tests wait for their condition (WORK-LOG TURN 613); 6 was the TASK 568 pick before that.
 const QUICK_JOBS = Math.max(1, os.cpus().length - 2);
-const LIVE_JOBS = 6;
+const LIVE_JOBS = 12;
 
 // Machine-wide state lives outside every repo so all worktrees share it.
 const STATE_DIR = process.env.LOCALAPPDATA || os.tmpdir();

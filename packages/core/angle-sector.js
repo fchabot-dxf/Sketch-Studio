@@ -86,8 +86,9 @@ export function angleDimensionSector(d1, d2, labelAngle, value) {
   return { start: best.start, end: best.end };
 }
 
-// Where a dimension's label sits as a direction from the intersection (glyphPos, then __pos, else between the two lines).
+// Where a dimension's label sits as a direction from the intersection (labelAngle, else glyphPos / __pos, else bisect).
 export function angleLabelAngle(c, int, d1, d2) {
+  if (Number.isFinite(c.labelAngle)) return c.labelAngle;
   const at = c.glyphPos || c.__pos;
   return at && int ? Math.atan2(at.y - int.y, at.x - int.x) : (d1 + d2) / 2;
 }

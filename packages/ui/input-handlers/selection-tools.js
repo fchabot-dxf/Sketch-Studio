@@ -12,6 +12,7 @@ import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
 import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
+import { angleVertex, linearDimFrame, linearPointToParams, resolveDimEndpoints } from '#core/dim-label.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -201,7 +202,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 type: DRAG_TYPES.DIMENSION,
                 mode: 'label',
                 constraint: constraint,
-                initialOffset: constraint.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
                 startWorld: screenToWorld(svg, e.clientX, e.clientY),
                 startClient: { x: e.clientX, y: e.clientY },
                 pointerId: e.pointerId
@@ -219,7 +220,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
             state.drag = {
                 type: DRAG_TYPES.DIMENSION,
                 constraint: constraint,
-                initialOffset: constraint.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
                 startWorld: screenToWorld(svg, e.clientX, e.clientY),
                 pointerId: e.pointerId
             };
@@ -598,29 +599,15 @@ export function handleSelectionPointerMove(e, svg, state) {
         }
         // If this is a radial (circle) dimension, compute radial offset from center
         if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-            const s1 = state.shapes.find(s => s.id === c.shapes[0]);
-            const s2 = state.shapes.find(s => s.id === c.shapes[1]);
-            if (s1 && s2 && s1.joints && s2.joints) {
-                const j1 = state.joints.get(s1.joints[0]), j2 = state.joints.get(s1.joints[1]);
-                const j3 = state.joints.get(s2.joints[0]), j4 = state.joints.get(s2.joints[1]);
-                if (j1 && j2 && j3 && j4) {
-                    const int = getLineIntersection(j1, j2, j3, j4);
-                    if (int) {
-                        c.offset = getDist(int, wpt);
-                    }
-                }
-            }
+            const int = angleVertex(c, state.joints, state.shapes);
+            if (int) c.offset = getDist(int, wpt);
             return true;
         } else if (c && c.isRadius) {
-            const shape = c.shape ? state.shapes.find(s => s.id === c.shape) : null;
-            const center = (shape && shape.joints && shape.joints[0]) ? state.joints.get(shape.joints[0]) : null;
+            const { j1: center } = resolveDimEndpoints(c, state.joints, state.shapes);
             if (center) placeRadiusLabel(c, center, wpt);
         } else {
-            const j1 = state.joints.get(c.joints[0]);
-            const j2 = state.joints.get(c.joints[1]);
-            if (j1 && j2) {
-                c.offset = perpendicularDistance(wpt, j1, j2);
-            }
+            const { j1, j2 } = resolveDimEndpoints(c, state.joints, state.shapes);
+            if (j1 && j2) c.offset = linearPointToParams(linearDimFrame(c, j1, j2), wpt).offset;
         }
         return true;
     }

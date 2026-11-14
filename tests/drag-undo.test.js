@@ -113,7 +113,7 @@ assert.deepStrictEqual(DRAG_SHAPE_UNDO_LABELS, { line: 'drag line', circle: 'dra
     handleSelectionPointerMove(ev({ x: 260, y: 20 }), SVG, st);
     handleSelectionPointerUp(ev({ x: 260, y: 20 }), SVG, st);
   });
-  assert.ok(c.labelPos, 'the label moved');
+  assert.ok(c.offset !== 30 && Number.isFinite(c.labelSlide), 'the label moved onto the dragged offset and slide');
   drag(S, { joint: b }, { x: 300, y: 100 }, { x: 300, y: 180 });
   assert.deepStrictEqual(labels(st).slice(h0), ['move dimension label', 'drag point'], 'label drag then joint drag: two steps');
   const journal = buildJournal(st.history, st, { redoStack: st.redoStack });

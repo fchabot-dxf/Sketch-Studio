@@ -13,6 +13,7 @@ import { getDist, perpendicularDistance, projectPointOnLine, getLineIntersection
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
 import { angleSectorUnderLabel } from '#core/angle-sector.js';
+import { linearDimFrame, linearParamsToPoint, linearPointToParams, polarPointToParams, projectDimLabel, resolveDimEndpoints } from '#core/dim-label.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -961,8 +962,10 @@ function detectDimMode(j1, j2, w) {
 // dragging an existing dimension all call it): the label's DISTANCE from the centre (offset) and its ANGLE around the
 // centre (labelAngle), so the leader can sit at any angle and the label lands where it is dropped.
 export function placeRadiusLabel(c, center, w) {
-    c.offset = getDist(center, w);
-    c.labelAngle = Math.atan2(w.y - center.y, w.x - center.x);
+    const { offset, labelAngle } = polarPointToParams(center, w);
+    c.offset = offset;
+    c.labelAngle = labelAngle;
+    delete c.labelPos;
 }
 
 export function updateConstraintOffset(state, c, w) {
@@ -973,7 +976,11 @@ export function updateConstraintOffset(state, c, w) {
             placeRadiusLabel(c, center, w);
         }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-        // Angle Dimension: Offset is radius from intersection
+        if (!c.__placing) {
+            projectDimLabel(c, w, state.joints, state.shapes);
+            return;
+        }
+        // Angle Dimension during placement: offset is radius from intersection, label stays on sector bisect by default
         const s1 = sceneShapes(state.shapes).find(s => s.id === c.shapes[0]);
         const s2 = sceneShapes(state.shapes).find(s => s.id === c.shapes[1]);
         if (s1 && s2) {
@@ -983,11 +990,13 @@ export function updateConstraintOffset(state, c, w) {
                 const int = getLineIntersection(j1, j2, j3, j4);
                 if (int) {
                     c.offset = getDist(int, w);
+                    delete c.labelAngle;
+                    delete c.labelPos;
                     // Also store explicit position for sector detection
                     c.glyphPos = w;
                     // TASK 543 / 553: while a NEW angle dimension is being placed, the sector under the label (at most 180 degrees) decides
                     // what it measures: its span is the value, the sector is stored. Geometry is untouched: every choice holds the lines where they are.
-                    if (c.__placing && c.__newlyPlaced && !(c.isDriven || c.driven)) {
+                    if (c.__newlyPlaced && !(c.isDriven || c.driven)) {
                         const choice = angleSectorUnderLabel(Math.atan2(j2.y - j1.y, j2.x - j1.x), Math.atan2(j4.y - j3.y, j4.x - j3.x), Math.atan2(w.y - int.y, w.x - int.x));
                         c.value = choice.value;
                         c.sector = choice.sector;
@@ -996,19 +1005,30 @@ export function updateConstraintOffset(state, c, w) {
             }
         }
     } else if (c.type === CONSTRAINT_TYPES.DISTANCE && c.shapes && c.shapes.length === 2) {
-        // Line-Line Distance: Offset is distance from first line?
-        // For simplicity, we can just store the mouse position as glyphPos and let renderer handle it,
-        // or calculate offset relative to the first line.
-        c.glyphPos = w;
+        if (!c.__placing) {
+            projectDimLabel(c, w, state.joints, state.shapes);
+            return;
+        }
+        const { j1, j2 } = resolveDimEndpoints(c, state.joints, state.shapes);
+        if (j1 && j2) {
+            const frame = linearDimFrame(c, j1, j2);
+            c.offset = linearPointToParams(frame, w).offset;
+            delete c.labelSlide;
+            delete c.labelPos;
+            c.glyphPos = linearParamsToPoint(frame, c.offset, 0);
+        }
     } else if (isPointLineDistance(c)) {
-        // Point-to-line: the dimension line runs from P to the foot of the perpendicular; the label sits `offset` to its side.
-        const pt = sceneJoints(state.joints).get(c.joints[0]), la = sceneJoints(state.joints).get(c.joints[1]), lb = sceneJoints(state.joints).get(c.joints[2]);
-        if (pt && la && lb) {
-            const foot = projectPointOnLine(pt, la, lb);
-            try { c.offset = perpendicularDistance(w, pt, foot); } catch(_) { c.offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30; }
-            const dx = foot.x - pt.x, dy = foot.y - pt.y, len = Math.hypot(dx, dy);
-            const nx = len > 0.01 ? -dy / len : 0, ny = len > 0.01 ? dx / len : -1;
-            c.glyphPos = { x: (pt.x + foot.x) / 2 + nx * c.offset, y: (pt.y + foot.y) / 2 + ny * c.offset };
+        if (!c.__placing) {
+            projectDimLabel(c, w, state.joints, state.shapes);
+            return;
+        }
+        const { j1, j2 } = resolveDimEndpoints(c, state.joints, state.shapes);
+        if (j1 && j2) {
+            const frame = linearDimFrame(c, j1, j2);
+            c.offset = linearPointToParams(frame, w).offset;
+            delete c.labelSlide;
+            delete c.labelPos;
+            c.glyphPos = linearParamsToPoint(frame, c.offset, 0);
         }
     } else if (c.joints && c.joints.length >= 2) {
         const j1 = sceneJoints(state.joints).get(c.joints[0]);
@@ -1038,29 +1058,15 @@ export function updateConstraintOffset(state, c, w) {
                 c.isDriven = isReference;
                 c.driven = isReference;
 
-                const midX = (j1.x + j2.x) / 2;
-                const midY = (j1.y + j2.y) / 2;
-                
-                if (mode === 'horizontal') {
-                    c.offset = w.y - midY;
-                    c.value = Math.abs(j2.x - j1.x);
-                    c.glyphPos = { x: midX, y: w.y };
-                } else if (mode === 'vertical') {
-                    c.offset = w.x - midX;
-                    c.value = Math.abs(j2.y - j1.y);
-                    c.glyphPos = { x: w.x, y: midY };
-                } else {
-                    try { c.offset = perpendicularDistance(w, j1, j2); } catch(_) { c.offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30; }
-                    c.value = getDist(j1, j2);
-                    const dx = j2.x - j1.x, dy = j2.y - j1.y;
-                    const len = Math.hypot(dx, dy);
-                    const nx = len > 0.01 ? -dy / len : 0;
-                    const ny = len > 0.01 ? dx / len : -1;
-                    c.glyphPos = { x: midX + nx * c.offset, y: midY + ny * c.offset };
-                }
+                const frame = linearDimFrame(c, j1, j2);
+                c.offset = linearPointToParams(frame, w).offset;
+                delete c.labelSlide;
+                delete c.labelPos;
+                c.value = mode === 'horizontal' ? Math.abs(j2.x - j1.x) : mode === 'vertical' ? Math.abs(j2.y - j1.y) : getDist(j1, j2);
+                c.glyphPos = linearParamsToPoint(frame, c.offset, 0);
             } else {
-                // After placement, just update offset (mode is locked)
-                try { c.offset = perpendicularDistance(w, j1, j2); } catch(_) { c.offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30; }
+                // After placement, drag moves label onto its line via the one projection rule
+                projectDimLabel(c, w, state.joints, state.shapes);
             }
         }
     }

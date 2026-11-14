@@ -146,6 +146,7 @@ function withDimensionState(obj, params) {
     if (params.glyphPos) obj.glyphPos = params.glyphPos;
     if (params.__pos) obj.__pos = params.__pos;
     if (Number.isFinite(params.labelAngle)) obj.labelAngle = params.labelAngle;
+    if (Number.isFinite(params.labelSlide)) obj.labelSlide = params.labelSlide;
     if (params.labelPos) obj.labelPos = { ...params.labelPos };
     // TASK 535: the dimension's NAME (d1, d2, ... or the user's) and its FORMULA (only when one was typed) travel here, once, for every mode
     if (typeof params.name === 'string' && params.name) obj.name = params.name;
@@ -241,7 +242,7 @@ export function createConstraint(type, params) {
                     type: CONSTRAINT_TYPES.DISTANCE,
                     shape: params.shape,
                     value: params.value,
-                    offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                    offset: Number.isFinite(params.offset) ? params.offset : (SolverConfig.DIMENSION_OFFSET || 30),
                     isRadius: true
                 }, params);
             }
@@ -251,7 +252,7 @@ export function createConstraint(type, params) {
                     type: CONSTRAINT_TYPES.DISTANCE,
                     shapes: params.shapes.slice(),
                     value: params.value,
-                    offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30
+                    offset: Number.isFinite(params.offset) ? params.offset : (SolverConfig.DIMENSION_OFFSET || 30)
                 }, params);
             }
             if (!params.joints || params.joints.length < 2) return null;
@@ -259,7 +260,7 @@ export function createConstraint(type, params) {
                 type: CONSTRAINT_TYPES.DISTANCE,
                 joints: params.joints,
                 value: params.value,
-                offset: params.offset || SolverConfig.DIMENSION_OFFSET || 30,
+                offset: Number.isFinite(params.offset) ? params.offset : (SolverConfig.DIMENSION_OFFSET || 30),
                 isRadius: params.isRadius || false
             }, params);
         case CONSTRAINT_TYPES.EQUAL:
@@ -281,7 +282,7 @@ export function createConstraint(type, params) {
                 type: CONSTRAINT_TYPES.ANGLE,
                 shapes: params.shapes.slice(),
                 value: params.value,
-                offset: params.offset || SolverConfig.ANGLE_OFFSET || 40
+                offset: Number.isFinite(params.offset) ? params.offset : (SolverConfig.ANGLE_OFFSET || 40)
             }, params);
             // TASK 553: a DRIVING angle measures one stored sector (#core/angle-sector.js), the default when none was given; a reference
             // measures the sector its label sits in and stores none

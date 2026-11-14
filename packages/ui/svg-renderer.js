@@ -15,6 +15,7 @@ import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
+import { linearDimFrame, linearParamsToPoint, linearPointToParams, polarPointToParams, resolveDimEndpoints } from '#core/dim-label.js';
 import { symmetricOperands } from '#core/symmetric.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 
@@ -322,153 +323,67 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   }
 
   // --- Dimension geometry, shared by the dimension drawing below and the glyph/label overlap rule ---
-  const resolveDimEnds = (c) => {
-    let j1 = null, j2 = null;
-    if(c.isRadius && c.shape){
-      const shape = opShapes.find(s => s.id === c.shape);
-      if(shape && shape.joints && shape.joints.length >= 1) j1 = opJoints.get(shape.joints[0]);
-    } else if(isPointLineDistance(c)){
-      // Point-to-line: from P to the foot of the perpendicular on line AB
-      j1 = opJoints.get(c.joints[0]);
-      const la = opJoints.get(c.joints[1]), lb = opJoints.get(c.joints[2]);
-      if(j1 && la && lb){
-        const dx = lb.x - la.x, dy = lb.y - la.y;
-        const det = dx*dx + dy*dy;
-        if(det > 0.00001){
-          const t = ((j1.x - la.x)*dx + (j1.y - la.y)*dy) / det;
-          j2 = { x: la.x + t*dx, y: la.y + t*dy };
-        }
-      }
-    } else if(c.joints && c.joints.length >= 2){
-      j1 = opJoints.get(c.joints[0]); j2 = opJoints.get(c.joints[1]);
-    } else if(c.shapes && c.shapes.length === 2){
-      // Line-Line Distance (Parallel)
-      const s1 = opShapes.find(s => s.id === c.shapes[0]);
-      const s2 = opShapes.find(s => s.id === c.shapes[1]);
-      if(s1 && s2 && s1.joints && s2.joints){
-        const l1a = opJoints.get(s1.joints[0]), l1b = opJoints.get(s1.joints[1]);
-        const l2a = opJoints.get(s2.joints[0]), l2b = opJoints.get(s2.joints[1]);
-        if(l1a && l1b && l2a && l2b){
-          // Project midpoint of s1 onto s2 to get perpendicular distance points
-          const mx = (l1a.x + l1b.x)/2, my = (l1a.y + l1b.y)/2;
-          j1 = { x: mx, y: my };
-          const dx = l2b.x - l2a.x, dy = l2b.y - l2a.y;
-          const det = dx*dx + dy*dy;
-          if(det > 0.00001){
-             const t = ((j1.x - l2a.x)*dx + (j1.y - l2a.y)*dy) / det;
-             j2 = { x: l2a.x + t*dx, y: l2a.y + t*dy };
-          }
-        }
-      }
-    } else if(c.joint && c.shape){
-      // Point-Line Distance
-      j1 = opJoints.get(c.joint);
-      const s = opShapes.find(s => s.id === c.shape);
-      if(j1 && s && s.joints){
-         const l1 = opJoints.get(s.joints[0]), l2 = opJoints.get(s.joints[1]);
-         if(l1 && l2){
-           const dx = l2.x - l1.x, dy = l2.y - l1.y;
-           const det = dx*dx + dy*dy;
-           if(det > 0.00001){
-              const t = ((j1.x - l1.x)*dx + (j1.y - l1.y)*dy) / det;
-              j2 = { x: l1.x + t*dx, y: l1.y + t*dy };
-           }
-         }
-      }
-    }
-    return { j1, j2 };
-  };
+  const resolveDimEnds = (c) => resolveDimEndpoints(c, opJoints, opShapes);
 
-  // A radius label: explicit placement (__pos), else `offset` along the declared labelAngle from the centre.
+  // A radius label: explicit placement (__pos), else `offset` along the declared labelAngle (or projected legacy labelPos).
   const radiusLabelPos = (c, center, offset) => {
-    if (c && c.labelPos) return { x: c.labelPos.x, y: c.labelPos.y };
     if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
-    const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : 0;
-    return { x: center.x + Math.cos(angle) * offset, y: center.y + Math.sin(angle) * offset };
+    const legacy = (c && c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
+    const effOffset = legacy ? legacy.offset : offset;
+    const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacy ? legacy.labelAngle : 0);
+    return { x: center.x + Math.cos(angle) * effOffset, y: center.y + Math.sin(angle) * effOffset };
   };
 
   // A linear dimension: value text, extension lines, dimension line and arrow direction.
-  const linearDimGeom = (c, j1, j2, offset) => {
-    const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2;
-    const dx = j2.x - j1.x, dy = j2.y - j1.y;
-    const len = Math.hypot(dx, dy);
+  // The label always sits ON its dimension line at (offset, labelSlide), centred by default.
+  const linearDimGeom = (c, j1, j2, defaultOffset) => {
+    const frame = linearDimFrame(c, j1, j2);
+    const { dimMode, len, ax: adx, ay: ady, nx, ny } = frame;
+    const legacy = (c && c.labelPos) ? linearPointToParams(frame, c.labelPos) : null;
+    const offset = legacy ? legacy.offset : defaultOffset;
+    const hasSlide = Number.isFinite(c.labelSlide) || !!legacy;
+    const slide = legacy ? legacy.labelSlide : (Number.isFinite(c.labelSlide) ? c.labelSlide : 0);
     const isPlacing = !!c.__placing;
     const isDrivenFlag = !!(c.isDriven || c.driven);
     const hasValue = (typeof c.value === 'number');
-    const dimMode = c.dimMode || 'aligned';
-    let displayVal, nx, ny, annotX, annotY;
-    let ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd;
-    let adx, ady; // arrow direction
 
+    let projDist, ext1End, ext2End;
     if (dimMode === 'horizontal') {
-      // Horizontal: measure X distance, dim line is horizontal, extensions are vertical
-      const projDist = Math.abs(j2.x - j1.x);
-      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-
-      const midY = (j1.y + j2.y) / 2;
-      const dimY = midY + offset;
-
-      nx = 0; ny = 1; // extensions go vertical
-      ext1Start = { x: j1.x, y: j1.y };
+      projDist = Math.abs(j2.x - j1.x);
+      const dimY = frame.mid.y + offset;
       ext1End = { x: j1.x, y: dimY };
-      ext2Start = { x: j2.x, y: j2.y };
       ext2End = { x: j2.x, y: dimY };
-      dimLineStart = { x: j1.x, y: dimY };
-      dimLineEnd = { x: j2.x, y: dimY };
-      annotX = (j1.x + j2.x) / 2;
-      annotY = dimY;
-      adx = j2.x > j1.x ? 1 : -1; ady = 0;
-
     } else if (dimMode === 'vertical') {
-      // Vertical: measure Y distance, dim line is vertical, extensions are horizontal
-      const projDist = Math.abs(j2.y - j1.y);
-      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-
-      const midX = (j1.x + j2.x) / 2;
-      const dimX = midX + offset;
-
-      nx = 1; ny = 0; // extensions go horizontal
-      ext1Start = { x: j1.x, y: j1.y };
+      projDist = Math.abs(j2.y - j1.y);
+      const dimX = frame.mid.x + offset;
       ext1End = { x: dimX, y: j1.y };
-      ext2Start = { x: j2.x, y: j2.y };
       ext2End = { x: dimX, y: j2.y };
-      dimLineStart = { x: dimX, y: j1.y };
-      dimLineEnd = { x: dimX, y: j2.y };
-      annotX = dimX;
-      annotY = (j1.y + j2.y) / 2;
-      adx = 0; ady = j2.y > j1.y ? 1 : -1;
-
     } else {
-      // Aligned (default — existing behavior)
-      const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : len;
-      displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-
-      nx = 0; ny = -1;
-      if (len > 0.01) { nx = -dy / len; ny = dx / len; }
-
-      if (c && c.__pos) { annotX = c.__pos.x; annotY = c.__pos.y; }
-      else { annotX = mx + nx * offset; annotY = my + ny * offset; }
-
-      ext1Start = { x: j1.x, y: j1.y };
+      projDist = len;
       ext1End = { x: j1.x + nx * offset, y: j1.y + ny * offset };
-      ext2Start = { x: j2.x, y: j2.y };
       ext2End = { x: j2.x + nx * offset, y: j2.y + ny * offset };
-      dimLineStart = ext1End;
-      dimLineEnd = ext2End;
-      adx = dx / len; ady = dy / len;
     }
+
+    const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
+    const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+    const ext1Start = { x: j1.x, y: j1.y };
+    const ext2Start = { x: j2.x, y: j2.y };
+    const dimLineStart = ext1End;
+    const dimLineEnd = ext2End;
+
+    let { x: annotX, y: annotY } = (c && c.__pos)
+      ? { x: c.__pos.x, y: c.__pos.y }
+      : linearParamsToPoint(frame, offset, slide);
+
     const narrow = isNarrowDim(Math.hypot(dimLineEnd.x - dimLineStart.x, dimLineEnd.y - dimLineStart.y), scale(1));
-    let centred = false;
-    if (c.labelPos) { annotX = c.labelPos.x; annotY = c.labelPos.y; centred = true; }
-    else if (narrow) {
-      // Too narrow for two arrowheads: they flip outside, and the value sits beyond the far stub.
+    if (narrow && !hasSlide && !(c && c.__pos)) {
+      // Too narrow for two arrowheads: they flip outside, and the value sits beyond the far stub on the extended line.
       const alongHalf = DIM_LABEL_BOX ? Math.abs(adx) * scale(20) + Math.abs(ady) * scale(9) : dimTextWidth(displayVal, scale(11)) / 2;
       const reach = scale(DIM_ARROW_PX + DIM_NARROW_STUB_PX) + alongHalf;
-      annotX = dimLineEnd.x + adx * reach; annotY = dimLineEnd.y + ady * reach;
+      annotX = dimLineEnd.x + adx * reach;
+      annotY = dimLineEnd.y + ady * reach;
     }
-    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred };
+    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred: false };
   };
 
   // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
@@ -499,7 +414,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
       const { j1, j2 } = resolveDimEnds(c);
       if (!j1) continue;
-      const offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30;
+      const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
       if (c.isRadius) {
         const p = radiusLabelPos(c, j1, offset);
         dimLabelBounds.push(placeDimLabel(p.x, p.y, null, null, formatConstraintValue(c, { value: typeof c.value === 'number' ? c.value : 0 }), scale(50)).bounds);
@@ -1658,7 +1573,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const mx = (j1.x + j2.x)/2, my = (j1.y + j2.y)/2;
       const dx = j2.x - j1.x, dy = j2.y - j1.y;
       const len = Math.hypot(dx, dy);
-      const offset = active.offset || SolverConfig.DIMENSION_OFFSET || 30;
+      const offset = Number.isFinite(active.offset) ? active.offset : (SolverConfig.DIMENSION_OFFSET || 30);
       const dist = active.value ? formatLenLabel(active.value) : formatLenLabel(len);
       
       let nx = 0, ny = -1;
@@ -2394,7 +2309,7 @@ switch(c.type){
       // Dimension annotation with leader lines
       const { j1, j2 } = resolveDimEnds(c);
       if(j1){
-        const offset = c.offset || SolverConfig.DIMENSION_OFFSET || 30;
+        const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
         const cIdx = constraints.indexOf(c);
         const canEdit = currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION;
 
@@ -2417,10 +2332,9 @@ switch(c.type){
           const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
 
           // Direction from center to label (use offset as radial distance)
-          // TASK 448: the label's angle around the centre = the declared constraint field `labelAngle` (default 0 = the
-          // old horizontal-right leader, so saved dimensions without it look exactly as before).
-          const angle = c.labelPos ? Math.atan2(c.labelPos.y - center.y, c.labelPos.x - center.x) : (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : (Number.isFinite(c.labelAngle) ? c.labelAngle : 0));
-          // Prefer explicit placement from import/export: __pos (preferred), then glyphPos, else computed offset
+          // TASK 448 / 621: label lives on its radial leader at (offset, labelAngle); legacy labelPos projects onto it.
+          const legacyRad = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
+          const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyRad ? legacyRad.labelAngle : (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0));
           const { x: labelX, y: labelY } = radiusLabelPos(c, center, offset);
 
           // Leader line from circle edge to label (ghost appearance when placing)
@@ -2429,13 +2343,7 @@ switch(c.type){
           const edgeX = center.x + Math.cos(angle) * radius;
           const edgeY = center.y + Math.sin(angle) * radius;
 
-          // Draw leader line (a value dragged free: rim point to the text's edge, via the one lead function)
-          if (c.labelPos) {
-            const lead = radialLead({ x: edgeX, y: edgeY }, placeDimLabel(labelX, labelY, null, null, displayVal, scale(50)).rect, scale(DIM_LEAD_MIN_PX));
-            if (lead) out.push(`<line x1="${lead.x1}" y1="${lead.y1}" x2="${lead.x2}" y2="${lead.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
-          } else {
-            out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
-          }
+          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
 
           // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
           // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
@@ -2528,7 +2436,7 @@ switch(c.type){
           }
 
           const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred);
-          if (centred || narrow) out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX)), strokeColor, visualOpacity));
+          out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
@@ -2552,7 +2460,8 @@ switch(c.type){
         if (j1 && j2 && j3 && j4) {
           const int = getLineIntersection(j1, j2, j3, j4);
           if (int) {
-            const radius = c.offset || SolverConfig.ANGLE_OFFSET || 40;
+            const legacyAngle = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(int, c.labelPos) : null;
+            const radius = legacyAngle ? Math.max(0.01, legacyAngle.offset) : (Number.isFinite(c.offset) ? Math.max(0.01, c.offset) : (SolverConfig.ANGLE_OFFSET || 40));
             // Determine angles of the two lines relative to intersection
             const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
             const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
@@ -2563,10 +2472,11 @@ switch(c.type){
               ? angleDimensionSector(a1, a2, angleLabelAngle(c, int, a1, a2), null)
               : angleSectorArc(angleSectorOf(c), a1, a2);
             
-            // Compute label position: bisector of the sector, at arc radius
+            // Label lives ON the arc at (radius, theta); centred on bisector by default.
             const bisect = (startAngle + endAngle) / 2;
-            const labelX = int.x + Math.cos(bisect) * radius;
-            const labelY = int.y + Math.sin(bisect) * radius;
+            const theta = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyAngle ? legacyAngle.labelAngle : bisect);
+            const labelX = int.x + Math.cos(theta) * radius;
+            const labelY = int.y + Math.sin(theta) * radius;
             
             // Draw Arc
             const sx = int.x + Math.cos(startAngle) * radius;
@@ -2585,6 +2495,18 @@ switch(c.type){
             const largeArcFlag = (delta > Math.PI) ? 1 : 0;
             const sweepFlag = 1;
             out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            // If the label was slid past either arrow along the circle, extend the arc from the nearest arrow tip to reach it
+            const TAU = Math.PI * 2;
+            const normA = (v) => ((v % TAU) + TAU) % TAU;
+            const relTheta = normA(theta - startAngle);
+            if (relTheta > delta + 1e-6 && relTheta < TAU - 1e-6) {
+              const wrapA = (v) => { const w = normA(v); return w > Math.PI ? w - TAU : w; };
+              const dS = wrapA(theta - startAngle), dE = wrapA(theta - (startAngle + delta));
+              const fromStart = Math.abs(dS) <= Math.abs(dE);
+              const fromPt = fromStart ? { x: sx, y: sy } : { x: ex, y: ey };
+              const dExt = fromStart ? dS : dE;
+              out.push(`<path d="M ${fromPt.x} ${fromPt.y} A ${radius} ${radius} 0 0 ${dExt > 0 ? 1 : 0} ${labelX} ${labelY}" fill="none" class="dim-arc-extension" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
+            }
             
             // Draw Arrows
             const arrowSize = scale(6);
@@ -2614,21 +2536,15 @@ switch(c.type){
             const labelStrokeColor = isSelected ? '#1e40af' : '#2563eb';
             const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
 
-            // A value dragged free sits at labelPos, on a leader from the arc point it would normally mark
-            const tx = c.labelPos ? c.labelPos.x : labelX, ty = c.labelPos ? c.labelPos.y : labelY;
-            const placedAngle = placeDimLabel(tx, ty, null, null, displayVal);
-            if (c.labelPos) {
-              const lead = radialLead({ x: labelX, y: labelY }, placedAngle.rect, scale(DIM_LEAD_MIN_PX));
-              if (lead) out.push(...leadLines({ extension: null, leader: lead }, strokeColor, visualOpacity));
-            }
+            const placedAngle = placeDimLabel(labelX, labelY, null, null, displayVal);
 
             if (isSelected) {
-                out.push(`<rect x="${tx - labelW/2}" y="${ty - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
+                out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
             }
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
-                ${dimLabelRect(tx, ty, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
+                ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
                 <text ${placedAngle.attrs}>${displayVal}</text>
             </g>`;
             

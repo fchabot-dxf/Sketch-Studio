@@ -20,6 +20,7 @@ import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters } from '#core/parameters.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { legacyAngleSector } from '#core/angle-sector.js';
+import { projectDimLabel } from '#core/dim-label.js';
 import { sceneJoints } from '#core/reference-lines.js';
 import { dbg } from '#core/debug.js';
 
@@ -131,8 +132,11 @@ export function deserializeDocument(doc, state) {
     // (`__temp`) a crash left in a saved drawing, is not loaded: it would stop every solve, so nothing could be dragged. Logged by name.
     const why = c && c.__temp ? 'a temporary test constraint' : unknownJointOf(c, scene);
     if (why) { dbg.warn('document', `[deserializeDocument] dropped constraint ${JSON.stringify(c)}: ${why}`); continue; }
+    const raw = { ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined };
+    // TASK 621: a legacy free labelPos loads ONTO its dimension line / arc / leader (offset + labelSlide / labelAngle).
+    if (raw.labelPos) projectDimLabel(raw, raw.labelPos, state.joints, state.shapes);
     // TASK 553: an angle dimension saved by an older build (no `sector`) is converted here, the one load path, from the loaded geometry
-    const proto = legacyAngleSector({ ...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined }, state.joints, state.shapes);
+    const proto = legacyAngleSector(raw, state.joints, state.shapes);
     addConstraintObject(state, proto);
   }
 

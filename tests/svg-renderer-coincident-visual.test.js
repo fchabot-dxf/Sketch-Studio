@@ -1,6 +1,8 @@
 (async () => {
   const { draw } = await import('../packages/ui/svg-renderer.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
+  const SettingsManager = (await import('#core/settings-manager.js')).default;
+  const HOVER_COLOR = SettingsManager.getDefault('HOVER_COLOR');
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Mock SVG element with minimal API used by renderer
@@ -30,17 +32,17 @@
   const constraints = [c1, c2, c3];
 
   const svg = makeSVG();
-  // Draw default (no selection) - should show exactly 3 visible white joint circles
+  // Closed triangle: all 3 corners have two curve ends, so Fusion-style point display hides all 3 until hovered
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
-  // P2: joint fill is now routed through the theme var -> `fill:var(--sk-joint-fill, white)` (was fill="white").
   const whiteCircles = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
-  assert(whiteCircles === 3, `Expected 3 visible white joints, got ${whiteCircles}`);
+  assert(whiteCircles === 0, `Expected 0 visible points on closed triangle, got ${whiteCircles}`);
 
-  // Hover one of the hidden follower joints (e.g., a2) and verify the leader glows (blue halo)
+  // Hover one of the hidden follower joints (e.g., a2) and verify the corner appears with the true-blue hover glow
   svg.innerHTML = '';
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, 'a2', null, null, false, null);
-  // Glow markup uses the routed origin var `stroke:var(--sk-origin, #3B82F6)` (Fusion Blue halo). Ensure present.
-  assert(/stroke:var\(--sk-origin, #3B82F6\)/.test(svg.innerHTML), 'Hovering hidden joint should show leader glow');
+  const hoveredWhite = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
+  assert(hoveredWhite === 1, `Hovering hidden corner should reveal 1 point, got ${hoveredWhite}`);
+  assert(svg.innerHTML.includes(`stroke:${HOVER_COLOR}`), `Hovering hidden joint should show leader glow (${HOVER_COLOR})`);
 
   // Select the coincident constraint c1 and assert the corresponding glyph appears (opacity:1)
   svg.innerHTML = '';
@@ -49,12 +51,12 @@
   // Glyph groups for constraints have class including "constraint-glyph" and will have style="opacity:1" when visible
   assert(/class="[^"]*constraint-glyph[^"]*"[\s\S]*opacity:1/.test(svg.innerHTML), 'Selecting a constraint should reveal its glyph (opacity:1)');
 
-  // Delete one coincident constraint (c1) and redraw - corner should "split" increasing visible joints to 4
+  // Delete one coincident constraint (c1) and redraw - split corner yields 2 open ends (other 2 corners remain hidden)
   svg.innerHTML = '';
   const constraints2 = [c2, c3];
   draw(joints, shapes, svg, null, null, constraints2, new Set(), new Set(), null, null, new Set(), null, null, null, null, false, null);
   const whiteCircles2 = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
-  assert(whiteCircles2 === 4, `After removing one coincident constraint expected 4 visible joints, got ${whiteCircles2}`);
+  assert(whiteCircles2 === 2, `After removing one coincident constraint expected 2 visible open ends, got ${whiteCircles2}`);
 
   console.log('svg-renderer-coincident-visual tests passed ✅');
 })().catch(e => { console.error('svg-renderer-coincident-visual tests failed ❌', e); process.exit(1); });

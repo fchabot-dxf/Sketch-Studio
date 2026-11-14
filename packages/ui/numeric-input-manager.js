@@ -124,6 +124,10 @@ const NUMERIC_INPUT_CSS = `
     color: #888;
     font-weight: bold;
 }
+/* TASK 597: a creation box beside the mouse cursor lets the pointer through (it sits 15 px from the cursor, and a quick move toward it landed ON the box, so the click never reached the canvas); typing goes to the focused field, Tab switches. A finger taps the box to focus it. */
+@media (pointer: fine) {
+    .sk-live-box { pointer-events: none; }
+}
 /* TASK 596: a finger. The two-field box (rect W x H, polygon size x sides) has fields >= 44 px tall and a 16 px font (no iOS zoom). A mouse keeps today's look. */
 @media (pointer: coarse) {
     .sk-dual-input input { width: 72px; min-height: 44px; font-size: 16px; }
@@ -261,7 +265,7 @@ function setupListeners() {
             e.stopImmediatePropagation(); return;
         }
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape') handleCancel();
+        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
     
@@ -270,7 +274,7 @@ function setupListeners() {
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
         if (e.key === 'Enter') handleCommit();
-        if (e.key === 'Escape') handleCancel();
+        if (e.key === 'Escape' || drawUndoKey(e)) handleCancel();
         if (e.key === 'Tab') {
             e.preventDefault();
             const next = field === 'width' ? uiState.dualInputH : uiState.dualInputW;
@@ -287,9 +291,15 @@ function setupListeners() {
     uiState.dualInputH.addEventListener('input', () => { uiState.typed[1] = true; handlePreview(); });
 }
 
+/** TASK 597: Ctrl/Cmd+Z in a box of a drawing tool (not the dimension edit box) is the canvas's own Ctrl+Z mid-draw: it ends the draw like Esc (task 549). */
+function drawUndoKey(e) {
+    return (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && uiState.mode !== 'edit';
+}
+
 // --- Public API ---
 
-export function showSingleInput(x, y, value, field, initialKey = null) {
+export function showSingleInput(x, y, value, field, initialKey = null, focus = true) {
+    if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
     uiState.mode = 'live-single';
@@ -297,16 +307,18 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     uiState.typed = [!!initialKey, false];
 
     // Position
-    uiState.singleInput.style.left = `${x}px`;
-    uiState.singleInput.style.top = `${y}px`;
     uiState.singleInput.style.transform = '';
+    uiState.singleInput.classList.add('sk-live-box');
     showNumericInputEl(uiState.singleInput);
+    placeLiveBox(uiState.singleInput, x, y);
     
     // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
     uiState.singleInput.inputMode = 'decimal';
     uiState.singleInput.value = initialKey || (typeof value === 'number' ? value.toFixed(1) : '');
-    uiState.singleInput.focus();
-    if (!initialKey) uiState.singleInput.select();
+    if (focus) {   // TASK 597: a touch opens the box WITHOUT focus (no phone keyboard on every click); tapping the box focuses it
+        uiState.singleInput.focus();
+        if (!initialKey) uiState.singleInput.select();
+    }
 }
 
 /**
@@ -314,6 +326,7 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
  * ({ kind, labels: [first, second], separator, digits: [first, second] }), the same element, keys and events, so Tab, Enter, Esc are ONE code path.
  */
 export function showDualInput(x, y, w, h, opts = {}) {
+    if (!uiState.dualContainer) return;   // no DOM, no boxes (see showSingleInput)
     resetState();
     uiState.active = true;
     uiState.mode = 'live-dual';
@@ -325,15 +338,17 @@ export function showDualInput(x, y, w, h, opts = {}) {
     uiState.dualInputH.placeholder = labels[1];
     uiState.dualSep.innerText = opts.separator || '×';
 
-    uiState.dualContainer.style.left = `${x}px`;
-    uiState.dualContainer.style.top = `${y}px`;
+    uiState.dualContainer.classList.add('sk-live-box');
     showNumericInputEl(uiState.dualContainer);
+    placeLiveBox(uiState.dualContainer, x, y);
 
     uiState.dualInputW.value = w.toFixed(uiState.dualDigits[0]);
     uiState.dualInputH.value = h.toFixed(uiState.dualDigits[1]);
     
-    uiState.dualInputW.focus();
-    uiState.dualInputW.select();
+    if (opts.focus !== false) {
+        uiState.dualInputW.focus();
+        uiState.dualInputW.select();
+    }
     if (opts.initialKey) {   // the digit that opened the box is the first character of the first field, never lost
         uiState.dualInputW.value = opts.initialKey;
         uiState.typed[0] = true;
@@ -439,13 +454,16 @@ export function updateInputPosition(x, y) {
     const ox = x + 15;
     const oy = y + 15;
 
-    if (uiState.mode === 'live-single') {
-        uiState.singleInput.style.left = `${ox}px`;
-        uiState.singleInput.style.top = `${oy}px`;
-    } else if (uiState.mode === 'live-dual') {
-        uiState.dualContainer.style.left = `${ox}px`;
-        uiState.dualContainer.style.top = `${oy}px`;
-    }
+    if (uiState.mode === 'live-single') placeLiveBox(uiState.singleInput, ox, oy);
+    else if (uiState.mode === 'live-dual') placeLiveBox(uiState.dualContainer, ox, oy);
+}
+
+/** TASK 597: a live box beside the cursor stays INSIDE the window: one sticking out past the right edge widened the page on a phone (the layout grew, the view shrank, taps missed). */
+function placeLiveBox(el, x, y) {
+    const w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || Infinity, vh = (typeof window !== 'undefined' && window.innerHeight) || Infinity;
+    el.style.left = `${Math.max(0, Math.min(x, vw - w - 8))}px`;
+    el.style.top = `${Math.max(0, Math.min(y, vh - h - 8))}px`;
 }
 
 // --- Internals ---
@@ -634,10 +652,11 @@ function resetState() {
     uiState.field = null;
     
     if (uiState.singleInput) {
+        uiState.singleInput.classList.remove('sk-live-box');
         if (uiState.singleInput.style) uiState.singleInput.style.transform = '';
         hideNumericInputEl(uiState.singleInput);
     }
-    if (uiState.dualContainer) hideNumericInputEl(uiState.dualContainer);
+    if (uiState.dualContainer) { uiState.dualContainer.classList.remove('sk-live-box'); hideNumericInputEl(uiState.dualContainer); }
     if (uiState.rafId) { cancelAnimationFrame(uiState.rafId); uiState.rafId = null; }
 }
 

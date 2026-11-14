@@ -11,24 +11,25 @@ import { newShapeId } from '#core/shape-id.js';
 
 let circleState = { lockedRadius: null, boxOpen: false };
 const localState = { isDragging: false, dragStartScreen: null };
-// TASK 596: after the first click the radius box shows at once (base-tool's shared creation-box path); the size follows the cursor until a radius is typed
-const BOX = { single: { field: 'radius' } };
+// TASK 596: after the first click the size box shows at once (base-tool's shared creation-box path); the size follows the cursor until one is typed.
+// TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds the same radius dimension as before (isRadius, value = diameter / 2)
+const BOX = { single: { field: 'diameter' } };
 
 export function setupCircleTool(svg, state){
     setupNumericInput(svg, state);
     state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; circleState.lockedRadius = null; hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
     setupDimensionListeners(state, TOOL_MODES.CIRCLE, {
         onApply: (detail) => {
-            if (detail.mode === 'single' && detail.field === 'radius') {
-                if (detail.typed[0] && detail.value > 0) circleState.lockedRadius = detail.value; // only a typed radius locks (the box otherwise shows the live one, rounded)
+            if (detail.mode === 'single' && detail.field === 'diameter') {
+                if (detail.typed[0] && detail.value > 0) circleState.lockedRadius = detail.value / 2; // only a typed diameter locks (the box otherwise shows the live one, rounded)
                 if (detail.confirmedBy === 'enter') {
                     try { finalizeCircleFromActive(svg, state); } catch (_) { }
                 }
             }
         },
         onPreview: (detail) => {
-            if (detail.mode !== 'single' || detail.field !== 'radius') return;
-            const v = detail.value;
+            if (detail.mode !== 'single' || detail.field !== 'diameter') return;
+            const v = detail.value / 2;
             circleState.lockedRadius = v > 0 ? v : null;
             const center = state.joints.get(state.active.start) || state.active.startPt;
             if (center && state.active.preview) {
@@ -73,7 +74,7 @@ export function handleCirclePointerMove(e, svg, state, w){
     if(!center) return false;
     const dx = previewPt.x - center.x, dy = previewPt.y - center.y;
     let r = Math.hypot(dx, dy);
-    if (isInputActive()) followCreationBoxes(e, [r]);
+    if (isInputActive()) followCreationBoxes(e, [2 * r]);
     if (circleState.lockedRadius) r = circleState.lockedRadius;
     safeUpdatePreview(state, 'circle', [state.active.start], previewPt, { radius: r });
     return true;
@@ -163,7 +164,7 @@ export function handleCircleKeyDown(e, svg, state) {
         const currentRadius = Math.hypot((previewPt.x - center.x), (previewPt.y - center.y));
         const midWorld = { x: (center.x + previewPt.x) / 2, y: (center.y + previewPt.y) / 2 };
         const midScreen = worldToScreen(svg, midWorld);
-        showSingleInput(midScreen.x, midScreen.y, currentRadius, 'radius', e.key); // the typed digit is the box's first character
+        showSingleInput(midScreen.x, midScreen.y, 2 * currentRadius, 'diameter', e.key); // the typed digit is the box's first character
         return true;
     }
     return false;

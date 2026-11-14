@@ -1,6 +1,6 @@
 // tests/dimension-enter-once-live.test.js - TASK 593: in the real browser, the real Enter key in a dimension's edit box commits ONCE (the
 // numeric-input-manager listener only; live-dimension-input.js no longer listens on #dimInput): the value changes, ONE undo step, no
-// 'live-line-commit' (that is for a line being drawn), no page error. The node twin (all modes): tests/dimension-enter-once-node.test.js.
+// 'live-rect-commit' (retired with the line boxes, task 597), no page error. The node twin (all modes): tests/dimension-enter-once-node.test.js.
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
 
@@ -32,7 +32,7 @@ await (async () => {
       st.joints.set('a', { x: -45, y: -20 }); st.joints.set('b', { x: -5, y: -20 });
       st.shapes.push({ id: 'L1', type: 'line', joints: ['a', 'b'] });
       st.constraints.push({ type: 'distance', name: 'd1', joints: ['a', 'b'], value: 40, glyphPos: { x: -25, y: -30 } });
-      window.__commits = 0; window.addEventListener('live-line-commit', () => { window.__commits++; }); window.addEventListener('live-rect-commit', () => { window.__commits++; });
+      window.__commits = 0; window.addEventListener('live-rect-commit', () => { window.__commits++; });
       if (window.__designController.render) window.__designController.render();
     })()`);
     await sleep(300);

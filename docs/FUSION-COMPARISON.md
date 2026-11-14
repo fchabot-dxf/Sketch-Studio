@@ -2162,3 +2162,14 @@ Fusion**. Ours = tests/chain-select-move-node.test.js (the node kit) and tests/c
 
 To verify in Fusion: whether the double-click chain goes through branches and whether it mixes construction and normal curves; whether a group drag with a fixed member
 moves the free part (ours: nothing moves); whether a group drag snaps (ours: never).
+
+## Line / arc / circle value boxes on the first click (task 597)
+Fusion was NOT measured: the task needs the REAL mouse in Fusion and this session has no mouse driver (script-launched Fusion commands are not allowed), so every Fusion cell below is the task's fallback, **to verify in Fusion**. Ours = tests/creation-boxes.test.js (node kit) and tests/line-boxes-live.test.js (real mouse and keys).
+
+| tool, after the first click | Fusion (to verify in Fusion) | ours (task 597) |
+|---|---|---|
+| Line | length and angle boxes, length focused | the same: L and angle (degrees, world atan2); a typed one locks while the other follows the cursor; Tab / Shift+Tab switch; Enter or a click places and the next segment of the chain has its boxes |
+| Arc (centre-start-end, the only kind the app has; 3-point and tangent do not exist here) | radius, then the sweep angle | radius after the centre click, sweep (degrees) after the start click; typed radius = the start point at that distance along the cursor and the same radius dimension as before; typed sweep = that exact angle, the winding direction follows the cursor |
+| Circle | diameter | the DIAMETER box (was radius); the circle keeps its radius and a typed one adds the SAME radius dimension (isRadius, value = diameter / 2) |
+
+Not the same / not done: a typed line ANGLE adds no constraint (geometry exact only; ours never had an angle constraint for a line); a typed arc sweep adds none either; a typed length is the existing distance constraint.

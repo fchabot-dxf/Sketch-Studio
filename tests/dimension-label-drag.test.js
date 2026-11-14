@@ -177,20 +177,20 @@ function mkStateWithoutLabelPos() {
   assert.strictEqual(s.history.length, hist0, 'and the history is back');
 }
 
-// ── selected dimension: the blue handle dot drives the line offset and keeps labelSlide ─────────────────────────────────
+// ── selected dimension: no separate offset-handle dot; dragging the label perpendicular to the line moves offset and keeps labelSlide ──
 {
   const sel = base();
   const html = render(sel, joints, shapes, 700, new Set([sel[0]]));
-  assert(html.includes('class="dim-offset-handle"'), 'a selected linear dimension shows the offset handle');
+  assert(!html.includes('dim-offset-handle'), 'a selected linear dimension does not draw a separate offset-handle dot');
   assert(!render(sel).includes('dim-offset-handle'), 'an unselected one does not');
   const s = mkStateWithoutLabelPos();
   s.currentTool = TOOL_MODES.SELECT; s.constraints[0].labelSlide = 250;
   const svg = { setPointerCapture() {}, releasePointerCapture() {}, viewBox: { baseVal: { x: 0, y: 0, width: 700, height: 320 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 700, height: 320 }) };
-  const handle = { dataset: { constraintIdx: '0' }, closest: (q) => (q === '.dim-offset-handle' ? { dataset: { constraintIdx: '0' } } : null) };
-  handleSelectionPointerDown({ target: handle, pointerId: 1, clientX: 140, clientY: 130, shiftKey: false, preventDefault() {}, stopPropagation() {} }, svg, s, null, null, null);
-  handleSelectionPointerMove({ pointerId: 1, clientX: 140, clientY: 180 }, svg, s);
-  handleSelectionPointerUp({ pointerId: 1, clientX: 140, clientY: 180 }, svg, s);
-  near(s.constraints[0].offset, 80, 'the handle moved the dimension line offset');
-  near(s.constraints[0].labelSlide, 250, 'moving the offset does not clear labelSlide');
+  const labelEl = { dataset: { constraintIdx: '0' }, closest: (q) => (q === '.dim-label' ? { dataset: { constraintIdx: '0' } } : null) };
+  handleSelectionPointerDown({ target: labelEl, pointerId: 1, clientX: 450, clientY: 130, shiftKey: false, preventDefault() {}, stopPropagation() {} }, svg, s, null, null, null);
+  handleSelectionPointerMove({ pointerId: 1, clientX: 450, clientY: 180 }, svg, s);
+  handleSelectionPointerUp({ pointerId: 1, clientX: 450, clientY: 180 }, svg, s);
+  near(s.constraints[0].offset, 80, 'dragging the label perpendicular to the line moved the dimension line offset');
+  near(s.constraints[0].labelSlide, 250, 'moving perpendicular to the line keeps labelSlide');
 }
 console.log('dimension-label-drag: md5', md5(render(base())), 'ok');

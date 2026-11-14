@@ -64,7 +64,7 @@ export const UNTITLED = 'Untitled';
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
  * Returns { restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves, designId, designName,
- *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, newTab, activate, closeTab, store }.
+ *   isStored, needsSavePrompt, discardUnsaved, tabs, openTab, openFileTab, newTab, activate, closeTab, store }.
  */
 export function createDocumentBuffer({ state, app, hostName, getHostData, session = null, onRestored, store = getProjectStore(), pollMs = 1500, onStatusChange, canvas = null, doc = globalThis.document, win = globalThis.window } = {}) {
   // ---- the ACTIVE tab's live binding (an inactive tab keeps the same fields in its record) ----
@@ -183,10 +183,12 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
   // Drive changed this design elsewhere and our edit was kept as a conflicted copy: show Drive's version (never write our older state over it).
   const onConflict = (id) => { if (id === boundId) store.get(id).then((d) => { if (d) load(d, 'conflict'); }, (e) => console.error('reload after a Drive conflict failed', e)); };
-  const onVisibility = () => { if (doc.visibilityState === 'hidden') flush(); };
-  const onPageHide = () => { flush(); };
-  // THE leave-page warning (owner ruling 2026-11-12): armed exactly while leaving would lose work (see needsSavePrompt).
-  const onBeforeUnload = (e) => { if (!needsSavePrompt()) return; e.preventDefault(); e.returnValue = ''; };
+  // TASK 587: a hidden / closing page saves the active design AND writes every design's pending Drive write through (inactive tabs keep theirs queued).
+  const flushAll = async () => { await poll(); await store.flushDrive(); };
+  const onVisibility = () => { if (doc.visibilityState === 'hidden') flushAll(); };
+  const onPageHide = () => { flushAll(); };
+  // THE leave-page warning (owner ruling 2026-11-12): armed exactly while leaving would lose work (see needsSavePrompt), in ANY open tab.
+  const onBeforeUnload = (e) => { if (!tabs().some((t) => t.needsSavePrompt)) return; e.preventDefault(); e.returnValue = ''; };
   function start() {
     if (intervalId != null) return;
     intervalId = setInterval(poll, pollMs);
@@ -282,6 +284,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const out = restored({ restored: true, hosts: result.hosts || {}, name, reason: 'switch' });
     if (session) session.restore(hostSession);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
+    notify(boundId ? (saveOk ? 'saved' : 'error') : 'idle'); // the host's status text follows the tab now shown (an unsaved Untitled writes nothing: empty)
     return out;
   }
   /** A fresh tab record becomes active with an empty unsaved Untitled (its history starts empty). */
@@ -291,6 +294,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const out = loadUntitled('new');
     if (session) session.restore(undefined);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
+    notify('idle');
     return out;
   }
   const untouchedUntitled = () => !boundId && !hasContent(sigNow(), emptySig) && !(state.history && state.history.length) && !(state.redoStack && state.redoStack.length);
@@ -305,7 +309,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   /** Open stored design `id` in a NEW tab (T2) at the right end; already open -> its tab is activated; the active tab an untouched
    *  Untitled -> it is reused. */
-  async function openTab(id) {
+  async function openTab(id, reason = 'open') {
     if (boundId === id) return { restored: true, hosts: {}, name, reason: 'switch' };
     const open = tabList.find((x) => x !== active && x.designId === id);
     if (open) return activate(open.key);
@@ -319,10 +323,19 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
       await putAside();
       active = newRecord(); tabList.push(active);
     }
-    const out = load(design, 'open');
+    const out = load(design, reason);
     if (!reuse && session) session.restore(undefined);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
+    notify('saved');
     return out;
+  }
+  /** Open from file into a NEW tab (T2): the file becomes a stored, named design (as openFile) and opens like any design. The tab limit is
+   *  checked BEFORE the file is imported, so a refused open leaves nothing stored. */
+  async function openFileTab(seam = browserFileSeam) {
+    if (tabList.length >= MAX_TABS && !untouchedUntitled()) throw full();
+    await poll();
+    const p = await store.importFile(seam, { app });
+    return p ? openTab(p.id, 'file') : null;
   }
   /** New design in a NEW tab (T3): an unsaved Untitled. */
   async function newTab() {
@@ -360,6 +373,6 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   return {
     restore, ready, start, stop, flush, openDesign, newDesign, saveAs, saveFile, openFile, followMoves,
     designId: () => boundId, designName: () => name, isStored: () => !!boundId, needsSavePrompt, discardUnsaved,
-    tabs, openTab, newTab, activate, closeTab, store,
+    tabs, openTab, openFileTab, newTab, activate, closeTab, store,
   };
 }

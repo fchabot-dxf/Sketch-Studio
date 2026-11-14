@@ -30,10 +30,10 @@ export function shaperBufferOptions({ controller, canvas, statusEl = null, refre
   return {
     state: controller.state,
     app: 'shaper', canvas,
-    onRestored: ({ hosts }) => {
+    onRestored: ({ hosts, reason }) => {
       try {
         controller.engine.solve(500);
-        fitToDrawing(canvas, controller.state); // TASK 494: frame the restored drawing (armed until the canvas has a size)
+        if (reason !== 'switch') fitToDrawing(canvas, controller.state); // TASK 494: frame the restored drawing (armed until the canvas has a size). TASK 587: a tab switch keeps the tab's own view
         refreshViews();
       } catch (_) {}
       // TASK 460: restore the cut plan AFTER the sketch (loop/chain ids are derived from shape ids, so they are stable). No sidecar (an old buffer): defaults.

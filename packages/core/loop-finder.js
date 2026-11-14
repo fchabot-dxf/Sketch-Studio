@@ -131,6 +131,53 @@ export function findLoops(state) {
   return loops;
 }
 
+// THE END JOINTS of a curve, declared per shape kind (the joints a chain of curves passes through): a line's two joints, an arc's start /
+// end (joints[1] / [2]; joints[0] is its centre), a bezier's first / last joint. A kind without an entry (a circle) has no ends.
+const CURVE_ENDS = {
+  line: { min: 2, ends: (j) => [j[0], j[1]] },
+  arc: { min: 3, ends: (j) => [j[1], j[2]] },
+  bezier: { min: 2, ends: (j) => [j[0], j[j.length - 1]] },
+};
+// The end joint ids of shape s (CURVE_ENDS), or null when its kind declares none (or it has too few joints).
+export function curveEnds(s) {
+  const d = s && CURVE_ENDS[s.type];
+  return d && Array.isArray(s.joints) && s.joints.length >= d.min ? d.ends(s.joints) : null;
+}
+
+/**
+ * findConnectedChain(state, shapeId, include) -> shape ids   (TASK 588: the select tool's double-click)
+ * Every curve connected END TO END to the shape `shapeId`, through branches: two curves are connected when an end joint of one is an end
+ * joint of the other or is made coincident with it (buildNodeMap). A curve is in the chain only when it is the same kind as the start one
+ * (construction or normal) and include(shape) accepts it (the caller's pick rule: locked / hidden sketches are out). A shape without ends
+ * (a circle) is a chain of itself. The start shape comes first, then breadth-first order.
+ */
+export function findConnectedChain(state, shapeId, include = () => true) {
+  const shapes = (state && state.shapes) || [];
+  const start = shapes.find((s) => s && s.id === shapeId);
+  if (!start) return [];
+  const construction = !!start.isConstruction;
+  const node = buildNodeMap(state);
+  const byNode = new Map();
+  for (const s of shapes) {
+    if (!s || s === start || !!s.isConstruction !== construction || !include(s)) continue;
+    for (const j of (curveEnds(s) || [])) {
+      const n = node(j);
+      if (!byNode.has(n)) byNode.set(n, []);
+      byNode.get(n).push(s);
+    }
+  }
+  const chain = [start.id], seen = new Set(chain), queue = [start];
+  while (queue.length) {
+    for (const j of (curveEnds(queue.shift()) || [])) {
+      for (const s of (byNode.get(node(j)) || [])) {
+        if (seen.has(s.id)) continue;
+        seen.add(s.id); chain.push(s.id); queue.push(s);
+      }
+    }
+  }
+  return chain;
+}
+
 /**
  * findOpenChains(state, loops) → Chain[]
  * Returns [{ id, shapes, edges }] for each connected group (connected through shared/coincident joints)
@@ -154,10 +201,8 @@ export function findOpenChains(state, loops) {
   const node = buildNodeMap(state);
   const endpointsOf = (s) => {
     if (!s || !Array.isArray(s.joints)) return [];
-    if (s.type === 'line' && s.joints.length >= 2) return [node(s.joints[0]), node(s.joints[1])];
-    if (s.type === 'arc' && s.joints.length >= 3) return [node(s.joints[1]), node(s.joints[2])];
-    if (s.type === 'bezier' && s.joints.length >= 2) return [node(s.joints[0]), node(s.joints[s.joints.length - 1])];
-    return s.joints.map((j) => node(j));
+    const ends = curveEnds(s);
+    return (ends || s.joints).map((j) => node(j));
   };
 
   const nodeToShapes = new Map();

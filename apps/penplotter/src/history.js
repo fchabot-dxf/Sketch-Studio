@@ -25,6 +25,16 @@ export function installHistory(onRestore, isActive) {
     window.addEventListener("keydown", onKey);
 }
 
+/** TASK 587: a document tab's own copy of these two stacks (in memory, not in the document): captured when the tab is put aside, restored when it
+ *  comes back; restoreHistorySession(undefined) = a design with no history yet. */
+export function captureHistorySession() {
+    return { undo: [...undoStack], redo: [...redoStack] };
+}
+export function restoreHistorySession(session) {
+    undoStack.length = 0; redoStack.length = 0;
+    if (session) { undoStack.push(...session.undo); redoStack.push(...session.redo); }
+}
+
 /** Save the current state onto the undo stack BEFORE mutating. */
 export function snapshot() {
     undoStack.push(serialize());

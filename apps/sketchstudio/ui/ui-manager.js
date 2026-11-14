@@ -207,8 +207,6 @@ export function setupUI(state){
         constructToggle.setAttribute('aria-pressed', 'false');
         constructToggle.title = 'Construction: OFF (K)';
       }
-      // Ensure visible label
-      try { constructToggle.innerText = 'Construction'; } catch (_){ }
     }
 
     // Initial UI

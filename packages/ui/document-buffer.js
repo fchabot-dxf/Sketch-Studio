@@ -40,6 +40,7 @@ import { browserFileSeam, serializeProjectFile, projectFileName } from '#ui/proj
 export const MAX_TABS = 10;
 /** The name an unsaved design shows. */
 export const UNTITLED = 'Untitled';
+const TAB_BUFFER_FIELDS = ['doc', 'sig', 'history', 'redoStack', 'view', 'hostSession', 'lastSig', 'emptySig', 'saveOk', 'designId', 'name'];
 
 /**
  * createDocumentBuffer({ state, app, hostName, getHostData, session, onRestored, store, pollMs, onStatusChange, canvas, doc, win })
@@ -74,8 +75,11 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   let name = UNTITLED;    // the design's name as shown
   let emptySig = null;    // an unsaved Untitled: the signature it started from (content = anything else); null for a stored design
   let saveOk = true;      // the last autosave of the bound design succeeded
+  let bufferOk = true;    // the last local working-buffer write succeeded (beforeunload arms on failure)
+  let lastBufSig = null;  // JSON string of last successfully persisted open-tabs buffer
   let intervalId = null;
   let offConflict = () => {};
+  let offHistory = () => {};
   // ---- tabs: one record per open design, in strip order; `active` is the record whose design is in the state ----
   let tabSeq = 0;
   const newRecord = () => ({ key: 't' + (++tabSeq) });
@@ -114,21 +118,76 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   const sigNow = () => JSON.stringify(currentDoc());
 
+  /** Snapshot of the open tabs + active working state so page refresh / crash reopens what was open (local working buffer only, NOT a saved file). */
+  function captureBufferSnapshot() {
+    if (tabList.length === 1 && !boundId && untouchedUntitled()) return null;
+    const activeDoc = JSON.parse(sigNow());
+    return {
+      v: 1,
+      app: app || null,
+      activeKey: active.key,
+      currentId: boundId || null,
+      tabs: tabList.map((t) => {
+        if (t === active) {
+          return {
+            key: t.key,
+            designId: boundId || null,
+            name,
+            emptySig: boundId ? null : emptySig,
+            saveOk,
+            doc: activeDoc,
+            view: state.view ? { ...state.view } : null,
+            hostSession: session ? session.capture() : undefined,
+          };
+        }
+        return {
+          key: t.key,
+          designId: t.designId || null,
+          name: t.name,
+          emptySig: t.designId ? null : t.emptySig,
+          saveOk: t.saveOk,
+          doc: t.doc,
+          view: t.view ? { ...t.view } : null,
+          hostSession: t.hostSession,
+        };
+      }),
+    };
+  }
+  async function saveWorkingBuffer() {
+    if (!store.writeBuffer) return true;
+    let payload;
+    try { payload = captureBufferSnapshot(); } catch (_) { return true; }
+    const s = JSON.stringify(payload);
+    if (s === lastBufSig && bufferOk) return true;
+    try {
+      await store.writeBuffer(payload);
+      lastBufSig = s;
+      bufferOk = true;
+      return true;
+    } catch (_) {
+      bufferOk = false;
+      return false;
+    }
+  }
+
   async function poll() {
-    if (!boundId) return; // THE SAVE RULE: an unsaved Untitled is never stored
+    const bufPromise = saveWorkingBuffer();
+    if (!boundId) { await bufPromise; return; } // THE SAVE RULE: an unsaved Untitled lives only in the working buffer above
     const target = boundId; // the design this signature belongs to (the buffer may be rebound while the write is in flight)
     let sig;
-    try { sig = sigNow(); } catch (_) { return; } // a transient bad state -- skip this tick
-    if (sig === lastSig) return;
+    try { sig = sigNow(); } catch (_) { await bufPromise; return; } // a transient bad state -- skip this tick
+    if (sig === lastSig) { await bufPromise; return; }
     notify('saving');
     let ok = false, r = null;
     try { r = await store.save(JSON.parse(sig), { app, id: target }); ok = true; } catch (_) { ok = false; }
+    await bufPromise;
     if (boundId !== target) { // rebound (open / new / tab switch) while this write was in flight: the result belongs to the design we left
       const left = ok && r.id !== target ? tabList.find((x) => x !== active && x.designId === target) : null;
-      if (left) left.designId = r.id; // that design was re-created under a new id: its tab follows
+      if (left) { left.designId = r.id; await saveWorkingBuffer(); } // that design was re-created under a new id: its tab follows
       return;
     }
-    if (ok) boundId = r.id;
+    if (ok && r.id !== boundId) { boundId = r.id; await saveWorkingBuffer(); }
+    else if (ok) boundId = r.id;
     saveOk = ok;
     if (sig === lastSig) return; // a newer change landed while this write was in flight -- let the NEXT tick handle it
     lastSig = sig;
@@ -174,6 +233,63 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   async function restore() {
     try {
+      let bufSnap = null;
+      try { bufSnap = store.readBuffer ? await store.readBuffer() : null; } catch (_) { bufSnap = null; }
+      if (bufSnap && Array.isArray(bufSnap.tabs) && bufSnap.tabs.length) {
+        try { if (store.prepare) await store.prepare({ app }); } catch (_) {}
+        let curId = null;
+        try { curId = store.currentId ? await store.currentId() : null; } catch (_) { curId = null; }
+        const externalCurrent = !!(curId && curId !== bufSnap.currentId && !bufSnap.tabs.some((t) => t.designId === curId));
+        if (!externalCurrent) {
+          const restoredTabs = [];
+          for (const s of bufSnap.tabs) {
+            const key = s && s.key ? String(s.key) : ('t' + (++tabSeq));
+            const m = /^t(\d+)$/.exec(key); if (m) tabSeq = Math.max(tabSeq, Number(m[1]));
+            if (!s.designId) {
+              if (!validateDocument(s.doc).ok) continue;
+              restoredTabs.push({ key, designId: null, name: s.name || UNTITLED, emptySig: s.emptySig, saveOk: true, lastSig: JSON.stringify(s.doc), doc: s.doc, view: s.view || null, hostSession: s.hostSession });
+            } else {
+              let d = null, unreadable = false;
+              try { d = await store.get(s.designId); } catch (_) { unreadable = true; }
+              if (!d && !unreadable) continue; // deleted on Drive out-of-band (with no local shadow): do not resurrect
+              const doc = d ? d.document : s.doc;
+              if (!validateDocument(doc).ok) continue;
+              restoredTabs.push({ key, designId: d ? d.id : s.designId, name: (d ? d.name : s.name) || UNTITLED, emptySig: null, saveOk: true, lastSig: JSON.stringify(doc), doc, view: s.view || null, hostSession: s.hostSession });
+            }
+          }
+          if (restoredTabs.length) {
+            tabList.length = 0;
+            tabList.push(...restoredTabs);
+            const target = tabList.find((x) => x.key === bufSnap.activeKey) || tabList[0];
+            active = target;
+            const result = deserializeDocument(target.doc, state);
+            if (result.ok) {
+              if (target.designId) {
+                boundId = target.designId; name = target.name; emptySig = null; saveOk = true;
+              } else {
+                boundId = null; name = target.name || UNTITLED; emptySig = target.emptySig; saveOk = true;
+              }
+              if (target.view && state.view) Object.assign(state.view, target.view);
+              const hostSession = target.hostSession;
+              for (const k of TAB_BUFFER_FIELDS) delete target[k];
+              const out = restored({ restored: true, hosts: result.hosts, name, reason: 'restore' });
+              if (session && hostSession !== undefined) session.restore(hostSession);
+              if (typeof state._notifyHistory === 'function') state._notifyHistory();
+              lastSig = sigNow();
+              if (boundId !== curId && store.setCurrent) { try { await store.setCurrent(boundId); } catch (_) {} }
+              notify(boundId ? 'saved' : 'idle');
+              return out;
+            }
+          }
+          // All buffered tabs vanished on Drive or failed validation: reset stale buffer cleanly to Untitled
+          active = newRecord();
+          tabList.length = 0; tabList.push(active);
+          if (store.writeBuffer) { try { await store.writeBuffer(null); } catch (_) {} }
+          if (curId && store.setCurrent) { try { await store.setCurrent(null); } catch (_) {} }
+          bindUntitled();
+          return { restored: false, hosts: {} };
+        }
+      }
       let design = null;
       try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch (unchanged)
       if (!design) { bindUntitled(); return { restored: false, hosts: {} }; } // nothing stored: the page shows an unsaved Untitled
@@ -186,16 +302,19 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // The tab going hidden or closing: save what changed since the last tick and write it through to Drive now (a hidden tab may be frozen).
   // Drive changed this design elsewhere and our edit was kept as a conflicted copy: show Drive's version (never write our older state over it).
   const onConflict = (id) => { if (id === boundId) store.get(id).then((d) => { if (d) load(d, 'conflict'); }, (e) => console.error('reload after a Drive conflict failed', e)); };
-  // TASK 587: a hidden / closing page saves the active design AND writes every design's pending Drive write through (inactive tabs keep theirs queued).
-  const flushAll = async () => { await poll(); await store.flushDrive(); };
+  // TASK 587 / 624: a hidden / closing page saves the working buffer + active design AND writes pending Drive writes through.
+  const flushAll = async () => { await poll(); await store.flushDrive(); await saveWorkingBuffer(); };
   const onVisibility = () => { if (doc.visibilityState === 'hidden') flushAll(); };
   const onPageHide = () => { flushAll(); };
-  // THE leave-page warning (owner ruling 2026-11-12): armed exactly while leaving would lose work (see needsSavePrompt), in ANY open tab.
-  const onBeforeUnload = (e) => { if (!tabs().some((t) => t.needsSavePrompt)) return; e.preventDefault(); e.returnValue = ''; };
+  // THE leave-page warning (TASK 624): since the local working buffer survives refresh, arm beforeunload ONLY when leaving would lose unpersisted work
+  // (a buffer write failed, or any open tab has failed / unflushed Drive writes). The close-tab prompt for Untitled content stays in needsSavePrompt().
+  const shouldWarnLeave = () => !bufferOk || tabs().some((t) => t.needsSavePrompt === 'save-failed' || (t.designId && store.hasPendingDrive && store.hasPendingDrive(t.designId)));
+  const onBeforeUnload = (e) => { if (!shouldWarnLeave()) return; e.preventDefault(); e.returnValue = ''; };
   function start() {
     if (intervalId != null) return;
     intervalId = setInterval(poll, pollMs);
     offConflict = store.subscribeConflict(onConflict);
+    offHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { saveWorkingBuffer(); }) : () => {};
     if (doc) doc.addEventListener('visibilitychange', onVisibility);
     if (win) { win.addEventListener('pagehide', onPageHide); win.addEventListener('beforeunload', onBeforeUnload); }
   }
@@ -203,6 +322,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (intervalId == null) return;
     clearInterval(intervalId); intervalId = null;
     offConflict();
+    offHistory();
     if (doc) doc.removeEventListener('visibilitychange', onVisibility);
     if (win) { win.removeEventListener('pagehide', onPageHide); win.removeEventListener('beforeunload', onBeforeUnload); }
   }
@@ -213,21 +333,24 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // They act on the ACTIVE tab. One that would replace an unsaved Untitled WITH content refuses: nothing is ever thrown away silently.
   // The UI never meets that refusal: it asks Save… / Don't save / Cancel first (project-actions.js settleUnsaved) and then either saves
   // (saveAs) or discards (discardUnsaved) before calling these. An empty Untitled is simply replaced.
-  async function openDesign(id) { refuseIfUnsaved(); await flush(); return load(await store.open(id), 'open'); }
+  async function openDesign(id) { refuseIfUnsaved(); await flush(); const out = load(await store.open(id), 'open'); await saveWorkingBuffer(); return out; }
   /** New design: an empty, UNSAVED Untitled (stored at its first named save). No design is current while it shows. */
-  async function newDesign() { refuseIfUnsaved(); await flush(); await store.setCurrent(null); return loadUntitled('new'); }
+  async function newDesign() { refuseIfUnsaved(); await flush(); await store.setCurrent(null); const out = loadUntitled('new'); await saveWorkingBuffer(); return out; }
   /** Save as: on an unsaved Untitled, the FIRST NAMED SAVE (it is stored under `newName`, and autosaves from then on); on a stored design,
    *  a copy under `newName` that becomes the bound one (unchanged). */
   async function saveAs(newName) {
     if (!boundId) {
-      const d = await store.newDesign(newName, { app }); // stored, named, current
-      boundId = d.id; name = d.name; emptySig = null; saveOk = true; lastSig = null;
-      await poll(); // the drawing goes into it now
+      const sig = sigNow();
+      const d = await store.newDesign(newName, { app, document: JSON.parse(sig) }); // stored, named, current in one write
+      boundId = d.id; name = d.name; emptySig = null; saveOk = true; lastSig = sig;
+      notify('saved');
+      await saveWorkingBuffer();
       return d;
     }
     await flush();
     const p = await store.saveAs(newName, { app, fromId: boundId });
-    boundId = p.id; name = p.name;
+    boundId = p.id; name = p.name; lastSig = sigNow();
+    await saveWorkingBuffer();
     return p;
   }
   /** Save a design to a file: `designId` (a design picked in the project manager), else the shown one: the bound design, or the unsaved
@@ -238,20 +361,23 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   }
   /** "Don't save": the unsaved Untitled is thrown away (an empty Untitled takes its place), so the action the user asked for can go on.
    *  A stored design is never discarded (it is autosaved). */
-  function discardUnsaved() { if (!boundId) loadUntitled('new'); }
+  function discardUnsaved() { if (!boundId) { loadUntitled('new'); saveWorkingBuffer(); } }
   async function openFile(seam = browserFileSeam) {
     refuseIfUnsaved();
     await flush();
     const p = await store.importFile(seam, { app }); // a file has a name: it is stored as a named design
-    return p ? load(p, 'file') : null;
+    const out = p ? load(p, 'file') : null;
+    if (out) await saveWorkingBuffer();
+    return out;
   }
 
-  /** After store.cloud.moveProjectToDrive / makeProjectLocal: the designs bound here (the active one and the other tabs) may have a new id
+  /** After store.cloud.moveProjectToDrive: the designs bound here (the active one and the other tabs) may have a new id
    *  (`designIds` = { old: new }). */
   function followMoves(designIds) {
     if (!designIds) return;
     if (boundId && designIds[boundId]) boundId = designIds[boundId];
     for (const t of tabList) if (t !== active && t.designId && designIds[t.designId]) t.designId = designIds[t.designId];
+    saveWorkingBuffer();
   }
 
   // ---- TABS -------------------------------------------------------------------------------------------------------------------
@@ -283,7 +409,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (Array.isArray(rec.history)) { state.history = rec.history; state.redoStack = rec.redoStack; }
     if (rec.view && state.view) Object.assign(state.view, rec.view);
     const hostSession = rec.hostSession;
-    for (const k of ['doc', 'sig', 'history', 'redoStack', 'view', 'hostSession', 'lastSig', 'emptySig', 'saveOk', 'designId', 'name']) delete rec[k];
+    for (const k of TAB_BUFFER_FIELDS) delete rec[k];
     const out = restored({ restored: true, hosts: result.hosts || {}, name, reason: 'switch' });
     if (session) session.restore(hostSession);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
@@ -305,7 +431,13 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const recordOf = (key) => { const r = tabList.find((x) => x.key === key); if (!r) throw new Error('That tab is not open.'); return r; };
 
   /** The open tabs in strip order: { key, designId, name, active, stored, needsSavePrompt }. */
+  function syncMovedIds() {
+    if (!store || !store.resolveId) return;
+    if (boundId) boundId = store.resolveId(boundId);
+    for (const t of tabList) if (t.designId) t.designId = store.resolveId(t.designId);
+  }
   function tabs() {
+    syncMovedIds();
     return tabList.map((t) => (t === active
       ? { key: t.key, designId: boundId, name, active: true, stored: !!boundId, needsSavePrompt: needsSavePrompt() }
       : { key: t.key, designId: t.designId || null, name: t.name, active: false, stored: !!t.designId, needsSavePrompt: promptFor(t.designId, t.sig, t.emptySig, t.saveOk) }));
@@ -330,6 +462,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (!reuse && session) session.restore(undefined);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
     notify('saved');
+    await saveWorkingBuffer();
     return out;
   }
   /** Open from file into a NEW tab (T2): the file becomes a stored, named design (as openFile) and opens like any design. The tab limit is
@@ -347,6 +480,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const out = bringInUntitled();
     tabList.push(active);
     await store.setCurrent(null);
+    await saveWorkingBuffer();
     return out;
   }
   /** Switch to the tab `key`. */
@@ -356,6 +490,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     await putAside();
     const out = bringIn(rec);
     await store.setCurrent(boundId);
+    await saveWorkingBuffer();
     return out;
   }
   /** Close the tab `key` (the caller asked needsSavePrompt first: closing never asks here). Its design is saved first; the active tab
@@ -363,13 +498,14 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   async function closeTab(key) {
     const rec = recordOf(key);
     const i = tabList.indexOf(rec);
-    if (rec !== active) { tabList.splice(i, 1); if (rec.designId) await store.flushDrive(rec.designId); return null; }
+    if (rec !== active) { tabList.splice(i, 1); if (rec.designId) await store.flushDrive(rec.designId); await saveWorkingBuffer(); return null; }
     endInteraction();
     await flush();
     tabList.splice(i, 1);
-    if (!tabList.length) { const out = bringInUntitled(); tabList.push(active); await store.setCurrent(null); return out; }
+    if (!tabList.length) { const out = bringInUntitled(); tabList.push(active); await store.setCurrent(null); await saveWorkingBuffer(); return out; }
     const out = bringIn(tabList[Math.min(i, tabList.length - 1)]);
     await store.setCurrent(boundId);
+    await saveWorkingBuffer();
     return out;
   }
 

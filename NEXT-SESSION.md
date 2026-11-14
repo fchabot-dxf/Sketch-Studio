@@ -51,7 +51,36 @@ FUSION: broken. Hangs at "Initializing", log `BaseAuth not initialized; cannot f
 if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-11`. Then run the diagonal-dimension test
 (sketch CLAUDE_TEST_O3, delete it after) before sending 516.
 
-### Update (2026-11-14, turn 1312) — LATEST
+### Update (2026-11-14, turn 1514) — LATEST
+- MERGED since 1312 (main a73b65c): 608 Vcarve record only on a real setting, Trace inactive-tab photos bounded; 609-611 node batch F,
+  UI polish (Pen Plotter Design panel 44 px on touch, Parameters window clamped); 612 typed dimension moves only the operand that
+  gives way (Fusion, 12 cells measured); 613 notices carry their level (green / amber / red); 614 the owner's look as factory
+  defaults; 615-616 canvas icon buttons, toast Copy only on errors; 617 docUnit() accessor; 618 shared footer Undo / Redo; 619 ONE
+  shared app chrome in all 4 apps (desktop header = menu + stages; phones no header bar, drawer handle peeks left; footer Undo / Redo /
+  Delete red X / Clear sketch trash / Recenter; Construction beside Sketches on the canvas, OFF in Pen Plotter; MAG LENS button gone);
+  620 phone Sketches button = the floating card; 621 + 627 dimension label on its line, drag X/Y moves the line, no blue box, no
+  offset dot; 622 points like Fusion (only hovered / selected / open end / centre / lone); 624 saving is Google Drive ONLY (sign-in
+  asked; open tabs kept per app after a refresh; legacy local designs offer Move to Google Drive); 625 docs/DESIGN-PARITY.md (G1-G13);
+  626 hover + selection = bold #017AFD stroke, no glow; 628 tab-strip clicks never dropped; 629 parity fixes G2 G3 G4 G6 G7; 630 the
+  Fusion look IS the default (joint 1.0, glyph 25, outline 0.5, profile tint on), no hover-colour setting, Compact glyph 16 / outline
+  0.5, point rings 80 % black at rest / 100 % hover + selected (blue-tint fill selected), SNAP_MAGNETISM 10 (one source; a locked snap
+  now lets go at 20 px instead of 32: owner told), lit axis bold in its own colour; 631 midpoint glyph preview while snapping; 632 Arc
+  tool begins / ends on other arcs' points (a press there no longer drags the joint); 633 grid light lines visible from 8 px, darker
+  greys, 1-2-5 level steps, heavy every 5 light; 634 angle value beside its arc; 635 Open in Drive opens the FOLDER, rename waits for
+  an in-flight autosave.
+- GATE: shell-smoke has 13 checks now; scripts/gate.cjs accepts any N/N (smokeGreen), not the literal 12/12.
+- OWNER RULINGS: Drive only for saving (no local saves); open tabs stay local so a refresh reopens them; root Drive folder stays
+  "Sketch Studio" (renaming it in code would orphan the existing folder: drive.file scope only sees app-created folders); Hydrogen is
+  the Antigravity daily driver (pass model= explicitly); Copilot seats first; hover is never a setting.
+- OPEN, ask the owner: radius / diameter labels have the leader line through the value (634 found it; same fix as the angle?);
+  a Google folder picker to choose the Drive folder (needs his Picker API key; offered, not queued).
+- FOLLOW-UPS (not dispatched): store.moveDesign outside the per-design write lock (same race 635 fixed in rename); mobile-drawer.js:86
+  and style-panel.js:337 close only on an outside click (a press on a disabled control leaves them open; 619 fixed the Rect popover);
+  Pen Plotter output must skip construction geometry, then enable Construction there; the "snapping" canvas colour is never applied;
+  parity batches G1+G5, G10+G13, G8 await the owner's yes; dimension-label tap area on touch (owner never answered).
+- Antigravity quota: every model OUT until next Saturday (Argon 11:39, Hydrogen / Flash 14:29, Claude-in-AGY 17:07).
+
+### Update (2026-11-14, turn 1312)
 - MERGED since 1267 (main 7add38c, FULL 410/410 in 361 s): 597 line / arc / circle(DIAMETER) creation boxes on the first click, one
   shared path, touch boxes unfocused and docked at the canvas top centre (602), mouse clicks pass through boxes; 598 dragged line end
   offers only Fusion's inferences (H, V, midpoint, coincident snaps; measured 22 real-mouse drags); 601 node batch E; 602 phone

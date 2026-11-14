@@ -81,10 +81,6 @@ export const defaultInputCtx = {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return {};
     return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content'), btn: document.getElementById('btn-mag-toggle') };
   },
-  setViewportSize(text) {
-    const el = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('viewport-size') : null;
-    if (el) el.innerText = text;
-  },
   getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
   // P4b TOOLBAR/STATUS (app-specific; a host with its own toolbar supplies these, or omits to skip the sync).
   // setActiveTool — switch via the toolbar button (primary path); returns true if it handled the switch.
@@ -1081,11 +1077,6 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
                     try { updateHover(svg, sx, sy, state); } catch(_) { }
                 }
 
-                // Update viewport size display (ancillary P4a: host's setViewportSize; default writes #viewport-size)
-                if(state.view) {
-                     const r = svg.getBoundingClientRect();
-                     inputCtx.setViewportSize?.(`VIEW: ${Math.round(state.view.w)} x ${Math.round(state.view.h)} / ${Math.round(r.width)}px x ${Math.round(r.height)}px`);
-                }
             } catch(_) { }
         });
     } catch(_) { }
@@ -1141,7 +1132,6 @@ export function updateViewBox(svg, view) {
     view.h = view.w / (rect.width / rect.height);
     svg.setAttribute('viewBox', `${view.x - view.w/2} ${view.y - view.h/2} ${view.w} ${view.h}`);
 
-    inputCtx.setViewportSize?.(`VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`);
 }
 
 // TASK 618: the history key mapping moved to #ui/history-control.js (one mapping for every host); re-exported here for its callers.

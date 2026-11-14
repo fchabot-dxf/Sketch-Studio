@@ -28,7 +28,7 @@ const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, ex
 
 /**
  * Build the nav buttons AND the stage bodies from STAGES into `nav` / `stagesHost`, pre-mount the Design sketcher and the hidden Draw host,
- * and show the persisted stage (else the first). Returns { showStage, currentStageId, history } (history: the Undo / Redo router, TASK 618).
+ * and show the persisted stage (else the first). Returns { showStage, currentStageId, history, designView } (history: the Undo / Redo router; designView(): the Design stage's { svg, state } while it shows, else null: the footer's Recenter, TASK 618).
  * bufferSeams: the autosave buffer's own seams (`store`, `doc`, `win` of createDocumentBuffer), handed to the Design stage; the page passes none
  * (the shared IndexedDB store, its own document and window), the node test kit passes its profile's in-memory store.
  */
@@ -40,6 +40,7 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
     if (currentStageId === 'design') return mounted.design && mounted.design.controller ? sketchHistory(mounted.design.controller.state) : null;
     return (currentStageId === 'toolpath' || currentStageId === 'export') ? penHistory : null;
   } });
+  const designView = () => (currentStageId === 'design' && mounted.design && mounted.design.controller ? { svg: mounted.design.controller.svg, state: mounted.design.controller.state } : null);
   const btns = new Map();
   const views = new Map();
   // Build the nav buttons AND the stub stage bodies BY ITERATING STAGES (declaration-first — nothing hardcoded).
@@ -109,5 +110,5 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
   let initial = STAGES[0].id;
   try { const saved = localStorage.getItem(STAGE_KEY); if (saved && views.has(saved)) initial = saved; } catch (_) {}
   showStage(initial);
-  return { showStage, currentStageId: () => currentStageId, history };
+  return { showStage, currentStageId: () => currentStageId, history, designView };
 }

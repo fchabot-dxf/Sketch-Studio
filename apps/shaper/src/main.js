@@ -15,7 +15,7 @@ import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBro
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
-import { mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { MODE_KEY, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
@@ -421,7 +421,7 @@ modes = createModeRouter({
   },
 });
 const showMode = modes.showMode;
-mountHistoryButtons({ router: history, header: document.querySelector('header.sk-phone-header'), before: document.getElementById('explore-actions') }); // TASK 618: right side, left of the settings button
+mountAppFooter({ router: history, view: () => (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null) }); // TASK 618: Recenter on the Design view only
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {

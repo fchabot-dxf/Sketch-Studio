@@ -81,5 +81,6 @@ body > header.sk-phone-header > * { flex-shrink: 0; }
   :root { --sk-header-h: 52px; }
   body > header.sk-phone-header { height: var(--sk-header-h); box-sizing: border-box; }
   body > header.sk-phone-header button { min-height: 44px; min-width: 44px; }
-  body .sk-statusbar { display: none; }
+  /* TASK 618: the status bar stays, floating over the canvas's bottom edge (app-footer.js) with Undo / Redo, Construction, Recenter; Log / Tune / the mag lens are in the menu or off */
+  body .sk-statusbar #status-diag-slot, body .sk-statusbar #btn-mag-toggle, body .sk-statusbar #btn-tuning-toggle { display: none; }
 }

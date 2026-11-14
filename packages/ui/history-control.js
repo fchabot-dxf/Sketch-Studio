@@ -49,8 +49,8 @@ export function createHistoryRouter({ current }) {
 }
 
 const ICONS = {
-  undo: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M3 7v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  redo: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M21 7v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  redo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 7v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const BUTTONS = [
   { id: 'btn-undo', action: 'undo', can: 'canUndo', label: 'Undo (Ctrl+Z)' },
@@ -64,18 +64,20 @@ function injectStyles() {
   s.id = 'sk-history-styles';
   s.textContent = `
 .sk-history { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-.sk-history-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; background: transparent;
+.sk-history-btn, .sk-footer-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: transparent;
   color: inherit; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font: inherit; }
-.sk-history-btn:hover:not(:disabled) { background: var(--sk-header-hover, rgba(0,0,0,0.08)); }
+.sk-history-btn svg, .sk-footer-btn svg { width: 22px; height: 22px; pointer-events: none; }
+.sk-history-btn:hover:not(:disabled), .sk-footer-btn:hover:not(:disabled) { background: var(--sk-header-hover, rgba(0,0,0,0.08)); }
 .sk-history-btn:disabled { opacity: 0.35; cursor: default; }
-@media (pointer: coarse) { .sk-history-btn { width: 44px; height: 44px; } }
+/* the footer's icon buttons (Undo, Redo here; Construction, Recenter in app-footer.js): 32 px with a mouse, 44 px under a finger (TASK 615) */
+@media (pointer: coarse) { .sk-history-btn, .sk-footer-btn { width: 44px; height: 44px; } .sk-history-btn svg, .sk-footer-btn svg { width: 28px; height: 28px; } }
 `;
   document.head.appendChild(s);
   stylesInjected = true;
 }
 
-/** mountHistoryButtons({ router, header, before }) -> { el, destroy }: the Undo + Redo icon buttons, inserted into `header` before `before`
- *  (an element of the header: the host's right-hand controls), or at its end. The ONE mount every host calls. */
+/** mountHistoryButtons({ router, header, before }) -> { el, destroy }: the Undo + Redo icon buttons, inserted into `header` (the app footer, app-footer.js,
+ *  is the one caller) before `before`, or at its end. */
 export function mountHistoryButtons({ router, header, before = null }) {
   injectStyles();
   const el = document.createElement('span');

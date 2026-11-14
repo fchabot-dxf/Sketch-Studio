@@ -189,8 +189,8 @@ const HOSTS = {
     const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
-    const { createHistoryRouter, mountHistoryButtons } = await import('#ui/history-control.js'); const { sketchHistory } = await import('#ui/input-manager.js');
-    mountHistoryButtons({ router: createHistoryRouter({ current: () => sketchHistory(state) }), header: doc.body }); // main.js: Undo / Redo in the header (TASK 618)
+    const { createHistoryRouter } = await import('#ui/history-control.js'); const { mountAppFooter } = await import('#ui/app-footer.js'); const { sketchHistory } = await import('#ui/input-manager.js');
+    mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true }); // main.js: the footer (TASK 618)
     const importer = D.createStudioImporter({ state, svg }); importer.mountDrop(); // main.js: the file menu's entry (the sidebar) + the drop on the canvas
     const browser = designBrowser ? D.mountStudioBrowser({ svg, state, engine }) : null; // main.js: the SKETCHES browser; the render loop ticks it first
     const frame = () => { if (browser) browser.tick(); D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
@@ -226,7 +226,7 @@ const HOSTS = {
     };
     modes = M.createModeRouter({ views: M.findViews(doc), modeBtns: [...doc.querySelectorAll('.mode-btn')], exploreActions: doc.getElementById('explore-actions'),
       getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: () => history.refresh() });
-    (await import('#ui/history-control.js')).mountHistoryButtons({ router: history, header: doc.body }); // main.js: Undo / Redo in the header (TASK 618)
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: history }); // main.js: the footer (TASK 618)
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
@@ -250,7 +250,7 @@ const HOSTS = {
     // (the Design stage's svg, and the plotter canvas the other stages borrow), none while the stage that holds it is hidden
     layoutById(win, { 'design-canvas': MEASURED_CANVAS_RECT.penplotter, canvasWrap: MEASURED_PLOTTER_WRAP_RECT, canvas: MEASURED_PLOTTER_WRAP_RECT });
     const router = stages.mountStages({ nav: doc.getElementById('mode-nav'), stagesHost: doc.getElementById('stages'), bufferSeams: { store, doc, win } }); // the buffer's own seams, as for the other hosts
-    (await import('#ui/history-control.js')).mountHistoryButtons({ router: router.history, header: doc.body }); // main.js: Undo / Redo in the header (TASK 618)
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history }); // main.js: the footer (TASK 618)
     const svg = doc.getElementById('design-canvas');
     const controller = win.__sketch.controller; // the stage's own dev / test seam (sketch-stage.js): the sketcher it mounted
     const buffer = sketch.getDocBuffer();

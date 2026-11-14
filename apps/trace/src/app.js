@@ -13,7 +13,8 @@ import { getGoogleAccount }               from '#ui/cloud/google-account.js'; //
 getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
-import { createHistoryRouter, mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
+import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
 import { sketchHistory } from '#ui/input-manager.js';
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload, decodeImageBlob }     from './upload.js';
@@ -55,7 +56,7 @@ if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // TASK 618: Undo / Redo belong to the Edit tab's sketch (the Trace and Export tabs have no history)
 const history = createHistoryRouter({ current: () => (getEditState() && !tabPanes.edit.hidden ? sketchHistory(getEditState()) : null) });
-if (swHost) mountHistoryButtons({ router: history, header: swHost.parentElement, before: _diagLog.toggleEl }); // right side, left of Log
+mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null) });
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
 const listeners = {};

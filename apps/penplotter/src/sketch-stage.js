@@ -292,7 +292,7 @@ export function mountSketchStage(view, ctx = {}) {
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.
-  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine, toggleHost: document.querySelector('header.toolbar') });
+  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine });
   browser.drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
   infoPanel = browser.panel;
   const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };

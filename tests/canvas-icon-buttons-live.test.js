@@ -1,4 +1,4 @@
-// tests/canvas-icon-buttons-live.test.js — TASK 615: the canvas's Construction and Recenter controls are icon buttons (a sprite glyph, an aria-label, no
+// tests/canvas-icon-buttons-live.test.js — TASK 615 (TASK 618: they now live in the app footer, not on the canvas): the Construction and Recenter controls are icon buttons (a sprite glyph, an aria-label, no
 // text), 32 px square with a mouse and 44 px under a finger; Construction's ON state shows; Recenter still recenters; neither overlaps the SKETCHES box.
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
@@ -15,6 +15,7 @@ try {
   let c = await info('btn-construct-toggle'), r = await info('btn-recenter-view');
   console.log('desktop', JSON.stringify({ c, r }));
   assert.deepStrictEqual([c.w, c.h, r.w, r.h], [32, 32, 32, 32], 'desktop: both buttons are 32 px square');
+  assert.ok(await evalJs(`!!document.getElementById('btn-construct-toggle').closest('footer') && !!document.getElementById('btn-recenter-view').closest('footer')`), 'TASK 618: both are in the footer, not on the canvas');
   assert.ok(c.glyph >= 20 && r.glyph >= 20, `TASK 616: the glyph fills the button (>= 20 px of 32): ${c.glyph} / ${r.glyph}`);
   assert.deepStrictEqual([c.aria, r.aria], ['Construction', 'Recenter view'], 'aria-labels');
   assert.deepStrictEqual([c.text, r.text], ['', ''], 'no text, icon only');

@@ -1,5 +1,4 @@
 import { dbg } from '#core/debug.js';
-import { fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
@@ -190,71 +189,7 @@ export function setupUI(state){
   }catch(_){ }
   
 
-  // Construction toggle (floating switch)
-  const constructToggle = document.getElementById('btn-construct-toggle');
-  if (constructToggle) {
-    function updateConstructUI() {
-      const pressed = !!state.isConstructionMode;
-      // Visual classes and title
-      if (pressed) {
-        constructToggle.style.backgroundColor = '#f97316'; // Dark orange when active
-        constructToggle.style.color = 'white';
-        constructToggle.setAttribute('aria-pressed', 'true');
-        constructToggle.title = 'Construction: ON (K)';
-      } else {
-        constructToggle.style.backgroundColor = '#fed7aa'; // Light orange when idle
-        constructToggle.style.color = '#9a3412'; // Dark orange text
-        constructToggle.setAttribute('aria-pressed', 'false');
-        constructToggle.title = 'Construction: OFF (K)';
-      }
-    }
-
-    // Initial UI
-    updateConstructUI();
-
-    constructToggle.addEventListener('click', () => {
-      // If shapes are selected, toggle their construction state (undoable)
-      if (state.selectedShapes && state.selectedShapes.size > 0) {
-        try{ state.beginUndoGroup('toggle construction'); }catch(_){ }
-        for (const sid of state.selectedShapes) {
-          const s = state.shapes.find(x => x.id === sid);
-          if (s) s.isConstruction = !s.isConstruction;
-        }
-        try{ state.saveState(); }catch(_){ }
-        try{ state.endUndoGroup(); }catch(_){ }
-      } else {
-        // Toggle global construction mode for subsequent draws
-        state.isConstructionMode = !state.isConstructionMode;
-      }
-
-      // Refresh UI to reflect global state
-      updateConstructUI();
-
-      dbg.log('ui', '[ui] isConstructionMode set to', state.isConstructionMode);
-    });
-
-    // Make toggle keyboard-accessible and add 'k' shortcut
-    constructToggle.tabIndex = 0;
-    constructToggle.addEventListener('keydown', (e) => {
-      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); constructToggle.click(); }
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-      if (e.key && e.key.toLowerCase() === 'k') {
-        constructToggle.click();
-      }
-    });
-  }
-
-  // Recenter view button (canvas overlay)
-  const recenterBtn = document.getElementById('btn-recenter-view');
-  if (recenterBtn) {
-    recenterBtn.addEventListener('click', () => {
-      const svg = document.getElementById('svgCanvas');
-      if (!svg || !state || !state.view) return;
-      fitViewToExtents(svg, state.view, state);
-    });
-  }
+  // TASK 618: the Construction toggle and Recenter moved to the shared app footer (#ui/app-footer.js, mounted by main.js)
 
   // Clear All button (destructive)
   const clearBtn = document.getElementById('btn-clear');

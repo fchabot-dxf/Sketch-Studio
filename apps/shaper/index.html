@@ -54,7 +54,7 @@
       --sk-ribbon-grouplabel: #6b7280;
       --sk-ribbon-menu-bg: #1b2030;
     }
-    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 0 0; display: flex; background: #0b1020; z-index: 5; }
+    #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
     /* VCARVE-3a: Vcarve = a docked left panel (per the docked-layout target, NOT floating) + the cream canvas. */
     #view-vcarve { flex-direction: row; }

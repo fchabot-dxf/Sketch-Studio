@@ -25,7 +25,7 @@ const BEFORE = {
   },
   '1440x900': {
     sketchstudio: { header: 38, ribbon: 79, footer: 39, canvasW: 1406, canvasBottom: 844 },
-    shaper: { header: [0, 44], ribbon: [44, 89], canvas: [0, 134, 1440, 766] },
+    shaper: { header: [0, 44], ribbon: [44, 79], canvas: [0, 124, 1440, 776] }, // TASK 618: was [44, 89] / [0, 134, 1440, 766]: without the Edit group (Undo / Redo) the ribbon no longer overflows 1440 px, so its 10 px scrollbar is gone
     penplotter: { header: [0, 44], ribbon: [44, 79], canvas: [0, 124, 1196, 776] },
     trace: { header: [0, 44], ribbon: [44, 79], canvas: [0, 123, 1440, 777] },
   },
@@ -117,18 +117,20 @@ await (async () => {
         if (h.name === 'sketchstudio') {
           assert.strictEqual(m.header[3], b.header, tag + 'header height unchanged');
           assert.strictEqual(m.ribbon[3], b.ribbon, tag + 'ribbon height unchanged');
-          assert.strictEqual(m.footer[3], b.footer, tag + 'status bar height unchanged');
+          // TASK 618: the status bar holds the 32 / 44 px icon buttons now (was a 29 / 39 px text bar): 12 px of padding + the line + the button
+          assert.strictEqual(m.footer[3], mouse ? 45 : 57, tag + 'status bar height: the icon buttons (32 + 13 mouse, 44 + 13 finger)');
           assert.strictEqual(m.strip[1], m.header[4], tag + 'the tab strip is right under the header');
           assert.strictEqual(m.strip[3], mouse ? 26 : 31, tag + 'the tab strip row height (26 mouse / 31 finger, TASK 608)');
           assert(m.ribbon[1] >= m.strip[4], tag + 'the ribbon is under the tab strip');
-          if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom, tag + 'canvas bottom unchanged'); }
+          if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom - (m.footer[3] - b.footer), tag + 'canvas bottom: the taller footer takes its difference'); }
         } else {
           // TASK 605: these hosts have the tab strip too (26 px mouse / 31 px finger) right under the header; everything below it moved down by exactly that row
           const row = mouse ? 26 : 31;
           assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header unchanged');
           assert.deepStrictEqual([m.strip[1], m.strip[3]], [m.header[4], row], tag + 'the tab strip is right under the header, ' + row + ' px tall');
           assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], [b.ribbon[0] + row, b.ribbon[1]], tag + 'ribbon unchanged in size, down by the strip row');
-          assert.deepStrictEqual([m.canvas[0], m.canvas[1], m.canvas[2], m.canvas[3]], [b.canvas[0], b.canvas[1] + row, b.canvas[2], b.canvas[3] - row], tag + 'canvas: same width, starts a strip row lower, ends where it did');
+          assert.deepStrictEqual([m.canvas[0], m.canvas[1], m.canvas[2], m.canvas[3]], [b.canvas[0], b.canvas[1] + row, b.canvas[2], b.canvas[3] - row - m.footer[3]], tag + 'canvas: same width, starts a strip row lower, ends where the footer starts');
+          assert.strictEqual(m.footer[3], mouse ? 40 : 52, tag + 'the shared footer row (TASK 618)');
         }
         console.log(`unchanged ${tag}${JSON.stringify(m)}`);
       }

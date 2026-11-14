@@ -2,14 +2,14 @@
 // shared SKETCHES tree with each sketch's expandable constraint list (createDesignInfoPanel, showSketchTree) in a small card that FLOATS over
 // the TOP-LEFT of the canvas, like Fusion's BROWSER. All four hosts (SketchStudio, Shaper, Pen Plotter, Trace) mount it through this function.
 //
-//   const browser = mountDesignBrowser({ container, state, engine, toggleHost });
+//   const browser = mountDesignBrowser({ container, state, engine });
 //   browser.tick()    call from the host's render loop: refreshes the tree when something it shows changed (cheap signature)
 //   browser.panel     the createDesignInfoPanel instance     browser.el  the card     browser.drawer  the phone drawer
 // container: the element that holds the canvas (a sibling of the canvas <svg>, so the pointer events inside the card never reach the canvas,
 // and the ones outside it do). It becomes the card's positioning parent (class sk-browser-host).
 // Collapsed: the card shrinks to its header bar. The state is the per-user setting BROWSER_COLLAPSED (SettingsManager, local), not a document field.
 // Phones (<= 640 px, the one phone breakpoint, tasks 562 / 581): the card does not fit over the canvas, so the SAME element becomes a
-// slide-over drawer (createMobileDrawer, breakpoint 641) opened by a header button (browser.drawer.toggleEl, placed in toggleHost).
+// slide-over drawer (createMobileDrawer, breakpoint 641) opened by a layers icon button in the canvas's top-right corner (browser.drawer.toggleEl, TASK 618).
 // Phone LANDSCAPE (the short viewport, #ui/short-viewport.js, TASK 602): the card starts COLLAPSED (the canvas is short), and collapses again each time the
 // phone turns into landscape; the user can expand it (that choice is stored like any other). Turning back to portrait / a tall window brings back the stored
 // setting. Expanded, it stays inside the canvas (max-height) and scrolls. Its controls are 44 px finger targets there.
@@ -18,6 +18,7 @@
 
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
+import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { sketchesSignature } from '#core/sketch-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport, onShortViewportChange } from '#ui/short-viewport.js';
@@ -44,6 +45,8 @@ function injectStyles() {
 /* the tree's own header (title + the new-sketch "+") is folded into the card's header bar: title hidden, "+" pinned at the bar's right */
 .sk-browser .sk-tree-hdr { position: absolute; top: 3px; right: 8px; padding: 0; }
 .sk-browser .sk-tree-title { display: none; }
+/* TASK 618: the canvas's top-right corner (the Sketches drawer button) */
+.sk-canvas-corner { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; gap: 8px; }
 @media (min-width: ${BROWSER_PHONE_BREAKPOINT}px) {
   .sk-browser { position: absolute; top: 8px; left: 8px; z-index: 20; width: 248px; max-height: calc(100% - 16px); backdrop-filter: blur(3px); }
 }
@@ -63,7 +66,7 @@ function injectStyles() {
   stylesInjected = true;
 }
 
-export function mountDesignBrowser({ container, state, engine, toggleHost = null, label = 'Sketches' } = {}) {
+export function mountDesignBrowser({ container, state, engine, label = 'Sketches' } = {}) {
   if (!container) throw new Error('mountDesignBrowser: container is required');
   injectStyles();
   container.classList.add('sk-browser-host');
@@ -88,8 +91,11 @@ export function mountDesignBrowser({ container, state, engine, toggleHost = null
   onShortViewportChange((short) => apply(short || stored())); // a rotation: landscape collapses, portrait brings back the stored state (never written here)
   toggle.addEventListener('click', () => { const c = !el.classList.contains('collapsed'); apply(c); SettingsManager.set('BROWSER_COLLAPSED', c); });
 
-  const drawer = createMobileDrawer({ panelEl: el, label, breakpoint: BROWSER_PHONE_BREAKPOINT, hideOnMobile: [toggle], side: 'right' });
-  if (toggleHost) toggleHost.appendChild(drawer.toggleEl);
+  // TASK 618: the drawer's button is a layers icon button in the canvas's top-right corner (it left the header); it shows only while the list is a drawer (phones)
+  ensureIconSymbols(['icon-layers']);
+  const drawer = createMobileDrawer({ panelEl: el, label, breakpoint: BROWSER_PHONE_BREAKPOINT, hideOnMobile: [toggle], side: 'right', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-layers"/></svg>' });
+  const corner = document.createElement('div'); corner.className = 'sk-canvas-corner';
+  corner.appendChild(drawer.toggleEl); container.appendChild(corner);
 
   let lastSig = '';
   const tick = () => {

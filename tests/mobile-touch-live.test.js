@@ -40,7 +40,7 @@ try {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
     return { coarse: matchMedia('(pointer: coarse)').matches, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), style: m('.sk-header-style'), debug: m('#btn-debug-toggle'), ribbonBtn: m('.sk-ribbon-btn'),
       ribbonLbl: m('.sk-ribbon-lbl'), construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
-      tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
+      tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
   console.log('desktop 1400:', JSON.stringify(desk));
   assert.strictEqual(desk.coarse, false);
   assert.ok(desk.menuBtn[1] < 44 && desk.style[1] < 44 && desk.debug[1] < 44, 'desktop keeps its compact header (no 44 px growth)');
@@ -69,13 +69,14 @@ try {
   const ph = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
     return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), actions: m('.sk-header-actions'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'),
-      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'),
+      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'),
       fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage.slice(0, 40), hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       headerRight: Math.round(document.querySelector('.sk-header').getBoundingClientRect().right), ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
   console.log('phone 390:', JSON.stringify(ph));
   assert.strictEqual(ph.coarse, true, 'the emulated phone is a coarse pointer');
   for (const k of ['menuBtn', 'tab', 'ribbonBtn', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
-  for (const k of ['ribbonLbl', 'groupLbl', 'coords']) assert.ok(parseFloat(ph[k][2]) >= 12, `${k} text >= 12 px: ${ph[k][2]}`);
+  for (const k of ['ribbonLbl', 'groupLbl']) assert.ok(parseFloat(ph[k][2]) >= 12, `${k} text >= 12 px: ${ph[k][2]}`);
+  assert.strictEqual(await evalJs(`document.getElementById('viewport-size')`), null, 'the VIEW readout is gone (TASK 618)');
   assert.strictEqual(ph.actions[3], 'none', 'Style + Debug left the header at phone width');
   assert.ok(ph.headerRight <= 390 && !ph.hscroll, 'the header fits the screen (no clipped button, no page scroll)');
   for (const k of ['mag', 'tune', 'diagSlot']) assert.strictEqual(ph[k][3], 'none', `${k} left the footer on a phone`);

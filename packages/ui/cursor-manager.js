@@ -82,6 +82,12 @@ const ICONS = {
         content: `<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="12" cy="12" r="2" fill="currentColor"/>`
     },
 
+    // TASK 618: the Sketches button over the canvas (phones: the SKETCHES list is a drawer): a stack of layers
+    'icon-layers': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M12 3 3 8l9 5 9-5-9-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M3 12.5l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
+    },
+
     'icon-terminal': {
         viewBox: '0 0 24 24',
         content: `<polyline points="4 17 10 12 4 7" stroke="currentColor" fill="none"/><line x1="12" y1="19" x2="20" y2="19" stroke="currentColor" fill="none"/>`

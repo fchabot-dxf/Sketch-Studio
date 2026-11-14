@@ -141,10 +141,11 @@ function injectStyles() {
    display needs !important: each host styles its frame by id (#design-view { display: flex }), and an id beats any class; :not([hidden])
    keeps a host's own hidden frame hidden. */
 @media ${SHORT_VIEWPORT_QUERY} {
-  .sk-ribbon-frame:not([hidden]) { display: grid !important; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+  .sk-ribbon-frame:not([hidden]) { display: grid !important; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
     flex: 1 1 auto; min-height: 0; }
   .sk-ribbon-frame > * { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; }
-  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; width: auto; padding: 0;
+  .sk-ribbon-frame > footer { grid-column: 2; grid-row: 2; } /* TASK 618: SketchStudio's status bar (the footer) under the work area, right of the rail */
+  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0;
     overflow: hidden; border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
   .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; gap: 0; padding: 2px;
     overflow-x: hidden; overflow-y: auto; touch-action: pan-y; -webkit-mask-image: none; mask-image: none; }

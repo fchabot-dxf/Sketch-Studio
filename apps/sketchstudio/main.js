@@ -2,7 +2,8 @@ import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput, showDimInput, sketchHistory } from '#ui/input-manager.js';
-import { createHistoryRouter, mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
+import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Construction, Recenter in the footer
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
@@ -180,9 +181,9 @@ function initApp(){
   });
   const headerHost = document.getElementById('app-header-host');
   if (headerHost) header.render(headerHost);
-  mountHistoryButtons({ router: createHistoryRouter({ current: () => sketchHistory(state) }), header: header.el, before: header.el.querySelector('.sk-header-actions') }); // TASK 618: right side, left of Style / Debug
+  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true, footer: document.querySelector('footer.sk-statusbar') }); // TASK 618: the status bar holds Undo / Redo (left), Construction + Recenter (right)
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer opened from this header button
-  sidePanel = mountStudioBrowser({ svg, state, engine, toggleHost: header.el }); // design-canvas.js
+  sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
   showView('design');
 
   // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)

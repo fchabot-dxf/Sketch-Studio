@@ -13,7 +13,8 @@
 // Each case: a stored design (mm), one press on the point, pointer moves along a path, release. Per event the shown inference (state.inference,
 // what the renderer draws) is checked at its position: the relation it names must hold for every line through the dragged point (the release
 // adds it to each of them, selection-tools.js handleSelectionPointerUp). Controls: the LINE tool still gets its tangent / parallel /
-// perpendicular inference; an attached-line inference of a drag (a line end made parallel to another line) is still offered.
+// perpendicular inference. (Task 594's second control, a line end made parallel to another line still offered its parallel, was turned by TASK 598:
+// Fusion offers no parallel there; tests/drag-attached-inference-node.test.js holds the attached-line rows.)
 // The view: 130 mm across, no grid magnet (GRID_MAGNETISM 0.001, as tests/drag-like-fusion-node.test.js).
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
@@ -133,8 +134,9 @@ for (const [label, doc] of scenes1) {
 const FREE = () => design(J({ a: [0, 0], b: [30, 10], m0: [15, 6], m1: [45, 26] }), [line('L', 'a', 'b'), line('M', 'm0', 'm1')], []);
 await check('2a free line end, moved parallel to the nearby line M', FREE(), O, 'b', ray(at(30, 10), Math.atan2(2, 3) * 180 / Math.PI, 14));
 await check('2b free line end, moved along its own line', FREE(), O, 'b', ray(at(30, 10), Math.atan2(1, 3) * 180 / Math.PI, 14));
-// control: an attached-line inference is still offered: B moved to O + (24, 16), where L (from A) is parallel to M
-await check('2c control, free line end turned until its line is parallel to M', FREE(), O, 'b', linePath(at(30, 10), at(24, 16)), { shows: 'parallel' });
+// B moved to O + (24, 16), where L (from A) is parallel to M. Task 594 kept this as a control (the parallel still offered); TASK 598 measured Fusion
+// (no parallel glyph, nothing added) and removed that attached-line test: no inference the point cannot satisfy, and none at all now.
+await check('2c free line end turned until its line is parallel to M', FREE(), O, 'b', linePath(at(30, 10), at(24, 16)));
 
 // ---- 3. the end of a line ATTACHED TO AN ARC: arc A centre O, start S = O + (20, 0), end O + (0, 20), counter-clockwise; line L O + (40, -15) -> S
 // SHARING the arc's start joint (as the line tool makes it when it starts on the arc's end: line-tool.js takes the snapped joint as the start).

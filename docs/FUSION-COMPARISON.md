@@ -2064,6 +2064,30 @@ Owner drawing (`.evidence/584/probe-owner.mjs`, `probe-j3.mjs`), before -> after
 lock changes 2 [joint:j_origin] -> 0; default grid 2 [joint:j_origin] -> 2 [grid:0,0] (the grid node at the origin, where the held point is: a grid snap adds nothing).
 j3 corner 40 x 4 px each way, zoomed: inferences 38 / 38 events -> 0 / 0, worst gap 0.99 -> 0.99 px, constraints 17 -> 17.
 
+## Dragging: inferences of a single point (task 594)
+**Fusion, measured** (2026-11-13, Fusion 360 Personal, a new unsaved document, sketch built through the bridge, edit mode entered and every drag done with
+the REAL mouse, screenshots taken while the button was held; cm). Ours = tests/drag-inference-scan-node.test.js (node kit, the app's pointer listeners, mm).
+
+| Case | Fusion while dragging / at release | Ours before | Ours after |
+|---|---|---|---|
+| A lone point on a circle, a vertical line 0.4 beside it, dragged along the tangent | no glyph / nothing added (the circle stretched to follow) | PARALLEL to the vertical line shown on 1 event (a point with no line) | none |
+| A line end on a circle, dragged along the tangent | no glyph / nothing added | none (the circle's curve snap holds most events; canApplyInference refused the tangent) | none |
+| A free line end moved parallel to a nearby line M | no glyph / nothing added | PARALLEL to M on 30 of 30 events, the end pinned on its motion line, and a Parallel L-M ADDED at release (L was 15 deg off) | none, nothing added |
+| A free line end moved along its own line | no glyph / nothing added | PARALLEL to its OWN line on 30 of 30 events (pinned on its direction) | none |
+| A line end shared with an arc end, dragged along the arc / its tangent | no glyph (no tangent) / nothing added | TANGENT to the arc on 5 / 5 / 12 events for a line 11-12 mm off tangent (nothing added at release) | none |
+| A free line end turned until its line is parallel to M (0.06 deg) | NO parallel glyph / nothing added | PARALLEL to M (attached-line test), Parallel added | unchanged |
+| A free line end turned horizontal | Horizontal glyph / Horizontal ADDED | (attached-line H, task 548 rules) | unchanged |
+| A hexagon corner moved in 12 directions | not measured | none shown (canApplyInference refuses every relation the regular polygon implies); findInference's raw answer had a drawing-scan PERPENDICULAR to a side at 150 / 330 deg | none shown; raw 150 / 330 deg: none |
+
+**The rule (ours, task 594, one place: packages/core/inference-engine.js findInference).** The DRAWING scan (H / V of the displacement, perpendicular to a line
+through the start, the global parallel scan, tangent to a circle / arc the start lies on) reads startPt -> endPt as the line being drawn. In a drag that is the
+point's motion, so it never runs when the options name a drag (`draggedType`); a drag gets only the tests tied to the lines through the dragged joint (and
+the midpoint test), task 582's rules unchanged. The line tool (no drag in the options) keeps every drawing inference (controls in the test: tangent,
+parallel, perpendicular).
+
+**Divergence (reported, not changed).** Fusion showed no PARALLEL glyph when a free line end was turned parallel to another line (0.06 deg off) and added
+nothing; ours (attached-line test, ANGLE_SNAP_DEG 3) shows it and adds a Parallel at release. Fusion's Horizontal on the same drag matches ours.
+
 ## Mirror (task 585)
 Measured by the advisor in Fusion 360 with the REAL UI (Create > Mirror, select the objects, select the mirror line, Enter; new unsaved document, cm; 2026-11-13).
 Ours = tests/mirror-fusion-node.test.js (the node kit: SketchStudio's ribbon Mirror, the objects by clicks, Enter, the line by a click, Enter; ours is mm, shown

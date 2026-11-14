@@ -40,7 +40,11 @@ export function mountVcarveView(state) {
 
   if (!Array.isArray(state.vcarves)) state.vcarves = [];
   // ONE record (the tab edits a single vcarve for now); DERIVE the stack — never materialize it.
-  const rec = () => state.vcarves[0] || (state.vcarves.push({ id: 'vcarve-1', region: null, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 6 }), state.vcarves[0]);
+  // TASK 609: the record is CREATED only when the user sets something up (rec(), used by every write); merely entering the tab READS the defaults (peek()) and
+  // leaves the document untouched, so an Untitled the user did nothing in stays clean (no dot, closing asks nothing).
+  const newRecord = () => ({ id: 'vcarve-1', region: null, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 6 });
+  const peek = () => state.vcarves[0] || newRecord();
+  const rec = () => state.vcarves[0] || (state.vcarves.push(newRecord()), state.vcarves[0]);
 
   // enable + populate the controls (they were disabled placeholders in 3a)
   els.vbit.disabled = els.dstep.disabled = els.maxdepth.disabled = els.recompute.disabled = els.region.disabled = false;
@@ -64,11 +68,11 @@ export function mountVcarveView(state) {
     }
     els.region.innerHTML = html;
 
-    const current = rec().region;
+    const current = peek().region;
     const matched = resolveTargetKey(current, state);
     if (matched && !matched.invalid && matched.outer) {
       const key = matched.profileId ? `profile:${matched.profileId}` : `loop:${matched.outer}`;
-      rec().region = key;
+      if (key !== current) rec().region = key; // normalise a stored bare id (a stored record exists here: current is non-null)
       els.region.value = key;
     } else if (current) {
       rec().region = null;
@@ -77,7 +81,7 @@ export function mountVcarveView(state) {
   }
 
   function syncControls() {
-    const r = rec();
+    const r = peek();
     els.vbit.value = String(r.vbit.angle);
     els.dstep.value = r.dStep + ' mm';
     els.maxdepth.value = r.maxDepth + ' mm';
@@ -85,7 +89,7 @@ export function mountVcarveView(state) {
 
   let lastRegion = null;
   function recompute() {
-    const r = rec();
+    const r = peek();
     const sb = shapeById();
     const loops = findLoops(state);
     const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));

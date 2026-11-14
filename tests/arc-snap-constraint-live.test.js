@@ -17,8 +17,8 @@ await (async () => {
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });
     await Promise.race([loaded, sleep(8000)]);
-    await waitFor(`!!document.querySelector('.stage-btn[data-stage="design"]')`, 'the stage button');
-    const sb = await centerOf('.stage-btn[data-stage="design"]'); await click(sb.x, sb.y);
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the stage button');
+    const sb = await centerOf('.sk-header-tab[data-tab="design"]'); await click(sb.x, sb.y);
     await waitForApp('design-canvas');
     await waitFor(`document.querySelector('#design-canvas').getBoundingClientRect().width > 0 && !!${STATE}`, 'the design canvas');
     const ab = await centerOf('#tool-arc'); await click(ab.x, ab.y);

@@ -27,9 +27,24 @@ const factory = (overrides = {}) => {
   return out;
 };
 
+// The canvas colours of the Fusion look (CSS --sk-* custom properties set on the canvas HOST element only). Declared once: the
+// Fusion template and (task 614) the Default template both use them.
+const FUSION_TOKENS = {
+  '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
+  '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
+  '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
+  '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
+  '--sk-construction': '#A9744F',
+  '--sk-constraint-stroke': '#1F2937', // dimension lines + text
+  '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
+  '--sk-profile-fill': '#5B9BF0',
+  '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
+  '--sk-joint-fill': '#FFFFFF',
+};
+
 export const STYLE_TEMPLATES = [
-  // Exactly today's look: the factory values.
-  { id: 'default', name: 'Default', settings: factory() },
+  // The factory look (task 614: the owner's current look) with the Fusion canvas colours.
+  { id: 'default', name: 'Default', settings: factory(), tokens: FUSION_TOKENS },
 
   // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
   // 15px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
@@ -45,18 +60,7 @@ export const STYLE_TEMPLATES = [
       DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
             LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
           }),
-    tokens: {
-      '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
-      '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
-      '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
-      '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
-      '--sk-construction': '#A9744F',
-      '--sk-constraint-stroke': '#1F2937', // dimension lines + text
-      '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
-      '--sk-profile-fill': '#5B9BF0',
-      '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
-      '--sk-joint-fill': '#FFFFFF',
-    },
+    tokens: FUSION_TOKENS,
   },
 
   // Dense drawings: thin lines, small joints and glyphs, tight glow.

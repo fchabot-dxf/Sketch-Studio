@@ -46,9 +46,9 @@ const strokeWidths = (m) => [...m.matchAll(/stroke-width="([\d.]+)"/g)].map((x) 
 const before = render();
 assert(before.length > 200, 'the fixed sketch renders markup');
 
-// 1. declaration: every template covers the same keys; only Fusion declares colour tokens (--sk-*)
+// 1. declaration: every template covers the same keys; Default and Fusion declare the same colour tokens (--sk-*), task 614; the others none
 for (const t of STYLE_TEMPLATES) {
-  assert(t.id === 'fusion' ? Object.keys(t.tokens || {}).length > 5 : !t.tokens, t.id + ' tokens declaration');
+  assert(t.id === 'fusion' || t.id === 'default' ? Object.keys(t.tokens || {}).length > 5 : !t.tokens, t.id + ' tokens declaration');
   assert.deepStrictEqual(Object.keys(t.settings).sort(), [...STYLE_SETTING_KEYS].sort(), t.id + ' covers every template key');
 }
 assert.deepStrictEqual(STYLE_TEMPLATES.map((t) => t.id), ['default', 'fusion', 'compact', 'presentation']);
@@ -115,7 +115,7 @@ const f2 = render2();
 assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
 assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
 assert(/#5B6CF0/i.test(render2('freeLine')), 'Fusion hover colour is blue-violet');
-assert(!/#5B6CF0/i.test(render2('freeLine') && d2), 'Default never uses the Fusion hover colour');
+assert(/#5B6CF0/i.test(render2('freeLine')) === (SettingsManager.get('HOVER_COLOR').toUpperCase() === '#5B6CF0'), 'Default hover colour = the factory HOVER_COLOR');
 applyStyleTemplate('default');
 assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round trip');
 
@@ -123,7 +123,7 @@ assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round
 const mkHost = () => { const props = {}; return { props, style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } } }; };
 const host = mkHost(), chrome = mkHost();
 const unbind = bindTemplateTokens(host);
-assert.strictEqual(Object.keys(host.props).length, 0, 'Default sets no tokens');
+assert.deepStrictEqual(host.props, STYLE_TEMPLATES[1].tokens, 'Default sets the Fusion canvas tokens (task 614)');
 applyStyleTemplate('fusion');
 assert.strictEqual(host.props['--sk-geo-fixed'], '#000000', 'Fusion: fully constrained lines are black');
 assert.strictEqual(host.props['--sk-constraint-fill'], '#2B9BD6', 'Fusion: free lines are sketch blue');
@@ -132,7 +132,7 @@ assert.strictEqual(Object.keys(chrome.props).length, 0, 'tokens never touch anot
 applyStyleTemplate('compact');
 assert.strictEqual(Object.keys(host.props).length, 0, 'Compact clears the tokens');
 applyStyleTemplate('fusion'); SettingsManager.resetToDefaults();
-assert.strictEqual(Object.keys(host.props).length, 0, 'reset to defaults clears the tokens');
+assert.deepStrictEqual(host.props, STYLE_TEMPLATES[0].tokens, 'reset to defaults gives Default tokens');
 unbind();
 
 console.log('style-templates.test.js passed');

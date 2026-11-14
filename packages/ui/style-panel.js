@@ -6,7 +6,10 @@
 
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
-import { STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, activeStyleTemplateId, applyStyleTemplate } from './style-templates.js';
+import {
+  STYLE_TEMPLATES, CUSTOM_TEMPLATE_ID, USER_PRESETS_KEY, activeStyleTemplateId, applyStyleTemplate, userPresetsOf, listUserPresets,
+  isUserPresetId, presetNameProblem, findUserPresetByName, saveUserPreset, renameUserPreset, deleteUserPreset,
+} from './style-templates.js';
 
 // The shared sketcher-rendering controls. Labels are the EXACT text from #settings-panel (index.html) — faithful
 // for the S7c-2c swap. min/max/step carried from the retired settings-panel.js sliderSpecs. SHOW_GRID = checkbox; the rest =
@@ -91,6 +94,12 @@ function injectStyles() {
   color: inherit; border: 1px solid var(--sk-style-sep, #cbd5e1); }
 .sk-style-input[type="checkbox"] { width: auto; }
 .sk-style-slider { width: 100%; accent-color: var(--sk-selection, #3B82F6); cursor: pointer; }
+.sk-style-presetbar { display: flex; flex-wrap: wrap; gap: 6px; }
+.sk-style-presetbar [hidden] { display: none; }
+.sk-style-ask { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--sk-style-sep, #cbd5e1); border-radius: 6px; }
+.sk-style-ask-input { width: 100%; text-align: left; }
+.sk-style-ask-err { color: #b91c1c; }
+.sk-style-ask-btns { display: flex; justify-content: flex-end; gap: 6px; }
 .sk-style-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .sk-style-btn { padding: 4px 10px; border-radius: 6px; cursor: pointer; background: transparent; color: inherit;
   border: 1px solid var(--sk-style-sep, #cbd5e1); }
@@ -139,11 +148,81 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   const tplTop = document.createElement('div'); tplTop.className = 'sk-style-rowtop';
   const tplLab = document.createElement('span'); tplLab.className = 'sk-style-label'; tplLab.textContent = 'Template';
   const tplSelect = document.createElement('select'); tplSelect.className = 'sk-style-input'; tplSelect.dataset.key = 'STYLE_TEMPLATE';
-  for (const t of [...STYLE_TEMPLATES, { id: CUSTOM_TEMPLATE_ID, name: 'Custom' }]) {
-    const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; tplSelect.appendChild(o);
+  // The options: the built-ins, then the user's own presets in their own group, then Custom. Rebuilt when the stored presets change.
+  let builtRaw;
+  const optionsFor = (list) => list.map((t) => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; return o; });
+  function buildTplOptions() {
+    const raw = settings.get(USER_PRESETS_KEY);
+    if (raw === builtRaw && tplSelect.options.length) return;
+    builtRaw = raw;
+    const mine = userPresetsOf(raw);
+    const group = (label, list) => { const g = document.createElement('optgroup'); g.label = label; g.append(...optionsFor(list)); return g; };
+    tplSelect.replaceChildren(group('Built-in', STYLE_TEMPLATES));
+    if (mine.length) tplSelect.appendChild(group('My presets', mine));
+    tplSelect.append(...optionsFor([{ id: CUSTOM_TEMPLATE_ID, name: 'Custom' }]));
   }
   tplSelect.addEventListener('change', () => { if (tplSelect.value !== CUSTOM_TEMPLATE_ID) applyStyleTemplate(tplSelect.value, settings); });
-  tplTop.append(tplLab, tplSelect); tplRow.appendChild(tplTop); body.appendChild(tplRow);
+  tplTop.append(tplLab, tplSelect); tplRow.appendChild(tplTop);
+
+  // User presets: save the current look under a name, rename / delete the chosen one. Questions are asked INLINE under the picker
+  // (no window.prompt / confirm: unsupported in some embedded webviews). One question at a time; a newer one cancels the older.
+  const presetBar = document.createElement('div'); presetBar.className = 'sk-style-presetbar';
+  const barBtn = (action, text) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-style-btn'; b.dataset.action = action; b.textContent = text; presetBar.appendChild(b); return b; };
+  const saveBtn = barBtn('save-preset', 'Save as preset…');
+  const renameBtn = barBtn('rename-preset', 'Rename…');
+  const deleteBtn = barBtn('delete-preset', 'Delete');
+  tplRow.appendChild(presetBar);
+  let askSettle = null;
+  // ask({ label, value?, okLabel, validate? }) → Promise: with `value` (even '') a text field: resolves the trimmed text, or null on cancel;
+  // without it a yes/no: true or null. validate(text) → an error message keeps the question open and shows the message.
+  function ask({ label, value = null, okLabel, validate = null }) {
+    if (askSettle) askSettle(null);
+    return new Promise((resolve) => {
+      const row = document.createElement('div'); row.className = 'sk-style-ask'; row.setAttribute('role', value === null ? 'alertdialog' : 'group');
+      const lab = document.createElement('span'); lab.textContent = label; row.appendChild(lab);
+      const settle = (v) => { if (askSettle !== settle) return; askSettle = null; row.remove(); resolve(v); };
+      let inp = null, err = null;
+      if (value !== null) {
+        inp = document.createElement('input'); inp.type = 'text'; inp.className = 'sk-style-input sk-style-ask-input'; inp.value = value; inp.maxLength = 200; row.appendChild(inp);
+        err = document.createElement('span'); err.className = 'sk-style-ask-err'; err.hidden = true; row.appendChild(err);
+      }
+      const commit = () => {
+        if (!inp) { settle(true); return; }
+        const text = inp.value.trim(), problem = validate ? validate(text) : null;
+        if (problem) { err.textContent = problem; err.hidden = false; inp.focus(); return; }
+        settle(text);
+      };
+      const btns = document.createElement('div'); btns.className = 'sk-style-ask-btns';
+      const mk = (cls, text, onClick) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-style-btn ' + cls; b.textContent = text; b.addEventListener('click', onClick); btns.appendChild(b); return b; };
+      mk('cancel', 'Cancel', () => settle(null));
+      mk('ok sk-style-btn-primary', okLabel, commit);
+      if (inp) inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); settle(null); } // cancels the question, not the panel
+      });
+      row.appendChild(btns);
+      askSettle = settle; tplRow.appendChild(row);
+      if (inp) { inp.focus(); inp.select(); } else row.querySelector('.ok').focus();
+    });
+  }
+  const chosenPreset = () => listUserPresets(settings).find((p) => p.id === tplSelect.value) || null;
+  saveBtn.addEventListener('click', async () => {
+    const name = await ask({ label: 'Save the current style as', value: '', okLabel: 'Save', validate: (n) => presetNameProblem(n, settings, { allowExisting: true }) });
+    if (name === null) return;
+    const clash = findUserPresetByName(name, settings);
+    if (clash && !(await ask({ label: 'A preset named "' + clash.name + '" already exists. Overwrite it?', okLabel: 'Overwrite' }))) return;
+    saveUserPreset(name, settings); notify('Saved style preset "' + name + '".');
+  });
+  renameBtn.addEventListener('click', async () => {
+    const p = chosenPreset(); if (!p) return;
+    const name = await ask({ label: 'Rename "' + p.name + '" to', value: p.name, okLabel: 'Rename', validate: (n) => presetNameProblem(n, settings, { exceptId: p.id }) });
+    if (name !== null) renameUserPreset(p.id, name, settings);
+  });
+  deleteBtn.addEventListener('click', async () => {
+    const p = chosenPreset(); if (!p) return;
+    if (await ask({ label: 'Delete the preset "' + p.name + '"?', okLabel: 'Delete' })) { deleteUserPreset(p.id, settings); notify('Deleted style preset "' + p.name + '".'); }
+  });
+  body.appendChild(tplRow);
 
   // Tabs: the control->tab mapping is the declared `tab` of each CONTROLS entry; the Units tab holds the document unit.
   const tabBar = document.createElement('div'); tabBar.className = 'sk-style-tabs'; tabBar.setAttribute('role', 'tablist');
@@ -192,7 +271,8 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   // Footer (Reset + Close)
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
   const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'sk-style-btn'; resetBtn.textContent = 'Reset';
-  resetBtn.addEventListener('click', () => { settings.resetToDefaults(); populate(); notify('Reset to factory defaults.'); });
+  // Reset restores the factory LOOK; the user's saved presets are their data, not look settings, so they are put back after it.
+  resetBtn.addEventListener('click', () => { const mine = settings.get(USER_PRESETS_KEY); settings.resetToDefaults(); settings.set(USER_PRESETS_KEY, mine, { persist: 'local' }); populate(); notify('Reset to factory defaults.'); });
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-style-btn'; closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => close());
   foot.append(resetBtn, closeBtn);
@@ -242,7 +322,10 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
       else { c.input.value = v; if (c.slider) c.slider.value = v; }
     }
     docUnitSelect.value = settings.get('DOC_UNIT') || 'mm';
+    buildTplOptions();
     tplSelect.value = activeStyleTemplateId(all);
+    const mine = isUserPresetId(tplSelect.value, settings);
+    renameBtn.hidden = !mine; deleteBtn.hidden = !mine;
   }
 
   // Live re-populate on any external change. subscribe RETURNS its unsubscribe — keep it; call it in destroy().
@@ -252,7 +335,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     if (isOpen) return;
     isOpen = true; el.classList.remove('sk-hidden'); populate();
     escHandler = (e) => { if (e.key === 'Escape') close(); };
-    outsideHandler = (e) => { if (!el.contains(e.target)) close(); };
+    outsideHandler = (e) => { if (!e.composedPath().includes(el)) close(); }; // the path, not contains(): a clicked inline-question button is already removed by then
     document.addEventListener('keydown', escHandler);
     setTimeout(() => { if (isOpen) document.addEventListener('click', outsideHandler); }, 0); // defer so the opening click doesn't close it
   }

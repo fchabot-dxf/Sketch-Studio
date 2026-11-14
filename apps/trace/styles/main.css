@@ -47,12 +47,6 @@ body { display: flex; flex-direction: column; }
 
 .tr-spacer { flex: 1; }
 
-.tr-status {
-  font-size: 12px;
-  color: var(--muted);
-  font-family: var(--mono);
-}
-
 /* ── Tab navigation ──────────────────────────────────── */
 .tr-tabs { display: flex; gap: 2px; }
 

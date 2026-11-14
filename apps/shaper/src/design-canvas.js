@@ -24,9 +24,9 @@ export const RIBBON_OPTIONS = Object.freeze({ profiles: true });
  * The options createDocumentBuffer gets from Shaper. TASK 474: the SAME restore runs after the initial restore and after Open / New / Open
  * from file (onRestored), and a design without a Shaper sidecar resets the cut plan and stock to their defaults instead of inheriting the
  * previous design's. refreshViews(): the page's views that follow the sketch (inside the same try as the solve); afterSidecar(): what the
- * page re-mounts once the cut plan is back. statusEl: the passive autosave indicator (optional).
+ * page re-mounts once the cut plan is back. session: createShaperSession() (TASK 605). No header status text (TASK 605: the tab dot shows it).
  */
-export function shaperBufferOptions({ controller, canvas, statusEl = null, refreshViews = () => {}, afterSidecar = () => {} }) {
+export function shaperBufferOptions({ controller, canvas, session = null, refreshViews = () => {}, afterSidecar = () => {} }) {
   return {
     state: controller.state,
     app: 'shaper', canvas,
@@ -41,7 +41,7 @@ export function shaperBufferOptions({ controller, canvas, statusEl = null, refre
       afterSidecar();
     },
     hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
-    onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
+    session, // TASK 605: the tab's in-memory stage state (shaper-session.js); the save state is the tab dot (document-tabs.js) + the canvas's data-save-state
   };
 }
 

@@ -158,6 +158,12 @@ export function mountVcarveView(state) {
     refresh,
     pickAtWorldPoint,
     viewState: vcarveViewState,
+    // TASK 605: a document tab keeps its own Vcarve pan / zoom aside (shaper-session.js); null = none yet: the next draw fits the region
+    getView: () => (vcarveViewState.view ? { ...vcarveViewState.view } : null),
+    setView(v) {
+      if (v) { vcarveViewState.view = { ...v }; updateViewBox(els.canvas, vcarveViewState.view); }
+      else { vcarveViewState.view = null; recompute(); }
+    },
     destroy() {
       els.canvas.removeEventListener('pointerdown', onCanvasDown);
       els.canvas.removeEventListener('pointerup', onCanvasUp);

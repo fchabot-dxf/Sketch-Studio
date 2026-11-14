@@ -45,17 +45,17 @@ await (async () => {
     await clickEl('.stage-btn[data-stage="toolpath"]'); await stageOn('toolpath');
     await waitFor(`!!document.querySelector('#toolpathLayers .group-row')`, 'toolpath group row rendered');
     const fresh = await evalJs(`(() => ({ group: document.querySelector('#toolpathLayers .group-row').textContent, hint: document.getElementById('plotColors').textContent, strip: !!document.querySelector('.tp-strip'),
-      panelTop: Math.round(document.getElementById('toolpathPanel').getBoundingClientRect().top), headerBottom: Math.round(document.querySelector('header.toolbar').getBoundingClientRect().bottom) }))()`);
+      panelTop: Math.round(document.getElementById('toolpathPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.toolbar')).getBoundingClientRect().bottom) }))()`);
     console.log('fresh Toolpath tab:', JSON.stringify(fresh));
     assert(/\(no pen\)/.test(fresh.group), 'the pen-less group row is labelled "(no pen)": ' + fresh.group);
     assert(/\+ Pen/.test(fresh.hint) && !/click \+ to/.test(fresh.hint), 'the Pens hint names the + Pen button: ' + fresh.hint);
     // ---- item 6a: no empty label band above the panel (the panel starts right under the header)
     assert.strictEqual(fresh.strip, false, 'no .tp-strip band on the Toolpath tab');
-    assert(fresh.panelTop - fresh.headerBottom <= 2, 'the Toolpath panel starts under the header (gap ' + (fresh.panelTop - fresh.headerBottom) + 'px)');
+    assert(fresh.panelTop - fresh.headerBottom <= 2, 'the Toolpath panel starts under the header and its tab strip (TASK 605) (gap ' + (fresh.panelTop - fresh.headerBottom) + 'px)');
     await clickEl('.stage-btn[data-stage="export"]'); await stageOn('export');
-    const ex = await evalJs(`(() => ({ strip: !!document.querySelector('.tp-strip'), top: Math.round(document.getElementById('exportPanel').getBoundingClientRect().top), headerBottom: Math.round(document.querySelector('header.toolbar').getBoundingClientRect().bottom) }))()`);
+    const ex = await evalJs(`(() => ({ strip: !!document.querySelector('.tp-strip'), top: Math.round(document.getElementById('exportPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.toolbar')).getBoundingClientRect().bottom) }))()`);
     assert.strictEqual(ex.strip, false, 'no .tp-strip band on the Export tab');
-    assert(ex.top - ex.headerBottom <= 2, 'the Export panel starts under the header (gap ' + (ex.top - ex.headerBottom) + 'px)');
+    assert(ex.top - ex.headerBottom <= 2, 'the Export panel starts under the header and its tab strip (TASK 605) (gap ' + (ex.top - ex.headerBottom) + 'px)');
 
     // ---- item 4: Export with nothing to plot says what to do TODAY
     await clickEl('#exportBtn');

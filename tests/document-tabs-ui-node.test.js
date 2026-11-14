@@ -2,6 +2,7 @@
 //   A. SketchStudio: two designs as tabs, each keeps its drawing, undo history and VIEW (a switch refits nothing); Ctrl+Z acts on the active tab only.
 //   B. Pen Plotter: its Toolpath / Export undo stacks (history.js) ride the tab (the `session` hook), a new tab starts empty.
 //   C. Shaper: the cut plan of each tab stays apart through a switch (it rides the sidecar, no session needed).
+//   F-I (TASK 605). F. Pen Plotter: the Toolpath selection is the tab's. G. Shaper: Explore's SVG and Prepare's selection + view, the stage stays. H. the 11th tab and the close question per host. I. Trace: the photo session.
 //   D. The strip (document-tabs.js) over the declared project actions: click, +, close x with THE unsaved question, keyboard, the 11th tab (T7),
 //      the same design twice, a renamed / deleted design, the sidebar placing it below the header (TASK 602), the name following the active tab.
 import assert from 'node:assert';
@@ -205,6 +206,108 @@ const names = (b) => b.tabs().map((t) => t.name);
     assert(/Alpha/.test(doc.title), 'the page title follows the active tab: ' + doc.title);
     assert.strictEqual(b.tabs().length, 2);
   } finally { await app.close(); }
+}
+// ---- F. TASK 605, Pen Plotter: the Toolpath stage's selection is the tab's (a toolpath id like "toolpath3" exists in two designs) ---------------------------------
+{
+  const profile = await createProfile();
+  await createNamedDesign(profile, 'penplotter', 'Postcard');
+  const pp = await open({ host: 'penplotter', profile });
+  try {
+    const st = pp.plotter;
+    st.selectedToolpathIds = new Set(['toolpath1']); st.targetEditingToolpathId = 'toolpath1'; st.selectedPenId = 'pen1'; st.selectedShapeIds = new Set(['s1']);
+    await pp.buffer.newTab();
+    assert.deepStrictEqual([...st.selectedToolpathIds], [], 'a new tab selects no toolpath');
+    assert.strictEqual(st.targetEditingToolpathId, null, 'and edits no toolpath targets');
+    assert.strictEqual(st.selectedPenId, null, 'and has no pen folder selected');
+    assert.deepStrictEqual([...st.selectedShapeIds], [], 'and no shape');
+    st.selectedToolpathIds = new Set(['toolpath2']);
+    await pp.buffer.activate(pp.buffer.tabs()[0].key);
+    assert.deepStrictEqual([...st.selectedToolpathIds], ['toolpath1'], "the first tab's selected toolpath is back");
+    assert.strictEqual(st.targetEditingToolpathId, 'toolpath1'); assert.strictEqual(st.selectedPenId, 'pen1');
+    assert.deepStrictEqual([...st.selectedShapeIds], ['s1']);
+    await pp.buffer.activate(pp.buffer.tabs()[1].key);
+    assert.deepStrictEqual([...st.selectedToolpathIds], ['toolpath2'], "the second tab's own selection is back");
+    // the stage stays where it is (it is the app's, not the document's)
+    pp.router.showStage('toolpath');
+    await pp.buffer.activate(pp.buffer.tabs()[0].key);
+    assert.strictEqual(pp.router.currentStageId(), 'toolpath', 'a tab switch from Toolpath stays in Toolpath');
+  } finally { await pp.close(); }
+}
+
+// ---- G. TASK 605, Shaper: Explore's SVG, Prepare's selection + view come back with their tab ---------------------------------------------------------------
+{
+  const profile = await createProfile();
+  await createNamedDesign(profile, 'shaper', 'Sign');
+  const sh = await open({ host: 'shaper', profile });
+  try {
+    const { store: exploreStore } = await import('../apps/shaper/src/store.js');
+    const explored = sh.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    exploreStore.doc = explored; exploreStore.selected = null;
+    // a closed rectangle: Prepare has one loop to select
+    lineAt(sh, 0.3, 0.3, 0.6, 0.3); lineAt(sh, 0.6, 0.3, 0.6, 0.6); lineAt(sh, 0.6, 0.6, 0.3, 0.6); lineAt(sh, 0.3, 0.6, 0.3, 0.3);
+    sh.modes.showMode('prepare'); sh.frames(2);
+    const view = sh.prepare.view();
+    assert(view && view.loops.length >= 1, 'Prepare found the rectangle loop');
+    view.setSelection([{ kind: 'loop', id: view.loops[0].id }]);
+    view.setView({ x: 12, y: 34, w: 56, h: 78 });
+    const picked = view.selectedTargets().map((t) => t.id);
+    await sh.buffer.newTab();
+    assert.strictEqual(exploreStore.doc, null, 'a new tab has no Explore SVG');
+    assert.strictEqual(sh.modes.current(), 'prepare', 'a tab switch from Prepare stays in Prepare');
+    assert.deepStrictEqual(sh.prepare.view().selectedTargets(), [], 'a new tab selects nothing in Prepare');
+    await sh.buffer.activate(sh.buffer.tabs()[0].key); sh.frames(2);
+    assert.strictEqual(sh.modes.current(), 'prepare', 'and back: still Prepare');
+    assert.strictEqual(exploreStore.doc, explored, "Explore's SVG is back");
+    assert.deepStrictEqual(sh.prepare.view().selectedTargets().map((t) => t.id), picked, "the tab's Prepare selection is back");
+    const back = sh.prepare.view().view; // (the view's height follows the canvas's aspect: updateViewBox)
+    assert.deepStrictEqual([back.x, back.y, back.w], [12, 34, 56], 'and its Prepare view');
+    // left from Design (Prepare not showing): the selection waits for the view's next mount
+    sh.modes.showMode('design');
+    await sh.buffer.newTab(); await sh.buffer.activate(sh.buffer.tabs()[0].key);
+    sh.modes.showMode('prepare'); sh.frames(2);
+    assert.deepStrictEqual(sh.prepare.view().selectedTargets().map((t) => t.id), picked, 'switching in Design, the Prepare selection is back when Prepare is entered');
+  } finally { await sh.close(); }
+}
+
+// ---- H. TASK 605, every host: the 11th tab and the close question go through the one buffer -------------------------------------------------------------------
+for (const host of ['shaper', 'penplotter']) {
+  const profile = await createProfile();
+  await createNamedDesign(profile, host, 'First');
+  const app = await open({ host, profile });
+  try {
+    const b = app.buffer;
+    for (let i = b.tabs().length; i < 10; i++) await b.newTab();
+    assert.strictEqual(b.tabs().length, 10, host + ': ten tabs');
+    await assert.rejects(() => b.newTab(), /Close a tab first/, host + ': the 11th tab is refused');
+    assert.strictEqual(b.tabs().length, 10);
+    // the active tab is an empty Untitled: closing asks nothing; with content it asks THE question
+    assert.strictEqual(b.tabs().at(-1).needsSavePrompt, null, host + ': an empty Untitled closes without a question');
+    lineAt(app, 0.3, 0.3, 0.6, 0.3);
+    assert.strictEqual(b.tabs().at(-1).needsSavePrompt, 'unsaved', host + ': an Untitled with content asks the unsaved question');
+  } finally { await app.close(); }
+}
+
+// ---- I. TASK 605, Trace: the photo session (the page has no node kit: the session is pure over its parts) -------------------------------------------------
+{
+  const { createTraceSession } = await import('../apps/trace/src/trace-session.js');
+  const log = [];
+  const state = { imageCanvas: null, imageW: 0, imageH: 0, imageName: 'trace', svgString: null, params: { threshold: 128 } };
+  let maskOf = null, scaleOf = { mode: 'global', unit: 'mm', globalWidth: '' };
+  const preview = { getMask: () => maskOf, setMask: (m) => { maskOf = m; }, clear: () => log.push('clear'), setImage: (c) => log.push('image:' + c.name), setSVG: (v) => log.push('svg:' + v), updateThresholdOverlay: () => {} };
+  const scale = { getState: () => ({ ...scaleOf }), setState: (v) => { scaleOf = v ? { ...v } : { mode: 'global', unit: 'mm', globalWidth: '' }; }, setImageSize: () => {} };
+  const ui = { cancelTrace: () => log.push('cancel'), showPhotoUi: (has) => log.push('ui:' + has), fallbackName: () => 'fromSidecar', onNoPhoto: () => log.push('nophoto') };
+  const session = createTraceSession({ state, preview, scale, ui });
+  const photo = { name: 'canvasA' };
+  Object.assign(state, { imageCanvas: photo, imageW: 40, imageH: 30, imageName: 'A', svgString: '<svg A/>' }); maskOf = { name: 'maskA' }; scaleOf = { mode: 'global', unit: 'in', globalWidth: '8' };
+  const a = session.capture();
+  session.restore(undefined); // a new tab
+  assert.strictEqual(state.imageCanvas, null, 'a new tab has no photo'); assert.strictEqual(state.svgString, null);
+  assert.strictEqual(state.imageName, 'fromSidecar'); assert.strictEqual(scaleOf.globalWidth, '', 'and the scale is back to its first-run state');
+  assert(log.includes('clear') && log.includes('nophoto'), 'the preview is cleared and the page is told: ' + log);
+  session.restore(a);
+  assert.strictEqual(state.imageCanvas, photo, "tab A's photo is back"); assert.strictEqual(state.svgString, '<svg A/>'); assert.strictEqual(state.imageName, 'A');
+  assert.deepStrictEqual(maskOf, { name: 'maskA' }, 'its mask'); assert.deepStrictEqual(scaleOf, { mode: 'global', unit: 'in', globalWidth: '8' }, 'its scale');
+  assert(log.includes('svg:<svg A/>'), 'its traced SVG is shown again (not re-traced)');
 }
 console.log('document-tabs-ui-node: ok');
 process.exit(0);

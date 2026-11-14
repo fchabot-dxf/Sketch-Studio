@@ -1,7 +1,7 @@
 // tests/document-tabs-strip-live.test.js — TASK 587 (docs/DOCUMENT-TABS-DESIGN.md slice 3): the strip in the REAL SketchStudio page, real pointer.
 // Its own row BELOW the header, above the ribbon (TASK 602, owner; no header control moves sideways or changes size, nothing overlaps it: the header,
 // the ribbon, the SKETCHES box, the Construction / Recenter buttons), click / + / close x, THE question on an unsaved tab, the 11th tab (T7), and the
-// other hosts (Shaper, Pen Plotter, Trace) show NO strip.
+// other hosts (Shaper, Pen Plotter, Trace) show the same strip (TASK 605; their stage switching is tests/document-tabs-stages-live.test.js).
 // TASK 602 sizes (owner: "tabs can be minimal size"): a 26 px row with a mouse, a 45 px row under a finger (44 px tabs, close x and "+": real 44 px
 // targets). Widths like browser tabs: 1 or 2 tabs at the full 240 px, shrinking evenly as more open, never below the minimum (72 px mouse, 104 px finger),
 // then the row scrolls sideways with the active tab in view; measured with 1, 2, 5 and 10 tabs at 1400 px (mouse) and 390 px (touch).
@@ -137,12 +137,14 @@ await (async () => {
     await send('Emulation.setTouchEmulationEnabled', { enabled: false });
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
 
-    // the other hosts have no strip
+    // TASK 605: the other hosts show the SAME strip: the row right under the header (26 px), the host's own content starts below it (nothing under it)
     for (const h of ['shaper', 'penplotter', 'trace']) {
       await navigate(url(h), 10000);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, h + ' sidebar');
-      await sleep(300);
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctabs').length`), 0, h + ' shows no strip');
+      await waitFor(`!!document.querySelector('.sk-doctabs') && !!document.querySelector('.sk-doctab-name')`, h + ' strip');
+      const g = await evalJs(`(() => { const s = document.querySelector('.sk-doctabs'), hd = document.querySelector('header'); const sr = s.getBoundingClientRect(), hr = hd.getBoundingClientRect();
+        const below = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2); return { prev: s.previousElementSibling === hd, h: Math.round(sr.height), gap: Math.abs(sr.top - hr.bottom), onTop: s.contains(below), statusText: !!document.getElementById('save-status') || !!document.getElementById('tr-status') }; })()`);
+      assert(g.prev && g.h === 26 && g.gap < 0.5 && g.onTop, h + ': the strip is the 26 px row right under the header and nothing covers it: ' + JSON.stringify(g));
+      assert.strictEqual(g.statusText, false, h + ': no header status text any more (the tab dot shows the state)');
     }
     console.log('document-tabs-strip-live: ok');
   } finally { await cdp.close(); }

@@ -15,7 +15,7 @@ import { CUT_PLAN, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the sha
  *   getController(): the mounted Design sketch controller (null before it exists). getMode(): the showing mode ('prepare' while Prepare shows).
  *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. ensureSketch(): mounts the sketch (the page mounts it lazily).
  *   notify(msg): the page's status line. onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam).
- * Returns { hostSnapshot, mount, enter, view, afterRestore, cutPanel }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
+ * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
  * afterRestore() = what a document restore does with Prepare.
  */
@@ -65,6 +65,24 @@ export function createPrepareStage({ getController, getMode, panelEl, canvasEl, 
     clearTimeout(prepareNoticeTimer); prepareNoticeTimer = setTimeout(() => { el.hidden = true; }, 4500);
   }
 
+  // TASK 605: what a document tab keeps of Prepare while another tab shows: the selected targets and the pan / zoom. Put back on the view's next mount
+  // (a restore re-mounts Prepare when it shows, and destroys it otherwise), so a tab switch from ANY mode brings the tab's own Prepare back.
+  let pendingSession = null;
+  function applyPendingSession() {
+    const s = pendingSession;
+    if (!s || !prepareView) return;
+    pendingSession = null;
+    if (s.view) prepareView.setView(s.view);
+    prepareView.setSelection(s.selection);
+  }
+  const captureSession = () => (prepareView
+    ? { selection: prepareView.selectedTargets().map((t) => ({ kind: t.kind, id: t.id })), view: { ...prepareView.view } }
+    : pendingSession); // not mounted (the tab was left before Prepare was entered again): what it already carries
+  function restoreSession(s) {
+    pendingSession = s && (s.selection.length || s.view) ? s : null;
+    if (prepareView && getMode() === 'prepare') applyPendingSession();
+  }
+
   // SP1a/SP1c: (re)mount the Prepare view on the shared Design sketch (no 2nd engine/RAF). TASK 460: also called after a document
   // restore so Prepare shows the restored geometry and cut plan.
   function mountPrepare() {
@@ -85,6 +103,7 @@ export function createPrepareStage({ getController, getMode, panelEl, canvasEl, 
     }
     prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice });
     prepareSig = geomSig(st);
+    applyPendingSession();
     onViewChange(prepareView);
     refreshCutPanel(); // no selection yet → the card stays hidden
   }
@@ -108,6 +127,7 @@ export function createPrepareStage({ getController, getMode, panelEl, canvasEl, 
     mount: mountPrepare,
     enter: (enteringMode) => { if (enteringMode || !prepareView) mountPrepare(); }, // the mode router's hook: entering Prepare mounts it afresh
     view: () => prepareView,
+    captureSession, restoreSession, // TASK 605: the tab's Prepare selection + view (shaper-session.js)
     // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
     afterRestore: () => {
       if (getMode() === 'prepare') mountPrepare();

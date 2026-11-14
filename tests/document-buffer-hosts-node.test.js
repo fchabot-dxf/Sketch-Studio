@@ -34,7 +34,7 @@ try {
   plotter.settings = { pen_up_z: 7, pen_down_z: -2, draw_feed: 1234, z_feed: 567, tolerance_mm: 0.2, export_files: 'pen' };
   s1 = await stored(pp);
   assert(s1 && s1.penplotter && s1.penplotter.toolpaths.length === 1 && s1.penplotter.toolpaths[0].name === 'Tri' && s1.penplotter.settings.draw_feed === 1234, 'Pen Plotter autosaved its toolpath sidecar (its own toolpath and settings, not the starter toolpath)');
-  assert.strictEqual(pp.saveStatus(), 'Saved', 'autosave reports Saved');
+  assert.strictEqual(pp.saveStatus(), 'saved', 'autosave reports saved (the canvas data-save-state)');
   plotterBefore = JSON.parse(JSON.stringify(pd.capturePlotterDoc()));
   assert(s1.hosts.includes('penplotter'), 'Pen Plotter saved its sidecar: ' + JSON.stringify(s1.hosts));
   assert(plotterBefore.toolpaths.length === 1 && plotterBefore.plotColors.length >= 1, 'plotter state built');

@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EVID = path.join(process.cwd(), '.evidence', '619');
@@ -72,6 +73,8 @@ await (async () => {
 
     const open = async (name) => {
       const h = HOSTS[name];
+      // each host starts on a fresh Untitled: the open-tabs buffer (TASK 624) would otherwise bring back the previous pass's drawing
+      await resetBufferLive(cdp);
       await goto(h.url, h.ready);
       if (h.enter) { await evalJs(`document.querySelector(${JSON.stringify(h.enter)}).click()`); await sleep(700); }
       await waitFor(`!!document.querySelector('${h.canvas}') && document.querySelector('${h.canvas}').getBoundingClientRect().width > 100`, name + ' canvas');

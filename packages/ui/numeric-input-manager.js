@@ -7,7 +7,8 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
-import { previewDimensionInput, completionsFor } from '#core/parameters.js';
+import { previewDimensionInput } from '#core/parameters.js';
+import { createParameterCompletion } from '#ui/parameter-completion.js';
 
 // U2: the active document unit for LENGTH dimension display/parse. Defaults to 'mm' = the world base (1 unit = 1 mm),
 // so a bare number round-trips byte-identically to the old parseFloat/toFixed(1) until the U3 toggle changes it.
@@ -179,7 +180,7 @@ let uiState = {
     // TASK 535: the hint line and the autocomplete list under the dimension box (null where the host has no real DOM)
     hintEl: null,
     listEl: null,
-    complete: null // { from, to, prefix, items, index } while the list is open
+    completion: null // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
 };
 
 export function setupNumericInput(svg, state) {
@@ -257,9 +258,8 @@ function setupListeners() {
     // Single Input Handler
     uiState.singleInput.addEventListener('keydown', (e) => {
         // TASK 535 autocomplete: while the list is open Up / Down move, Enter / Tab insert, Esc closes the list (a second Esc is the box's own Esc)
-        if (uiState.mode === 'edit' && uiState.complete) {
-            const consumed = handleCompletionKey(e);
-            if (consumed) { e.stopImmediatePropagation(); return; }
+        if (uiState.mode === 'edit' && uiState.completion && uiState.completion.handleKey(e)) {
+            e.stopImmediatePropagation(); return;
         }
         if (e.key === 'Enter') handleCommit();
         if (e.key === 'Escape') handleCancel();
@@ -540,7 +540,7 @@ function createAssistElements(single) {
     if (typeof document.createElement !== 'function' || !single || !single.parentNode || typeof single.parentNode.appendChild !== 'function') return;
     // setupNumericInput runs again for every tool that calls it: reuse the elements a first call made (one hint line and one list per page)
     const made = typeof document.getElementById === 'function' ? [document.getElementById('dimHint'), document.getElementById('dimComplete')] : [null, null];
-    if (made[0] && made[1]) { uiState.hintEl = made[0]; uiState.listEl = made[1]; return; }
+    if (made[0] && made[1]) { uiState.hintEl = made[0]; uiState.listEl = made[1]; attachCompletion(single); return; }
     const hint = document.createElement('div');
     hint.id = 'dimHint';
     hint.className = 'dim-hint hidden';
@@ -550,12 +550,6 @@ function createAssistElements(single) {
     list.className = 'dim-complete hidden';
     list.setAttribute('role', 'listbox');
     list.setAttribute('aria-label', 'Parameter names');
-    // a mouse press on a row inserts it (mousedown, not click: the box must keep focus); a touch tap produces the same mousedown
-    list.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        const li = e.target && typeof e.target.closest === 'function' ? e.target.closest('li') : null;
-        if (li && uiState.complete) insertCompletion(Number(li.dataset.index));
-    });
     single.parentNode.appendChild(list);
     single.parentNode.appendChild(hint);
     single.setAttribute('aria-describedby', 'dimHint');
@@ -566,82 +560,24 @@ function createAssistElements(single) {
     single.setAttribute('spellcheck', 'false');
     uiState.hintEl = hint;
     uiState.listEl = list;
+    attachCompletion(single);
 }
 
-function closeList() {
-    uiState.complete = null;
-    if (uiState.listEl) { uiState.listEl.replaceChildren(); hideNumericInputEl(uiState.listEl); }
-    if (uiState.singleInput && typeof uiState.singleInput.removeAttribute === 'function') uiState.singleInput.removeAttribute('aria-activedescendant');
+// the list's behaviour is the shared one (the same function a Parameters-window expression field calls)
+function attachCompletion(single) {
+    uiState.completion = createParameterCompletion({
+        input: single,
+        list: uiState.listEl,
+        context: () => (uiState.mode === 'edit' && uiState.target
+            ? { state: uiState.appState, unit: getDocUnit(), exclude: uiState.target.name ? [uiState.target.name] : [] } : null),
+        onInsert: () => { updateAssist({ complete: false }); placeAssist(); },
+        onChange: placeAssist,
+    });
 }
 
 function hideAssist() {
-    closeList();
+    if (uiState.completion) uiState.completion.close();
     if (uiState.hintEl) hideNumericInputEl(uiState.hintEl);
-}
-
-function renderList() {
-    const L = uiState.complete;
-    const list = uiState.listEl;
-    list.replaceChildren();
-    L.items.forEach((it, i) => {
-        const li = document.createElement('li');
-        li.id = `dimComplete-${i}`;
-        li.setAttribute('role', 'option');
-        li.setAttribute('aria-selected', i === L.index ? 'true' : 'false');
-        li.dataset.index = String(i);
-        const name = document.createElement('span');
-        name.className = 'dc-name';
-        name.textContent = it.kind === 'function' ? it.detail : it.name;
-        const val = document.createElement('span');
-        val.className = 'dc-val';
-        val.textContent = [it.value, it.unit].filter(Boolean).join(' ');
-        li.append(name, val);
-        list.appendChild(li);
-    });
-    if (L.index >= 0) uiState.singleInput.setAttribute('aria-activedescendant', `dimComplete-${L.index}`);
-    else uiState.singleInput.removeAttribute('aria-activedescendant');
-    showNumericInputEl(list);
-}
-
-// Up / Down move (no row is picked until one is moved to, so a plain Enter still commits), Enter / Tab insert the picked row (Tab: the first when none),
-// Esc closes the list. Returns true when the key was used.
-function handleCompletionKey(e) {
-    const L = uiState.complete;
-    if (!L) return false;
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const n = L.items.length;
-        L.index = e.key === 'ArrowDown' ? (L.index + 1) % n : L.index <= 0 ? n - 1 : L.index - 1;
-        renderList();
-        placeAssist();
-        return true;
-    }
-    if (e.key === 'Tab' || (e.key === 'Enter' && L.index >= 0)) {
-        e.preventDefault();
-        insertCompletion(L.index >= 0 ? L.index : 0);
-        return true;
-    }
-    if (e.key === 'Escape') {
-        e.preventDefault();
-        closeList();
-        placeAssist();
-        return true;
-    }
-    return false;
-}
-
-function insertCompletion(i) {
-    const L = uiState.complete;
-    const input = uiState.singleInput;
-    if (!L || !L.items[i]) return;
-    const v = input.value;
-    input.value = v.slice(0, L.from) + L.items[i].insert + v.slice(L.to);
-    const caret = L.from + L.items[i].insert.length;
-    input.setSelectionRange(caret, caret);
-    input.focus();
-    closeList(); // the list stays closed until the next keystroke, so Enter then commits
-    updateAssist({ complete: false });
-    placeAssist();
 }
 
 // hint = what Enter will do (value preview, the O4 change list) or why it will not; list = names under the caret
@@ -660,8 +596,7 @@ function updateAssist({ complete = true } = {}) {
     }
     input.setAttribute('aria-invalid', !pv.ok && !pv.empty ? 'true' : 'false');
     if (complete) {
-        const found = completionsFor(state, input.value, input.selectionStart, { unit, exclude: uiState.target.name ? [uiState.target.name] : [] });
-        if (found) { uiState.complete = { ...found, index: -1 }; renderList(); } else closeList();
+        if (uiState.completion) uiState.completion.update(); // places the assist itself
     }
     placeAssist();
 }

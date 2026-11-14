@@ -65,9 +65,8 @@ const reopen = async (app, re) => { // two quick clicks on the label of the dime
     app.type('wi');
     b = box(app);
     assert.deepStrictEqual(b.list.map((x) => [x.name, x.val]), [['width', '6.0 mm']], 'autocomplete after "wi": the parameter with its value and unit: ' + JSON.stringify(b.list));
-    assert.strictEqual(b.list[0].sel, 'false', 'no row is picked until Down is pressed (so a plain Enter still commits)');
-    app.key('ArrowDown');
-    assert.strictEqual(box(app).list[0].sel, 'true', 'Down picks the first row');
+    assert.strictEqual(b.list[0].sel, 'true', 'TASK 595: the top row is highlighted (Tab takes it)');
+    app.key('ArrowDown'); // a plain Enter still commits; after Up / Down Enter inserts the highlighted row
     app.enter();
     b = box(app);
     assert.strictEqual(b.value, 'width', 'Enter inserts the picked name');

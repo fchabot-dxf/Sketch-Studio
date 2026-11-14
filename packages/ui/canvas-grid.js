@@ -21,7 +21,7 @@
 // same literals — so SketchStudio resolves to exactly its old colours while a host (Shaper's cream palette) retints.
 
 import { dbg } from '#core/debug.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { basePer, UNITS, format as formatUnit, worldToUserY } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -290,5 +290,5 @@ export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gri
 
 /** updateCanvasGrid with the mode and unit read live from the declared GRID_MODE / DOC_UNIT settings (what both render ctxs call). */
 export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
-  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE'), docUnit: SettingsManager.get('DOC_UNIT') || 'mm' });
+  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE'), docUnit: docUnit() });
 }

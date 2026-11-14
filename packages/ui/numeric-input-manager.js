@@ -5,14 +5,10 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
-import SettingsManager from '#core/settings-manager.js';
+import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
-
-// U2: the active document unit for LENGTH dimension display/parse. Defaults to 'mm' = the world base (1 unit = 1 mm),
-// so a bare number round-trips byte-identically to the old parseFloat/toFixed(1) until the U3 toggle changes it.
-const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
 export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
 
@@ -429,7 +425,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey
         : hasFormula ? constraint.expression
         : (typeof prefillValue === 'number'
-            ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, getDocUnit()))
+            ? (isAngleDim ? prefillValue.toFixed(1) : formatUnit(prefillValue, docUnit()))
             : '');
     updateAssist({ complete: typeof initialKey === 'string' });
 
@@ -489,7 +485,7 @@ function handleCommit() {
         // A text that is not valid keeps the box open: the hint under it says why (the old box closed silently and dropped what was typed).
         const target = uiState.target;
         const state = uiState.appState;
-        const pv = previewDimensionInput(state, target, uiState.singleInput.value, { unit: getDocUnit() });
+        const pv = previewDimensionInput(state, target, uiState.singleInput.value, { unit: docUnit() });
         if (!pv.ok && !pv.empty) { updateAssist({ complete: false }); return; }
         if (pv.ok) {
             const isFirstValue = target.__newlyPlaced === true;
@@ -600,7 +596,7 @@ function attachCompletion(single) {
         input: single,
         list: uiState.listEl,
         context: () => (uiState.mode === 'edit' && uiState.target
-            ? { state: uiState.appState, unit: getDocUnit(), exclude: uiState.target.name ? [uiState.target.name] : [] } : null),
+            ? { state: uiState.appState, unit: docUnit(), exclude: uiState.target.name ? [uiState.target.name] : [] } : null),
         onInsert: () => { updateAssist({ complete: false }); placeAssist(); },
         onChange: placeAssist,
     });
@@ -617,7 +613,7 @@ function updateAssist({ complete = true } = {}) {
     if (uiState.mode !== 'edit' || !uiState.target) { hideAssist(); return; }
     const input = uiState.singleInput;
     const state = uiState.appState;
-    const unit = getDocUnit();
+    const unit = docUnit();
     const pv = previewDimensionInput(state, uiState.target, input.value, { unit });
     if (pv.empty) hideNumericInputEl(uiState.hintEl);
     else {

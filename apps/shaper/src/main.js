@@ -34,7 +34,8 @@ applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
-import { createShaperImporter, getDocUnit } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
+import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
+import { docUnit } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 
 canvas.init(document.getElementById('canvas'));
@@ -106,7 +107,7 @@ function generateShaperSvgPayload() {
   const sById = new Map((st.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(st)) loopPolys[l.id] = loopPolygon(l, st, sById);
-  const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: getDocUnit(), options: { groupByCut: true }, loopPolys });
+  const svg = exportShaperSVG({ state: st, entries, encoding: exportEncoding(), docUnit: docUnit(), options: { groupByCut: true }, loopPolys });
   return { svg, entries, vcarves, state: st };
 }
 

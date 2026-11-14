@@ -13,7 +13,7 @@ import {
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
 import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
-import SettingsManager from '#core/settings-manager.js';
+import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
@@ -29,10 +29,9 @@ let _radiusUnit = null;   // doc unit the default was seeded for; a unit change 
 let _pick = null;         // { line1 } once the first line is picked
 let _input = null;        // { el, corner, radius } while the radius input is open
 
-const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 const decimalsFor = (unit) => (unit === 'in' ? 3 : 2);
 // Radius for display: 2 decimals in mm (2.79), 3 in inches (0.25in / 0.4in), trailing zeros trimmed, unit suffix.
-const fmtR = (mm, unit = getDocUnit()) => formatUnit(mm, unit, { unit: true, decimals: decimalsFor(unit) });
+const fmtR = (mm, unit = docUnit()) => formatUnit(mm, unit, { unit: true, decimals: decimalsFor(unit) });
 
 function getSvgElement(ctx) {
   if (ctx && typeof ctx.getCanvasSvg === 'function') return ctx.getCanvasSvg();
@@ -57,7 +56,7 @@ function setCursor(c) {
 }
 
 function ensureRadius() {
-  if (currentRadius == null) { currentRadius = defaultFilletRadius(getDocUnit()); _radiusUnit = getDocUnit(); }
+  if (currentRadius == null) { currentRadius = defaultFilletRadius(docUnit()); _radiusUnit = docUnit(); }
 }
 
 export function setupFilletTool(ctx, state) {
@@ -68,7 +67,7 @@ export function setupFilletTool(ctx, state) {
 
   // Runs on EVERY activation: only seed the default the first time / when the doc unit changes, so the
   // "last value used" survives tool switches for the session.
-  const unit = getDocUnit();
+  const unit = docUnit();
   if (currentRadius == null || _radiusUnit !== unit) {
     currentRadius = defaultFilletRadius(unit);
     _radiusUnit = unit;
@@ -161,7 +160,7 @@ export function handleFilletPointerUp() {
 export function handleFilletKeyDown(e, svg, state) {
   if (e.key === 'Escape' && (_pick || _input)) { cancelAll(); return true; }
   if (e.key === 'r' || e.key === 'R') {
-    const unit = getDocUnit();
+    const unit = docUnit();
     const input = prompt('Enter Fillet Radius (' + unit + '):', formatUnit(currentRadius, unit, { decimals: decimalsFor(unit) }));
     if (input !== null) {
       const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
@@ -186,7 +185,7 @@ function openInput(svg, state, viewState, corner) {
   cancelInput();
   _pick = null;
   hoverCorner = null;
-  const unit = getDocUnit();
+  const unit = docUnit();
   const el = document.createElement('input');
   el.id = INPUT_ID;
   el.type = 'text';
@@ -207,7 +206,7 @@ function openInput(svg, state, viewState, corner) {
   _input = { el, corner, radius: currentRadius, svg, state, viewState };
 
   const preview = () => {
-    const v = parseFilletRadius(el.value, getDocUnit());
+    const v = parseFilletRadius(el.value, docUnit());
     if (v != null) _input.radius = v;
     renderFilletOverlay(svg, corner, viewState, { radius: _input.radius });
   };
@@ -229,7 +228,7 @@ function openInput(svg, state, viewState, corner) {
 function commitInput() {
   if (!_input) return;
   const { el, corner, state, svg } = _input;
-  const unit = getDocUnit();
+  const unit = docUnit();
   const val = parseFilletRadius(el.value, unit);
   if (val == null) { showNotification('Enter a radius greater than zero', 'warning'); return; }
   const pre = calculateFilletGeometry(corner.pA, corner.cornerPt, corner.pB, val);

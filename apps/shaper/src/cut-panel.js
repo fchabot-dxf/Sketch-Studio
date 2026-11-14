@@ -4,7 +4,7 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
@@ -23,9 +23,8 @@ const DEPTH_START = 0.1;   // first value (in the DOC unit) when stepping up/dow
 const DEPTH_STEP = 0.05;   // step increment, in the DOC unit
 const TOOLDIA_DEFAULT_MM = 3.175; // 1/8 in
 
-const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
-const fmt = (baseMM) => formatUnit(baseMM, getDocUnit(), { decimals: 3 });               // BASE mm → doc-unit string (3 dp)
-const toDocNum = (baseMM) => Number(formatUnit(baseMM, getDocUnit(), { decimals: 6 }));  // BASE mm → doc-unit number
+const fmt = (baseMM) => formatUnit(baseMM, docUnit(), { decimals: 3 });               // BASE mm → doc-unit string (3 dp)
+const toDocNum = (baseMM) => Number(formatUnit(baseMM, docUnit(), { decimals: 6 }));  // BASE mm → doc-unit number
 const isUnset = (v) => v === 'unset' || v == null;
 
 export function createCutPanel(hostEl, opts = {}) {
@@ -135,9 +134,9 @@ export function createCutPanel(hostEl, opts = {}) {
     // step in the DOC unit, then store BASE mm (step from 'unset' → the start value)
     const curDoc = isUnset(current.cutDepth) ? null : toDocNum(Number(current.cutDepth));
     const nextDoc = curDoc == null ? DEPTH_START : Math.max(0, +(curDoc + d * DEPTH_STEP).toFixed(6));
-    onSetField('cutDepth', parseUnit(String(nextDoc), getDocUnit())); // → base mm
+    onSetField('cutDepth', parseUnit(String(nextDoc), docUnit())); // → base mm
   }));
-  depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, getDocUnit()) ?? 'unset')); });
+  depthInput.addEventListener('change', () => { const v = depthInput.value.trim(); onSetField('cutDepth', v === '' ? 'unset' : (parseUnit(v, docUnit()) ?? 'unset')); });
   // offset presets popover (3x2): opens on focus (the value is selected so typing replaces it), closes on blur / pick
   const buildOffsetPop = () => {
     offsetPop.innerHTML = '<div class="cut-pop-title">presets</div><div class="cut-pop-grid"></div>';
@@ -145,7 +144,7 @@ export function createCutPanel(hostEl, opts = {}) {
     for (const p of OFFSET_PRESETS) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'cut-preset'; b.dataset.mm = String(p.mm);
-      b.textContent = getDocUnit() === 'in' ? p.label : fmt(p.mm); // mm/cm docs show the converted values (UNVERIFIED vs Studio)
+      b.textContent = docUnit() === 'in' ? p.label : fmt(p.mm); // mm/cm docs show the converted values (UNVERIFIED vs Studio)
       if (Math.abs(Math.abs(Number(current.cutOffset) || 0) - p.mm) < 1e-6) b.classList.add('is-active');
       b.addEventListener('click', () => { onSetField('cutOffset', p.mm); closePops(null); });
       grid.appendChild(b);
@@ -154,9 +153,9 @@ export function createCutPanel(hostEl, opts = {}) {
   offsetPop.addEventListener('mousedown', (e) => e.preventDefault()); // keep the field focused while picking
   offsetInput.addEventListener('focus', () => { buildOffsetPop(); openPop(offsetPop, offsetInput); offsetInput.select(); });
   offsetInput.addEventListener('blur', () => { offsetPop.hidden = true; syncOpenState(); });
-  offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, getDocUnit()) ?? 0));
+  offsetInput.addEventListener('change', () => onSetField('cutOffset', parseUnit(offsetInput.value, docUnit()) ?? 0));
   flipBtn.addEventListener('click', () => onSetField('cutOffset', -(Number(current.cutOffset) || 0))); // sign flip (base mm)
-  bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, getDocUnit()); if (n != null) onSetField('toolDia', n); });
+  bitInput.addEventListener('change', () => { const n = parseUnit(bitInput.value, docUnit()); if (n != null) onSetField('toolDia', n); });
 
   // cutter shape popover: flat / ball nose / V-bit rows; the V-bit row carries its angle presets (the EXISTING VBIT_PRESETS)
   const buildShapePop = () => {
@@ -199,7 +198,7 @@ export function createCutPanel(hostEl, opts = {}) {
     presetsWrap.querySelectorAll('.cut-preset').forEach((b) => b.classList.toggle('is-active', Math.abs(Number(b.dataset.value) - dia) < 1e-6));
     const shape = CUTTER_SHAPES.find((x) => x.id === current.cutterShape) || CUTTER_SHAPES[0];
     shapeIc.innerHTML = iconSvg(shape); shapeCur.textContent = shape.id === 'vbit' ? `${shape.label} ${Number(current.cutterAngle) || 90}\u00b0` : shape.label;
-    const u = getDocUnit();
+    const u = docUnit();
     unitEls.forEach((el) => { el.textContent = u; });
   };
 

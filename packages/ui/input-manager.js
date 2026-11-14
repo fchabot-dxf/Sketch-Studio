@@ -40,7 +40,7 @@ import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
@@ -418,7 +418,7 @@ export function setupInput(svg, state, opts = {}) {
 // The grid intersection nearest the pointer (world gx, gy) and its screen distance from the pointer.
 function nearestGridPoint(svg, e) {
     const w = screenToWorld(svg, e.clientX, e.clientY);
-    const { GRID_SIZE } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SettingsManager.get('GRID_SIZE') || SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SettingsManager.get('GRID_MAJOR_STEP') || SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
+    const { GRID_SIZE } = gridSpacing(docUnit(), { GRID_SIZE: Number(SettingsManager.get('GRID_SIZE') || SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SettingsManager.get('GRID_MAJOR_STEP') || SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
     const gx = Math.round(w.x / GRID_SIZE) * GRID_SIZE;
     const gy = Math.round(w.y / GRID_SIZE) * GRID_SIZE;
     const screenGrid = worldToScreen(svg, { x: gx, y: gy });
@@ -1157,7 +1157,7 @@ export function undoRedoKeyAction(e) {
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : showNotification;
-    const clipboard = createClipboard({ state, notify: notifyFn, unit: () => SettingsManager.get('DOC_UNIT') || 'mm' });
+    const clipboard = createClipboard({ state, notify: notifyFn, unit: docUnit });
     // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
     window.addEventListener('liveDimensionCancelled', () => {
         if (!isActiveFn()) return;

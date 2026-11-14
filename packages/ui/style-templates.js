@@ -38,7 +38,7 @@ export const STYLE_TEMPLATES = [
     settings: factory({
       LINE_STROKE: 0.3, JOINT_RADIUS: 1, JOINT_STROKE_MULT: 0.8,
       SELECTION_FEEDBACK_MULT: 2.5,
-      GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
+      GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
       HOVER_FEEDBACK_MULT: 3, GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '',

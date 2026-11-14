@@ -14754,3 +14754,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 - Behaviour change: fresh users and Reset get thinner lines, smaller joints, bigger glyphs, profile fill, Segoe label font, green locked lines.
 - Tests updated: default-look, style-templates, style-presets, profile-fill, fusion-glyphs-polish, dimension-label-drag, hover-stroke-node, hover-stroke-live, style-presets-live. New: tests/shaper-canvas-default-look-live.test.js (Shaper Design canvas stays rgb(244, 239, 225), no inline canvas token). gate:quick 363/363; shell-smoke, style-presets-live, style-panel-tabs, hover-stroke-live, joint-display-live, glyph-pick-hover-live, chain-select-move-live pass.
 
+
+- Addition: Compact template GLYPH_SYMBOL_SIZE_PX 12 -> 15 (Compact only; rest pinned as 614). tests/default-look.test.js updated. gate:quick run below.
+

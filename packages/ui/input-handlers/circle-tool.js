@@ -9,13 +9,14 @@ import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, cancelCreation } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 
-let circleState = { lockedRadius: null };
+let circleState = { lockedRadius: null, boxOpen: false };
 const localState = { isDragging: false, dragStartScreen: null };
 // TASK 596: after the first click the radius box shows at once (base-tool's shared creation-box path); the size follows the cursor until a radius is typed
 const BOX = { single: { field: 'radius' } };
 
 export function setupCircleTool(svg, state){
     setupNumericInput(svg, state);
+    state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; circleState.lockedRadius = null; hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
     setupDimensionListeners(state, TOOL_MODES.CIRCLE, {
         onApply: (detail) => {
             if (detail.mode === 'single' && detail.field === 'radius') {
@@ -90,7 +91,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     if (!localState.isDragging && !state.active.waitingForSecondClick) {
         state.active.waitingForSecondClick = true;
         localState.dragStartScreen = null; 
-        openCreationBoxes(e, BOX, [0]);
+        openCreationBoxes(e, BOX, [0]); circleState.boxOpen = true;
         return true;
     }
 
@@ -124,7 +125,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
         } 
     }catch(_){ }
 
-    circleState.lockedRadius = null;
+    circleState.lockedRadius = null; circleState.boxOpen = false;
     localState.isDragging = false;
     localState.dragStartScreen = null;
     try{ resetLockedDimensions(); }catch(_){ }
@@ -151,7 +152,7 @@ export function finalizeCircleFromActive(svg, state){
         if (circleState.lockedRadius != null) {
             addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { shape: shapeId, value: r, isRadius: true });
         }
-        circleState.lockedRadius = null; try{ resetLockedDimensions(); }catch(_){ }
+        circleState.lockedRadius = null; circleState.boxOpen = false; try{ resetLockedDimensions(); }catch(_){ }
         try{ hideInput(); }catch(_){ }
         state.endUndoGroup(); state.active = null; return true;
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }

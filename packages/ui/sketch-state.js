@@ -254,6 +254,9 @@ export function createSketchState(engine, view) {
       this.beginUndoGroup(label, snapshot);
       this._undoGroupInfo.draw = true;
     },
+    // TASK 596: the on-canvas value boxes a creation tool opens after its first click belong to the draw: a tool registers here to close them
+    // (and forget what was typed in them) when that draw is cancelled by ANY path (Esc, another tool picked, Undo mid-draw).
+    onDrawCancelled: function(fn){ (this._drawCancelListeners || (this._drawCancelListeners = [])).push(fn); },
     closeDrawStep: function(){
       const info = this._undoGroupInfo;
       if(!this._undoGroupActive || !info || !info.draw) return 'none';
@@ -264,6 +267,7 @@ export function createSketchState(engine, view) {
       this.history.splice(info.startIndex);
       this._restoreSnapshot(start);
       this._notifyHistory();
+      for(const fn of (this._drawCancelListeners || [])) fn();
       return 'cancelled';
     },
     // Cancel the active undo group and revert to the snapshot taken before the group started.

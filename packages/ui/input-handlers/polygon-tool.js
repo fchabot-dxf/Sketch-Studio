@@ -34,6 +34,7 @@ export function setupPolygonTool(svg, state) {
         let stored = null; try { stored = localStorage.getItem(SIDES_KEY); } catch (_) { /* storage blocked: the default applies */ }
         state.polygonSides = clampPolygonSides(stored == null ? POLYGON_SIDES.default : stored);
     }
+    state.onDrawCancelled(() => { if (live.boxOpen) resetLive(); });   // another tool picked / Undo mid-draw: the boxes go with the draw
     setupDimensionListeners(state, TOOL_MODES.POLYGON, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'polygon',
         onPreview: (detail) => {

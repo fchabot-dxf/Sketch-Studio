@@ -75,8 +75,12 @@ try {
   app.esc(); app.tool('select'); app.esc();
   app.tool('rect'); const R = P(500, 450); app.move(R.x, R.y); app.click(R.x, R.y); app.move(R.x + 100, R.y + 80);
   events.length = 0;
-  app.key('4'); app.enter();
-  assert.strictEqual(count('live-rect-commit'), 1, '4: exactly one live-rect-commit: ' + events);
+  const nr = lines().length;
+  app.key('4'); app.enter();   // TASK 596: the W x H boxes are open since the first click, so the typed digit goes in the focused W box and Enter commits it once
+  assert.strictEqual(count('liveDimensionApplied'), 1, '4: exactly one commit of the W x H box: ' + events);
+  assert.strictEqual(count('live-rect-commit'), 0, '4: the old live rect box is not what committed: ' + events);
+  assert.strictEqual(lines().length, nr + 4, '4: one rectangle (4 lines)');
+  app.undo(); assert.strictEqual(lines().length, nr, '4: ONE undo removes the whole rectangle');
   assert.strictEqual(count('live-line-commit'), 0, '4: no live-line-commit: ' + events);
   assert.deepStrictEqual(errors, [], '4: no error');
   console.log('4. rect typed width: ok');

@@ -142,5 +142,17 @@ try {
   clickAt(P(0, 0)); app.esc();
   assert(idleBoxes() && st.active === null && hist() === base, 'circle: Esc cancels');
   console.log('circle: ok');
+
+  // picking another tool in the middle of a draw takes the boxes away with the draw, and what was typed is forgotten
+  for (const t of ['polygon', 'rect', 'circle']) {
+    app.esc(); app.tool(t); clickAt(P(0, 0)); app.type('9');
+    assert(!idleBoxes(), t + ': boxes up before the switch');
+    app.tool('select');
+    assert(idleBoxes(), t + ': picking another tool closes the boxes');
+    assert.strictEqual(hist(), base, t + ': and leaves nothing');
+    app.tool(t); clickAt(P(0, 0)); app.move(P(40, 30).x, P(40, 30).y); app.click(P(40, 30).x, P(40, 30).y);
+    app.undo(); assert.strictEqual(hist(), base);
+  }
+  console.log('tool switch: ok');
 } catch (e) { failed = e; } finally { await app.close(); }
 if (failed) { console.error(failed.stack || failed.message || failed); process.exitCode = 1; } else console.log('creation-boxes: ok');

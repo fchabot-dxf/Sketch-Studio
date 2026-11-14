@@ -24,6 +24,7 @@ function lockedCorner(c1, pt) {
 
 export function setupRectTool(svg, state){
     setupNumericInput(svg, state);
+    state.onDrawCancelled(() => { if (localState.boxes) closeRectBoxes(); });   // another tool picked / Undo mid-draw: the boxes go with the draw
     setupDimensionListeners(state, TOOL_MODES.RECT, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'rect',
         onApply: (detail) => {

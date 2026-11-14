@@ -219,7 +219,7 @@ function sessionOf(state) {
   };
 }
 
-// TASK 591: every user setting whose value differs from its default (display + behaviour: GLYPH_STYLE, DOC_UNIT, SHOW_GRID, AXIS_SNAP,
+// TASK 591: every user setting whose value differs from its default (display + behaviour: DOC_UNIT, SHOW_GRID, AXIS_SNAP,
 // BACKGROUND, STYLE_TEMPLATE ...), { KEY: value }. Settings only; the manager holds no personal data.
 export function changedSettings() {
   const defaults = SettingsManager.getDefaults(), out = {};

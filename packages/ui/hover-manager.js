@@ -13,10 +13,10 @@ import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 
 // the glyph AS DRAWN (glyphDrawnRadiusPx, the same on touch: the glyph is not bigger there) plus GLYPH_PICK_MARGIN_PX. A pointer merely NEAR a
 // glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click and hover all call glyphAt.
 export const GLYPH_PICK_MARGIN_PX = 3;
-// The screen radius of a glyph as drawn (svg-renderer drawUnifiedGlyph): the 'badge' style draws a disc of GLYPH_BG_DIAMETER_PX; the 'fusion'
-// style draws no disc, only the icon, GLYPH_SYMBOL_SIZE_PX on its longer side (fusion-glyphs.js fusionGlyphMarkup).
+// The screen radius of a glyph as drawn (svg-renderer drawUnifiedGlyph): the outlined icon, GLYPH_SYMBOL_SIZE_PX on its longer side
+// (fusion-glyphs.js fusionGlyphMarkup), so 10 px at the default size.
 export function glyphDrawnRadiusPx(settings = SettingsManager.getAll()) {
-    return settings.GLYPH_STYLE === 'fusion' ? Number(settings.GLYPH_SYMBOL_SIZE_PX || 20) / 2 : settings.GLYPH_BG_DIAMETER_PX / 2;
+    return Number(settings.GLYPH_SYMBOL_SIZE_PX || 20) / 2;
 }
 export function glyphAt(svg, state, screenX, screenY) {
     return hitConstraintAtScreen(pickableConstraints(state) || [], svg, screenX, screenY, glyphDrawnRadiusPx() + GLYPH_PICK_MARGIN_PX);

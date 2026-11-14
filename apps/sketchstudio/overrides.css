@@ -57,8 +57,6 @@ body { font-family: 'Inter', sans-serif; touch-action: none; overflow: hidden; -
 body * { z-index: auto; }
 
 .tool-btn svg { width:28px; height:28px; display:block; margin:auto; color:#000303; --icon-accent:#ff0402; stroke-width:1px; }
-.constraint-glyph use { color:#3B82F6; --icon-accent:#3B82F6; stroke-width:1.5px; transition:all .2s ease; transform-origin:center; }
-.constraint-glyph.selected use, .constraint-glyph.hovered use { color:#1e40af; --icon-accent:#1e40af; stroke-width:2.5px; transform:scale(1.2); transform-origin:center; }
 .constraint-glyph.preview { opacity:0.5; pointer-events:none; }
 .constraint-glyph { transition:opacity 0.12s ease; }
 .tool-btn { display:flex; align-items:center; justify-content:center; padding:4px; }

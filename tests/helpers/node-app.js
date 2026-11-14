@@ -33,6 +33,17 @@
 //      app.hasFileChooser() is true while one is open, app.chooseFile({ name, text }) answers it as the user does (the input gets that File, its change fires).
 //   16. navigation (task 583): a page that leaves (location.href = ...) is not loaded by happy-dom (no network, no scripts): the new location is what the page's own code asked for,
 //      and the test reads it (app.window.location); the next page is an open() on the same profile.
+// KIT API ADDED in task 610 (not overrides; page wiring moved into modules the page and the kit both call, no app behaviour change):
+//   17. design browser (task 610): open({ designBrowser: true }) mounts the floating SKETCHES browser (packages/ui/design-browser.js: the Design info panel, its rows and
+//      sketch tree) over the canvas through the host's own declared mount (SketchStudio design-canvas.js mountStudioBrowser, Shaper design-canvas.js mountShaperBrowser; Pen Plotter's
+//      Design stage always mounts it, so its panel is in the DOM without the option) and ticks it once per frame, as the host's render loop does. app.browser is the mount.
+//      The phone drawer's header button is not placed (SketchStudio's header is page-only).
+//   18. import (task 610): with sidebar: true the sidebar's "Import SVG / DXF…" entry is mounted as the page mounts it (the host's own importFile: SketchStudio createStudioImporter,
+//      Shaper createShaperImporter + createGroupStatus, Pen Plotter importDrawing) and a dropped file lands on the host's drop target (a DragEvent 'drop' on the canvas / Design view);
+//      app.importFile(text, name) is that same function (a test that has no menu to click calls it). Trace is not a kit host.
+//   19. dropped file (task 610): a browser's DragEvent carries a DataTransfer ({ types: ['Files'], files: [File] }); happy-dom's DragEvent drops the dataTransfer it is given.
+//      app.dropFile(target, { name, text }) sends the dragover and the drop a user's file drag sends, each carrying that DataTransfer-shaped object, so the app's own drop
+//      listener (packages/ui/sketch-import.js mountImportDrop) runs unchanged.
 // KIT API ADDED in task 580 (not overrides; each is what a browser test did through CDP, shared by the files that need it):
 //   8. hidden focus (task 580): a browser takes the focus off an element that stops being rendered; see dropFocusIfHidden below (key() and type()).
 //   focus (task 580, in the pointer helper): a press on anything but the focused text field blurs the field first, as a browser's mousedown does.
@@ -162,7 +173,7 @@ export async function createNamedDesign(profile, app, name = 'Test design', docu
 // Each host's Design canvas, as its page script sets it up, from the host's declaration module (the page imports the same module).
 const HOSTS = {
   // apps/sketchstudio/main.js: initStudioCanvas, setupUI's ribbon, the buffer, setupInput(svg, state), the loop = studioFrame
-  async sketchstudio({ win, store }) {
+  async sketchstudio({ win, store, designBrowser }) {
     const [{ createEngine }, { DEFAULT_VIEW }, { createSketchState }, { setupInput }, { setupUI }, { createDocumentBuffer }, D] = await Promise.all([
       import('#core/constraint-solver.js'), import('#core/constants.js'), import('#ui/sketch-state.js'), import('#ui/input-manager.js'),
       import('../../apps/sketchstudio/ui/ui-manager.js'), import('#ui/document-buffer.js'), import('../../apps/sketchstudio/design-canvas.js')]);
@@ -178,19 +189,22 @@ const HOSTS = {
     const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
-    const frame = () => { D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
-    return { svg, state, engine, ribbon, buffer, frame };
+    const importer = D.createStudioImporter({ state, svg }); importer.mountDrop(); // main.js: the file menu's entry (the sidebar) + the drop on the canvas
+    const browser = designBrowser ? D.mountStudioBrowser({ svg, state, engine }) : null; // main.js: the SKETCHES browser; the render loop ticks it first
+    const frame = () => { if (browser) browser.tick(); D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
+    return { svg, state, engine, ribbon, buffer, frame, importFile: importer.importFile, browser };
   },
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
   // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Explore, Vcarve and Review views are not mounted.
-  async shaper({ win, store }) {
-    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }] = await Promise.all([
+  async shaper({ win, store, designBrowser }) {
+    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
-      import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js'), import('../../apps/shaper/src/shaper-session.js')]);
+      import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js'), import('../../apps/shaper/src/shaper-session.js'),
+      import('../../apps/shaper/src/cut-import.js'), import('../../apps/shaper/src/group-status.js')]);
     const doc = win.document;
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
-    let controller = null, modes = null, ribbon = null, buffer = null;
+    let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
     const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(),
       panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
@@ -200,17 +214,21 @@ const HOSTS = {
       if (controller) return;
       controller = mountSketch(svg, { ...D.DESIGN_CANVAS_OPTIONS, isActive: () => modes.current() === 'design' });
       controller.state.hostSnapshot = prepare.hostSnapshot;
+      if (designBrowser) browser = D.mountShaperBrowser({ state: controller.state, engine: controller.engine }); // buildDesignUI: the SKETCHES browser
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)
-      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
+      buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
       buffer.restore(); buffer.start();
     };
     modes = M.createModeRouter({ views: M.findViews(doc), modeBtns: [...doc.querySelectorAll('.mode-btn')], exploreActions: doc.getElementById('explore-actions'),
       getController: () => controller, ensureSketch, enter: { prepare: prepare.enter } });
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
-    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => runFrames(1) };
+    const views = M.findViews(doc);
+    const importer = createShaperImporter({ ensureSketch, getController: () => controller, getInfoPanel: () => browser && browser.panel, notify: createGroupStatus(() => views.design), getDropHost: () => views.design });
+    importer.mountDrop(); // main.js: the drop on the Design view (the menu entry is the sidebar's)
+    return { svg, state: controller.state, engine: controller.engine, controller, ribbon, buffer, modes, prepare, frame: () => { if (browser) browser.tick(); runFrames(1); }, importFile: importer.importFile, browser };
   },
   // apps/penplotter/src/main.js: the stage pipeline = mountStages() (apps/penplotter/src/stages.js, which the page calls too): the nav, the stage
   // bodies, the router, the Design stage (mountSketchStage: the sketcher, the ribbon, the buffer, the plotter sidecar) and the hidden Draw host. The
@@ -236,7 +254,7 @@ const HOSTS = {
       const poll = () => { if (svg.dataset.docReady === '1') res(); else if (Date.now() > end) rej(new Error('node-app: the Pen Plotter restore did not finish')); else nodeTimers.setTimeout(poll, 5); };
       poll();
     });
-    return { svg, state: controller.state, engine: controller.engine, ribbon: null, buffer, plotterDoc, plotter: pstate.state, router, frame: () => runFrames(1) };
+    return { svg, state: controller.state, engine: controller.engine, ribbon: null, buffer, plotterDoc, plotter: pstate.state, router, frame: () => runFrames(1), importFile: sketch.importDrawing };
   },
 };
 
@@ -246,7 +264,7 @@ let current = null; // one app at a time: the engine's store is module-level (pa
  * open({ host, profile, framesPerEvent }) -> app. Loads the host's page, mounts its Design canvas, restores the profile's current design
  * through the real buffer (the page's initial restore) and starts the autosave. Close it (app.close()) before opening the next.
  */
-export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1, width = 1600, height = 900, sidebar = false } = {}) {
+export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1, width = 1600, height = 900, sidebar = false, designBrowser = false } = {}) {
   if (!HOSTS[host]) throw new Error('node-app: unknown host ' + host);
   if (current) throw new Error('node-app: close the open app first (one engine store per process)');
   profile = profile || await createProfile();
@@ -257,11 +275,11 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   // the store's cross-tab channel is a real BroadcastChannel (as in the page), named per profile and closed with the app
   const channel = new BroadcastChannel(profile.channelName);
   const store = profile.createProjectStore({ adapter: profile.adapter, legacySource: async () => null, channel });
-  const m = await HOSTS[host]({ win, store });
+  const m = await HOSTS[host]({ win, store, designBrowser });
   const { svg, state, buffer } = m;
   if (sidebar) { // override 14: what every page script does with the shared sidebar (the host's own actions are not mounted)
     const { mountProjectSidebar } = await import('#ui/sidebar-projects.js');
-    (doc.getElementById('app-sidebar-host') || doc.body).appendChild(mountProjectSidebar({ appId: host, getBuffer: () => buffer, store }).el);
+    (doc.getElementById('app-sidebar-host') || doc.body).appendChild(mountProjectSidebar({ appId: host, getBuffer: () => buffer, store, importFile: m.importFile }).el);
   }
   m.frame();
   const frames = (n = framesPerEvent) => { for (let i = 0; i < n; i++) m.frame(); };
@@ -294,7 +312,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   };
 
   const app = {
-    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, router: m.router, prepare: m.prepare, controller: m.controller,
+    host, state, engine: m.engine, svg, document: doc, clipboard: profile.clipboard, window: win, buffer, store, profile, ribbon: m.ribbon, plotterDoc: m.plotterDoc, plotter: m.plotter, modes: m.modes, router: m.router, browser: m.browser, importFile: m.importFile, prepare: m.prepare, controller: m.controller,
     frames,
     /** world -> screen through the app's own transform (#ui/coords.js worldToScreen, the svg's live viewBox) */
     toScreen: (wx, wy) => { const p = worldToScreen(svg, { x: wx, y: wy }); return { x: Math.round(p.x), y: Math.round(p.y) }; },
@@ -367,6 +385,16 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
       const input = c.input; c.input = null;
       Object.defineProperty(input, 'files', { configurable: true, value: [new win.File([text], name)] });
       input.dispatchEvent(new win.Event('change', { bubbles: true }));
+      frames();
+    },
+    /** override 19: drag a file onto `target` (an element) and drop it: dragover, then drop, each with the DataTransfer a browser gives (types ['Files'], files [File]) */
+    dropFile(target, { name, text }) {
+      const dataTransfer = { types: ['Files'], files: [new win.File([text], name)] };
+      for (const type of ['dragover', 'drop']) {
+        const e = new win.DragEvent(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(e, 'dataTransfer', { value: dataTransfer });
+        target.dispatchEvent(e);
+      }
       frames();
     },
     /** a real pause (the app pairs clicks into a double click by their time: 500 ms; the kit sends events with no pause, a person does not) */

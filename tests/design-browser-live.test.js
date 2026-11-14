@@ -9,6 +9,7 @@
 //  390 px touch: the same box is a drawer opened by the header button, with the same tree.
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,6 +106,7 @@ await (async () => {
     }
 
     // phone (390x844 touch): the SAME floating card starts hidden, is toggled by the layers button (or hidden by its own collapse arrow), fits inside the canvas, keeps 44 px targets, and its rows work with real taps
+    await resetBufferLive(cdp);
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });

@@ -234,6 +234,13 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
   assert.strictEqual(bufReload.needsSavePrompt(), 'unsaved', 'restored Untitled with content still prompts on close-tab');
   bufReload.stop();
 
+  // Another app (e.g. Shaper) has its own working buffer scope and does NOT inherit SketchStudio's unsaved Untitled
+  const stShaper = mkState();
+  const bufShaper = mkBuffer(stShaper, mkStore(adapter), { app: 'shaper', win: null, doc: null });
+  const resShaper = await bufShaper.restore();
+  assert.strictEqual(resShaper.restored, false, 'another app starts fresh without inheriting SketchStudio working buffer');
+  assert.deepStrictEqual(ids(stShaper), [], 'another app has no inherited Untitled geometry');
+
   buf.discardUnsaved();
   assert.deepStrictEqual(ids(st), [], 'Don\'t save discards the Untitled');
   assert.strictEqual(leave(), false, 'after Don\'t save: no warning');
@@ -245,7 +252,7 @@ const mkBuffer = (st, store, extra = {}) => createDocumentBuffer({ state: st, ap
 
   // beforeunload DOES arm when writing the local working buffer failed
   let failBuf = true;
-  const flakyStore = { ...store, writeBuffer: async (p) => { if (failBuf) throw new Error('quota exceeded'); return store.writeBuffer(p); } };
+  const flakyStore = { ...store, writeBuffer: async (p, o) => { if (failBuf) throw new Error('quota exceeded'); return store.writeBuffer(p, o); } };
   const bufFlaky = mkBuffer(st, flakyStore, { win, doc: null });
   await bufFlaky.restore(); bufFlaky.start();
   step(st, 'line', 'jw');

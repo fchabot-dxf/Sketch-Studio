@@ -54,6 +54,7 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js';
 
 const CURRENT = CURRENT_DESIGN_KEY;
 const OPEN_TABS_BUFFER = 'openTabsBuffer';
+const bufferKey = (app) => `${OPEN_TABS_BUFFER}:${app}`; // meta key of one app's open-tabs working buffer
 const LEGACY_MIGRATED = 'legacyMigrated';
 const BASE = 'driveBase:';     // meta key: the Drive `version` a design's local edits are based on (what a recovery compares with)
 const SHADOW = 'driveShadow:'; // meta key of the LOCAL copy of a design that lives on Drive and has a write not yet confirmed (the safety net)
@@ -467,14 +468,11 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       await recoverOrphans();
       return d;
     },
-    /** Migrate any pre-474 legacy slot and recover any unconfirmed offline Drive writes (called by buffer restore as well as loadCurrent). */
-    async prepare({ app } = {}) {
-      await migrateLegacy(app);
-      await recoverOrphans();
-    },
     currentId: () => adapter.getMeta(CURRENT),
-    readBuffer: () => adapter.getMeta(OPEN_TABS_BUFFER),
-    writeBuffer: (data) => adapter.setMeta(OPEN_TABS_BUFFER, data),
+    /** The open-tabs working buffer of `app` (TASK 624): what that app had open (Untitled tabs included), so a refresh reopens it. One
+     *  key per app: another app never reopens this app's tabs (the shared CURRENT pointer still carries a stored design across apps). */
+    readBuffer: ({ app }) => adapter.getMeta(bufferKey(app)),
+    writeBuffer: (data, { app }) => adapter.setMeta(bufferKey(app), data),
     isRemote,
     resolveId: resolveMoved,
     hasPendingDrive: (id) => { id = resolveMoved(id); return !!(id && isRemote(id) && writer.status(id).state === 'failed'); },

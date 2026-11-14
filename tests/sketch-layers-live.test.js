@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -130,6 +131,7 @@ await (async () => {
     assert.strictEqual(await state(`const sk = st.shapes.find(s => s.id === 'LC').sketchId; return sk === st.sketches[st.sketches.length - 1].id;`), true, 'and LC lives in it');
 
     // ---- (5) ALL FOUR hosts: the same tree controls (a fresh page each: one sketch, so one row)
+    await resetBufferLive(cdp);
     const counts = `(() => { const q = (s) => document.querySelectorAll(s).length; return JSON.stringify({ add: q('.sk-tree-add'), eye: q('.sk-sketch-eye'), icon: q('.sk-sketch-icon'), name: q('.sk-sketch-name'), radio: q('.sk-sketch-radio'), gone: q('.sk-sketch-grip, .sk-sketch-up, .sk-sketch-down, .sk-sketch-solo, .sk-sketch-lock, .sk-tree-move') }); })()`;
     const hosts = [
       { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },

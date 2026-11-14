@@ -11,6 +11,7 @@ import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '587', width: 1400, height: 800 });
@@ -111,7 +112,7 @@ await (async () => {
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');
 
     // phone (390 x 844, a finger): a 31 px row (TASK 608, owner ruling; was 45), tabs the full row height, close x / + >= 24 x 24; widths at 1, 2, 5, 10 tabs (real taps on "+"); one line that scrolls, the active tab in view
-    await evalJs(`(async () => (await import('/packages/ui/project-store.js')).getProjectStore().writeBuffer(null))()`);
+    await resetBufferLive(cdp);
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await navigate(url('sketchstudio'), 10000);

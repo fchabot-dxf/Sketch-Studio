@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const J = (x, y) => ({ x, y, fixed: false, sketchId: 'sketch-1' });
 const DOC = {
@@ -60,8 +61,9 @@ try {
 
   await navigate(url, 8000); await waitForApp('svgCanvas');
   await evalJs(`(async () => { localStorage.clear(); localStorage.setItem('sketch-studio-settings', JSON.stringify({ GRID_MAGNETISM: 0.001 })); const dbs = indexedDB.databases ? await indexedDB.databases() : []; await Promise.all(dbs.map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name); q.onsuccess = q.onerror = q.onblocked = () => r(); }))); return true; })()`);
+  await installFakeDriveSession(cdp);
   await navigate(url, 8000); await waitForApp('svgCanvas');
-  await evalJs(`import('/packages/ui/project-store.js').then(async (m) => { const s = m.getProjectStore(); const d = await s.newDesign('Task 622 Live', { app: 'sketchstudio' }); await s.save(${JSON.stringify(DOC)}, { app: 'sketchstudio', id: d.id }); return d.id; })`);
+  await evalJs(`import('/packages/ui/project-store.js').then(async (m) => { const s = m.getProjectStore(); const d = await s.newDesign('Task 622 Live', { app: 'sketchstudio' }); await s.save(${JSON.stringify(DOC)}, { app: 'sketchstudio', id: d.id }); await s.flushDrive(); return d.id; })`);
   await navigate(url, 8000); await waitForApp('svgCanvas'); await sleep(600);
   await evalJs(`document.getElementById('tool-select').click()`); await sleep(150);
 

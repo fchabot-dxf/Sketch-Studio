@@ -120,7 +120,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   /** Snapshot of the open tabs + active working state so page refresh / crash reopens what was open (local working buffer only, NOT a saved file). */
   function captureBufferSnapshot() {
-    if (tabList.length === 1 && !boundId && untouchedUntitled()) return null;
+    if (tabList.length === 1 && !boundId && !hasContent(sigNow(), emptySig)) return null;
     const activeDoc = JSON.parse(sigNow());
     return {
       v: 1,
@@ -160,7 +160,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const s = JSON.stringify(payload);
     if (s === lastBufSig && bufferOk) return true;
     try {
-      await store.writeBuffer(payload);
+      await store.writeBuffer(payload, { app });
       lastBufSig = s;
       bufferOk = true;
       return true;
@@ -233,13 +233,15 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
 
   async function restore() {
     try {
+      let design = null;
+      try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch (unchanged)
       let bufSnap = null;
-      try { bufSnap = store.readBuffer ? await store.readBuffer() : null; } catch (_) { bufSnap = null; }
+      try { bufSnap = store.readBuffer ? await store.readBuffer({ app }) : null; } catch (_) { bufSnap = null; }
       if (bufSnap && Array.isArray(bufSnap.tabs) && bufSnap.tabs.length) {
-        try { if (store.prepare) await store.prepare({ app }); } catch (_) {}
-        let curId = null;
-        try { curId = store.currentId ? await store.currentId() : null; } catch (_) { curId = null; }
-        const externalCurrent = !!(curId && curId !== bufSnap.currentId && !bufSnap.tabs.some((t) => t.designId === curId));
+        let curId = design ? design.id : null;
+        if (!curId && store.currentId) { try { curId = await store.currentId(); } catch (_) { curId = null; } }
+        const resolvedBufCur = bufSnap.currentId && store.resolveId ? store.resolveId(bufSnap.currentId) : bufSnap.currentId;
+        const externalCurrent = !!(curId && curId !== resolvedBufCur && !bufSnap.tabs.some((t) => (store.resolveId ? store.resolveId(t.designId) : t.designId) === curId));
         if (!externalCurrent) {
           const restoredTabs = [];
           for (const s of bufSnap.tabs) {
@@ -249,12 +251,16 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
               if (!validateDocument(s.doc).ok) continue;
               restoredTabs.push({ key, designId: null, name: s.name || UNTITLED, emptySig: s.emptySig, saveOk: true, lastSig: JSON.stringify(s.doc), doc: s.doc, view: s.view || null, hostSession: s.hostSession });
             } else {
-              let d = null, unreadable = false;
-              try { d = await store.get(s.designId); } catch (_) { unreadable = true; }
+              const sid = store.resolveId ? store.resolveId(s.designId) : s.designId;
+              let d = (design && (design.id === sid || design.id === s.designId)) ? design : null;
+              let unreadable = false;
+              if (!d) {
+                try { d = await store.get(sid); } catch (_) { unreadable = true; }
+              }
               if (!d && !unreadable) continue; // deleted on Drive out-of-band (with no local shadow): do not resurrect
               const doc = d ? d.document : s.doc;
               if (!validateDocument(doc).ok) continue;
-              restoredTabs.push({ key, designId: d ? d.id : s.designId, name: (d ? d.name : s.name) || UNTITLED, emptySig: null, saveOk: true, lastSig: JSON.stringify(doc), doc, view: s.view || null, hostSession: s.hostSession });
+              restoredTabs.push({ key, designId: d ? d.id : sid, name: (d ? d.name : s.name) || UNTITLED, emptySig: null, saveOk: true, lastSig: JSON.stringify(doc), doc, view: s.view || null, hostSession: s.hostSession });
             }
           }
           if (restoredTabs.length) {
@@ -284,14 +290,12 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
           // All buffered tabs vanished on Drive or failed validation: reset stale buffer cleanly to Untitled
           active = newRecord();
           tabList.length = 0; tabList.push(active);
-          if (store.writeBuffer) { try { await store.writeBuffer(null); } catch (_) {} }
+          if (store.writeBuffer) { try { await store.writeBuffer(null, { app }); } catch (_) {} }
           if (curId && store.setCurrent) { try { await store.setCurrent(null); } catch (_) {} }
           bindUntitled();
           return { restored: false, hosts: {} };
         }
       }
-      let design = null;
-      try { design = await store.loadCurrent({ app }); } catch (_) { design = null; } // best-effort: no store = boot with an empty sketch (unchanged)
       if (!design) { bindUntitled(); return { restored: false, hosts: {} }; } // nothing stored: the page shows an unsaved Untitled
       return load(design, 'restore');
     } finally {

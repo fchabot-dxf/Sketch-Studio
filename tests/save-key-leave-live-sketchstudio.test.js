@@ -8,6 +8,7 @@
 import assert from 'node:assert';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const H = { url: '/apps/sketchstudio/index.html', canvas: 'svgCanvas', name: 'Sketch' };
 
@@ -49,7 +50,7 @@ await (async () => {
 
     // 1. a clean Untitled: no leave-page warning
     await load();
-    await evalJs(`(async () => { const s = ${S}; await s.setCurrent(null); await s.writeBuffer(null); })()`); await load();
+    await resetBufferLive(cdp); await load();
     await clickEl('#tool-select'); // a user gesture on the page
     assert.strictEqual(await leaveWarns(), false, 'a clean Untitled: no leave-page warning');
     // 2. an unsaved Untitled with content: kept in local working buffer across reload (no beforeunload!)

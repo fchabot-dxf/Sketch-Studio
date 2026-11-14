@@ -11,7 +11,7 @@ import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
-import { format as formatUnit } from '#core/units.js';
+import { format as formatUnit, docUnit } from '#core/units.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
@@ -22,7 +22,7 @@ import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
 // The Design canvas renders on a continuous solve→draw RAF, so labels re-label on the next frame after a unit toggle
 // (no explicit re-render wire needed).
-export const formatLenLabel = (v) => formatUnit(v, SettingsManager.get('DOC_UNIT') || 'mm', { decimals: 1 });
+export const formatLenLabel = (v) => formatUnit(v, docUnit(), { decimals: 1 });
 
 /**
  * Shared formatter for constraint / dimension values (S5b / TASK 439).
@@ -178,7 +178,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
   const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
-  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
+  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(docUnit(), { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';
   const LOCKED_LINE_COLOR = getStr('LOCKED_LINE_COLOR', ''); // '' = a locked line looks like any fully constrained one

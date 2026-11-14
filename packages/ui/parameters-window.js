@@ -12,7 +12,7 @@
 
 import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { createParameterTable } from '#ui/parameter-table.js';
-import SettingsManager from '#core/settings-manager.js';
+import { docUnit } from '#core/units.js';
 
 export const PARAMETERS_PERSIST_KEY = 'sk-parameters';
 const SIZE = { w: 460, h: 360 };
@@ -36,8 +36,7 @@ function injectStyles() {
 
 export function createParametersWindow({ state, anchorEl = null, onClose = null } = {}) {
   injectStyles();
-  const getUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
-  const table = createParameterTable({ state, getUnit });
+  const table = createParameterTable({ state, getUnit: docUnit });
 
   // first run: right-aligned just below the anchor (the ribbon); a remembered position wins (the dock merges it over this)
   const a = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;

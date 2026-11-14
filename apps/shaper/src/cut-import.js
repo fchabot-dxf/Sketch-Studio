@@ -4,12 +4,9 @@
 // in (afterImport; a compound <path> becomes ONE pocket-with-hole profile: see assignImportedCuts). Moved out of main.js unchanged; the page keeps its status
 // line and panel refresh.
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
-import SettingsManager from '#core/settings-manager.js';
+import { docUnit } from '#core/units.js';
 import { extractCutRecord } from './shaper.js';
 import { CUT_PLAN, assignImportedCuts } from './cut-plan.js';
-
-/** The document unit (TASK 610: moved from main.js, which imports it). */
-export const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
 /** Import `text` (an SVG or a DXF) into `designController`'s sketch as a NEW sketch; returns the shared importer's result. getDocUnit(): the document unit. */
 export function importShaperFile(designController, text, fileName, getDocUnit) {
@@ -35,7 +32,7 @@ export function importShaperFile(designController, text, fileName, getDocUnit) {
 export function createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost }) {
   const importFile = (text, fileName) => {
     ensureSketch();
-    const res = importShaperFile(getController(), text, fileName, getDocUnit);
+    const res = importShaperFile(getController(), text, fileName, docUnit);
     const panel = getInfoPanel();
     if (res.ok && panel) panel.refresh();
     notify(res.message);

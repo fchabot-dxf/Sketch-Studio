@@ -92,7 +92,7 @@ await (async () => {
         assert(!m.kids.some((k) => k.id === 'btn-undo' || k.id === 'btn-redo' || k.id === 'btn-recenter-view'), tag + 'no footer buttons in the header');
         assert(!(await evalJs(`!!document.querySelector('header [aria-label="Sketches"]')`)), tag + 'no Sketches button in the header');
         const ft = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
-          const cv = document.querySelector(${JSON.stringify(HOSTS[name].canvas)}).getBoundingClientRect(); const corner = document.querySelector('.sk-canvas-corner .sk-drawer-toggle'); const cb = corner && corner.getBoundingClientRect();
+          const cv = document.querySelector(${JSON.stringify(HOSTS[name].canvas)}).getBoundingClientRect(); const corner = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn'); const cb = corner && corner.getBoundingClientRect();
           return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
         for (const k of ['undo', 'redo', 'recenter']) assert(ft[k] && ft[k].w >= 43.5 && ft[k].h >= 43.5, tag + k + ' is a 44 px target in the footer: ' + JSON.stringify(ft[k]));
@@ -104,9 +104,9 @@ await (async () => {
         if (L.tag === 'landscape844' || L.tag === 'landscape780') assert(share >= 0.6, tag + 'the canvas keeps >= 60 % of the height: ' + share);
         if (L.tag.startsWith('portrait')) {
           assert(ft.sk && ft.sk.vis && ft.sk.w >= 43.5 && ft.sk.h >= 43.5 && ft.sk.aria === 'Sketches' && ft.sk.r <= ft.vw && ft.sk.t >= 0, tag + 'the Sketches layers button is in the canvas corner, 44 px, on screen: ' + JSON.stringify(ft.sk));
-          const c = await centerOf('.sk-canvas-corner .sk-drawer-toggle'); await tap(c.x, c.y);
-          assert(await evalJs(`document.querySelector('.sk-drawer-panel').classList.contains('sk-drawer-open')`), tag + 'a real tap on the Sketches button opens the drawer');
-          await evalJs(`document.querySelector('.sk-drawer-panel').classList.remove('sk-drawer-open')`);
+          const c = await centerOf('.sk-canvas-corner .sk-browser-corner-btn'); await tap(c.x, c.y);
+          assert(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-browser-open')`), tag + 'a real tap on the Sketches button shows the floating card');
+          await tap(c.x, c.y);
         } else assert(!ft.sk || !ft.sk.vis, tag + 'landscape: the SKETCHES box floats on the canvas, no drawer button');
         await shot(`${L.tag}-${name}-footer.png`, { x: 0, y: ft.fr.top - 2, width: L.w, height: L.h - ft.fr.top + 2 });
         if (L.tag.startsWith('landscape')) assert(m.hr.bottom - m.hr.top <= 53, tag + 'one header row (52 px): ' + (m.hr.bottom - m.hr.top));

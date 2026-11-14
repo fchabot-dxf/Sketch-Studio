@@ -51,7 +51,20 @@ FUSION: broken. Hangs at "Initializing", log `BaseAuth not initialized; cannot f
 if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-11`. Then run the diagonal-dimension test
 (sketch CLAUDE_TEST_O3, delete it after) before sending 516.
 
-### Update (2026-11-14, turn 1267) — LATEST
+### Update (2026-11-14, turn 1312) — LATEST
+- MERGED since 1267 (main 7add38c, FULL 410/410 in 361 s): 597 line / arc / circle(DIAMETER) creation boxes on the first click, one
+  shared path, touch boxes unfocused and docked at the canvas top centre (602), mouse clicks pass through boxes; 598 dragged line end
+  offers only Fusion's inferences (H, V, midpoint, coincident snaps; measured 22 real-mouse drags); 601 node batch E; 602 phone
+  landscape (short-viewport rule: left icon rail, SKETCHES collapsed, Log in menu; canvas 63-87 %), tab strip UNDER the header
+  everywhere (owner, final), 26/45 px, browser-like widths, SketchStudio Export in the menu + no 'Saved'; 603 glyph pick = drawn icon
+  outline + 2 px (6 touch), dimension labels via dimLabelAt; 604 user style presets; 605 tabs in all 4 apps, across stages (stage
+  per app; per-document stage state in sessions); 606 gate:quick never waits (DEFERRED exclusive tests); 607 Rect menu popover.
+- NOTHING RUNNING. Open, ask the owner: Pen Plotter Design panel controls < 44 px on phones; Parameters window remembered position
+  off a narrow screen; Trace ribbon icons low contrast; Shaper Vcarve marks an empty Untitled unsaved; Trace keeps every tab's photo
+  in memory (no bound); untested Trace no-photo -> Edit rule; import wiring to modules (SketchStudio/Shaper importFile) and the Design
+  info panel in the node kit (more live -> node); LIVE_JOBS 10-12 measurement (task 600); Mirror line rotation on dimension edit.
+
+### Update (2026-11-14, turn 1267)
 - MERGED since 1170 (main f1ea286; FULL 389/389 in 307 s on 90e14d6): 583 node batches C+D (live 61 -> 45), 584 arc-by-centre
   translates + origin-held no snap + cluster drag no inference (bezier body translates whole), 585 Mirror tool, 586 floating SKETCHES
   browser top-left in all 4 apps (no side panel, NO constraints/DOF status line: owner), 587 document tabs slices 2-4 (SketchStudio),

@@ -10,12 +10,7 @@
 //
 // Adopted by the dimension field (U2) + the Shaper cut params (U3); INERT until then.
 
-import SettingsManager from './settings-manager.js';
-
 export const BASE = 'mm'; // 1 world unit = 1 mm
-
-/** The active document unit ('mm' | 'cm' | 'in'), defaulting to 'mm'. */
-export const docUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
 // TASK 535 (slice 1a) — THE one unit table. Every conversion factor in the app lives here (the expression parser reads it too).
 // kind 'length' → f = mm per 1 of the unit (base mm); kind 'angle' → f = degrees per 1 of the unit (base deg).

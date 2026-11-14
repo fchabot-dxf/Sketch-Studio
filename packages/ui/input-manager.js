@@ -18,7 +18,7 @@ import { toggleDriving } from '#ui/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
-import { updateHover, glyphAt } from '#ui/hover-manager.js';
+import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
@@ -471,7 +471,7 @@ function updateSnapTarget(e, svg, state) {
         // Check for constraints only when not dragging
         let hitConstraint = null;
         if (!state.drag) {
-            hitConstraint = glyphAt(svg, state, e.clientX, e.clientY, isTouch); // THE glyph pick (task 603)
+            hitConstraint = constraintAt(svg, state, e.clientX, e.clientY, isTouch); // THE constraint pick: a glyph's drawn icon, else a dimension's label (task 603)
         }
 
         const isDrawing = isDrawingTool;
@@ -678,7 +678,7 @@ function handlePointerDown(e, svg, state) {
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
-    try { hitConstraint = glyphAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
+    try { hitConstraint = constraintAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){

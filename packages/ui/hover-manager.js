@@ -30,12 +30,32 @@ export function glyphAt(svg, state, screenX, screenY, touch = false) {
     return null;
 }
 
+// A dimension's canvas label (the `.dim-label` element svg-renderer draws, data-constraint-idx) is its own hit: the pointer inside the label's
+// drawn box picks the dimension. Dimensions have no sheet glyph, so glyphAt never picks them (task 603 removed the 20 px glyphPos circle that
+// used to catch a label by accident).
+export function dimLabelAt(svg, state, screenX, screenY) {
+    const labels = svg.querySelectorAll ? svg.querySelectorAll('.dim-label') : [];
+    const pickable = pickableConstraints(state) || [];
+    for (const el of labels) {
+        const b = el.getBoundingClientRect();
+        if (screenX < b.left || screenX > b.right || screenY < b.top || screenY > b.bottom) continue;
+        const c = state.constraints[parseInt(el.dataset.constraintIdx, 10)];
+        if (c && pickable.includes(c)) return c;
+    }
+    return null;
+}
+
+// The constraint under the pointer: a glyph (glyphAt), else a dimension label (dimLabelAt).
+export function constraintAt(svg, state, screenX, screenY, touch = false) {
+    return glyphAt(svg, state, screenX, screenY, touch) || dimLabelAt(svg, state, screenX, screenY);
+}
+
 // THE select tool's pick (task 588: HOVER = CLICK, so what lights up on hover is exactly what a click selects): a joint in snap reach
 // (hitJoint), else a glyph the pointer is ON (glyphAt), else a shape (hitShape). Returns { joint } | { constraint } | { shape } | null.
 // selection-tools handleSelectionPointerDown (the click) and applyHoverPriority (the hover) both call it.
 export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY, touch = false) {
     if (hitJoint) return { joint: hitJoint };
-    const constraint = glyphAt(svg, state, screenX, screenY, touch);
+    const constraint = constraintAt(svg, state, screenX, screenY, touch);
     if (constraint) return { constraint };
     if (hitShape) return { shape: hitShape };
     return null;

@@ -22,8 +22,8 @@ await (async () => {
     };
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Shaper to load');
-    for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
+    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Shaper to load');
+    for (let i = 0; i < 5; i++) { await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === 'design') break; }
     await waitForApp('design-canvas'); await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design tab to show');
     await evalJs(`(() => {
       const st = window.__designController.state;

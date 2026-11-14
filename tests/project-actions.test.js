@@ -9,39 +9,66 @@ const rec = (n) => async (...a) => { calls.push([n, ...a]); return { name: 'X', 
 const store = {
   rename: rec('rename'), duplicate: rec('duplicate'), moveDesign: rec('moveDesign'), remove: rec('remove'),
   renameProject: rec('renameProject'), pinProject: rec('pinProject'), removeProject: rec('removeProject'), createProject: rec('createProject'),
-  cloud: { saveToDrive: async (id) => { calls.push(['saveToDrive', id]); return { fileId: 'F' }; }, makeProjectLocal: rec('makeProjectLocal'), moveProjectToDrive: rec('moveProjectToDrive') },
+  cloud: { moveProjectToDrive: rec('moveProjectToDrive') },
 };
 const notes = [];
-const buffer = { flush: async () => calls.push(['flush']), designId: () => 'cur', openDesign: async (id) => { calls.push(['openDesign', id]); return { restored: true }; }, saveFile: async (seam, id) => { calls.push(['saveFile', seam, id]); return { name: 'f' }; }, newDesign: rec('newDesign'), openFile: rec('openFile'), saveAs: rec('saveAs'), needsSavePrompt: () => null };
-const mk = (signedIn) => createProjectActions({ store, getBuffer: () => buffer, account: { state: () => ({ signedIn }) }, notify: (...a) => notes.push(a) });
+const buffer = { flush: async () => calls.push(['flush']), ready: Promise.resolve(), isStored: () => false, designName: () => 'Untitled', designId: () => 'cur', openDesign: async (id) => { calls.push(['openDesign', id]); return { restored: true }; }, saveFile: async (seam, id) => { calls.push(['saveFile', seam, id]); return { name: 'f' }; }, newDesign: rec('newDesign'), openFile: rec('openFile'), saveAs: rec('saveAs'), needsSavePrompt: () => null };
+const mk = (signedIn, extraAcc = {}) => createProjectActions({ store, getBuffer: () => buffer, account: { state: () => ({ signedIn }), signIn: async () => { calls.push(['signIn']); }, ...extraAcc }, notify: (...a) => notes.push(a) });
 
 const d = { id: 'd1', name: 'Door', projectId: 'p1' };
 const projects = [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }];
 
-// the design's actions, in order; Google Drive only when signed in; Move only when there is another project
+// the design's actions, in order (Drive-only: no copy-snapshot save-drive entry); Move only when there is another project
 assert.deepStrictEqual(mk(false).designItems(d, { projects }).map((a) => a.id), ['open', 'rename', 'duplicate', 'move', 'save-file', 'delete']);
-assert.deepStrictEqual(mk(true).designItems(d, { projects }).map((a) => a.id), ['open', 'rename', 'duplicate', 'move', 'save-file', 'save-drive', 'delete']);
+assert.deepStrictEqual(mk(true).designItems(d, { projects }).map((a) => a.id), ['open', 'rename', 'duplicate', 'move', 'save-file', 'delete']);
 assert.ok(!mk(false).designItems(d, { projects: [projects[0]] }).some((a) => a.id === 'move'), 'no Move with one project');
 const items = Object.fromEntries(mk(true).designItems(d, { projects }).map((a) => [a.id, a]));
 assert.strictEqual(items.delete.ask.kind, 'confirm'); assert.strictEqual(items.rename.ask.kind, 'prompt'); assert.deepStrictEqual(items.move.ask.options, [{ id: 'p2', label: 'B' }]);
 assert.strictEqual(items.open.closes, true);
 
 // each action calls the store / buffer with THAT design
-await items.rename.run('New'); await items.move.run('p2'); await items.delete.run(); await items['save-file'].run(); await items.duplicate.run(); await items['save-drive'].run(); await items.open.run();
+await items.rename.run('New'); await items.move.run('p2'); await items.delete.run(); await items['save-file'].run(); await items.duplicate.run(); await items.open.run();
 assert.deepStrictEqual(calls.filter((c) => c[0] !== 'flush'), [
-  ['rename', 'd1', 'New'], ['moveDesign', 'd1', 'p2'], ['remove', 'd1'], ['saveFile', undefined, 'd1'], ['duplicate', 'd1'], ['saveToDrive', 'd1'], ['openDesign', 'd1'],
+  ['rename', 'd1', 'New'], ['moveDesign', 'd1', 'p2'], ['remove', 'd1'], ['saveFile', undefined, 'd1'], ['duplicate', 'd1'], ['openDesign', 'd1'],
 ]);
-assert.ok(notes.some((n) => /Duplicated as/.test(n[0])) && notes.some((n) => n[0] === 'Saved to Google Drive' && n[2].href.includes('F')));
+assert.ok(notes.some((n) => /Duplicated as/.test(n[0])));
 
-// project actions: Make local / Use Google Drive only signed in, by where the project lives
+// project actions: Move to Google Drive on legacy local projects (no Make local on Drive projects)
 const pid = (signedIn, p) => mk(signedIn).projectItems(p).map((a) => a.id);
 assert.deepStrictEqual(pid(false, { id: 'p1', name: 'A' }), ['rename', 'pin', 'delete']);
 assert.deepStrictEqual(pid(true, { id: 'p1', name: 'A' }), ['use-drive', 'rename', 'pin', 'delete']);
-assert.deepStrictEqual(pid(true, { id: 'drive:p', name: 'G', location: 'drive' }), ['make-local', 'rename', 'pin', 'delete']);
+assert.deepStrictEqual(pid(true, { id: 'drive:p', name: 'G', location: 'drive' }), ['rename', 'pin', 'delete']);
 assert.strictEqual(mk(false).projectItems({ id: 'p1', name: 'A', pinned: true }).find((a) => a.id === 'pin').label, 'Unpin');
-// the manager's toolbar, and the main menu's own actions go through the same functions
-assert.deepStrictEqual(mk(false).toolbarItems().map((a) => a.id), ['new-project', 'new-design', 'open-file']);
-calls.length = 0; await mk(false).duplicateCurrent(); assert.deepStrictEqual(calls.filter((c) => c[0] === 'duplicate'), [['duplicate', 'cur']], 'the menu Duplicate duplicates the current design through the same function');
+// signed out: Save as… / Duplicate prompt Google sign-in first, and carry on once signed in (or cancel cleanly)
+calls.length = 0;
+{
+  let isSigned = false;
+  const pa = createProjectActions({
+    store, getBuffer: () => buffer,
+    account: { state: () => ({ signedIn: isSigned }), signIn: async () => { calls.push(['signIn']); isSigned = true; } },
+    ask: async (spec) => {
+      calls.push(['ask', spec.kind]);
+      if (spec.kind === 'prompt') return 'Named';
+      const opt = spec.options.find((o) => o.id === 'signin');
+      if (opt && opt.onClick) opt.onClick();
+      return opt ? opt.id : null;
+    },
+    notify: (...a) => notes.push(a),
+  });
+  await pa.saveAsPrompt();
+  assert.deepStrictEqual(calls.filter((c) => c[0] !== 'flush'), [['ask', 'choose'], ['signIn'], ['ask', 'prompt'], ['saveAs', 'Named']]);
+  calls.length = 0;
+  await mk(true).duplicateCurrent();
+  assert.deepStrictEqual(calls.filter((c) => c[0] === 'duplicate'), [['duplicate', 'cur']], 'the menu Duplicate duplicates the current design through the same function');
+  calls.length = 0;
+  const cancelled = createProjectActions({
+    store, getBuffer: () => buffer,
+    account: { state: () => ({ signedIn: false }), signIn: async () => { throw new Error('sign-in cancelled'); } },
+    ask: async () => null, notify: (...a) => notes.push(a),
+  });
+  await cancelled.duplicateCurrent();
+  assert.strictEqual(calls.some((c) => c[0] === 'duplicate'), false, 'declined sign-in cancels cleanly');
+}
 // a missing buffer is a readable refusal, nothing else happens
 await assert.rejects(() => createProjectActions({ store, getBuffer: () => null }).openDesign('x'), /still starting/);
 

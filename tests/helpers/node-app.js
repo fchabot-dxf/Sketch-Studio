@@ -190,7 +190,7 @@ const HOSTS = {
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
     const { createHistoryRouter } = await import('#ui/history-control.js'); const { mountAppFooter } = await import('#ui/app-footer.js'); const { sketchHistory } = await import('#ui/input-manager.js');
-    mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true }); // main.js: the footer (TASK 618)
+    mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }) }); // main.js: the footer (TASK 618/619)
     const importer = D.createStudioImporter({ state, svg }); importer.mountDrop(); // main.js: the file menu's entry (the sidebar) + the drop on the canvas
     const browser = designBrowser ? D.mountStudioBrowser({ svg, state, engine }) : null; // main.js: the SKETCHES browser; the render loop ticks it first
     const frame = () => { if (browser) browser.tick(); D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
@@ -224,9 +224,12 @@ const HOSTS = {
       buffer = createDocumentBuffer({ ...D.shaperBufferOptions({ controller, canvas: svg, session: createShaperSession({ prepare }), refreshViews: () => { if (browser) browser.panel.refresh(); }, afterSidecar: () => { prepare.afterRestore(); stockCard.show(); } }), store, doc, win }); // TASK 605: the tab's stage state, as on the page (no Vcarve view here)
       buffer.restore(); buffer.start();
     };
-    modes = M.createModeRouter({ views: M.findViews(doc), modeBtns: [...doc.querySelectorAll('.mode-btn')], exploreActions: doc.getElementById('explore-actions'),
+    const { createAppHeader } = await import('#ui/app-header.js');
+    const header = createAppHeader({ tabs: M.SHAPER_STAGES, activeTab: 'design', onTabChange: (id) => modes.showMode(id) });
+    doc.body.insertBefore(header.el, doc.body.firstChild);
+    modes = M.createModeRouter({ views: M.findViews(doc), onActiveChange: (id) => header.setActiveTab(id),
       getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: () => history.refresh() });
-    (await import('#ui/app-footer.js')).mountAppFooter({ router: history }); // main.js: the footer (TASK 618)
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: history, view: () => (controller && modes.current() === 'design' ? { svg, state: controller.state } : null) }); // main.js: the footer (TASK 618/619)
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
@@ -249,8 +252,12 @@ const HOSTS = {
     // override 1 by id: the stage's own svg is made by the stage (mountSketchStage); it reports the size it has in the real page
     // (the Design stage's svg, and the plotter canvas the other stages borrow), none while the stage that holds it is hidden
     layoutById(win, { 'design-canvas': MEASURED_CANVAS_RECT.penplotter, canvasWrap: MEASURED_PLOTTER_WRAP_RECT, canvas: MEASURED_PLOTTER_WRAP_RECT });
-    const router = stages.mountStages({ nav: doc.getElementById('mode-nav'), stagesHost: doc.getElementById('stages'), bufferSeams: { store, doc, win } }); // the buffer's own seams, as for the other hosts
-    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history }); // main.js: the footer (TASK 618)
+    const { createAppHeader } = await import('#ui/app-header.js');
+    let header = null;
+    const router = stages.mountStages({ stagesHost: doc.getElementById('stages'), onActiveChange: (id) => { if (header) header.setActiveTab(id); }, bufferSeams: { store, doc, win } }); // the buffer's own seams, as for the other hosts
+    header = createAppHeader({ tabs: stages.STAGES.map(({ id, label }) => ({ id, label })), activeTab: router.currentStageId(), onTabChange: (id) => router.showStage(id) });
+    doc.body.insertBefore(header.el, doc.body.firstChild);
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history, view: router.designView }); // main.js: the footer (TASK 618/619)
     const svg = doc.getElementById('design-canvas');
     const controller = win.__sketch.controller; // the stage's own dev / test seam (sketch-stage.js): the sketcher it mounted
     const buffer = sketch.getDocBuffer();
@@ -284,7 +291,7 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   const { svg, state, buffer } = m;
   if (sidebar) { // override 14: what every page script does with the shared sidebar (the host's own actions are not mounted)
     const { mountProjectSidebar } = await import('#ui/sidebar-projects.js');
-    (doc.getElementById('app-sidebar-host') || doc.body).appendChild(mountProjectSidebar({ appId: host, getBuffer: () => buffer, store, importFile: m.importFile }).el);
+    (doc.querySelector('.sk-header') || doc.body).appendChild(mountProjectSidebar({ appId: host, getBuffer: () => buffer, store, importFile: m.importFile }).el);
   }
   m.frame();
   const frames = (n = framesPerEvent) => { for (let i = 0; i < n; i++) m.frame(); };

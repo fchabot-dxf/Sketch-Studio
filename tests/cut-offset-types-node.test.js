@@ -40,14 +40,14 @@ try {
   const doc = app.document;
   const q = (sel) => doc.querySelector(sel);
   const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
-  pressEl('[data-mode="design"]');
+  pressEl('.sk-header-tab[data-tab="design"]');
   const st = app.state;
   for (const k of [...st.joints.keys()]) st.joints.delete(k);
   st.shapes.length = 0; st.constraints.length = 0;
   const J = (id, x, y) => st.joints.set(id, { x, y });
   J('a', 0, 0); J('b', 60, 0); J('c', 60, 40); J('d', 0, 40);
   [['s1', 'a', 'b'], ['s2', 'b', 'c'], ['s3', 'c', 'd'], ['s4', 'd', 'a']].forEach(([id, p, q2]) => st.shapes.push({ id, type: 'line', joints: [p, q2] }));
-  pressEl('[data-mode="prepare"]');
+  pressEl('.sk-header-tab[data-tab="prepare"]');
   const pc = doc.getElementById('prepare-canvas');
   const inside = worldToScreen(pc, { x: 30, y: 20 });
   app.click(Math.round(inside.x), Math.round(inside.y), { target: pc }); // select the loop

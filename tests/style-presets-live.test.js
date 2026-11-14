@@ -34,8 +34,8 @@ const vis = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.st
 const asks = () => evalJs(`document.querySelectorAll('${P} .sk-style-ask').length`);
 const askText = (sel) => evalJs(`document.querySelector('${P} .sk-style-ask ${sel}').textContent`);
 const ask = (sel) => `${P} .sk-style-ask ${sel}`;
-const loaded = async (what) => { await waitFor(`!!document.querySelector('.sk-header-style') && !!document.querySelector('${P}')`, what); };
-const openPanel = async () => { await click('.sk-header-style'); await waitFor(`!document.querySelector('${P}').classList.contains('sk-hidden')`, 'the Style panel open'); };
+const loaded = async (what) => { await waitFor(`!!document.querySelector('.sk-sidebar-btn') && !!document.querySelector('${P}')`, what); };
+const openPanel = async () => { await click('.sk-sidebar-btn'); await sleep(150); await click('.sk-sidebar [data-action="style"]'); await waitFor(`!document.querySelector('${P}').classList.contains('sk-hidden')`, 'the Style panel open'); };
 const shot = async (name) => {
   if (!EVID) return;
   const r = await evalJs(`(() => { const r = document.querySelector('${P}').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, scale: 1 }; })()`);

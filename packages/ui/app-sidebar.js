@@ -33,6 +33,7 @@
 
 // The app roster, names and icons come from THE registry (#ui/app-registry.js): one source for GO TO, the tab title and the favicon.
 import { APPS } from './app-registry.js';
+import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
 export { APPS };
 
 // Icons for the common actions (inline SVG, currentColor) so hosts reference them by key instead of drawing their own.
@@ -45,6 +46,9 @@ export const SIDEBAR_ICONS = {
   open: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V3M5.5 6.5L9 3l3.5 3.5M3 12.5v2h12v-2"/></svg>',
   cloud: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13.5a3 3 0 0 1-.4-5.97A4.5 4.5 0 0 1 13.2 6.6 3.5 3.5 0 0 1 13 13.5zM9 7.5v4M7.3 9.3L9 7.5l1.7 1.8"/></svg>',
   new: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 15.5h8A1.5 1.5 0 0 0 14.5 14V6.5zM10.5 2.5v4h4M9 9v4M7 11h4"/></svg>',
+  style: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/></svg>',
+  log: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10M4 9h10M4 13.5h6"/></svg>',
+  debug: '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l4 4-4 4M9.5 13H14"/></svg>',
 };
 
 let stylesInjected = false;
@@ -53,19 +57,35 @@ function injectStyles() {
   if (document.getElementById('sk-sidebar-styles')) { stylesInjected = true; return; }
   const s = document.createElement('style'); s.id = 'sk-sidebar-styles';
   s.textContent = `
-.sk-sidebar-btn { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: inherit; cursor: pointer;
-  border: 1px solid var(--sk-header-sep, var(--sk-ribbon-sep, rgba(127,127,127,0.35))); border-radius: 6px; padding: 4px 9px; font: inherit; font-weight: 700; }
+.sk-sidebar-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; background: transparent; color: inherit; cursor: pointer;
+  border: 1px solid var(--sk-header-sep, var(--sk-ribbon-sep, rgba(127,127,127,0.35))); border-radius: 6px; font: 700 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; white-space: nowrap; }
 .sk-sidebar-btn:hover { background: var(--sk-header-hover, rgba(127,127,127,0.12)); }
-@media (pointer: coarse) { .sk-sidebar-btn { min-height: 44px; min-width: 44px; } .sk-sidebar-item { min-height: 44px; } }
+@media (pointer: coarse) { .sk-sidebar-item { min-height: 44px; } }
 .sk-sidebar-burger { font-size: 1.15em; line-height: 1; }
 .sk-sidebar-backdrop { position: fixed; inset: 0; z-index: 9400; background: rgba(0,0,0,0.45); }
 .sk-sidebar-backdrop[hidden] { display: none; }
-.sk-sidebar { position: fixed; top: 0; bottom: 0; left: 0; z-index: 9500; width: 280px; max-width: 85vw; box-sizing: border-box; display: flex; flex-direction: column;
+.sk-sidebar { position: fixed; top: 0; bottom: 0; left: 0; z-index: 9500; width: 280px; max-width: min(85vw, calc(100vw - 44px)); box-sizing: border-box; display: flex; flex-direction: column;
   background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
-  font: 14px system-ui, sans-serif; box-shadow: 2px 0 20px rgba(0,0,0,0.4); transform: translateX(-100%); transition: transform 0.18s ease; visibility: hidden; }
+  font: 14px system-ui, sans-serif; box-shadow: 2px 0 20px rgba(0,0,0,0.4); transform: translateX(-100%); transition: transform 0.18s ease; visibility: hidden; overflow: visible; }
 .sk-sidebar.open { transform: translateX(0); visibility: visible; }
 /* TASK 602: a menu taller than the screen (a phone in landscape: 360 px) scrolls under a finger instead of cutting its last entries off */
-.sk-sidebar { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.sk-sidebar-content { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.sk-sidebar-stages { display: none; }
+.sk-sidebar-handle { display: none; }
+@media (max-width: 640px), ${SHORT_VIEWPORT_QUERY} {
+  .sk-sidebar-stages { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 10px; border-bottom: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.3)); }
+  .sk-sidebar-stage { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 12px;
+    border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-radius: 8px; background: transparent; color: inherit;
+    cursor: pointer; font: 600 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  .sk-sidebar-stage:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+  .sk-sidebar-stage.active { background: var(--sk-selection, var(--sk-sidebar-accent, #2c65ff)); border-color: transparent; color: #fff; }
+  .sk-sidebar-handle { display: flex; align-items: center; justify-content: center; position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 72px; padding: 0; border-left: 0; border-top: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
+    border-right: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); border-bottom: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35));
+    border-radius: 0 10px 10px 0; background: var(--sk-sidebar-bg, var(--sk-header-bg, #fff)); color: var(--sk-sidebar-fg, var(--sk-header-fg, #1e293b));
+    box-shadow: 2px 0 8px rgba(0,0,0,0.22); visibility: visible; pointer-events: auto; cursor: grab; touch-action: none; }
+  .sk-sidebar-grip { width: 4px; height: 28px; border-radius: 2px; background: currentColor; opacity: 0.45; pointer-events: none; }
+}
 .sk-sidebar-top { padding: 16px 16px 8px; }
 .sk-sidebar-doc { font-size: 17px; font-weight: 600; margin: 0 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sk-sidebar-actions { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px; }
@@ -91,6 +111,7 @@ function injectStyles() {
 .sk-sidebar-msg a { color: inherit; font-weight: 600; margin-left: 6px; }
 .sk-sidebar-status { margin: -4px 0 8px; font-size: 12.5px; line-height: 1.35; opacity: 0.75; }
 .sk-sidebar-status.error { opacity: 1; color: #ff9c9c; }
+.sk-sidebar-status-act { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .sk-account-toggle { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
 .sk-account-toggle input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
 .sk-check-steps { margin: 2px 10px 4px; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.4; }
@@ -124,11 +145,13 @@ function injectStyles() {
   document.head.appendChild(s); stylesInjected = true;
 }
 
-export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null } = {}) {
+export function createAppSidebar({ current, docName = 'Untitled', actions = [], apps = APPS, views = {}, onRenameDoc = null, account = null, driveControls = null, status = null, beforeGoTo = null, stages = [], activeStage = null, onStageChange = null } = {}) {
   injectStyles();
   const list = Array.isArray(apps) && apps.length ? apps : APPS;
   const cur = list.find((a) => a.id === current) || list[0];
   let acts = Array.isArray(actions) ? actions : [];
+  let stageList = Array.isArray(stages) ? stages : [];
+  let curStage = activeStage ?? (stageList[0] && stageList[0].id) ?? null;
   let name = docName;
   let isOpenFlag = false;
   let viewId = 'main';
@@ -142,6 +165,10 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
 
   const backdrop = document.createElement('div'); backdrop.className = 'sk-sidebar-backdrop'; backdrop.hidden = true;
   const drawer = document.createElement('aside'); drawer.className = 'sk-sidebar'; drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'App menu');
+  const content = document.createElement('div'); content.className = 'sk-sidebar-content';
+  const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'sk-sidebar-handle'; handle.setAttribute('aria-label', 'Open menu'); handle.setAttribute('aria-expanded', 'false'); handle.title = 'Menu';
+  handle.innerHTML = '<span class="sk-sidebar-grip" aria-hidden="true"></span>';
+  drawer.append(content, handle);
   document.body.append(backdrop, drawer);
 
   const enabledOf = (a) => (typeof a.enabled === 'function' ? !!a.enabled() : a.enabled !== false);
@@ -152,9 +179,9 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     const back = document.createElement('button'); back.type = 'button'; back.className = 'sk-sidebar-item sk-sidebar-back'; back.setAttribute('aria-label', 'Back');
     back.innerHTML = `<span class="sk-sidebar-ic" aria-hidden="true">&#8592;</span><span>${def.title || ''}</span>`;
     back.addEventListener('click', () => showView('main'));
-    head.appendChild(back); drawer.appendChild(head);
+    head.appendChild(back); content.appendChild(head);
     drawMessage(head);
-    const body = document.createElement('div'); body.className = 'sk-sidebar-view'; body.dataset.view = viewId; drawer.appendChild(body);
+    const body = document.createElement('div'); body.className = 'sk-sidebar-view'; body.dataset.view = viewId; content.appendChild(body);
     try { def.render(body, { go: showView, back: () => showView('main'), close }); } catch (e) { console.error(e); }
   }
 
@@ -162,9 +189,23 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   let askRow = null, askSettle = null;
   function render() { renderBody(); if (askRow) placeAsk(); }
   function renderBody() {
-    drawer.innerHTML = '';
+    content.innerHTML = '';
     if (viewId !== 'main' && viewDefs[viewId]) { renderView(viewDefs[viewId]); return; }
     viewId = 'main';
+    if (stageList.length) {
+      const sb = document.createElement('div'); sb.className = 'sk-sidebar-stages'; sb.dataset.section = 'stages';
+      for (const s of stageList) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-sidebar-stage' + (s.id === curStage ? ' active' : ''); b.dataset.tab = s.id; b.textContent = s.label || '';
+        b.addEventListener('click', () => {
+          setActiveStage(s.id);
+          close();
+          if (s.onSelect) s.onSelect(s.id);
+          else if (onStageChange) onStageChange(s.id);
+        });
+        sb.appendChild(b);
+      }
+      content.appendChild(sb);
+    }
     const top = document.createElement('div'); top.className = 'sk-sidebar-top';
     const h = document.createElement('h2'); h.className = 'sk-sidebar-doc'; h.textContent = name; top.appendChild(h);
     if (onRenameDoc) {
@@ -181,7 +222,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       h.addEventListener('keydown', (e) => { if (e.key === 'Enter') edit(); });
     }
     if (status) { const s = document.createElement('div'); s.className = 'sk-sidebar-status'; s.dataset.section = 'status'; top.appendChild(s); paintStatus(s); }
-    drawer.appendChild(top);
+    content.appendChild(top);
     drawMessage(top);
     const box = document.createElement('div'); box.className = 'sk-sidebar-actions'; box.dataset.section = 'actions';
     for (const a of acts) {
@@ -200,7 +241,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       });
       box.appendChild(b);
     }
-    drawer.appendChild(box);
+    content.appendChild(box);
     const go = document.createElement('div'); go.className = 'sk-sidebar-goto'; go.dataset.section = 'goto';
     go.innerHTML = '<div class="sk-sidebar-goto-title">GO TO</div>';
     for (const app of list) {
@@ -215,7 +256,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       go.appendChild(b);
     }
     if (account) go.appendChild(renderAccount());
-    drawer.appendChild(go);
+    content.appendChild(go);
   }
 
   // The Google account row (the ONE sign-in door). signIn() runs synchronously inside the click so the popup is not blocked.
@@ -264,13 +305,8 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     }).catch(() => { av.textContent = '?'; });
     return row;
   }
-  // Signed-in Drive rows: the default-location toggle, and the connection check with its steps listed inline (TASK 506).
+  // Signed-in Drive row: the connection check with its steps listed inline.
   function driveRows(fail) {
-    const toggle = document.createElement('label'); toggle.className = 'sk-account-toggle'; toggle.dataset.account = 'drive-default-row';
-    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.account = 'drive-default'; cb.checked = !!driveControls.getDefault();
-    cb.addEventListener('change', () => { try { driveControls.setDefault(cb.checked); } catch (e) { fail(e); } });
-    const t = document.createElement('span'); t.textContent = 'Save to Google Drive by default';
-    toggle.append(cb, t);
     const check = document.createElement('button'); check.type = 'button'; check.className = 'sk-sidebar-item'; check.dataset.account = 'check-drive';
     check.innerHTML = '<span class="sk-sidebar-ic" aria-hidden="true">&#10003;</span><span>Check Google Drive connection</span>';
     const list = document.createElement('ul'); list.className = 'sk-check-steps'; list.dataset.account = 'check-result';
@@ -291,9 +327,24 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       check.disabled = true;
       Promise.resolve(driveControls.check((steps) => { checkSteps = steps; if (list.isConnected) draw(); })).catch(fail).finally(() => { check.disabled = false; });
     });
-    return [toggle, check, list];
+    return [check, list];
   }
-  function paintStatus(el) { const s = status(); el.textContent = s.text; el.classList.toggle('error', s.kind === 'error'); el.dataset.kind = s.kind || 'info'; }
+  function paintStatus(el) {
+    const s = status();
+    el.classList.toggle('error', s.kind === 'error');
+    el.dataset.kind = s.kind || 'info';
+    el.textContent = s.text;
+    if (s.action && s.action.label) {
+      el.append(' \u00b7 ');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sk-sidebar-status-act';
+      b.dataset.action = s.action.id || 'status-action';
+      b.textContent = s.action.label;
+      b.addEventListener('click', s.action.onClick);
+      el.appendChild(b);
+    }
+  }
   if (account && account.subscribe) account.subscribe(() => { if (isOpenFlag && viewId === 'main') render(); });
 
   // an inline "are you sure" row (no window.confirm: it is unsupported in some embedded webviews)
@@ -308,7 +359,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   }
 
   // ask(spec): a question inline under the drawer's heading (see the header comment). One at a time: a newer one cancels the older.
-  function placeAsk() { const top = drawer.querySelector('.sk-sidebar-top') || drawer.querySelector('.sk-sidebar-viewhead'); if (top) top.after(askRow); else drawer.prepend(askRow); }
+  function placeAsk() { const top = content.querySelector('.sk-sidebar-top') || content.querySelector('.sk-sidebar-viewhead'); if (top) top.after(askRow); else content.prepend(askRow); }
   function ask(spec) {
     if (askSettle) askSettle(null);
     if (!isOpenFlag) open();
@@ -323,7 +374,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       const btns = document.createElement('div'); btns.className = 'sk-sidebar-confirm-btns';
       const mk = (cls, text, onClick) => { const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls; b.textContent = text; b.addEventListener('click', onClick); btns.appendChild(b); return b; };
       const typed = () => { const v = inp.value.trim(); if (v) settle(v); };
-      if (spec.kind === 'choose') for (const o of spec.options) mk('ok', o.label, () => settle(o.id)).dataset.choice = o.id;
+      if (spec.kind === 'choose') for (const o of spec.options) mk('ok', o.label, () => { if (o.onClick) o.onClick(); settle(o.id); }).dataset.choice = o.id;
       mk('cancel', 'Cancel', () => settle(null));
       if (inp) {
         mk('ok', spec.okLabel || 'OK', typed);
@@ -349,15 +400,22 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     btn.replaceWith(row); inp.focus(); inp.select();
   }
   function drawMessage(parent) {
-    const old = drawer.querySelector('.sk-sidebar-msg'); if (old) old.remove();
+    const old = content.querySelector('.sk-sidebar-msg'); if (old) old.remove();
     if (!message) return;
     const m = document.createElement('div'); m.className = 'sk-sidebar-msg ' + (message.kind || 'info'); m.setAttribute('role', message.kind === 'error' ? 'alert' : 'status'); m.textContent = message.text;
     if (message.link) { const a = document.createElement('a'); a.href = message.link.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = message.link.label; m.appendChild(a); }
-    (parent || drawer).appendChild(m);
+    (parent || content).appendChild(m);
   }
-  function notify(text, kind = 'info', link = null) { message = text ? { text, kind, link } : null; if (isOpenFlag) { const top = drawer.querySelector('.sk-sidebar-top') || drawer.querySelector('.sk-sidebar-viewhead'); drawMessage(top); } }
+  function notify(text, kind = 'info', link = null) { message = text ? { text, kind, link } : null; if (isOpenFlag) { const top = content.querySelector('.sk-sidebar-top') || content.querySelector('.sk-sidebar-viewhead'); drawMessage(top); } }
 
-  const focusables = () => [...drawer.querySelectorAll('button:not(:disabled)')];
+  const isHiddenByLayout = (node) => {
+    if (typeof getComputedStyle !== 'function') return false;
+    for (let cur = node; cur && cur !== drawer; cur = cur.parentElement) {
+      if (cur.hidden || getComputedStyle(cur).display === 'none') return true;
+    }
+    return false;
+  };
+  const focusables = () => [...drawer.querySelectorAll('button:not(:disabled)')].filter((b) => !isHiddenByLayout(b));
   function firstFocus() { const f = focusables(); if (f[0]) f[0].focus(); }
 
   const onKey = (e) => {
@@ -376,27 +434,98 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     if (isOpenFlag) return;
     isOpenFlag = true; viewId = 'main'; message = null; render();
     backdrop.hidden = false; drawer.classList.add('open'); el.setAttribute('aria-expanded', 'true');
+    handle.setAttribute('aria-expanded', 'true'); handle.setAttribute('aria-label', 'Close menu');
     document.addEventListener('keydown', onKey, true);
     firstFocus();
   }
   function close() {
+    backdrop.hidden = true;
     if (!isOpenFlag) return;
     isOpenFlag = false;
     if (askSettle) askSettle(null); // closing the drawer cancels an open question
-    backdrop.hidden = true; drawer.classList.remove('open'); el.setAttribute('aria-expanded', 'false');
+    drawer.classList.remove('open'); el.setAttribute('aria-expanded', 'false');
+    handle.setAttribute('aria-expanded', 'false'); handle.setAttribute('aria-label', 'Open menu');
     document.removeEventListener('keydown', onKey, true);
-    try { el.focus(); } catch (_) {}
+    try { if (typeof getComputedStyle === 'function' && getComputedStyle(handle).display !== 'none') handle.focus(); else el.focus(); } catch (_) {}
   }
   const toggle = () => (isOpenFlag ? close() : open());
   el.addEventListener('click', toggle);
   backdrop.addEventListener('click', close);
 
+  // Peeking phone drawer handle: tap (pointerup when !dragged, plus click for keyboard/programmatic) OR drag horizontally (never edge-swipe).
+  let pointerToggle = false;
+  let pointerTimer = null;
+  const markPointerHandled = () => {
+    pointerToggle = true;
+    clearTimeout(pointerTimer);
+    pointerTimer = setTimeout(() => { pointerToggle = false; }, 400);
+  };
+  handle.addEventListener('click', () => {
+    if (pointerToggle) { pointerToggle = false; clearTimeout(pointerTimer); return; }
+    toggle();
+  });
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button && e.button !== 0) return;
+    pointerToggle = false;
+    clearTimeout(pointerTimer);
+    const pid = e.pointerId;
+    const startX = e.clientX;
+    const w = drawer.getBoundingClientRect().width || 280;
+    const wasOpen = isOpenFlag;
+    const startTx = wasOpen ? 0 : -w;
+    let dragged = false;
+    try { handle.setPointerCapture(pid); } catch (_) {}
+    const move = (ev) => {
+      if (ev.pointerId !== pid) return;
+      const dx = ev.clientX - startX;
+      if (!dragged && Math.abs(dx) > 4) {
+        dragged = true;
+        if (!wasOpen) { viewId = 'main'; message = null; render(); }
+        drawer.style.transition = 'none';
+        drawer.style.visibility = 'visible';
+        backdrop.hidden = false;
+      }
+      if (!dragged) return;
+      const tx = Math.max(-w, Math.min(0, startTx + dx));
+      drawer.style.transform = `translateX(${tx}px)`;
+    };
+    const end = (ev) => {
+      if (ev.pointerId !== pid) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      try { if (handle.hasPointerCapture && handle.hasPointerCapture(pid)) handle.releasePointerCapture(pid); } catch (_) {}
+      drawer.style.transition = '';
+      drawer.style.visibility = '';
+      drawer.style.transform = '';
+      markPointerHandled();
+      if (!dragged) {
+        if (ev.type === 'pointerup') toggle();
+        return;
+      }
+      const dx = ev.clientX - startX;
+      const tx = Math.max(-w, Math.min(0, startTx + dx));
+      const shouldOpen = !wasOpen ? (tx > -w * 0.65 || dx > 40) : !(tx < -w * 0.35 || dx < -40);
+      if (shouldOpen) open();
+      else close();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+
+  function setActiveStage(id) {
+    curStage = id;
+    for (const b of content.querySelectorAll('.sk-sidebar-stage')) b.classList.toggle('active', b.dataset.tab === id);
+  }
+
   return {
     el, open, close, toggle, isOpen: () => isOpenFlag,
     // updates the heading in place: a full re-render would reset an open view (e.g. the Projects browser back to its first level)
-    setDocName(n) { name = n; const h = drawer.querySelector('h2.sk-sidebar-doc'); if (h) h.textContent = n; },
+    setDocName(n) { name = n; const h = content.querySelector('h2.sk-sidebar-doc'); if (h) h.textContent = n; },
     /** Repaint the status line in place (the store's state changed). */
-    refreshStatus() { const s = drawer.querySelector('[data-section=status]'); if (s && status) paintStatus(s); },
+    refreshStatus() { const s = content.querySelector('[data-section=status]'); if (s && status) paintStatus(s); },
+    setActiveStage,
     showView, notify, ask, registerView(id, def) { viewDefs[id] = def; },
     setActions(a) { acts = Array.isArray(a) ? a : []; if (isOpenFlag) render(); },
     destroy() { close(); try { el.remove(); backdrop.remove(); drawer.remove(); } catch (_) {} },

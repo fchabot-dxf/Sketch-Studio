@@ -27,8 +27,8 @@ export async function runImportFit(appNames, tag) {
     // ── 1. FIT in every app ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     const apps = [
       { name: 'SketchStudio', url: '/apps/sketchstudio/index.html', ready: `!!document.getElementById('tool-line')`, canvas: '#svgCanvas', shapes: '#svgCanvas .shape-elem' },
-      { name: 'Shaper', url: '/apps/shaper/index.html', ready: `!!document.querySelector('[data-mode="design"]')`, prep: `document.querySelector('[data-mode="design"]').click()`, canvas: '#design-canvas', shapes: '#design-canvas .shape-elem' },
-      { name: 'Pen Plotter', url: '/apps/penplotter/index.html', ready: `!!window.__sketch`, prep: `(document.querySelector('.stage-btn[data-stage="design"]') || document.body).click()`, canvas: '#design-canvas', shapes: '#design-paper > rect' }, // TASK 573: Pen Plotter frames the whole PAPER (the SVG sets the paper size, the DXF does not: both)
+      { name: 'Shaper', url: '/apps/shaper/index.html', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, prep: `document.querySelector('.sk-header-tab[data-tab="design"]').click()`, canvas: '#design-canvas', shapes: '#design-canvas .shape-elem' },
+      { name: 'Pen Plotter', url: '/apps/penplotter/index.html', ready: `!!window.__sketch`, prep: `(document.querySelector('.sk-header-tab[data-tab="design"]') || document.body).click()`, canvas: '#design-canvas', shapes: '#design-paper > rect' }, // TASK 573: Pen Plotter frames the whole PAPER (the SVG sets the paper size, the DXF does not: both)
       { name: 'Trace', url: '/apps/trace/index.html', ready: `!!document.getElementById('tab-edit')`, canvas: '#design-canvas', shapes: '#design-canvas .shape-elem' },
     ];
     const boxes = (app) => evalJs(`(() => {

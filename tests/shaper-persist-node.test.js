@@ -18,7 +18,7 @@ const exportStr = (app) => {
   for (const l of findLoops(st)) lp[l.id] = loopPolygon(l, st, by);
   return exportShaperSVG({ state: st, entries: cutPlanEntries(), encoding: CUT_TYPES, docUnit: 'in', options: { groupByCut: true }, loopPolys: lp });
 };
-const openMode = (app, mode) => { app.press(app.document.querySelector(`[data-mode="${mode}"]`)); assert.strictEqual(app.document.querySelector('.mode-btn.active').dataset.mode, mode, 'the ' + mode + ' tab opens'); };
+const openMode = (app, mode) => { app.press(app.document.querySelector(`.sk-header-tab[data-tab="${mode}"]`)); assert.strictEqual(app.document.querySelector('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
 const edges = (app) => app.document.querySelectorAll('#prepare-canvas .sk-edge').length;
 
 applyShaperUnitDefault(); // the page's own default document unit (U3b: inch unless the user chose one): the Review card shows inches. The kit leaves a host's unit alone.

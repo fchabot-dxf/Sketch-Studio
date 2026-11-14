@@ -7,6 +7,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const DOC = JSON.parse(fs.readFileSync(new URL('./fixtures/drag/owner-two-arcs-575.json', import.meta.url), 'utf8'));
 const J8 = 'j8_1794492561525', J2 = 'j2_1794492542145', SIDE = 's1794492578633';
@@ -15,6 +16,7 @@ await (async () => {
   const cdp = await launchBrowser({ tag: '578' });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, navigate, waitForApp } = cdp;
+  await installFakeDriveSession(cdp);
   try {
     const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
     const mouse = (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });

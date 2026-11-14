@@ -32,7 +32,7 @@ const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, ex
  * bufferSeams: the autosave buffer's own seams (`store`, `doc`, `win` of createDocumentBuffer), handed to the Design stage; the page passes none
  * (the shared IndexedDB store, its own document and window), the node test kit passes its profile's in-memory store.
  */
-export function mountStages({ nav, stagesHost, bufferSeams }) {
+export function mountStages({ onActiveChange = null, stagesHost, bufferSeams }) {
   const mounted = {};
   let currentStageId = null; // the showing stage; drives the isActive gate + which stage gets onLeave on a switch
   // TASK 618: the stage that owns Undo / Redo: Design = the shared sketch history, Toolpath / Export = history.js (TASK 444b: one keystroke, one history)
@@ -41,18 +41,9 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
     return (currentStageId === 'toolpath' || currentStageId === 'export') ? penHistory : null;
   } });
   const designView = () => (currentStageId === 'design' && mounted.design && mounted.design.controller ? { svg: mounted.design.controller.svg, state: mounted.design.controller.state } : null);
-  const btns = new Map();
   const views = new Map();
-  // Build the nav buttons AND the stub stage bodies BY ITERATING STAGES (declaration-first — nothing hardcoded).
+  // Build the stage bodies BY ITERATING STAGES (the shared header + sidebar own the stage buttons).
   STAGES.forEach((s, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'stage-btn';
-    btn.dataset.stage = s.id;
-    btn.innerHTML = s.label + (s.optional ? '<span class="opt">optional</span>' : '');
-    btn.addEventListener('click', () => showStage(s.id));
-    nav.appendChild(btn);
-    btns.set(s.id, btn);
-
     const view = document.createElement('section');
     view.className = 'stage';
     view.id = 'stage-' + s.id;
@@ -72,8 +63,8 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
     const prev = currentStageId;
     for (const s of STAGES) {
       views.get(s.id).hidden = (s.id !== id);
-      btns.get(s.id).classList.toggle('active', s.id === id);
     }
+    if (onActiveChange) onActiveChange(id);
     try { localStorage.setItem(STAGE_KEY, id); } catch (_) { /* storage blocked */ }
     // Pause the stage being LEFT before entering the next — a GENERIC onLeave hook (mirrors Shaper stopping the
     // Design RAF off-tab) so no stage is special-cased in the router; PP-7a's Sketch stage uses it to stop its loop.

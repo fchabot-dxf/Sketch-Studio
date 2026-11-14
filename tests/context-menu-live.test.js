@@ -24,8 +24,8 @@ await (async () => {
     };
     const openMode = async (mode) => {
       for (let i = 0; i < 5; i++) {
-        await clickEl(`[data-mode="${mode}"]`); await sleep(300);
-        if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === mode) return;
+        await clickEl(`.sk-header-tab[data-tab="${mode}"]`); await sleep(300);
+        if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === mode) return;
       }
       assert.fail('could not open the ' + mode + ' tab');
     };
@@ -38,7 +38,7 @@ await (async () => {
 
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Shaper to load');
+    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Shaper to load');
     await openMode('design'); await waitForApp('design-canvas'); await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design tab to show');
 
     const key = async (k, code, vk, modifiers = 0) => { await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers }); await sleep(350); };

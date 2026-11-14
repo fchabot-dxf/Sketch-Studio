@@ -38,7 +38,7 @@ await (async () => {
     };
 
     await navigate(`http://127.0.0.1:${port}${URL_PATH}`, 4000);
-    if (HOST === 'shaper') { await evalJs(`localStorage.clear(); document.querySelector('.mode-btn[data-mode="design"]').click()`); await sleep(1500); }
+    if (HOST === 'shaper') { await evalJs(`localStorage.clear(); document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleep(1500); }
     await waitFor(`!!document.querySelector('${CANVAS}') && !!document.getElementById('tool-dim')`, 'the canvas and the dimension tool', 15000);
     await sleep(1500);
     const o = await toScreen(0, 0);

@@ -13,11 +13,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '605', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
+  await installFakeDriveSession(cdp);
   const shot = async (name, clip) => {
     if (!process.env.EVIDENCE_DIR) return;
     const s = await send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 1.5 } });
@@ -51,7 +53,7 @@ await (async () => {
     {
       await twoDesigns('shaper');
       await noStatusText('shaper');
-      const modeBtn = (m) => evalJs(`document.querySelector('[data-mode="${m}"]').click()`);
+      const modeBtn = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
       for (const m of ['explore', 'design', 'vcarve', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
       // a closed rectangle in Design (real pointer: line tool, four clicks, back to the first point)
       await modeBtn('design'); await sleep(600);
@@ -66,14 +68,14 @@ await (async () => {
       await evalJs(`window.__prepareView.setSelection([{ kind: 'loop', id: window.__prepareView.loops[0].id }])`);
       const selected = () => evalJs(`window.__prepareView.selectedTargets().length`);
       const loops = () => evalJs(`window.__prepareView.loops.length`);
-      const mode = () => evalJs(`document.querySelector('.mode-btn.active').dataset.mode`);
+      const mode = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       assert.strictEqual(await selected(), 1); const nLoops = await loops();
       await shot('shaper-prepare-before-switch.png', { x: 0, y: 0, width: 1400, height: 360 });
       await newTab();
       assert.strictEqual(await mode(), 'prepare', 'shaper: "+" in Prepare stays in Prepare');
       assert.strictEqual(await loops(), 0, 'shaper: the new tab shows an empty document in Prepare (no loops)');
       assert.strictEqual(await selected(), 0, 'shaper: nothing selected in the new tab');
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot').length`), 0, 'shaper: an empty new tab shows no not-saved dot');
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot:not(.saving)').length`), 0, 'shaper: an empty new tab shows no not-saved dot');
       await backToFirst();
       assert.strictEqual(await mode(), 'prepare', 'shaper: switching back from Prepare stays in Prepare');
       assert.strictEqual(await loops(), nLoops, "shaper: Beta's rectangle is shown in Prepare");
@@ -95,8 +97,8 @@ await (async () => {
     {
       await twoDesigns('penplotter');
       await noStatusText('penplotter');
-      const stage = (s) => evalJs(`document.querySelector('.stage-btn[data-stage="${s}"]').click()`);
-      const cur = () => evalJs(`document.querySelector('.stage-btn.active').dataset.stage`);
+      const stage = (s) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${s}"]').click()`);
+      const cur = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       for (const s of ['design', 'toolpath', 'export']) { await stage(s); await sleep(500); assert(await stripVisible(), `penplotter ${s}: the strip is visible and uncovered`); }
       await stage('toolpath'); await sleep(600);
       await clickEl('#addPlotColor'); await sleep(400);
@@ -109,7 +111,7 @@ await (async () => {
       assert.strictEqual(await cur(), 'toolpath', 'penplotter: "+" in Toolpath stays in Toolpath');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.pc-row').length`), 0, 'penplotter: the new tab has no pens');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.group-row.pen-selected').length`), 0, 'penplotter: and no selected folder');
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot').length`), 0, 'penplotter: an empty new tab shows no not-saved dot');
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot:not(.saving)').length`), 0, 'penplotter: an empty new tab shows no not-saved dot');
       await backToFirst();
       assert.strictEqual(await cur(), 'toolpath', 'penplotter: back, still Toolpath');
       assert.strictEqual(await evalJs(`document.querySelectorAll('.pc-row').length`), 1, "penplotter: Beta's pen is back");
@@ -128,8 +130,8 @@ await (async () => {
     {
       await twoDesigns('trace');
       await noStatusText('trace');
-      const tab = (t) => evalJs(`document.querySelector('.tr-tab[data-tab="${t}"]').click()`);
-      const cur = () => evalJs(`document.querySelector('.tr-tab.active').dataset.tab`);
+      const tab = (t) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${t}"]').click()`);
+      const cur = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       for (const t of ['trace', 'edit', 'export']) { await tab(t); await sleep(500); assert(await stripVisible(), `trace ${t}: the strip is visible and uncovered`); }
       await tab('trace'); await sleep(400);
       // a photo through the real file input: a black block on white, 60 x 40 px
@@ -148,7 +150,7 @@ await (async () => {
       assert.strictEqual(await cur(), 'trace', 'trace: "+" in the Trace tab stays in the Trace tab');
       const n = await trState();
       assert(n.w === 0 && !n.traced && n.width === '' && !n.send && n.empty !== 'none', 'trace: the new tab has no photo, no trace, no scale: ' + JSON.stringify(n));
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot').length`), 0, 'trace: an empty new tab shows no not-saved dot (nothing changed in it)');
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab-dot:not(.saving)').length`), 0, 'trace: an empty new tab shows no not-saved dot (nothing changed in it)');
       await backToFirst();
       assert.strictEqual(await cur(), 'trace', 'trace: back, still the Trace tab');
       const b = await trState();

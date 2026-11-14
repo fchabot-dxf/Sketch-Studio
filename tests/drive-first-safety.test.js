@@ -39,7 +39,7 @@ function device(drive, { local = createMemoryAdapter(), skew = 0} = {}) {
     return drive.fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + drive.token, ...(opts.headers || {}) } });
   } };
   const remote = createDriveAdapter({ account, meta: local });
-  const router = createRouterAdapter({ local, getRemote: () => remote, preferDrive: () => dev.signedIn, signedIn: () => dev.signedIn, subscribeSignIn: (fn) => { dev.listeners.add(fn); return () => dev.listeners.delete(fn); } });
+  const router = createRouterAdapter({ local, getRemote: () => remote, signedIn: () => dev.signedIn, subscribeSignIn: (fn) => { dev.listeners.add(fn); return () => dev.listeners.delete(fn); } });
   dev.store = createProjectStore({ adapter: router, now: () => clock + skew, channel: null, setTimer, clearTimer });
   return dev;
 }
@@ -165,14 +165,14 @@ for (const skew of [0, 3_600_000, -3_600_000]) { // A's clock right, an hour ahe
   assert.strictEqual(fileX(drive, cur.id), 8); assert.strictEqual(await A.local.getMeta('driveShadow:' + d.id), null);
   assert(/removed from Google Drive/.test(A2.store.status(cur.id).notice), 'a message is shown');
 }
-{ // (b) the project is gone too: a design on this device
+{ // (b) the project is gone too: recreated in "My Designs" on Drive (never on this device)
   const drive = createFakeDrive(); const A = device(drive);
   const p = await A.store.createProject('P'); const d = await A.store.newDesign('Door', { app: 'shaper', projectId: p.id });
   drive.failWrites = 1000; await A.store.save(doc(8), { id: d.id, app: 'shaper' }); await settle(); drive.failWrites = 0;
   drive.files.get(d.id.replace('drive:', '')).trashed = true; drive.files.get(p.id.replace('drive:', '')).trashed = true;
   const A2 = device(drive, { local: A.local });
   const cur = await A2.store.loadCurrent({ app: 'shaper' });
-  assert(cur && !isRemoteId(cur.id), 'a local design'); assert.strictEqual(xOf(cur), 8);
+  assert(cur && isRemoteId(cur.id), 'recreated on Drive when original Drive project is gone'); assert.strictEqual(xOf(cur), 8);
   assert.strictEqual(await A.local.getMeta('currentDesign'), cur.id);
 }
 { // (c) trashed, no local copy: nothing to open, the stale pointer is cleared, a message says so
@@ -340,16 +340,16 @@ for (const outcome of [500, null]) {
   const A2 = device(drive, { local: A.local }); await A2.store.loadCurrent({ app: 'shaper' }); await settle();
   assert.deepStrictEqual(names(drive), [], 'nothing was recreated on Drive'); assert.deepStrictEqual(await A2.store.listRecent(), [], 'nor on this device');
 }
-{
+{ // Make local was removed in TASK 624: Drive projects stay on Drive (and legacy local projects can still move to Drive safely)
   const drive = createFakeDrive(); const A = device(drive);
-  const p = await A.store.createProject('Moving'); const d = await A.store.newDesign('Door', { app: 'shaper', projectId: p.id });
-  drive.failWrites = 1000; await A.store.save(doc(6), { id: d.id, app: 'shaper' }); await settle(); drive.failWrites = 0;
-  const r = await A.store.cloud.makeProjectLocal(p.id);
-  const local = await A.store.get(r.designIds[d.id]);
-  assert.strictEqual(xOf(local), 6, 'G4: the unconfirmed edit was flushed to Drive BEFORE the copy down, so it is in the local copy');
-  assert.deepStrictEqual(await A.local.listMetaKeys('driveShadow:'), [], 'no local copy of the Drive design is left');
-  const A2 = device(drive, { local: A.local }); await A2.store.loadCurrent({ app: 'shaper' }); await settle();
-  assert.deepStrictEqual(names(drive), [], 'the moved design is not recreated on Drive');
+  assert.strictEqual(A.store.cloud.makeProjectLocal, undefined, 'makeProjectLocal was removed');
+  await A.local.putProject({ id: 'old-p', name: 'Moving', pinned: false, updatedAt: clock });
+  await A.local.putDesign({ id: 'old-d', projectId: 'old-p', name: 'Door', app: 'shaper', updatedAt: clock, document: doc(6) });
+  await A.store.open('old-d');
+  const res = await A.store.cloud.moveProjectToDrive('old-p');
+  assert(isRemoteId(res.projectId) && isRemoteId(res.designIds['old-d']), 'legacy local project moved cleanly to Drive');
+  assert.strictEqual(xOf(await A.store.get(res.designIds['old-d'])), 6);
+  assert.strictEqual(await A.local.getProject('old-p'), null);
 }
 
 // G5: signed out = no attempts and no retry timers; signing in resumes

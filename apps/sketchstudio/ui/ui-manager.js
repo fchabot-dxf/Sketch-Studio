@@ -112,11 +112,9 @@ export function setupUI(state){
   
 
 
-  // ── S7c-2d: mount the shared tool ribbon into the (now-empty) #toolsRibbon container. Tool clicks route to the
+  // ── S7c-2d / TASK 619: mount the shared tool ribbon into the (now-empty) #toolsRibbon container. Tool clicks route to the
   // rich handleToolActivate/setTool via onToolClick (a rect-variant select sets state.rectMode then calls
-  // onToolClick(RECT)); the ribbon owns the rect dropdown and built-in Edit group (Undo/Redo); Actions (Clear All)
-  // comes via extraGroups and KEEPS its id so the clear handler below binds it (R-BIND-ORDER: mounted before it runs).
-  // (S7c-2d-cleanup: the inline button markup + the dead rect-dropdown machinery have been statically removed.)
+  // onToolClick(RECT)); the ribbon owns the rect dropdown; Clear sketch now lives in the shared app footer (#ui/app-footer.js).
   try {
     const trEl = document.getElementById('toolsRibbon');
     if (trEl) {
@@ -124,7 +122,6 @@ export function setupUI(state){
       toolRibbon = createToolRibbon({
         state,
         onToolClick: (t) => handleToolActivate(t), // S7c-2d-pre: the rich activation (pre-selection workflows)
-        extraGroups: [{ label: 'Actions', buttons: [{ id: 'btn-clear', label: 'Clear All' }] }],
       });
       toolRibbon.render(trEl);
     }
@@ -189,23 +186,7 @@ export function setupUI(state){
   }catch(_){ }
   
 
-  // TASK 618: the Construction toggle and Recenter moved to the shared app footer (#ui/app-footer.js, mounted by main.js)
-
-  // Clear All button (destructive)
-  const clearBtn = document.getElementById('btn-clear');
-  if(clearBtn){
-    clearBtn.addEventListener('click', ()=>{
-      // Clear All always clears the whole document (Destructive, Not Undoable); deleting a selection is the Delete key's job.
-      try{
-        state.clearDocument();
-
-        // Reset UI mode
-        setTool(TOOL_MODES.SELECT);
-      }catch(err){
-        console.error('[clear] error clearing canvas', err);
-      }
-    });
-  }
+  // TASK 618 / 619: Construction moved to .sk-canvas-corner (#ui/design-browser.js); Clear sketch and Recenter live in the shared app footer (#ui/app-footer.js)
 
   // S7c-2e: Export is a router-owned TAB now (no popup). The dead popup-open machinery (#btn-export, closeExport,
   // outside/Esc handlers) is removed; #btn-export-close is dropped; Cancel + a successful export return to Design

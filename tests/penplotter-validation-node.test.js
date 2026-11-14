@@ -37,8 +37,8 @@ try {
   pressEl('#docDone');
 
   // ---- Toolpath tab: machine settings
-  pressEl('.stage-btn[data-stage="toolpath"]');
-  assert(q('.stage-btn[data-stage="toolpath"]').classList.contains('active') && q('#drawFeed') && q('#addFillTp'), 'toolpath stage ready');
+  pressEl('.sk-header-tab[data-tab="toolpath"]');
+  assert(q('.sk-header-tab[data-tab="toolpath"]').classList.contains('active') && q('#drawFeed') && q('#addFillTp'), 'toolpath stage ready');
   const setRows = [];
   for (const [id, typed, key_, want] of [
     ['drawFeed', '', 'draw_feed', 2000], ['drawFeed', '-5', 'draw_feed', 1], ['drawFeed', '1234', 'draw_feed', 1234],

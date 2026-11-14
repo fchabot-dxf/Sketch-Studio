@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importViaMenu } from './helpers/import-via-menu.js';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SVG = path.join(REPO_ROOT, 'tests', 'fixtures', 'svg', 'import-basic.svg');
@@ -19,6 +20,7 @@ await (async () => {
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
   try {
+    const driveSession = await installFakeDriveSession(cdp, { signedIn: false });
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
     await send('Page.addScriptToEvaluateOnNewDocument', { source: 'delete window.showOpenFilePicker; delete window.showSaveFilePicker;' });
     const goto = (url) => navigate(`http://127.0.0.1:${port}${url}`, 8000);
@@ -50,11 +52,11 @@ await (async () => {
     // ── A. the File menus ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     const apps = [
       ['SketchStudio', '/apps/sketchstudio/index.html', `!!document.getElementById('tool-line')`],
-      ['Shaper', '/apps/shaper/index.html', `!!document.querySelector('[data-mode="design"]')`],
+      ['Shaper', '/apps/shaper/index.html', `!!document.querySelector('.sk-header-tab[data-tab="design"]')`],
       ['Pen Plotter', '/apps/penplotter/index.html', `!!window.__sketch`],
       ['Trace', '/apps/trace/index.html', `!!document.getElementById('tab-edit')`],
     ];
-    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export']); // each host's declared extras (hostActions): Shaper / Pen Plotter Download, Trace Download SVG / DXF, SketchStudio Export (TASK 602)
+    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'explore-open', 'explore-export', 'style', 'settings', 'log', 'debug', 'tune']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619)
     const menus = {};
     for (const [name, url, ready] of apps) {
       await goto(url);
@@ -67,7 +69,7 @@ await (async () => {
     const base = common(menus['SketchStudio']);
     for (const name of Object.keys(menus)) assert.deepStrictEqual(common(menus[name]), base, name + ': the same File menu items, same order, same labels as SketchStudio');
     assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file'], 'the shared items (Save to Google Drive shows signed in only)');
-    assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf'], 'Trace keeps its Download SVG / DXF, after the shared items');
+    assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf', 'log'], 'Trace keeps its Download SVG / DXF + Log, after the shared items');
     console.log('File menus equal across the four apps; Trace extras:', JSON.stringify(menus['Trace'].slice(base.length)));
 
     // ── B. Trace: import into Edit, parameters, Save as, reload ──────────────────────────────────────────────────────────────────────────────
@@ -79,8 +81,12 @@ await (async () => {
     await sleep(300);
     await openMenu();
     await clickEl('[data-action="save-as"]'); await sleep(250);
+    await waitFor(`!!document.querySelector('.sk-sidebar-ask [data-choice="signin"]')`, 'signed out Save as asks to sign in first');
+    await clickEl('.sk-sidebar-ask [data-choice="signin"]');
+    await waitFor(`!!document.querySelector('.sk-sidebar-input')`, 'Save as name prompt after sign-in');
     await evalJs(`document.querySelector('.sk-sidebar-input').value = 'T1'`);
     await clickEl('.sk-sidebar-confirm-btns .ok'); await sleep(900);
+    assert.strictEqual(driveSession.drive.byName('T1.sketch.json').length, 1, 'T1 saved ONLY to fake Google Drive');
     assert.ok((await recent()).includes('T1'), 'Save as T1: ' + JSON.stringify(await recent()));
     const saved = await storedCurrent();
     assert.strictEqual(saved.name, 'T1'); assert.strictEqual(saved.app, 'trace');

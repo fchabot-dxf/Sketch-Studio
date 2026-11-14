@@ -100,22 +100,20 @@ export function setupDebugPanel(state) {
   // Close button handler
   panel.querySelector('#debug-close-btn').addEventListener('click', () => togglePanel(false));
 
-  // Wire header button (exists in index.html)
-  const debugBtn = document.getElementById('btn-debug-toggle');
-  if (debugBtn) debugBtn.addEventListener('click', () => togglePanel());
-
   // Close on outside click
   document.addEventListener('mousedown', (e) => {
-    if (panelVisible && panel && !panel.contains(e.target) && e.target.id !== 'btn-debug-toggle') togglePanel(false);
+    if (panelVisible && panel && !panel.contains(e.target) && !e.target.closest?.('.sk-sidebar-item[data-action="debug"]')) togglePanel(false);
   });
 
   dbg.log('debug-panel', '[debug-panel] initialized');
+}
+
+export function toggleDebugPanel(forceState) {
+  togglePanel(forceState);
 }
 
 function togglePanel(forceState) {
   panelVisible = typeof forceState === 'boolean' ? forceState : !panelVisible;
   if (!panel) return;
   panel.style.display = panelVisible ? 'block' : 'none';
-  const btn = document.getElementById('btn-debug-toggle');
-  if (btn) btn.classList.toggle('text-blue-400', panelVisible);
 }

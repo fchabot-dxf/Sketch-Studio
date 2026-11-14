@@ -58,7 +58,7 @@ export function applyShaperUnitDefault() {
   } catch (_) { /* localStorage blocked */ }
 }
 
-/** TASK 610: the floating SKETCHES browser over Shaper's Design canvas (main.js buildDesignUI did this inline): the card goes in #design-body, the phone drawer's button in the toolbar. */
+/** TASK 610 / 619: the floating SKETCHES browser + Construction toggle over Shaper's Design canvas (verified safe: loop-finder.js:116,198 excludes isConstruction from loops/chains/cut export). */
 export function mountShaperBrowser({ state, engine }) {
-  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine });
+  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, construction: true });
 }

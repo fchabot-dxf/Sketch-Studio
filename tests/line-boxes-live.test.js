@@ -23,8 +23,8 @@ await (async () => {
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/penplotter/index.html` });   // the Pen Plotter hosts the shared Design tab and exposes its state
     await Promise.race([loaded, sleep(8000)]);
-    await waitFor(`!!document.querySelector('.stage-btn[data-stage="design"]')`, 'the stage buttons');
-    await evalJs(`document.querySelector('.stage-btn[data-stage="design"]').click()`);
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the stage buttons');
+    await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
     await waitForApp('design-canvas');
     await waitFor(`!!window.__sketch && !!window.__sketch.controller && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design tab');
     const boxes = () => evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => [...b.querySelectorAll('input')].map((i) => [i.placeholder, i.value]))`);

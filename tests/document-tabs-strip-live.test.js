@@ -10,11 +10,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '587', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
+  await installFakeDriveSession(cdp);
   const shot = async (name, clip) => {
     if (!process.env.EVIDENCE_DIR) return;
     const s = await send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 1.5 } });
@@ -37,7 +40,8 @@ await (async () => {
     const checkPlace = async (what) => {
       const b = await evalJs(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const x = e.getBoundingClientRect(); return { top: x.top, bottom: x.bottom, left: x.left, right: x.right }; };
         return { strip: r('.sk-doctabs'), header: r('header'), ribbon: r('#toolsRibbon'), box: r('.sk-browser'), construct: r('#btn-construct-toggle'), recenter: r('#btn-recenter-view') }; })()`);
-      assert(Math.abs(b.strip.top - b.header.bottom) < 0.5 && b.strip.bottom <= b.ribbon.top + 0.5, what + ': the strip is right under the header, above the ribbon: ' + JSON.stringify(b));
+      const topExpected = b.header ? b.header.bottom : 0;
+      assert(Math.abs(b.strip.top - topExpected) < 0.5 && b.strip.bottom <= b.ribbon.top + 0.5, what + ': the strip is right under the header (or at top on phones), above the ribbon: ' + JSON.stringify(b));
       for (const k of ['box', 'construct', 'recenter']) {
         const o = b[k]; if (!o) continue;
         assert(o.top >= b.strip.bottom - 0.5 || o.bottom <= b.strip.top + 0.5 || o.left >= b.strip.right - 0.5 || o.right <= b.strip.left + 0.5, `${what}: the strip does not overlap ${k}: ` + JSON.stringify(b));
@@ -109,6 +113,7 @@ await (async () => {
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');
 
     // phone (390 x 844, a finger): a 31 px row (TASK 608, owner ruling; was 45), tabs the full row height, close x / + >= 24 x 24; widths at 1, 2, 5, 10 tabs (real taps on "+"); one line that scrolls, the active tab in view
+    await resetBufferLive(cdp);
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await navigate(url('sketchstudio'), 10000);

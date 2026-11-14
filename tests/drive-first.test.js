@@ -1,15 +1,15 @@
-// tests/drive-first.test.js — TASK 506: Google Drive FIRST, against a FAKE Drive (no Google call anywhere), fake clock and timers.
-//   A. the default "Save to Google Drive" setting (preferDrive): ON + signed in puts NEW projects / designs on Drive (ONE "My Designs",
-//      never duplicated across devices / tabs); OFF or signed out stays local and makes no Drive call; signing in moves nothing
+// tests/drive-first.test.js — TASK 506 / 624: Drive-only saved designs, against a FAKE Drive (no Google call anywhere), fake clock and timers.
+//   A. NEW projects / designs go ONLY to Drive when signed in (ONE "My Designs", never duplicated); signed out rejects; legacy local stays in place
 //   B. autosave of a design on Drive: THROTTLED (>= 5 s between writes), flushed on demand / when the tab hides, 458 sidecar merge kept
 //   C. the local safety net: a failed Drive write keeps the local copy, shows the reason, retries with BACKOFF, and a reload recovers it
-//   D. Drive unreachable when something NEW is created: it falls back to this device and says why
-//   E. "Save to Google Drive" (store.cloud.saveToDrive): My Designs on Drive, one copy updated on a repeat, local project untouched, failure
+//   D. Drive unreachable when something NEW is created: refuses with a clear message and leaves nothing local (drawing stays in tab buffer)
+//   E. Out-of-band Drive deletion: emptied folder (deleted design file inside existing folder) writes a fresh file into the existing folder;
+//      deleted folder / deleted root folder recreates cleanly on Drive
 //   F. "Check Google Drive connection": every step reported, a failing step stops the rest, the test file is cleaned up
-//   G. the status the sidebar line reads (store.status) for each state
+//   G. the writer on its own (throttle policy as data, no store)
 import assert from 'node:assert';
 import { createFakeDrive } from './harness/fake-drive.js';
-import { createDriveAdapter, driveFileUrl, driveErrorText, CHECK_STEPS } from '../packages/ui/cloud/drive-adapter.js';
+import { createDriveAdapter, driveErrorText, CHECK_STEPS } from '../packages/ui/cloud/drive-adapter.js';
 import { createRouterAdapter, isRemoteId } from '../packages/ui/cloud/router-adapter.js';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
 import { createDocumentBuffer } from '../packages/ui/document-buffer.js';
@@ -34,7 +34,7 @@ async function advance(ms) {
 }
 
 const doc = (marker, hosts = {}) => ({ ...emptyDocument(), geometry: { joints: [['j1', { x: marker, y: 0 }]], shapes: [], constraints: [] }, hosts });
-const state = { signedIn: true, prefer: true, token: null };
+const state = { signedIn: true, token: null };
 const accountFor = (drive) => ({
   authedFetch: (url, opts = {}) => {
     if (!state.signedIn) return Promise.reject(new Error('cloud-auth'));
@@ -42,15 +42,15 @@ const accountFor = (drive) => ({
   },
 });
 /** One DEVICE: its own local adapter + router + store over a (shared) fake Drive. */
-function device(drive, { local = createMemoryAdapter(), prefer = () => state.signedIn && state.prefer } = {}) {
+function device(drive, { local = createMemoryAdapter() } = {}) {
   const remote = createDriveAdapter({ account: accountFor(drive), meta: local });
-  const router = createRouterAdapter({ local, getRemote: () => remote, preferDrive: prefer, signedIn: () => state.signedIn });
+  const router = createRouterAdapter({ local, getRemote: () => remote, signedIn: () => state.signedIn });
   const store = createProjectStore({ adapter: router, now: () => clock, channel: null, setTimer, clearTimer });
   return { store, local, router, drive };
 }
 const uploads = (drive) => drive.requests.filter((r) => r.method === 'PATCH' && r.url.includes('/upload/drive/v3/files/'));
 const liveFolders = (drive, name) => drive.byName(name).filter((f) => !f.trashed);
-const reset = () => { state.signedIn = true; state.prefer = true; timers = []; clock += 1_000_000; };
+const reset = () => { state.signedIn = true; timers = []; clock += 1_000_000; };
 
 // ---- A. where NEW things are created ---------------------------------------------------------------------------------------
 {
@@ -87,32 +87,25 @@ const reset = () => { state.signedIn = true; state.prefer = true; timers = []; c
   assert.strictEqual(liveFolders(drive2, 'My Designs').length, 1, 'two devices creating it at the same moment: ONE survives (the loser trashes its own)');
   assert.strictEqual((await x.store.listRecent()).length, 2, 'both designs live in it');
 }
-{ // toggle OFF, and signed out: LOCAL exactly as before, no Drive call
-  for (const [label, on] of [['toggle OFF', () => { state.prefer = false; }], ['signed out', () => { state.signedIn = false; }]]) {
-    reset(); on();
-    const drive = createFakeDrive(); const { store } = device(drive);
-    const p = await store.createProject('Local one');
-    const d = await store.newDesign('Mine', { app: 'shaper' });
-    const d2 = await store.newDesign('In project', { app: 'shaper', projectId: p.id });
-    assert(!isRemoteId(p.id) && !isRemoteId(d.id) && !isRemoteId(d2.id), label + ': everything is local');
-    await store.save(doc(1), { id: d.id, app: 'shaper' });
-    assert.strictEqual(drive.calls.length, 0, label + ': no Drive call at all');
-    assert.deepStrictEqual(store.status(d.id), { where: 'device', state: 'saved', at: null, reason: null, notice: null });
-  }
-}
-{ // signing in moves NOTHING that exists: a local design keeps saving locally; only NEW projects go to Drive
+{ // signed out: new projects / designs cannot be created locally; legacy local projects stay openable and signing in moves nothing
   reset(); state.signedIn = false;
   const drive = createFakeDrive(); const dev = device(drive);
-  const p = await dev.store.createProject('Old'); const d = await dev.store.newDesign('Old design', { app: 'shaper', projectId: p.id });
+  await assert.rejects(() => dev.store.createProject('Blocked'), /cloud-auth|Google Drive/);
+  await assert.rejects(() => dev.store.newDesign('Blocked', { app: 'shaper' }), /cloud-auth|Google Drive/);
+  assert.strictEqual(drive.calls.length, 0, 'signed out: no Drive API call attempted');
+  assert.deepStrictEqual(await dev.local.listProjects(), [], 'signed out: nothing created locally');
+  assert.deepStrictEqual(await dev.local.listDesigns(), [], 'signed out: no local named design created');
+
+  // seed a legacy local project directly on device storage: it keeps working locally and signing in never auto-moves it
+  await dev.local.putProject({ id: 'legacy-p', name: 'Old', pinned: false, updatedAt: clock });
+  await dev.local.putDesign({ id: 'legacy-d', projectId: 'legacy-p', name: 'Old design', app: 'shaper', updatedAt: clock, document: doc(1) });
   state.signedIn = true;
-  const sig = JSON.stringify([await dev.local.listProjects(), await dev.local.listDesigns()]);
-  await dev.store.save(doc(2), { id: d.id, app: 'shaper' });
-  const n = await dev.store.newDesign('Next to it', { app: 'shaper', projectId: p.id });
-  assert(!isRemoteId(d.id) && !isRemoteId(n.id), 'a design in a LOCAL project stays local, signed in or not');
-  assert.deepStrictEqual((await dev.local.listProjects()).map((x) => x.id), JSON.parse(sig)[0].map((x) => x.id), 'no local project left or changed');
-  assert.strictEqual(drive.byName('Old').length, 0); assert.strictEqual(drive.byName('Old design.sketch.json').length, 0, 'nothing of it was copied to Drive');
+  await dev.store.save(doc(2), { id: 'legacy-d', app: 'shaper' });
+  assert.strictEqual((await dev.store.get('legacy-d')).document.geometry.joints[0][1].x, 2, 'legacy local design saves in place');
+  assert.strictEqual(drive.byName('Old').length, 0); assert.strictEqual(drive.byName('Old design.sketch.json').length, 0, 'nothing was moved automatically');
   const np = await dev.store.createProject('New');
-  assert(isRemoteId(np.id), 'only NEW projects follow the default');
+  const nd = await dev.store.newDesign('New design', { app: 'shaper', projectId: np.id });
+  assert(isRemoteId(np.id) && isRemoteId(nd.id), 'all NEW projects/designs go ONLY to Drive');
 }
 
 // ---- B. throttle ------------------------------------------------------------------------------------------------------------
@@ -227,62 +220,57 @@ const reset = () => { state.signedIn = true; state.prefer = true; timers = []; c
   assert.strictEqual(await b.store.cloud.isEnabled(), true);
 }
 
-// ---- D. Drive unreachable for something NEW --------------------------------------------------------------------------------
+// ---- D. Drive unreachable for something NEW (Decision 4: refuse cleanly, never fall back to local named design) ------------------
 {
   reset();
-  const drive = createFakeDrive(); const { store } = device(drive);
+  const drive = createFakeDrive(); const { store, local } = device(drive);
   drive.offline = true;
-  const d = await store.newDesign('Offline one', { app: 'shaper' });
-  assert(!isRemoteId(d.id), 'Drive unreachable: the design is created on this device');
-  const s = store.status(d.id);
-  assert.strictEqual(s.where, 'device'); assert(/could not be reached/.test(s.reason), 'with the reason: ' + s.reason);
-  const p = await store.createProject('Also offline');
-  assert(!isRemoteId(p.id), 'and so is a new project');
-  await store.save(doc(3), { id: d.id, app: 'shaper' });
-  assert.strictEqual((await store.get(d.id)).document.geometry.joints[0][1].x, 3, 'nothing is lost');
+  await assert.rejects(() => store.newDesign('Offline one', { app: 'shaper' }), /Google Drive can't be reached; your drawing is kept, try again when online/);
+  await assert.rejects(() => store.createProject('Also offline'), /Google Drive can't be reached; your drawing is kept, try again when online/);
+  assert.deepStrictEqual(await local.listDesigns(), [], 'offline failure leaves no local named design');
+  assert.deepStrictEqual(await local.listProjects(), [], 'offline failure leaves no local project');
   drive.offline = false;
-  assert(!isRemoteId((await store.newDesign('Next to it', { app: 'shaper' })).id), 'a design next to a local one stays in its local project (nothing moves by itself)');
   const back = await store.createProject('Back online');
-  assert(isRemoteId(back.id), 'back online a NEW project goes to Drive again');
+  assert(isRemoteId(back.id), 'back online a NEW project goes to Drive');
   const e = await store.newDesign('Online again', { app: 'shaper', projectId: back.id });
-  assert(isRemoteId(e.id)); assert.strictEqual(store.status(e.id).where, 'drive'); assert.strictEqual(store.status(e.id).reason, null, 'the failure note is cleared once Drive works');
-  // an explicit Drive project that fails is the user's to see (no silent local copy of it)
+  assert(isRemoteId(e.id)); assert.strictEqual(store.status(e.id).where, 'drive'); assert.strictEqual(store.status(e.id).reason, null);
+  // an explicit Drive project that fails while offline also refuses with the exact message
   const dp = await store.createProject('Drive proj'); assert(isRemoteId(dp.id));
   drive.offline = true;
-  await assert.rejects(() => store.newDesign('Into it', { projectId: dp.id }), /network unreachable/);
+  await assert.rejects(() => store.newDesign('Into it', { projectId: dp.id }), /Google Drive can't be reached; your drawing is kept, try again when online/);
 }
 
-// ---- E. "Save to Google Drive" ---------------------------------------------------------------------------------------------
+// ---- E. Out-of-band Drive deletion (624 note + correction: emptied folder OR deleted folder / root) -------------------------
 {
-  reset(); state.prefer = false; // the default is OFF here: the action works on its own
-  const drive = createFakeDrive(); const { store, local } = device(drive);
-  const proj = await store.createProject('Kitchen'); const d = await store.newDesign('Door', { app: 'shaper', projectId: proj.id });
-  await store.save(doc(4, { shaper: { cut: 'inside' } }), { id: d.id, app: 'shaper' });
-  const r = await store.cloud.saveToDrive(d.id);
-  const file = drive.files.get(r.fileId);
-  assert.strictEqual(file.name, 'Door.sketch.json');
-  assert.strictEqual(liveFolders(drive, 'My Designs').length, 1, 'saved into the Drive project "My Designs", created when absent');
-  assert.deepStrictEqual(file.parents, [liveFolders(drive, 'My Designs')[0].id]);
-  assert.strictEqual(parseProjectFile(file.content).document.geometry.joints[0][1].x, 4);
-  assert.strictEqual(driveFileUrl(r.fileId), `https://drive.google.com/file/d/${r.fileId}/view`);
-  assert(await local.getProject(proj.id), 'the whole local project was NOT moved'); assert(await local.getDesign(d.id), 'the design stays local');
-  assert.strictEqual(drive.byName('Kitchen').length, 0);
-  // again: the same Drive file is updated, no second copy, still one My Designs
-  await store.save(doc(8), { id: d.id, app: 'shaper' });
-  const r2 = await store.cloud.saveToDrive(d.id);
-  assert.strictEqual(r2.fileId, r.fileId); assert.strictEqual(drive.byName('Door.sketch.json').length, 1);
-  assert.strictEqual(parseProjectFile(drive.files.get(r.fileId).content).document.geometry.joints[0][1].x, 8);
-  assert.strictEqual(liveFolders(drive, 'My Designs').length, 1);
-  // failure: the exact reason, the local design intact
-  drive.failWrites = 1000; await store.save(doc(9), { id: d.id, app: 'shaper' });
-  await assert.rejects(() => store.cloud.saveToDrive(d.id), (e) => driveErrorText(e) === 'Google Drive answered HTTP 500');
-  assert.strictEqual((await store.get(d.id)).document.geometry.joints[0][1].x, 9, 'a failed save loses nothing');
-  drive.failWrites = 0;
-  // a design that already lives on Drive: its own file, nothing copied
-  state.prefer = true;
-  const onDrive = await store.newDesign('Already', { app: 'shaper', projectId: (await store.createProject('Drive one')).id });
-  const r3 = await store.cloud.saveToDrive(onDrive.id);
-  assert.strictEqual(r3.fileId, onDrive.id.slice(6)); assert.strictEqual(drive.byName('Already.sketch.json').length, 1);
+  reset();
+  const drive = createFakeDrive(); const dev = device(drive); const { store } = dev;
+  const d = await store.newDesign('EmptyMe', { app: 'shaper' });
+  await store.save(doc(4, { shaper: { cut: 'inside' } }), { id: d.id, app: 'shaper' }); await store.flushDrive(d.id);
+  const myDesignsFolders = liveFolders(drive, 'My Designs');
+  assert.strictEqual(myDesignsFolders.length, 1);
+  const folderId = myDesignsFolders[0].id;
+  // 1) Owner emptied "My Designs" out of band (deleted the file permanently, folder stays!): next save creates a fresh file INSIDE existing folder
+  drive.files.delete(d.id.slice(6));
+  await store.save(doc(8, { shaper: { cut: 'inside' } }), { id: d.id, app: 'shaper' });
+  await store.flushDrive();
+  const curAfterFileGone = await store.current();
+  assert(curAfterFileGone && isRemoteId(curAfterFileGone.id) && curAfterFileGone.id !== d.id, 'fresh Drive file created');
+  assert.strictEqual(curAfterFileGone.projectId, 'drive:' + folderId, 'placed into EXISTING My Designs folder (not duplicated)');
+  assert.strictEqual(liveFolders(drive, 'My Designs').length, 1, 'still only one My Designs folder');
+  const freshFile = drive.files.get(curAfterFileGone.id.slice(6));
+  assert(freshFile && freshFile.parents.includes(folderId) && parseProjectFile(freshFile.content).document.geometry.joints[0][1].x === 8, 'fresh file holds latest work');
+  // 2) Remembered "My Designs" folder AND root "Sketch Studio" folder deleted out of band: detected and recreated on Drive (never locally)
+  const rootId = await dev.local.getMeta('driveRootId');
+  assert(rootId, 'driveRootId was cached');
+  drive.files.delete(curAfterFileGone.id.slice(6));
+  drive.files.delete(folderId);
+  drive.files.delete(rootId);
+  const dNext = await store.newDesign('FreshAfterFolderGone', { app: 'shaper' });
+  assert(isRemoteId(dNext.id) && isRemoteId(dNext.projectId), 'recreated cleanly on Drive after folder deletion');
+  assert.strictEqual(liveFolders(drive, 'Sketch Studio').length, 1, 'root folder recreated on Drive');
+  assert.strictEqual(liveFolders(drive, 'My Designs').length, 1, 'My Designs folder recreated on Drive');
+  assert.notStrictEqual(liveFolders(drive, 'Sketch Studio')[0].id, rootId, 'new root id replaces deleted cached id');
+  assert.deepStrictEqual(await dev.local.listProjects(), [], 'no local project created on Drive folder loss');
 }
 
 // ---- F. "Check Google Drive connection" -------------------------------------------------------------------------------------

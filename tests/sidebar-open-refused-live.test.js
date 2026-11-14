@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -28,6 +29,7 @@ await (async () => {
   const cdp = await launchBrowser({ tag: '479', width: 1600, height: 900 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, once, evalJs, waitFor, ws } = cdp;
+  await installFakeDriveSession(cdp);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-479-'));
   try {
     const key = async (k, code, vk, modifiers = 0, text = '') => { await sendRealKey(send, k, code, vk, modifiers, text); await sleep(200); };
@@ -54,7 +56,7 @@ await (async () => {
     const openSb = async () => { await clickEl('.sk-sidebar-btn'); await sleep(350); };
 
     await nav();
-    await clickEl('[data-mode="design"]'); await sleep(1200);
+    await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(1200);
     await key('Escape', 'Escape', 27); await sleep(200);
     // ── a refused file (newer version) shows its message and changes nothing ──
     await key('Escape', 'Escape', 27); await sleep(200);

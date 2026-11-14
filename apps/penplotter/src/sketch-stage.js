@@ -139,7 +139,7 @@ export function mountSketchStage(view, ctx = {}) {
   };
   // DESIGN-PAPER-BOUNDS: draw the document paper+grid (0,0)-(doc.w,doc.h) as the BACKMOST Design layer — same helper +
   // world/mm coords the plotter canvas (render-art) uses, so the Design area IS the paper. Redrawn on doc-size change.
-  const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc); };
+  const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc, { grid: false }); };
   // IMPORT-DOC-SIZE / UNIFY-6: fit the SHARED view to the CURRENT doc on THIS canvas, then apply it. The plotter-side
   // fitViewport() measures #canvasWrap — hidden while Design is up — so the Design tab has to do its own fit. Used on
   // stage entry (first fit) AND after an import changes the paper size.

@@ -13,7 +13,6 @@ import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRect
 import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from '#ui/input-handlers/circle-tool.js';
 import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
-import { handleJointSelection } from '#ui/input-handlers/selection-tools.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
 import { newShapeId } from '#core/shape-id.js';
 
@@ -81,12 +80,6 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
         case TOOL_MODES.POLYGON:
             return handlePolygonPointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.ARC:
-            // If user clicked on a JOINT that belongs to an existing arc, start a joint drag instead of creating a new arc
-            try {
-                if (hitSnap && hitSnap.type === 'joint' && state.shapes && state.shapes.some(s => s && s.type === 'arc' && s.joints && s.joints.includes(hitSnap.targetId))) {
-                    return handleJointSelection(e, svg, state, { id: hitSnap.targetId, j: state.joints.get(hitSnap.targetId) });
-                }
-            } catch(_) {}
             return handleArcPointerDown(e, svg, state, hitSnap, w);
     }
     

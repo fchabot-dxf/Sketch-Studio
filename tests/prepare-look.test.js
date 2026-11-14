@@ -81,7 +81,8 @@ await (async () => {
                edgeStroke: getComputedStyle(document.querySelector('#prepare-canvas .sk-edge')).stroke, edgeWidth: getComputedStyle(document.querySelector('#prepare-canvas .sk-edge')).strokeWidth,
                guideEdges: q('.sk-edge-guide'), bg: getComputedStyle(document.getElementById('prepare-canvas')).backgroundColor };
     })()`);
-    const away = { x: 10, y: 880 };
+    // an empty spot inside the Prepare canvas, near its bottom-left corner (from its rect: the app footer, TASK 618, is below it)
+    const away = await evalJs(`(() => { const r = document.getElementById('prepare-canvas').getBoundingClientRect(); return { x: Math.round(r.left + 10), y: Math.round(r.bottom - 20) }; })()`);
     // idle: ONLY the svg line (thin white), the guide the one blue exception
     await move(away.x, away.y);
     let sIdle = await snap();

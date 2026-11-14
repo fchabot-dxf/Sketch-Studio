@@ -78,6 +78,31 @@ try {
   const a5 = observe();
   assert.strictEqual(a5.tps, a4.tps, 'Toolpath Ctrl+Z then Ctrl+Shift+Z returns to the same toolpaths');
   assert.strictEqual(a5.lines, a4.lines, 'Toolpath Ctrl+Shift+Z must NOT touch the sketch');
+  // TASK 618: the header's Undo / Redo buttons run the SAME dispatch as the keys, per stage (one router: history-control.js)
+  const hb = (id) => doc.getElementById(id);
+  stageTab('toolpath');
+  assert.strictEqual(hb('btn-undo').disabled, false, 'Toolpath: header Undo enabled (the toolpath is on its stack)');
+  const h0 = observe();
+  app.press(hb('btn-undo'));
+  const h1 = observe();
+  assert.strictEqual(h1.tps, h0.tps - 1, 'Toolpath: a click on header Undo undoes the toolpath (as Ctrl+Z)');
+  assert.strictEqual(h1.lines, h0.lines, 'Toolpath: header Undo does not touch the sketch');
+  assert.strictEqual(hb('btn-redo').disabled, false, 'Toolpath: header Redo enabled after the undo');
+  app.press(hb('btn-redo'));
+  assert.strictEqual(observe().tps, h0.tps, 'Toolpath: header Redo redoes the toolpath');
+  stageTab('design');
+  const d0 = observe();
+  app.press(hb('btn-undo'));
+  assert.strictEqual(observe().lines, d0.lines - 1, 'Design: header Undo undoes the line (the sketch history)');
+  assert.strictEqual(observe().tps, d0.tps, 'Design: header Undo leaves the toolpath');
+  app.press(hb('btn-redo'));
+  assert.strictEqual(observe().lines, d0.lines, 'Design: header Redo redoes the line');
+  // switching stage re-evaluates the buttons: drain the toolpath stack, the Toolpath stage then has nothing to undo while Design still does
+  stageTab('toolpath');
+  while (!hb('btn-undo').disabled) app.press(hb('btn-undo'));
+  assert.strictEqual(hb('btn-undo').disabled, true, 'Toolpath: header Undo disabled when its stack is empty');
+  stageTab('design');
+  assert.strictEqual(hb('btn-undo').disabled, false, 'switching to Design re-enables Undo (the sketch history)');
   console.log('penplotter-stage-undo-node: ok');
 } finally {
   await app.close();

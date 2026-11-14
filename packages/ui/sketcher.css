@@ -60,12 +60,18 @@
  * marks .sk-phone-collapse leaves the header (the host puts the same actions in its menu, like SketchStudio's Style / Debug). A host
  * whose views start under the header reads the height from --sk-header-h (44 px everywhere above the breakpoint, unchanged). */
 :root { --sk-header-h: 44px; }
+/* TASK 618 (owner: "if layout is too long it should scroll header"): when a header's controls do not fit, the row scrolls sideways (a swipe; no
+ * scrollbar, no wrapping, nothing hidden). Its menus / panels (app menu, Style, Log) are position: fixed on <body>, so this scroll box cannot clip them. */
+body > header.sk-phone-header { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+body > header.sk-phone-header::-webkit-scrollbar { display: none; }
+body > header.sk-phone-header > * { flex-shrink: 0; }
 @media (max-width: 640px) {
   :root { --sk-header-h: 92px; }
   body > header.sk-phone-header { flex-wrap: wrap; height: var(--sk-header-h); gap: 4px; padding: 0 12px; box-sizing: border-box; }
   body > header.sk-phone-header .sk-phone-collapse { display: none; }
-  body > header.sk-phone-header .sk-phone-tabs { order: 9; flex: 1 0 100%; height: 44px; gap: 4px; align-items: stretch; }
-  body > header.sk-phone-header .sk-phone-tabs > button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 2px; }
+  body > header.sk-phone-header .sk-phone-tabs { order: 9; flex: 1 0 100%; height: 44px; gap: 4px; align-items: stretch; overflow-x: auto; scrollbar-width: none; } /* row 2 scrolls too when its buttons do not fit */
+  body > header.sk-phone-header .sk-phone-tabs::-webkit-scrollbar { display: none; }
+  body > header.sk-phone-header .sk-phone-tabs > button { flex: 1 0 auto; min-width: 0; min-height: 44px; padding: 0 8px; }
 }
 
 /* TASK 602 -- the SHORT viewport (a phone in LANDSCAPE): the query is SHORT_VIEWPORT_QUERY in #ui/short-viewport.js (a static stylesheet cannot import
@@ -76,5 +82,6 @@
   :root { --sk-header-h: 52px; }
   body > header.sk-phone-header { height: var(--sk-header-h); box-sizing: border-box; }
   body > header.sk-phone-header button { min-height: 44px; min-width: 44px; }
-  body .sk-statusbar { display: none; }
+  /* TASK 618: the status bar stays, floating over the canvas's bottom edge (app-footer.js) with Undo / Redo, Construction, Recenter; Log / Tune / the mag lens are in the menu or off */
+  body .sk-statusbar #status-diag-slot, body .sk-statusbar #btn-mag-toggle, body .sk-statusbar #btn-tuning-toggle { display: none; }
 }

@@ -7,6 +7,18 @@
 // router only shows/hides containers. The shared sketcher (Design) mounts once on first entry; its RAF runs only while Design is the active mode, and the
 // input layer's isActive gate is tied to the ACTIVE MODE (not mere visibility) so Explore/Prepare/Sim keystrokes never reach the sketcher (R-COEXIST).
 
+import { createHistoryRouter } from '#ui/history-control.js';
+import { sketchHistory } from '#ui/input-manager.js';
+
+/** TASK 618: Shaper's Undo / Redo router, declared once (the page and the node test kit both call it): Design and Prepare own the shared sketch
+ *  history (every cut-plan edit is a step of it, TASK 463); Explore, Vcarve and Review have none. */
+export function createShaperHistory({ getController, getMode }) {
+  return createHistoryRouter({ current: () => {
+    const c = getController();
+    return c && (getMode() === 'design' || getMode() === 'prepare') ? sketchHistory(c.state) : null;
+  } });
+}
+
 export const MODE_KEY = 'shaper-mode';
 
 /** The page's mode containers. Explore is in normal flow (display); the others are absolute overlays (hidden attr). */

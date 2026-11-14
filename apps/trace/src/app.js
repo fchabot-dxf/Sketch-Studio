@@ -13,6 +13,9 @@ import { getGoogleAccount }               from '#ui/cloud/google-account.js'; //
 getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
+import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
+import { sketchHistory } from '#ui/input-manager.js';
 import { createDiagnosticLog }            from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { initUpload, decodeImageBlob }     from './upload.js';
 import { initControls, DEFAULT_PARAMS }    from './controls.js';
@@ -50,6 +53,10 @@ function importDrawing(text, name) {
 // DIAG-OVERLAY: log/error/viewport/touch capture, and the document section (the Edit canvas's sketch state, through the same getter shape the other hosts use).
 const _diagLog = createDiagnosticLog({ appId: 'trace', state: () => getEditState() });
 if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
+
+// TASK 618: Undo / Redo belong to the Edit tab's sketch (the Trace and Export tabs have no history)
+const history = createHistoryRouter({ current: () => (getEditState() && !tabPanes.edit.hidden ? sketchHistory(getEditState()) : null) });
+mountAppFooter({ router: history, view: () => (getEditState() && !tabPanes.edit.hidden ? { svg: document.getElementById('design-canvas'), state: getEditState() } : null) });
 
 // ── Event bus ─────────────────────────────────────────────────────────────────
 const listeners = {};
@@ -89,6 +96,7 @@ function switchTab(id) {
   if (id === 'trace') scaleCtl.redrawLine(); // the reference line is drawn in display pixels: it needs the tab showing
   if (id === 'edit') { startEdit(); updateExportButtons(); } // the shared Design canvas draws only while its tab shows (idempotent start)
   else stopEdit();
+  history.refresh();
   if (id === 'export') {
     updateExportButtons();
     updateScaleNote();

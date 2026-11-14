@@ -75,7 +75,7 @@ export function createStudioImporter({ state, svg }) {
   return { importFile, mountDrop };
 }
 
-/** TASK 610: the floating SKETCHES browser over the canvas (main.js did this inline): the card goes in the canvas's parent. toggleHost: the phone drawer's button host. */
-export function mountStudioBrowser({ svg, state, engine, toggleHost = null }) {
-  return mountDesignBrowser({ container: svg.parentElement, state, engine, toggleHost });
+/** TASK 610: the floating SKETCHES browser over the canvas (main.js did this inline): the card goes in the canvas's parent. */
+export function mountStudioBrowser({ svg, state, engine }) {
+  return mountDesignBrowser({ container: svg.parentElement, state, engine });
 }

@@ -426,12 +426,14 @@ function setupMockDom() {
   assert(Math.abs(largeArcBounds.maxY - 10) < 1e-6, '270° arc maxY must be 10');
   console.log('Check 9 passed: #core/geometry-bounds computeGeometryBounds uses analytical arc sweep extrema ✅');
 
-  // --- Check 10: SketchStudio setupUI #btn-recenter-view delegates to shared fitViewToExtents ---
-  const { setupUI } = await import('../apps/sketchstudio/ui/ui-manager.js');
+  // --- Check 10: the app footer's #btn-recenter-view (TASK 618, was SketchStudio's canvas button) delegates to shared fitViewToExtents ---
+  const { mountAppFooter } = await import('../packages/ui/app-footer.js');
+  const { createHistoryRouter } = await import('../packages/ui/history-control.js');
   const ssSvg = dom.makeElement('svg');
   dom.register('svgCanvas', ssSvg);
-  const recenterBtn = dom.makeElement('button');
-  dom.register('btn-recenter-view', recenterBtn);
+  global.document.head = dom.makeElement('head');
+  global.document.body = dom.makeElement('body');
+  global.document.body.classList = { add() {}, remove() {} };
   const ssState = {
     view: { x: 0, y: 0, w: 20, h: 15 },
     joints: new Map([
@@ -449,12 +451,16 @@ function setupMockDom() {
     selectedShapes: new Set(),
     selectedConstraints: new Set(),
   };
-  setupUI(ssState);
+  const footerEl = dom.makeElement('footer');
+  mountAppFooter({ router: createHistoryRouter({ current: () => null }), view: () => ({ svg: ssSvg, state: ssState }), footer: footerEl });
+  const findBtn = (el) => (el.id === 'btn-recenter-view' ? el : (el.children || []).map(findBtn).find(Boolean));
+  const recenterBtn = findBtn(footerEl);
+  assert.ok(recenterBtn, 'the footer has #btn-recenter-view');
   recenterBtn.dispatchEvent({ type: 'click' });
   assert.strictEqual(ssState.view.x, 70, 'SketchStudio recenter centers X on rendered [40..100] (ignoring j_origin)');
   assert.strictEqual(ssState.view.y, 25, 'SketchStudio recenter centers Y on rendered [20..30] (ignoring arc center -20, including bulge +30)');
   assert.strictEqual(ssState.view.w, 72, 'SketchStudio recenter sets view.w = 60 * 1.2 = 72');
-  console.log('Check 10 passed: SketchStudio #btn-recenter-view delegates to shared fitViewToExtents ✅');
+  console.log('Check 10 passed: the footer recenter button delegates to shared fitViewToExtents ✅');
 
   // Clean up
   prepare.destroy();

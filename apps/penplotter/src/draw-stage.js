@@ -61,7 +61,7 @@ export function mountDrawStage(view, ctx) {
   installCanvasHandlers();
   installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas
   installKeyboard();
-  installHistory(() => renderArt(), ctx.isActive); // keys act only on the stages history.js owns (router closure, main.js)
+  installHistory(() => renderArt(), ctx.isActive, ctx.history); // keys act only on the stages history.js owns (router closure, main.js)
   // S3: the Pens palette is installed by toolpath-stage now (it was hidden in this drawHost).
 
   initLayers();                           // UNIFY-7: now seeds ONLY the default toolpath (no art layer)

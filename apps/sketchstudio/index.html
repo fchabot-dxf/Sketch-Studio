@@ -250,9 +250,6 @@
         /* Show state: display block; menu is absolutely positioned and already has a high z-index */
         .tool-dropdown .tool-dropdown.show { display: block; }
 
-        /* TASK 615 -- the canvas's Construction / Recenter buttons are 32 px square icon buttons (the glyph is a <use> of the shared icon sprite, packages/ui/cursor-manager.js ICONS). */
-        #btn-construct-toggle, #btn-recenter-view { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-        #btn-construct-toggle svg, #btn-recenter-view svg { width: 22px; height: 22px; pointer-events: none; } /* TASK 616: the glyph fills the button (stroke scales with it, like the ribbon icons) */
         /* TASK 562 -- phone layout (<= 640 px, the app's one breakpoint): the footer's Log / MAG LENS / TUNE leave the bar (Log and TUNE live in
            the menu, see main.js; the lens is automatic under a finger). */
         @media (max-width: 640px) {
@@ -262,10 +259,7 @@
            mouse: under a finger the lens follows the finger by itself (input-manager.js). */
         @media (pointer: coarse) {
             #btn-mag-toggle { display: none; }
-            #btn-construct-toggle, #btn-recenter-view { width: 44px; height: 44px; }
-            #btn-construct-toggle svg, #btn-recenter-view svg { width: 28px; height: 28px; }
             footer .sk-diag-toggle, #btn-tuning-toggle { min-height: 44px; min-width: 44px; font-size: 12px; }
-            #viewport-size { font-size: 12px; }
             #debug-panel #debug-close-btn { min-width: 44px; min-height: 44px; font-size: 22px; }
             #debug-panel input[type=checkbox] { width: 44px; height: 44px; }
             #debug-panel input[type=range] { height: 44px; }
@@ -395,11 +389,6 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
             </svg>
             <input type="text" id="dimInput" class="dim-input hidden" autocomplete="off" />
 
-            <!-- Floating Construct toggle (moved from footer): positioned over canvas for quick access -->
-            <div class="absolute right-4 top-4 z-40 flex gap-2">
-                <button id="btn-construct-toggle" class="toolbar-btn bg-white shadow-sm rounded" title="Toggle Construction Mode" aria-label="Construction" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-construction"/></svg></button>
-                <button id="btn-recenter-view" class="toolbar-btn bg-white shadow-sm rounded text-slate-500 hover:text-slate-700" title="Recenter View" aria-label="Recenter view"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-recenter"/></svg></button>
-            </div>
         </div>
     </main>
 
@@ -410,7 +399,6 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
                 MAG LENS: OFF
             </button>
         </div>
-        <div class="whitespace-nowrap overflow-hidden"><span id="viewport-size" class="text-slate-500">VIEW: - x -</span></div>
     </footer>
 
     <!-- S7c-2c: the old #settings-panel popup is retired — its stroke/style controls live in the SHARED style

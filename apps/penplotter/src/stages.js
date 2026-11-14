@@ -5,6 +5,9 @@
 import { mountDrawStage } from './draw-stage.js'; // UNIFY-4a: re-homed to a HIDDEN host (owns #canvasWrap); art store DORMANT (UNIFY-7 retires)
 import { mountToolpathStage } from './toolpath-stage.js'; // PP-4a: the Toolpath stage (borrows the shared canvas). MERGE-1: now hosts the fill/outline editor inline (active-layer-panel).
 import { mountExportStage } from './export-stage.js'; // PP-6: the Export stage (gcode + zip + pen-width sim)
+import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618: Undo / Redo of the showing stage (the keys and the header buttons share it)
+import { sketchHistory } from '#ui/input-manager.js';
+import { penHistory } from './history.js';
 import { mountSketchStage } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 
 // The pipeline stages, declared as DATA. INTEGRATION.md: "Stages / tabs" is a registry — one entry lights up the
@@ -25,13 +28,19 @@ const STAGE_MOUNT = { design: mountSketchStage, toolpath: mountToolpathStage, ex
 
 /**
  * Build the nav buttons AND the stage bodies from STAGES into `nav` / `stagesHost`, pre-mount the Design sketcher and the hidden Draw host,
- * and show the persisted stage (else the first). Returns { showStage, currentStageId }.
+ * and show the persisted stage (else the first). Returns { showStage, currentStageId, history, designView } (history: the Undo / Redo router; designView(): the Design stage's { svg, state } while it shows, else null: the footer's Recenter, TASK 618).
  * bufferSeams: the autosave buffer's own seams (`store`, `doc`, `win` of createDocumentBuffer), handed to the Design stage; the page passes none
  * (the shared IndexedDB store, its own document and window), the node test kit passes its profile's in-memory store.
  */
 export function mountStages({ nav, stagesHost, bufferSeams }) {
   const mounted = {};
   let currentStageId = null; // the showing stage; drives the isActive gate + which stage gets onLeave on a switch
+  // TASK 618: the stage that owns Undo / Redo: Design = the shared sketch history, Toolpath / Export = history.js (TASK 444b: one keystroke, one history)
+  const history = createHistoryRouter({ current: () => {
+    if (currentStageId === 'design') return mounted.design && mounted.design.controller ? sketchHistory(mounted.design.controller.state) : null;
+    return (currentStageId === 'toolpath' || currentStageId === 'export') ? penHistory : null;
+  } });
+  const designView = () => (currentStageId === 'design' && mounted.design && mounted.design.controller ? { svg: mounted.design.controller.svg, state: mounted.design.controller.state } : null);
   const btns = new Map();
   const views = new Map();
   // Build the nav buttons AND the stub stage bodies BY ITERATING STAGES (declaration-first — nothing hardcoded).
@@ -78,6 +87,7 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
       if (!mounted[id]) mounted[id] = mounter(views.get(id), { isActive: () => currentStageId === id, navigate: (to) => showStage(to), bufferSeams }) || {};
       if (mounted[id].onEnter) mounted[id].onEnter();
     }
+    history.refresh();
   }
 
   // UNIFY-6: pre-mount the DESIGN sketcher at startup so the SHARED view (state.coreSketch.view) exists BEFORE the
@@ -94,11 +104,11 @@ export function mountStages({ nav, stagesHost, bufferSeams }) {
   drawHost.id = 'stage-draw';
   drawHost.hidden = true;
   stagesHost.appendChild(drawHost);
-  mounted.draw = mountDrawStage(drawHost, { isActive: () => currentStageId === 'toolpath' || currentStageId === 'export', navigate: (to) => showStage(to) }) || {};
+  mounted.draw = mountDrawStage(drawHost, { isActive: () => currentStageId === 'toolpath' || currentStageId === 'export', navigate: (to) => showStage(to), history }) || {};
 
   // Initial stage: the persisted one if still valid, else the first.
   let initial = STAGES[0].id;
   try { const saved = localStorage.getItem(STAGE_KEY); if (saved && views.has(saved)) initial = saved; } catch (_) {}
   showStage(initial);
-  return { showStage, currentStageId: () => currentStageId };
+  return { showStage, currentStageId: () => currentStageId, history, designView };
 }

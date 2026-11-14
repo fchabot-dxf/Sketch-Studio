@@ -9,7 +9,7 @@
 //  - every other control on the screen (header, tab strip, canvas overlays, the SKETCHES box) is inside the viewport, 44 px or more, and not covered
 //    (the point at its centre is the control). Pen Plotter's own Design panel (Document, colours, checkboxes) is checked too (TASK 608);
 //  - the page does not scroll; the SKETCHES box starts collapsed, a tap expands it inside the canvas, a tap collapses it;
-//  - SketchStudio: the status bar (Log, Tune, the VIEW readout) is folded away; Log is in the menu and opens the log; Export is in the menu, opens the
+//  - SketchStudio: the status bar keeps only its icon buttons (Undo, Redo, Construction, Recenter, TASK 618), floating over the canvas's bottom edge; Log, Tune and the mag lens are folded away; Log is in the menu and opens the log; Export is in the menu, opens the
 //    Export view, and the header's Design button comes back.
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './cdp-browser.js';
@@ -145,7 +145,8 @@ export async function runPhoneLandscape(hostName) {
 
         if (h.name === 'sketchstudio') {
           // the status bar folds away; Log and Export are in the menu
-          assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('footer')).display`), 'none', tag + 'the status bar is folded away (Log, Tune, VIEW readout)');
+          assert.strictEqual(await evalJs(`['#status-diag-slot', '#btn-mag-toggle', '#btn-tuning-toggle'].map((s) => document.querySelector(s) && getComputedStyle(document.querySelector(s)).display).join()`), 'none,none,none', tag + 'Log, Tune and the mag lens are folded away');
+          assert.strictEqual(await evalJs(`!!document.getElementById('viewport-size')`), false, tag + 'no VIEW readout');
           assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design'], tag + 'the header has one mode button: Design');
           assert.strictEqual(await evalJs(`!!document.getElementById('save-status')`), false, tag + 'no "Saved" text');
           await tap(await rectOf(`document.querySelector('.sk-sidebar-btn')`)); await sleep(300);

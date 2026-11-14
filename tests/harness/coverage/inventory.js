@@ -180,7 +180,7 @@ function buildEditFeatures() {
   f('break', must('packages/core/break.js', /^export function breakShape/));
   f('polygon', must('packages/core/shapes.js', /^export function makePolygon/));
   for (const [k, v] of Object.entries(RECT_MODES)) f('rect ' + v, must('packages/core/constants.js', new RegExp(`^  ${k}:`)));
-  f('construction toggle', must('apps/sketchstudio/ui/ui-manager.js', /s\.isConstruction = !s\.isConstruction/));
+  f('construction toggle', must('packages/ui/app-footer.js', /s\.isConstruction = !s\.isConstruction/));
   f('lock / fix', must('packages/ui/input-manager.js', /^export function toggleFixedSelection/));
   f('delete constraints', must('packages/core/delete-manager.js', /^export function deleteConstraints/));
   f('delete shapes', must('packages/core/delete-manager.js', /^export function deleteShapes/));

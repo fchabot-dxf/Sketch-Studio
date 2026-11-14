@@ -38,7 +38,7 @@ export function mountEdit({ isActive, getHostData, applyHost, session = null }) 
   bodyEl.hidden   = false;
   emptyEl.style.display = 'none';
   // the Edit tab's SKETCHES browser floats over the canvas's top-left (#design-body); the phone-width drawer button goes in the app header
-  sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine, toggleHost: document.querySelector('.tr-header') });
+  sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine });
   sidePanel.drawer.toggleEl.style.display = 'none'; // shown only while the Edit tab shows (startEdit / stopEdit)
 
   docBuffer = createDocumentBuffer({

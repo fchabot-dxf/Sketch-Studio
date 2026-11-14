@@ -8,6 +8,7 @@ import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
+import { undoRedoKeyAction } from '#ui/history-control.js';
 import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
@@ -79,10 +80,6 @@ export const defaultInputCtx = {
   getMagEls() {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return {};
     return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content'), btn: document.getElementById('btn-mag-toggle') };
-  },
-  setViewportSize(text) {
-    const el = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('viewport-size') : null;
-    if (el) el.innerText = text;
   },
   getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
   // P4b TOOLBAR/STATUS (app-specific; a host with its own toolbar supplies these, or omits to skip the sync).
@@ -1080,11 +1077,6 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
                     try { updateHover(svg, sx, sy, state); } catch(_) { }
                 }
 
-                // Update viewport size display (ancillary P4a: host's setViewportSize; default writes #viewport-size)
-                if(state.view) {
-                     const r = svg.getBoundingClientRect();
-                     inputCtx.setViewportSize?.(`VIEW: ${Math.round(state.view.w)} x ${Math.round(state.view.h)} / ${Math.round(r.width)}px x ${Math.round(r.height)}px`);
-                }
             } catch(_) { }
         });
     } catch(_) { }
@@ -1140,18 +1132,29 @@ export function updateViewBox(svg, view) {
     view.h = view.w / (rect.width / rect.height);
     svg.setAttribute('viewBox', `${view.x - view.w/2} ${view.y - view.h/2} ${view.w} ${view.h}`);
 
-    inputCtx.setViewportSize?.(`VIEW: ${Math.round(view.w)} x ${Math.round(view.h)} / ${Math.round(rect.width)}px x ${Math.round(rect.height)}px`);
 }
 
-// TASK 463: THE one mapping of the history keys (Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y redo), shared by this
-// handler and by a host stage that has no sketcher input layer (Shaper's Prepare).
-export function undoRedoKeyAction(e) {
-    const mod = e.ctrlKey || e.metaKey;
-    if (!mod) return null;
-    const z = e.key === 'z' || e.key === 'Z';
-    if (z && !e.shiftKey) return 'undo';
-    if ((z && e.shiftKey) || e.key === 'y' || e.key === 'Y') return 'redo';
-    return null;
+// TASK 618: the history key mapping moved to #ui/history-control.js (one mapping for every host); re-exported here for its callers.
+export { undoRedoKeyAction };
+
+const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
+const sketchHistories = new WeakMap();
+/** TASK 618: the sketch state as a history source (history-control.js): THE Undo / Redo of the Design surface, called by the Ctrl+Z / Ctrl+Y keys
+ *  below and by the header buttons. TASK 549 (Fusion, measured): undo while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the
+ *  uncommitted rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT undo undoes one element. */
+export function sketchHistory(state) {
+    let h = sketchHistories.get(state);
+    if (!h) {
+        h = {
+            undo: () => { if (state.active && DRAWING_TOOLS.includes(state.currentTool)) handleEscape(state); else state.undo(); },
+            redo: () => state.redo(),
+            canUndo: () => state.canUndo(),
+            canRedo: () => state.canRedo(),
+            subscribe: (fn) => state.addHistoryListener(fn),
+        };
+        sketchHistories.set(state, h);
+    }
+    return h;
 }
 
 function setupKeyboardShortcuts(state, opts = {}) {
@@ -1237,15 +1240,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
         if (e.key === 'Delete' || e.key === 'Backspace') { handleDelete(state); e.preventDefault(); }
         if (e.key === 'Escape') { handleEscape(state); e.preventDefault(); }
         const histAction = undoRedoKeyAction(e);
-        if (histAction === 'undo') {
-            // TASK 549 (Fusion, measured): Ctrl+Z while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the uncommitted
-            // rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT Ctrl+Z undoes one element.
-            const DRAWING = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
-            if (state.active && DRAWING.includes(state.currentTool)) handleEscape(state);
-            else state.undo();
-            e.preventDefault();
-        }
-        else if (histAction === 'redo') { state.redo(); e.preventDefault(); }
+        if (histAction) { sketchHistory(state)[histAction](); e.preventDefault(); } // TASK 618: the same function the header buttons call
 
         // Toggle fixed on selection
         if (e.key.toLowerCase() === 'f') {

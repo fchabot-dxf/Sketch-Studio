@@ -73,7 +73,7 @@ async function cdpRun(cdp, url) {
       ['header tabs = design (Export is in the menu, TASK 602)', c.headerTabs === 'design', c.headerTabs],
       ['header Style button', c.hasStyle === true, c.hasStyle],
       ['header Debug action', c.hasDebug === true, c.hasDebug],
-      ['ribbon groups = Create,Modify,Inspect,Constrain,Edit,Actions', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Edit,Actions', c.ribbonGroups],
+      ['ribbon groups = Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups],
       ['canvas visible (Design default)', c.canvasVisible === true, c.canvasVisible],
       ['Export tab shows the export view', c.exportShows === true, c.exportShows],
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],

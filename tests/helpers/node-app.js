@@ -189,6 +189,8 @@ const HOSTS = {
     const restored = buffer.restore(); buffer.start(); // main.js does not wait for the restore: setupInput runs while it is still reading the store
     setupInput(svg, state); // (its 50 px per unit initial zoom applies to the view BEFORE the restore frames the drawing, as on the page)
     await restored;
+    const { createHistoryRouter } = await import('#ui/history-control.js'); const { mountAppFooter } = await import('#ui/app-footer.js'); const { sketchHistory } = await import('#ui/input-manager.js');
+    mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true }); // main.js: the footer (TASK 618)
     const importer = D.createStudioImporter({ state, svg }); importer.mountDrop(); // main.js: the file menu's entry (the sidebar) + the drop on the canvas
     const browser = designBrowser ? D.mountStudioBrowser({ svg, state, engine }) : null; // main.js: the SKETCHES browser; the render loop ticks it first
     const frame = () => { if (browser) browser.tick(); D.studioFrame({ engine, state, svg, worldGroup, ribbon }); runFrames(1); }; // the page's loop is its own rAF tick; the app's other rAF callbacks (the value box takes focus in one) run in the same step (override 2, task 580)
@@ -205,7 +207,8 @@ const HOSTS = {
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
-    const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(),
+    const history = M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() });
+    const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history,
       panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js ensureSketch, run by the mode router on the first entry into Design, with the Design view already showing: the sketch, the ribbon, the buffer
@@ -222,7 +225,8 @@ const HOSTS = {
       buffer.restore(); buffer.start();
     };
     modes = M.createModeRouter({ views: M.findViews(doc), modeBtns: [...doc.querySelectorAll('.mode-btn')], exploreActions: doc.getElementById('explore-actions'),
-      getController: () => controller, ensureSketch, enter: { prepare: prepare.enter } });
+      getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: () => history.refresh() });
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: history }); // main.js: the footer (TASK 618)
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
@@ -246,6 +250,7 @@ const HOSTS = {
     // (the Design stage's svg, and the plotter canvas the other stages borrow), none while the stage that holds it is hidden
     layoutById(win, { 'design-canvas': MEASURED_CANVAS_RECT.penplotter, canvasWrap: MEASURED_PLOTTER_WRAP_RECT, canvas: MEASURED_PLOTTER_WRAP_RECT });
     const router = stages.mountStages({ nav: doc.getElementById('mode-nav'), stagesHost: doc.getElementById('stages'), bufferSeams: { store, doc, win } }); // the buffer's own seams, as for the other hosts
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history }); // main.js: the footer (TASK 618)
     const svg = doc.getElementById('design-canvas');
     const controller = win.__sketch.controller; // the stage's own dev / test seam (sketch-stage.js): the sketcher it mounted
     const buffer = sketch.getDocBuffer();

@@ -247,7 +247,7 @@
     console.log('✓ sketch-state canUndo/canRedo and notification verified');
   }
 
-  console.log('--- 2. Testing tool-ribbon built-in Edit group & button enable/disable ---');
+  console.log('--- 2. Testing the ribbon has no Undo / Redo (TASK 618) and the shared header control enables / disables live ---');
   {
     const engine = createEngine();
     engine.init();
@@ -255,52 +255,43 @@
 
     const ribbonContainer = new MockElement('div');
     globalThis.document.body.appendChild(ribbonContainer);
-
-    const ribbon = createToolRibbon({
-      state,
-      extraGroups: [{ label: 'Actions', buttons: [{ id: 'btn-clear', label: 'Clear All' }] }]
-    });
+    const ribbon = createToolRibbon({ state, extraGroups: [{ label: 'Actions', buttons: [{ id: 'btn-clear', label: 'Clear All' }] }] });
     ribbon.render(ribbonContainer);
-
-    const undoBtn = ribbonContainer.querySelector('#btn-undo');
-    const redoBtn = ribbonContainer.querySelector('#btn-redo');
-    const clearBtn = ribbonContainer.querySelector('#btn-clear');
-
-    assert(undoBtn !== null, '#btn-undo must exist in the ribbon');
-    assert(redoBtn !== null, '#btn-redo must exist in the ribbon');
-    assert(clearBtn !== null, '#btn-clear must exist in extra group');
-
-    // Check group labels
+    assert(ribbonContainer.querySelector('#btn-undo') === null, 'the ribbon has no Undo (it is in the header)');
+    assert(ribbonContainer.querySelector('#btn-redo') === null, 'the ribbon has no Redo (it is in the header)');
+    assert(ribbonContainer.querySelector('#btn-clear') !== null, '#btn-clear must exist in extra group');
     const groupLabels = ribbonContainer.querySelectorAll('.sk-ribbon-group-label').map(el => el.textContent);
-    assert(groupLabels.includes('Edit'), `Ribbon must include built-in 'Edit' group, got: ${groupLabels.join(',')}`);
-    assert(groupLabels.includes('Actions'), `Ribbon must include host 'Actions' group, got: ${groupLabels.join(',')}`);
+    assert(!groupLabels.includes('Edit'), 'no Edit group in the ribbon');
+    ribbon.destroy();
 
-    // Initially both buttons must be disabled
+    const { createHistoryRouter, mountHistoryButtons } = await import('../packages/ui/history-control.js');
+    const { sketchHistory } = await import('../packages/ui/input-manager.js');
+    const header = new MockElement('header');
+    header.insertBefore = (el) => header.appendChild(el);
+    globalThis.document.body.appendChild(header);
+    mountHistoryButtons({ router: createHistoryRouter({ current: () => sketchHistory(state) }), header });
+    const undoBtn = header.querySelector('#btn-undo');
+    const redoBtn = header.querySelector('#btn-redo');
+    assert(undoBtn !== null && redoBtn !== null, 'the header has Undo and Redo');
+    assert(undoBtn.title === 'Undo (Ctrl+Z)' && redoBtn.title === 'Redo (Ctrl+Y)', 'titles');
     assert(undoBtn.disabled === true, 'undoBtn must be disabled initially');
     assert(redoBtn.disabled === true, 'redoBtn must be disabled initially');
 
-    // Add state change
     state.saveState();
     state.joints.set('a', { x: 0, y: 0 });
-
-    // The ribbon automatically updates via state history listener
     assert(undoBtn.disabled === false, 'undoBtn must be enabled after saveState()');
     assert(redoBtn.disabled === true, 'redoBtn must be disabled after saveState()');
 
-    // Click undo button
     undoBtn.dispatchEvent({ type: 'click' });
     assert(undoBtn.disabled === true, 'undoBtn must be disabled after clicking undo');
     assert(redoBtn.disabled === false, 'redoBtn must be enabled after clicking undo');
     assert(!state.joints.has('a'), 'Joint "a" must be undone');
 
-    // Click redo button
     redoBtn.dispatchEvent({ type: 'click' });
     assert(undoBtn.disabled === false, 'undoBtn must be enabled after clicking redo');
     assert(redoBtn.disabled === true, 'redoBtn must be disabled after clicking redo');
     assert(state.joints.has('a'), 'Joint "a" must be restored via redo');
-
-    ribbon.destroy();
-    console.log('✓ tool-ribbon Edit group and live enable/disable verified');
+    console.log('✓ ribbon has no Undo / Redo; header Undo / Redo live enable/disable verified');
   }
 
   console.log('--- 3. Testing shared Redo shortcuts in input-manager.js ---');

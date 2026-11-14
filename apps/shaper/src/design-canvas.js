@@ -60,5 +60,5 @@ export function applyShaperUnitDefault() {
 
 /** TASK 610: the floating SKETCHES browser over Shaper's Design canvas (main.js buildDesignUI did this inline): the card goes in #design-body, the phone drawer's button in the toolbar. */
 export function mountShaperBrowser({ state, engine }) {
-  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, toggleHost: document.querySelector('header.toolbar') });
+  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine });
 }

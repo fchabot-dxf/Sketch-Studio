@@ -161,7 +161,7 @@ function initApp(){
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
     leading: mountProjectSidebar({
-      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importDrawing, documentTabs: true, // TASK 587: the document tab strip above the header // TASK 566: "Import SVG / DXF…" in the file menu
+      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importDrawing, documentTabs: true, // TASK 587: the document tab strip (TASK 602: below the header) // TASK 566: "Import SVG / DXF…" in the file menu
       hostActions: [
         { id: 'export', label: 'Export…', icon: SIDEBAR_ICONS.download, onClick: () => route('export') }, // TASK 602 (owner): Export left the header for this menu
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },

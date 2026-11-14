@@ -72,12 +72,14 @@ export function safeUpdatePreview(state, type, jointIds, pt, opts) {
  * ({ dual: { kind, labels, separator, digits } } for two fields, { single: { field } } for one) and calls these:
  * openCreationBoxes on the first click (the boxes show at once, beside the cursor, the first field focused: a digit typed now goes in it),
  * followCreationBoxes on every move (the box follows the cursor and each field shows the live value unless the user typed in it),
+ * On TOUCH (pointerType 'touch') the boxes show but are NOT focused (a focused box pops the phone keyboard on every click and shrinks the viewport); tapping a box focuses it; mouse and pen auto-focus.
  * Esc inside a box is NOT handled here: the box raises 'liveDimensionCancelled' and input-manager runs the canvas Esc (handleEscape) for it.
  */
 export function openCreationBoxes(e, box, values) {
     const x = e.clientX + 15, y = e.clientY + 15;
-    if (box.dual) showDualInput(x, y, values[0], values[1], box.dual);
-    else showSingleInput(x, y, values[0], box.single.field);
+    const focus = e.pointerType !== 'touch';
+    if (box.dual) showDualInput(x, y, values[0], values[1], { ...box.dual, focus });
+    else showSingleInput(x, y, values[0], box.single.field, null, focus);
 }
 export function followCreationBoxes(e, values) {
     updateInputPosition(e.clientX, e.clientY);

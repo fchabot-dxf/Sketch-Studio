@@ -52,7 +52,7 @@ await (async () => {
 
       // 1. All runtime numeric inputs must have computed display === 'none'
       const displays = await evalJs(`(() => {
-        return ['dimInput', 'dualInput', 'live-dim-width', 'live-dim-height', 'live-dim-length', 'live-dim-angle'].map(id => {
+        return ['dimInput', 'dualInput', 'live-dim-width', 'live-dim-height'].map(id => {
           const el = document.getElementById(id);
           return { id, display: el ? getComputedStyle(el).display : 'missing', inline: el ? el.style.display : 'missing' };
         });
@@ -234,7 +234,7 @@ await (async () => {
   assert(styleEls[0].textContent.includes('var(--fusion-orange, #EA580C)'), 'injected CSS must include fallback #EA580C for non-SketchStudio hosts');
   assert(styleEls[0].textContent.includes('.sk-dual-input.hidden { display: none; }'), 'injected CSS must hide .sk-dual-input.hidden');
 
-  for (const id of ['dimInput', 'dualInput', 'live-dim-width', 'live-dim-height', 'live-dim-length', 'live-dim-angle']) {
+  for (const id of ['dimInput', 'dualInput', 'live-dim-width', 'live-dim-height']) {
     const el = byId.get(id);
     assert(el, `expected #${id} to be created`);
     assert(el.classList.contains('hidden'), `#${id} must carry .hidden when idle`);

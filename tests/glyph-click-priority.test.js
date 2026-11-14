@@ -1,4 +1,8 @@
 (async () => {
+  const fs = await import('node:fs'); // task 603: a glyph is drawn (and picked) only with the real sheet loaded
+  const { loadGlyphSheet } = await import('#ui/glyph-sheet.js');
+  const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
+  await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
   const { draw } = await import('../packages/ui/svg-renderer.js');
   const { handleSelectionPointerDown } = await import('#ui/input-handlers/selection-tools.js');
   const { CONSTRAINT_TYPES, TOOL_MODES } = await import('#core/constants.js');
@@ -24,8 +28,8 @@
   const gp = constraints[0].glyphPos;
   assert(gp, 'Constraint glyph position should be present after draw');
 
-  // Simulate pointerdown directly on the glyph position; expect the glyph to be selected, and no shape selected
-  const e = { clientX: gp.x, clientY: gp.y, pointerId: 1, shiftKey: false, target: { closest: () => null }, stopPropagation: () => {}, preventDefault: () => {} };
+  // Simulate pointerdown on the coincident glyph's drawn bar (5 px right, 8 px above its centre; task 603: the pick follows the drawn strokes, its centre is empty); expect the glyph to be selected, and no shape selected
+  const e = { clientX: gp.x + 5, clientY: gp.y - 8, pointerId: 1, shiftKey: false, target: { closest: () => null }, stopPropagation: () => {}, preventDefault: () => {} };
   const handled = handleSelectionPointerDown(e, svg, state, null, null, null);
   // After handling, selectedConstraints should include the constraint
   const found = Array.from(state.selectedConstraints).some(c => c === constraints[0]);

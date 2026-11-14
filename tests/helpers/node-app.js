@@ -389,3 +389,11 @@ export async function open({ host = 'sketchstudio', profile, framesPerEvent = 1,
   current = app;
   return app;
 }
+
+// Task 603: a glyph is picked only where its icon is drawn, so a test that picks glyphs needs the sheet. Override 4 above leaves the sheet
+// unloaded (the relative URL cannot fetch); this loads the real one from disk. Call it BEFORE open() (the hosts' own load then reuses it).
+export async function loadGlyphSheetFromDisk() {
+  const { loadGlyphSheet } = await import('#ui/glyph-sheet.js');
+  const { DOMParserShim } = await import('./xml-dom-shim.js');
+  return loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
+}

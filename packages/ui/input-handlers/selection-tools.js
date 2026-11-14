@@ -236,7 +236,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     // THE select tool's pick (hover-manager selectPick, task 588: the hover uses the same function, so a click selects exactly what the hover
     // lit): a joint in snap reach, else a glyph the pointer is ON (its drawn badge + 3 px: THE glyph pick, the right click's too), else a shape.
     // A pointer merely NEAR a glyph (on the line beside it) picks the line.
-    const pick = selectPick(svg, state, hitJoint, hitShape, e.clientX, e.clientY);
+    const pick = selectPick(svg, state, hitJoint, hitShape, e.clientX, e.clientY, e.pointerType === 'touch' || !!e.isTouch);
     // TASK 588: a press on a member of a selection of several shapes / points (no Shift) MOVES the whole selection (startGroupDrag); a
     // release without a move is the click it was before (the one entity selected). The second press of a double click on a shape selects its
     // connected chain (selectChain). Both are decided before the selection is cleared.

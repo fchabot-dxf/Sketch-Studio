@@ -5,10 +5,10 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, pickableConstraints, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
-import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
+import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
@@ -18,7 +18,7 @@ import { toggleDriving } from '#ui/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
-import { updateHover, glyphAt } from '#ui/hover-manager.js';
+import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
@@ -32,7 +32,6 @@ import { createTouchDoneButton } from '#ui/touch-done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
-import { handleArcKeyDown } from '#ui/input-handlers/arc-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
@@ -442,7 +441,6 @@ function toolSnap(state, svg, pt, excludeIds, boost) {
 function updateSnapTarget(e, svg, state) {
     const isTouch = e.isTouch || e.pointerType === 'touch';
     const snapBoost = snapBoostFor(isTouch);
-    const constraintTol = 20 * snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
     const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
@@ -472,7 +470,7 @@ function updateSnapTarget(e, svg, state) {
         // Check for constraints only when not dragging
         let hitConstraint = null;
         if (!state.drag) {
-            hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, e.clientX, e.clientY, constraintTol);
+            hitConstraint = constraintAt(svg, state, e.clientX, e.clientY, isTouch); // THE constraint pick: a glyph's drawn icon, else a dimension's label (task 603)
         }
 
         const isDrawing = isDrawingTool;
@@ -679,8 +677,7 @@ function handlePointerDown(e, svg, state) {
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
-    const constraintTol = 20 * snapBoostFor(isTouch);
-    try { hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, screenX, screenY, constraintTol); } catch(_) { hitConstraint = null; }
+    try { hitConstraint = constraintAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){
@@ -1164,7 +1161,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
     // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
     window.addEventListener('liveDimensionCancelled', () => {
         if (!isActiveFn()) return;
-        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) handleEscape(state);
+        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
     });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
@@ -1229,9 +1226,6 @@ function setupKeyboardShortcuts(state, opts = {}) {
         }
         if (state.currentTool === TOOL_MODES.CIRCLE) {
             try{ if (handleCircleKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
-        }
-        if (state.currentTool === TOOL_MODES.ARC) {
-            try{ if (handleArcKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
         }
         if (state.currentTool === TOOL_MODES.BEZIER) {
             try{ if (handleBezierKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; } }catch(_){ }
@@ -1340,10 +1334,10 @@ function pickContextTarget(svg, state, e) {
         if (c && !isConstraintInert(inertEntities(state), c)) return { kind: 'dimension', constraint: c };
     }
     // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
-    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the glyph as drawn plus a 3 px margin, the same on touch; task 588: the
+    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the drawn icon's box plus a small margin, a larger one on touch; task 588: the
     // left click and the hover use it too); a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
     // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = glyphAt(svg, state, e.clientX, e.clientY);
+    const glyph = glyphAt(svg, state, e.clientX, e.clientY, e.pointerType === 'touch');
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     const scene = pickScene(state);

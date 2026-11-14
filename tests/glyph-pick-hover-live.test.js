@@ -1,8 +1,8 @@
 // tests/glyph-pick-hover-live.test.js -- TASK 588 in the REAL SketchStudio (headless, REAL mouse and keys via CDP): THE glyph pick and its look.
 // Owner, 2026-11-13: two clicks on a rectangle's vertical edge, 14.3 and 15.9 px from its V glyph, selected the glyph, never the line (the left
 // click took any visible glyph within 24 px). Now left click, hover and right click share ONE rule (hover-manager glyphAt): a glyph is picked
-// only when the pointer is ON the glyph as drawn (+ 3 px), and HOVER = CLICK (hover-manager selectPick).
-//  1. the outlined glyph (the icon, 10 px radius): the line 15 px from the glyph centre hovers BLUE and a click selects the LINE; a double
+// only when the pointer is ON the drawn icon (its box + 2 px; task 603), and HOVER = CLICK (hover-manager selectPick).
+//  1. the outlined glyph (the icon box): the line 15 px from the glyph centre hovers BLUE and a click selects the LINE; a double
 //     click there selects the rectangle's chain.
 //  2. the glyph hovered: the glyph (a filled warm halo behind the icon) and the lines its constraint binds light in the glyph-hover colour (--sk-glyph-hover), no line in blue
 //     (--sk-selection); a click selects the CONSTRAINT: the glyph and its lines in --sk-glyph-selected, no blue.
@@ -33,17 +33,18 @@ await (async () => {
     const url = `http://127.0.0.1:${port}/apps/sketchstudio/index.html`;
     const mouse = (type, x, y, buttons, clickCount) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : (clickCount || 1) });
     // per line: its colour token (the var() its stroke uses); the V glyph's centre (world) and the tokens its markup uses; the canvas transform
-    const geo = () => evalJs(`(() => { const ls = {}; const m = document.querySelector('#svgCanvas .shape-elem').getScreenCTM();
+    const geo = (ct = 'vertical', cj0 = 'r2', lineId = 'rE2') => evalJs(`(() => { const ls = {}; const m = document.querySelector('#svgCanvas .shape-elem').getScreenCTM();
       const tok = (s) => ((s || '').match(/var\\((--sk-[a-z-]+)/) || [])[1] || null;
       for (const e of document.querySelectorAll('#svgCanvas line.shape-elem')) ls[e.dataset.shapeId] = tok(e.getAttribute('style'));
-      const g = document.querySelector('#svgCanvas g.constraint-glyph[data-ctype="vertical"][data-cj0="r2"]');
+      const g = document.querySelector('#svgCanvas g.constraint-glyph[data-ctype="${ct}"][data-cj0="${cj0}"]');
       const t = g && (g.getAttribute('transform') || '').match(/translate\\(([-0-9.e]+),([-0-9.e]+)\\)/);
       // the halo: the filled circle(s) drawn right before the glyph, at its centre (the hover / selected halo)
       const halo = []; for (let e = g && g.previousElementSibling; e && e.tagName === 'circle'; e = e.previousElementSibling) halo.push(e.outerHTML);
       const glyphToks = g ? [...new Set((g.outerHTML + halo.join('')).match(/--sk-glyph-(hover|selected)/g) || [])] : [];
       const haloToks = [...new Set(halo.filter((h) => h.includes('fill:var(--sk-glyph')).join('').match(/--sk-glyph-(hover|selected)/g) || [])];
-      const lineX = (() => { const e = document.querySelector('#svgCanvas line.shape-elem[data-shape-id="rE2"]'); return +e.getAttribute('x1'); })();
-      return JSON.stringify({ ls, glyph: t ? [+t[1], +t[2]] : null, glyphToks, haloToks, lineX, m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
+      const lineX = (() => { const e = document.querySelector('#svgCanvas line.shape-elem[data-shape-id="${lineId}"]'); return +e.getAttribute('x1'); })();
+      const lineY = (() => { const e = document.querySelector('#svgCanvas line.shape-elem[data-shape-id="${lineId}"]'); return +e.getAttribute('y1'); })();
+      return JSON.stringify({ ls, glyph: t ? [+t[1], +t[2]] : null, glyphToks, haloToks, lineX, lineY, m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
     const toS = (g, x, y) => ({ x: g.m[0] * x + g.m[2] * y + g.m[4], y: g.m[1] * x + g.m[3] * y + g.m[5] });
     const blueLines = (g) => Object.keys(g.ls).filter((id) => g.ls[id] === '--sk-selection' || g.ls[id] === '--sk-hover').sort();
     const linesIn = (g, token) => Object.keys(g.ls).filter((id) => g.ls[id] === token).sort();
@@ -69,15 +70,15 @@ await (async () => {
       assert.ok(p, 'an empty point of the canvas, off the drawing and off any panel');
       await mouse('mouseMoved', p.x, p.y, 0); await sleep(250); };
     const clearSel = async (g) => { await away(g); await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(700); };
-    const open = async () => {
+    const open = async (offset = 16, ct, cj0, lineId, symbol = 20) => {
       await navigate(url, 8000); await waitForApp('svgCanvas');
-      await evalJs(`(async () => { localStorage.clear(); localStorage.setItem('sketch-studio-settings', JSON.stringify({ GRID_MAGNETISM: 0.001, GLYPH_OFFSET_PX: 16 })); const dbs = indexedDB.databases ? await indexedDB.databases() : []; await Promise.all(dbs.map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name); q.onsuccess = q.onerror = q.onblocked = () => r(); }))); return true; })()`);
+      await evalJs(`(async () => { localStorage.clear(); localStorage.setItem('sketch-studio-settings', JSON.stringify({ GRID_MAGNETISM: 0.001, GLYPH_OFFSET_PX: ${offset}, GLYPH_SYMBOL_SIZE_PX: ${symbol} })); const dbs = indexedDB.databases ? await indexedDB.databases() : []; await Promise.all(dbs.map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name); q.onsuccess = q.onerror = q.onblocked = () => r(); }))); return true; })()`);
       await navigate(url, 8000); await waitForApp('svgCanvas');
       await evalJs(`import('/packages/ui/project-store.js').then(async (m) => { const s = m.getProjectStore(); const d = await s.newDesign('Task 588 glyph', { app: 'sketchstudio' }); await s.save(${JSON.stringify(DOC)}, { app: 'sketchstudio', id: d.id }); return d.id; })`);
       await navigate(url, 8000); await waitForApp('svgCanvas'); await sleep(600);
       await evalJs(`document.getElementById('tool-select').click()`); await sleep(150);
-      const g = await geo();
-      assert.ok(g.glyph, 'the V glyph of rE2 is drawn');
+      const g = await geo(ct, cj0, lineId);
+      assert.ok(g.glyph, 'the glyph is drawn');
       const G = toS(g, ...g.glyph), Lx = toS(g, g.lineX, g.glyph[1]).x;
       const h = Math.abs(G.x - Lx);
       // the point of the line rE2 at distance d px from the glyph centre (pointer events land on whole pixels: d is re-measured)
@@ -87,7 +88,7 @@ await (async () => {
 
     // ---- 1 / 2: the outlined glyph (the owner's case)
     {
-      const { g, G, h, at } = await open();
+      const { g, G, h, at } = await open(16, "vertical", "r2", "rE2");
       assert.ok(h < 15, 'the glyph sits close beside its line (' + h.toFixed(1) + ' px)');
       const p = at(15);
       out.push(`glyph ${h.toFixed(1)} px beside rE2, pointer ${p.d.toFixed(1)} px from its centre`);
@@ -129,6 +130,35 @@ await (async () => {
       assert.deepStrictEqual(linesIn(s, '--sk-glyph-selected'), BOUND, 'its lines in the glyph-selected colour');
       assert.deepStrictEqual(blueLines(s), [], 'no blue on its lines');
       await shot('588-selected-glyph.png', G);
+    }
+    // ---- 3 (task 603): a glyph BESIDE its line, inside the old pick disc. At Glyph Icon Size 40 (also: the size setting scales the box) the old disc was 23 px; the H glyph of rE1 sits ~14 px off
+    // its line; the pointer on the line right under the icon is beside the thin icon, so it is on the LINE (hover and click); on the icon it is the glyph (hover and click).
+    {
+      const { g, G } = await open(16, 'horizontal', 'r1', 'rE1', 40);
+      const P = toS(g, g.glyph[0], g.lineY); P.x = Math.round(P.x); P.y = Math.round(P.y);
+      const d = Math.hypot(P.x - G.x, P.y - G.y);
+      out.push(`3. H glyph, pointer on its line ${d.toFixed(1)} px from the icon centre (inside the old 23 px circle of a 40 px glyph)`);
+      assert.ok(d > 12 && d < 23, 'the line point is inside the old 23 px circle and off the thin icon (' + d + ')');
+      await mouse('mouseMoved', P.x, P.y, 0); await sleep(300);
+      let s = await geo('horizontal', 'r1', 'rE1');
+      out.push(`   line point hovered: blue [${blueLines(s).join(' ')}], glyph tokens [${s.glyphToks.join(' ')}]`);
+      assert.deepStrictEqual(blueLines(s), ['rE1'], 'hover beside the thin icon lights the LINE');
+      assert.deepStrictEqual(s.glyphToks, [], 'not the glyph');
+      await shot('603-hover-beside-icon.png', G);
+      await mouse('mousePressed', P.x, P.y, 1, 1); await sleep(60); await mouse('mouseReleased', P.x, P.y, 0, 1); await sleep(200);
+      await away(g); s = await geo('horizontal', 'r1', 'rE1');
+      assert.deepStrictEqual(blueLines(s), ['rE1'], 'the click selects the LINE');
+      assert.deepStrictEqual(s.glyphToks, [], 'not the glyph');
+      await clearSel(g);
+      await mouse('mouseMoved', G.x, G.y, 0); await sleep(300);
+      s = await geo('horizontal', 'r1', 'rE1');
+      out.push(`   icon hovered: glyph tokens [${s.glyphToks.join(' ')}], blue [${blueLines(s).join(' ')}]`);
+      assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-hover'], 'hover on the icon lights the glyph');
+      assert.deepStrictEqual(blueLines(s), [], 'no blue line');
+      await shot('603-hover-on-icon.png', G);
+      await mouse('mousePressed', G.x, G.y, 1, 1); await sleep(60); await mouse('mouseReleased', G.x, G.y, 0, 1); await sleep(200);
+      await away(g); s = await geo('horizontal', 'r1', 'rE1');
+      assert.deepStrictEqual(s.glyphToks, ['--sk-glyph-selected'], 'the click on the icon selects the glyph');
     }
     console.log(out.join('\n'));
     console.log('screenshots ' + md5s.join(' '));

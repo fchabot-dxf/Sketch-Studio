@@ -10,7 +10,7 @@ const app = await open({ host: 'sketchstudio' });
 const errors = [];
 app.window.addEventListener('error', (e) => errors.push(e.error ? String(e.error.stack || e.error) : String(e.message)));
 const events = [];
-for (const t of ['live-line-commit', 'live-rect-commit', 'liveDimensionApplied']) app.window.addEventListener(t, () => events.push(t));
+for (const t of ['live-rect-commit', 'liveDimensionApplied']) app.window.addEventListener(t, () => events.push(t));
 let failed = null;
 try {
   const st = app.state;
@@ -34,7 +34,7 @@ try {
   assert.strictEqual(dims().length, 1, '1: one dimension');
   assert.strictEqual(st.constraints.length, n0, '1: the Enter added no constraint of its own (the dimension was placed before)');
   assert(Math.abs(dims()[0].value - 200) < 1e-6, '1: value 200: ' + dims()[0].value);
-  assert.strictEqual(count('live-line-commit') + count('live-rect-commit'), 0, '1: no live-line / live-rect commit: ' + events);
+  assert.strictEqual(count('live-rect-commit') + count('liveDimensionApplied'), 0, '1: no live-rect commit / draw-box commit: ' + events);
   assert.strictEqual(st.history.length, h0, '1: the first value rides the placing snapshot (history ' + h0 + ' -> ' + st.history.length + ')');
   assert.deepStrictEqual(errors, [], '1: no error');
   app.undo();
@@ -54,7 +54,7 @@ try {
   app.type('150'); app.enter();
   assert(Math.abs(dims()[0].value - 150) < 1e-6, '2: value 150: ' + dims()[0].value);
   assert.strictEqual(st.history.length, h1 + 1, '2: ONE undo step (history ' + h1 + ' -> ' + st.history.length + ')');
-  assert.strictEqual(count('live-line-commit') + count('live-rect-commit'), 0, '2: no live-line / live-rect commit: ' + events);
+  assert.strictEqual(count('live-rect-commit') + count('liveDimensionApplied'), 0, '2: no live-rect commit / draw-box commit: ' + events);
   assert.deepStrictEqual(errors, [], '2: no error');
   app.undo();
   assert(Math.abs(dims()[0].value - 200) < 1e-6, '2: one Ctrl+Z restores 200: ' + dims()[0].value);
@@ -66,7 +66,7 @@ try {
   events.length = 0;
   const nl = lines().length, h2 = st.history.length;
   app.key('3'); app.enter();
-  assert.strictEqual(count('live-line-commit'), 1, '3: exactly one live-line-commit: ' + events);
+  assert.strictEqual(count('liveDimensionApplied'), 1, '3: exactly one commit of the length / angle box: ' + events);
   assert.strictEqual(lines().length, nl + 1, '3: one line');
   assert.deepStrictEqual(errors, [], '3: no error');
   console.log('3. line typed length: ok (history ' + h2 + ' -> ' + st.history.length + ')');
@@ -81,7 +81,6 @@ try {
   assert.strictEqual(count('live-rect-commit'), 0, '4: the old live rect box is not what committed: ' + events);
   assert.strictEqual(lines().length, nr + 4, '4: one rectangle (4 lines)');
   app.undo(); assert.strictEqual(lines().length, nr, '4: ONE undo removes the whole rectangle');
-  assert.strictEqual(count('live-line-commit'), 0, '4: no live-line-commit: ' + events);
   assert.deepStrictEqual(errors, [], '4: no error');
   console.log('4. rect typed width: ok');
 } catch (e) { failed = e; } finally { await app.close(); }

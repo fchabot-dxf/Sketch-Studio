@@ -8,7 +8,8 @@
 // symmetric glyph offers "Delete constraint", which deletes it (the glyph is the right-click's target element, kit override 5). The cropped screenshot of
 // the glyphs (evidence, no assert) is not taken. The axis assert reads the stored design (page-hide autosave of a named design).
 import assert from 'node:assert';
-import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
+import { open, createProfile, createNamedDesign, loadGlyphSheetFromDisk } from './helpers/node-app.js';
+await loadGlyphSheetFromDisk(); // task 603: a glyph is picked where its icon is drawn
 import { glyphPoint } from './helpers/node-dom-read.js';
 
 for (const HOST of ['shaper', 'sketchstudio']) {

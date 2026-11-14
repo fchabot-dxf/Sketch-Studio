@@ -51,7 +51,7 @@ await (async () => {
     {
       await twoDesigns('shaper');
       await noStatusText('shaper');
-      const modeBtn = (m) => evalJs(`document.querySelector('[data-mode="${m}"]').click()`);
+      const modeBtn = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
       for (const m of ['explore', 'design', 'vcarve', 'prepare', 'review']) { await modeBtn(m); await sleep(500); assert(await stripVisible(), `shaper ${m}: the strip is visible and uncovered`); }
       // a closed rectangle in Design (real pointer: line tool, four clicks, back to the first point)
       await modeBtn('design'); await sleep(600);
@@ -66,7 +66,7 @@ await (async () => {
       await evalJs(`window.__prepareView.setSelection([{ kind: 'loop', id: window.__prepareView.loops[0].id }])`);
       const selected = () => evalJs(`window.__prepareView.selectedTargets().length`);
       const loops = () => evalJs(`window.__prepareView.loops.length`);
-      const mode = () => evalJs(`document.querySelector('.mode-btn.active').dataset.mode`);
+      const mode = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       assert.strictEqual(await selected(), 1); const nLoops = await loops();
       await shot('shaper-prepare-before-switch.png', { x: 0, y: 0, width: 1400, height: 360 });
       await newTab();
@@ -95,8 +95,8 @@ await (async () => {
     {
       await twoDesigns('penplotter');
       await noStatusText('penplotter');
-      const stage = (s) => evalJs(`document.querySelector('.stage-btn[data-stage="${s}"]').click()`);
-      const cur = () => evalJs(`document.querySelector('.stage-btn.active').dataset.stage`);
+      const stage = (s) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${s}"]').click()`);
+      const cur = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       for (const s of ['design', 'toolpath', 'export']) { await stage(s); await sleep(500); assert(await stripVisible(), `penplotter ${s}: the strip is visible and uncovered`); }
       await stage('toolpath'); await sleep(600);
       await clickEl('#addPlotColor'); await sleep(400);
@@ -128,8 +128,8 @@ await (async () => {
     {
       await twoDesigns('trace');
       await noStatusText('trace');
-      const tab = (t) => evalJs(`document.querySelector('.tr-tab[data-tab="${t}"]').click()`);
-      const cur = () => evalJs(`document.querySelector('.tr-tab.active').dataset.tab`);
+      const tab = (t) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${t}"]').click()`);
+      const cur = () => evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`);
       for (const t of ['trace', 'edit', 'export']) { await tab(t); await sleep(500); assert(await stripVisible(), `trace ${t}: the strip is visible and uncovered`); }
       await tab('trace'); await sleep(400);
       // a photo through the real file input: a black block on white, 60 x 40 px

@@ -118,13 +118,13 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
     return b;
   });
 
-  function setActiveTab(i) {
+  function setActiveTab(i, persist = true) {
     if (i < 0 || i >= tabs.length) return;
     activeTab = i; st.tab = i;
     tabBtns.forEach((b, j) => b.classList.toggle('active', j === i));
     bodyEl.innerHTML = '';
     try { tabs[i] && tabs[i].render && tabs[i].render(bodyEl); } catch (_) { /* tab render is app code */ }
-    save();
+    if (persist) save();
   }
 
   function applyDock(edge) {
@@ -218,7 +218,7 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
   if (!startOpen) root.hidden = true;
 
   applyLayout();
-  setActiveTab(activeTab);
+  setActiveTab(activeTab, false);
   if (typeof document !== 'undefined' && document.body) document.body.appendChild(root);
 
   return {

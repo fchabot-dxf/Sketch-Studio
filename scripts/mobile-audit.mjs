@@ -189,18 +189,20 @@ const shots = [];
       if (d.full) { await c.ev(`(() => { const e = document.createElement('div'); e.id = 'lp-control'; e.style.cssText = 'position:fixed;left:150px;top:300px;width:90px;height:90px;background:#fc0;z-index:99999'; document.body.appendChild(e); window.__ctl = []; e.addEventListener('contextmenu', ev => window.__ctl.push(ev.type)); })()`);
         await T('touchStart', [{ x: 195, y: 345 }]); await sleep(900); await T('touchEnd', []); await sleep(200);
         results.longPressControl = await c.ev('window.__ctl'); await c.ev(`document.getElementById('lp-control').remove()`); }
-      // sidebar
-      await tapSel('.sk-sidebar-btn'); await sleep(400); await shot('ss-sidebar-open'); await measure('ss-sidebar-open', '#svgCanvas');
+      // sidebar (phones use the peeking .sk-sidebar-handle)
+      await tapSel('.sk-sidebar-handle'); await sleep(400); await shot('ss-sidebar-open'); await measure('ss-sidebar-open', '#svgCanvas');
       await tapSel('[data-action="projects"]'); await sleep(900); await shot('ss-projects-modal'); await measure('ss-projects-modal', '#svgCanvas');
       await esc(); await esc(); await c.ev(`document.querySelectorAll('.sk-pm-backdrop,.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);
       if (!d.full) { await drawAndHold(d, 'ss', '#svgCanvas', '#world-group'); return; }
       // Params window
       await tapSel('#btn-parameters'); await sleep(500); await shot('ss-params-window'); await measure('ss-params-window', '#svgCanvas'); await tapSel('.sk-pwin button[aria-label*="lose"], .sk-pwin .sk-dock-close'); await esc();
-      // Style panel
-      await tapSel('.sk-header-style'); await sleep(400); await shot('ss-style-panel'); await measure('ss-style-panel', '#svgCanvas'); await esc();
-      if (await c.ev(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`)) { await tapSel('.sk-header-style'); await sleep(200); }
-      // Debug panel
-      await tapSel('#btn-debug-toggle'); await sleep(500); await shot('ss-debug-panel'); await measure('ss-debug-panel', '#svgCanvas'); await tapSel('#debug-close-btn'); await sleep(200);
+      // Style panel (opened from ☰ sidebar menu on phones)
+      await tapSel('.sk-sidebar-handle'); await sleep(250);
+      await tapSel('.sk-sidebar-item[data-action="style"]'); await sleep(400); await shot('ss-style-panel'); await measure('ss-style-panel', '#svgCanvas'); await esc();
+      if (await c.ev(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`)) { await evalJs(`document.querySelector('.sk-style-panel').classList.add('sk-hidden')`); await sleep(200); }
+      // Debug panel (opened from ☰ sidebar menu)
+      await tapSel('.sk-sidebar-handle'); await sleep(250);
+      await tapSel('.sk-sidebar-item[data-action="debug"]'); await sleep(500); await shot('ss-debug-panel'); await measure('ss-debug-panel', '#svgCanvas'); await tapSel('#debug-close-btn'); await sleep(200);
       await drawAndHold(d, 'ss', '#svgCanvas', '#world-group');
     };
 
@@ -268,14 +270,16 @@ const shots = [];
     const shaper = async (d) => {
       await setDevice(d); await fresh(`${base}/apps/shaper/index.html`);
       for (const mode of ['explore', 'design', 'vcarve', 'prepare', 'review']) {
-        await tapSel(`.mode-btn[data-mode="${mode}"]`); await sleep(900);
+        await tapSel('.sk-sidebar-handle'); await sleep(250);
+        await tapSel(`.sk-sidebar-stage[data-tab="${mode}"]`); await sleep(900);
         const canvasSel = { explore: '#canvas', design: '#design-canvas', vcarve: '#vcarve-canvas', prepare: '#prepare-canvas', review: '#review-canvas-host' }[mode];
         await shot(`shaper-${mode}`); await measure(`shaper-${mode}`, canvasSel);
         if (d.full && mode === 'design') {
-          await tapSel('.sk-sidebar-btn'); await sleep(400); await shot('shaper-sidebar-open'); await esc(); await c.ev(`document.querySelectorAll('.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);
+          await tapSel('.sk-sidebar-handle'); await sleep(400); await shot('shaper-sidebar-open'); await esc(); await c.ev(`document.querySelectorAll('.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);
           await tapSel('#btn-parameters'); await sleep(500); await shot('shaper-params-window'); await measure('shaper-params-window', '#design-canvas'); await esc();
           await drawAndHold(d, 'shaper', '#design-canvas', '#design-canvas > g');
-          await tapSel('.mode-btn[data-mode="design"]');
+          await tapSel('.sk-sidebar-handle'); await sleep(250);
+          await tapSel('.sk-sidebar-stage[data-tab="design"]');
         }
       }
     };
@@ -283,13 +287,15 @@ const shots = [];
     const pen = async (d) => {
       await setDevice(d); await fresh(`${base}/apps/penplotter/index.html`);
       for (const st of ['design', 'toolpath', 'export']) {
-        await tapSel(`.stage-btn[data-stage="${st}"]`); await sleep(1000);
+        await tapSel('.sk-sidebar-handle'); await sleep(250);
+        await tapSel(`.sk-sidebar-stage[data-tab="${st}"]`); await sleep(1000);
         const canvasSel = st === 'design' ? '#design-canvas' : `#stage-${st}`;
         await shot(`pen-${st}`); await measure(`pen-${st}`, canvasSel);
         if (d.full && st === 'design') {
-          await tapSel('.sk-sidebar-btn'); await sleep(400); await shot('pen-sidebar-open'); await esc(); await c.ev(`document.querySelectorAll('.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);
+          await tapSel('.sk-sidebar-handle'); await sleep(400); await shot('pen-sidebar-open'); await esc(); await c.ev(`document.querySelectorAll('.sk-sidebar-backdrop').forEach(b => b.click())`); await sleep(300);
           await drawAndHold(d, 'pen', '#design-canvas', '#design-canvas > g');
-          await tapSel('.stage-btn[data-stage="design"]');
+          await tapSel('.sk-sidebar-handle'); await sleep(250);
+          await tapSel('.sk-sidebar-stage[data-tab="design"]');
         }
       }
     };

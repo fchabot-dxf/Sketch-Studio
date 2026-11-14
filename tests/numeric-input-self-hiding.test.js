@@ -30,15 +30,15 @@ await (async () => {
       {
         name: 'Shaper',
         path: '/apps/shaper/index.html',
-        readyExpr: `!!document.querySelector('[data-mode="design"]')`,
-        enterExpr: `(() => { const b = document.querySelector('[data-mode="design"]'); if (b) b.click(); })()`,
+        readyExpr: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`,
+        enterExpr: `(() => { const b = document.querySelector('.sk-header-tab[data-tab="design"]'); if (b) b.click(); })()`,
         ctxExpr: `() => ({ svg: document.getElementById('design-canvas'), state: window.__designController.state, engine: window.__designController.engine })`,
       },
       {
         name: 'Pen Plotter',
         path: '/apps/penplotter/index.html',
-        readyExpr: `[...document.querySelectorAll('.stage-btn')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`,
-        enterExpr: `(() => { const b = [...document.querySelectorAll('.stage-btn')].find(x => /design/i.test(x.textContent)); if (b) b.click(); })()`,
+        readyExpr: `[...document.querySelectorAll('.sk-header-tab')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`,
+        enterExpr: `(() => { const b = [...document.querySelectorAll('.sk-header-tab')].find(x => /design/i.test(x.textContent)); if (b) b.click(); })()`,
         ctxExpr: `() => ({ svg: document.getElementById('design-canvas'), state: window.__sketch.controller.state, engine: window.__sketch.controller.engine })`,
       },
     ];

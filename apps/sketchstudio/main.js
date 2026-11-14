@@ -3,18 +3,17 @@ import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput, showDimInput, sketchHistory } from '#ui/input-manager.js';
 import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
-import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Construction, Recenter in the footer
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618/619: Undo / Redo / Delete / Clear sketch (left), Recenter (right) in the footer
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
-import { createAppHeader } from '#ui/app-header.js';
+import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 getGoogleAccount().init();
-import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
@@ -22,7 +21,6 @@ import { createStylePanel } from '#ui/style-panel.js';
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
-import { isShortViewport } from '#ui/short-viewport.js'; // TASK 602: a phone in landscape (the status bar folds away: Log / Tune go to the menu)
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 loadFusionGlyphs(); // the owner's constraint-glyph sheet, fetched once; the render loop picks it up when it arrives
@@ -95,10 +93,12 @@ function initApp(){
   initStudioCanvas(state, engine, document.getElementById(CANVAS_ID));
   
   // 6. Initialize Tuning Wizard (dev-only)
+  let shouldLoadTuning = false;
+  let toggleTune = null;
   try {
     const urlSearch = (typeof location !== 'undefined' && location.search) ? location.search : '';
     const tuningQuery = urlSearch.includes('tuning=1') || urlSearch.includes('enable_tuning=1') || urlSearch.includes('enable_tuning=true');
-    const shouldLoadTuning = (typeof window !== 'undefined') && (
+    shouldLoadTuning = (typeof window !== 'undefined') && !!(
       window.__ENABLE_TUNING_WIZARD__ ||
       tuningQuery ||
       location.hostname === 'localhost' ||
@@ -108,15 +108,22 @@ function initApp(){
 
     if (shouldLoadTuning) {
       (typeof require !== 'undefined' ? Promise.resolve(require('./ui/tuning-wizard.js')) : import('./ui/tuning-wizard.js'))
-        .then(m => { if (m && typeof m.setupTuningWizard === 'function') m.setupTuningWizard(state); })
+        .then(m => {
+          if (m && typeof m.setupTuningWizard === 'function') m.setupTuningWizard(state);
+          if (m && typeof m.toggleTuningPanel === 'function') toggleTune = m.toggleTuningPanel;
+        })
         .catch(() => {});
     }
   } catch (e) { /* no-op in production */ }
 
   // Initialize Debug Panel (always available)
+  let toggleDebug = null;
   try {
     (typeof require !== 'undefined' ? Promise.resolve(require('./ui/debug-panel.js')) : import('./ui/debug-panel.js'))
-      .then(m => { if (m && typeof m.setupDebugPanel === 'function') m.setupDebugPanel(state); })
+      .then(m => {
+        if (m && typeof m.setupDebugPanel === 'function') m.setupDebugPanel(state);
+        if (m && typeof m.toggleDebugPanel === 'function') toggleDebug = m.toggleDebugPanel;
+      })
       .catch(() => {});
   } catch (e) { /* ignore */ }
 
@@ -149,40 +156,31 @@ function initApp(){
     if (design) setTimeout(updateView, 0); // recompute the canvas viewBox aspect once it reflows back in
   }
 
-  // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
-  // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
-  const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint
-  const noStatusBar = () => onPhone() || isShortViewport(); // TASK 602: in phone landscape the status bar folds away too (#ui/short-viewport.js)
-  // THE mode router (TASK 602): Design is the header's one mode button; Export is opened from the menu (and its Cancel / Export return to Design).
-  const route = (mode) => { header.setActiveTab(mode); showView(mode); };
-  const header = createAppHeader({
-    // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
-    leading: mountProjectSidebar({
-      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importer.importFile, documentTabs: true, // TASK 587: the document tab strip (TASK 602: below the header) // TASK 566: "Import SVG / DXF…" in the file menu
-      hostActions: [
-        { id: 'export', label: 'Export…', icon: SIDEBAR_ICONS.download, onClick: () => route('export') }, // TASK 602 (owner): Export left the header for this menu
-        { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
-        { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
-        // TASK 562: at phone width (<= 640 px) the header's Style / Debug buttons and the footer's Log / TUNE are hidden and live here
-        // instead (the same buttons' own handlers run: nothing is rebuilt). A wider screen keeps them where they are.
-        { divider: true, visible: noStatusBar },
-        { id: 'phone-style', label: 'Style', icon: '⚙', visible: onPhone, onClick: () => stylePanel.toggle() },
-        { id: 'phone-debug', label: 'Debug', icon: '⌨', visible: onPhone, onClick: () => document.getElementById('btn-debug-toggle').click() },
-        { id: 'phone-log', label: 'Log', icon: '☰', visible: noStatusBar, onClick: () => diagLog.toggle() },
-        { id: 'phone-tune', label: 'Tune solver', icon: '⚙', visible: () => noStatusBar() && !!document.getElementById('btn-tuning-toggle'), onClick: () => document.getElementById('btn-tuning-toggle').click() },
-      ],
-    }).el,
-    tabs: [{ id: 'design', label: 'Design' }], // TASK 602: Export is in the menu; while it shows, Design (not highlighted) is the way back
-    actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
-    collapseActionsOnPhone: true, // TASK 562: Style + Debug move into the menu at <= 640 px
-    activeTab: 'design',
-    onStyle: () => stylePanel.toggle(),
-    onTabChange: showView,
+  const diagLog = createDiagnosticLog({ appId: 'sketchstudio', state });
+
+  // THE mode router (TASK 602/619): Design is the one stage tab; Export, Style, Log, Debug and Tune solver live in the ☰ menu.
+  const route = (mode) => { chrome.setActiveStage(mode); showView(mode); };
+  const chrome = mountAppChrome({
+    appId: 'sketchstudio',
+    container: document.getElementById('app-header-host'),
+    stages: [{ id: 'design', label: 'Design' }],
+    activeStage: 'design',
+    onStageChange: showView,
+    getBuffer: () => docBuffer,
+    importFile: importer.importFile,
+    hostActions: [
+      { id: 'export', label: 'Export…', icon: SIDEBAR_ICONS.download, onClick: () => route('export') },
+      { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
+      { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
+      { divider: true },
+      { id: 'style', label: 'Style', icon: SIDEBAR_ICONS.style, onClick: () => stylePanel.toggle() },
+      { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => diagLog.toggle() },
+      { id: 'debug', label: 'Debug', icon: SIDEBAR_ICONS.debug, onClick: () => toggleDebug && toggleDebug() },
+      { id: 'tune', label: 'Tune solver', icon: SIDEBAR_ICONS.gear, visible: () => shouldLoadTuning, onClick: () => toggleTune && toggleTune() },
+    ],
   });
-  const headerHost = document.getElementById('app-header-host');
-  if (headerHost) header.render(headerHost);
-  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true, footer: document.querySelector('footer.sk-statusbar') }); // TASK 618: the status bar holds Undo / Redo (left), Construction + Recenter (right)
-  // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer opened from this header button
+  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar') }); // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
+  // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer
   sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
   showView('design');
 
@@ -190,10 +188,6 @@ function initApp(){
   docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg })); // design-canvas.js
   docBuffer.restore();
   docBuffer.start();
-
-  // DIAG-OVERLAY: the Log button lives in the bottom status bar (where the MODE label was), on every screen width.
-  const diagLog = createDiagnosticLog({ appId: 'sketchstudio', state });
-  document.getElementById('status-diag-slot').appendChild(diagLog.toggleEl);
 
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {

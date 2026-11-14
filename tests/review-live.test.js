@@ -22,8 +22,8 @@ await (async () => {
     };
     const openMode = async (mode) => { // real click; retry because the nav shifts while the page's late widgets mount
       for (let i = 0; i < 5; i++) {
-        await clickEl(`[data-mode="${mode}"]`); await sleep(300);
-        if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === mode) return;
+        await clickEl(`.sk-header-tab[data-tab="${mode}"]`); await sleep(300);
+        if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === mode) return;
       }
       assert.fail('could not open the ' + mode + ' tab');
     };
@@ -35,7 +35,7 @@ await (async () => {
     };
 
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
     await openMode('design');
     await waitForApp('design-canvas');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
@@ -105,8 +105,8 @@ await (async () => {
 
     await evalJs(`localStorage.setItem('shaper-mode', 'simexport')`); // the stored tab name migrates
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('.mode-btn.active') && !!document.getElementById('review-info')`, 'shaper app ready after the reload');
-    assert.strictEqual(await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`), 'review', "a stored 'simexport' opens Review");
+    await waitFor(`!!document.querySelector('.sk-header-tab.active') && !!document.getElementById('review-info')`, 'shaper app ready after the reload');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`), 'review', "a stored 'simexport' opens Review");
     console.log(`review-live: ok (${tri} triangles, ${ms} ms)`);
   } finally {
     await cdp.close();

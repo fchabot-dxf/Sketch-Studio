@@ -13,7 +13,7 @@ try {
   const doc = app.document;
   const q = (sel) => doc.querySelector(sel);
   const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
-  pressEl('[data-mode="design"]');
+  pressEl('.sk-header-tab[data-tab="design"]');
   // seed: A = an L-shaped outline (the board), B = a 20x20 loop drawn INSIDE it (a part, NOT a hole), C = a separate rectangle
   const st = app.state;
   for (const k of [...st.joints.keys()]) st.joints.delete(k);
@@ -22,7 +22,7 @@ try {
   poly('A', [[0, 0], [120, 0], [120, 60], [60, 60], [60, 120], [0, 120]]);
   poly('B', [[10, 10], [30, 10], [30, 30], [10, 30]]);
   poly('C', [[160, 0], [200, 0], [200, 40], [160, 40]]);
-  pressEl('[data-mode="prepare"]');
+  pressEl('.sk-header-tab[data-tab="prepare"]');
   const pc = doc.getElementById('prepare-canvas');
   assert(pc.children.length > 0, 'prepare canvas ready');
   const clickAt = (x, y) => { const p = worldToScreen(pc, { x, y }); app.click(Math.round(p.x), Math.round(p.y), { target: pc }); };

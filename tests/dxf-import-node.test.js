@@ -19,7 +19,7 @@ try {
   const doc = app.document;
   const q = (sel) => doc.querySelector(sel);
   const pressEl = (sel) => { const e = q(sel); assert(e, sel + ' not found'); app.press(e); };
-  const openMode = (mode) => { pressEl(`[data-mode="${mode}"]`); assert.strictEqual(q('.mode-btn.active').dataset.mode, mode, 'the ' + mode + ' tab opens'); };
+  const openMode = (mode) => { pressEl(`.sk-header-tab[data-tab="${mode}"]`); assert.strictEqual(q('.sk-header-tab.active').dataset.tab, mode, 'the ' + mode + ' tab opens'); };
   const importFile = async (file) => { // clear the status line, import through the sidebar's entry + the file chooser, wait for the app to write the import's result into it
     const el = doc.getElementById('group-status'); if (el) el.textContent = '';
     pressEl('.sk-sidebar-btn'); await app.pause(50);

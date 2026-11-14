@@ -33,19 +33,19 @@ const { port, send, evalJs, waitFor, navigate } = cdp;
 const shot = async (name) => { if (!EVID) return; const r = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(EVID, name + '.png'), Buffer.from(r.data, 'base64')); };
 
 try {
-  // ═══ DESKTOP, 1400 px, a mouse: nothing changed ═══
+  // ═══ DESKTOP, 1400 px, a mouse: unified 44px header, no Log/Tune in footer ═══
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 15000);
-  await waitFor(`!!document.querySelector('.sk-ribbon') && !!document.getElementById('btn-mag-toggle') && !!document.getElementById('btn-tuning-toggle')`, 'SketchStudio loaded');
+  await waitFor(`!!document.querySelector('.sk-ribbon') && !!document.getElementById('btn-construct-toggle')`, 'SketchStudio loaded');
   const desk = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
-    return { coarse: matchMedia('(pointer: coarse)').matches, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), style: m('.sk-header-style'), debug: m('#btn-debug-toggle'), ribbonBtn: m('.sk-ribbon-btn'),
+    return { coarse: matchMedia('(pointer: coarse)').matches, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), ribbonBtn: m('.sk-ribbon-btn'),
       ribbonLbl: m('.sk-ribbon-lbl'), construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
-      tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
+      fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
   console.log('desktop 1400:', JSON.stringify(desk));
   assert.strictEqual(desk.coarse, false);
-  assert.ok(desk.menuBtn[1] < 44 && desk.style[1] < 44 && desk.debug[1] < 44, 'desktop keeps its compact header (no 44 px growth)');
+  assert.ok(desk.menuBtn[1] < 44 && desk.tab[1] < 44, 'desktop keeps its compact header controls (no 44 px growth)');
   assert.deepStrictEqual([desk.ribbonBtn[0], desk.ribbonBtn[1], desk.ribbonLbl[2]], [48, 56, '8px'], 'desktop ribbon: 48x56 buttons, 8 px labels (unchanged)');
-  for (const k of ['style', 'debug', 'mag', 'tune', 'log', 'diagSlot']) assert.notStrictEqual(desk[k][3], 'none', `desktop still shows ${k} where it was`);
+  assert.strictEqual(desk.mag, null, 'desktop removed legacy MAG LENS button (TASK 619)');
   assert.ok(desk.fade === 'none' || desk.fade === '', 'no edge fade on the desktop ribbon');
   await shot('desktop-1400');
   if (process.env.WRITE_DESKTOP_JSON) fs.writeFileSync(process.env.WRITE_DESKTOP_JSON, JSON.stringify(desk, null, 1));
@@ -56,7 +56,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 15000);
-  await waitFor(`!!document.querySelector('.sk-ribbon') && !!document.getElementById('svgCanvas') && !!document.getElementById('btn-tuning-toggle')`, 'SketchStudio loaded (phone)');
+  await waitFor(`!!document.querySelector('.sk-ribbon') && !!document.getElementById('svgCanvas')`, 'SketchStudio loaded (phone)');
   await sleep(600);
   const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: p.id ?? i, radiusX: 1, radiusY: 1, force: 1 })) });
   const tap = async (p, hold = 40) => { await T('touchStart', [p]); await sleep(hold); await T('touchEnd', []); await sleep(150); };
@@ -68,18 +68,19 @@ try {
 
   const ph = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
-    return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), actions: m('.sk-header-actions'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'),
-      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'),
+    return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, header: m('header.sk-header'), handle: m('.sk-sidebar-handle'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'),
+      construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
       fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage.slice(0, 40), hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      headerRight: Math.round(document.querySelector('.sk-header').getBoundingClientRect().right), ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
+      ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
   console.log('phone 390:', JSON.stringify(ph));
   assert.strictEqual(ph.coarse, true, 'the emulated phone is a coarse pointer');
-  for (const k of ['menuBtn', 'tab', 'ribbonBtn', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
+  for (const k of ['ribbonBtn', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
+  assert.ok(ph.handle && ph.handle[1] >= 44, `peeking drawer handle >= 44 px tall: ${ph.handle}`);
   for (const k of ['ribbonLbl', 'groupLbl']) assert.ok(parseFloat(ph[k][2]) >= 12, `${k} text >= 12 px: ${ph[k][2]}`);
   assert.strictEqual(await evalJs(`document.getElementById('viewport-size')`), null, 'the VIEW readout is gone (TASK 618)');
-  assert.strictEqual(ph.actions[3], 'none', 'Style + Debug left the header at phone width');
-  assert.ok(ph.headerRight <= 390 && !ph.hscroll, 'the header fits the screen (no clipped button, no page scroll)');
-  for (const k of ['mag', 'tune', 'diagSlot']) assert.strictEqual(ph[k][3], 'none', `${k} left the footer on a phone`);
+  assert.strictEqual(ph.header[3], 'none', 'phone has no header bar (TASK 619)');
+  assert.ok(!ph.hscroll, 'no horizontal page scroll');
+  assert.strictEqual(ph.mag, null, 'MAG LENS is gone from the DOM (TASK 619)');
   assert.ok(ph.fade.includes('linear-gradient'), 'the ribbon has the edge-fade cue at phone width');
   assert.ok(ph.ribbonScroll[0] > ph.ribbonScroll[1], 'the ribbon scrolls');
   const fadeVars = () => evalJs(`document.querySelector('.sk-ribbon').dataset.fade`);
@@ -88,11 +89,11 @@ try {
   assert.strictEqual(await fadeVars(), 'left', 'at the end only the left edge fades');
   await evalJs(`document.querySelector('.sk-ribbon').scrollLeft = 0`); await sleep(300);
   // Style / Debug / Log / Tune are in the menu
-  await tapSel('.sk-sidebar-btn'); await sleep(400);
+  await tapSel('.sk-sidebar-handle'); await sleep(400);
   const menuActions = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-action]')].map((b) => b.dataset.action)`);
-  for (const a of ['phone-style', 'phone-debug', 'phone-log', 'phone-tune']) assert.ok(menuActions.includes(a), `the menu has ${a}: ${menuActions}`);
+  for (const a of ['style', 'log', 'debug', 'tune']) assert.ok(menuActions.includes(a), `the menu has ${a}: ${menuActions}`);
   await shot('phone-menu');
-  await tapSel('.sk-sidebar [data-action="phone-style"]'); await sleep(500);
+  await tapSel('.sk-sidebar [data-action="style"]'); await sleep(500);
   assert.ok(await evalJs(`!!document.querySelector('.sk-style-panel') && !document.querySelector('.sk-style-panel').classList.contains('sk-hidden')`), 'menu > Style opens the style panel');
   await tapSel('.sk-style-close'); await sleep(200);
   await shot('phone-first-screen');
@@ -203,9 +204,10 @@ try {
 
   // ── Shaper's Design tab (the shared Design tab): the same hold ──
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 15000);
-  await waitFor(`!!document.querySelector('.mode-btn[data-mode="design"]')`, 'Shaper loaded');
+  await waitFor(`!!document.querySelector('.sk-sidebar-handle')`, 'Shaper loaded');
   await sleep(500);
-  await tapSel('.mode-btn[data-mode="design"]'); await sleep(900);
+  await tapSel('.sk-sidebar-handle'); await sleep(300);
+  await tapSel('.sk-sidebar-stage[data-tab="design"]'); await sleep(900);
   const sh = await evalJs(`(() => { const svg = document.getElementById('design-canvas'); const l = svg.querySelector('.shape-elem'); if (!l) return null; const r = l.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, tag: l.tagName }; })()`);
   assert.ok(sh, 'Shaper Design has a demo line to hold');
   await evalJs(`(() => { const b = document.querySelector('#tool-select'); if (b) b.click(); })()`);

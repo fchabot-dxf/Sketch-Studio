@@ -22,7 +22,7 @@ const observe = (app) => JSON.parse(JSON.stringify({
   gcode: buildGcodeEntries(),
   penRows: app.document.querySelectorAll('#plotColors .pc-row').length,
   docInfo: (app.document.getElementById('docInfo') || {}).textContent || '',
-  stage: app.document.querySelector('.stage-btn.active').dataset.stage,
+  stage: app.document.querySelector('.sk-header-tab.active').dataset.tab,
   drawFeedInput: (app.document.getElementById('drawFeed') || {}).value,
 }));
 
@@ -34,8 +34,8 @@ let before, storedId;
     const imp = importDrawing(SVG, 'persist.svg'); assert(imp.ok, 'SVG import: ' + imp.message); // the File menu entry runs this after its chooser
     assert(app.state.shapes.length > 0, 'SVG import produced geometry');
     // Build the plotter state: a click on + Pen, then toolpaths/settings/styles (test setup, not the gesture under test).
-    app.press(doc.querySelector('.stage-btn[data-stage="toolpath"]'));
-    assert(doc.querySelector('.stage-btn[data-stage="toolpath"]').classList.contains('active') && doc.getElementById('addPlotColor'), 'toolpath stage shown');
+    app.press(doc.querySelector('.sk-header-tab[data-tab="toolpath"]'));
+    assert(doc.querySelector('.sk-header-tab[data-tab="toolpath"]').classList.contains('active') && doc.getElementById('addPlotColor'), 'toolpath stage shown');
     app.press(doc.getElementById('addPlotColor'));
     assert(doc.querySelectorAll('#plotColors .pc-row').length >= 1, 'pen row added');
     const shapes = app.state.shapes;

@@ -26,9 +26,9 @@ await (async () => {
     const shot = async (file, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) }); fs.writeFileSync(path.join(EVID, file), Buffer.from(r.data, 'base64')); };
     const HOSTS = {
       studio:     { url: '/apps/sketchstudio/index.html', enter: null, ready: `!!document.querySelector('#svgCanvas')`, canvas: '#svgCanvas' },
-      shaper:     { url: '/apps/shaper/index.html', enter: '.mode-btn[data-mode="design"]', ready: `!!document.querySelector('.mode-btn[data-mode="design"]')`, canvas: '#design-canvas' },
-      penplotter: { url: '/apps/penplotter/index.html', enter: '.stage-btn[data-stage="design"]', ready: `!!document.querySelector('.stage-btn[data-stage="design"]')`, canvas: '#design-canvas' },
-      trace:      { url: '/apps/trace/index.html', enter: '.tr-tab[data-tab="edit"]', ready: `!!document.querySelector('.tr-tab[data-tab="edit"]')`, canvas: '#design-canvas' },
+      shaper:     { url: '/apps/shaper/index.html', enter: '.sk-header-tab[data-tab="design"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, canvas: '#design-canvas' },
+      penplotter: { url: '/apps/penplotter/index.html', enter: '.sk-header-tab[data-tab="design"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="design"]')`, canvas: '#design-canvas' },
+      trace:      { url: '/apps/trace/index.html', enter: '.sk-header-tab[data-tab="edit"]', ready: `!!document.querySelector('.sk-header-tab[data-tab="edit"]')`, canvas: '#design-canvas' },
     };
     const open = async (name) => {
       const h = HOSTS[name]; await goto(h.url, h.ready);
@@ -65,18 +65,21 @@ await (async () => {
       assert.strictEqual(await shapeCount(), n1, name + ': a real click on footer Redo brings it back');
       assert.strictEqual((await btn('btn-redo')).disabled, true, name + ': Redo disabled again');
       const fb = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
-        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
-      assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb.undo));
-      assert(fb.undo.l < fb.redo.l && fb.redo.l < fb.vw / 2, name + ': Undo, Redo at the left of the footer');
+        const fc = f.querySelector('#btn-construct-toggle'); const cc = document.querySelector('.sk-canvas-corner #btn-construct-toggle');
+        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!fc, cornerConstruct: cc ? { w: cc.getBoundingClientRect().width, h: cc.getBoundingClientRect().height } : null, view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
+      assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32 && fb.del && fb.del.w === 32 && fb.clr && fb.clr.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb));
+      assert(fb.undo.l < fb.redo.l && fb.redo.r <= fb.del.l && fb.del.r < fb.clr.l && fb.clr.l < fb.vw / 2, name + ': Undo, Redo, Delete, gap, Clear sketch at the left of the footer: ' + JSON.stringify([fb.redo, fb.del, fb.clr]));
       assert(fb.recenter && fb.recenter.r > fb.vw - 40 && fb.recenter.w === 32, name + ': Recenter at the right of the footer: ' + JSON.stringify(fb.recenter));
       assert(fb.fr.bottom <= fb.vh + 0.5 && fb.fr.bottom >= fb.vh - 1, name + ': the footer sits at the bottom of the screen: ' + JSON.stringify([fb.fr.bottom, fb.vh]));
       assert.strictEqual(fb.view, false, name + ': no VIEW readout'); assert(!/VIEW/i.test(fb.text), name + ': no VIEW text in the footer');
-      assert.strictEqual(!!fb.construct, name === 'studio', name + ': Construction is in the footer of SketchStudio only (the one host with a construction toggle)');
+      assert.strictEqual(fb.footerConstruct, false, name + ': Construction is NOT in the footer (TASK 619)');
+      if (name === 'penplotter') assert.strictEqual(fb.cornerConstruct, null, 'penplotter: Construction stays disabled (safety check)');
+      else assert(fb.cornerConstruct && fb.cornerConstruct.w === 32 && fb.cornerConstruct.h === 32, name + ': Construction is 32x32 in .sk-canvas-corner');
       await shot(`desktop-${name}.png`, { x: 0, y: fb.fr.top - 2, width: fb.vw, height: fb.vh - fb.fr.top + 2 });
       console.log('desktop', name, 'ok');
     }
 
-    // ---- 2. phone portrait 390 / 360 (touch) and landscape 844x390: the header holds, 44 px, a swipe moves it, every control reachable, the app menu opens fully
+    // ---- 2. phone portrait 390 / 360 (touch) and landscape 844x390 / 780x360: no header bar, 44 px footer row, 56 x 44 wide buttons, peeking handle opens the menu fully
     const layouts = [{ w: 390, h: 844, tag: 'portrait390' }, { w: 360, h: 780, tag: 'portrait360' }, { w: 844, h: 390, tag: 'landscape844' }, { w: 780, h: 360, tag: 'landscape780' }];
     for (const L of layouts) {
       await send('Emulation.setDeviceMetricsOverride', { width: L.w, height: L.h, deviceScaleFactor: 2, mobile: true });
@@ -84,21 +87,24 @@ await (async () => {
       for (const name of Object.keys(HOSTS)) {
         await open(name);
         const tag = `${name} ${L.tag}: `;
-        const m = await evalJs(`(() => { const h = document.querySelector('header'); const hr = h.getBoundingClientRect(); const kids = [...h.querySelectorAll('button, input, a')].filter((e) => e.getBoundingClientRect().width > 0)
-          .map((e) => { const r = e.getBoundingClientRect(); return { id: e.id || e.className, left: r.left, right: r.right, w: r.width, h: r.height }; });
-          return { vw: innerWidth, hr: { left: hr.left, right: hr.right, top: hr.top, bottom: hr.bottom }, sw: h.scrollWidth, cw: h.clientWidth, ox: getComputedStyle(h).overflowX, pageSW: document.documentElement.scrollWidth, kids }; })()`);
-        assert(m.hr.right <= m.vw + 0.5 && m.pageSW <= m.vw + 0.5, tag + 'no page overflow ' + JSON.stringify([m.hr.right, m.vw, m.pageSW]));
-        assert(['auto', 'scroll'].includes(m.ox), tag + 'the header scrolls sideways when too long: ' + m.ox);
-        assert(!m.kids.some((k) => k.id === 'btn-undo' || k.id === 'btn-redo' || k.id === 'btn-recenter-view'), tag + 'no footer buttons in the header');
+        const m = await evalJs(`(() => { const h = document.querySelector('header'); const hr = h.getBoundingClientRect();
+          return { vw: innerWidth, hr: { left: hr.left, right: hr.right, top: hr.top, bottom: hr.bottom }, hdrDisplay: getComputedStyle(h).display, pageSW: document.documentElement.scrollWidth }; })()`);
+        assert.strictEqual(m.hdrDisplay, 'none', tag + 'phone has no header bar (TASK 619)');
+        assert(m.pageSW <= m.vw + 0.5, tag + 'no page overflow ' + JSON.stringify([m.vw, m.pageSW]));
         assert(!(await evalJs(`!!document.querySelector('header [aria-label="Sketches"]')`)), tag + 'no Sketches button in the header');
         const ft = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
           const cv = document.querySelector(${JSON.stringify(HOSTS[name].canvas)}).getBoundingClientRect(); const corner = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn'); const cb = corner && corner.getBoundingClientRect();
-          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), canvasH: cv.height,
+          const cbtn = document.querySelector('.sk-canvas-corner #btn-construct-toggle'); const cbr = cbtn && cbtn.getBoundingClientRect();
+          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!f.querySelector('#btn-construct-toggle'),
+            cornerConstruct: cbr ? { w: cbr.width, h: cbr.height, l: cbr.left, r: cbr.right, t: cbr.top } : null, canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
-        for (const k of ['undo', 'redo', 'recenter']) assert(ft[k] && ft[k].w >= 43.5 && ft[k].h >= 43.5, tag + k + ' is a 44 px target in the footer: ' + JSON.stringify(ft[k]));
-        if (ft.construct) assert(ft.construct.w >= 43.5, tag + 'Construction is 44 px');
+        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
+        assert.strictEqual(ft.footerConstruct, false, tag + 'Construction is NOT in the footer');
+        if (name === 'penplotter') assert.strictEqual(ft.cornerConstruct, null, tag + 'penplotter: Construction stays disabled');
+        else assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));
-        assert(ft.undo.r <= ft.redo.l + 0.5 && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo then (right) Recenter fit the footer width');
+        assert.strictEqual(Math.round(ft.fr.bottom - ft.fr.top), 44, tag + 'footer bar is 44 px tall (no extra vertical padding)');
+        assert(ft.undo.r <= ft.redo.l + 0.5 && ft.redo.r <= ft.del.l + 0.5 && ft.del.r < ft.clr.l && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo, Delete, gap, Clear sketch then Recenter fit the footer width: ' + JSON.stringify({ redo: ft.redo, del: ft.del, clr: ft.clr, recenter: ft.recenter }));
         const share = ft.canvasH / ft.vh;
         console.log(tag + 'canvas share ' + Math.round(share * 100) + ' %, footer ' + Math.round(ft.fr.bottom - ft.fr.top) + ' px');
         if (L.tag === 'landscape844' || L.tag === 'landscape780') assert(share >= 0.6, tag + 'the canvas keeps >= 60 % of the height: ' + share);
@@ -109,25 +115,12 @@ await (async () => {
           await tap(c.x, c.y);
         } else assert(!ft.sk || !ft.sk.vis, tag + 'landscape: the SKETCHES box floats on the canvas, no drawer button');
         await shot(`${L.tag}-${name}-footer.png`, { x: 0, y: ft.fr.top - 2, width: L.w, height: L.h - ft.fr.top + 2 });
-        if (L.tag.startsWith('landscape')) assert(m.hr.bottom - m.hr.top <= 53, tag + 'one header row (52 px): ' + (m.hr.bottom - m.hr.top));
-        // a real swipe left on the header moves it when it is longer than the screen
-        if (m.sw > m.cw + 1) {
-          const y = Math.round((m.hr.top + m.hr.bottom) / 2);
-          await T('touchStart', [{ x: m.vw - 10, y }]); for (let i = 1; i <= 8; i++) { await T('touchMove', [{ x: m.vw - 10 - i * 40, y }]); await sleep(15); } await T('touchEnd', []); await sleep(300);
-          assert((await evalJs(`document.querySelector('header').scrollLeft`)) > 0, tag + 'a real swipe scrolled the header');
-        }
-        // every header control is reachable: at the start of the scroll the first is on screen, at the end the last is
-        await evalJs(`document.querySelector('header').scrollLeft = 0`); await sleep(100);
-        assert(await evalJs(`(() => { const e = [...document.querySelector('header').querySelectorAll('button')].find((b) => b.getBoundingClientRect().width > 0); const r = e.getBoundingClientRect(); return r.left >= -0.5 && r.right <= innerWidth + 0.5; })()`), tag + 'the first control is on screen at the start');
-        await evalJs(`(() => { const h = document.querySelector('header'); h.scrollLeft = h.scrollWidth; })()`); await sleep(100);
-        assert(await evalJs(`(() => { const bs = [...document.querySelector('header').querySelectorAll('button')].filter((b) => b.getBoundingClientRect().width > 0); const r = bs[bs.length - 1].getBoundingClientRect(); return r.right <= innerWidth + 0.5 && r.left >= -0.5; })()`), tag + 'the last control is on screen at the end');
-        await evalJs(`document.querySelector('header').scrollLeft = 0`); await sleep(100);
-        await shot(`${L.tag}-${name}.png`, { x: 0, y: 0, width: L.w, height: Math.min(L.h, Math.ceil(m.hr.bottom) + 40) });
-        // the app menu (a real tap on the header's first button) opens fully inside the screen
-        const first = await centerOf('header button');
-        await tap(first.x, first.y);
-        const menu = await evalJs(`(() => { const d = document.querySelector('.sk-sidebar'); if (!d) return null; const r = d.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight }; })()`);
-        assert(menu, tag + 'the app menu did not open');
+        // the app menu (a real tap on the peeking handle) opens fully inside the screen
+        const handleC = await centerOf('.sk-sidebar-handle');
+        assert(handleC, tag + 'peeking drawer handle exists');
+        await tap(handleC.x, handleC.y);
+        const menu = await evalJs(`(() => { const d = document.querySelector('.sk-sidebar.open'); if (!d) return null; const r = d.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight }; })()`);
+        assert(menu, tag + 'the app menu did not open from the handle');
         assert(menu.left >= -0.5 && menu.right <= menu.vw + 0.5 && menu.top >= -0.5 && menu.bottom <= menu.vh + 0.5 && menu.right - menu.left > 200, tag + 'the app menu is fully inside the screen: ' + JSON.stringify(menu));
         await shot(`${L.tag}-${name}-menu.png`);
         console.log(L.tag, name, 'ok');

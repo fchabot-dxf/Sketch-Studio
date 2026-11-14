@@ -62,11 +62,14 @@ await (async () => {
       return true;`;
     await state(seed);
     await sleep(800);
+    // task 586: the floating browser covers the canvas's top-left and the canvas is wider; a real wheel zoom-out at its centre puts the seeded lines (-40..40 mm) clear of the box
+    for (let i = 0; i < 3; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 800, y: 500, deltaX: 0, deltaY: 200 }); await sleep(150); }
+    await sleep(300);
 
     // ---- (1) lock Plate through the row's REAL right-click menu, then a real drag on it moves nothing
     await rightClick(await center(head('sketch-2') + ' .sk-sketch-name'));
     assert.deepStrictEqual(await menuIds(), ['sk-lock=Lock', 'sk-only=Show only this sketch', 'sk-rename=Rename', 'sk-delete=Delete'], 'the row menu');
-    await shot('577-row-menu.png', union(await rectOf('#design-panel-info .sk-tree-hdr'), await rectOf('.sk-context-menu')));
+    await shot('577-row-menu.png', union(await rectOf('.sk-browser-info .sk-tree-hdr'), await rectOf('.sk-context-menu')));
     await clickEl('.sk-context-menu .sk-context-item[data-id="sk-lock"]');
     assert.strictEqual(await state(`return st.sketches[1].locked === true;`), true, 'the menu locked Plate');
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-sketch-node[data-sketch-id="sketch-2"] .sk-sketch-lockbadge')`), true, 'the purple badge shows');
@@ -86,7 +89,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`document.querySelector('.sk-sketch-node[data-sketch-id="sketch-2"] .sk-sketch-radio').disabled`), true, 'the locked radio is disabled');
     await clickEl(head('sketch-1') + ' .sk-sketch-name'); assert.strictEqual(await state(`return st.activeSketchId;`), 'sketch-3', 'a click on the name does not activate');
     await clickEl(head('sketch-1') + ' .sk-sketch-radio'); assert.strictEqual(await state(`return st.activeSketchId;`), 'sketch-1', 'a click on an empty radio activates');
-    await shot('577-panel-locked.png', union(await rectOf('#design-panel-info .sk-tree-hdr'), await rectOf('.sk-sketch-node[data-sketch-id="sketch-3"]')));
+    await shot('577-panel-locked.png', union(await rectOf('.sk-browser-info .sk-tree-hdr'), await rectOf('.sk-sketch-node[data-sketch-id="sketch-3"]')));
 
     // ---- (2) a real mouse drag of the Holes NAME above Outline reorders (one undo step)
     await rightClick(await center(head('sketch-2') + ' .sk-sketch-name')); await clickEl('.sk-context-menu .sk-context-item[data-id="sk-lock"]'); // Unlock
@@ -102,7 +105,7 @@ await (async () => {
     // ---- (3) Show only this sketch: the others' visible = false, nothing else; the eyes bring them back
     await rightClick(await center(head('sketch-1') + ' .sk-sketch-name')); await clickEl('.sk-context-menu .sk-context-item[data-id="sk-only"]');
     assert.deepStrictEqual(await state(`return st.sketches.map(s => s.id + ':' + s.visible);`), ['sketch-3:false', 'sketch-1:true', 'sketch-2:false'], 'only Outline is visible');
-    assert.strictEqual(await evalJs(`/show all|only this/i.test(document.getElementById('design-panel-info').textContent)`), false, 'no banner, no show-all');
+    assert.strictEqual(await evalJs(`/show all|only this/i.test(document.querySelector('.sk-browser-info').textContent)`), false, 'no banner, no show-all');
     await clickEl(head('sketch-3') + ' .sk-sketch-eye'); await clickEl(head('sketch-2') + ' .sk-sketch-eye');
     assert.deepStrictEqual(await state(`return st.sketches.map(s => s.visible);`), [true, true, true], 'plain eye toggles bring the sketches back');
 
@@ -129,10 +132,10 @@ await (async () => {
     // ---- (5) ALL FOUR hosts: the same tree controls (a fresh page each: one sketch, so one row)
     const counts = `(() => { const q = (s) => document.querySelectorAll(s).length; return JSON.stringify({ add: q('.sk-tree-add'), eye: q('.sk-sketch-eye'), icon: q('.sk-sketch-icon'), name: q('.sk-sketch-name'), radio: q('.sk-sketch-radio'), gone: q('.sk-sketch-grip, .sk-sketch-up, .sk-sketch-down, .sk-sketch-solo, .sk-sketch-lock, .sk-tree-move') }); })()`;
     const hosts = [
-      { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-side .sk-sketch-node')` },
-      { name: 'shaper', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="design"]').click()`, ready: `!!document.querySelector('#design-panel-info .sk-sketch-node')` },
-      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, ready: `!!document.querySelector('#design-panel-info .sk-sketch-node')` },
-      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-side .sk-sketch-node')` },
+      { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },
+      { name: 'shaper', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
+      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
+      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },
     ];
     const perHost = {};
     for (const h of hosts) {

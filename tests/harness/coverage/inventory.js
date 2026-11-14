@@ -62,6 +62,7 @@ const TOOL_SOLVER_ROLE = {
   dim: 'creates distance / angle / radius constraints (a point-to-line dimension is one 3-joint distance)',
   coincident: 'coincident', hv: 'horizontal | vertical', parallel: 'parallel', perp: 'perpendicular', collinear: 'collinear',
   tangent: 'tangent', equal: 'equal', midpoint: 'midpoint', symmetric: 'symmetric (two points, two lines or two circles / arcs about a line)',
+  mirror: 'creates mirrored copies (shapes + joints) linked to the originals by symmetric constraints only (task 585, #core/mirror.js)',
 };
 function buildTools() {
   const groups = ['CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup);
@@ -195,12 +196,13 @@ function buildEditFeatures() {
   return F;
 }
 
-// features the task listed that have NO code in SketchStudio (searched: mirror / paste / offset / duplicate). Proven absent by scan.
+// features the task listed that have NO code in SketchStudio (searched: paste / offset / duplicate). Proven absent by scan. (Mirror exists since
+// task 585: the `mirror` ribbon tool above, #core/mirror.js.)
 export function absentFeatures() {
-  const re = /\b(mirror(?:Shape|Selection)|pasteSelection|copySelection|offsetShape|duplicateShape)\b/;
+  const re = /\b(pasteSelection|copySelection|offsetShape|duplicateShape)\b/;
   const hits = [];
   for (const file of [...listFiles('packages/core'), ...listFiles('packages/ui'), ...listFiles('apps/sketchstudio')]) source(file).forEach((l, i) => { if (re.test(l)) hits.push(at(file, i + 1)); });
-  return { names: ['mirror', 'offset', 'copy / paste'], hits };
+  return { names: ['offset', 'copy / paste'], hits };
 }
 
 function sketchStudioTools(tools) {

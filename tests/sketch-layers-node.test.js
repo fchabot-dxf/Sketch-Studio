@@ -10,8 +10,9 @@ import { addSketch, activateSketch, setSketchLocked, moveToSketch, moveSelection
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { createDesignInfoPanel } from '#ui/design-info-panel.js';
 import { contextMenuItems } from '#ui/context-menu.js';
-import { mountDesignSidePanel } from '#ui/design-side-panel.js';
+import { mountDesignBrowser } from '#ui/design-browser.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { updateViewBox } from '#ui/input-manager.js';
 
 const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); };
 const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`ASSERT: ${m}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
@@ -35,6 +36,9 @@ async function canvasChecks(host) {
   const app = await open({ host, profile });
   try {
     const S = app.state;
+    // TASK 583: the Pen Plotter node host is now the real stages, whose Design view frames the whole 200 mm paper (about 3.5 px per unit); this test's pixel offsets
+    // (a 5 px dy to the second point, the grid snap reach in px) were written for the 120-unit-wide view Shaper opens with, so Pen Plotter starts from that same view
+    if (host === 'penplotter') { Object.assign(S.view, { x: 0, y: 0, w: 120 }); updateViewBox(app.svg, S.view); app.frames(2); }
     // two sketches: A in Sketch 1, B in Sketch 2 (active), far apart on the canvas
     const A = addLine(app, 10, 10, 30, 10);
     const sk2 = addSketch(S, 'Plate'); activateSketch(S, sk2.id);
@@ -81,7 +85,7 @@ async function canvasChecks(host) {
     app.tool('line');
     const endB = app.toScreen(...jointXY(app, B.b));
     app.click(endB.x, endB.y);                          // first point ON the locked line's end point
-    app.click(endB.x + 120, endB.y + 5);                // second point
+    app.click(endB.x + 120, endB.y + 40);               // second point
     app.esc(); app.tool('select');
     assert(S.shapes.length === nShapes + 1, host + ': the line tool drew one line: ' + (S.shapes.length - nShapes));
     const drawn = S.shapes[S.shapes.length - 1];
@@ -238,13 +242,12 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
 // ---------------------------------------------------------------- the PANEL (shared): the same row controls in ALL FOUR hosts, and each drives the model
 {
   const results = {};
-  // How each host mounts the tree (read from the host's own source): Shaper and Pen Plotter call createDesignInfoPanel({ showSketchTree: true });
-  // SketchStudio and Trace mount the same panel through the ONE shared mount (#ui/design-side-panel.js, which sets showSketchTree: true).
+  // How each host mounts the tree (read from the host's own source): all four through the ONE shared mount (#ui/design-browser.js, task 586,
+  // which sets showSketchTree: true).
   const src = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
   const declared = { sketchstudio: src('apps/sketchstudio/main.js'), trace: src('apps/trace/src/edit-view.js'), shaper: src('apps/shaper/src/main.js'), penplotter: src('apps/penplotter/src/sketch-stage.js') };
-  assert(/showSketchTree:\s*true/.test(src('packages/ui/design-side-panel.js')), 'the shared side-panel mount opts into the tree');
-  for (const host of ['sketchstudio', 'trace']) assert(/mountDesignSidePanel\(/.test(declared[host]), host + ' mounts the sketch tree through mountDesignSidePanel');
-  for (const host of ['shaper', 'penplotter']) assert(/showSketchTree:\s*true/.test(declared[host]), host + ' declares the sketch tree');
+  assert(/showSketchTree:\s*true/.test(src('packages/ui/design-browser.js')), 'the shared browser mount opts into the tree');
+  for (const host of ['sketchstudio', 'trace', 'shaper', 'penplotter']) assert(/mountDesignBrowser\(/.test(declared[host]), host + ' mounts the sketch tree through mountDesignBrowser');
   // Trace has no node-kit host (its Edit tab is the same createDesignInfoPanel on the same sketch state); its real page is in sketch-layers-live.test.js
   const CONTROLS = ['.sk-tree-add', '.sk-sketch-eye', '.sk-sketch-icon', '.sk-sketch-name', '.sk-sketch-radio'];
   const GONE = ['.sk-sketch-grip', '.sk-sketch-up', '.sk-sketch-down', '.sk-sketch-solo', '.sk-sketch-lock', '.sk-tree-move', 'select'];
@@ -258,7 +261,7 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
       const A = addL(0, 10); const sk2 = addSketch(S, 'Plate'); activateSketch(S, sk2.id); const B = addL(0, 30); const sk3 = addSketch(S, 'Holes'); activateSketch(S, sk3.id); const C = addL(0, 50);
       const holder = doc.createElement('div'); doc.body.appendChild(holder);
       let panel;
-      if (host === 'sketchstudio') { const side = mountDesignSidePanel({ container: holder, state: S, engine: app.engine, storageKey: 'test-side' }); panel = side.panel; }
+      if (host === 'sketchstudio') { const side = mountDesignBrowser({ container: holder, state: S, engine: app.engine }); panel = side.panel; }
       else { panel = createDesignInfoPanel({ state: S, engine: app.engine, showSketchTree: true }); panel.render(holder); }
       results[host] = Object.fromEntries(CONTROLS.map((c) => [c, holder.querySelectorAll(c).length]));
       eq(results[host], WANT, host + ' panel controls');

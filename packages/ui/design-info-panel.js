@@ -6,7 +6,6 @@
 // constraints on the canvas, so the dock↔canvas highlight is automatic (no new plumbing).
 // App-agnostic: imports only #core (constraint-status). Themed via --sk-*/--sk-dock-*. Self-contained styles.
 
-import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { constraintSketch, addSketch, activateSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME,
   recordUndo, setSketchLocked, showOnlySketch, reorderSketch } from '#core/sketch-model.js'; // SKETCH-1b/2a: gated tree + multi-sketch; TASK 577: sketches as layers
 import { deleteSketch } from '#core/delete-manager.js';
@@ -41,9 +40,6 @@ function injectStyles() {
   s.id = 'sk-info-styles';
   s.textContent = `
 .sk-info { display: flex; flex-direction: column; gap: 6px; font: 12px system-ui, sans-serif; color: inherit; }
-.sk-info-dof { padding: 4px 6px; border-radius: 6px; background: var(--sk-info-head, rgba(127,127,127,0.12));
-  opacity: 0.92; }
-.sk-info-dof b { font-weight: 700; }
 .sk-info-list { display: flex; flex-direction: column; gap: 2px; }
 .sk-info-empty { opacity: 0.55; padding: 4px 6px; font-style: italic; }
 .sk-info-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
@@ -163,16 +159,9 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
   const collapsedSketchIds = new Set();
   const knownSketchIds = new Set(); // sketches already seen — a new one starts collapsed, then follows the caret
   const el = document.createElement('div'); el.className = 'sk-info';
-  const dofEl = document.createElement('div'); dofEl.className = 'sk-info-dof';
   const listEl = document.createElement('div'); listEl.className = 'sk-info-list';
-  el.append(dofEl, listEl);
+  el.append(listEl);
 
-  function totalDOF() {
-    try {
-      const { dof } = analyzeConstraintStatus({ joints: state.joints, shapes: state.shapes || [], constraints: state.constraints || [] });
-      return dof;
-    } catch (_) { return null; }
-  }
 
   // One constraint row (icon + label + geometry + value), click toggles state.selectedConstraints (the renderer
   // auto-highlights); hovering sets state.hoveredConstraint, which the renderer lights up with the geometry it binds.
@@ -265,12 +254,6 @@ export function createDesignInfoPanel({ state, engine, showSketchTree = false } 
   function refresh() {
     const cons = (state && Array.isArray(state.constraints)) ? state.constraints : [];
     const sel = (state && state.selectedConstraints instanceof Set) ? state.selectedConstraints : null;
-    const dof = totalDOF();
-    let solved = '';
-    try { const stats = engine && engine.getSolveStats && engine.getSolveStats(); if (stats && typeof stats.converged === 'boolean') solved = ` · ${stats.converged ? '✓ solved' : '… solving'}`; } catch (_) {}
-    const dofTxt = (dof != null) ? ` · DOF <b>${dof}</b> · ${dof === 0 ? 'fully constrained' : dof + ' free'}` : '';
-    dofEl.innerHTML = `<b>${cons.length}</b> constraint${cons.length === 1 ? '' : 's'}${dofTxt}${solved}`;
-
     listEl.innerHTML = '';
     geoLabel = labelGeometry((state && state.shapes) || []);
     failing = failingConstraints(engine, cons);

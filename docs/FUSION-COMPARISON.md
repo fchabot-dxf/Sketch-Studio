@@ -2022,3 +2022,77 @@ the j3 corner (a cluster) 0.8 -> 0.8 px.
 Default grid magnet: worst gap 16.23 -> 10.40 px, snap lock changes per drag 13 -> 13 (grid nodes the end passes, each within the magnet of where the end is). A LOCKED point
 (the outer centre j7, welded to the origin) dragged 40 x (4, 2) px with the default grid magnet: lock changes 15 -> 2, events locked 26 -> 3 of 40 (task 575 item 3: the snap no
 longer locks onto grid nodes / targets under the cursor that the held point cannot reach). Evidence: .evidence/582/probe-owner.mjs (local).
+
+## Dragging: an arc by its centre, the origin snap, cluster inferences (task 584)
+**Arc by its CENTRE, nothing held: translates whole, like Fusion.** The recorded drag oracle (tests/fusion-drag.test.js, the task 530 real-mouse cells) has Fusion
+"MMM. translate" for a free arc (`arc.free.centre.along / across / diag`) and for a radius-dimensioned arc (`arc.rad.centre.*`). Ours was "MMMr stretch" (free; across:
+"M..r") and "MMM. rotate" (radius). Cause: the select tool set a drag target on the centre AND both rims (selection-tools.js pullDrag), but every solve pulled ONE joint
+only (engine.solve: the explicit spring of the grabbed joint in the pointer event's pass; in the app's frame solve the FIRST joint carrying a target, in joint insertion
+order), so the rims followed the radius equality, not the drag. Now (one place, packages/core/solver/engine.js `_jointDragSprings`) every solve pulls EVERY joint
+carrying a drag target, one spring per solver variable (coincident joints are one point), and the select tool gives a target only to the joints the drag CARRIES
+(`state.drag.carried`): the grabbed point's coincident cluster, plus both rims for an arc grabbed by its centre. Unchanged: one HELD rim makes it task 582's pivot (the
+rims are not carried, the radius is kept, the free end follows the constraints); a held centre locks the drag; a centre-point rectangle's group is masked with its centre
+but not carried (as before, only the centre is pulled). Changed by the same cause: a BEZIER grabbed by its body (no body point declared, so its drag keeps member
+targets on all four control points) moved only its FIRST control point (the one spring); it now translates whole (`.evidence/584/probe-clusters-*.txt`: control
+points 2-4 (20, 30) / (40, 30) / (50, 10) stayed, now each moves by (6, -4) with the first). Fusion: not measured.
+
+| oracle class | same / KNOWN before | after |
+|---|---|---|
+| arc.free.centre (3 cells) | 0 / 3 (ours MMMr / M..r stretch) | 3 / 0 (MMM. translate) |
+| arc.rad.centre (3 cells) | 0 / 3 (ours MMM. rotate) | 3 / 0 (MMM. translate) |
+| arc centre (kind.target, 12 cells; fixc / fixcrad: the lock, same both) | 6 / 6 | 12 / 0 |
+| all 161 cells | 140 same / 17 KNOWN / 4 unstable | 146 same / 11 KNOWN / 4 unstable |
+
+No other cell changed (`.evidence/584/oracle-before.txt` vs `oracle-after.txt`: only those 6 rows). In the node kit (tests/drag-cluster-node.test.js, 30 pointer moves, mm):
+a free arc centre (-20, 20) -> (-9.954, 26.039), both rims moved by the same displacement (0.0e+0 mm off), radius 12 -> 12; before, start (-8, 20) -> (-5.174, 18.542),
+radius 12 -> 8.892. The same with a radius dimension and with a rim coincident with a free line end (the line end follows, its other end stays).
+
+**The origin is not a snap target of a drag that holds it.** input-manager.js updateSnapTarget offered `j_origin` through its explicit origin check even when the drag's
+coincident cluster contains the origin (the owner's outer centre j7, welded to it: 14 offers, snapTarget + activeSnap, in 10 pointer events of (2, 1) px). The check now respects the drag's excluded joints,
+as findSnap does. A free point dragged onto the origin still snaps to it (Coincident added); the drawing tools still snap to it (they have no drag, nothing excluded).
+
+**A CLUSTER drag shows no inference.** findInference has the attached-line tests (H / V, parallel / perpendicular to another line, midpoint) for a single dragged JOINT
+only; for any other drag it read the displacement start -> cursor as a line being DRAWN: a tangent to a circle the start lies on, parallel / perpendicular to a nearby
+line. That is the point's motion, not a line of the sketch, so the inferred pose is one the point cannot take: the owner's j3 corner (j3 = j14 = j16: the inner arc's end,
+the radial side, the radial construction line) showed a TANGENT to the inner arc on 38 of 40 events although the side is radial (it adds nothing at release only because
+no snap was locked with it). Now a cluster drag (a coincident corner, an arc by its centre, a centre-point rectangle's centre) infers nothing. A single-joint drag keeps its
+inferences (task 582's rules). **Fusion: to verify** what Fusion shows while dragging a corner shared by an arc and a line (not measured); the conservative choice was taken:
+no inference the sketch already implies, none the point cannot satisfy.
+
+Owner drawing (`.evidence/584/probe-owner.mjs`, `probe-j3.mjs`), before -> after: j8 40 x 4 px along / against its circle, no grid magnet: worst gap 1.08 -> 1.08 / 1.01 ->
+1.01 px, lock changes 0 -> 0; default grid: 10.40 -> 10.40 / 8.96 -> 8.96 px, lock changes 13 -> 13 / 14 -> 14. j7 (welded to the origin) 40 x (4, 2) px: no grid magnet,
+lock changes 2 [joint:j_origin] -> 0; default grid 2 [joint:j_origin] -> 2 [grid:0,0] (the grid node at the origin, where the held point is: a grid snap adds nothing).
+j3 corner 40 x 4 px each way, zoomed: inferences 38 / 38 events -> 0 / 0, worst gap 0.99 -> 0.99 px, constraints 17 -> 17.
+
+## Mirror (task 585)
+Measured by the advisor in Fusion 360 with the REAL UI (Create > Mirror, select the objects, select the mirror line, Enter; new unsaved document, cm; 2026-11-13).
+Ours = tests/mirror-fusion-node.test.js (the node kit: SketchStudio's ribbon Mirror, the objects by clicks, Enter, the line by a click, Enter; ours is mm, shown
+here in cm). Sketch: construction line x = 0 from (0,-1) to (0,5); line A (0,4)->(-3,4) horizontal, its start on the construction line, length dimension 3;
+line B (-3,4)->(-3,1) vertical, sharing A's end; circle (-1.5,2), diameter dimension 1 (ours: radius dimension 0.5). Mirror {A, B, circle} about the
+construction line.
+
+| item | Fusion | ours (task 585) | same? |
+|---|---|---|---|
+| new curves | Line (0,4)->(3,4), Line (3,4)->(3,1), Circle (1.5,2) r 0.5 | the same three | yes |
+| the copy's corner | shared (the chain stays connected) | ONE shared joint (our original corner is two joints + a coincident: the line tool's chain; a coincident cluster becomes one copy point) | yes |
+| the point ON the mirror line | its own copy point at (0,4), linked by symmetry, not merged | the same | yes |
+| new constraints | 4 symmetries: Pt(0,4)-Pt(0,4)', Pt(-3,4)-Pt(3,4), Pt(-3,1)-Pt(3,1), Circle-Circle' | the same 4 symmetric constraints (3 point form, 1 circle form) | yes |
+| copied | nothing else: no horizontal, vertical, coincident-to-line, no dimension (2 stay 2) | the same | yes |
+| points | 7 -> 11 (4 new) | 4 new (our total differs: the chain corner is two joints) | yes (new count) |
+| undo | one step | one step ('mirror'); redo identical | yes |
+| A 3 -> 4, diameter 1 -> 1.6 | copy (4,4), (4,1), r 0.8 | with the construction line held on x = 0: copy x 4, y 4.0008 / 0.9982, r 0.8 | x and r yes; y within 0.002 cm |
+| A 3 -> 4 with a FREE construction line | the line stayed | the line turns 3.0 degrees (to (-0.19,-1.00)-(0.13,5.00)), A's start goes to (0.080, 4.115); the copy stays its exact mirror | no (see below) |
+| arcs | not measured | the circle form (centre + equal radius) PLUS point links on both ends: the copy is the true mirror image; its sweep flips | to verify in Fusion |
+| the mirror line among the objects | not measured | refused ("the mirror line cannot be one of the objects to mirror") | to verify in Fusion |
+
+Divergences (reported, owner decides):
+- A FREE mirror line moves under a dimension edit: our edit's least-change solve (task 528) turns a free construction line, mirror or no mirror. Measured
+  (tests/harness lib sketch, mm): without the mirror, A 30 -> 40 moves the line to (1.040,-10.034)-(5.253,49.826) and A's start to (4.569, 40.104); with the
+  mirror, to (-1.905,-9.953)-(1.270,49.972), A's start (0.802, 41.146). Fusion kept the line. Held (vertical + start on the Y axis), A's height still drifts
+  by 0.008 mm (0.026 mm without the mirror): the same least-change spread.
+- Our circle dimension is a radius; Fusion's measured one is a diameter (the same driving, value halved).
+
+## Dimension tool: starting with a selection, reference notice (task 589)
+**Starting the Dimension tool with a selection (task 589; Fusion NOT measured, this follows the advisor's knowledge: with geometry selected, Sketch Dimension (D) takes the selection as its first pick, the label attached to the cursor).** Ours: a selected line = its length preview, a circle / arc = its RADIUS (the tool's click rule; Fusion's circle gives a diameter and a diameter dimension has no creation path in ours: divergence, unchanged), two joints = their distance, a line and a point = point-to-line distance, two lines = line-line distance (parallel) or the angle, one joint = a first pick waiting for the second. Three or more items, or a pair the tool cannot take (line + circle, two circles): the tool starts with no pick and the selection stays. To verify in Fusion: a selected circle's diameter, and what Fusion does with 3+ selected items.
+
+**A REFERENCE (driven) dimension is announced on placement, not on the pick (task 589; Fusion NOT measured, advisor's knowledge: Fusion says nothing when a line whose length is already determined is picked, and asks about a driven dimension when it is placed).** Ours: the line's length preview is still a reference while it follows the cursor (shown in parentheses like every placing label), but "Dimension added as reference" now shows when it is placed (click, Enter, release of a press-drag), once; a second pick (another line, a point, an axis) that turns it into another dimension shows nothing. Divergence kept: ours places it as a reference with a notice, Fusion asks first.

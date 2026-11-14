@@ -1,5 +1,5 @@
 // tests/recentre-on-reload-node.test.js - TASK 576 (node port of tests/recentre-on-reload-live.test.js, TASK 494): a restored drawing is framed
-// (fitToDrawing) after a reload and after Open recent. SketchStudio and Shaper (their shared Design canvas) through
+// (fitToDrawing) after a reload and after Open recent. SketchStudio, Shaper and (task 583) Pen Plotter (its Design stage, the real stages) through
 // tests/helpers/node-app.js; designs are seeded straight into the shared project store; a reload is close() and open() on the same profile.
 //  - a small drawing far off-centre: after a reload its box is inside the canvas, centred, with the 10% margin
 //  - an empty design keeps the default view
@@ -37,7 +37,7 @@ try {
     else assert(Math.max(bw / vw, bh / vh) > 0.8 && Math.max(bw / vw, bh / vh) < 0.84, `${label}: 10% margin (fill ${Math.max(bw / vw, bh / vh)})`);
     console.log(label, 'ok: viewBox', v.vb.map((n) => +n.toFixed(3)).join(' '));
   };
-  for (const host of ['sketchstudio', 'shaper']) { // Pen Plotter stays in tests/recentre-on-reload-live.test.js: its framing is wired in the page script (sketch-stage.js), not in design-canvas.js
+  for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
     SMALL.bbox.maxY = 3020;
     const profile = await createProfile();
     let app = null;
@@ -67,6 +67,7 @@ try {
       await sleep(50); app.frames(3);
       const zoomed = viewBoxOf(app);
       assert(zoomed.vb[2] < framedW, host + ': wheel zoomed in (' + zoomed.vb + ')');
+      await app.buffer.flush(); // the browser run had waited two settle pauses by now: the buffer's first autosave (it normalises a seeded design, and Pen Plotter adds its sidecar) is done, so the save below is not overwritten by it
       await app.store.save(doc([['a', 5000, 3000], ['b', 5040, 3020], ['c', 5040, 3050]], [line('L1', 'a', 'b'), line('L2', 'b', 'c')]), { app: host, id: smallId });
       await sleep(3200); app.frames(3); // two autosave ticks
       assert.deepStrictEqual(viewBoxOf(app).vb, zoomed.vb, host + ': an autosave tick after a zoom does not re-fit');

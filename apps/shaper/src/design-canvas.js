@@ -5,6 +5,7 @@
 
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js';
+import SettingsManager from '#core/settings-manager.js';
 
 /** The page's Design canvas (index.html <svg id="design-canvas">). */
 export const DESIGN_CANVAS_ID = 'design-canvas';
@@ -42,4 +43,16 @@ export function shaperBufferOptions({ controller, canvas, statusEl = null, refre
     hostName: 'shaper', getHostData: captureShaperDoc, // TASK 460: cut plan + stock persist across reloads (and cross-app saves keep them: TASK 458)
     onStatusChange: (s) => { if (statusEl) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   };
+}
+
+/**
+ * U3b (TASK 583: moved out of main.js unchanged): Shaper defaults to INCH — but ONLY when the user hasn't persisted a doc-unit choice. persist:false keeps it
+ * in-memory (the default never writes to the shared 'sketch-studio-settings' localStorage, so it can't leak to a same-origin SketchStudio); only an explicit
+ * toggle in the Settings modal persists.
+ */
+export function applyShaperUnitDefault() {
+  try {
+    const persisted = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}');
+    if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
+  } catch (_) { /* localStorage blocked */ }
 }

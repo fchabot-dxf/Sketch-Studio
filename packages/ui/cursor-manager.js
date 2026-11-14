@@ -127,6 +127,11 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<path d="M3 19 C 7 4, 17 4, 21 19" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="3" y1="19" x2="7" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><line x1="21" y1="19" x2="17" y2="4" stroke="var(--icon-accent, #ef4444)" stroke-width="1"/><circle cx="3" cy="19" r="2" fill="currentColor"/><circle cx="21" cy="19" r="2" fill="currentColor"/><circle cx="7" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/><circle cx="17" cy="4" r="1.5" fill="var(--icon-accent, #ef4444)"/>`
     },
+    // TASK 585: the Mirror tool (ribbon only, no cursor entry): a dashed mirror line (accent) between a shape and its mirror image
+    'icon-tool-mirror': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M12 2v20" stroke="var(--icon-accent, #ef4444)" stroke-width="1.6" stroke-dasharray="2.4 1.8"/><path d="M9 5 L9 19 L2.5 15 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M15 5 L15 19 L21.5 15 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-dasharray="3 2" fill="none"/>`
+    },
     'icon-tool-dim': {
         viewBox: '0 0 24 24',
         content: `<path d="M3 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M21 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 8l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`

@@ -45,13 +45,13 @@ await (async () => {
     // A screen point `r` px from the origin where NO snap locks: outside the lock distance of both axes (the axis snap, task 537) and
     // farthest from every grid point (the grid snap). Each case releases on such a point, so its release has no snap of its own and
     // only the recovery can move it.
-    const clearPoint = (r) => evalJs(`Promise.all([import('#ui/coords.js'), import('#ui/canvas-grid.js'), import('#ui/snap-magnet.js'), import('#core/settings-manager.js')]).then(([{ worldToScreen, screenToWorld }, { gridSpacing }, { getMagnetThreshold }, { default: SM }]) => {
+    const clearPoint = (r, minAxis = magnet.lock) => evalJs(`Promise.all([import('#ui/coords.js'), import('#ui/canvas-grid.js'), import('#ui/snap-magnet.js'), import('#core/settings-manager.js')]).then(([{ worldToScreen, screenToWorld }, { gridSpacing }, { getMagnetThreshold }, { default: SM }]) => {
       const svg = document.querySelector('#design-canvas');
       const { GRID_SIZE } = gridSpacing(SM.get('DOC_UNIT') || 'mm', { GRID_SIZE: Number(SM.get('GRID_SIZE') || SM.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: Number(SM.get('GRID_MAJOR_STEP') || SM.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SM.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SM.get('INCH_GRID_MAJOR') });
       let best = null;
       for (let deg = 0; deg < 360; deg++) {
         const x = Math.round(${origin.x} + ${r} * Math.cos(deg * Math.PI / 180)), y = Math.round(${origin.y} + ${r} * Math.sin(deg * Math.PI / 180));
-        if (Math.min(Math.abs(x - ${origin.x}), Math.abs(y - ${origin.y})) <= ${magnet.lock}) continue;
+        if (Math.min(Math.abs(x - ${origin.x}), Math.abs(y - ${origin.y})) <= ${minAxis}) continue;
         const w = screenToWorld(svg, x, y), g = worldToScreen(svg, { x: Math.round(w.x / GRID_SIZE) * GRID_SIZE, y: Math.round(w.y / GRID_SIZE) * GRID_SIZE });
         const d = Math.hypot(g.x - x, g.y - y);
         if (!best || d > best.gridPx) best = { x, y, gridPx: d };
@@ -65,7 +65,7 @@ await (async () => {
     await mouse('mouseMoved', origin.x, origin.y, 0); await sleep(60);
     const lockedAtPress = await evalJs(`(() => { const t = ${S}.snapTarget; return !!(t && t.isLocked && t.targetId === 'j_origin'); })()`);
     assert(lockedAtPress, 'hovering the origin locks its snap before the press');
-    const end = await clearPoint(120);
+    const end = await clearPoint(120, magnet.release); // a lock held from the flick's first move survives out to the RELEASE distance (task 586: a wider canvas moved the grid phase and picked a point in the 16-32 px band)
     await arm();
     await mouse('mousePressed', origin.x, origin.y, 1);
     await mouse('mouseMoved', Math.round((origin.x + end.x) / 2), Math.round((origin.y + end.y) / 2), 1);

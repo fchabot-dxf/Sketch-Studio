@@ -16,51 +16,55 @@
 //     doesn't need its own width-detection logic). Not self-mounted/floating: this codebase's convention is
 //     app actions live in the panel/header, not as overlays floating over the ribbon/canvas.
 
-let stylesInjected = false;
+// One stylesheet per breakpoint (task 586): the Design browser box is a drawer at <= 640 px (breakpoint 641), a host's own aside at
+// < 768 px; each drawer's elements carry `sk-bp-<breakpoint>` so a rule only applies to the drawers of its own breakpoint.
+const injectedBreakpoints = new Set();
 function injectStyles(breakpoint) {
-  if (stylesInjected || typeof document === 'undefined' || !document.head) return;
-  if (document.getElementById('sk-drawer-styles')) { stylesInjected = true; return; }
+  if (injectedBreakpoints.has(breakpoint) || typeof document === 'undefined' || !document.head) return;
+  const id = 'sk-drawer-styles-' + breakpoint;
+  if (document.getElementById(id)) { injectedBreakpoints.add(breakpoint); return; }
+  const bp = '.sk-bp-' + breakpoint;
   const s = document.createElement('style');
-  s.id = 'sk-drawer-styles';
+  s.id = id;
   s.textContent = `
 .sk-drawer-toggle { display: none; }
 .sk-drawer-close { display: none; }
 .sk-drawer-hide-mobile { display: inline-flex; }
 @media (max-width: ${breakpoint - 1}px) {
-  .sk-drawer-toggle { display: inline-flex; align-items: center; gap: 6px; background: transparent;
+  .sk-drawer-toggle${bp} { display: inline-flex; align-items: center; gap: 6px; background: transparent;
     border: 1px solid currentColor; opacity: 0.75; border-radius: 6px; padding: 4px 10px;
     font: 12px system-ui, sans-serif; cursor: pointer; color: inherit; }
-  .sk-drawer-toggle:hover { opacity: 1; }
-  @media (pointer: coarse) { .sk-drawer-toggle { min-height: 44px; min-width: 44px; justify-content: center; } } /* TASK 581: a finger */
-  .sk-drawer-hide-mobile { display: none !important; }
-  .sk-drawer-panel { position: fixed !important; top: 0; bottom: 0; left: 0; height: 100%; z-index: 9500;
+  .sk-drawer-toggle${bp}:hover { opacity: 1; }
+  @media (pointer: coarse) { .sk-drawer-toggle${bp} { min-height: 44px; min-width: 44px; justify-content: center; } } /* TASK 581: a finger */
+  .sk-drawer-hide-mobile${bp} { display: none !important; }
+  .sk-drawer-panel${bp} { position: fixed !important; top: 0; bottom: 0; left: 0; height: 100%; z-index: 9500;
     width: 280px; max-width: 85vw; overflow-y: auto; transform: translateX(-100%);
     transition: transform 0.2s ease; box-shadow: 2px 0 16px rgba(0,0,0,0.35); }
-  .sk-drawer-panel.sk-drawer-open { transform: translateX(0); }
-  .sk-drawer-panel.sk-drawer-right { left: auto; right: 0; transform: translateX(100%); box-shadow: -2px 0 16px rgba(0,0,0,0.35); }
-  .sk-drawer-panel.sk-drawer-right.sk-drawer-open { transform: translateX(0); }
-  .sk-drawer-close { display: block; position: absolute; top: 6px; right: 8px; z-index: 1; background: transparent;
+  .sk-drawer-panel${bp}.sk-drawer-open { transform: translateX(0); }
+  .sk-drawer-panel${bp}.sk-drawer-right { left: auto; right: 0; transform: translateX(100%); box-shadow: -2px 0 16px rgba(0,0,0,0.35); }
+  .sk-drawer-panel${bp}.sk-drawer-right.sk-drawer-open { transform: translateX(0); }
+  .sk-drawer-close${bp} { display: block; position: absolute; top: 6px; right: 8px; z-index: 1; background: transparent;
     border: 0; font-size: 16px; line-height: 1; cursor: pointer; color: inherit; opacity: 0.7; padding: 4px; }
-  .sk-drawer-close:hover { opacity: 1; }
+  .sk-drawer-close${bp}:hover { opacity: 1; }
 }
 `;
   document.head.appendChild(s);
-  stylesInjected = true;
+  injectedBreakpoints.add(breakpoint);
 }
 
 export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel', hideOnMobile = [], side = 'left' } = {}) {
   if (!panelEl) throw new Error('createMobileDrawer: panelEl is required');
   injectStyles(breakpoint);
-  panelEl.classList.add('sk-drawer-panel');
+  panelEl.classList.add('sk-drawer-panel', 'sk-bp-' + breakpoint);
   if (side === 'right') panelEl.classList.add('sk-drawer-right');
-  for (const el of hideOnMobile) { if (el) el.classList.add('sk-drawer-hide-mobile'); }
+  for (const el of hideOnMobile) { if (el) el.classList.add('sk-drawer-hide-mobile', 'sk-bp-' + breakpoint); }
 
   const closeX = document.createElement('button');
-  closeX.type = 'button'; closeX.className = 'sk-drawer-close'; closeX.textContent = '✕'; closeX.title = 'Close';
+  closeX.type = 'button'; closeX.className = 'sk-drawer-close sk-bp-' + breakpoint; closeX.textContent = '✕'; closeX.title = 'Close';
   panelEl.insertBefore(closeX, panelEl.firstChild);
 
   const toggleEl = document.createElement('button');
-  toggleEl.type = 'button'; toggleEl.className = 'sk-drawer-toggle'; toggleEl.title = label;
+  toggleEl.type = 'button'; toggleEl.className = 'sk-drawer-toggle sk-bp-' + breakpoint; toggleEl.title = label;
   toggleEl.setAttribute('aria-label', label);
   toggleEl.textContent = '☰ ' + label;
 
@@ -94,8 +98,8 @@ export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel',
       close();
       try { toggleEl.remove(); } catch (_) {}
       try { closeX.remove(); } catch (_) {}
-      panelEl.classList.remove('sk-drawer-panel', 'sk-drawer-open', 'sk-drawer-right');
-      for (const el of hideOnMobile) { if (el) el.classList.remove('sk-drawer-hide-mobile'); }
+      panelEl.classList.remove('sk-drawer-panel', 'sk-bp-' + breakpoint, 'sk-drawer-open', 'sk-drawer-right');
+      for (const el of hideOnMobile) { if (el) el.classList.remove('sk-drawer-hide-mobile', 'sk-bp-' + breakpoint); }
     },
   };
 }

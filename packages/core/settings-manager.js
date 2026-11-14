@@ -47,26 +47,26 @@ const DEFAULT_SETTINGS = {
     INCH_GRID_MAJOR: 1,
 
     // Visual defaults
-    LINE_STROKE: 1.0,
-    JOINT_RADIUS: 4,
-    JOINT_STROKE_MULT: 1.0,
-    SELECTION_FEEDBACK_MULT: 2,
-    HOVER_FEEDBACK_MULT: 3,
+    LINE_STROKE: 0.25,
+    JOINT_RADIUS: 1.4,
+    JOINT_STROKE_MULT: 1.4,
+    SELECTION_FEEDBACK_MULT: 1.5,
+    HOVER_FEEDBACK_MULT: 2,
     LINE_CAP: 'round',
     LINE_JOIN: 'round',
     BACKGROUND: 'light',
     LABEL_FONT_SIZE: 12,
-    GLYPH_SYMBOL_SIZE_PX: 20,
-    GLYPH_INFERENCE_SIZE_PX: 24,
-    GLYPH_OFFSET_PX: 40,
-    GLOW_WIDTH_PX: 20,
-    DASH_LENGTH_PX: 8,
-    DASH_GAP_PX: 8,
-    // Look knobs a style template owns (#ui/style-templates.js). Defaults = today's look.
-    GLYPH_OUTLINE_PX: 1,            // constraint glyph outline width (screen px, 0.2-4)
-    DIM_LABEL_BOX: true,            // dimension value drawn on a filled label box; false = plain text on the dimension line
-    HOVER_COLOR: '#1e40af',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
-    FIXED_JOINT_FILL: 'white',      // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
+    GLYPH_SYMBOL_SIZE_PX: 23,
+    GLYPH_INFERENCE_SIZE_PX: 21,
+    GLYPH_OFFSET_PX: 19,
+    GLOW_WIDTH_PX: 10,
+    DASH_LENGTH_PX: 7,
+    DASH_GAP_PX: 4,
+    // Look knobs a style template owns (#ui/style-templates.js). Defaults = the owner's look (task 614: Fusion-style thin lines, plain dimension text).
+    GLYPH_OUTLINE_PX: 0.7,          // constraint glyph outline width (screen px, 0.2-4)
+    DIM_LABEL_BOX: false,           // dimension value drawn on a filled label box; false = plain text on the dimension line
+    HOVER_COLOR: '#5B6CF0',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
+    FIXED_JOINT_FILL: '#202020',    // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
     LABEL_FONT_FAMILY: '',          // font-family of dimension values/labels: '' = inherit from the host page (today's look) | a CSS font stack
     PROFILE_FILL: 'off',            // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
     LOCKED_LINE_COLOR: '',          // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one

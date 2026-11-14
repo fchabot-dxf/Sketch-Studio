@@ -2,6 +2,8 @@
 // save after changing two knobs, switch to Default, pick the preset (both knobs back, nothing else moved), rename, delete (confirm), overwrite
 // (confirm), persistence across a real reload, an invalid stored entry dropped without breaking the panel, and Reset keeping the presets.
 import assert from 'node:assert';
+global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+const FACTORY = (await import('../packages/core/settings-manager.js')).default.getDefaults(); // the factory look (task 614: read, not hard-coded)
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
@@ -74,7 +76,7 @@ try {
 
   // 2. Default, then the preset again: both knobs back, nothing else changed
   await pickByName('Default');
-  s = await state(); assert.strictEqual(s.LINE_STROKE, 1); assert.strictEqual(s.DASH_GAP_PX, 8);
+  s = await state(); assert.strictEqual(s.LINE_STROKE, FACTORY.LINE_STROKE); assert.strictEqual(s.DASH_GAP_PX, FACTORY.DASH_GAP_PX);
   const beforePick = await state();
   await pickByName('Chunky');
   const afterPick = await state();
@@ -116,7 +118,7 @@ try {
 
   // 6. Reset keeps the user's presets; a built-in has no Rename / Delete
   await click(`${P} .sk-style-foot .sk-style-btn`);
-  assert.strictEqual((await state()).LINE_STROKE, 1, 'Reset restored the factory look');
+  assert.strictEqual((await state()).LINE_STROKE, FACTORY.LINE_STROKE, 'Reset restored the factory look');
   assert.strictEqual((await picker()).groups[1], 'My presets:Heavy', 'Reset kept the preset');
   assert.ok(!(await vis(`${P} [data-action="delete-preset"]`)), 'Default has no Delete');
 

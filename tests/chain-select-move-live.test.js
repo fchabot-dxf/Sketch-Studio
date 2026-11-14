@@ -5,9 +5,11 @@
 //  2. Shift + click adds S; a real drag of S (pressed on its body) MOVES THE WHOLE SELECTION by the cursor's displacement: the rectangle stays
 //     a rectangle, the unselected line W does not move. Ctrl+Z puts everything back in ONE step, Ctrl+Y redoes it identically.
 // Selection and geometry are read from the drawn canvas: a selected shape is stroked in the selection colour (var(--sk-selection)) while the
-// pointer is away from it (hover uses the same colour); line ends in world units, through the canvas transform.
+// pointer is away from it (hover uses the same colour; the default hover colour is a literal, task 614); line ends in world units, through the canvas transform.
 // Screenshots (EVIDENCE_DIR, when set): the chain selected, the selection after the move.
 import assert from 'node:assert';
+global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+const HOVER_LITERAL = String((await import('../packages/core/settings-manager.js')).default.getDefault('HOVER_COLOR')).toLowerCase(); // the factory hover colour: drawn literally, as the selection colour was before task 614
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -34,7 +36,7 @@ await (async () => {
     const mouse = (type, x, y, buttons, clickCount, modifiers = 0) => send('Input.dispatchMouseEvent', { type, x, y, modifiers, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : (clickCount || 1) });
     // line ends (world) by shape id, the selected shape ids (stroked in the selection colour), and the canvas transform
     const geo = () => evalJs(`(() => { const ls = {}, sel = []; const m = document.querySelector('#svgCanvas .shape-elem').getScreenCTM();
-      for (const e of document.querySelectorAll('#svgCanvas line.shape-elem')) { ls[e.dataset.shapeId] = [+e.getAttribute('x1'), +e.getAttribute('y1'), +e.getAttribute('x2'), +e.getAttribute('y2')]; if ((e.getAttribute('style') || '').includes('--sk-selection')) sel.push(e.dataset.shapeId); }
+      for (const e of document.querySelectorAll('#svgCanvas line.shape-elem')) { ls[e.dataset.shapeId] = [+e.getAttribute('x1'), +e.getAttribute('y1'), +e.getAttribute('x2'), +e.getAttribute('y2')]; const st = (e.getAttribute('style') || '').toLowerCase(); if (st.includes('--sk-selection') || st.includes(${JSON.stringify(HOVER_LITERAL)})) sel.push(e.dataset.shapeId); }
       return JSON.stringify({ ls, sel: sel.sort(), m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
     const toS = (g, x, y) => ({ x: Math.round(g.m[0] * x + g.m[2] * y + g.m[4]), y: Math.round(g.m[1] * x + g.m[3] * y + g.m[5]) });
     const toW = (g, sx, sy) => { const [a, b, c, d, e, f] = g.m, det = a * d - b * c; return { x: (d * (sx - e) - c * (sy - f)) / det, y: (-b * (sx - e) + a * (sy - f)) / det }; };

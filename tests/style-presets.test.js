@@ -24,13 +24,13 @@ assert.strictEqual(T.activeStyleTemplateId(SettingsManager.getAll()), p.id);
 
 // the same apply path restores it; a built-in is untouched
 T.applyStyleTemplate('default');
-assert.strictEqual(SettingsManager.get('LINE_STROKE'), 1);
+assert.strictEqual(SettingsManager.get('LINE_STROKE'), SettingsManager.getDefault('LINE_STROKE'));
 const before = SettingsManager.getAll();
 T.applyStyleTemplate(p.id);
 const after = SettingsManager.getAll();
 assert.strictEqual(after.LINE_STROKE, 0.7); assert.strictEqual(after.DASH_GAP_PX, 3);
 for (const k of Object.keys(after)) if (!['LINE_STROKE', 'DASH_GAP_PX', 'STYLE_TEMPLATE'].includes(k)) assert.deepStrictEqual(after[k], before[k], k + ' unchanged');
-assert.strictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'default').settings.LINE_STROKE, 1, 'the built-in Default is unchanged');
+assert.strictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'default').settings.LINE_STROKE, SettingsManager.getDefault('LINE_STROKE'), 'the built-in Default is unchanged by saving or applying a preset');
 
 // tokens: a preset saved while Fusion is the template keeps Fusion's tokens
 T.applyStyleTemplate('fusion');

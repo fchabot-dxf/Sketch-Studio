@@ -9,6 +9,8 @@
 // The V glyph sits close beside its line, as in the owner's drawing: GLYPH_OFFSET_PX 16 puts it about 14 px off the line (svg-renderer's fan).
 // Screenshots (EVIDENCE_DIR, when set): the line hovered, the glyph hovered, the glyph selected.
 import assert from 'node:assert';
+global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+const HOVER_LITERAL = String((await import('../packages/core/settings-manager.js')).default.getDefault('HOVER_COLOR')).toLowerCase(); // the factory hover colour, drawn literally
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -34,7 +36,7 @@ await (async () => {
     const mouse = (type, x, y, buttons, clickCount) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : (clickCount || 1) });
     // per line: its colour token (the var() its stroke uses); the V glyph's centre (world) and the tokens its markup uses; the canvas transform
     const geo = (ct = 'vertical', cj0 = 'r2', lineId = 'rE2') => evalJs(`(() => { const ls = {}; const m = document.querySelector('#svgCanvas .shape-elem').getScreenCTM();
-      const tok = (s) => ((s || '').match(/var\\((--sk-[a-z-]+)/) || [])[1] || null;
+      const tok = (s) => ((s || '').match(/var\\((--sk-[a-z-]+)/) || [])[1] || ((s || '').match(/stroke:\s*(#[0-9a-fA-F]{6})/) || [])[1] || null; // a var() token, else a literal colour (the default HOVER_COLOR is literal)
       for (const e of document.querySelectorAll('#svgCanvas line.shape-elem')) ls[e.dataset.shapeId] = tok(e.getAttribute('style'));
       const g = document.querySelector('#svgCanvas g.constraint-glyph[data-ctype="${ct}"][data-cj0="${cj0}"]');
       const t = g && (g.getAttribute('transform') || '').match(/translate\\(([-0-9.e]+),([-0-9.e]+)\\)/);
@@ -46,7 +48,7 @@ await (async () => {
       const lineY = (() => { const e = document.querySelector('#svgCanvas line.shape-elem[data-shape-id="${lineId}"]'); return +e.getAttribute('y1'); })();
       return JSON.stringify({ ls, glyph: t ? [+t[1], +t[2]] : null, glyphToks, haloToks, lineX, lineY, m: [m.a, m.b, m.c, m.d, m.e, m.f] }); })()`).then(JSON.parse);
     const toS = (g, x, y) => ({ x: g.m[0] * x + g.m[2] * y + g.m[4], y: g.m[1] * x + g.m[3] * y + g.m[5] });
-    const blueLines = (g) => Object.keys(g.ls).filter((id) => g.ls[id] === '--sk-selection' || g.ls[id] === '--sk-hover').sort();
+    const blueLines = (g) => Object.keys(g.ls).filter((id) => g.ls[id] === '--sk-selection' || g.ls[id] === '--sk-hover' || String(g.ls[id]).toLowerCase() === HOVER_LITERAL).sort();
     const linesIn = (g, token) => Object.keys(g.ls).filter((id) => g.ls[id] === token).sort();
     // a 200 x 140 px crop around the glyph centre G, at 3x
     const shot = async (name, G) => {

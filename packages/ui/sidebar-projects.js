@@ -18,7 +18,7 @@ import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
 import { getProjectStore } from './project-store.js';
 import { applyAppIdentity } from './app-registry.js';
 import { getGoogleAccount } from './cloud/google-account.js';
-import { driveErrorText } from './cloud/drive-adapter.js';
+import { driveErrorText, driveFolderUrl } from './cloud/drive-adapter.js';
 import { createProjectActions } from './project-actions.js';
 import { createDocumentTabs } from './document-tabs.js';
 import { importSidebarAction } from './sketch-import.js';
@@ -89,7 +89,11 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       };
     }
     if (s.state === 'saving') return { kind: 'info', text: 'Saving to Google Drive...' };
-    return { kind: 'info', text: 'Saved to Google Drive' + (s.at ? ', ' + relativeTime(s.at) : '') };
+    return {
+      kind: 'info',
+      text: 'Saved to Google Drive' + (s.at ? ', ' + relativeTime(s.at) : ''),
+      ...(s.projectId ? { action: { id: 'open-in-drive', label: 'Open in Drive', href: driveFolderUrl(s.projectId) } } : {}),
+    };
   };
   const driveControls = store.cloud ? {
     check: (onSteps) => store.cloud.checkConnection(onSteps),

@@ -336,12 +336,12 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     el.textContent = s.text;
     if (s.action && s.action.label) {
       el.append(' \u00b7 ');
-      const b = document.createElement('button');
-      b.type = 'button';
+      const b = document.createElement(s.action.href ? 'a' : 'button');
       b.className = 'sk-sidebar-status-act';
       b.dataset.action = s.action.id || 'status-action';
       b.textContent = s.action.label;
-      b.addEventListener('click', s.action.onClick);
+      if (s.action.href) { b.href = s.action.href; b.target = '_blank'; b.rel = 'noopener noreferrer'; }
+      else { b.type = 'button'; b.addEventListener('click', s.action.onClick); }
       el.appendChild(b);
     }
   }

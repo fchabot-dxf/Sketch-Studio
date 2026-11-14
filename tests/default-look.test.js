@@ -19,7 +19,7 @@ const OWNER = { LINE_STROKE: 0.25, JOINT_RADIUS: 1.0, JOINT_STROKE_MULT: 0.67, S
   LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A' };
 assert.deepStrictEqual(Object.keys(OWNER).sort(), [...T.STYLE_SETTING_KEYS].sort(), 'the owner values cover every look knob');
 const looks = (all) => Object.fromEntries(T.STYLE_SETTING_KEYS.map((k) => [k, all[k]]));
-const FUSION_TOKENS = { '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB', '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
+const FUSION_TOKENS = { '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB', '--sk-grid-minor': '#CDD3DA', '--sk-grid-major': '#A9B2BD',
   '--sk-constraint-fill': '#2B9BD6', '--sk-geo-fixed': '#000000', '--sk-construction': '#A9744F', '--sk-constraint-stroke': '#1F2937',
   '--sk-selection': '#017AFD', '--sk-profile-fill': '#5B9BF0', '--sk-profile-tint': '#3AA0DC', '--sk-joint-fill': '#FFFFFF' };
 const mkHost = () => { const props = {}; return { props, style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } } }; };

@@ -120,9 +120,9 @@ export const defaultRenderCtx = {
   // (a) Mount + retune the shared canvas grid (#ui/canvas-grid.js — the ONE grid: GRID_MODE lines/off/points, retuned to
   // the current grid sizes / zoom so strokes don't saturate). `svg` is the canvas draw() was handed; the grid's
   // <defs>/<rect> are created inside it (no longer hardcoded in apps/sketchstudio/index.html).
-  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, svg }) {
+  updateGrid({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, svg }) {
     try {
-      updateGridFromSettings({ svgEl: svg, GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale });
+      updateGridFromSettings({ svgEl: svg, GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale });
     } catch (_) {}
   },
   // (b) Read the engine's last solve stats (written elsewhere by the solver) for the debug/AI-vision residual labels.
@@ -194,7 +194,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
   const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
-  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(docUnit(), { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
+  const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale } = gridSpacing(docUnit(), { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';
   const LOCKED_LINE_COLOR = getStr('LOCKED_LINE_COLOR', ''); // '' = a locked line looks like any fully constrained one
@@ -403,14 +403,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
   // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
-  // goes just above/beside the line, reading along it; a leader label (dirX null: radius/angle) stays centred on its point.
-  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb') => {
+  // goes just above/beside the line, reading along it (an angle value uses the arc's tangent at its anchor as the direction);
+  // a leader label (dirX null: radius) stays centred on its point.
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb', outward) => {
     const fontPx = scale(11);
     const textAttrs = DIM_LABEL_BOX ? DIM_TEXT_ATTRS : `style="fill:${skv(textColor)}"`;
     const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${textAttrs}`;
     if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)), rect: axisRect(cx, cy, boxW, scale(18)) };
     if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
-    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
+    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX), outward });
     const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
     return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds, rect: p.rect };
   };
@@ -478,7 +479,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
   // This replaces the manual JS grid loop and fixes the "zooming in" stroke issue.
   // Ancillary (P3): the host's render ctx mounts + retunes the shared canvas grid (default ctx → #ui/canvas-grid.js on `svg`).
-  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, svg });
+  ctx.updateGrid?.({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, svg });
 
   // Closed-shape fills: build simple loops from grouped line shapes
   try {
@@ -1625,6 +1626,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // Use the unified active snap (computed by input-manager) if present, otherwise fall back to snapTarget
   const effectiveSnap = activeSnap || snapTarget;
+  // The ONE place a snap / inference preview glyph is drawn (constraint type -> icon); `lifted` puts it GLYPH_OFFSET_PX above the point like the inference glyphs
+  const PREVIEW_GLYPH_ICONS = {
+    [CONSTRAINT_TYPES.COINCIDENT]: 'icon-coincident',
+    [CONSTRAINT_TYPES.POINT_ON_LINE]: 'icon-coincident',
+    [CONSTRAINT_TYPES.MIDPOINT]: 'icon-midpoint',
+  };
+  const drawPreviewGlyph = (cType, x, y, lifted) => {
+    const icon = PREVIEW_GLYPH_ICONS[cType];
+    if (!icon) return;
+    drawUnifiedGlyph({ type: cType, __isPreview: true }, x, lifted ? y - scale(GLYPH_OFFSET_PX) : y, icon, 0, { isPreview: true });
+  };
   // draw snap indicator - show when a snap target is present
   if(effectiveSnap){
     // Normalize snap point into `p` (support .pt, {x,y}, id/targetId resolving)
@@ -1708,11 +1720,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Draw a preview of the constraint that would be created by this snap (red X for coincident, orange diamond for point-on-line)
   try{
     const effectivePreviewSnap = activeSnap || snapTarget;
-    if(effectivePreviewSnap && active){
+    if(effectivePreviewSnap && (active || isDragging)){
       let previewJointId = null;
-      if (active.mode === TOOL_MODES.LINE && active.preview) previewJointId = 'preview_end';
-      else if (active.mode === TOOL_MODES.RECT && active.preview) previewJointId = 'preview_corner';
-      else if (active.mode === TOOL_MODES.CIRCLE && active.preview) previewJointId = 'preview_radius';
+      if (active && active.mode === TOOL_MODES.LINE && active.preview) previewJointId = 'preview_end';
+      else if (active && active.mode === TOOL_MODES.RECT && active.preview) previewJointId = 'preview_corner';
+      else if (active && active.mode === TOOL_MODES.CIRCLE && active.preview) previewJointId = 'preview_radius';
       else previewJointId = '__preview__';
 
       const preview = previewSnapConstraint(effectivePreviewSnap, previewJointId, { allowPointOnLine: true });
@@ -1728,21 +1740,21 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
         if(!pt) return;
 
-        if (preview.type === CONSTRAINT_TYPES.COINCIDENT) {
-          // Preview coincident using unified glyph (preview mode) with a dummy constraint for hit attributes
-          const dummyC = { type: CONSTRAINT_TYPES.COINCIDENT, __isPreview: true };
-          drawUnifiedGlyph(dummyC, pt.x, pt.y, 'icon-coincident', 0, { isPreview: true });
-        } else if (preview.type === CONSTRAINT_TYPES.POINT_ON_LINE) {
-          // Point-on-line preview: show coincident glyph in preview mode (unified Blue)
-          const dummyC = { type: CONSTRAINT_TYPES.POINT_ON_LINE, __isPreview: true };
-          drawUnifiedGlyph(dummyC, pt.x, pt.y, 'icon-coincident', 0, { isPreview: true });
+        // Every snap / inference preview glyph goes through drawPreviewGlyph (declared above the snap block)
+        if (preview.type === CONSTRAINT_TYPES.MIDPOINT) {
+          // The drag's midpoint INFERENCE draws the same glyph at the same spot below
+          if (!(inference && inference.type === INFERENCE_TYPES.MIDPOINT)) drawPreviewGlyph(CONSTRAINT_TYPES.MIDPOINT, pt.x, pt.y, true);
+        } else {
+          drawPreviewGlyph(preview.type, pt.x, pt.y, false);
         }
       }
     }
   }catch(_){ }
   
   // Draw inference hint (horizontal, vertical, perpendicular) - use unified glyphs mapped to constraint types
-  if(inference && ((active && active.start) || inference.origin)){
+  if(inference && inference.type === INFERENCE_TYPES.MIDPOINT && inference.pos){
+    drawPreviewGlyph(CONSTRAINT_TYPES.MIDPOINT, inference.pos.x, inference.pos.y, true);
+  } else if(inference && ((active && active.start) || inference.origin)){
     const start = (active && active.start) ? joints.get(active.start) : inference.origin;
     if(start){
       const offset = scale(GLYPH_OFFSET_PX);
@@ -2513,7 +2525,7 @@ switch(c.type){
             const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
             const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
 
-            const placedAngle = placeDimLabel(labelX, labelY, null, null, displayVal, undefined, false, labelStrokeColor);
+            const placedAngle = placeDimLabel(labelX, labelY, -Math.sin(theta), Math.cos(theta), displayVal, undefined, false, labelStrokeColor, { x: Math.cos(theta), y: Math.sin(theta) });
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">

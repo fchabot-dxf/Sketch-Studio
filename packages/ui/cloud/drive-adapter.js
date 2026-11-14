@@ -15,6 +15,7 @@
 // write is small but not zero, and is the honest limit of the API. Every request goes through account.authedFetch (bearer token,
 // one re-mint + retry on a 401); nothing here ever sees a client secret.
 import { GOOGLE } from '#ui/cloud/providers.js';
+import { DRIVE_PREFIX } from '#ui/cloud/router-adapter.js';
 import { serializeProjectFile, parseProjectFile, PROJECT_FILE_EXT } from '#ui/project-file.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
@@ -43,6 +44,12 @@ export const CHECK_STEPS = [
   { id: 'read', label: 'Test file read back identical' },
   { id: 'trash', label: 'Test file deleted (trashed)' },
 ];
+
+/** The Drive web URL of a project's FOLDER (`projectId` = the store's `drive:<id>` or a plain Drive id). The one place this URL is built. */
+export function driveFolderUrl(projectId) {
+  const id = String(projectId);
+  return `https://drive.google.com/drive/folders/${encodeURIComponent(id.startsWith(DRIVE_PREFIX) ? id.slice(DRIVE_PREFIX.length) : id)}`;
+}
 
 const fileName = (name) => String(name) + PROJECT_FILE_EXT;
 const baseName = (file) => String(file).endsWith(PROJECT_FILE_EXT) ? String(file).slice(0, -PROJECT_FILE_EXT.length) : String(file);

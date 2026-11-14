@@ -14,7 +14,7 @@
 // 'lines' markup at the base level (fully opaque minors) is IDENTICAL to the <defs>/<rect> that used to live in apps/sketchstudio/index.html
 // (same ids, attribute order, values, and the same per-zoom stroke-width retune). Zoomed OUT the grid has levels of
 // detail (see gridLevel): the displayed minor spacing becomes GRID_SIZE × ratio^k (ratio = GRID_MAJOR_STEP/GRID_SIZE) so it
-// never packs tighter than MIN_MINOR_PX on screen, and the minor lines fade in so level changes don't pop. Zoomed in
+// never packs the light lines tighter than MIN_MINOR_PX on screen, and the minor lines fade in so level changes don't pop. Zoomed in
 // it never subdivides. Snapping keeps using GRID_SIZE (input-manager.js), not the displayed level. Colours: the stroke/fill ATTRIBUTES
 // keep SketchStudio's literal colours, and a tiny injected stylesheet re-routes them through --sk-grid-minor /
 // --sk-grid-major (var() is not valid in SVG presentation attributes, but CSS beats them), falling back to the very
@@ -29,10 +29,11 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export const GRID_MODES = ['lines', 'off', 'points'];
 export const normalizeGridMode = (m) => (GRID_MODES.includes(m) ? m : 'lines');
 
-// Level of detail: the displayed minor spacing is GRID_SIZE × (GRID_MAJOR_STEP/GRID_SIZE)^k, the smallest k whose
-// on-screen spacing is >= MIN_MINOR_PX. Minor lines fade 0 -> 1 as that spacing grows MIN_MINOR_PX -> (1+MINOR_FADE_SPAN)×.
+// Level of detail (gridLevel): the heavy spacing steps along the declared nice sequence (1-2-5 ...); the displayed level is the first whose
+// light lines are >= MIN_MINOR_PX apart on screen. Like Fusion, light lines stay clearly visible right down to that spacing: they fade in
+// over a short span only (full at (1+MINOR_FADE_SPAN) x MIN_MINOR_PX).
 export const MIN_MINOR_PX = 8;
-const MINOR_FADE_SPAN = 1;
+const MINOR_FADE_SPAN = 0.05;
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
@@ -71,7 +72,7 @@ export const GRID_SPACING_BY_UNIT = {
 // inches with 10 divisions): 1, 2, 5 x 10^n. Binary inches (divisions 2/4/8/16, lodRatio 2): ... 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8 ...
 // The system follows the grid's lodRatio (the same declaration that picks the grid levels); a ratio not listed is decimal.
 export const NICE_LABEL_STEPS = {
-  decimal: { base: 10, mantissas: [1, 2, 5] },
+  decimal: { base: 10, mantissas: [1, 2, 5], subdivisions: [5, 10, 4, 2] },
   binary: { base: 2, mantissas: [1] },
 };
 const NICE_SYSTEM_BY_LOD_RATIO = { 2: 'binary' };
@@ -120,23 +121,34 @@ export function gridSpacing(docUnit, settings) {
   const n = row.divisions.options.includes(asked) ? asked : row.divisions.options[0];
   const askedMajor = Number(settings[row.major.setting]);
   const major = askedMajor > 0 && Number.isFinite(askedMajor) ? askedMajor : row.major.default;
-  return { GRID_SIZE: (major / n) * k, GRID_MAJOR_STEP: major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other };
+  return { GRID_SIZE: (major / n) * k, GRID_MAJOR_STEP: major * k, lodRatio: row.lodRatio[n] ?? row.lodRatio.other, unitScale: k };
 }
 
 /** The displayed grid level for a zoom: { factor, minor, major (world units), minorPx, fade (minor opacity 0..1) }. PURE. */
-export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
-  // lodRatio (gridSpacing's, for units with a row) = the step between levels; absent = major/size (the mm path, unchanged).
-  const ratio = lodRatio || GRID_MAJOR_STEP / GRID_SIZE;
+export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale = 1 }) {
   const pxPerUnit = 1 / scale(1);
-  let factor = 1;
-  // ratio <= 1 cannot subdivide into levels; keep the base grid.
-  if (ratio > 1 && Number.isFinite(pxPerUnit) && pxPerUnit > 0) {
-    while (GRID_SIZE * factor * pxPerUnit < MIN_MINOR_PX && factor < 1e12) factor *= ratio;
+  const divisions = GRID_MAJOR_STEP / GRID_SIZE;  // light lines per heavy square at the base level
+  let major = GRID_MAJOR_STEP, minor = GRID_SIZE;
+  // divisions <= 1 cannot subdivide into levels; keep the base grid.
+  if (divisions > 1 && Number.isFinite(pxPerUnit) && pxPerUnit > 0) {
+    // Heavy spacings = the base major, then every step of the declared nice sequence above it (unitScale = world units per file unit).
+    const nice = niceSteps(NICE_SYSTEM_BY_LOD_RATIO[lodRatio] || 'decimal').map((n) => n * unitScale);
+    const subdivisions = NICE_LABEL_STEPS[NICE_SYSTEM_BY_LOD_RATIO[lodRatio] || 'decimal'].subdivisions || [divisions];
+    const isNiceStep = (v) => nice.some((n) => Math.abs(n - v) <= EPS * v);
+    const levels = [{ major: GRID_MAJOR_STEP, minor: GRID_SIZE }];
+    for (const h of nice.filter((n) => n > GRID_MAJOR_STEP * (1 + EPS))) {
+      const prev = levels[levels.length - 1].minor;
+      // light = the first declared subdivision (decimal: 5, like Fusion; then 10, 4, 2) that is a nice step finer than the heavy and coarser
+      // than the previous level's light lines (so every heavy step shows up); else the largest nice step <= h/divisions dividing h evenly
+      const minor = subdivisions.map((d) => h / d).find((m) => isNiceStep(m) && m > prev * (1 + EPS))
+        ?? nice.filter((n) => n <= h / divisions * (1 + EPS) && isWhole(h / n)).pop() ?? h / divisions;
+      levels.push({ major: h, minor });
+    }
+    ({ major, minor } = levels.find((l) => l.minor * pxPerUnit >= MIN_MINOR_PX) ?? levels[levels.length - 1]);
   }
-  const minor = GRID_SIZE * factor;
   const minorPx = minor * pxPerUnit;
   const fade = Math.min(1, Math.max(0, (minorPx - MIN_MINOR_PX) / (MINOR_FADE_SPAN * MIN_MINOR_PX)));
-  return { factor, minor, major: factor === 1 ? GRID_MAJOR_STEP : Math.max(GRID_MAJOR_STEP, minor * ratio), minorPx, fade };
+  return { factor: major / GRID_MAJOR_STEP, minor, major, minorPx, fade };
 }
 
 /**
@@ -149,8 +161,8 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
  * 'lines' (and 'off', which only hides the rect) = the pattern grid. 'points' = a dot at every grid intersection,
  * same levels, heavier at every major.
  */
-export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio }) {
-  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
+export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio, unitScale }) {
+  const { factor, minor: G, major: M, fade } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale });
   // Fully opaque adds no attribute, so the base level stays byte-identical to the original markup.
   const op = (attr) => (fade < 1 ? ` ${attr}="${fade}"` : '');
   if (normalizeGridMode(gridMode) === 'points') {
@@ -190,9 +202,9 @@ export function gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lo
  * their place. At most MAX_LABELS_PER_AXIS per axis.
  *   vb: the viewBox { x, y, width, height }; scale(px) → world units; docUnit: 'mm' | 'cm' | 'in'.
  */
-export function gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit }) {
+export function gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, vb, docUnit }) {
   if (!vb || !(vb.width > 0) || !(vb.height > 0)) return '';
-  const { major: M, minor: G } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio });
+  const { major: M, minor: G } = gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale });
   const unit = UNITS.includes(docUnit) ? docUnit : 'mm';
   const k = basePer(unit);  // world mm per file unit
   const fileStep = labelStep({ major: M / k, minor: G / k, pxPerUnit: k / scale(1), lodRatio });
@@ -268,14 +280,14 @@ export function ensureCanvasGrid(svgEl) {
 const applied = new WeakMap(); // svgEl → last applied signature (skip the DOM write on idle frames)
 
 /** Mount (if needed) + retune the grid (and its axis numbers) on svgEl for the given spacing/zoom/mode/unit. Returns false if it refused. */
-export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio, docUnit }) {
+export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode, lodRatio, unitScale, docUnit }) {
   const parts = ensureCanvasGrid(svgEl);
   if (!parts) return false;
   const mode = normalizeGridMode(gridMode);
-  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode, lodRatio });
+  const markup = gridDefsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, scale, gridMode: mode, lodRatio, unitScale });
   // The axis numbers: part of the same grid, so they follow the same mode ('off' draws none) and the same levels.
   const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
-  const labels = mode === 'off' ? '' : gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, scale, vb, docUnit });
+  const labels = mode === 'off' ? '' : gridLabelsMarkup({ GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale, scale, vb, docUnit });
   const sig = mode + '|' + markup + '|' + labels;
   if (applied.get(svgEl) !== sig || !parts.defs.firstChild) {
     parts.defs.innerHTML = markup;
@@ -289,6 +301,6 @@ export function updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, gri
 }
 
 /** updateCanvasGrid with the mode and unit read live from the declared GRID_MODE / DOC_UNIT settings (what both render ctxs call). */
-export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio }) {
-  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, gridMode: SettingsManager.get('GRID_MODE'), docUnit: docUnit() });
+export function updateGridFromSettings({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale }) {
+  return updateCanvasGrid({ svgEl, GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitScale, gridMode: SettingsManager.get('GRID_MODE'), docUnit: docUnit() });
 }

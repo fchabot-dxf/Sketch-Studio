@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -68,6 +69,7 @@ await (async () => {
     await send('Runtime.enable'); await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
     const evalJs = async (expression) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r && r.exceptionDetails) throw new Error('CDP eval threw: ' + JSON.stringify(r.exceptionDetails)); return r && r.result ? r.result.value : undefined; };
+    await installFakeDriveSession({ ws, send, evalJs });
     const mouse = (type, x, y, buttons = 0) => send('Input.dispatchMouseEvent', { type, x, y, button: (buttons || type === 'mouseReleased') ? 'left' : 'none', buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
     const move = async (x, y) => { await mouse('mouseMoved', x, y); await sleep(80); };
     const click = async (x, y) => { await move(x, y); await mouse('mousePressed', x, y, 1); await sleep(40); await mouse('mouseReleased', x, y, 0); await sleep(150); };
@@ -78,10 +80,11 @@ await (async () => {
     const EVID = process.env.EVIDENCE_DIR || '';
     const shot = async (name, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 2 } }); if (EVID) { fs.mkdirSync(EVID, { recursive: true }); fs.writeFileSync(path.join(EVID, name), Buffer.from(r.data, 'base64')); } };
     const litCount = (axis) => evalJs(`document.querySelectorAll('[data-ref-axis${axis ? `="${axis}"` : ''}]').length`);
-    const stored = () => evalJs(`new Promise((res) => {
-      const open = indexedDB.open('sketch-studio-projects', 1); open.onerror = () => res(null);
-      open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
-        m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
+    const stored = () => evalJs(`import('/packages/ui/project-store.js').then(async ({ getProjectStore }) => {
+      const s = getProjectStore(); await s.flushDrive();
+      const id = await s.currentId(); if (!id) return null;
+      const r = await s.get(id); const d = r && r.document;
+      return d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null;
     })`).then((s) => s && JSON.parse(s));
     const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.querySelector('[data-doc-ready]').dataset.saveState === 'saved'`)) { await sleep(300); return; } await sleep(250); } };
     const toScreen = (canvas, wx, wy) => evalJs(`(() => { const s = document.querySelector('${canvas}'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);

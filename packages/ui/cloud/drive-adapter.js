@@ -24,9 +24,6 @@ const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,createdTime,vers
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
 
-/** The browser link to a Drive file (what the "Open in Drive" link points at). */
-export const driveFileUrl = (fileId) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
-
 /** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
 export function driveErrorText(e) {
   const m = (e && e.message) || String(e);
@@ -82,11 +79,21 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
 
   // ---- the app root folder ----
   const oldestFirst = (a, b) => (Date.parse(a.createdTime) || 0) - (Date.parse(b.createdTime) || 0) || String(a.id).localeCompare(String(b.id));
-  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null. */
+  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null.
+   *  Always verifies any cached root id is not trashed/deleted out of band before returning it. */
   async function findRoot() {
-    if (rootId) return rootId;
+    if (rootId) {
+      const m = await getMeta(rootId);
+      if (m) return rootId;
+      rootId = null;
+      await meta.setMeta(ROOT_KEY, null);
+    }
     const cached = await meta.getMeta(ROOT_KEY);
-    if (cached) { const m = await getMeta(cached); if (m) return (rootId = cached); }
+    if (cached) {
+      const m = await getMeta(cached);
+      if (m) return (rootId = cached);
+      await meta.setMeta(ROOT_KEY, null);
+    }
     const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
     if (!found.length) return null;
     await meta.setMeta(ROOT_KEY, found[0].id);

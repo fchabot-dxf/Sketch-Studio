@@ -1,0 +1,11 @@
+<!doctype html>
+<!-- tests/helpers/reset-buffer.html — the live tests' reset page (TASK 624, see reset-buffer.js resetBufferLive): it runs the SAME resetBuffer on the
+     origin's shared project store from a page that has no app (no document buffer of its own that could write its open tabs back on pagehide). -->
+<meta charset="utf-8">
+<title>resetting</title>
+<script type="importmap">{ "imports": { "#core/": "/packages/core/", "#ui/": "/packages/ui/" } }</script>
+<script type="module">
+  import { getProjectStore } from '#ui/project-store.js';
+  import { resetBuffer } from './reset-buffer.js';
+  resetBuffer(getProjectStore()).then(() => { document.title = 'buffers reset'; }, (e) => { document.title = 'reset failed: ' + e.message; });
+</script>

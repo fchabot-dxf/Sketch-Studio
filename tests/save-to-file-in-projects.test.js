@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const STUB = `(() => {
   window.showOpenFilePicker = undefined;
@@ -20,6 +21,7 @@ await (async () => {
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate, waitForApp } = cdp;
   try {
+    await installFakeDriveSession(cdp);
     await send('Page.addScriptToEvaluateOnNewDocument', { source: STUB });
     const shot = async (name, w = 1000, h = 680, x = 0, y = 0) => {
       if (!process.env.EVIDENCE_DIR) return;
@@ -55,9 +57,10 @@ await (async () => {
       // project by default (project-store.js newDesign), and the current design here is whatever the previous host's half opened last (TASK 558:
       // a fresh page no longer stores an "Untitled" in My Designs that used to be the current one).
       await q(`(async () => { const s = ${S};
-        const a = await s.newDesign('Trapezoid', { app: ${H}, projectId: 'my-designs' }); await s.save(${JSON.stringify(DOC([[0, 0], [60, 0], [45, 30], [15, 30]]))}, { id: a.id, app: ${H} });
-        const b = await s.newDesign('Bracket', { app: ${H}, projectId: 'my-designs' }); await s.save(${JSON.stringify(DOC([[0, 0], [40, 0], [40, 40]]))}, { id: b.id, app: ${H} });
+        const a = await s.newDesign('Trapezoid', { app: ${H} }); await s.save(${JSON.stringify(DOC([[0, 0], [60, 0], [45, 30], [15, 30]]))}, { id: a.id, app: ${H} });
+        const b = await s.newDesign('Bracket', { app: ${H}, projectId: a.projectId }); await s.save(${JSON.stringify(DOC([[0, 0], [40, 0], [40, 40]]))}, { id: b.id, app: ${H} });
         const p = await s.createProject('Shop jigs'); const c = await s.newDesign('Plate', { app: ${H} }); await s.save(${JSON.stringify(DOC([[0, 0], [80, 0], [80, 20], [0, 20]]))}, { id: c.id, app: ${H} }); await s.moveDesign(c.id, p.id);
+        await s.flushDrive();
         return true; })()`);
 
       // the menu: no Save to file; its neighbours are untouched
@@ -79,7 +82,7 @@ await (async () => {
       assert.ok((await tiles()).includes('Trapezoid') && (await tiles()).includes('Plate'), `${host}: Recent lists the designs`);
       await waitFor(`document.querySelectorAll('.sk-pm-thumb svg').length >= 3`, `${host}: thumbnails`);
       assert.ok(await q(`document.querySelector('.sk-pm-thumb svg path').getAttribute('d').startsWith('M')`), `${host}: a thumbnail draws a path`);
-      assert.ok(/This device/.test(await q(`document.querySelector('.sk-pm-sub').textContent`)), `${host}: where it lives is shown`);
+      assert.ok(/Google Drive/.test(await q(`document.querySelector('.sk-pm-sub').textContent`)), `${host}: where it lives is shown`);
       await shot(`547-${host}-manager-desktop`, 960, 660, 220, 70);
 
       // search

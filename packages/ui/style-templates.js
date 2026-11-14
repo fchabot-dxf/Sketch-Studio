@@ -32,7 +32,7 @@ export const STYLE_TEMPLATES = [
   { id: 'default', name: 'Default', settings: factory() },
 
   // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
-  // 15px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
+  // 25px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
   // hover, solid dark dots for fixed joints. `tokens` = the canvas colours (CSS --sk-* custom properties set on the
   // canvas HOST element only): free lines sketch blue, fully constrained black, brown construction, pale blue plane.
   {
@@ -40,7 +40,7 @@ export const STYLE_TEMPLATES = [
     settings: factory({
       LINE_STROKE: 0.25, JOINT_RADIUS: 0.75, JOINT_STROKE_MULT: 0.67,
       SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2,
-      GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
+      GLYPH_SYMBOL_SIZE_PX: 25, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
       DIM_LABEL_BOX: false,
             LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',

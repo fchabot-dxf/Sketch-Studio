@@ -2087,6 +2087,35 @@ parallel, perpendicular).
 
 **Divergence (reported, not changed).** Fusion showed no PARALLEL glyph when a free line end was turned parallel to another line (0.06 deg off) and added
 nothing; ours (attached-line test, ANGLE_SNAP_DEG 3) shows it and adds a Parallel at release. Fusion's Horizontal on the same drag matches ours.
+(Resolved by task 598, next section: the attached-line parallel / perpendicular test is gone.)
+
+## Dragging: the attached-line inferences of a line end (task 598)
+**Fusion, measured** (2026-11-13, Fusion 360 Personal, a new unsaved document, sketch built through the bridge, edit mode entered and every drag done with
+the REAL mouse, 25 steps over 2 s, screenshots while the button was held, constraints read back after each release; cm; local evidence .evidence/598/,
+fusion-summary.txt). Fusion's sketch grid snap (0.05 in in that inch document) puts a dragged point on a grid point, so the angle / length targets are the
+grid points where the relation holds best; the error at release is given. Ours = tests/drag-attached-inference-node.test.js (node kit, the app's pointer
+listeners, the same rows in mm, 30 events to the target).
+
+| Row (the free end of a line L dragged; two directions each) | Fusion while held / at release | Ours before | Ours after |
+|---|---|---|---|
+| L turned horizontal (from above / below) | Horizontal glyph / Horizontal added | the same | the same |
+| L turned vertical (from the right / left) | Vertical glyph / Vertical added | the same | the same |
+| L turned parallel to another line M (0.069 / 0.033 deg; a first try at 1.0 deg) | nothing / nothing | PARALLEL shown, the end pinned, Parallel added | nothing / nothing |
+| L turned perpendicular to an unconnected line N (0.003 / 0.153 deg) | nothing / nothing | PERPENDICULAR shown, Perpendicular added | nothing / nothing |
+| L turned perpendicular to K, K and L sharing their corner point (0.077 / 0.074 deg) | nothing / nothing | PERPENDICULAR to K shown, added | nothing / nothing |
+| L lengthened / shortened to another line's length (2.9995 / 3.0129 cm vs 3) | nothing / nothing | nothing (no equal-length inference) | nothing |
+| L turned tangent to the arc it shares its other end with (0.048 / 0.009 deg) | nothing / nothing | nothing (gone since task 594) | nothing |
+| L's end onto another line's midpoint (from above / the upper right) | Midpoint glyph / MidPoint added | Midpoint shown / midpoint added | the same |
+| L's end onto a lone point (snap) | lands on it / Coincident added | joint snap / coincident added | the same |
+| L's end onto a line, 0.8 cm from its midpoint (snap) | snap marker / Coincident (point on the line) added | line snap / pointOnLine added | the same |
+| L's end onto a circle, from outside / inside (snap) | snap marker / Coincident (point on the circle) added | curve snap / pointOnLine added | the same |
+
+**The rule (ours, task 598, one place: packages/core/inference-engine.js findInference, the attached-line tests of a joint drag).** A line through the
+dragged joint offers Horizontal / Vertical only (plus the midpoint test); the parallel / perpendicular test against every other line (ANGLE_SNAP_DEG 3)
+is removed. The coincident snaps are input-manager's (task 582), unchanged and already as Fusion. The line tool (no drag in the options) keeps every
+drawing inference: H, V, tangent, parallel, perpendicular (the test's control).
+Seen during the run: a sketch point left selected by a drag is dragged by the next press made elsewhere (Fusion), and a press under a cursor that did
+not move since the view changed starts a window select.
 
 ## Mirror (task 585)
 Measured by the advisor in Fusion 360 with the REAL UI (Create > Mirror, select the objects, select the mirror line, Enter; new unsaved document, cm; 2026-11-13).

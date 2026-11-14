@@ -36,7 +36,11 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
   const worldPerPx = options && options.worldPerPx;
   if (isDraggingJoint && !(worldPerPx > 0)) throw new Error('findInference: a joint drag needs options.worldPerPx (world units per screen pixel)');
 
-  // When dragging a joint, check if attached lines are becoming horizontal/vertical first
+  // When dragging a joint: is a line through it becoming horizontal / vertical? These are the only attached-line inferences of a drag, as in
+  // Fusion (TASK 598, measured with the real mouse, docs/FUSION-COMPARISON.md "Dragging: the attached-line inferences of a line end"): a dragged line
+  // end turned horizontal / vertical shows the glyph and the release adds it; turned parallel or perpendicular to another line (the line it shares
+  // its corner with included), to another line's length or tangent to the arc it shares its other end with, Fusion shows and adds nothing. The
+  // parallel / perpendicular test that stood here (any other line within ANGLE_SNAP_DEG pinned the end and the release added it) is gone.
   if(isDraggingJoint && draggedJointId){
     // Find all lines attached to the dragged joint
     const attachedLines = shapes.filter(s => 
@@ -52,64 +56,8 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
       // Find which endpoint is fixed (the one that's not being dragged)
       const fixedJoint = (attachedLine.joints[0] === draggedJointId) ? j2 : j1;
 
-      // Vector from fixed endpoint to current drag position
-      const dragDx = endPt.x - fixedJoint.x;
-      const dragDy = endPt.y - fixedJoint.y;
-      const dragAngle = Math.atan2(dragDy, dragDx) * 180 / Math.PI;
-      const dragDist = Math.hypot(dragDx, dragDy);
-
-      // FIRST: Check if this line would be parallel/perpendicular to other lines (prefer matching existing lines)
-      // Use the SIGNED angle difference (not absolute) so we can tell whether
-      // the dragged line is parallel-same or anti-parallel to the reference,
-      // and which side of perpendicular it's on. Otherwise the snap pos
-      // computed from `otherAngle` flips the dragged line 180°.
-      for(const otherShape of shapes){
-        if(!otherShape || otherShape === attachedLine) continue;
-        if(otherShape.type === 'line' && otherShape.joints && otherShape.joints.length >= 2){
-          const oa = joints.get(otherShape.joints[0]);
-          const ob = joints.get(otherShape.joints[1]);
-          if(!oa || !ob) continue;
-
-          const otherDx = ob.x - oa.x;
-          const otherDy = ob.y - oa.y;
-          const otherAngle = Math.atan2(otherDy, otherDx) * 180 / Math.PI;
-
-          // Signed difference, normalized to (-180, 180]
-          let signedDiff = dragAngle - otherAngle;
-          while (signedDiff > 180) signedDiff -= 360;
-          while (signedDiff <= -180) signedDiff += 360;
-          const absDiff = Math.abs(signedDiff);
-
-          // Parallel: dragged line is within SNAP° of either same-direction (0)
-          // or anti-parallel (±180). Pick the matching branch so the dragged
-          // line keeps its current orientation.
-          const isParaSame = absDiff < ANGLE_SNAP_DEG;
-          const isParaOpp  = Math.abs(absDiff - 180) < ANGLE_SNAP_DEG;
-          if(isParaSame || isParaOpp){
-            const targetAngleDeg = isParaOpp ? (otherAngle + 180) : otherAngle;
-            const rad = targetAngleDeg * Math.PI / 180;
-            const snapPos = {
-              x: fixedJoint.x + dragDist * Math.cos(rad),
-              y: fixedJoint.y + dragDist * Math.sin(rad)
-            };
-            return { type: INFERENCE_TYPES.PARALLEL, pos: snapPos, targetId: otherShape.id, refLine: { id: otherShape.id, p1: oa, p2: ob } };
-          }
-
-          // Perpendicular: dragged line is within SNAP° of either +90 or -90
-          // from the reference. signedDiff sign tells us which side.
-          const isPerpPlus  = Math.abs(signedDiff -  90) < ANGLE_SNAP_DEG;
-          const isPerpMinus = Math.abs(signedDiff - (-90)) < ANGLE_SNAP_DEG;
-          if(isPerpPlus || isPerpMinus){
-            const targetAngleDeg = isPerpPlus ? (otherAngle + 90) : (otherAngle - 90);
-            const rad = targetAngleDeg * Math.PI / 180;
-            const snapPos = {
-              x: fixedJoint.x + dragDist * Math.cos(rad),
-              y: fixedJoint.y + dragDist * Math.sin(rad)
-            };
-            return { type: INFERENCE_TYPES.PERPENDICULAR, pos: snapPos, targetId: otherShape.id, refLine: { id: otherShape.id, p1: oa, p2: ob } };
-          }
-        }
-      }
+      // Angle of the line from its other end to the current drag position
+      const dragAngle = Math.atan2(endPt.y - fixedJoint.y, endPt.x - fixedJoint.x) * 180 / Math.PI;
 
       // A line that already carries a horizontal or vertical constraint takes no H/V inference: the inferred pose (the end straight
       // across or above the other end) contradicts it (task 548 F2: that collapsed an H line on a fast fling)
@@ -117,13 +65,13 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
         && c.joints.includes(attachedLine.joints[0]) && c.joints.includes(attachedLine.joints[1]));
       if(hasHV) continue;
 
-      // FALLBACK: Check if the dragged line is becoming horizontal
+      // Is the dragged line becoming horizontal?
       const horizontalDiff = Math.min(Math.abs(dragAngle), Math.abs(Math.abs(dragAngle) - 180));
       if(horizontalDiff < ANGLE_SNAP_DEG){
         return { type: INFERENCE_TYPES.HORIZONTAL, pos: { x: endPt.x, y: fixedJoint.y }, targetId: null };
       }
 
-      // FALLBACK: Check if the dragged line is becoming vertical
+      // Is the dragged line becoming vertical?
       const verticalDiff = Math.abs(Math.abs(dragAngle) - 90);
       if(verticalDiff < ANGLE_SNAP_DEG){
         return { type: INFERENCE_TYPES.VERTICAL, pos: { x: fixedJoint.x, y: endPt.y }, targetId: null };

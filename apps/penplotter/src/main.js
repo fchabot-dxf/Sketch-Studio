@@ -11,6 +11,7 @@ applyAppIdentity('penplotter');
 import { onExportClick } from './export.js';
 import { getDocBuffer, importDrawing } from './sketch-stage.js'; // UNIFY-4a: the merged 'Design' tab = the shared #core/#ui sketcher
 import { mountStages } from './stages.js'; // TASK 583: the stage pipeline (list, nav, router, Design + Draw mounts), declared once (the node test kit calls it too)
+import { mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 
 // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the G-code zip export, New = a fresh document.
@@ -30,4 +31,5 @@ const _diagLog = createDiagnosticLog({ appId: 'penplotter', state: () => window.
 if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // The stage pipeline (stages.js): the nav buttons + stage bodies from its declared list, the router, the Design + Draw mounts.
-mountStages({ nav: document.getElementById('mode-nav'), stagesHost: document.getElementById('stages') });
+const { history } = mountStages({ nav: document.getElementById('mode-nav'), stagesHost: document.getElementById('stages') });
+if (swHost) mountHistoryButtons({ router: history, header: swHost.parentElement, before: _diagLog.toggleEl }); // TASK 618: right side, left of Log

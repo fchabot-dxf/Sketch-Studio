@@ -402,6 +402,7 @@ export function mountSketchStage(view, ctx = {}) {
 
   // RAF lifecycle tied to the active stage. onEnter re-renders the underlay (catches palette edits made on other tabs).
   return {
+    controller, // TASK 618: the stage's history (stages.js)
     onEnter: () => {
       controller.start(); underlayDirty = true;
       // UNIFY-6: the FIRST canvas shown at a real size fits the SHARED view (controller.state.view) to the plotter

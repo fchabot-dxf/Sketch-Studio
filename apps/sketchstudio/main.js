@@ -1,7 +1,8 @@
 import { dbg } from '#core/debug.js';
 import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
-import { setupInput, showDimInput } from '#ui/input-manager.js';
+import { setupInput, showDimInput, sketchHistory } from '#ui/input-manager.js';
+import { createHistoryRouter, mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
@@ -179,6 +180,7 @@ function initApp(){
   });
   const headerHost = document.getElementById('app-header-host');
   if (headerHost) header.render(headerHost);
+  mountHistoryButtons({ router: createHistoryRouter({ current: () => sketchHistory(state) }), header: header.el, before: header.el.querySelector('.sk-header-actions') }); // TASK 618: right side, left of Style / Debug
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer opened from this header button
   sidePanel = mountStudioBrowser({ svg, state, engine, toggleHost: header.el }); // design-canvas.js
   showView('design');

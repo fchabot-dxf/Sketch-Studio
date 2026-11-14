@@ -205,7 +205,7 @@ const HOSTS = {
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
     let controller = null, modes = null, ribbon = null, buffer = null, browser = null;
-    const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(),
+    const prepare = createPrepareStage({ getController: () => controller, getMode: () => modes.current(), history: M.createShaperHistory({ getController: () => controller, getMode: () => modes.current() }),
       panelEl: doc.getElementById('prepare-panel'), canvasEl: doc.getElementById('prepare-canvas'), noticeEl: doc.getElementById('prepare-notice') });
     const stockCard = createStockCard({ input: doc.getElementById('review-stock-thickness'), noteEl: doc.getElementById('review-stock-note'), getController: () => controller });
     // main.js ensureSketch, run by the mode router on the first entry into Design, with the Design view already showing: the sketch, the ribbon, the buffer

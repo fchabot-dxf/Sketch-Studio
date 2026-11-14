@@ -4,7 +4,6 @@
 // while Prepare shows, and what the document buffer does with Prepare after a restore. Moved out of main.js unchanged; the page keeps its own views (Explore,
 // Vcarve, Review, the info panel) and passes what only it has as options.
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
-import { undoRedoKeyAction } from '#ui/input-manager.js'; // TASK 463: the shared history key mapping
 import { captureCutPlan, applyCutPlan } from './shaper-doc.js'; // TASK 460: the cut plan + stock ride in doc.hosts.shaper
 import { mountPrepareView } from './prepare-view.js'; // SP1a/c/d/e: Prepare render + loop/edge select + cut preview
 import { createCutPanel } from './cut-panel.js';       // SP1f: the cut-settings card (cut-type control)
@@ -13,13 +12,14 @@ import { CUT_PLAN, migrateEdgeRecords } from './cut-plan.js'; // SP1j-4: the sha
 /**
  * createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, ensureSketch, notify, onViewChange })
  *   getController(): the mounted Design sketch controller (null before it exists). getMode(): the showing mode ('prepare' while Prepare shows).
+ *   history: the Undo / Redo router (modes.js createShaperHistory); its runKey serves Ctrl+Z / Ctrl+Y while Prepare shows.
  *   panelEl / canvasEl / noticeEl: the cut card's host, the Prepare svg, the one-line notice. ensureSketch(): mounts the sketch (the page mounts it lazily).
  *   notify(msg): the page's status line. onViewChange(view): told when the Prepare view is (re)mounted (the page's dev / test seam).
  * Returns { hostSnapshot, mount, enter, view, afterRestore, captureSession, restoreSession, cutPanel }: hostSnapshot = state.hostSnapshot of the sketch (the cut plan in its undo snapshots);
  * mount() = (re)mount the Prepare view; enter(enteringMode) = the mode router's hook for entering Prepare (modes.js); view() = the mounted view or null;
  * afterRestore() = what a document restore does with Prepare.
  */
-export function createPrepareStage({ getController, getMode, panelEl, canvasEl, noticeEl, ensureSketch = () => {}, notify = () => {}, onViewChange = () => {} }) {
+export function createPrepareStage({ getController, getMode, history, panelEl, canvasEl, noticeEl, ensureSketch = () => {}, notify = () => {}, onViewChange = () => {} }) {
   let prepareView = null;      // SP1c–f: Prepare-local view (edges + loop/edge select + cut preview); re-mounted per Prepare enter
   // SP1f: the cut-settings card reflects the Prepare selection + writes the picked cut type back onto it.
   const refreshCutPanel = () => {
@@ -110,16 +110,13 @@ export function createPrepareStage({ getController, getMode, panelEl, canvasEl, 
 
   // TASK 463: Prepare has no sketcher input layer and the shared Ctrl+Z handler is gated to Design (isActive: mode === 'design'),
   // so Ctrl+Z / Ctrl+Y on Prepare would do nothing. This listener runs ONLY while Prepare is the mode (the two gates are mutually
-  // exclusive, so a key never fires twice), uses the SAME key mapping as the shared handler (input-manager undoRedoKeyAction), and
-  // drives the same state.undo()/redo().
+  // exclusive, so a key never fires twice) and runs the SAME dispatch as the header's Undo / Redo buttons (`history`, modes.js
+  // createShaperHistory, TASK 618; the key mapping is history-control undoRedoKeyAction).
   document.addEventListener('keydown', (e) => {
     const designController = getController();
     if (getMode() !== 'prepare' || !designController) return;
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // let a text field undo its own text
-    const action = undoRedoKeyAction(e);
-    if (!action) return;
-    designController.state[action]();
-    e.preventDefault();
+    history.runKey(e);
   });
 
   return {

@@ -15,7 +15,8 @@ import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBro
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
-import { MODE_KEY, findViews, createModeRouter } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
+import { mountHistoryButtons } from '#ui/history-control.js'; // TASK 618: Undo / Redo in the header
+import { MODE_KEY, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
@@ -317,8 +318,9 @@ let showStockThickness = () => {}; // TASK 460: re-syncs the Review card's thick
 let vcarveView = null;       // VCARVE-3b: the live Vcarve workspace; mounted once, refreshed per Vcarve enter
 // SP1c-f, TASK 463, TASK 472 (prepare-stage.js): the Prepare view, the cut-settings card, every cut-plan edit as ONE step of the shared history, the cut
 // plan in the sketch's undo snapshots, the Ctrl+Z / Ctrl+Y keys while Prepare shows, the one-line notice
+const history = createShaperHistory({ getController: () => designController, getMode: () => modes.current() }); // TASK 618
 const prepare = createPrepareStage({
-  getController: () => designController, getMode: () => modes.current(),
+  getController: () => designController, getMode: () => modes.current(), history,
   panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'),
   ensureSketch, notify: groupStatus, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
 });
@@ -401,7 +403,7 @@ function ensureSketch() {
 // The view router (modes.js): show the active mode's container, hide the rest, drive the Design RAF lifecycle, persist the active mode.
 modes = createModeRouter({
   views: VIEWS, modeBtns, exploreActions, getController: () => designController, ensureSketch,
-  afterShow: (mode) => { if (browser) { if (mode !== 'design') browser.drawer.close(); browser.drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586: the Sketches drawer button shows only on Design
+  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.drawer.close(); browser.drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586: the Sketches drawer button shows only on Design
   enter: {
     vcarve: () => {
       ensureSketch();
@@ -419,6 +421,7 @@ modes = createModeRouter({
   },
 });
 const showMode = modes.showMode;
+mountHistoryButtons({ router: history, header: document.querySelector('header.sk-phone-header'), before: document.getElementById('explore-actions') }); // TASK 618: right side, left of the settings button
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {

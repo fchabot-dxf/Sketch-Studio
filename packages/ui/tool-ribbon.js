@@ -318,33 +318,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   document.addEventListener('pointerup', syncSoon);
   document.addEventListener('keyup', syncSoon);
 
-  // EDIT: shared built-in Undo / Redo (all hosts)
-  const editFrag = document.createDocumentFragment();
-  const undoBtn = document.createElement('button');
-  undoBtn.type = 'button';
-  undoBtn.className = 'sk-ribbon-btn';
-  undoBtn.id = 'btn-undo';
-  undoBtn.title = 'Undo (Ctrl+Z)';
-  undoBtn.innerHTML = `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sk-ribbon-lbl">Undo</span>`;
-  undoBtn.addEventListener('click', () => {
-    if (state && typeof state.undo === 'function') state.undo();
-    fire('action', { id: 'btn-undo', action: 'undo' });
-    refresh();
-  });
-
-  const redoBtn = document.createElement('button');
-  redoBtn.type = 'button';
-  redoBtn.className = 'sk-ribbon-btn';
-  redoBtn.id = 'btn-redo';
-  redoBtn.title = 'Redo (Ctrl+Y, Ctrl+Shift+Z)';
-  redoBtn.innerHTML = `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 7v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sk-ribbon-lbl">Redo</span>`;
-  redoBtn.addEventListener('click', () => {
-    if (state && typeof state.redo === 'function') state.redo();
-    fire('action', { id: 'btn-redo', action: 'redo' });
-    refresh();
-  });
-  editFrag.append(undoBtn, redoBtn);
-  el.appendChild(group('Edit', editFrag));
+  // TASK 618: Undo / Redo left the ribbon: one shared control in every host's header (history-control.js).
 
   // app-specific groups (Actions / …) appended by the host
   (extraGroups || []).forEach((grp) => {
@@ -360,10 +334,6 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
   function refresh() {
     const cur = state && state.currentTool;
     toolBtns.forEach(({ btn, tool }) => btn.classList.toggle('active', tool === cur));
-    const canUndo = (state && typeof state.canUndo === 'function') ? state.canUndo() : Boolean(state && state.history && state.history.length > 0);
-    const canRedo = (state && typeof state.canRedo === 'function') ? state.canRedo() : Boolean(state && state.redoStack && state.redoStack.length > 0);
-    undoBtn.disabled = !canUndo;
-    redoBtn.disabled = !canRedo;
     const lock = state ? selectionLockState(state) : { has: false, locked: false };
     lockBtn.disabled = !lock.has;
     lockBtn.setAttribute('aria-pressed', String(lock.locked));

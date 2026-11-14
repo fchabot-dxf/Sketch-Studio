@@ -400,14 +400,15 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
   // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
-  // goes just above/beside the line, reading along it; a leader label (dirX null: radius/angle) stays centred on its point.
-  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb') => {
+  // goes just above/beside the line, reading along it (an angle value uses the arc's tangent at its anchor as the direction);
+  // a leader label (dirX null: radius) stays centred on its point.
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb', outward) => {
     const fontPx = scale(11);
     const textAttrs = DIM_LABEL_BOX ? DIM_TEXT_ATTRS : `style="fill:${skv(textColor)}"`;
     const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${textAttrs}`;
     if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)), rect: axisRect(cx, cy, boxW, scale(18)) };
     if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
-    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
+    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX), outward });
     const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
     return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds, rect: p.rect };
   };
@@ -2508,7 +2509,7 @@ switch(c.type){
             const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
             const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
 
-            const placedAngle = placeDimLabel(labelX, labelY, null, null, displayVal, undefined, false, labelStrokeColor);
+            const placedAngle = placeDimLabel(labelX, labelY, -Math.sin(theta), Math.cos(theta), displayVal, undefined, false, labelStrokeColor, { x: Math.cos(theta), y: Math.sin(theta) });
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">

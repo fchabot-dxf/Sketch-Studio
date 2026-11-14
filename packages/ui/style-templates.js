@@ -15,7 +15,7 @@ import { dbg } from '#core/debug.js';
 // The look knobs a template owns. (Snap/grid behaviour and grid look are not touched.)
 export const STYLE_SETTING_KEYS = [
   'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
-  'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'GLOW_WIDTH_PX',
+  'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX',
   'DASH_LENGTH_PX', 'DASH_GAP_PX',
   'DIM_LABEL_BOX',   'HOVER_COLOR', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
 ];
@@ -39,7 +39,7 @@ export const STYLE_TEMPLATES = [
     id: 'fusion', name: 'Fusion',
     settings: factory({
       LINE_STROKE: 0.25, JOINT_RADIUS: 0.75, JOINT_STROKE_MULT: 0.67,
-      SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2, GLOW_WIDTH_PX: 10,
+      SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2,
       GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
       DIM_LABEL_BOX: false, HOVER_COLOR: FACTORY.HOVER_COLOR,
@@ -52,19 +52,19 @@ export const STYLE_TEMPLATES = [
       '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
       '--sk-construction': '#A9744F',
       '--sk-constraint-stroke': '#1F2937', // dimension lines + text
-      '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
+      '--sk-selection': '#017AFD',         // hovered / selected geometry + joint ring outline
       '--sk-profile-fill': '#5B9BF0',
       '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
       '--sk-joint-fill': '#FFFFFF',
     },
   },
 
-  // Dense drawings: thin lines, small joints and glyphs, tight glow.
+  // Dense drawings: thin lines, small joints and glyphs.
   {
     id: 'compact', name: 'Compact',
     settings: factory({
       LINE_STROKE: 0.3, JOINT_RADIUS: 1, JOINT_STROKE_MULT: 0.8,
-      SELECTION_FEEDBACK_MULT: 2.5, GLOW_WIDTH_PX: 10,
+      SELECTION_FEEDBACK_MULT: 2.5,
       GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
@@ -77,7 +77,7 @@ export const STYLE_TEMPLATES = [
     id: 'presentation', name: 'Presentation',
     settings: factory({
       LINE_STROKE: 1.5, JOINT_RADIUS: 5, JOINT_STROKE_MULT: 1,
-      SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2, GLOW_WIDTH_PX: 28,
+      SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2,
       GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56,
       DASH_LENGTH_PX: 14, DASH_GAP_PX: 8,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Presentation)

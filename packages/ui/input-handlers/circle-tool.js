@@ -1,23 +1,25 @@
 // Circle tool - preview and creation
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
-import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
+import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, cancelCreation } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 
 let circleState = { lockedRadius: null };
 const localState = { isDragging: false, dragStartScreen: null };
+// TASK 596: after the first click the radius box shows at once (base-tool's shared creation-box path); the size follows the cursor until a radius is typed
+const BOX = { single: { field: 'radius' } };
 
 export function setupCircleTool(svg, state){
     setupNumericInput(svg, state);
     setupDimensionListeners(state, TOOL_MODES.CIRCLE, {
         onApply: (detail) => {
             if (detail.mode === 'single' && detail.field === 'radius') {
-                circleState.lockedRadius = detail.value;
+                if (detail.typed[0] && detail.value > 0) circleState.lockedRadius = detail.value; // only a typed radius locks (the box otherwise shows the live one, rounded)
                 if (detail.confirmedBy === 'enter') {
                     try { finalizeCircleFromActive(svg, state); } catch (_) { }
                 }
@@ -26,6 +28,7 @@ export function setupCircleTool(svg, state){
         onPreview: (detail) => {
             if (detail.mode !== 'single' || detail.field !== 'radius') return;
             const v = detail.value;
+            circleState.lockedRadius = v > 0 ? v : null;
             const center = state.joints.get(state.active.start) || state.active.startPt;
             if (center && state.active.preview) {
                 const pt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : center;
@@ -33,11 +36,16 @@ export function setupCircleTool(svg, state){
                 try { state.tempMousePos = pt; } catch (_) { }
             }
         },
-        onCancel: () => { circleState.lockedRadius = null; }
+        onCancel: () => {
+            circleState.lockedRadius = null;
+            // Esc inside the box (open since the first click): nothing is made and no undo step, as Esc on the canvas
+            if (state.active && state.active.mode === TOOL_MODES.CIRCLE && state.active.waitingForSecondClick) cancelCreation(state);
+        }
     });
 }
 
 export function resetCircleState(state){ 
+    if (state && state.active && state.active.mode === TOOL_MODES.CIRCLE) { circleState.lockedRadius = null; try { hideInput(); } catch (_) { /* no DOM (node) */ } } // the radius box open since the first click goes with the circle
     resetToolState(state, TOOL_MODES.CIRCLE, localState);
 }
 
@@ -66,9 +74,9 @@ export function handleCirclePointerMove(e, svg, state, w){
     const previewPt = state.snapTarget ? state.snapTarget.pt : w;
     const center = state.joints.get(state.active.start);
     if(!center) return false;
-    if (isInputActive()) { updateInputPosition(e.clientX, e.clientY); }
     const dx = previewPt.x - center.x, dy = previewPt.y - center.y;
     let r = Math.hypot(dx, dy);
+    if (isInputActive()) followCreationBoxes(e, [r]);
     if (circleState.lockedRadius) r = circleState.lockedRadius;
     safeUpdatePreview(state, 'circle', [state.active.start], previewPt, { radius: r });
     return true;
@@ -82,6 +90,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     if (!localState.isDragging && !state.active.waitingForSecondClick) {
         state.active.waitingForSecondClick = true;
         localState.dragStartScreen = null; 
+        openCreationBoxes(e, BOX, [0]);
         return true;
     }
 
@@ -157,7 +166,7 @@ export function handleCircleKeyDown(e, svg, state) {
         const currentRadius = Math.hypot((previewPt.x - center.x), (previewPt.y - center.y));
         const midWorld = { x: (center.x + previewPt.x) / 2, y: (center.y + previewPt.y) / 2 };
         const midScreen = worldToScreen(svg, midWorld);
-        showSingleInput(midScreen.x, midScreen.y, currentRadius, 'radius');
+        showSingleInput(midScreen.x, midScreen.y, currentRadius, 'radius', e.key); // the typed digit is the box's first character
         return true;
     }
     return false;

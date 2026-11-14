@@ -1,27 +1,20 @@
-(async () => {
-    const { handleRectPointerDown, handleRectPointerUp } = await import('#ui/input-handlers/rect-tool.js');
-    const { TOOL_MODES, RECT_MODES } = await import('#core/constants.js');
-    const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
+// Two-point rectangle: the first click waits for the second, the second places it. TASK 596: the first click also opens the W x H boxes on the
+// canvas (the shared numeric box needs the DOM), so this runs in the node kit on the real SketchStudio page with real pointer events.
+import assert from 'node:assert';
+import { open } from './helpers/node-app.js';
 
-    const createState = () => ({ joints: new Map(), shapes: [], constraints: [], genJ: () => 'j' + Math.floor(Math.random()*10000), beginUndoGroup: () => {}, beginDrawStep: () => {}, closeDrawStep: () => 'none', isUndoGroupOpen: () => false, captureUndoSnapshot: () => ({}), endUndoGroup: () => {}, saveState: () => {}, isConstructionMode: false, currentTool: TOOL_MODES.RECT, rectMode: RECT_MODES.TWO_POINT, activeSnap: null, snapTarget: null });
-
-    const svg = null; // not needed for this test
-
-    // First click should set corner and enter waitingForSecondClick
-    const state = createState();
-    const w1 = { x: 10, y: 10 };
-    handleRectPointerDown({ clientX: 10, clientY: 10 }, svg, state, null, w1);
-    // Up without dragging -> should set waitingForSecondClick
-    handleRectPointerUp({ clientX: 10, clientY: 10 }, svg, state, null, w1, false);
-    assert(state.active && state.active.waitingForSecondClick === true, 'First click should set waitingForSecondClick for two-point mode');
-
-    // Second click should finalize rectangle (create shapes)
-    const w2 = { x: 20, y: 30 };
-    handleRectPointerDown({ clientX: 20, clientY: 30 }, svg, state, null, w2);
-    const beforeShapes = state.shapes.length;
-    handleRectPointerUp({ clientX: 20, clientY: 30 }, svg, state, null, w2, false);
-    assert(state.active === null, 'After second click two-point rect should finalize and active should be cleared');
-    assert(state.shapes.length > beforeShapes, 'Rectangle shapes should be created on second click');
-
-    console.log('rect-two-point-click tests passed ✅');
-})().catch(e => { console.error('rect-two-point-click tests failed ❌', e); process.exit(1); });
+const app = await open({ host: 'sketchstudio' });
+let failed = null;
+try {
+    const st = app.state, O = app.toScreen(0, 0);
+    app.tool('rect');
+    const a = { x: O.x + 300, y: O.y + 150 }, b = { x: O.x + 380, y: O.y + 210 };
+    app.click(a.x, a.y);   // First click should set corner and enter waitingForSecondClick
+    assert(st.active && st.active.waitingForSecondClick === true, 'First click should set waitingForSecondClick for two-point mode');
+    const before = st.shapes.length;
+    app.click(b.x, b.y);   // Second click should finalize the rectangle (create shapes)
+    assert(st.active === null, 'After second click two-point rect should finalize and active should be cleared');
+    assert(st.shapes.length > before, 'Rectangle shapes should be created on second click');
+    console.log('rect-two-point-click tests passed');
+} catch (e) { failed = e; } finally { await app.close(); }
+if (failed) { console.error('rect-two-point-click tests failed', failed.stack || failed); process.exitCode = 1; }

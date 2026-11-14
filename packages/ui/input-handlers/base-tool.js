@@ -2,7 +2,8 @@
 // BASE TOOL - Shared utilities for all drawing tools
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { updatePreview } from '#ui/preview-manager.js';
+import { updatePreview, clearPreview } from '#ui/preview-manager.js';
+import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition, hideInput } from '#ui/numeric-input-manager.js';
 
 /**
  * Check if pointer movement exceeds drag threshold.
@@ -64,6 +65,29 @@ export function resetToolState(state, toolMode, localState) {
 export function safeUpdatePreview(state, type, jointIds, pt, opts) {
     try { updatePreview(state, type, jointIds, pt, opts); } catch (_) { }
     state.tempMousePos = pt;
+}
+
+/**
+ * TASK 596: the ONE "show the tool's boxes on the first click" path of the creation tools (rect, circle, polygon). A tool declares its box
+ * ({ dual: { kind, labels, separator, digits } } for two fields, { single: { field } } for one) and calls these:
+ * openCreationBoxes on the first click (the boxes show at once, beside the cursor, the first field focused: a digit typed now goes in it),
+ * followCreationBoxes on every move (the box follows the cursor and each field shows the live value unless the user typed in it),
+ * and cancelCreation for Esc inside a box (nothing is made, no undo step).
+ */
+export function openCreationBoxes(e, box, values) {
+    const x = e.clientX + 15, y = e.clientY + 15;
+    if (box.dual) showDualInput(x, y, values[0], values[1], box.dual);
+    else showSingleInput(x, y, values[0], box.single.field);
+}
+export function followCreationBoxes(e, values) {
+    updateInputPosition(e.clientX, e.clientY);
+    values.forEach((v, i) => setLiveInputValue(i, v));
+}
+export function cancelCreation(state) {
+    state.closeDrawStep();   // nothing committed: the centre / corner joint made by the first click goes with the cancelled step
+    clearPreview(state);
+    state.active = null;
+    hideInput();
 }
 
 /**

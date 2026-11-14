@@ -39,7 +39,7 @@ try {
   const desk = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
     return { coarse: matchMedia('(pointer: coarse)').matches, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), style: m('.sk-header-style'), debug: m('#btn-debug-toggle'), ribbonBtn: m('.sk-ribbon-btn'),
-      ribbonLbl: m('.sk-ribbon-lbl'), poly: m('#polygon-sides'), construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
+      ribbonLbl: m('.sk-ribbon-lbl'), construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'),
       tune: m('#btn-tuning-toggle'), log: m('.sk-diag-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'), fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage }; })()`);
   console.log('desktop 1400:', JSON.stringify(desk));
   assert.strictEqual(desk.coarse, false);
@@ -68,13 +68,13 @@ try {
 
   const ph = await evalJs(`(() => {
     const m = (s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, cs.fontSize, cs.display]; };
-    return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), actions: m('.sk-header-actions'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'), poly: m('#polygon-sides'),
+    return { coarse: matchMedia('(pointer: coarse)').matches, vw: innerWidth, menuBtn: m('.sk-sidebar-btn'), tab: m('.sk-header-tab'), actions: m('.sk-header-actions'), ribbonBtn: m('.sk-ribbon-btn'), ribbonLbl: m('.sk-ribbon-lbl'), groupLbl: m('.sk-ribbon-group-label'),
       construct: m('#btn-construct-toggle'), recenter: m('#btn-recenter-view'), mag: m('#btn-mag-toggle'), tune: m('#btn-tuning-toggle'), diagSlot: m('#status-diag-slot'), coords: m('#viewport-size'),
       fade: getComputedStyle(document.querySelector('.sk-ribbon')).maskImage.slice(0, 40), hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       headerRight: Math.round(document.querySelector('.sk-header').getBoundingClientRect().right), ribbonScroll: [document.querySelector('.sk-ribbon').scrollWidth, document.querySelector('.sk-ribbon').clientWidth] }; })()`);
   console.log('phone 390:', JSON.stringify(ph));
   assert.strictEqual(ph.coarse, true, 'the emulated phone is a coarse pointer');
-  for (const k of ['menuBtn', 'tab', 'ribbonBtn', 'poly', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
+  for (const k of ['menuBtn', 'tab', 'ribbonBtn', 'construct', 'recenter']) assert.ok(ph[k][0] >= 44 && ph[k][1] >= 44, `${k} is >= 44x44 on a phone: ${ph[k]}`);
   for (const k of ['ribbonLbl', 'groupLbl', 'coords']) assert.ok(parseFloat(ph[k][2]) >= 12, `${k} text >= 12 px: ${ph[k][2]}`);
   assert.strictEqual(ph.actions[3], 'none', 'Style + Debug left the header at phone width');
   assert.ok(ph.headerRight <= 390 && !ph.hscroll, 'the header fits the screen (no clipped button, no page scroll)');
@@ -100,6 +100,13 @@ try {
   const cr = await evalJs(`(() => { const r = document.getElementById('svgCanvas').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()`);
   const P = (fx, fy) => ({ x: cr.l + cr.w * fx, y: cr.t + cr.h * fy });
   assert.strictEqual(await shapes(), 0, 'an empty canvas');
+  // TASK 596: the polygon's size / sides boxes show on the canvas after the centre tap; every field is a finger (>= 44 px tall); Esc closes them
+  await tapSel('#tool-polygon'); await tap(P(0.3, 0.5));
+  const polyBoxes = await evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').flatMap((b) => [...b.querySelectorAll('input')].map((i) => { const r = i.getBoundingClientRect(); return [i.placeholder, Math.round(r.width), Math.round(r.height)]; }))`);
+  assert.strictEqual(polyBoxes.length, 2, 'the size and the sides boxes show after the centre tap: ' + JSON.stringify(polyBoxes));
+  for (const [name, w, h] of polyBoxes) assert.ok(w >= 44 && h >= 44, `the ${name} box is >= 44x44: ${w}x${h}`);
+  await evalJs(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await sleep(150);
+  assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').length`), 0, 'Esc closes the polygon boxes');
   await tapSel('#tool-line');
   assert.ok(await evalJs(`document.querySelector('.sk-touch-done') ? document.querySelector('.sk-touch-done').hidden : true`), 'Done is hidden before a chain starts');
   await tap(P(0.25, 0.35));

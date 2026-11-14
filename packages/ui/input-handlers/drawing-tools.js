@@ -11,7 +11,7 @@ import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLine
 import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
 import { setupCircleTool, handleCirclePointerDown, handleCirclePointerMove, handleCirclePointerUp, resetCircleState } from '#ui/input-handlers/circle-tool.js';
-import { handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
+import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
 import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { handleJointSelection } from '#ui/input-handlers/selection-tools.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
@@ -36,10 +36,11 @@ export function setupDrawingTools(svg, state) {
     if (!state.rectMode) {
         state.rectMode = RECT_MODES.TWO_POINT;
     }
-    // Initialize line, rect, circle and arc tools (the polygon tool keeps no setup: no numeric input of its own)
+    // Initialize line, rect, circle, polygon and arc tools
     setupLineTool(svg, state);
     setupRectTool(svg, state);
     setupCircleTool(svg, state);
+    setupPolygonTool(svg, state);
     setupArcTool(svg, state);
 }
 

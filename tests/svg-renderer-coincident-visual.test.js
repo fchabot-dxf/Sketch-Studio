@@ -37,12 +37,13 @@
   const whiteCircles = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(whiteCircles === 0, `Expected 0 visible points on closed triangle, got ${whiteCircles}`);
 
-  // Hover one of the hidden follower joints (e.g., a2) and verify the corner appears with the true-blue hover glow
+  // Hover one of the hidden follower joints (e.g., a2) and verify the corner appears with the thicker Fusion-blue ring and no outer halo
   svg.innerHTML = '';
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, 'a2', null, null, false, null);
   const hoveredWhite = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(hoveredWhite === 1, `Hovering hidden corner should reveal 1 point, got ${hoveredWhite}`);
-  assert(svg.innerHTML.includes(`stroke:${HOVER_COLOR}`), `Hovering hidden joint should show leader glow (${HOVER_COLOR})`);
+  assert(svg.innerHTML.includes(`stroke:var(--sk-selection, ${HOVER_COLOR})`), `Hovering hidden joint should show leader ring (${HOVER_COLOR})`);
+  assert(!/<circle[^>]*fill="none"/.test(svg.innerHTML), 'Hovering hidden joint should draw no outer halo circle');
 
   // Select the coincident constraint c1 and assert the corresponding glyph appears (opacity:1)
   svg.innerHTML = '';

@@ -41,12 +41,11 @@ const hoverHaloDots = (svg) => jointDots(svg).filter((d) => d.fill === 'none');
 
 // 1. HOVER_COLOR & FIXED_JOINT_FILL checks
 const hoverColor = SettingsManager.getDefault('HOVER_COLOR');
-assert.strictEqual(hoverColor, '#5B96E8', 'HOVER_COLOR default is true-blue #5B96E8');
+assert.strictEqual(hoverColor, '#017AFD', 'HOVER_COLOR default is bright Fusion blue #017AFD');
 assert.notStrictEqual(hoverColor.toUpperCase(), '#5B6CF0', 'old violet #5B6CF0 is gone');
-const selHsl = hexToHsl('#3B7DD8'), hovHsl = hexToHsl(hoverColor);
+const selHsl = hexToHsl('#017AFD'), hovHsl = hexToHsl(hoverColor);
 assert(Math.abs(selHsl.h - hovHsl.h) <= 3, `hover hue (${hovHsl.h.toFixed(1)}) matches --sk-selection hue (${selHsl.h.toFixed(1)})`);
 assert(hovHsl.b > hovHsl.g && hovHsl.g > hovHsl.r, 'hover colour is true blue (B > G > R, zero violet shift)');
-assert(hovHsl.l > selHsl.l, 'hover blue is lighter/softer than --sk-selection so selection stays stronger');
 
 assert.strictEqual(SettingsManager.getDefault('FIXED_JOINT_FILL'), undefined, 'FIXED_JOINT_FILL removed from DEFAULT_SETTINGS');
 assert.ok(!STYLE_SETTING_KEYS.includes('FIXED_JOINT_FILL'), 'FIXED_JOINT_FILL removed from STYLE_SETTING_KEYS');
@@ -91,7 +90,7 @@ const makeDoc = (joints, shapes, constraints = []) => ({
   const originDot = [...app.svg.querySelectorAll('circle')].find((c) => Number(c.getAttribute('cx')) === 0 && Number(c.getAttribute('cy')) === 0 && (c.getAttribute('style') || '').includes('--sk-joint-fill'));
   assert.ok(originDot, 'j_origin still draws at (0,0) with its current look');
 
-  // Hover hidden corner r3 (50, 40): revealed, white fill, dark outline, true-blue glow
+  // Hover hidden corner r3 (50, 40): revealed, white fill, thicker bright-blue ring, no outer halo
   const r3s = app.toScreen(50, 40);
   app.move(r3s.x, r3s.y);
   let dots = regularJointDots(app.svg);
@@ -99,23 +98,22 @@ const makeDoc = (joints, shapes, constraints = []) => ({
   assert.strictEqual(dots[0].cx, 50);
   assert.strictEqual(dots[0].cy, 40);
   assert.match(dots[0].fill, /--sk-joint-fill/, 'hovered unselected point stays white fill');
-  assert.match(dots[0].stroke, /--sk-geo-fixed.*#202020/, 'hovered point keeps dark outline');
+  assert.match(dots[0].stroke, new RegExp(`--sk-selection.*${hoverColor}`, 'i'), 'hovered point ring uses bright Fusion blue (--sk-selection)');
   const halos = hoverHaloDots(app.svg);
-  assert.strictEqual(halos.length, 1, 'hovered point draws 1 outer halo');
-  assert.strictEqual(halos[0].stroke.toLowerCase(), hoverColor.toLowerCase(), 'hover halo uses true-blue HOVER_COLOR');
+  assert.strictEqual(halos.length, 0, 'hovered point draws no outer halo');
 
   // Move away -> hidden again
   app.move(away.x, away.y);
   assert.strictEqual(regularJointDots(app.svg).length, 0, 'moving away hides corner again');
 
-  // Click hidden corner r3 -> selected & stays visible with blue-tinted fill and dark ring
+  // Click hidden corner r3 -> selected & stays visible with blue-tinted fill and bolder bright-blue ring
   app.click(r3s.x, r3s.y);
   app.move(away.x, away.y);
   assert.ok(app.state.selectedJoints.has('r3'), 'hidden corner stays pickable by real click');
   dots = regularJointDots(app.svg);
   assert.strictEqual(dots.length, 1, 'selected corner stays visible when mouse leaves');
   assert.match(dots[0].fill, /--sk-joint-selected/, 'selected point is filled with blue tint (--sk-joint-selected)');
-  assert.match(dots[0].stroke, /--sk-geo-fixed.*#202020/, 'selected point keeps dark ring outline');
+  assert.match(dots[0].stroke, new RegExp(`--sk-selection.*${hoverColor}`, 'i'), 'selected point ring uses bright Fusion blue (--sk-selection)');
 
   await app.close();
 }

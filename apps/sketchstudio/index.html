@@ -250,6 +250,9 @@
         /* Show state: display block; menu is absolutely positioned and already has a high z-index */
         .tool-dropdown .tool-dropdown.show { display: block; }
 
+        /* TASK 615 -- the canvas's Construction / Recenter buttons are 32 px square icon buttons (the glyph is a <use> of the shared icon sprite, packages/ui/cursor-manager.js ICONS). */
+        #btn-construct-toggle, #btn-recenter-view { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+        #btn-construct-toggle svg, #btn-recenter-view svg { width: 20px; height: 20px; pointer-events: none; }
         /* TASK 562 -- phone layout (<= 640 px, the app's one breakpoint): the footer's Log / MAG LENS / TUNE leave the bar (Log and TUNE live in
            the menu, see main.js; the lens is automatic under a finger). */
         @media (max-width: 640px) {
@@ -259,7 +262,7 @@
            mouse: under a finger the lens follows the finger by itself (input-manager.js). */
         @media (pointer: coarse) {
             #btn-mag-toggle { display: none; }
-            #btn-construct-toggle, #btn-recenter-view { min-height: 44px; font-size: 12px; }
+            #btn-construct-toggle, #btn-recenter-view { width: 44px; height: 44px; }
             footer .sk-diag-toggle, #btn-tuning-toggle { min-height: 44px; min-width: 44px; font-size: 12px; }
             #viewport-size { font-size: 12px; }
             #debug-panel #debug-close-btn { min-width: 44px; min-height: 44px; font-size: 22px; }
@@ -393,8 +396,8 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
 
             <!-- Floating Construct toggle (moved from footer): positioned over canvas for quick access -->
             <div class="absolute right-4 top-4 z-40 flex gap-2">
-                <button id="btn-construct-toggle" class="toolbar-btn bg-white shadow-sm px-3 py-1 rounded text-xs uppercase" title="Toggle Construction Mode" aria-pressed="false">Construction</button>
-                <button id="btn-recenter-view" class="toolbar-btn bg-white shadow-sm px-3 py-1 rounded text-xs uppercase text-slate-500 hover:text-slate-700" title="Recenter View">Recenter</button>
+                <button id="btn-construct-toggle" class="toolbar-btn bg-white shadow-sm rounded" title="Toggle Construction Mode" aria-label="Construction" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-construction"/></svg></button>
+                <button id="btn-recenter-view" class="toolbar-btn bg-white shadow-sm rounded text-slate-500 hover:text-slate-700" title="Recenter View" aria-label="Recenter view"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-recenter"/></svg></button>
             </div>
         </div>
     </main>

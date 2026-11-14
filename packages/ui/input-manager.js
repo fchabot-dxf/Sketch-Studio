@@ -1156,7 +1156,7 @@ export function undoRedoKeyAction(e) {
 
 function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
-    const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : (msg) => { try { showNotification(msg); } catch (_) {} };
+    const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : showNotification;
     const clipboard = createClipboard({ state, notify: notifyFn, unit: () => SettingsManager.get('DOC_UNIT') || 'mm' });
     // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
     window.addEventListener('liveDimensionCancelled', () => {

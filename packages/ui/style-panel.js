@@ -120,7 +120,7 @@ function injectStyles() {
  * createStylePanel({ settings, onNotify, title }) → { el, open, close, toggle, render, destroy }
  *   settings: the SettingsManager-like store (get/set/getAll/subscribe→unsub/resetToDefaults). Defaults to the
  *     shared #core singleton; injectable so a smoke can pass a fresh manager.
- *   onNotify(msg): optional toast hook (no Tailwind dependency here).
+ *   onNotify(msg, level): optional toast hook (no Tailwind dependency here); level is 'success' | 'info' | 'warning' | 'error'. A throw from it propagates.
  *   title: header text (default 'Style').
  *   hostId: names the host so each remembers its own last-open tab (localStorage).
  */
@@ -128,7 +128,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   injectStyles();
   const controlEls = {}; // key -> { input, slider? }
   let isOpen = false, escHandler = null, outsideHandler = null;
-  const notify = (m) => { if (typeof onNotify === 'function') { try { onNotify(m); } catch (_) {} } };
+  const notify = (m, level) => { if (typeof onNotify === 'function') onNotify(m, level); };
 
   const el = document.createElement('div'); el.className = 'sk-style-panel sk-hidden';
 
@@ -211,7 +211,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
     if (name === null) return;
     const clash = findUserPresetByName(name, settings);
     if (clash && !(await ask({ label: 'A preset named "' + clash.name + '" already exists. Overwrite it?', okLabel: 'Overwrite' }))) return;
-    saveUserPreset(name, settings); notify('Saved style preset "' + name + '".');
+    saveUserPreset(name, settings); notify('Saved style preset "' + name + '".', 'success');
   });
   renameBtn.addEventListener('click', async () => {
     const p = chosenPreset(); if (!p) return;
@@ -220,7 +220,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   });
   deleteBtn.addEventListener('click', async () => {
     const p = chosenPreset(); if (!p) return;
-    if (await ask({ label: 'Delete the preset "' + p.name + '"?', okLabel: 'Delete' })) { deleteUserPreset(p.id, settings); notify('Deleted style preset "' + p.name + '".'); }
+    if (await ask({ label: 'Delete the preset "' + p.name + '"?', okLabel: 'Delete' })) { deleteUserPreset(p.id, settings); notify('Deleted style preset "' + p.name + '".', 'success'); }
   });
   body.appendChild(tplRow);
 
@@ -272,7 +272,7 @@ export function createStylePanel({ settings = SettingsManager, onNotify = null, 
   const foot = document.createElement('div'); foot.className = 'sk-style-foot';
   const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'sk-style-btn'; resetBtn.textContent = 'Reset';
   // Reset restores the factory LOOK; the user's saved presets are their data, not look settings, so they are put back after it.
-  resetBtn.addEventListener('click', () => { const mine = settings.get(USER_PRESETS_KEY); settings.resetToDefaults(); settings.set(USER_PRESETS_KEY, mine, { persist: 'local' }); populate(); notify('Reset to factory defaults.'); });
+  resetBtn.addEventListener('click', () => { const mine = settings.get(USER_PRESETS_KEY); settings.resetToDefaults(); settings.set(USER_PRESETS_KEY, mine, { persist: 'local' }); populate(); notify('Reset to factory defaults.', 'success'); });
   const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'sk-style-btn'; closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => close());
   foot.append(resetBtn, closeBtn);

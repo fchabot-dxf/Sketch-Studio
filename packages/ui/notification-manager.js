@@ -34,7 +34,7 @@ export function setupNotifications() {
     }
 }
 
-export function showNotification(message, type = 'error', duration = 3000) {
+export function showNotification(message, type = 'info', duration = 3000) {
     // No-op in non-DOM environments (tests, server-side imports). Notifications
     // are pure UI candy; their absence shouldn't crash logic flows.
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
@@ -51,6 +51,7 @@ export function showNotification(message, type = 'error', duration = 3000) {
     }
 
     const toast = document.createElement('div');
+    toast.setAttribute('data-level', type); // the level the caller asked for (read by tests; no look depends on it)
     
     // Visual styles based on type
     let bg = '#ef4444'; // error (red)

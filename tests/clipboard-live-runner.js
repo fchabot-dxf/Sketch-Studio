@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const SOURCE = process.env.HOST || 'sketchstudio';
 const CROSS = process.env.CROSS === '1';
@@ -21,6 +22,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
   let bws = null;
   try {
     const { send, evalJs, navigate, port } = h;
+    await installFakeDriveSession(h);
     await send('Emulation.setFocusEmulationEnabled', { enabled: true });
     const origin = `http://127.0.0.1:${port}`;
     // Browser.grantPermissions is a BROWSER-target command: its own short-lived connection (read the port the profile dir recorded)
@@ -43,7 +45,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       const H = hostOf(name);
       await navigate(H.url); await sleepMs(2500);
       if (name === 'shaper') {
-        for (let i = 0; i < 5; i++) { await evalJs(`document.querySelector('[data-mode="design"]').click()`); await sleepMs(500); if (await evalJs(`!!window.__designController`)) break; }
+        for (let i = 0; i < 5; i++) { await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleepMs(500); if (await evalJs(`!!window.__designController`)) break; }
         await sleepMs(1500);
       } else {
         await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);
@@ -56,11 +58,11 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     // the live document: Shaper exposes its state (test hook); SketchStudio is read from its autosaved store (the buffer polls every 1500 ms)
     const sortKeys = (o) => Array.isArray(o) ? o.map(sortKeys) : (o && typeof o === 'object') ? Object.fromEntries(Object.keys(o).sort().map((k) => [k, sortKeys(o[k])])) : o;
     const norm = (d) => ({ shapes: sortKeys(d.shapes.map(({ sketchId, ...r }) => r)), joints: sortKeys((Array.isArray(d.joints) ? d.joints : Object.entries(d.joints)).map(([k, v]) => { const { sketchId, ...r } = v; return [k, r]; })), constraints: d.constraints.map((c) => { const { __visible, glyphPos, __pos, ...r } = c; return sortKeys(r); }) });
-    const storedDoc = () => evalJs(`new Promise((res) => {
-      const open = indexedDB.open('sketch-studio-projects', 1);
-      open.onerror = () => res(null);
-      open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
-        m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
+    const storedDoc = () => evalJs(`import('/packages/ui/project-store.js').then(async ({ getProjectStore }) => {
+      const s = getProjectStore(); await s.flushDrive();
+      const id = await s.currentId(); if (!id) return null;
+      const r = await s.get(id); const d = r && r.document;
+      return d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null;
     })`).then((s) => s && JSON.parse(s));
     const waitSaved = async () => { await sleepMs(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.querySelector('[data-doc-ready]').dataset.saveState === 'saved'`)) { await sleepMs(200); return; } await sleepMs(200); } };
     const readDoc = async (name) => {

@@ -145,7 +145,7 @@ function injectStyles() {
     flex: 1 1 auto; min-height: 0; }
   .sk-ribbon-frame > * { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; }
   .sk-ribbon-frame > footer { grid-column: 2; grid-row: 2; } /* TASK 618: SketchStudio's status bar (the footer) under the work area, right of the rail */
-  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0;
+  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0 0 0 16px;
     overflow: hidden; border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
   .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; gap: 0; padding: 2px;
     overflow-x: hidden; overflow-y: auto; touch-action: pan-y; -webkit-mask-image: none; mask-image: none; }
@@ -265,13 +265,14 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     });
     // TASK 607: the variants menu is a POPOVER: it lives on document.body (a ribbon is a scroll box and clips any child, absolute or fixed under a
     // mask) and is placed from the button's rect, kept inside the viewport: below the button in the bar, beside it in the short-viewport rail.
-    // It closes on Esc, an outside click, the ribbon scrolling and the window resizing; the listeners exist only while it is open.
+    // It closes on Esc, an outside press or click, the ribbon scrolling and the window resizing; the listeners exist only while it is open.
+    // An outside press is caught at pointerdown because a DISABLED button (e.g. the footer's Clear sketch on an empty sketch) never fires click.
     const closeMenu = () => {
       menu.classList.remove('show');
-      document.removeEventListener('click', onOutside); document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onOutside); document.removeEventListener('click', onOutside); document.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', closeMenu); el.removeEventListener('scroll', closeMenu);
     };
-    const onOutside = (ev) => { if (!menu.contains(ev.target)) closeMenu(); };
+    const onOutside = (ev) => { if (!menu.contains(ev.target) && !b.contains(ev.target)) closeMenu(); };
     const onKey = (ev) => { if (ev.key === 'Escape') closeMenu(); };
     const openMenu = () => {
       menu.classList.add('show');
@@ -282,7 +283,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       const left = beside ? r.right + pad : r.left, top = beside ? r.top : r.bottom + 2;
       menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
       menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
-      document.addEventListener('click', onOutside); document.addEventListener('keydown', onKey);
+      document.addEventListener('pointerdown', onOutside); document.addEventListener('click', onOutside); document.addEventListener('keydown', onKey);
       window.addEventListener('resize', closeMenu); el.addEventListener('scroll', closeMenu);
     };
     b.addEventListener('click', (ev) => {

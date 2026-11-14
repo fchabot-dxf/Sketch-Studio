@@ -35,6 +35,9 @@ function injectStyles(breakpoint) {
     border: 1px solid currentColor; opacity: 0.75; border-radius: 6px; padding: 4px 10px;
     font: 12px system-ui, sans-serif; cursor: pointer; color: inherit; }
   .sk-drawer-toggle${bp}:hover { opacity: 1; }
+  .sk-drawer-toggle-icon${bp} { width: 32px; height: 32px; padding: 0; justify-content: center; opacity: 1; background: var(--sk-browser-solid, #f8fafc); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+  .sk-drawer-toggle-icon${bp} svg { width: 22px; height: 22px; pointer-events: none; }
+  @media (pointer: coarse) { .sk-drawer-toggle-icon${bp} { width: 44px; height: 44px; } .sk-drawer-toggle-icon${bp} svg { width: 28px; height: 28px; } }
   @media (pointer: coarse) { .sk-drawer-toggle${bp} { min-height: 44px; min-width: 44px; justify-content: center; } } /* TASK 581: a finger */
   .sk-drawer-hide-mobile${bp} { display: none !important; }
   .sk-drawer-panel${bp} { position: fixed !important; top: 0; bottom: 0; left: 0; height: 100%; z-index: 9500;
@@ -53,7 +56,7 @@ function injectStyles(breakpoint) {
   injectedBreakpoints.add(breakpoint);
 }
 
-export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel', hideOnMobile = [], side = 'left' } = {}) {
+export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel', hideOnMobile = [], side = 'left', icon = null } = {}) {
   if (!panelEl) throw new Error('createMobileDrawer: panelEl is required');
   injectStyles(breakpoint);
   panelEl.classList.add('sk-drawer-panel', 'sk-bp-' + breakpoint);
@@ -67,7 +70,8 @@ export function createMobileDrawer({ panelEl, breakpoint = 768, label = 'Panel',
   const toggleEl = document.createElement('button');
   toggleEl.type = 'button'; toggleEl.className = 'sk-drawer-toggle sk-bp-' + breakpoint; toggleEl.title = label;
   toggleEl.setAttribute('aria-label', label);
-  toggleEl.textContent = '☰ ' + label;
+  if (icon) { toggleEl.classList.add('sk-drawer-toggle-icon'); toggleEl.innerHTML = icon; } // TASK 618 / 619: an icon-only button (the label stays the aria-label / title)
+  else toggleEl.textContent = '☰ ' + label;
 
   let isOpenState = false, escHandler = null, outsideHandler = null;
 

@@ -14,8 +14,8 @@ try {
   const observe = () => ({ pens: P.plotColors.map((p) => p.name), tpPens: P.toolpaths.map((t) => t.plotColorId), penIds: P.plotColors.map((p) => p.id) });
   const ctrl = (k) => app.key(k, { ctrl: true });
 
-  pressEl('.stage-btn[data-stage="toolpath"]');
-  assert(q('.stage-btn[data-stage="toolpath"]').classList.contains('active') && q('#addPlotColor'), 'toolpath stage shown');
+  pressEl('.sk-header-tab[data-tab="toolpath"]');
+  assert(q('.sk-header-tab[data-tab="toolpath"]').classList.contains('active') && q('#addPlotColor'), 'toolpath stage shown');
 
   const base = observe();
   // 1. add a pen -> Ctrl+Z -> gone -> Ctrl+Y -> back

@@ -23,8 +23,8 @@ await (async () => {
     };
     const openMode = async (mode) => { // real click; retry because the nav shifts while the page's late widgets mount
       for (let i = 0; i < 5; i++) {
-        await clickEl(`[data-mode="${mode}"]`); await sleep(300);
-        if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === mode) return;
+        await clickEl(`.sk-header-tab[data-tab="${mode}"]`); await sleep(300);
+        if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === mode) return;
       }
       assert.fail('could not open the ' + mode + ' tab');
     };
@@ -36,7 +36,7 @@ await (async () => {
     };
 
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
     await openMode('design');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     // seed: A = an L-shaped outline (the board), B = a 20x20 loop drawn INSIDE it (a part, NOT a hole), C = a separate rectangle

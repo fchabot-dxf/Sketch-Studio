@@ -1,6 +1,6 @@
 import { removeOrphanJoints } from './joints.js';
 import { SolverConfig } from './solver-config.js';
-import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo } from './sketch-model.js'; // TASK 577
+import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
@@ -173,8 +173,6 @@ export function deleteJoints(state, jointIds) {
 export function deleteSelection(state) {
   if (!state) return;
 
-  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
-
   // 1. Identify explicit selections
   // TASK 577: nothing of a LOCKED sketch is deleted (a pick cannot select it; this is the same rule for a selection made some other way)
   const inert = inertEntities(state);
@@ -236,15 +234,15 @@ export function deleteSelection(state) {
       }
   }
 
+  const safeToDelete = finalJointsToDelete.filter(id => id !== 'j_origin');
+  if (constraintsToDelete.length === 0 && explicitShapes.length === 0 && safeToDelete.length === 0) return;
+
+  try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
+
   // 3. Execute Deletions
   if (constraintsToDelete.length > 0) deleteConstraints(state, constraintsToDelete);
   if (explicitShapes.length > 0) deleteShapes(state, explicitShapes);
-  
-  if (finalJointsToDelete.length > 0) {
-      // Protect origin from deletion
-      const safeToDelete = finalJointsToDelete.filter(id => id !== 'j_origin');
-      if (safeToDelete.length > 0) deleteJoints(state, safeToDelete);
-  }
+  if (safeToDelete.length > 0) deleteJoints(state, safeToDelete);
 
   try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
 }
@@ -270,6 +268,90 @@ export function deleteSketch(state, id) {
   deleteSelection(state);
   list.splice(list.indexOf(sk), 1);
   if (state.activeSketchId === id) state.activeSketchId = next.id;
+  try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
+  return { ok: true };
+}
+
+/** True when any deletable shape, non-origin joint, or constraint is currently selected for Delete. */
+export function hasSelection(state) {
+  if (!state) return false;
+  const ss = state.selectedShapes, sj = state.selectedJoints, sc = state.selectedConstraints;
+  const rawS = ss ? ss.size : 0, rawJ = sj ? sj.size : 0, rawC = sc ? sc.size : 0;
+  if (rawS === 0 && rawC === 0 && (rawJ === 0 || (rawJ === 1 && sj.has('j_origin')))) return false;
+  const inert = inertEntities(state);
+  if (ss) { for (const id of ss) if (!isShapeInert(inert, id)) return true; }
+  if (sc) { for (const c of sc) if (!isConstraintInert(inert, c)) return true; }
+  if (sj) { for (const id of sj) if (id !== 'j_origin' && !isJointInert(inert, id)) return true; }
+  return false;
+}
+
+/** Display name of the active sketch (falls back to 'Sketch 1'). */
+export function activeSketchName(state) {
+  const id = (state && state.activeSketchId) || DEFAULT_SKETCH_ID;
+  const sk = state && Array.isArray(state.sketches) ? state.sketches.find((s) => s.id === id) : null;
+  return (sk && sk.name) || DEFAULT_SKETCH_NAME;
+}
+
+/** True when the active sketch is unlocked and owns at least one shape, non-origin joint, or constraint. */
+export function canClearActiveSketch(state) {
+  if (!state) return false;
+  const id = state.activeSketchId || DEFAULT_SKETCH_ID;
+  const sk = Array.isArray(state.sketches) ? state.sketches.find((s) => s.id === id) : null;
+  if (sk && sk.locked === true) return false;
+  if (Array.isArray(state.shapes) && state.shapes.some((s) => sketchOf(s) === id)) return true;
+  if (state.joints && typeof state.joints[Symbol.iterator] === 'function') {
+    for (const [jid, j] of state.joints) if (jid !== 'j_origin' && sketchOf(j) === id) return true;
+  }
+  if (Array.isArray(state.constraints) && state.constraints.some((c) => constraintSketch(c, state) === id)) return true;
+  return false;
+}
+
+/**
+ * TASK 619: Clear every shape, non-origin joint, and constraint belonging to the active sketch in ONE undo step.
+ * Leaves all other sketches and any locked sketches untouched; refuses if the active sketch is locked or already empty.
+ * Returns { ok, reason? }.
+ */
+export function clearActiveSketch(state) {
+  if (!state) return { ok: false, reason: 'no state' };
+  const id = state.activeSketchId || DEFAULT_SKETCH_ID;
+  const sk = Array.isArray(state.sketches) ? state.sketches.find((s) => s.id === id) : null;
+  if (sk && sk.locked === true) return { ok: false, reason: 'it is locked: unlock it first' };
+  if (!canClearActiveSketch(state)) return { ok: false, reason: 'empty' };
+
+  try { if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); } catch (_) {}
+  try {
+    if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('clear sketch');
+    else recordUndo(state, 'clear sketch');
+  } catch (_) {}
+
+  const shapeIds = (state.shapes || []).filter((s) => sketchOf(s) === id).map((s) => s.id);
+  if (shapeIds.length > 0) deleteShapes(state, shapeIds);
+
+  const remConstraints = (state.constraints || []).filter((c) => constraintSketch(c, state) === id);
+  if (remConstraints.length > 0) deleteConstraints(state, remConstraints);
+
+  const survivingUsed = new Set();
+  for (const s of (state.shapes || [])) {
+    if (s && Array.isArray(s.joints)) s.joints.forEach((jid) => survivingUsed.add(jid));
+  }
+  const remJoints = [];
+  if (state.joints && typeof state.joints[Symbol.iterator] === 'function') {
+    for (const [jid, j] of state.joints) {
+      if (jid !== 'j_origin' && sketchOf(j) === id && !survivingUsed.has(jid)) remJoints.push(jid);
+    }
+  }
+  if (remJoints.length > 0) deleteJoints(state, remJoints);
+
+  try { if (state.selectedShapes && state.selectedShapes.clear) state.selectedShapes.clear(); } catch (_) {}
+  try { if (state.selectedJoints && state.selectedJoints.clear) state.selectedJoints.clear(); } catch (_) {}
+  try { if (state.selectedConstraints && state.selectedConstraints.clear) state.selectedConstraints.clear(); } catch (_) {}
+  state.hoveredShape = null;
+  state.hoveredJoint = null;
+  state.hoveredConstraint = null;
+  state.pendingConstraint = null;
+  state.active = null;
+  state.drag = null;
+
   try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
   return { ok: true };
 }

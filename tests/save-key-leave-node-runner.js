@@ -9,6 +9,7 @@
 import assert from 'node:assert';
 import { open, createProfile } from './helpers/node-app.js';
 import { HOSTS, leaveWarns } from './unsaved-prompt-node-runner.js';
+import { resetBuffer } from './helpers/reset-buffer.js';
 
 export async function runSaveKeyLeave({ host }) {
   const H = { ...HOSTS[host], name: HOSTS[host].name };
@@ -32,14 +33,14 @@ export async function runSaveKeyLeave({ host }) {
     // 1. a clean Untitled: no leave-page warning
     console.log(`${host} step 1`);
     app = await open({ host, profile, sidebar: true });
-    await app.store.setCurrent(null);
+    await resetBuffer(app.store);
     await app.close(); app = await open({ host, profile, sidebar: true });
     app.tool('select');
     assert.strictEqual(leaveWarns(app), false, 'a clean Untitled: no leave-page warning');
-    // 2. an unsaved Untitled with content: the warning is armed
+    // 2. an unsaved Untitled with content: local buffer keeps it across reload, so leave-page warning is NOT armed
     console.log(`${host} step 2`);
     drawLine();
-    assert.strictEqual(leaveWarns(app), true, 'an unsaved Untitled with content: the leave-page warning is armed');
+    assert.strictEqual(leaveWarns(app), false, 'an unsaved Untitled with content lives in the working buffer: no leave-page warning');
     assert.strictEqual(shapes(), 1, 'the drawing is there');
     // 3. Ctrl+S on the unsaved Untitled: the Save as name prompt, in the sidebar; Ctrl+S does not pick the Select tool
     console.log(`${host} step 3`);

@@ -28,7 +28,7 @@ await (async () => {
       assert(c, sel + ' not found');
       await click(c.x, c.y);
     };
-    const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
+    const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
 
     // ── 1. tokens, not hex literals ──
     const read = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8');
@@ -42,8 +42,8 @@ await (async () => {
 
     // ── 2. the state model in the real app (real mouse): idle / hover / selected / selected+hover, same for every type ──
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
-    await clickEl('[data-mode="design"]');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
+    await clickEl('.sk-header-tab[data-tab="design"]');
     await waitFor('!!(window.__designController && window.__designController.state)', 'design controller ready');
     await evalJs(`(async () => {
       const { findLoops, findOpenChains } = await import('/packages/core/loop-finder.js');
@@ -68,7 +68,7 @@ await (async () => {
       CUT_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', ...base });
       CUT_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 6.35 });
     })()`);
-    await clickEl('[data-mode="prepare"]');
+    await clickEl('.sk-header-tab[data-tab="prepare"]');
     await waitFor(`!!document.querySelector('#prepare-canvas .sk-edge') && !!document.getElementById('prepare-canvas').getScreenCTM()`, 'prepare view drawn');
     const world = (wx, wy) => evalJs(`(() => { const s = document.getElementById('prepare-canvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
     const move = async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }); await sleep(200); };

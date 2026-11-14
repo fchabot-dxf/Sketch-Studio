@@ -37,8 +37,8 @@ export function mountEdit({ isActive, getHostData, applyHost, session = null }) 
   ribbonEl.hidden = false;
   bodyEl.hidden   = false;
   emptyEl.style.display = 'none';
-  // the Edit tab's SKETCHES browser floats over the canvas's top-left (#design-body); the phone-width drawer button goes in the app header
-  sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine });
+  // the Edit tab's SKETCHES browser + Construction toggle float over the canvas (#design-body); safety check verified Trace exports only traced state.svgString, never Edit sketch geometry
+  sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine, construction: true });
   sidePanel.toggleEl.style.display = 'none'; // shown only while the Edit tab shows (startEdit / stopEdit)
 
   docBuffer = createDocumentBuffer({

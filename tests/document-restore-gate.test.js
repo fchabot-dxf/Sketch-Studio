@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
+import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN_TAG = '<script type="module" src="./src/main.js"></script>';
@@ -28,10 +29,11 @@ await (async () => {
   const cdp = await launchBrowser({ tag: '542', width: 1200, height: 800, fixtures: { '/apps/penplotter/slow.html': slowHtml } });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
-  const idbDoc = `new Promise((res, rej) => { const r = indexedDB.open('sketch-studio-projects', 1); r.onerror = () => rej(r.error); r.onsuccess = () => { try { const db = r.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign'); m.onsuccess = () => { try { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { db.close(); res(g.result ? g.result.document : null); }; } catch (e) { rej(e); } }; } catch (e) { rej(e); } }; })`;
+  await installFakeDriveSession(cdp);
+  const savedDoc = `(async () => { const { getProjectStore } = await import('/packages/ui/project-store.js'); const s = getProjectStore(); await s.flushDrive(); const c = await s.current(); if (!c) return null; const d = await s.get(c.id); return d ? d.document : null; })()`;
   const enterDesign = async () => {
-    await waitFor(`[...document.querySelectorAll('.stage-btn')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
-    await evalJs(`[...document.querySelectorAll('.stage-btn')].find(x => /design/i.test(x.textContent)).click()`);
+    await waitFor(`[...document.querySelectorAll('.sk-header-tab')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
+    await evalJs(`[...document.querySelectorAll('.sk-header-tab')].find(x => /design/i.test(x.textContent)).click()`);
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design canvas to show');
   };
 
@@ -51,7 +53,7 @@ await (async () => {
       state.constraints.push({ id: 'c_1', type: 'distance', joints: ['j_a', 'j_b'], value: 50, offset: -15, glyphPos: { x: 0, y: -15 } });
       engine.solve(500);
     })()`);
-    await waitFor(`${idbDoc}.then((d) => !!d && d.geometry.shapes.length === 1 && d.geometry.constraints.length === 1)`, 'the autosave to store the design');
+    await waitFor(`${savedDoc}.then((d) => !!d && d.geometry.shapes.length === 1 && d.geometry.constraints.length === 1)`, 'the autosave to store the design');
 
     // 2. Reload with the restore held back: the canvas must say it is not ready and swallow input.
     await navigate(`http://127.0.0.1:${port}/apps/penplotter/slow.html`, 8000);

@@ -28,7 +28,7 @@ await (async () => {
       assert(c, sel + ' not found');
       await click(c.x, c.y);
     };
-    const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
+    const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
     const clickAt = click;
     await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`);
     await waitFor('!!(window.__draw && window.__draw.state && window.__draw.state.plotColors)', 'penplotter app ready');

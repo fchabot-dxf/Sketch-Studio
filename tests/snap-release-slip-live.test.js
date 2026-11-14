@@ -30,8 +30,8 @@ await (async () => {
 
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('.mode-btn[data-mode="design"]')`, 'the Shaper to load');
-    await clickEl('.mode-btn[data-mode="design"]');
+    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Shaper to load');
+    await clickEl('.sk-header-tab[data-tab="design"]');
     await waitForApp('design-canvas'); // the Design tab's autosave buffer is created when the tab is first entered
     await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design tab to show');
 

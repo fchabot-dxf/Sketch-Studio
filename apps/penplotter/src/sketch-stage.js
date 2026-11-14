@@ -13,6 +13,7 @@ import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the flo
 import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createMobileDrawer } from '#ui/mobile-drawer.js';
+import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { DESIGN_CANVAS_OPTIONS, plotterBufferOptions } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { updateViewBox } from '#ui/input-manager.js';                   // UNIFY-6: apply the shared view to #design-canvas
@@ -284,7 +285,8 @@ export function mountSketchStage(view, ctx = {}) {
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.
-  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine });
+  // Safety check (TASK 619): keep construction disabled here until Pen Plotter skips sh.isConstruction in core-geometry.js (resolveCoreShapes, collectToolpathShapes), render-art.js (buildCoreGeometry), and export.js (buildGcodeEntries).
+  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine, construction: false });
   browser.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
   infoPanel = browser.panel;
   const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };
@@ -317,11 +319,12 @@ export function mountSketchStage(view, ctx = {}) {
   setCollapsed(collapsed);
   toggle.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
-  // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer instead of the desktop
-  // collapse-to-strip above; hideOnMobile keeps the two toggle affordances from fighting each other.
-  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right' });
-  const header = document.querySelector('header.toolbar');
-  if (header) header.appendChild(drawer.toggleEl);
+  // MOBILE-DRAWER: below 768px, #design-panel becomes a slide-over drawer toggled from .sk-canvas-corner next to Sketches.
+  ensureIconSymbols(['icon-panel']);
+  const panelIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><use href="#icon-panel" width="24" height="24"/></svg>';
+  const drawer = createMobileDrawer({ panelEl: panel, label: 'Panel', hideOnMobile: [toggle], side: 'right', icon: panelIcon });
+  const corner = view.querySelector('#design-canvas-wrap .sk-canvas-corner');
+  if (corner) corner.appendChild(drawer.toggleEl);
   drawer.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
 
   // STYLE-2: the Style controls. ONE applier for all four — patch every selected shape's style record, re-mix if the
@@ -404,6 +407,6 @@ export function mountSketchStage(view, ctx = {}) {
       try { updateViewBox(designCanvas, controller.state.view); } catch (_) {}
       drawer.toggleEl.style.display = ''; browser.toggleEl.style.display = '';
     },
-    onLeave: () => { controller.stop(); drawer.toggleEl.style.display = 'none'; browser.close(); browser.toggleEl.style.display = 'none'; },
+    onLeave: () => { controller.stop(); drawer.close(); drawer.toggleEl.style.display = 'none'; browser.close(); browser.toggleEl.style.display = 'none'; },
   };
 }

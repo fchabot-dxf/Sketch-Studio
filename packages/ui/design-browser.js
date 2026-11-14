@@ -22,6 +22,7 @@ import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { sketchesSignature } from '#core/sketch-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport, onShortViewportChange } from '#ui/short-viewport.js';
+import { dbg } from '#core/debug.js';
 
 export const BROWSER_PHONE_BREAKPOINT = 641; // phone toggle below this width: the app's one phone breakpoint is max-width 640
 
@@ -46,20 +47,21 @@ function injectStyles() {
 /* the tree's own header (title + the new-sketch "+") is folded into the card's header bar: title hidden, "+" pinned at the bar's right */
 .sk-browser .sk-tree-hdr { position: absolute; top: 3px; right: 8px; padding: 0; }
 .sk-browser .sk-tree-title { display: none; }
-/* TASK 618 / 623: the canvas's top-right corner (the Sketches button, shown only on phones < 641 px) */
+/* TASK 618 / 623 / 619: the canvas's top-right corner (Construction on desktop+phone in SketchStudio; Sketches on phones < 641 px) */
 .sk-canvas-corner { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; gap: 8px; }
-.sk-browser-corner-btn { display: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+.sk-corner-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
   border: 1px solid var(--sk-browser-line, #cbd5e1); border-radius: 6px; cursor: pointer; color: var(--sk-browser-fg, #1f2937);
   background: var(--sk-browser-solid, #f8fafc); box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
-.sk-browser-corner-btn svg { width: 22px; height: 22px; pointer-events: none; }
+.sk-corner-btn svg { width: 22px; height: 22px; pointer-events: none; }
+.sk-browser-corner-btn { display: none; }
 @media (max-width: ${BROWSER_PHONE_BREAKPOINT - 1}px) {
   .sk-browser:not(.sk-browser-open) { display: none; }
-  .sk-browser { max-width: calc(100% - 68px); } /* clear of the 44 px corner button at right: 8px */
+  .sk-browser { max-width: calc(100% - 116px); } /* clear of both 44 px corner buttons (Construction + Sketches) at right: 8px */
   .sk-browser-corner-btn { display: inline-flex; }
 }
 @media (pointer: coarse) {
-  .sk-browser-corner-btn { width: 44px; height: 44px; }
-  .sk-browser-corner-btn svg { width: 28px; height: 28px; }
+  .sk-corner-btn { width: 44px; height: 44px; }
+  .sk-corner-btn svg { width: 28px; height: 28px; }
   .sk-browser-head { min-height: 44px; padding: 0 52px 0 2px; }
   .sk-browser .sk-tree-hdr { top: 0; right: 4px; }
   .sk-browser .sk-browser-toggle, .sk-browser .sk-tree-add, .sk-browser .sk-sketch-eye, .sk-browser .sk-sketch-radio { min-width: 44px; min-height: 44px;
@@ -75,7 +77,7 @@ function injectStyles() {
   stylesInjected = true;
 }
 
-export function mountDesignBrowser({ container, state, engine, label = 'Sketches' } = {}) {
+export function mountDesignBrowser({ container, state, engine, label = 'Sketches', construction = false } = {}) {
   if (!container) throw new Error('mountDesignBrowser: container is required');
   injectStyles();
   container.classList.add('sk-browser-host');
@@ -103,16 +105,58 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
   apply(isShortViewport() || stored());
   onShortViewportChange((short) => apply(short || stored())); // a rotation: landscape collapses, portrait brings back the stored state (never written here)
 
-  // TASK 618 / 623: on phones (< 641 px) the same floating card starts hidden and is toggled by the layers icon button in .sk-canvas-corner
-  ensureIconSymbols(['icon-layers']);
+  // TASK 618 / 623 / 619: canvas top-right corner group: Construction (when host opts in, desktop + phone) beside Sketches (phones < 641 px)
+  ensureIconSymbols(construction ? ['icon-layers', 'icon-construction'] : ['icon-layers']);
+  const corner = document.createElement('div'); corner.className = 'sk-canvas-corner';
+  let paintConstruct = null;
+  if (construction) {
+    const constructBtn = document.createElement('button');
+    constructBtn.type = 'button';
+    constructBtn.id = 'btn-construct-toggle';
+    constructBtn.className = 'sk-corner-btn';
+    constructBtn.setAttribute('aria-label', 'Construction');
+    constructBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-construction"/></svg>';
+    paintConstruct = () => {
+      const on = !!state.isConstructionMode;
+      constructBtn.style.backgroundColor = on ? '#f97316' : '#fed7aa'; // dark orange when active, light orange when idle
+      constructBtn.style.color = on ? 'white' : '#9a3412';
+      constructBtn.setAttribute('aria-pressed', String(on));
+      constructBtn.title = on ? 'Construction: ON (K)' : 'Construction: OFF (K)';
+    };
+    constructBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.selectedShapes && state.selectedShapes.size > 0) { // shapes selected: toggle THEIR construction state (undoable)
+        state.beginUndoGroup('toggle construction');
+        for (const sid of state.selectedShapes) { const s = state.shapes.find((x) => x.id === sid); if (s) s.isConstruction = !s.isConstruction; }
+        state.saveState();
+        state.endUndoGroup();
+      } else state.isConstructionMode = !state.isConstructionMode; // else the global mode for the next draws
+      paintConstruct();
+      dbg.log('ui', '[ui] isConstructionMode set to', state.isConstructionMode);
+    });
+    const isVisible = () => {
+      for (let p = container; p && p.nodeType === 1; p = p.parentElement) {
+        if (p.hidden || p.getAttribute?.('aria-hidden') === 'true' || p.classList?.contains('hidden') || (p.style && p.style.display === 'none')) return false;
+      }
+      return true;
+    };
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+        if (e.key && e.key.toLowerCase() === 'k' && isVisible()) constructBtn.click();
+      });
+    }
+    paintConstruct();
+    corner.appendChild(constructBtn);
+  }
   const toggleEl = document.createElement('button');
   toggleEl.type = 'button';
-  toggleEl.className = 'sk-browser-corner-btn';
+  toggleEl.className = 'sk-corner-btn sk-browser-corner-btn';
   toggleEl.title = label;
   toggleEl.setAttribute('aria-label', label);
   toggleEl.setAttribute('aria-expanded', 'false');
   toggleEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-layers"/></svg>';
-  const corner = document.createElement('div'); corner.className = 'sk-canvas-corner';
   corner.appendChild(toggleEl); container.appendChild(corner);
 
   let phoneOpen = false;
@@ -139,12 +183,16 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
     const c = !el.classList.contains('collapsed'); apply(c); SettingsManager.set('BROWSER_COLLAPSED', c);
   });
 
-  let lastSig = '';
+  let lastSig = '', lastConstructMode = !!state.isConstructionMode;
   const tick = () => {
     let vsum = 0; for (const c of state.constraints) if (typeof c.value === 'number') vsum += c.value;
     const sig = state.constraints.length + ':' + ((state.shapes && state.shapes.length) || 0) + ':' + ((state.joints && state.joints.size) || 0) + ':' + vsum.toFixed(1)
       + ':' + (state.selectedConstraints ? state.selectedConstraints.size : 0) + ':' + sketchesSignature(state);
     if (sig !== lastSig) { lastSig = sig; panel.refresh(); }
+    if (paintConstruct && lastConstructMode !== !!state.isConstructionMode) {
+      lastConstructMode = !!state.isConstructionMode;
+      paintConstruct();
+    }
   };
   return { el, panel, toggleEl, close: closePhone, tick, refresh: () => panel.refresh() };
 }

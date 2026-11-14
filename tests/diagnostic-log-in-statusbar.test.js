@@ -29,21 +29,21 @@ await (async () => {
     const LOG_OPEN = `!!document.querySelector('.sk-diag-panel') && !document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`;
 
     for (const [width, height] of [[390, 844], [1440, 900]]) {
-      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width <= 640 });
       await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
-      await waitFor(`!!document.querySelector('footer .sk-diag-toggle')`, `@${width}: the log button in the status bar`);
+      await waitFor(`!!document.querySelector('.sk-sidebar')`, `@${width}: sidebar mounted`);
       const label = `@${width}`;
       assert.strictEqual(await evalJs(`!!document.getElementById('modeText') || /MODE:/.test(document.querySelector('footer').textContent)`), false, `${label}: the MODE label is gone`);
-      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-diag-toggle').length`), 1, `${label}: one log button only`);
-      assert.strictEqual(await evalJs(`!!document.querySelector('header .sk-diag-toggle, #app-header-host .sk-diag-toggle')`), false, `${label}: none in the header`);
-      const r = await evalJs(`(() => { const b = document.querySelector('footer .sk-diag-toggle').getBoundingClientRect(); const f = document.querySelector('footer'); return { l: b.left, r: b.right, w: b.width, fOver: f.scrollWidth - f.clientWidth, doc: document.documentElement.scrollWidth - innerWidth, shown: getComputedStyle(document.querySelector('footer .sk-diag-toggle')).display !== 'none' }; })()`);
-      const phone = width <= 640; // TASK 562: at phone width the footer's Log button lives in the menu (header menu > Log) instead
-      if (phone) assert.ok(r.w === 0, `${label}: the footer Log button is hidden on a phone (it is in the menu)`);
-      else assert.ok(r.shown && r.w > 0 && r.l >= 0 && r.r <= width, `${label}: the button is fully on screen ${JSON.stringify(r)}`);
+      assert.strictEqual(await evalJs(`!!document.getElementById('status-diag-slot')`), false, `${label}: #status-diag-slot is gone (Log is in ☰ menu on all sizes, TASK 619)`);
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-diag-toggle').length`), 0, `${label}: no standalone Log toggle in footer or header`);
+      const r = await evalJs(`(() => { const f = document.querySelector('footer'); return { fOver: f.scrollWidth - f.clientWidth, doc: document.documentElement.scrollWidth - innerWidth }; })()`);
       assert.ok(r.fOver <= 0 && r.doc <= 0, `${label}: the status bar and page do not overflow sideways ${JSON.stringify(r)}`);
       await shot(`statusbar-${width}.png`);
-      if (phone) { await clickEl('.sk-sidebar-btn'); await sleep(400); await clickEl('.sk-sidebar [data-action="phone-log"]'); }
-      else await clickEl('footer .sk-diag-toggle');
+      if (width <= 640) await clickEl('.sk-sidebar-handle');
+      else await clickEl('.sk-sidebar-btn');
+      await sleep(400);
+      await evalJs(`document.querySelector('.sk-sidebar [data-action="log"]')?.scrollIntoView({ block: 'nearest' })`); await sleep(80);
+      await clickEl('.sk-sidebar [data-action="log"]');
       await waitFor(LOG_OPEN, `${label}: the log to open`);
       assert.strictEqual(await evalJs(`(() => { const b = document.querySelector('.sk-diag-panel .sk-diag-btn-primary'); const q = b.getBoundingClientRect(); return b.textContent === 'Copy Report' && !b.disabled && q.width > 0 && q.right <= innerWidth; })()`), true, `${label}: Copy Report is visible and enabled`);
       await shot(`statuslog-${width}.png`);

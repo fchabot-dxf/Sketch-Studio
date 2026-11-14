@@ -48,6 +48,7 @@ function onKeyDown(e) {
         return;
     }
     if (e.key === "Delete" || e.key === "Backspace") {
+        if (e.defaultPrevented) { state.selectedShapeIds.clear(); render(); return; }
         // Node tool: Delete removes the selected node, not the whole shape.
         if (state.tool === "node" && state.activeNode) { deleteActiveNode(); return; }
         return deleteSelected();

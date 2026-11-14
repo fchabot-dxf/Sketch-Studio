@@ -15,6 +15,7 @@
 // write is small but not zero, and is the honest limit of the API. Every request goes through account.authedFetch (bearer token,
 // one re-mint + retry on a 401); nothing here ever sees a client secret.
 import { GOOGLE } from '#ui/cloud/providers.js';
+import { DRIVE_PREFIX } from '#ui/cloud/router-adapter.js';
 import { serializeProjectFile, parseProjectFile, PROJECT_FILE_EXT } from '#ui/project-file.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
@@ -23,9 +24,6 @@ const FOLDER = 'application/vnd.google-apps.folder';
 const META_FIELDS = 'id,name,parents,appProperties,modifiedTime,createdTime,version,trashed';
 const ROOT_KEY = 'driveRootId';
 const RETRIES = 4;
-
-/** The browser link to a Drive file (what the "Open in Drive" link points at). */
-export const driveFileUrl = (fileId) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
 
 /** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
 export function driveErrorText(e) {
@@ -46,6 +44,12 @@ export const CHECK_STEPS = [
   { id: 'read', label: 'Test file read back identical' },
   { id: 'trash', label: 'Test file deleted (trashed)' },
 ];
+
+/** The Drive web URL of a project's FOLDER (`projectId` = the store's `drive:<id>` or a plain Drive id). The one place this URL is built. */
+export function driveFolderUrl(projectId) {
+  const id = String(projectId);
+  return `https://drive.google.com/drive/folders/${encodeURIComponent(id.startsWith(DRIVE_PREFIX) ? id.slice(DRIVE_PREFIX.length) : id)}`;
+}
 
 const fileName = (name) => String(name) + PROJECT_FILE_EXT;
 const baseName = (file) => String(file).endsWith(PROJECT_FILE_EXT) ? String(file).slice(0, -PROJECT_FILE_EXT.length) : String(file);
@@ -82,11 +86,21 @@ export function createDriveAdapter({ account, meta, config = GOOGLE } = {}) {
 
   // ---- the app root folder ----
   const oldestFirst = (a, b) => (Date.parse(a.createdTime) || 0) - (Date.parse(b.createdTime) || 0) || String(a.id).localeCompare(String(b.id));
-  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null. */
+  /** The root folder when it exists (READ-ONLY: never creates, so listing for a signed-in user writes nothing), else null.
+   *  Always verifies any cached root id is not trashed/deleted out of band before returning it. */
   async function findRoot() {
-    if (rootId) return rootId;
+    if (rootId) {
+      const m = await getMeta(rootId);
+      if (m) return rootId;
+      rootId = null;
+      await meta.setMeta(ROOT_KEY, null);
+    }
     const cached = await meta.getMeta(ROOT_KEY);
-    if (cached) { const m = await getMeta(cached); if (m) return (rootId = cached); }
+    if (cached) {
+      const m = await getMeta(cached);
+      if (m) return (rootId = cached);
+      await meta.setMeta(ROOT_KEY, null);
+    }
     const found = (await listAll(`mimeType='${FOLDER}' and name='${config.rootFolderName}' and 'root' in parents and trashed=false`, 'id,createdTime')).sort(oldestFirst);
     if (!found.length) return null;
     await meta.setMeta(ROOT_KEY, found[0].id);

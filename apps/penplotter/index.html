@@ -35,16 +35,6 @@
     body { background: #f5efe1; color: #3a352b; font: 14px system-ui, sans-serif; display: flex; flex-direction: column;
       touch-action: none; -webkit-user-select: none; user-select: none; } /* matches apps/sketchstudio's page-level lock --
       the canvas already owns its own gestures (packages/ui/sketch-canvas.js); the page must not compete */
-    header.toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 12px;
-      background: var(--sk-header-bg); border-bottom: 1px solid var(--sk-header-sep); color: var(--sk-header-fg); }
-    #app-sidebar-host { display: inline-flex; }
-    .mode-nav { display: flex; gap: 4px; align-items: center; }
-    .stage-btn { background: transparent; color: #6b6353; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer;
-      font: 13px system-ui, sans-serif; opacity: 0.8; }
-    .stage-btn:hover { background: var(--sk-header-hover); opacity: 1; }
-    .stage-btn.active { background: var(--sk-selection); color: #fff; opacity: 1; }
-    .stage-btn .opt { font-size: 11px; opacity: 0.65; margin-left: 5px; }
-    .spacer { flex: 1; }
     main.stages { flex: 1 1 auto; position: relative; min-height: 0; }
     .stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 10px; padding: 24px; text-align: center; }
@@ -253,13 +243,6 @@
   </style>
 </head>
 <body>
-  <header class="toolbar sk-phone-header">
-    <!-- TASK 473: the shared app sidebar button (mounted in main.js): document actions + GO TO the other apps. -->
-    <span id="app-sidebar-host"></span>
-    <!-- The 5-stage pipeline nav — built by ITERATING the STAGES registry in main.js (never hardcoded). -->
-    <nav id="mode-nav" class="mode-nav sk-phone-tabs"></nav>
-    <span class="spacer"></span>
-  </header>
   <!-- Stage bodies are created from STAGES in main.js (one source of truth), then shown/hidden by the router. -->
   <main id="stages" class="stages"></main>
 

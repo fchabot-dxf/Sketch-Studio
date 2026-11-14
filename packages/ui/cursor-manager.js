@@ -87,6 +87,20 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<path d="M12 3 3 8l9 5 9-5-9-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M3 12.5l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
     },
+    // TASK 619: Pen Plotter's Panel drawer button in the canvas corner (< 768px): side panel icon
+    'icon-panel': {
+        viewBox: '0 0 24 24',
+        content: `<rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="15" y1="4" x2="15" y2="20" stroke="currentColor" stroke-width="2"/>`
+    },
+    // TASK 619: Footer Delete (filled circle + white X) and Clear sketch (outlined trash can).
+    'icon-circle-x': {
+        viewBox: '0 0 24 24',
+        content: `<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>`
+    },
+    'icon-trash': {
+        viewBox: '0 0 24 24',
+        content: `<g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M9.5 6V4.5A1.5 1.5 0 0 1 11 3h2a1.5 1.5 0 0 1 1.5 1.5V6"/><rect x="4" y="6" width="16" height="3.2" rx="1.4"/><path d="M5.7 9.2L7 19.3A2 2 0 0 0 9 21h6a2 2 0 0 0 2-1.7L18.3 9.2"/><path d="M9.2 12.2l.4 5.8M12 12.2v5.8M14.8 12.2l-.4 5.8"/></g>`
+    },
 
     'icon-terminal': {
         viewBox: '0 0 24 24',

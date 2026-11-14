@@ -43,9 +43,8 @@ s.current = async () => ({ id: 'd1', name: 'Door A' }); s.listRecent = async () 
 s.status = () => s.st;
 s.cloud = {
   isEnabled: async () => s.enabled,
-  saveToDrive: async (id) => { s.saves.push(id); if (s.saveError) throw new Error(s.saveError); return { fileId: 'FILE123' }; },
   checkConnection: (onStep) => adapter.checkConnection(onStep),
-  moveProjectToDrive: async () => {}, makeProjectLocal: async () => {},
+  moveProjectToDrive: async () => {},
 };
 window.T = {
   drive, store: s,
@@ -58,8 +57,6 @@ window.T = {
     window.sb = sb; window.acct = account; return true;
   },
   setStatus(st) { s.st = st; s.fire(); },
-  setting: () => SettingsManager.get('DRIVE_DEFAULT'),
-  stored: () => localStorage.getItem('sketch-studio-settings'),
 };
 window.READY = true;
 </script></body></html>`;
@@ -85,31 +82,20 @@ await (async () => {
     const text = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.trim() : null; })()`);
     const has = (sel) => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 
-    // 1. signed out: the status says where it lives, NO Drive action, NO Drive rows, the account row is the one door
+    // 1. signed out on legacy local design: status shows "Saved on this device · Move to Google Drive", NO connection check, ONE sign-in door
     await ev(`T.mount(false)`);
-    assert.strictEqual(await text('[data-section=status]'), 'Saved on this device');
-    assert.strictEqual(await has('[data-action=save-drive]'), false, 'signed out: "Save to Google Drive" is hidden');
-    assert.strictEqual(await has('[data-account=drive-default]'), false, 'signed out: no default toggle');
+    assert.strictEqual(await text('[data-section=status]'), 'Saved on this device · Move to Google Drive');
+    assert.strictEqual(await has('[data-action=save-drive]'), false, 'save-drive entry removed');
+    assert.strictEqual(await has('[data-account=drive-default]'), false, 'default toggle removed');
     assert.strictEqual(await has('[data-account=check-drive]'), false, 'signed out: no connection check');
     assert.strictEqual(await ev(`document.querySelectorAll('[data-account=sign-in]').length`), 1, 'exactly ONE sign-in door');
     await shot('1-signed-out');
 
-    // 2. signed in: the action sits before Open from file, the toggle is ON by default and persists when changed
+    // 2. signed in: still no save-drive or default toggle; check-drive is present
     await ev(`T.mount(true)`); await sleep(300);
-    assert.strictEqual(await has('[data-action=save-drive]'), true);
-    const order = await ev(`[...document.querySelectorAll('[data-section=actions] [data-action]')].map((b) => b.dataset.action).filter((a) => a === 'save-drive' || a === 'open-file')`);
-    assert.deepStrictEqual(order, ['save-drive', 'open-file'], 'Save to file is no longer in the menu');
-    assert.strictEqual(await text('[data-action=save-drive]'), 'Save to Google Drive');
-    assert.strictEqual(await ev(`document.querySelector('[data-account=drive-default]').checked`), true, 'default ON');
-    assert.strictEqual(await text('[data-account=drive-default-row]'), 'Save to Google Drive by default');
-    assert.strictEqual(await ev(`T.setting()`), true);
-    await ev(`document.querySelector('[data-account=drive-default]').click()`);
-    assert.strictEqual(await ev(`T.setting()`), false, 'the toggle changes the declared setting');
-    assert(/"DRIVE_DEFAULT":false/.test(await ev(`T.stored()`)), 'and it is persisted');
-    await ev(`T.mount(true)`); await sleep(200);
-    assert.strictEqual(await ev(`document.querySelector('[data-account=drive-default]').checked`), false, 'a fresh sidebar shows the persisted choice');
-    await ev(`document.querySelector('[data-account=drive-default]').click()`);
-    assert.strictEqual(await ev(`T.setting()`), true);
+    assert.strictEqual(await has('[data-action=save-drive]'), false, 'no copy-snapshot save-drive action');
+    assert.strictEqual(await has('[data-account=drive-default]'), false, 'no default toggle');
+    assert.strictEqual(await has('[data-account=check-drive]'), true, 'signed in: connection check is shown');
 
     // 3. the status line: every state, repainted in place when the store changes
     await ev(`T.setStatus({ where: 'drive', state: 'saved', at: Date.now() - 125000, reason: null })`);
@@ -123,26 +109,13 @@ await (async () => {
     assert.strictEqual(await has('[data-section=status].error'), true, 'the failure line is styled as an error');
     await shot('4-status-failed');
     await ev(`T.setStatus({ where: 'device', state: 'saved', at: null, reason: 'Google could not be reached' })`);
-    assert.strictEqual(await text('[data-section=status]'), 'Not saved to Google Drive: Google could not be reached. Kept on this device.', 'a NEW design that fell back to this device says why');
+    assert.strictEqual(await text('[data-section=status]'), 'Not saved to Google Drive: Google could not be reached. Kept on this device.');
     await ev(`T.setStatus({ where: 'drive', state: 'saved', at: null, reason: null, notice: 'Another device changed this design. Your unsaved changes were kept as "Door (conflicted copy 2026-11-11 12-00)".' })`);
     assert.strictEqual(await text('[data-section=status]'), 'Another device changed this design. Your unsaved changes were kept as "Door (conflicted copy 2026-11-11 12-00)".', 'a conflicted copy is announced');
     assert.strictEqual(await has('[data-section=status].error'), true);
     await ev(`T.setStatus({ where: 'device', state: 'saved', at: null, reason: null })`);
-    assert.strictEqual(await text('[data-section=status]'), 'Saved on this device');
-
-    // 4. Save to Google Drive: flushes the buffer, success = message + "Open in Drive" link (new tab); failure = the exact reason
-    await ev(`document.querySelector('[data-action=save-drive]').click()`); await sleep(300);
-    assert.deepStrictEqual(await ev(`T.store.saves`), ['d1']);
-    assert.strictEqual(await ev(`window.flushes.length`), 1, 'the pending autosave is flushed first');
-    const ok = await ev(`(() => { const m = document.querySelector('.sk-sidebar-msg'); const a = m.querySelector('a'); return { cls: m.className, text: m.firstChild.textContent, href: a.href, target: a.target, rel: a.rel, label: a.textContent }; })()`);
-    assert.strictEqual(ok.text, 'Saved to Google Drive'); assert(!/error/.test(ok.cls));
-    assert.strictEqual(ok.href, 'https://drive.google.com/file/d/FILE123/view'); assert.strictEqual(ok.target, '_blank'); assert(/noopener/.test(ok.rel)); assert.strictEqual(ok.label, 'Open in Drive');
-    await shot('5-saved-with-link');
-    await ev(`T.store.saveError = 'Drive 403'`);
-    await ev(`document.querySelector('[data-action=save-drive]').click()`); await sleep(300);
-    const bad = await ev(`(() => { const m = document.querySelector('.sk-sidebar-msg'); return { cls: m.className, text: m.textContent, link: !!m.querySelector('a') }; })()`);
-    assert(/error/.test(bad.cls)); assert.strictEqual(bad.text, 'Google Drive answered HTTP 403'); assert.strictEqual(bad.link, false, 'no link on a failure');
-    await ev(`T.store.saveError = null`);
+    assert.strictEqual(await text('[data-section=status]'), 'Saved on this device · Move to Google Drive');
+    assert.strictEqual(await has('[data-action=move-to-drive]'), true, 'inline Move to Google Drive action offered for local design');
 
     // 5. Check Google Drive connection: the REAL adapter over a fake Drive, every step listed with its result
     await ev(`T.mount(true)`); await sleep(300);

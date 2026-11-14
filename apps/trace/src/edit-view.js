@@ -33,7 +33,7 @@ export function mountEdit({ isActive, getHostData, applyHost, onStatusChange }) 
 
   designController = mountSketch(svgEl, { isActive, seedDemo: false, onRender: () => { if (sidePanel) sidePanel.tick(); } }); // the buffer below decides what geometry (if any) to show
   const ribbon = createToolRibbon({ state: designController.state, extraGroups: [], parameters: false }); // O14: Trace has no Parameters window
-  ribbonEl.appendChild(ribbon.el);
+  ribbon.render(ribbonEl); // TASK 602: render() also marks #design-ribbon / #tab-edit as the ribbon's host / design frame (the phone-landscape rail)
   ribbonEl.hidden = false;
   bodyEl.hidden   = false;
   emptyEl.style.display = 'none';

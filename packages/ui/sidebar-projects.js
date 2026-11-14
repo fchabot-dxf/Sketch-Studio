@@ -28,7 +28,7 @@ import SettingsManager from '#core/settings-manager.js';
 export { relativeTime };
 
 // TASK 587: `documentTabs: true` opts the host into DOCUMENT TABS (document-tabs.js; docs/DOCUMENT-TABS-DESIGN.md): the strip is inserted as its own row
-// immediately before the host's <header> (the element holding this sidebar's button), Open / Open recent / Open from file / New open a new tab, and the name,
+// immediately AFTER the host's <header> (the element holding this sidebar's button; TASK 602, owner: between the header and the tool ribbon), Open / Open recent / Open from file / New open a new tab, and the name,
 // status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
 export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, store = getProjectStore(), account = getGoogleAccount() } = {}) {
   let sidebar = null;
@@ -115,7 +115,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     const place = () => {
       const header = sidebar.el.closest('header');
       if (!header || !header.parentNode) return false;
-      header.parentNode.insertBefore(tabStrip.el, header);
+      header.parentNode.insertBefore(tabStrip.el, header.nextSibling); // TASK 602 (owner): below the header, above the ribbon
       return true;
     };
     if (!place()) {

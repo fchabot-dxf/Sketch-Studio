@@ -21,9 +21,11 @@ I measured the switch on a design with 300 constraints: about 30 ms (one screen 
 that is the solver doing the same work it already does on every frame. So "one live drawing, swapped on a tab click" is
 fast enough, and it avoids rebuilding the solver and every app around several live drawings at once.
 
-The tab strip is a thin row ABOVE each app's header, like a browser's tabs or Fusion's document tabs. Shaper's
-Explore / Design / Vcarve / Prepare / Review and Pen Plotter's Design / Toolpath / Export stay where they are, in the
-header below: those are steps WITHIN one design; the new row is WHICH design. Trace has no designs, so it gets no tabs.
+The tab strip is a thin row directly BELOW each app's header, above its tool ribbon (owner, TASK 602; first built above the
+header in TASK 587). Shaper's Explore / Design / Vcarve / Prepare / Review and Pen Plotter's Design / Toolpath / Export stay
+where they are, in the header above it: those are steps WITHIN one design; the new row is WHICH design. Sizes (TASK 602):
+26 px with a mouse, 45 px under a finger (44 px targets); tabs are up to 240 px wide and shrink evenly as more open, down to
+72 px (104 px under a finger), then the row scrolls sideways. Trace has no designs, so it gets no tabs.
 
 Saving (your ruling): a new design is NOT stored until you save it the first time and give it a name. Until then it is
 an "Untitled" that lives only in the open page. From that first named save on, it autosaves as today. Closing (or

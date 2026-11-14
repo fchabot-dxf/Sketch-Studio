@@ -60,6 +60,7 @@ export const UNTITLED = 'Untitled';
  *   canvas: the host's Design canvas <svg>. Until the INITIAL restore has settled the buffer ignores the user's pointer / keyboard input on it (a late restore replaces the
  *     whole state, so an edit started before it lands would hit objects that are about to be thrown away) and carries data-doc-ready="0" on it; it sets data-doc-ready="1"
  *     when the restore is done (also when there was nothing to restore). `buffer.ready` is the same signal as a promise.
+ *     It also carries the autosave state as data-save-state ('saving' | 'saved' | 'error' | 'idle', the onStatusChange values; TASK 602).
  *   doc / win: the page's document and window (injectable for tests): when the tab goes hidden or is closing, the buffer saves pending
  *     changes and flushes the store's throttled Drive writes (TASK 506), so a design on Drive is never left a few seconds behind.
  *
@@ -102,7 +103,9 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (canvas) { canvas.dataset.docReady = '1'; if (win) for (const t of GATED) win.removeEventListener(t, gate, true); }
     openGate();
   }
-  const notify = (s) => { try { onStatusChange && onStatusChange(s); } catch (_) {} };
+  // TASK 602: the save state is also written on the canvas (data-save-state): a host without a status text (SketchStudio: its tab dot shows it) and the
+  // live tests read it there
+  const notify = (s) => { if (canvas) canvas.dataset.saveState = s; try { onStatusChange && onStatusChange(s); } catch (_) {} };
   const restored = (out) => { try { onRestored && onRestored(out); } catch (e) { console.error('onRestored failed', e); } return out; };
 
   function currentDoc() {

@@ -33,7 +33,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
         m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
     })`).then((s) => s && JSON.parse(s));
-    const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) { await sleep(200); return; } await sleep(200); } };
+    const waitSaved = async () => { await sleep(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.querySelector('[data-doc-ready]').dataset.saveState === 'saved'`)) { await sleep(200); return; } await sleep(200); } };
     const readDoc = async () => { await sleep(1800); await waitSaved(); return storedDoc(); };
     const J = (d) => Object.fromEntries(d.joints.map((e) => (Array.isArray(e) ? e : [e.id, e])));
     const cleanCons = (d) => JSON.stringify(d.constraints.map(({ glyphPos, __pos, __visible, ...r }) => Object.fromEntries(Object.keys(r).sort().map((k) => [k, r[k]]))));

@@ -62,7 +62,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       open.onsuccess = () => { const db = open.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign');
         m.onsuccess = () => { if (!m.result) { res(null); return; } const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { const d = g.result && g.result.document; res(d ? JSON.stringify({ shapes: d.geometry.shapes, constraints: d.geometry.constraints, joints: d.geometry.joints }) : null); }; }; };
     })`).then((s) => s && JSON.parse(s));
-    const waitSaved = async () => { await sleepMs(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.getElementById('save-status').textContent === 'Saved'`)) { await sleepMs(200); return; } await sleepMs(200); } };
+    const waitSaved = async () => { await sleepMs(300); for (let i = 0; i < 40; i++) { if (await evalJs(`document.querySelector('[data-doc-ready]').dataset.saveState === 'saved'`)) { await sleepMs(200); return; } await sleepMs(200); } };
     const readDoc = async (name) => {
       if (name === 'shaper') return norm(JSON.parse(await evalJs(`(() => { const s = window.__designController.state; return JSON.stringify({ shapes: s.shapes, constraints: s.constraints, joints: [...s.joints.entries()] }); })()`)));
       await sleepMs(1800); await waitSaved(); return norm(await storedDoc());

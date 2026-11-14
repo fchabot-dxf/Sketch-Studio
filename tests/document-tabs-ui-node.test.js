@@ -3,7 +3,7 @@
 //   B. Pen Plotter: its Toolpath / Export undo stacks (history.js) ride the tab (the `session` hook), a new tab starts empty.
 //   C. Shaper: the cut plan of each tab stays apart through a switch (it rides the sidecar, no session needed).
 //   D. The strip (document-tabs.js) over the declared project actions: click, +, close x with THE unsaved question, keyboard, the 11th tab (T7),
-//      the same design twice, a renamed / deleted design, the sidebar placing it above the header, the name following the active tab.
+//      the same design twice, a renamed / deleted design, the sidebar placing it below the header (TASK 602), the name following the active tab.
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { createDocumentTabs } from '#ui/document-tabs.js';
@@ -182,7 +182,7 @@ const names = (b) => b.tabs().map((t) => t.name);
   } finally { await app.close(); }
 }
 
-// ---- E. mountProjectSidebar({ documentTabs: true }): the strip is its own row above the header; the name follows the active tab --------------------
+// ---- E. mountProjectSidebar({ documentTabs: true }): the strip is its own row below the header (TASK 602); the name follows the active tab --------------------
 {
   const profile = await createProfile();
   const idA = await createNamedDesign(profile, 'sketchstudio', 'Alpha');
@@ -195,7 +195,7 @@ const names = (b) => b.tabs().map((t) => t.name);
     await new Promise((r) => setTimeout(r, 30));
     const strip = doc.querySelector('.sk-doctabs');
     assert(strip, 'the strip exists');
-    assert.strictEqual(strip.nextElementSibling, header, 'it is the row immediately above the header');
+    assert.strictEqual(strip.previousElementSibling, header, 'it is the row immediately below the header (TASK 602, owner)');
     await b.newTab();
     await new Promise((r) => setTimeout(r, 700));
     assert.strictEqual(sb.el.closest('header'), header);

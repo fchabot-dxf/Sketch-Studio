@@ -22,6 +22,7 @@ import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
+import { isShortViewport } from '#ui/short-viewport.js'; // TASK 602: a phone in landscape (the status bar folds away: Log / Tune go to the menu)
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
 import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 loadFusionGlyphs(); // the owner's constraint-glyph sheet, fetched once; the render loop picks it up when it arrives
@@ -154,23 +155,27 @@ function initApp(){
   // The header mounts SYNCHRONOUSLY here (before the async debug-panel import resolves) so the Debug action's
   // id=btn-debug-toggle exists when debug-panel.js binds it — no double-wire (the action has no onClick).
   const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint
+  const noStatusBar = () => onPhone() || isShortViewport(); // TASK 602: in phone landscape the status bar folds away too (#ui/short-viewport.js)
+  // THE mode router (TASK 602): Design is the header's one mode button; Export is opened from the menu (and its Cancel / Export return to Design).
+  const route = (mode) => { header.setActiveTab(mode); showView(mode); };
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
     leading: mountProjectSidebar({
       appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importDrawing, documentTabs: true, // TASK 587: the document tab strip above the header // TASK 566: "Import SVG / DXF…" in the file menu
       hostActions: [
+        { id: 'export', label: 'Export…', icon: SIDEBAR_ICONS.download, onClick: () => route('export') }, // TASK 602 (owner): Export left the header for this menu
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
         { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('dxf') },
         // TASK 562: at phone width (<= 640 px) the header's Style / Debug buttons and the footer's Log / TUNE are hidden and live here
         // instead (the same buttons' own handlers run: nothing is rebuilt). A wider screen keeps them where they are.
-        { divider: true, visible: onPhone },
+        { divider: true, visible: noStatusBar },
         { id: 'phone-style', label: 'Style', icon: '⚙', visible: onPhone, onClick: () => stylePanel.toggle() },
         { id: 'phone-debug', label: 'Debug', icon: '⌨', visible: onPhone, onClick: () => document.getElementById('btn-debug-toggle').click() },
-        { id: 'phone-log', label: 'Log', icon: '☰', visible: onPhone, onClick: () => diagLog.toggle() },
-        { id: 'phone-tune', label: 'Tune solver', icon: '⚙', visible: () => onPhone() && !!document.getElementById('btn-tuning-toggle'), onClick: () => document.getElementById('btn-tuning-toggle').click() },
+        { id: 'phone-log', label: 'Log', icon: '☰', visible: noStatusBar, onClick: () => diagLog.toggle() },
+        { id: 'phone-tune', label: 'Tune solver', icon: '⚙', visible: () => noStatusBar() && !!document.getElementById('btn-tuning-toggle'), onClick: () => document.getElementById('btn-tuning-toggle').click() },
       ],
     }).el,
-    tabs: [{ id: 'design', label: 'Design' }, { id: 'export', label: 'Export' }],
+    tabs: [{ id: 'design', label: 'Design' }], // TASK 602: Export is in the menu; while it shows, Design (not highlighted) is the way back
     actions: [{ id: 'btn-debug-toggle', label: 'Debug' }],
     collapseActionsOnPhone: true, // TASK 562: Style + Debug move into the menu at <= 640 px
     activeTab: 'design',
@@ -183,12 +188,8 @@ function initApp(){
   sidePanel = mountDesignBrowser({ container: svg.parentElement, state, engine, toggleHost: header.el });
   showView('design');
 
-  // PERSIST-2: a passive autosave status indicator (never a blocking prompt).
-  const saveStatusEl = document.createElement('span');
-  saveStatusEl.id = 'save-status';
-  saveStatusEl.style.cssText = 'font:11px system-ui,sans-serif;color:#94a3b8;opacity:0.85;margin-left:8px;align-self:center;display:inline-block;width:3.7em;white-space:nowrap;'; // fixed width = "Saving…" (the widest text) so the header buttons before it never move (TASK 557); Pen Plotter and Shaper own their toolbars (not createAppHeader), so each host keeps its own copy of this rule
-  header.el.appendChild(saveStatusEl);
-  docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg, statusEl: saveStatusEl })); // design-canvas.js
+  // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)
+  docBuffer = createDocumentBuffer(studioBufferOptions({ state, engine, svg })); // design-canvas.js
   docBuffer.restore();
   docBuffer.start();
 
@@ -199,7 +200,7 @@ function initApp(){
   // S7c-2e: the Export view's Cancel/Export return to the Design tab via the router (single source of truth).
   ['btn-export-cancel', 'btn-export-do'].forEach((id) => {
     const b = document.getElementById(id);
-    if (b) b.addEventListener('click', () => { header.setActiveTab('design'); showView('design'); });
+    if (b) b.addEventListener('click', () => route('design'));
   });
 
   setupInput(svg, state);

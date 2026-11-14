@@ -170,10 +170,11 @@ export async function launchBrowser(opts = {}) {
     // then ready for input. This is THE "page loaded" condition for a live test; never a fixed sleep after navigate.
     const waitForApp = (canvasId) => waitFor(`(() => { const c = document.getElementById('${canvasId}'); return !!c && c.dataset.docReady === '1'; })()`, `#${canvasId} to finish restoring its stored design (data-doc-ready)`);
     // Makes the autosave write what the app currently holds, through the app's own page-hide path (document-buffer.js: the tab closing saves pending changes at once), and waits for it.
-    // The buffer sets the "Saving…" status synchronously when something is unsaved; otherwise the store already holds the current state. Replaces "sleep past the 1500 ms poll".
+    // The buffer sets the 'saving' state synchronously when something is unsaved; otherwise the store already holds the current state. Replaces "sleep past the 1500 ms poll".
+    // The state is read from the Design canvas (document-buffer.js data-save-state, TASK 602: SketchStudio has no status text).
     const flushAutosave = async () => {
-      const status = await evalJs(`(() => { window.dispatchEvent(new Event('pagehide')); return document.getElementById('save-status').textContent; })()`);
-      if (status === 'Saving…') await waitFor(`document.getElementById('save-status').textContent === 'Saved'`, 'the autosave to finish writing');
+      const status = await evalJs(`(() => { window.dispatchEvent(new Event('pagehide')); return document.querySelector('[data-doc-ready]').dataset.saveState || ''; })()`);
+      if (status === 'saving') await waitFor(`document.querySelector('[data-doc-ready]').dataset.saveState === 'saved'`, 'the autosave to finish writing');
     };
     return { port: srv.port, server: srv.server, userDir, ws, send, once, evalJs, waitFor, navigate, waitForApp, flushAutosave, close, dialogs };
   } catch (e) {

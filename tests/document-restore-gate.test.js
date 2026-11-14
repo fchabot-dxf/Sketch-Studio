@@ -30,8 +30,8 @@ await (async () => {
   const { port, send, evalJs, waitFor, navigate } = cdp;
   const idbDoc = `new Promise((res, rej) => { const r = indexedDB.open('sketch-studio-projects', 1); r.onerror = () => rej(r.error); r.onsuccess = () => { try { const db = r.result; const m = db.transaction('meta').objectStore('meta').get('currentDesign'); m.onsuccess = () => { try { const g = db.transaction('designs').objectStore('designs').get(m.result); g.onsuccess = () => { db.close(); res(g.result ? g.result.document : null); }; } catch (e) { rej(e); } }; } catch (e) { rej(e); } }; })`;
   const enterDesign = async () => {
-    await waitFor(`[...document.querySelectorAll('.stage-btn')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
-    await evalJs(`[...document.querySelectorAll('.stage-btn')].find(x => /design/i.test(x.textContent)).click()`);
+    await waitFor(`[...document.querySelectorAll('.sk-header-tab')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
+    await evalJs(`[...document.querySelectorAll('.sk-header-tab')].find(x => /design/i.test(x.textContent)).click()`);
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design canvas to show');
   };
 

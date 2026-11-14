@@ -38,22 +38,22 @@ await (async () => {
     const toast = () => evalJs(`document.getElementById('toast').textContent`);
 
     await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
-    const stageOn = (s) => waitFor(`document.querySelector('.stage-btn[data-stage="${s}"]')?.classList.contains('active')`, `${s} stage active`);
-    await waitFor(`!!document.querySelector('.stage-btn[data-stage="toolpath"]')`, 'penplotter app ready');
+    const stageOn = (s) => waitFor(`document.querySelector('.sk-header-tab[data-tab="${s}"]')?.classList.contains('active')`, `${s} stage active`);
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="toolpath"]')`, 'penplotter app ready');
 
     // ---- item 6c/6b: a fresh page has the starter toolpath in a pen-less group: it is NAMED, and the pens hint is current
-    await clickEl('.stage-btn[data-stage="toolpath"]'); await stageOn('toolpath');
+    await clickEl('.sk-header-tab[data-tab="toolpath"]'); await stageOn('toolpath');
     await waitFor(`!!document.querySelector('#toolpathLayers .group-row')`, 'toolpath group row rendered');
     const fresh = await evalJs(`(() => ({ group: document.querySelector('#toolpathLayers .group-row').textContent, hint: document.getElementById('plotColors').textContent, strip: !!document.querySelector('.tp-strip'),
-      panelTop: Math.round(document.getElementById('toolpathPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.toolbar')).getBoundingClientRect().bottom) }))()`);
+      panelTop: Math.round(document.getElementById('toolpathPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.sk-header')).getBoundingClientRect().bottom) }))()`);
     console.log('fresh Toolpath tab:', JSON.stringify(fresh));
     assert(/\(no pen\)/.test(fresh.group), 'the pen-less group row is labelled "(no pen)": ' + fresh.group);
     assert(/\+ Pen/.test(fresh.hint) && !/click \+ to/.test(fresh.hint), 'the Pens hint names the + Pen button: ' + fresh.hint);
     // ---- item 6a: no empty label band above the panel (the panel starts right under the header)
     assert.strictEqual(fresh.strip, false, 'no .tp-strip band on the Toolpath tab');
     assert(fresh.panelTop - fresh.headerBottom <= 2, 'the Toolpath panel starts under the header and its tab strip (TASK 605) (gap ' + (fresh.panelTop - fresh.headerBottom) + 'px)');
-    await clickEl('.stage-btn[data-stage="export"]'); await stageOn('export');
-    const ex = await evalJs(`(() => ({ strip: !!document.querySelector('.tp-strip'), top: Math.round(document.getElementById('exportPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.toolbar')).getBoundingClientRect().bottom) }))()`);
+    await clickEl('.sk-header-tab[data-tab="export"]'); await stageOn('export');
+    const ex = await evalJs(`(() => ({ strip: !!document.querySelector('.tp-strip'), top: Math.round(document.getElementById('exportPanel').getBoundingClientRect().top), headerBottom: Math.round((document.querySelector('.sk-doctabs') || document.querySelector('header.sk-header')).getBoundingClientRect().bottom) }))()`);
     assert.strictEqual(ex.strip, false, 'no .tp-strip band on the Export tab');
     assert(ex.top - ex.headerBottom <= 2, 'the Export panel starts under the header and its tab strip (TASK 605) (gap ' + (ex.top - ex.headerBottom) + 'px)');
 
@@ -65,7 +65,7 @@ await (async () => {
     assert(/Design tab/.test(msg) && !/art layers/.test(msg), 'the nothing-to-plot toast is worded for the Design tab: ' + msg);
 
     // ---- item 1: a coloured shape + an EMPTY palette -> the Pen-mix box says why it is off
-    await clickEl('.stage-btn[data-stage="design"]'); await stageOn('design');
+    await clickEl('.sk-header-tab[data-tab="design"]'); await stageOn('design');
     await clickEl('#tool-line');
     const a = await world(20, 30), b = await world(60, 30);
     await click(a.x, a.y); await click(b.x, b.y);
@@ -94,7 +94,7 @@ await (async () => {
     await clickEl('#tool-select');
     const c = await world(82, 25); await click(c.x, c.y);       // the circle's edge (stroke #0000ff, fill #00ff00)
     await frame(); await sleep(300); await frame();
-    await clickEl('.stage-btn[data-stage="toolpath"]'); await stageOn('toolpath');
+    await clickEl('.sk-header-tab[data-tab="toolpath"]'); await stageOn('toolpath');
     await clickEl('#addOutlineTp');
     await waitFor(`import('/apps/penplotter/src/state.js').then(m => m.state.toolpaths.some(t => /^outline \\d+$/.test(t.name)))`, '+ Outline added a toolpath');
     const after = await st('({ names: state.toolpaths.map(t => t.name), pens: state.plotColors.map(p => p.color).length })');

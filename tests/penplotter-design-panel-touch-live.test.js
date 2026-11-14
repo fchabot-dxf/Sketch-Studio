@@ -11,7 +11,7 @@ const { port, send, evalJs, navigate } = cdp;
 try {
   const sizes = () => evalJs(`(() => { const o = {}; for (const e of document.querySelectorAll('#design-panel button, #design-panel input')) {
     const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue; o[e.id || e.className] = [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10]; } return o; })()`);
-  const enterDesign = async () => { await sleep(800); await evalJs(`document.querySelector('.stage-btn[data-stage="design"]').click()`); await sleep(800); };
+  const enterDesign = async () => { await sleep(800); await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleep(800); };
   const phone = async (w, h, landscape) => {
     await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: true, screenOrientation: landscape ? { type: 'landscapePrimary', angle: 90 } : { type: 'portraitPrimary', angle: 0 } });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });

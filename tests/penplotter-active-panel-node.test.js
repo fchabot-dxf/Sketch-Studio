@@ -39,7 +39,7 @@ try {
   app.click(pt.x, pt.y);
   app.frames(2);
   assert(P.selectedShapeIds.size > 0, 'the click selects the circle');
-  pressEl('.stage-btn[data-stage="toolpath"]');
+  pressEl('.sk-header-tab[data-tab="toolpath"]');
   assert(q('#addOutlineTp'), 'the toolpath stage (+ Outline there)');
 
   // 1. + Fill from the selection -> the panel shows the NEW fill, and editing Spacing changes THAT toolpath only

@@ -53,35 +53,21 @@
   --sk-error: #ef4444;
 }
 
-/* TASK 581 -- the PHONE HEADER of the editors that own a bespoke header (Shaper, Pen Plotter, Trace; SketchStudio's is createAppHeader's
- * .sk-header, whose own phone rules are in app-header.js). At <= 640 px (the one phone breakpoint) a header with class .sk-phone-header
- * is TWO fixed rows: row 1 = menu button, save status, the host's controls (Settings, Log, the panel drawer button); row 2 = the
- * mode / stage / tab strip (.sk-phone-tabs, class on the <nav>), its buttons sharing the width equally, 44 px high. Anything the host
- * marks .sk-phone-collapse leaves the header (the host puts the same actions in its menu, like SketchStudio's Style / Debug). A host
- * whose views start under the header reads the height from --sk-header-h (44 px everywhere above the breakpoint, unchanged). */
-:root { --sk-header-h: 44px; }
-/* TASK 618 (owner: "if layout is too long it should scroll header"): when a header's controls do not fit, the row scrolls sideways (a swipe; no
- * scrollbar, no wrapping, nothing hidden). Its menus / panels (app menu, Style, Log) are position: fixed on <body>, so this scroll box cannot clip them. */
-body > header.sk-phone-header { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-body > header.sk-phone-header::-webkit-scrollbar { display: none; }
-body > header.sk-phone-header > * { flex-shrink: 0; }
+/* TASK 619 -- Shared header tokens and height: 44 px desktop, 0 px on phones (no header bar; stage tabs + actions move into the drawer). */
+:root {
+  --sk-header-h: 44px;
+  --sk-header-bg: #ffffff;
+  --sk-header-fg: #334155;
+  --sk-header-sep: #cbd5e1;
+  --sk-header-hover: rgba(0, 0, 0, 0.05);
+}
 @media (max-width: 640px) {
-  :root { --sk-header-h: 92px; }
-  body > header.sk-phone-header { flex-wrap: wrap; height: var(--sk-header-h); gap: 4px; padding: 0 12px; box-sizing: border-box; }
-  body > header.sk-phone-header .sk-phone-collapse { display: none; }
-  body > header.sk-phone-header .sk-phone-tabs { order: 9; flex: 1 0 100%; height: 44px; gap: 4px; align-items: stretch; overflow-x: auto; scrollbar-width: none; } /* row 2 scrolls too when its buttons do not fit */
-  body > header.sk-phone-header .sk-phone-tabs::-webkit-scrollbar { display: none; }
-  body > header.sk-phone-header .sk-phone-tabs > button { flex: 1 0 auto; min-width: 0; min-height: 44px; padding: 0 8px; }
+  :root { --sk-header-h: 0px; }
 }
 
 /* TASK 602 -- the SHORT viewport (a phone in LANDSCAPE): the query is SHORT_VIEWPORT_QUERY in #ui/short-viewport.js (a static stylesheet cannot import
- * it; tests/short-viewport-node.test.js checks this copy is identical). The canvas needs the height: a host header (.sk-phone-header) stays ONE row,
- * 52 px, its buttons 44 px finger targets; a host's status bar (.sk-statusbar: SketchStudio's footer with Log / Tune / the VIEW readout) folds away
- * (Log and Tune are in the app menu, sidebar-projects hostActions). The tool ribbon's rail is in #ui/tool-ribbon.js. */
+ * it; tests/short-viewport-node.test.js checks this copy is identical). The canvas needs the height: no header bar; the tool ribbon's rail is in
+ * #ui/tool-ribbon.js. */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
-  :root { --sk-header-h: 52px; }
-  body > header.sk-phone-header { height: var(--sk-header-h); box-sizing: border-box; }
-  body > header.sk-phone-header button { min-height: 44px; min-width: 44px; }
-  /* TASK 618: the status bar stays, floating over the canvas's bottom edge (app-footer.js) with Undo / Redo, Construction, Recenter; Log / Tune / the mag lens are in the menu or off */
-  body .sk-statusbar #status-diag-slot, body .sk-statusbar #btn-mag-toggle, body .sk-statusbar #btn-tuning-toggle { display: none; }
+  :root { --sk-header-h: 0px; }
 }

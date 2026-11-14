@@ -41,9 +41,9 @@ await (async () => {
 
     const HOSTS = {
       studio:     { url: '/apps/sketchstudio/index.html', enter: null,                                      canvas: '#svgCanvas',      state: null },
-      shaper:     { url: '/apps/shaper/index.html',       enter: '.mode-btn[data-mode="design"]',           canvas: '#design-canvas',  state: 'window.__designController.state' },
-      penplotter: { url: '/apps/penplotter/index.html',   enter: '.stage-btn[data-stage="design"]',         canvas: '#design-canvas',  state: 'window.__sketch.controller.state' },
-      trace:      { url: '/apps/trace/index.html',        enter: '.tr-tab[data-tab="edit"]',                canvas: null,              state: null },
+      shaper:     { url: '/apps/shaper/index.html',       enter: '.sk-header-tab[data-tab="design"]',       canvas: '#design-canvas',  state: 'window.__designController.state' },
+      penplotter: { url: '/apps/penplotter/index.html',   enter: '.sk-header-tab[data-tab="design"]',       canvas: '#design-canvas',  state: 'window.__sketch.controller.state' },
+      trace:      { url: '/apps/trace/index.html',        enter: '.sk-header-tab[data-tab="edit"]',         canvas: null,              state: null },
     };
     const open = async (name) => { const h = HOSTS[name]; await goto(h.url, h.enter ? null : (h.canvas && h.canvas.slice(1)), h.enter ? `!!document.querySelector('${h.enter}')` : `!!document.querySelector('${h.canvas}')`); if (h.enter) { await clickEl(h.enter); if (h.canvas) await waitForApp(h.canvas.slice(1)); await waitFor(h.canvas ? `document.querySelector('${h.canvas}').getBoundingClientRect().width > 0 && ${h.state ? '!!' + h.state : 'true'}` : `document.querySelector('${h.enter}').classList.contains('active')`, name + ' tab to show'); } return h; };
 
@@ -86,7 +86,7 @@ await (async () => {
 
     // ---- 4. a hexagon in Shaper and in Studio (sides back to 6), real mouse; Undo once
     // the 8 typed above is remembered across a reload (localStorage): the next polygon starts with it
-    await goto(HOSTS.penplotter.url, null, `!!document.querySelector('.stage-btn[data-stage="design"]')`);
+    await goto(HOSTS.penplotter.url, null, `!!document.querySelector('.sk-header-tab[data-tab="design"]')`);
     await open('penplotter'); await clickEl('#tool-polygon'); await clickEl(pp.canvas);
     assert.deepStrictEqual(await boxes(), [[['R', '0.0'], ['N', '8']]], 'remembered across a reload');
     await key('Escape', 'Escape', 27);

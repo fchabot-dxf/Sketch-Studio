@@ -46,7 +46,7 @@ try {
   await waitFor(`!!document.getElementById('btn-recenter-view')`, 'loaded (phone)'); await sleep(600);
   c = await info('btn-construct-toggle'); r = await info('btn-recenter-view');
   console.log('phone', JSON.stringify({ c, r }));
-  assert.deepStrictEqual([c.w, c.h, r.w, r.h], [44, 44, 44, 44], 'a finger: both buttons are 44 px square');
+  assert.deepStrictEqual([c.w, c.h, r.w, r.h], [56, 44, 56, 44], 'a finger: both buttons are 56 x 44 (wider than tall, 44 px touch height)');
   assert.ok(c.glyph >= 26 && r.glyph >= 26, `TASK 616: a finger: the glyph is >= 26 px of 44: ${c.glyph} / ${r.glyph}`);
   const clearP = await evalJs(`(() => { const box = document.querySelector('.sk-browser'); if (!box) return true; const b = box.getBoundingClientRect(); if (!b.width) return true; return ['btn-construct-toggle', 'btn-recenter-view'].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom; }); })()`);
   assert.ok(clearP, 'phone: no overlap with the SKETCHES box');

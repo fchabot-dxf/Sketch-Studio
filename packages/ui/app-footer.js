@@ -19,13 +19,17 @@ function injectStyles() {
   const s = document.createElement('style');
   s.id = 'sk-footer-styles';
   s.textContent = `
-:root { --sk-footer-h: 40px; }
-@media (pointer: coarse) { :root { --sk-footer-h: 52px; } }
+:root { --sk-footer-h: 40px; --sk-footer-btn-w: 32px; --sk-footer-btn-h: 32px; --sk-footer-btn-icon: 22px; }
+@media (pointer: coarse) {
+  :root { --sk-footer-btn-w: 56px; --sk-footer-btn-h: 44px; --sk-footer-btn-icon: 28px; --sk-footer-h: var(--sk-footer-btn-h); }
+  body .sk-footer { border-top: 0; box-shadow: inset 0 1px 0 var(--sk-header-sep, #cbd5e1); }
+  body .sk-statusbar { height: var(--sk-footer-h); min-height: 0; padding: 0 10px !important; border-top-width: 0 !important; box-shadow: inset 0 1px 0 var(--sk-header-sep, #cbd5e1); }
+}
 /* The short viewport (a phone in landscape, short-viewport.js): a footer row would cost the canvas 45 px of 360, so the footer FLOATS over the canvas's bottom edge, right of the
    tool rail (no background, only the buttons take the pointer) and reserves no height: the canvas keeps its share. */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   :root { --sk-footer-h: 0px; --sk-rail-w: 56px; }
-  body .sk-footer, body .sk-statusbar { position: fixed !important; left: var(--sk-rail-w); right: 0; bottom: 0; height: 44px; padding: 0 8px !important; background: transparent !important; border: 0 !important; pointer-events: none; z-index: 30; }
+  body .sk-footer, body .sk-statusbar { position: fixed !important; left: var(--sk-rail-w); right: 0; bottom: 0; height: var(--sk-footer-btn-h); padding: 0 8px !important; gap: 6px; background: transparent !important; border: 0 !important; box-shadow: none !important; pointer-events: none; z-index: 30; }
   body .sk-footer, body .sk-statusbar { justify-content: flex-start !important; } /* one cluster at the bottom-left, clear of a host's own right-hand panel (Pen Plotter's Design panel) */
   body .sk-footer-end { margin-left: 0; }
   body .sk-footer .sk-history-btn, body .sk-footer .sk-footer-btn, body .sk-statusbar .sk-history-btn, body .sk-statusbar .sk-footer-btn { pointer-events: auto; background: var(--sk-header-bg, #f1f5f9); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
@@ -91,8 +95,9 @@ export function mountAppFooter({ router, view = () => null, construction = false
   }
   const recenterBtn = mk('btn-recenter-view', 'Recenter view', 'icon-recenter');
   recenterBtn.addEventListener('click', () => {
-    const v = view(); if (!v || !v.state.view) return;
-    fitViewToExtents(v.svg, v.state.view, v.state);
+    const v = view(); if (!v) return;
+    if (typeof v.fit === 'function') { v.fit(); return; }
+    if (v.state && v.state.view) fitViewToExtents(v.svg, v.state.view, v.state);
   });
 
   const refresh = () => {

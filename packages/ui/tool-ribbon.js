@@ -145,7 +145,7 @@ function injectStyles() {
     flex: 1 1 auto; min-height: 0; }
   .sk-ribbon-frame > * { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; }
   .sk-ribbon-frame > footer { grid-column: 2; grid-row: 2; } /* TASK 618: SketchStudio's status bar (the footer) under the work area, right of the rail */
-  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0;
+  .sk-ribbon-frame > .sk-ribbon-host { grid-column: 1; grid-row: 1 / -1; display: flex; flex-direction: column; width: auto; padding: 0 0 0 16px;
     overflow: hidden; border-bottom: 0; border-right: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
   .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: center; min-height: 0; height: 100%; gap: 0; padding: 2px;
     overflow-x: hidden; overflow-y: auto; touch-action: pan-y; -webkit-mask-image: none; mask-image: none; }

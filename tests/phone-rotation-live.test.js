@@ -11,21 +11,21 @@ import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
 const HOSTS = [
   { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas' },
-  { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('[data-mode="design"]').click()` },
-  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
-  { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()` },
+  { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+  { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()` },
 ];
-// measured before TASK 602: [top, height] of header / ribbon / status bar, canvas [left, top, width, height]
+// measured desktop baseline [top, height] (TASK 619: all 4 hosts share the 44px header; phones have NO header bar)
 const BEFORE = {
   '390x844': {
-    sketchstudio: { header: 53, ribbon: 88, footer: 29 },
-    shaper: { header: [0, 92], ribbon: [92, 88], canvas: [0, 181, 390, 663] },
-    penplotter: { header: [0, 92], ribbon: [92, 88], canvas: [0, 181, 390, 663] },
-    trace: { header: [0, 92], ribbon: [92, 88], canvas: [0, 180, 390, 664] },
+    sketchstudio: { ribbon: 88, footer: 44 },
+    shaper: { ribbon: [0, 88], canvas: [0, 89, 390, 755] },
+    penplotter: { ribbon: [0, 88], canvas: [0, 89, 390, 755] },
+    trace: { ribbon: [0, 88], canvas: [0, 88, 390, 756] },
   },
   '1440x900': {
-    sketchstudio: { header: 38, ribbon: 79, footer: 39, canvasW: 1406, canvasBottom: 844 },
-    shaper: { header: [0, 44], ribbon: [44, 79], canvas: [0, 124, 1440, 776] }, // TASK 618: was [44, 89] / [0, 134, 1440, 766]: without the Edit group (Undo / Redo) the ribbon no longer overflows 1440 px, so its 10 px scrollbar is gone
+    sketchstudio: { header: 44, ribbon: 79, footer: 45, canvasW: 1406, canvasBottom: 838 },
+    shaper: { header: [0, 44], ribbon: [44, 79], canvas: [0, 124, 1440, 776] },
     penplotter: { header: [0, 44], ribbon: [44, 79], canvas: [0, 124, 1196, 776] },
     trace: { header: [0, 44], ribbon: [44, 79], canvas: [0, 123, 1440, 777] },
   },
@@ -115,22 +115,22 @@ await (async () => {
         const m = await rows(h), b = BEFORE[size][h.name], tag = `${h.name} @${size}: `;
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'row', tag + 'the ribbon is a row (no rail)');
         if (h.name === 'sketchstudio') {
-          assert.strictEqual(m.header[3], b.header, tag + 'header height unchanged');
+          if (mouse) assert.strictEqual(m.header[3], b.header, tag + 'unified header height is 44');
+          else assert.strictEqual(m.header, null, tag + 'no header bar on phone');
           assert.strictEqual(m.ribbon[3], b.ribbon, tag + 'ribbon height unchanged');
-          // TASK 618: the status bar holds the 32 / 44 px icon buttons now (was a 29 / 39 px text bar): 12 px of padding + the line + the button
-          assert.strictEqual(m.footer[3], mouse ? 45 : 57, tag + 'status bar height: the icon buttons (32 + 13 mouse, 44 + 13 finger)');
-          assert.strictEqual(m.strip[1], m.header[4], tag + 'the tab strip is right under the header');
+          assert.strictEqual(m.footer[3], b.footer, tag + 'status bar height matches expected icon size');
+          assert.strictEqual(m.strip[1], mouse ? m.header[4] : 0, tag + 'the tab strip sits at top on phone / right under header on desktop');
           assert.strictEqual(m.strip[3], mouse ? 26 : 31, tag + 'the tab strip row height (26 mouse / 31 finger, TASK 608)');
           assert(m.ribbon[1] >= m.strip[4], tag + 'the ribbon is under the tab strip');
-          if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom - (m.footer[3] - b.footer), tag + 'canvas bottom: the taller footer takes its difference'); }
+          if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom, tag + 'canvas bottom meets footer'); }
         } else {
-          // TASK 605: these hosts have the tab strip too (26 px mouse / 31 px finger) right under the header; everything below it moved down by exactly that row
           const row = mouse ? 26 : 31;
-          assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header unchanged');
-          assert.deepStrictEqual([m.strip[1], m.strip[3]], [m.header[4], row], tag + 'the tab strip is right under the header, ' + row + ' px tall');
-          assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], [b.ribbon[0] + row, b.ribbon[1]], tag + 'ribbon unchanged in size, down by the strip row');
-          assert.deepStrictEqual([m.canvas[0], m.canvas[1], m.canvas[2], m.canvas[3]], [b.canvas[0], b.canvas[1] + row, b.canvas[2], b.canvas[3] - row - m.footer[3]], tag + 'canvas: same width, starts a strip row lower, ends where the footer starts');
-          assert.strictEqual(m.footer[3], mouse ? 40 : 52, tag + 'the shared footer row (TASK 618)');
+          if (mouse) assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header is 44 px');
+          else assert.strictEqual(m.header, null, tag + 'no header bar on phone');
+          assert.deepStrictEqual([m.strip[1], m.strip[3]], [mouse ? m.header[4] : 0, row], tag + 'the tab strip is at top on phone / under header on desktop, ' + row + ' px tall');
+          assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], [b.ribbon[0] + row, b.ribbon[1]], tag + 'ribbon size unchanged, starts below strip');
+          assert.deepStrictEqual([m.canvas[0], m.canvas[1], m.canvas[2], m.canvas[3]], [b.canvas[0], b.canvas[1] + row, b.canvas[2], b.canvas[3] - row - m.footer[3]], tag + 'canvas fills space between ribbon and footer');
+          assert.strictEqual(m.footer[3], mouse ? 40 : 44, tag + 'the shared footer row (TASK 618/619)');
         }
         console.log(`unchanged ${tag}${JSON.stringify(m)}`);
       }

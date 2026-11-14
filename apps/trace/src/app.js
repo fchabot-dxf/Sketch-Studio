@@ -7,9 +7,9 @@
  * Export tab: SVG (Shaper Origin) + DXF (Fusion 360)
  */
 
-import { SIDEBAR_ICONS }                  from '#ui/app-sidebar.js';
-import { mountProjectSidebar }            from '#ui/sidebar-projects.js'; // TASK 567: the SAME File menu (project actions, store-backed) every editor mounts
-import { getGoogleAccount }               from '#ui/cloud/google-account.js'; // TASK 488: the shared account row
+import { mountAppChrome }                  from '#ui/app-chrome.js';
+import { SIDEBAR_ICONS }                   from '#ui/app-sidebar.js';
+import { getGoogleAccount }                from '#ui/cloud/google-account.js'; // TASK 488: the shared account row
 getGoogleAccount().init();
 import { applyAppIdentity }                from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('trace');
@@ -27,21 +27,27 @@ import { createTraceSession }          from './trace-session.js'; // TASK 605: a
 import { mountEdit, getEditBuffer, getEditState, startEdit, stopEdit, importToEdit } from './edit-view.js';
 import { mountImportDrop }                from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer's drop on the Edit tab
 
-// ── App sidebar (TASK 473, 567) ───────────────────────────────────────────────
-// The File menu is the shared one every editor mounts (sidebar-projects.js): New design, Save as, Duplicate, Open recent, Projects, Save to Google
-// Drive, Open from file, Import SVG / DXF…. This host declares only ITS actions, which sit after those (below a divider) like the other apps'
-// own Download: Download SVG / DXF = the traced result (enabled once there is a trace).
-const swHost = document.getElementById('app-sidebar-host');
-if (swHost) {
-  swHost.appendChild(mountProjectSidebar({
-    appId: 'trace', getBuffer: () => getEditBuffer(), documentTabs: true, // TASK 605: the document tab strip under the header, in every tab
-     importFile: (text, name) => importDrawing(text, name),
-    hostActions: [
-      { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
-      { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
-    ],
-  }).el);
-}
+// ── App chrome (TASK 473, 567, 619) ───────────────────────────────────────────
+const TRACE_STAGES = [
+  { id: 'trace',  label: 'Trace' },
+  { id: 'edit',   label: 'Edit' },
+  { id: 'export', label: 'Export' },
+];
+const _diagLog = createDiagnosticLog({ appId: 'trace', state: () => getEditState() });
+const chrome = mountAppChrome({
+  appId: 'trace',
+  stages: TRACE_STAGES,
+  activeStage: 'trace',
+  onStageChange: (id) => switchTab(id),
+  getBuffer: () => getEditBuffer(),
+  importFile: (text, name) => importDrawing(text, name),
+  hostActions: [
+    { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadSVG(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
+    { id: 'download-dxf', label: 'Download DXF', icon: SIDEBAR_ICONS.download, enabled: () => !!state.svgString, tooltip: 'Trace an image first', onClick: () => downloadDXF(state.svgString, state.imageName, state.scale, state.imageH, state.unit) },
+    { divider: true },
+    { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
+  ],
+});
 
 // TASK 566: import an SVG / DXF into the Edit tab's sketch (the File menu's entry, and a drop on the Edit tab) and show the Edit tab.
 function importDrawing(text, name) {
@@ -49,10 +55,6 @@ function importDrawing(text, name) {
   toast(res.message, res.ok ? 'success' : 'error');
   if (res.ok) switchTab('edit');
 }
-
-// DIAG-OVERLAY: log/error/viewport/touch capture, and the document section (the Edit canvas's sketch state, through the same getter shape the other hosts use).
-const _diagLog = createDiagnosticLog({ appId: 'trace', state: () => getEditState() });
-if (swHost) swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 // TASK 618: Undo / Redo belong to the Edit tab's sketch (the Trace and Export tabs have no history)
 const history = createHistoryRouter({ current: () => (getEditState() && !tabPanes.edit.hidden ? sketchHistory(getEditState()) : null) });
@@ -86,10 +88,8 @@ const tabPanes = {
 };
 if (tabPanes.edit) mountImportDrop(tabPanes.edit, importDrawing); // TASK 566: a drop on the Edit tab imports too
 
-const tabBtns = document.querySelectorAll('.tr-tab[data-tab]');
-
 function switchTab(id) {
-  tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  chrome.setActiveStage(id);
   Object.entries(tabPanes).forEach(([k, el]) => {
     if (el) el.hidden = k !== id;
   });
@@ -102,8 +102,6 @@ function switchTab(id) {
     updateScaleNote();
   }
 }
-
-tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
 // ── Modules init ──────────────────────────────────────────────────────────────
 const preview = initPreview(eventBus);

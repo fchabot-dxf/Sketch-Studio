@@ -18,7 +18,7 @@ await (async () => {
     const stable = (sel) => waitFor(`new Promise((res) => { const p = document.querySelector('${sel}'); const s = () => { const r = p.getBoundingClientRect(); return r.left + ',' + r.right + ',' + r.height; }; let last = s(), n = 0; const tick = () => { const c = s(); n = c === last ? n + 1 : 0; last = c; if (n >= 5) res(true); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`, 'stable layout ' + sel);
 
     const hosts = [
-      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
+      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
     ];
     for (const h of hosts) {
       await navigate(`http://127.0.0.1:${port}${h.url}`, 4000);

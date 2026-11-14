@@ -79,7 +79,7 @@ export const defaultInputCtx = {
   getWorldGroup() { return (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('world-group') : null; },
   getMagEls() {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return {};
-    return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content'), btn: document.getElementById('btn-mag-toggle') };
+    return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content') };
   },
   getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
   // P4b TOOLBAR/STATUS (app-specific; a host with its own toolbar supplies these, or omits to skip the sync).
@@ -131,30 +131,25 @@ let inputCtx = defaultInputCtx;
 // Default ()=>true → SketchStudio (passes no isActive) is byte-identical. Shaper passes () => Design visible.
 let isActiveFn = () => true;
 
-// Global flag for magnifier toggle (the footer MAG LENS button, for mouse users)
-let magEnabled = false;
-// TASK 562: a finger is down on the canvas. The lens is then ON by itself while it draws or drags (no toggle on a phone): the finger
-// hides the point it works on, the lens shows it 80 px above. The MAG LENS button stays the switch for a mouse.
+// TASK 562/619: automatic touch lens — a finger is down on the canvas; the lens is ON while it draws or drags (finger hides the point it works on, lens shows it 80 px above).
 let touchPointerDown = false;
 const LENS_RADIUS_PX = 50;
 const LENS_OFFSET_PX = 80;
 
 // Helper to sync magnifier portal: shows 1:1 view of the area under the finger,
 // offset above the pointer so touch users can see the snap area.
-// Activates whenever magEnabled AND a snap target is active (any tool mode).
 // Called from updateSnapTarget so it always has fresh snap state.
 function updateMagnifier(svg, state) {
     const { mag, magContent } = inputCtx.getMagEls ? inputCtx.getMagEls() : {};
     const worldGroup = inputCtx.getWorldGroup ? inputCtx.getWorldGroup() : null;
     if (!mag || !magContent || !worldGroup) return;
 
-    // Show when: the toggle is ON and a snap target has a point, OR a finger is drawing / dragging (then it follows the finger's
-    // point, snapped when a snap is active)
+    // Show while a finger is drawing / dragging (follows the finger's point, snapped when a snap is active)
     const snap = state && state.activeSnap;
     const hasSnap = snap && snap.pt && typeof snap.pt.x === 'number';
     const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION, TOOL_MODES.BEZIER];
     const fingerWorking = touchPointerDown && !!state && !!(state.drag || state.active || drawingTools.includes(state.currentTool)) && !!state.lastMouse;
-    const showLens = (magEnabled && hasSnap) || fingerWorking;
+    const showLens = fingerWorking;
 
     if (!showLens) {
         mag.style.display = 'none';
@@ -203,21 +198,6 @@ function updateMagnifier(svg, state) {
     if (translateG) {
         translateG.setAttribute('transform', 'translate(' + (-focusX) + ',' + (-focusY) + ')');
     }
-}
-
-// Setup a footer button that toggles the magnifier on/off
-function setupMagToggle(svg, state) {
-    const btn = (inputCtx.getMagEls ? inputCtx.getMagEls() : {}).btn;
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-        magEnabled = !magEnabled;
-        btn.innerText = `MAG LENS: ${magEnabled ? 'ON' : 'OFF'}`;
-        btn.classList.toggle('bg-blue-500', magEnabled);
-        btn.classList.toggle('text-white', magEnabled);
-        btn.setAttribute('aria-pressed', magEnabled);
-        // Immediately sync magnifier visibility with current snap state
-        try { updateMagnifier(svg, state); } catch(_) { }
-    });
 }
 
 // Edge Panning State
@@ -286,7 +266,6 @@ export function setupInput(svg, state, opts = {}) {
     setupDimensionTool(svg, state);
     setupNumericInput(svg, state);
     setupNotifications();
-    try { setupMagToggle(svg, state); } catch(_) { }
     try { initCursors(); } catch(e) { console.error('Failed to init cursors:', e); }
     try { setupLiveDimensionInput(); } catch(e) { console.error('Failed to init live dim:', e); }
     

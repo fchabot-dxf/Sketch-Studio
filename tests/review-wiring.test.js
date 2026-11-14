@@ -33,8 +33,8 @@ for (const rel of ['apps/shaper/src', 'packages/core', 'apps/penplotter/src', 'a
 }
 
 // the tab: Simulate/Export is renamed Review; its export panel stays; a stored 'simexport' maps to 'review'
-assert.match(html, /data-mode="review">Review</);
-assert.doesNotMatch(html, /data-mode="simexport"/);
+assert.match(modes, /id:\s*'review',\s*label:\s*'Review'/);
+assert.doesNotMatch(modes, /id:\s*'simexport'/);
 assert.doesNotMatch(html, /Simulate\/Export/);
 assert.match(html, /id="view-review"[\s\S]*id="btn-generate-svg"/, 'the export panel lives inside the Review view');
 assert.match(main, /initMode === 'simexport'\) initMode = 'review'/);

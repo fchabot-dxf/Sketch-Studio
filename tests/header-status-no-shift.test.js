@@ -15,7 +15,7 @@ await (async () => {
   const { evalJs, waitFor, navigate, port } = cdp;
   const headerRects = () => evalJs(`[...document.querySelector('header').querySelectorAll('button, select, input')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; })`);
   try {
-    for (const [app, tabs] of [['penplotter', '#mode-nav button'], ['shaper', '#mode-nav button'], ['trace', '.tr-tab']]) {
+    for (const [app, tabs] of [['penplotter', '.sk-header-tab'], ['shaper', '.sk-header-tab'], ['trace', '.sk-header-tab']]) {
       await navigate(`http://127.0.0.1:${port}/apps/${app}/index.html`, 8000);
       await waitFor(`!!document.querySelector('.sk-doctabs') && document.querySelectorAll(${JSON.stringify(tabs)}).length > 1`, app + ' header + strip ready');
       assert.strictEqual(await evalJs(`document.getElementById('save-status') || document.getElementById('tr-status')`), null, app + ': no header status text (TASK 605: the tab dot shows the save state)');
@@ -30,9 +30,10 @@ await (async () => {
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
     // the header is built synchronously by main.js (no autosave restore to wait for: SketchStudio has no status text, TASK 602)
-    await waitFor(`document.querySelectorAll('header .sk-header-action, header .sk-header-style').length >= 2 && !!document.querySelector('header .sk-header-tab')`, 'sketchstudio header ready', 40000);
+    await waitFor(`!!document.querySelector('header .sk-sidebar-btn') && !!document.querySelector('header .sk-header-tab')`, 'sketchstudio header ready', 40000);
     assert.strictEqual(await evalJs(`document.getElementById('save-status')`), null, 'sketchstudio: no "Saved" text in the header (TASK 602)');
     assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design'], 'sketchstudio: Design is the one mode button (Export is in the menu, TASK 602)');
+    assert.strictEqual(await evalJs(`document.querySelectorAll('header .sk-header-action, header .sk-header-style').length`), 0, 'sketchstudio: Style and Debug live in the ☰ menu, not the header (TASK 619)');
     assert.strictEqual(await evalJs(`document.getElementById('coords-text')`), null, 'sketchstudio: the dead "X: 0 Y: 0" readout is gone');
     assert.ok(!(await evalJs(`document.querySelector('footer').textContent`)).includes('X: 0'), 'sketchstudio: no "X: 0 Y: 0" text in the status bar');
     assert.ok(!(await evalJs(`!!document.getElementById('viewport-size')`)), 'sketchstudio: the VIEW readout is gone (TASK 618)');

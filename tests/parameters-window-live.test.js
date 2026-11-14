@@ -181,8 +181,8 @@ await (async () => {
 
     // ================================================================== C. Shaper
     await navigate(url('/apps/shaper/index.html'), 8000);
-    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'Shaper to load');
-    for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'Shaper to load');
+    for (let i = 0; i < 5; i++) { await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === 'design') break; }
     await waitFor(`!!window.__designController && !!document.getElementById('btn-parameters')`, 'the Shaper Design tab with its Parameters button');
     await waitForApp('design-canvas');
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Shaper Design canvas to show');
@@ -259,9 +259,9 @@ await (async () => {
     await evalJs(`(() => { const s = window.__designController.state; s.constraints.pop(); })()`);
     await waitFor(`document.querySelectorAll('${W} tr.pt-dim').length === 4`, 'the row to go');
     // the window follows its Design tab: another Shaper tab hides it, coming back shows it
-    await clickEl('[data-mode="prepare"]'); await sleep(600);
+    await clickEl('.sk-header-tab[data-tab="prepare"]'); await sleep(600);
     assert.strictEqual(await winOpen(), false, 'on another Shaper tab the window is not over it');
-    await clickEl('[data-mode="design"]'); await sleep(600);
+    await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(600);
     assert.strictEqual(await winOpen(), true, 'back on Design the window is back');
     await shot('desktop-shaper-window.png', await winClip());
     // Shaper at 390 px
@@ -279,7 +279,7 @@ await (async () => {
     await navigate(url('/apps/penplotter/index.html'), 8000);
     await waitFor(`!!window.__sketch && !!document.getElementById('btn-parameters')`, 'Pen Plotter Design with its Parameters button');
     await sleep(1000);
-    await clickEl('.stage-btn[data-stage="design"]'); await sleep(500);
+    await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(500);
     assert.deepStrictEqual(await btnState(), { label: 'Parameters', pressed: 'false', popup: 'dialog', title: 'Parameters (fx)' }, 'Pen Plotter: the same declared button');
     await evalJs(`(() => {
       const st = window.__sketch.controller.state;
@@ -296,13 +296,13 @@ await (async () => {
     assert(pr.t >= prb.b, `Pen Plotter: the window does not overlap the ribbon (${pr.t} >= ${prb.b})`);
     await shot('desktop-penplotter-window.png', await winClip());
     await key('Escape', 'Escape', 27);
-    await clickEl('.stage-btn[data-stage="toolpath"]'); await sleep(500);
+    await clickEl('.sk-header-tab[data-tab="toolpath"]'); await sleep(500);
     assert.strictEqual(await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').offsetParent === null`), true, 'the Design ribbon is hidden on the Toolpath stage');
 
     // ================================================================== A. Trace has NO button
     await navigate(url('/apps/trace/index.html'), 8000);
-    await waitFor(`!!document.querySelector('.tr-tab[data-tab="edit"]')`, 'Trace to load');
-    await clickEl('.tr-tab[data-tab="edit"]');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="edit"]')`, 'Trace to load');
+    await clickEl('.sk-header-tab[data-tab="edit"]');
     await waitFor(`!!document.querySelector('#design-ribbon .sk-ribbon #tool-line')`, 'the Trace Edit ribbon to mount');
     assert.strictEqual(await evalJs(`!!document.getElementById('btn-parameters')`), false, 'Trace: no Parameters button (declared opt-out)');
     assert.strictEqual(await evalJs(`!!document.querySelector('${W}')`), false, 'Trace: no Parameters window either');

@@ -53,6 +53,10 @@
       --sk-ribbon-fg: #cbd5e1;
       --sk-ribbon-grouplabel: #6b7280;
       --sk-ribbon-menu-bg: #1b2030;
+      --sk-header-bg: #2b2d31;
+      --sk-header-fg: #cbd5e1;
+      --sk-header-sep: #3a3d42;
+      --sk-header-hover: rgba(255,255,255,0.08);
     }
     #design-view, #view-vcarve, #view-prepare, #view-review { position: absolute; inset: calc(var(--sk-header-h, 44px) + var(--sk-doctabs-row, 0px)) 0 var(--sk-footer-h, 0px) 0; display: flex; background: #0b1020; z-index: 5; }
     #design-view[hidden], #view-vcarve[hidden], #view-prepare[hidden], #view-review[hidden] { display: none; }
@@ -270,40 +274,10 @@
     .cut-shape-angles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding-top: 4px; }
     .cut-shape-angles .cut-preset { all: unset; box-sizing: border-box; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: var(--sk-prep-chip2); font-size: 11px; color: var(--sk-prep-chip-text); cursor: pointer; }
     .cut-shape-angles .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
-    /* S6a: 4-mode app nav (primary navigation) — replaces the old Design button. */
-    .mode-nav { display: flex; gap: 4px; align-items: center; }
-    .mode-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 14px; cursor: pointer; font: 13px system-ui, sans-serif; opacity: 0.7; }
-    .mode-btn:hover { background: rgba(255,255,255,0.08); opacity: 0.95; }
-    .mode-btn.active { background: var(--sk-selection, #4c9aff); color: #fff; opacity: 1; }
-    /* U3b: header Settings (gear) button → the shared style-panel modal. */
-    .settings-btn { background: transparent; color: #cbd5e1; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; font: 15px system-ui, sans-serif; opacity: 0.75; }
-    .settings-btn:hover { background: rgba(255,255,255,0.08); opacity: 1; }
-    @media (pointer: coarse) { .settings-btn { min-height: 44px; min-width: 44px; } } /* TASK 581: a finger */
   </style>
 </head>
 <body>
-  <header class="toolbar sk-phone-header">
-    <!-- TASK 473: the shared app sidebar button (mounted in main.js). -->
-    <span id="app-sidebar-host"></span>
-    <!-- S6a/VCARVE-3a: 5-mode app nav (primary navigation). Vcarve sits between Design and Prepare. -->
-    <nav id="mode-nav" class="mode-nav sk-phone-tabs">
-      <button class="mode-btn" data-mode="explore">Explore</button>
-      <button class="mode-btn" data-mode="design">Design</button>
-      <button class="mode-btn" data-mode="vcarve">Vcarve</button>
-      <button class="mode-btn" data-mode="prepare">Prepare</button>
-      <button class="mode-btn" data-mode="review">Review</button>
-    </nav>
-    <span class="spacer"></span>
-    <!-- Explore-mode actions (SVG editor file ops) — shown only while Explore is active (router toggles). -->
-    <span id="explore-actions" class="sk-phone-collapse">
-      <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
-      <button id="open">Open SVG</button>
-      <button id="fit">Fit</button>
-      <button id="export">Export</button>
-    </span>
-    <!-- U3b: Settings → the shared style-panel MODAL (with the doc-unit toggle). Always visible. -->
-    <button id="btn-settings" class="settings-btn" title="Settings" aria-label="Settings">&#9881;</button>
-  </header>
+  <input id="file" type="file" accept=".svg,image/svg+xml" hidden>
 
   <main class="layout">
     <aside id="tree" class="pane tree"></aside>

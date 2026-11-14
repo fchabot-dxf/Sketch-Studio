@@ -19,21 +19,25 @@ const CHECK_EXPR = `(async () => {
   const out = {};
   const header = document.querySelector('#app-header-host .sk-header');
   out.headerTabs = header ? [...header.querySelectorAll('.sk-header-tab')].map(t => t.dataset.tab).join(',') : '';
-  out.hasStyle = !!(header && header.querySelector('.sk-header-style'));
-  out.hasDebug = !!(header && header.querySelector('.sk-header-action[data-action="btn-debug-toggle"]'));
+  out.headerActions = header ? header.querySelectorAll('.sk-header-style, .sk-header-action').length : -1;
+  document.querySelector('.sk-sidebar-btn').click(); await sl(90);
+  out.hasStyle = !!document.querySelector('.sk-sidebar-item[data-action="style"]');
+  out.hasDebug = !!document.querySelector('.sk-sidebar-item[data-action="debug"]');
+  out.hasLog = !!document.querySelector('.sk-sidebar-item[data-action="log"]');
   const ribbon = document.querySelector('#toolsRibbon .sk-ribbon');
   out.ribbonGroups = ribbon ? [...ribbon.querySelectorAll('.sk-ribbon-group-label')].map(g => g.textContent).join(',') : '';
   const canvas = document.getElementById('svgCanvas');
   out.canvasVisible = !!canvas && getComputedStyle(canvas).display !== 'none' && canvas.getBoundingClientRect().width > 0;
   // Router: Design -> Export (TASK 602: Export is an entry of the menu) -> Design (the header's one mode button)
-  document.querySelector('.sk-sidebar-btn').click(); await sl(90);
   document.querySelector('.sk-sidebar-item[data-action="export"]').click(); await sl(90);
   out.exportShows = !document.getElementById('export-panel').classList.contains('hidden');
   out.designHidesOnExport = getComputedStyle(document.getElementById('toolsRibbon')).display === 'none';
   header.querySelector('.sk-header-tab[data-tab="design"]').click(); await sl(90);
   out.designBack = getComputedStyle(document.getElementById('toolsRibbon')).display !== 'none' && document.getElementById('export-panel').classList.contains('hidden');
-  // Style panel: open + 16 controls + close
-  header.querySelector('.sk-header-style').click(); await sl(90);
+  // Style panel: open from ☰ menu (closes menu first) + controls + close
+  document.querySelector('.sk-sidebar-btn').click(); await sl(90);
+  document.querySelector('.sk-sidebar-item[data-action="style"]').click(); await sl(90);
+  out.menuClosedOnStyle = !document.querySelector('.sk-sidebar').classList.contains('open');
   const sp = document.querySelector('.sk-style-panel');
   out.styleOpens = !!sp && !sp.classList.contains('sk-hidden');
   out.styleControls = sp ? sp.querySelectorAll('.sk-style-row').length : 0;
@@ -71,8 +75,9 @@ async function cdpRun(cdp, url) {
     const checks = [
       ['console errors = 0', errors.length === 0, errors.slice(0, 5).join(' | ')],
       ['header tabs = design (Export is in the menu, TASK 602)', c.headerTabs === 'design', c.headerTabs],
-      ['header Style button', c.hasStyle === true, c.hasStyle],
-      ['header Debug action', c.hasDebug === true, c.hasDebug],
+      ['header has no extra Style/Debug buttons (TASK 619)', c.headerActions === 0, c.headerActions],
+      ['menu Style, Debug & Log items', c.hasStyle === true && c.hasDebug === true && c.hasLog === true, [c.hasStyle, c.hasDebug, c.hasLog]],
+      ['menu closes when Style opens', c.menuClosedOnStyle === true, c.menuClosedOnStyle],
       ['ribbon groups = Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups],
       ['canvas visible (Design default)', c.canvasVisible === true, c.canvasVisible],
       ['Export tab shows the export view', c.exportShows === true, c.exportShows],

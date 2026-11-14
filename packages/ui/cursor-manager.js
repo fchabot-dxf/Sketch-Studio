@@ -87,6 +87,11 @@ const ICONS = {
         viewBox: '0 0 24 24',
         content: `<path d="M12 3 3 8l9 5 9-5-9-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M3 12.5l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`
     },
+    // TASK 619: Pen Plotter's Panel drawer button in the canvas corner (< 768px): side panel icon
+    'icon-panel': {
+        viewBox: '0 0 24 24',
+        content: `<rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="15" y1="4" x2="15" y2="20" stroke="currentColor" stroke-width="2"/>`
+    },
 
     'icon-terminal': {
         viewBox: '0 0 24 24',

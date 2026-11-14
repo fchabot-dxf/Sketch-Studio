@@ -3,7 +3,7 @@
 // dark thin outline always kept, selected point filled blue tint, hover uses true-blue HOVER_COLOR).
 import assert from 'node:assert';
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const HOVER_COLOR = String((await import('../packages/core/settings-manager.js')).default.getDefault('HOVER_COLOR')).toLowerCase();
+const HOVER_COLOR = '#017afd'; // the --sk-selection blue: hover has no setting
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';

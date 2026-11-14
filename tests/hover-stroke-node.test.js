@@ -18,8 +18,8 @@ for (const tpl of STYLE_TEMPLATES) {
 const panelSrc = fs.readFileSync(new URL('../packages/ui/style-panel.js', import.meta.url), 'utf8');
 assert.ok(!panelSrc.includes('GLOW_WIDTH_PX') && !panelSrc.includes('Glow Width'), 'GLOW_WIDTH_PX removed from style-panel CONTROLS');
 
-const hoverBlue = SettingsManager.getDefault('HOVER_COLOR');
-assert.strictEqual(hoverBlue, '#017AFD', 'HOVER_COLOR default is sampled bright Fusion blue #017AFD');
+assert.strictEqual(SettingsManager.getDefault('HOVER_COLOR'), undefined, 'HOVER_COLOR is not a setting (hover is always --sk-selection)');
+assert.ok(!STYLE_SETTING_KEYS.includes('HOVER_COLOR'), 'HOVER_COLOR removed from STYLE_SETTING_KEYS');
 const cssSrc = fs.readFileSync(new URL('../packages/ui/sketcher.css', import.meta.url), 'utf8');
 assert.match(cssSrc, /--sk-constraint-fill:\s*#2B9BD6/i, 'free line token is cyan-blue #2B9BD6');
 assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is bright Fusion blue #017AFD');

@@ -134,7 +134,7 @@ try {
 
   // 8. an invalid stored entry is dropped; the good one and the panel survive (checked after a real reload)
   const goodSettings = await evalJs(`(async () => { const S = (await import('/packages/core/settings-manager.js')).default; return S.getAll(); })()`);
-  const KEYS = ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'DIM_LABEL_BOX', 'HOVER_COLOR', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'];
+  const KEYS = ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'];
   const good = Object.fromEntries(KEYS.map((k) => [k, goodSettings[k]]));
   const stored = { v: 1, presets: [{ id: 'user-bad', name: 'Broken', settings: { LINE_STROKE: 'x' } }, { id: 'user-ok', name: 'Survivor', settings: good }] };
   await evalJs(`(() => { const raw = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}'); raw.STYLE_PRESETS = ${JSON.stringify(stored)}; localStorage.setItem('sketch-studio-settings', JSON.stringify(raw)); })()`);

@@ -116,9 +116,7 @@ applyStyleTemplate('fusion');
 const f2 = render2();
 assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
 assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
-const defHover = SettingsManager.getDefault('HOVER_COLOR');
-assert(new RegExp(defHover, 'i').test(render2('freeLine')), 'Fusion hover colour matches factory true-blue HOVER_COLOR');
-assert(new RegExp(defHover, 'i').test(render2('freeLine')) === (SettingsManager.get('HOVER_COLOR').toUpperCase() === defHover.toUpperCase()), 'Default hover colour = the factory HOVER_COLOR');
+assert(/stroke:var\(--sk-selection, #017AFD\)/i.test(render2('freeLine')), 'Fusion hover draws the --sk-selection token');
 applyStyleTemplate('default');
 assert.strictEqual(render2(), d2, 'Default markup identical after a Fusion round trip');
 

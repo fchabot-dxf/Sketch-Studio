@@ -40,8 +40,7 @@ const regularJointDots = (svg) => jointDots(svg).filter((d) => d.fill !== 'none'
 const hoverHaloDots = (svg) => jointDots(svg).filter((d) => d.fill === 'none');
 
 // 1. HOVER_COLOR & FIXED_JOINT_FILL checks
-const hoverColor = SettingsManager.getDefault('HOVER_COLOR');
-assert.strictEqual(hoverColor, '#017AFD', 'HOVER_COLOR default is bright Fusion blue #017AFD');
+const hoverColor = '#017AFD'; // the --sk-selection blue: hover has no setting
 assert.notStrictEqual(hoverColor.toUpperCase(), '#5B6CF0', 'old violet #5B6CF0 is gone');
 const selHsl = hexToHsl('#017AFD'), hovHsl = hexToHsl(hoverColor);
 assert(Math.abs(selHsl.h - hovHsl.h) <= 3, `hover hue (${hovHsl.h.toFixed(1)}) matches --sk-selection hue (${selHsl.h.toFixed(1)})`);

@@ -17,7 +17,7 @@ export const STYLE_SETTING_KEYS = [
   'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
   'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX',
   'DASH_LENGTH_PX', 'DASH_GAP_PX',
-  'DIM_LABEL_BOX',   'HOVER_COLOR', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
+  'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
 ];
 
 const FACTORY = SettingsManager.getDefaults();
@@ -42,7 +42,7 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2,
       GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
-      DIM_LABEL_BOX: false, HOVER_COLOR: FACTORY.HOVER_COLOR,
+      DIM_LABEL_BOX: false,
             LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
           }),
     tokens: {
@@ -68,8 +68,7 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
-      HOVER_FEEDBACK_MULT: 3, GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af',
-    }),
+      HOVER_FEEDBACK_MULT: 3,       GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true,    }),
   },
 
   // Screenshots / teaching: heavy lines, big joints and glyphs.
@@ -81,7 +80,7 @@ export const STYLE_TEMPLATES = [
       GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56,
       DASH_LENGTH_PX: 14, DASH_GAP_PX: 8,
       // the keys it never set, pinned (task 614: a change to the Default look must not restyle Presentation)
-      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af',
+      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true,
     }),
   },
 ];

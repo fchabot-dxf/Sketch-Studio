@@ -15,7 +15,7 @@ const T = await import('../packages/ui/style-templates.js');
 
 const OWNER = { LINE_STROKE: 0.25, JOINT_RADIUS: 1.4, JOINT_STROKE_MULT: 1.4, SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2,
   GLYPH_SYMBOL_SIZE_PX: 23, GLYPH_INFERENCE_SIZE_PX: 21, GLYPH_OFFSET_PX: 19, GLYPH_OUTLINE_PX: 0.7,
-  DASH_LENGTH_PX: 7, DASH_GAP_PX: 4, DIM_LABEL_BOX: false, HOVER_COLOR: '#017AFD',
+  DASH_LENGTH_PX: 7, DASH_GAP_PX: 4, DIM_LABEL_BOX: false,
   LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
 assert.deepStrictEqual(Object.keys(OWNER).sort(), [...T.STYLE_SETTING_KEYS].sort(), 'the owner values cover every look knob');
 const looks = (all) => Object.fromEntries(T.STYLE_SETTING_KEYS.map((k) => [k, all[k]]));
@@ -36,7 +36,7 @@ assert.deepStrictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'fusion').tokens, 
 const css = fs.readFileSync(new URL('../packages/ui/sketcher.css', import.meta.url), 'utf8').match(/:root\s*\{[\s\S]*?\n\}/)[0];
 for (const [n, v] of Object.entries(FUSION_TOKENS)) if (!/profile/.test(n)) assert(new RegExp(n + ':\\s*' + v + '\\b', 'i').test(css), 'sketcher.css default ' + n + ' = ' + v);
 // Compact / Presentation: resolved settings identical to what origin/main gave them (the old factory filled the keys they did not set)
-const OLDF = { LINE_STROKE: 1, JOINT_RADIUS: 4, JOINT_STROKE_MULT: 1, SELECTION_FEEDBACK_MULT: 2, HOVER_FEEDBACK_MULT: 3, GLYPH_SYMBOL_SIZE_PX: 20, GLYPH_INFERENCE_SIZE_PX: 24, GLYPH_OFFSET_PX: 40, GLYPH_OUTLINE_PX: 1, DASH_LENGTH_PX: 8, DASH_GAP_PX: 8, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af', LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
+const OLDF = { LINE_STROKE: 1, JOINT_RADIUS: 4, JOINT_STROKE_MULT: 1, SELECTION_FEEDBACK_MULT: 2, HOVER_FEEDBACK_MULT: 3, GLYPH_SYMBOL_SIZE_PX: 20, GLYPH_INFERENCE_SIZE_PX: 24, GLYPH_OFFSET_PX: 40, GLYPH_OUTLINE_PX: 1, DASH_LENGTH_PX: 8, DASH_GAP_PX: 8, DIM_LABEL_BOX: true, LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
 assert.deepStrictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'compact').settings, { ...OLDF, LINE_STROKE: 0.3, JOINT_RADIUS: 1, JOINT_STROKE_MULT: 0.8, SELECTION_FEEDBACK_MULT: 2.5, GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26, DASH_LENGTH_PX: 5, DASH_GAP_PX: 4 }, 'Compact resolves as on origin/main');
 assert.deepStrictEqual(T.STYLE_TEMPLATES.find((t) => t.id === 'presentation').settings, { ...OLDF, LINE_STROKE: 1.5, JOINT_RADIUS: 5, JOINT_STROKE_MULT: 1, SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2, GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56, DASH_LENGTH_PX: 14, DASH_GAP_PX: 8 }, 'Presentation resolves as on origin/main');
 assert.strictEqual(T.activeStyleTemplateId(sm.getAll()), 'default', 'the panel shows Default');
@@ -68,7 +68,7 @@ assert.strictEqual(sm3.get('LINE_STROKE'), 0.7, 'the preset still applies over D
 clear();
 const OLD = { LINE_STROKE: 1, JOINT_RADIUS: 4, JOINT_STROKE_MULT: 1, SELECTION_FEEDBACK_MULT: 2, HOVER_FEEDBACK_MULT: 3, GLYPH_SYMBOL_SIZE_PX: 20,
   GLYPH_INFERENCE_SIZE_PX: 24, GLYPH_OFFSET_PX: 40, GLYPH_OUTLINE_PX: 1, DASH_LENGTH_PX: 8, DASH_GAP_PX: 8, DIM_LABEL_BOX: true,
-  HOVER_COLOR: '#1e40af', LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
+  LABEL_FONT_FAMILY: '', PROFILE_FILL: 'off', LOCKED_LINE_COLOR: '' };
 store['sketch-studio-settings'] = JSON.stringify({ STYLE_TEMPLATE: 'default', ...OLD });
 const sm4 = await freshSM(4);
 assert.deepStrictEqual(looks(sm4.getAll()), OLD, 'stored values win: that user keeps the old look');

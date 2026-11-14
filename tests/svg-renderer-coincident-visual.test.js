@@ -2,7 +2,7 @@
   const { draw } = await import('../packages/ui/svg-renderer.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const SettingsManager = (await import('#core/settings-manager.js')).default;
-  const HOVER_COLOR = SettingsManager.getDefault('HOVER_COLOR');
+  const HOVER_COLOR = '#017AFD'; // the --sk-selection blue: hover has no setting
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Mock SVG element with minimal API used by renderer

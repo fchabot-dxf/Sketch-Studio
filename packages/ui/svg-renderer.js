@@ -200,7 +200,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
   const LABEL_FONT_FAMILY = getStr('LABEL_FONT_FAMILY', ''); // '' = no font-family attribute (inherits the host's font)
   const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
-  const HOVER_COLOR = getStr('HOVER_COLOR', SettingsManager.getDefault('HOVER_COLOR'));
+  const HOVER_COLOR = '#017AFD'; // not a setting: skv() maps this hex to the shared --sk-selection token
 
   // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
   function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }

@@ -9,7 +9,7 @@
 // Screenshots (EVIDENCE_DIR, when set): the chain selected, the selection after the move.
 import assert from 'node:assert';
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const HOVER_LITERAL = String((await import('../packages/core/settings-manager.js')).default.getDefault('HOVER_COLOR')).toLowerCase(); // the factory hover colour: drawn literally, as the selection colour was before task 614
+const HOVER_LITERAL = '#017afd'; // the --sk-selection blue (also its var() fallback)
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';

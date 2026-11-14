@@ -64,7 +64,6 @@ const DEFAULT_SETTINGS = {
     // Look knobs a style template owns (#ui/style-templates.js). Defaults = the owner's look (task 614: Fusion-style thin lines, plain dimension text).
     GLYPH_OUTLINE_PX: 0.7,          // constraint glyph outline width (screen px, 0.2-4)
     DIM_LABEL_BOX: false,           // dimension value drawn on a filled label box; false = plain text on the dimension line
-    HOVER_COLOR: '#017AFD',         // stroke of a hovered line / joint ring ('#017AFD' and '#1e40af' route through --sk-selection; any other value is literal)
     LABEL_FONT_FAMILY: '',          // font-family of dimension values/labels: '' = inherit from the host page (today's look) | a CSS font stack
     PROFILE_FILL: 'off',            // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
     LOCKED_LINE_COLOR: '',          // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one

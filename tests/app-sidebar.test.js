@@ -31,13 +31,13 @@ await (async () => {
       assert(c, sel + ' not found');
       await click(c.x, c.y);
     };
-    const stageTab = (name) => clickEl(`.stage-btn[data-stage="${name}"]`);
+    const stageTab = (name) => clickEl(`.sk-header-tab[data-tab="${name}"]`);
 
     const hosts = [
-      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download'] },
-      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download'] },
-      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'export', 'download-svg', 'download-dxf'] }, // TASK 602: Export (the view) is a SketchStudio menu entry
-      { id: 'trace', path: '/apps/trace/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download-svg', 'download-dxf'] },
+      { id: 'shaper', path: '/apps/shaper/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'explore-open', 'explore-export', 'settings', 'log'] },
+      { id: 'penplotter', path: '/apps/penplotter/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download', 'log'] },
+      { id: 'sketchstudio', path: '/apps/sketchstudio/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'export', 'download-svg', 'download-dxf', 'style', 'log', 'debug', 'tune'] },
+      { id: 'trace', path: '/apps/trace/index.html', actions: ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file', 'download-svg', 'download-dxf', 'log'] },
     ];
     // ── the registry: names, distinct icons, titles; each index.html's static <title> fallback equals the registry's ──
     assert.deepStrictEqual(APPS.map((a) => a.name), ['Sketch', 'Shaper', 'Pen Plotter', 'Trace']);

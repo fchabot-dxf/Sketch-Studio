@@ -28,11 +28,11 @@ await (async () => {
       fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, name), Buffer.from(s.data, 'base64'));
     };
     const LOG_OPEN = `!!document.querySelector('.sk-diag-panel') && !document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`;
-    const openLog = async () => { await evalJs(`document.querySelector('.sk-diag-toggle').click()`); await waitFor(LOG_OPEN, 'the log to open'); };
+    const openLog = async () => { await evalJs(`document.querySelector('.sk-sidebar-btn').click(); document.querySelector('.sk-sidebar [data-action="log"]').click()`); await waitFor(LOG_OPEN, 'the log to open'); };
 
     for (const [app, url] of [['sketchstudio', '/apps/sketchstudio/index.html'], ['shaper', '/apps/shaper/index.html']]) {
       await navigate(`http://127.0.0.1:${port}${url}`, 10000);
-      await waitFor(`!!document.querySelector('.sk-diag-toggle')`, `${app}: the log button`);
+      await waitFor(`!!document.querySelector('.sk-sidebar-btn')`, `${app}: sidebar ready`);
       await sleep(1200);
       await openLog();
       await clickEl('.sk-diag-btn-primary');

@@ -191,10 +191,6 @@
         /* Mode A: Toolbar (Professional Red/Black) */
         .tool-btn svg { width: 28px; height: 28px; display: block; margin: auto; color: #000303; --icon-accent: #ff0402; stroke-width: 1px; }
 
-        /* Subtle settings gear: make the cog a grey outline to reduce visual weight */
-        #btn-settings-toggle svg { color: #6b7280; /* slate-500 */ }
-        #btn-settings-toggle svg path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
-
         /* Preview state */
         .constraint-glyph.preview { opacity: 0.5; pointer-events: none; }
         .constraint-glyph { transition: opacity 0.12s ease; }
@@ -250,16 +246,8 @@
         /* Show state: display block; menu is absolutely positioned and already has a high z-index */
         .tool-dropdown .tool-dropdown.show { display: block; }
 
-        /* TASK 562 -- phone layout (<= 640 px, the app's one breakpoint): the footer's Log / MAG LENS / TUNE leave the bar (Log and TUNE live in
-           the menu, see main.js; the lens is automatic under a finger). */
-        @media (max-width: 640px) {
-            #status-diag-slot, #btn-mag-toggle, #btn-tuning-toggle { display: none; }
-        }
-        /* TASK 562 -- a finger (coarse pointer): every control >= 44 px, text >= 12 px. A mouse keeps today's look. The MAG LENS switch is for a
-           mouse: under a finger the lens follows the finger by itself (input-manager.js). */
+        /* TASK 562/619 -- phone & touch layout. */
         @media (pointer: coarse) {
-            #btn-mag-toggle { display: none; }
-            footer .sk-diag-toggle, #btn-tuning-toggle { min-height: 44px; min-width: 44px; font-size: 12px; }
             #debug-panel #debug-close-btn { min-width: 44px; min-height: 44px; font-size: 22px; }
             #debug-panel input[type=checkbox] { width: 44px; height: 44px; }
             #debug-panel input[type=range] { height: 44px; }
@@ -393,13 +381,7 @@ m-385 -2650 c275 -36 503 -87 740 -166 1259 -416 2223 -1500 2484 -2792 57
     </main>
 
     <!-- FOOTER -->
-    <footer class="sk-statusbar bg-slate-100 border-t border-slate-300 px-4 py-1.5 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0">
-        <div class="flex gap-4 shrink-0 whitespace-nowrap"><span id="status-diag-slot"></span>
-            <button id="btn-mag-toggle" class="ml-4 px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-200 transition-all text-[9px] font-bold whitespace-nowrap" aria-pressed="false">
-                MAG LENS: OFF
-            </button>
-        </div>
-    </footer>
+    <footer class="sk-statusbar bg-slate-100 border-t border-slate-300 px-4 py-1.5 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0"></footer>
 
     <!-- S7c-2c: the old #settings-panel popup is retired — its stroke/style controls live in the SHARED style
          panel (#ui/style-panel.js), opened from the header's Style button. settings-panel.js early-returns now. -->

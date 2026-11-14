@@ -16,7 +16,7 @@ import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mo
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
 import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Recenter in the footer
-import { MODE_KEY, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
+import { MODE_KEY, SHAPER_STAGES, findViews, createModeRouter, createShaperHistory } from './modes.js'; // TASK 583: the mode router, declared once (the node test kit calls it too)
 import { mountReviewView } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
@@ -26,10 +26,10 @@ import { bindTemplateTokens } from '#ui/style-templates.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
+import { mountAppChrome } from '#ui/app-chrome.js';
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 getGoogleAccount().init();
-import { mountProjectSidebar } from '#ui/sidebar-projects.js'; // TASK 479: project actions + views (store-backed), same entries in every editor // TASK 473: the shared app sidebar (replaces the app-switcher dropdown)
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
@@ -46,46 +46,39 @@ inspector.init(document.getElementById('inspector'));
 let designController = null; // sketcher mounted once, at boot (ensureSketch); RAF started while Design is active, paused otherwise (declared before the sidebar: the tab strip reads the buffer as it mounts)
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app (created with the sketch in ensureSketch); the sidebar and the tab strip read it lazily
 
-// TASK 473: the shared app sidebar (hamburger, document actions, GO TO) in the header brand slot. This host declares ITS actions:
-// Download = the Shaper SVG export (the same payload the export button builds), New = a fresh document.
-const _swHost = document.getElementById('app-sidebar-host');
-const onPhone = () => window.matchMedia('(max-width: 640px)').matches; // the app's one phone breakpoint (the header's .sk-phone-header rules)
-if (_swHost) {
-  _swHost.appendChild(mountProjectSidebar({
-    appId: 'shaper', getBuffer: () => docBuffer, // the buffer is created with the sketch, at boot (ensureSketch() before the first showMode, below); null until then
-    documentTabs: true, // TASK 605: the document tab strip under the header, in every mode
-    importFile: (text, name) => shaperImporter.importFile(text, name), // TASK 566: "Import SVG / DXF…" in the file menu
-    hostActions: [
-      { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
-        const payload = generateShaperSvgPayload();
-        if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
-        download('shaper-export.svg', payload.svg);
-      } },
-      // TASK 581: at phone width (<= 640 px) the header's Explore actions (Open SVG / Fit / Export) are hidden (.sk-phone-collapse) and live here
-      // while Explore shows (the same buttons' own handlers run: nothing is rebuilt). A wider screen keeps them in the header.
-      { divider: true, visible: () => onPhone() && modes.current() === 'explore' },
-      { id: 'phone-open', label: 'Open SVG', visible: () => onPhone() && modes.current() === 'explore', onClick: () => document.getElementById('open').click() },
-      { id: 'phone-fit', label: 'Fit', visible: () => onPhone() && modes.current() === 'explore', onClick: () => document.getElementById('fit').click() },
-      { id: 'phone-export', label: 'Export', visible: () => onPhone() && modes.current() === 'explore', onClick: () => document.getElementById('export').click() },
-    ],
-  }).el);
-}
-
 // DIAG-OVERLAY: created at boot (not gated to Design mode) so it's reachable even if a bug hits
 // Explore/Vcarve/Prepare — designController may not exist yet, so its state is read lazily.
 const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designController && designController.state });
-if (_swHost) _swHost.parentElement.appendChild(_diagLog.toggleEl);
 
 const fileInput = document.getElementById('file');
-document.getElementById('open').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) loadFile(fileInput.files[0]);
   fileInput.value = '';
 });
 
-document.getElementById('export').addEventListener('click', () => {
-  if (!store.doc) return;
-  download('edited.svg', serializeSvg(store.doc));
+const chrome = mountAppChrome({
+  appId: 'shaper',
+  stages: SHAPER_STAGES,
+  activeStage: 'explore',
+  onStageChange: (mode) => showMode(mode),
+  getBuffer: () => docBuffer,
+  importFile: (text, name) => shaperImporter.importFile(text, name),
+  hostActions: [
+    { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
+      const payload = generateShaperSvgPayload();
+      if (!payload) { groupStatus('No cuts assigned — assign cut types in Prepare first.'); return; }
+      download('shaper-export.svg', payload.svg);
+    } },
+    { divider: true, visible: () => modes.current() === 'explore' },
+    { id: 'explore-open', label: 'Open SVG', icon: SIDEBAR_ICONS.openFile, visible: () => modes.current() === 'explore', onClick: () => fileInput.click() },
+    { id: 'explore-export', label: 'Export', icon: SIDEBAR_ICONS.download, visible: () => modes.current() === 'explore', onClick: () => {
+      if (!store.doc) return;
+      download('edited.svg', serializeSvg(store.doc));
+    } },
+    { divider: true },
+    { id: 'settings', label: 'Settings', icon: SIDEBAR_ICONS.gear, onClick: () => stylePanel.toggle() },
+    { id: 'log', label: 'Log', icon: SIDEBAR_ICONS.log, onClick: () => _diagLog.toggle() },
+  ],
 });
 
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
@@ -278,8 +271,6 @@ document.addEventListener('keydown', (e) => {
 // The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop on the Design view is the second way in.
 const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => VIEWS.design }); // TASK 610: cut-import.js
 
-document.getElementById('fit').addEventListener('click', () => canvas.refit());
-
 // Drag-and-drop onto the canvas.
 const dropZone = document.getElementById('canvas');
 ['dragenter', 'dragover'].forEach((ev) =>
@@ -308,10 +299,8 @@ async function loadFile(file) {
   }
 }
 
-// ── S6a: 4-mode app shell — a view router over Explore / Design / Prepare / Simulate-Export. (modes.js: declared once, the node test kit calls it too) ──
+// ── S6a: 5-mode app shell — a view router over Explore / Design / Vcarve / Prepare / Review. (modes.js: declared once, the node test kit calls it too) ──
 const VIEWS = findViews(document);
-const modeBtns = [...document.querySelectorAll('.mode-btn')];
-const exploreActions = document.getElementById('explore-actions');
 let modes = null; // the mode router (created below, once the views it enters exist)
 
 let reviewView = null;       // TASK 459: the 3D Review (mounted on first entry, three imported dynamically)
@@ -328,12 +317,10 @@ const prepare = createPrepareStage({
 
 applyShaperUnitDefault(); // U3b (design-canvas.js, declared once: the node test kit calls it too)
 
-// U3b: the shared style-panel as a header-opened MODAL; its Units tab holds the one document-unit control.
+// U3b: the shared style-panel as a menu-opened MODAL; its Units tab holds the one document-unit control.
 const stylePanel = createStylePanel({ hostId: 'shaper' });
 stylePanel.render(document.body);
 bindTemplateTokens(document.getElementById('design-canvas'));
-const settingsBtn = document.getElementById('btn-settings');
-if (settingsBtn) settingsBtn.addEventListener('click', () => stylePanel.toggle());
 
 let browser = null, infoPanel = null, ribbon = null, lastSig = '';
 
@@ -403,8 +390,8 @@ function ensureSketch() {
 
 // The view router (modes.js): show the active mode's container, hide the rest, drive the Design RAF lifecycle, persist the active mode.
 modes = createModeRouter({
-  views: VIEWS, modeBtns, exploreActions, getController: () => designController, ensureSketch,
-  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586: the Sketches button shows only on Design
+  views: VIEWS, onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
+  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
     vcarve: () => {
       ensureSketch();
@@ -422,7 +409,10 @@ modes = createModeRouter({
   },
 });
 const showMode = modes.showMode;
-mountAppFooter({ router: history, view: () => (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null) }); // TASK 618: Recenter on the Design view only
+mountAppFooter({
+  router: history,
+  view: () => (modes.current() === 'explore' ? { fit: () => canvas.refit() } : (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null)),
+}); // TASK 618/619: Recenter on Design and Fit on Explore
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {

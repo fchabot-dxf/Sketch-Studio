@@ -137,7 +137,7 @@ await (async () => {
 
     // ---- Shaper ----
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` }); await sleep(4000);
-    await evalJs(`localStorage.clear(); document.querySelector('.mode-btn[data-mode="design"]').click()`); await sleep(1000);
+    await evalJs(`localStorage.clear(); document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleep(1000);
     o = await toScreen('#design-canvas', 0, 0);
     await tool('line'); await click(o.x + 200, o.y - 150); await click(o.x + 380, o.y - 60); await esc();
     await tool('select'); await move(o.x + 900, o.y); assert((await litCount()) === 0, 'Shaper select: not lit');

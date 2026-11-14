@@ -54,7 +54,7 @@ await (async () => {
         const vis = () => ({ unit: S.get('DOC_UNIT'), ...Object.fromEntries(['GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS', 'SHOW_GRID', 'GRID_MODE'].map((k) => [k, !document.querySelector('.sk-style-panel [data-row="' + k + '"]').hidden])) });
         const w = async () => { await sleep(400); const g = document.querySelector('#grid'); return g ? g.getAttribute('width') : 'NOGRID svgs=' + document.querySelectorAll('svg').length + ' rect=' + !!document.querySelector('#infinite-grid') + ' shown=' + [...document.querySelectorAll('svg')].map((s) => s.id + ':' + s.getBoundingClientRect().width).join(); };
         const out = {};
-        document.querySelector('.mode-btn[data-mode="design"]')?.click(); await sleep(500);
+        document.querySelector('.sk-header-tab[data-tab="design"]')?.click(); await sleep(500);
         for (const u of ['mm', 'cm', 'in']) { S.set('DOC_UNIT', u, { persist: false }); out['vis_' + u] = vis(); out['w_' + u] = await w(); }
         out.in10 = out.w_in; S.set('INCH_GRID_DIVISIONS', 8, { persist: false }); out.in8 = await w();
         S.set('INCH_GRID_MAJOR', 2, { persist: false }); out.in8m2 = await w();

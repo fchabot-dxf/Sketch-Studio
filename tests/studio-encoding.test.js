@@ -34,7 +34,7 @@ await (async () => {
 
     // ── render check in the real browser: with the DEFAULT fill rule the hole stays EMPTY ──
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
-    await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'shaper app ready');
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper app ready');
     const r = await evalJs(`(() => {
       const mk = (d) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '-40 -40 120 120'); const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', d); s.appendChild(p); document.body.appendChild(s); return { s, p }; };
       const pt = (s, x, y) => { const q = s.createSVGPoint(); q.x = x; q.y = y; return q; };

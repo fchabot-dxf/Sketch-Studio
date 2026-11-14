@@ -20,6 +20,8 @@
      white default background and inherited the light --text for its icons: 1.48:1). Same values as Shaper. */
   --sk-ribbon-bg: var(--panel); --sk-ribbon-sep: var(--line); --sk-ribbon-fg: var(--text);
   --sk-ribbon-hover: rgba(255,255,255,0.08); --sk-ribbon-grouplabel: #6b7280; --sk-ribbon-menu-bg: #1b2030;
+  --sk-header-bg: var(--panel); --sk-header-fg: var(--text); --sk-header-sep: var(--line); --sk-header-hover: rgba(255,255,255,0.06);
+  --sk-footer-ink: var(--sk-header-fg);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,40 +37,6 @@ html, body {
 
 /* ── Top-level layout ────────────────────────────────── */
 body { display: flex; flex-direction: column; }
-
-/* ── Header ──────────────────────────────────────────── */
-.tr-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.tr-spacer { flex: 1; }
-
-/* ── Tab navigation ──────────────────────────────────── */
-.tr-tabs { display: flex; gap: 2px; }
-
-.tr-tab {
-  background: transparent;
-  color: var(--muted);
-  border: none;
-  border-radius: 6px;
-  padding: 5px 14px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  opacity: 0.8;
-  transition: background 0.12s, color 0.12s, opacity 0.12s;
-}
-
-.tr-tab:hover { background: rgba(255,255,255,0.06); opacity: 1; color: var(--text); }
-.tr-tab.active { background: var(--accent); color: #fff; opacity: 1; }
 
 /* ── Tab panes ────────────────────────────────────────── */
 .tr-tab-pane {

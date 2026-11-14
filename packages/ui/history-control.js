@@ -64,13 +64,13 @@ function injectStyles() {
   s.id = 'sk-history-styles';
   s.textContent = `
 .sk-history { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-.sk-history-btn, .sk-footer-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: transparent;
+.sk-history-btn, .sk-footer-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; box-sizing: border-box;
+  width: var(--sk-footer-btn-w, 32px); height: var(--sk-footer-btn-h, 32px); padding: 0; background: transparent;
   color: inherit; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font: inherit; }
-.sk-history-btn svg, .sk-footer-btn svg { width: 22px; height: 22px; pointer-events: none; }
+.sk-history-btn svg, .sk-footer-btn svg { width: var(--sk-footer-btn-icon, 22px); height: var(--sk-footer-btn-icon, 22px); display: block; flex: 0 0 auto; pointer-events: none; }
 .sk-history-btn:hover:not(:disabled), .sk-footer-btn:hover:not(:disabled) { background: var(--sk-header-hover, rgba(0,0,0,0.08)); }
-.sk-history-btn:disabled { opacity: 0.35; cursor: default; }
-/* the footer's icon buttons (Undo, Redo here; Construction, Recenter in app-footer.js): 32 px with a mouse, 44 px under a finger (TASK 615) */
-@media (pointer: coarse) { .sk-history-btn, .sk-footer-btn { width: 44px; height: 44px; } .sk-history-btn svg, .sk-footer-btn svg { width: 28px; height: 28px; } }
+.sk-history-btn:disabled, .sk-footer-btn:disabled { opacity: 0.35; cursor: default; }
+/* footer button size tokens (--sk-footer-btn-w / -h / -icon) live once in app-footer.js */
 `;
   document.head.appendChild(s);
   stylesInjected = true;

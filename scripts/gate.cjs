@@ -14,7 +14,7 @@
 //   cannot load the CPU under it either). quick takes the lock for that exclusive part only (and releases it right after) if it is free, else prints `DEFERRED <file> (lock held by ...)` per
 //   test and runs none of them (the merge / full tier runs them); live/full/merge already hold the lock, waiting for it.
 //   Each prints `EXCLUSIVE <file> <seconds>`. Why a marker and not a list here: the declaration stays next to the test whose limit needs it.
-// Exit 0 only if no file failed, smoke is 12/12 (live/full) and no headless browser is left (live/full).
+// Exit 0 only if no file failed, smoke passed every check (N/N, smokeGreen) (live/full) and no headless browser is left (live/full).
 //
 // HOW A FILE'S TIER IS KNOWN (declared once, here): a test is `live` when its relative-import closure reaches
 // tests/helpers/cdp-browser.js (the one browser launcher) or a file that starts a browser itself (it contains
@@ -362,13 +362,16 @@ async function runExclusive(files, tier, results, lockSeconds, deferred) {
 }
 
 // ---------------------------------------------------------------- shell-smoke + leftover headless browsers
+// shell-smoke is green when every one of its checks passed: N/N with N > 0 (its check count grows as tasks add checks).
+const smokeGreen = (score) => { const [p, t] = String(score).split('/').map(Number); return t > 0 && p === t; };
+
 function runSmoke() {
   const res = spawnSync(process.execPath, [path.join('scripts', 'shell-smoke.cjs')], {
     cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: FILE_LIMIT_MS,
   });
-  let score = '0/12';
+  let score = '0/0';
   if (res.stdout) {
-    const m = res.stdout.match(/shell-smoke:\s*(\d+\/\d+)/) || res.stdout.match(/(\d+\/12)/);
+    const m = res.stdout.match(/shell-smoke:\s*(\d+\/\d+)/);
     if (m) score = m[1];
   }
   return { score, pid: res.pid, tail: ((res.stdout || '') + (res.stderr || '')).slice(-4000) };
@@ -445,7 +448,7 @@ async function main() {
 
   const failed = results.filter(r => !r.ok);
   for (const f of failed) console.log(`\n--- FAIL ${f.file} [${f.tier}] output tail ---\n${f.tail.trim()}\n--- end ${f.file} ---`);
-  if (smoke && smoke.score !== '12/12') console.log(`\n--- shell-smoke output tail ---\n${smoke.tail.trim()}\n---`);
+  if (smoke && !smokeGreen(smoke.score)) console.log(`\n--- shell-smoke output tail ---\n${smoke.tail.trim()}\n---`);
 
   console.log('\nSLOWEST 15 (seconds, tier, file):');
   for (const r of [...results].sort((a, b) => b.ms - a.ms).slice(0, 15)) console.log(`  ${(r.ms / 1000).toFixed(1).padStart(6)}  ${r.tier.padEnd(5)}  ${r.file}`);
@@ -462,7 +465,7 @@ async function main() {
   }
 
   const unknownFailures = failed.filter(f => !KNOWN_FAILURES.includes(f.file));
-  const passed = unknownFailures.length === 0 && (!smoke || (smoke.score === '12/12' && counts.left === 0));
+  const passed = unknownFailures.length === 0 && (!smoke || (smokeGreen(smoke.score) && counts.left === 0));
   process.exit(passed ? 0 : 1);
 }
 

@@ -56,7 +56,7 @@ try {
     console.log(name, JSON.stringify({ handlesMoved: results[name].handlesMoved, handles: results[name].handles, movedPoints: results[name].movedPoints, of: results[name].points, radiusChanged: results[name].radiusChanged, lengthChanged: results[name].lengthChanged }));
     return results[name];
   };
-  const reset = () => { clickBtn('btn-clear'); assert.strictEqual(svg.querySelectorAll('.shape-elem').length, 0, 'Clear All empties the board'); };
+  const reset = () => { app.state.clearDocument(); app.frames(); assert.strictEqual(svg.querySelectorAll('.shape-elem').length, 0, 'Clear All empties the board'); };
   const drawLine = (a, b) => { clickBtn('tool-line'); app.click(a.x, a.y); app.click(b.x, b.y); app.esc(); };
 
   // 1. a free line by its BODY (mid), along the line

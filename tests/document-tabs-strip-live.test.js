@@ -40,7 +40,8 @@ await (async () => {
     const checkPlace = async (what) => {
       const b = await evalJs(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const x = e.getBoundingClientRect(); return { top: x.top, bottom: x.bottom, left: x.left, right: x.right }; };
         return { strip: r('.sk-doctabs'), header: r('header'), ribbon: r('#toolsRibbon'), box: r('.sk-browser'), construct: r('#btn-construct-toggle'), recenter: r('#btn-recenter-view') }; })()`);
-      assert(Math.abs(b.strip.top - b.header.bottom) < 0.5 && b.strip.bottom <= b.ribbon.top + 0.5, what + ': the strip is right under the header, above the ribbon: ' + JSON.stringify(b));
+      const topExpected = b.header ? b.header.bottom : 0;
+      assert(Math.abs(b.strip.top - topExpected) < 0.5 && b.strip.bottom <= b.ribbon.top + 0.5, what + ': the strip is right under the header (or at top on phones), above the ribbon: ' + JSON.stringify(b));
       for (const k of ['box', 'construct', 'recenter']) {
         const o = b[k]; if (!o) continue;
         assert(o.top >= b.strip.bottom - 0.5 || o.bottom <= b.strip.top + 0.5 || o.left >= b.strip.right - 0.5 || o.right <= b.strip.left + 0.5, `${what}: the strip does not overlap ${k}: ` + JSON.stringify(b));

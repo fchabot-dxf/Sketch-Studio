@@ -16,9 +16,9 @@ import { launchBrowser, sleep } from './cdp-browser.js';
 
 export const LANDSCAPE_HOSTS = [
   { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas' },
-  { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('[data-mode="design"]').click()` },
-  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
-  { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()` },
+  { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+  { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()` },
 ];
 const SIZES = [{ w: 844, h: 390 }, { w: 780, h: 360 }];
 
@@ -49,14 +49,15 @@ export async function runPhoneLandscape(hostName) {
         await sleep(600);
         assert.strictEqual(await evalJs(`matchMedia('(pointer: coarse)').matches && matchMedia('(orientation: landscape)').matches`), true, tag + 'a coarse pointer, landscape');
 
-        // canvas share, the rail, no page scroll
+        // canvas share, the rail, no header bar, no page scroll
         const cv = await rectOf(`document.querySelector('${h.canvas}')`);
         const rail = await rectOf(`document.querySelector('.sk-ribbon')`);
-        const hdr = await rectOf(`document.querySelector('header')`);
+        const stripRect = await rectOf(`document.querySelector('.sk-doctabs')`);
         const share = cv.h / size.h;
         assert(share >= 0.6, tag + `the canvas is ${Math.round(share * 100)} % of the height (>= 60 %): ${JSON.stringify(cv)}`);
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
-        assert(rail.left <= 1 && rail.w <= 64 && rail.bottom >= size.h - 1 && rail.top >= hdr.bottom - 1, tag + 'the rail runs down the left edge from under the header: ' + JSON.stringify(rail));
+        assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
+        assert(rail.left <= 18 && rail.w <= 64 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
         assert(cv.left >= rail.right - 1, tag + `the canvas is right of the rail (canvas ${cv.left}, rail ${rail.right})`);
         assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1`), true, tag + 'the page does not scroll');
         assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group-label')].every((g) => getComputedStyle(g).display === 'none')`), true, tag + 'no group labels in the rail');
@@ -137,31 +138,33 @@ export async function runPhoneLandscape(hostName) {
         for (const c of others) {
           const t = tag + `control ${c.id} "${c.text}"`;
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
+          const isHandle = /sk-sidebar-handle/.test(c.id);
           const strip = /sk-doctab/.test(c.id); // TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
-          const min = strip ? 24 : 43.5;
-          assert(c.w >= min && c.h >= min, t + ` is a ${strip ? '24' : '44'} px target (${Math.round(c.w)} x ${Math.round(c.h)})`);
+          const minW = isHandle ? 14 : (strip ? 24 : 43.5);
+          const minH = strip ? 24 : 43.5;
+          assert(c.w >= minW && c.h >= minH, t + ` target size (${Math.round(c.w)} x ${Math.round(c.h)})`);
           assert(c.free, t + ' is not covered by anything');
         }
 
         if (h.name === 'sketchstudio') {
-          // the status bar folds away; Log and Export are in the menu
-          assert.strictEqual(await evalJs(`['#status-diag-slot', '#btn-mag-toggle', '#btn-tuning-toggle'].map((s) => document.querySelector(s) && getComputedStyle(document.querySelector(s)).display).join()`), 'none,none,none', tag + 'Log, Tune and the mag lens are folded away');
+          // Log & Tune moved to ☰ menu; legacy MAG LENS removed; Log and Export are in the menu
+          assert.strictEqual(await evalJs(`!!document.querySelector('#status-diag-slot, #btn-tuning-toggle, #btn-mag-toggle')`), false, tag + 'Log, Tune and MAG LENS removed from footer');
           assert.strictEqual(await evalJs(`!!document.getElementById('viewport-size')`), false, tag + 'no VIEW readout');
-          assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design'], tag + 'the header has one mode button: Design');
           assert.strictEqual(await evalJs(`!!document.getElementById('save-status')`), false, tag + 'no "Saved" text');
-          await tap(await rectOf(`document.querySelector('.sk-sidebar-btn')`)); await sleep(300);
-          await evalJs(`document.querySelector('.sk-sidebar-item[data-action="phone-log"]').scrollIntoView({ block: 'nearest' })`); await sleep(100); // the menu scrolls
-          const log = await rectOf(`document.querySelector('.sk-sidebar-item[data-action="phone-log"]')`);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
+          await evalJs(`document.querySelector('.sk-sidebar-item[data-action="log"]').scrollIntoView({ block: 'nearest' })`); await sleep(100); // the menu scrolls
+          const log = await rectOf(`document.querySelector('.sk-sidebar-item[data-action="log"]')`);
           assert(log && log.h >= 44 && log.bottom <= size.h + 0.5, tag + 'the menu has Log: ' + JSON.stringify(log));
           await tap(log);
           assert.strictEqual(await evalJs(`!document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`), true, tag + 'Log from the menu opens the log');
           await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await sleep(200);
-          await tap(await rectOf(`document.querySelector('.sk-sidebar-btn')`)); await sleep(300);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
           await evalJs(`document.querySelector('.sk-sidebar-item[data-action="export"]').scrollIntoView({ block: 'nearest' })`); await sleep(100);
           await tap(await rectOf(`document.querySelector('.sk-sidebar-item[data-action="export"]')`));
           assert.strictEqual(await evalJs(`!document.getElementById('export-panel').classList.contains('hidden') && getComputedStyle(document.getElementById('toolsRibbon')).display === 'none'`), true, tag + 'Export from the menu shows the Export view');
-          await tap(await rectOf(`document.querySelector('header .sk-header-tab[data-tab="design"]')`));
-          assert.strictEqual(await evalJs(`document.getElementById('export-panel').classList.contains('hidden') && getComputedStyle(document.getElementById('toolsRibbon')).display !== 'none'`), true, tag + 'the header Design button brings the Design view back');
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-handle')`)); await sleep(300);
+          await tap(await rectOf(`document.querySelector('.sk-sidebar-stage[data-tab="design"]')`));
+          assert.strictEqual(await evalJs(`document.getElementById('export-panel').classList.contains('hidden') && getComputedStyle(document.getElementById('toolsRibbon')).display !== 'none'`), true, tag + 'the sidebar Design button brings the Design view back');
         }
         console.log(`phone-landscape ${tag}canvas ${Math.round(share * 100)} % (${Math.round(cv.h)} px), rail ${Math.round(rail.w)} px wide, ${n} rail buttons reachable, ${tapped.length} tools tapped, ${others.length} other controls ok`);
       }

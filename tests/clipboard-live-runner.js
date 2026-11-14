@@ -45,7 +45,7 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
       const H = hostOf(name);
       await navigate(H.url); await sleepMs(2500);
       if (name === 'shaper') {
-        for (let i = 0; i < 5; i++) { await evalJs(`document.querySelector('[data-mode="design"]').click()`); await sleepMs(500); if (await evalJs(`!!window.__designController`)) break; }
+        for (let i = 0; i < 5; i++) { await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`); await sleepMs(500); if (await evalJs(`!!window.__designController`)) break; }
         await sleepMs(1500);
       } else {
         await evalJs(`new Promise((res) => { const r = indexedDB.deleteDatabase('sketch-studio-projects'); r.onsuccess = r.onerror = r.onblocked = () => res(1); setTimeout(() => res(1), 1500); })`);

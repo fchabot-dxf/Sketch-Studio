@@ -29,9 +29,9 @@ await (async () => {
     const settingStored = () => evalJs(`(() => { try { return JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}').BROWSER_COLLAPSED; } catch (_) { return 'err'; } })()`);
     const hosts = [
       { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas', full: true },
-      { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('[data-mode="design"]').click()` },
-      { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
-      { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, full: true },
+      { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+      { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()` },
+      { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()`, full: true },
     ];
     const open = async (h) => {
       await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);

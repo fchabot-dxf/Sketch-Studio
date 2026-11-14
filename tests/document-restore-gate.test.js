@@ -32,8 +32,8 @@ await (async () => {
   await installFakeDriveSession(cdp);
   const savedDoc = `(async () => { const { getProjectStore } = await import('/packages/ui/project-store.js'); const s = getProjectStore(); await s.flushDrive(); const c = await s.current(); if (!c) return null; const d = await s.get(c.id); return d ? d.document : null; })()`;
   const enterDesign = async () => {
-    await waitFor(`[...document.querySelectorAll('.stage-btn')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
-    await evalJs(`[...document.querySelectorAll('.stage-btn')].find(x => /design/i.test(x.textContent)).click()`);
+    await waitFor(`[...document.querySelectorAll('.sk-header-tab')].some(x => /design/i.test(x.textContent)) && !!window.__sketch`, 'Pen Plotter to load');
+    await evalJs(`[...document.querySelectorAll('.sk-header-tab')].find(x => /design/i.test(x.textContent)).click()`);
     await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design canvas to show');
   };
 

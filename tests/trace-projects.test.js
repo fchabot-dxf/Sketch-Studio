@@ -52,11 +52,11 @@ await (async () => {
     // ── A. the File menus ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     const apps = [
       ['SketchStudio', '/apps/sketchstudio/index.html', `!!document.getElementById('tool-line')`],
-      ['Shaper', '/apps/shaper/index.html', `!!document.querySelector('[data-mode="design"]')`],
+      ['Shaper', '/apps/shaper/index.html', `!!document.querySelector('.sk-header-tab[data-tab="design"]')`],
       ['Pen Plotter', '/apps/penplotter/index.html', `!!window.__sketch`],
       ['Trace', '/apps/trace/index.html', `!!document.getElementById('tab-edit')`],
     ];
-    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export']); // each host's declared extras (hostActions): Shaper / Pen Plotter Download, Trace Download SVG / DXF, SketchStudio Export (TASK 602)
+    const EXTRAS = new Set(['download', 'download-svg', 'download-dxf', 'export', 'explore-open', 'explore-export', 'style', 'settings', 'log', 'debug', 'tune']); // each host's declared extras (hostActions): download/export/settings/tools moved into ☰ menu (TASK 602, 619)
     const menus = {};
     for (const [name, url, ready] of apps) {
       await goto(url);
@@ -69,7 +69,7 @@ await (async () => {
     const base = common(menus['SketchStudio']);
     for (const name of Object.keys(menus)) assert.deepStrictEqual(common(menus[name]), base, name + ': the same File menu items, same order, same labels as SketchStudio');
     assert.deepStrictEqual(base.map(([id]) => id), ['new-design', 'save-as', 'duplicate', 'open-recent', 'projects', 'open-file', 'import-file'], 'the shared items (Save to Google Drive shows signed in only)');
-    assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf'], 'Trace keeps its Download SVG / DXF, after the shared items');
+    assert.deepStrictEqual(menus['Trace'].slice(base.length).map(([id]) => id), ['download-svg', 'download-dxf', 'log'], 'Trace keeps its Download SVG / DXF + Log, after the shared items');
     console.log('File menus equal across the four apps; Trace extras:', JSON.stringify(menus['Trace'].slice(base.length)));
 
     // ── B. Trace: import into Edit, parameters, Save as, reload ──────────────────────────────────────────────────────────────────────────────

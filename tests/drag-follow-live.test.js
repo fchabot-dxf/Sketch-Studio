@@ -44,7 +44,7 @@ await (async () => {
         await navigate(url, 8000);
         await evalJs(`(async () => { localStorage.clear(); const dbs = indexedDB.databases ? await indexedDB.databases() : []; await Promise.all(dbs.map(d => new Promise(r => { const q = indexedDB.deleteDatabase(d.name); q.onsuccess = q.onerror = q.onblocked = () => r(); }))); localStorage.setItem('sketch-studio-settings', JSON.stringify({ AXIS_SNAP: false, GRID_MAGNETISM: 0.001 })); return true; })()`);
         await navigate(url, 8000);
-        if (host === 'shaper') { await waitFor(`!!document.querySelector('.mode-btn[data-mode="design"]')`, 'Shaper'); await evalJs(`document.querySelector('.mode-btn[data-mode="design"]').click()`); }
+        if (host === 'shaper') { await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'Shaper'); await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`); }
         await waitFor(`(() => { const c = document.querySelector('${SEL}'); return !!c && c.getBoundingClientRect().width > 0 && c.dataset.docReady === '1' && !!document.getElementById('tool-select'); })()`, host + ' ready');
         await sleep(600);
         await evalJs(RECORDER); await evalJs(`window.__drag548.sel = '${SEL}'`);

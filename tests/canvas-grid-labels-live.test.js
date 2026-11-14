@@ -136,8 +136,8 @@ await (async () => {
 
     // ---- Shaper (Design canvas; inch by default) ----
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 5000);
-    await waitFor(`!!document.querySelector('.mode-btn[data-mode="design"]')`, 'Shaper ready');
-    await evalJs(`localStorage.clear(); document.querySelector('.mode-btn[data-mode="design"]').click()`);
+    await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'Shaper ready');
+    await evalJs(`localStorage.clear(); document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
     await sleep(800);
     await evalJs(probe);
     const sh = await evalJs(`__probe('#design-canvas', 200)`);

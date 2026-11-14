@@ -10,7 +10,7 @@ const app = await open({ host: 'penplotter' });
 try {
   const doc = app.document;
   const pressEl = (sel) => { const e = doc.querySelector(sel); assert(e, sel + ' not found'); app.press(e); };
-  const stageTab = (name) => { pressEl(`.stage-btn[data-stage="${name}"]`); assert(doc.querySelector(`.stage-btn[data-stage="${name}"]`).classList.contains('active'), name + ' stage active'); };
+  const stageTab = (name) => { pressEl(`.sk-header-tab[data-tab="${name}"]`); assert(doc.querySelector(`.sk-header-tab[data-tab="${name}"]`).classList.contains('active'), name + ' stage active'); };
   const ctrl = (k, o = {}) => app.key(k, { ctrl: true, ...o });
   const s = app.state, P = app.plotter;
   // sketch lines + sketch history depths (Design history) and toolpaths (history.js)

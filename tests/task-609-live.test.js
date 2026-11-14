@@ -33,7 +33,7 @@ await (async () => {
     {
       await navigate(url('shaper'), 10000);
       await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the strip');
-      const mode = (m) => evalJs(`document.querySelector('[data-mode="${m}"]').click()`);
+      const mode = (m) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${m}"]').click()`);
       await mode('vcarve'); await waitFor(`!!document.getElementById('vcarve-maxdepth') && !document.getElementById('vcarve-maxdepth').disabled`, 'the Vcarve tab is mounted');
       assert.strictEqual(await evalJs(`document.getElementById('vcarve-maxdepth').disabled`), false, 'the Vcarve tab is mounted');
       await mode('design'); await flushAutosave(); // the buffer's own save path, not a sleep past its 1.5 s poll
@@ -58,7 +58,7 @@ await (async () => {
     // ---- Trace ---------------------------------------------------------------------------------------------------------------------------
     await navigate(url('trace'), 10000);
     await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the Trace strip');
-    const tab = (t) => evalJs(`document.querySelector('.tr-tab[data-tab="${t}"]').click()`);
+    const tab = (t) => evalJs(`document.querySelector('.sk-header-tab[data-tab="${t}"]').click()`);
     const loadPhoto = async (w, h, name) => { // a noisy light photo with a black block (a JPEG, so the file is much smaller than the decode)
       await evalJs(`(async () => { const w = ${w}, h = ${h}; const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
         x.fillStyle = '#e8e8e8'; x.fillRect(0, 0, w, h); for (let i = 0; i < 4000; i++) { x.fillStyle = 'rgb(' + (200 + Math.random() * 50) + ',' + (200 + Math.random() * 50) + ',' + (200 + Math.random() * 50) + ')'; x.fillRect(Math.random() * w, Math.random() * h, 40, 40); }
@@ -71,7 +71,7 @@ await (async () => {
     const state = () => evalJs(`({ w: document.getElementById('original-canvas').width, traced: !!document.querySelector('#svg-output svg'), width: document.getElementById('global-width-val').value, alpha: (() => { const c = document.getElementById('threshold-overlay'); return c.width ? c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] : -1; })() })`);
 
     // ---- B. photo, mask, scale come back from the compressed file ------------------------------------------------------------------------------
-    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
+    await tab('trace'); await waitFor(`document.querySelector('.sk-header-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
     await loadPhoto(1600, 1200, 'big');
     await waitFor(`document.getElementById('threshold-overlay').width === 1600`, 'overlay sized');
     await waitFor(`(() => { const c = document.getElementById('threshold-overlay'); return c.width > 0 && c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] > 0; })()`, 'the traced block shows in the threshold overlay');
@@ -114,12 +114,12 @@ await (async () => {
     await newTab(3);
     await importViaMenu(cdp, SVG);
     await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === 10`, 'the import is drawn in Edit');
-    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
+    await tab('trace'); await waitFor(`document.querySelector('.sk-header-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
     await newTab(4);
-    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
-    assert.strictEqual(await evalJs(`document.querySelector('.tr-tab.active').dataset.tab`), 'trace', 'in the Trace tab');
+    await tab('trace'); await waitFor(`document.querySelector('.sk-header-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`), 'trace', 'in the Trace tab');
     await clickEl('.sk-doctab-main', 2);
-    await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'edit'`, 'the drawing-only design opens in Edit');
+    await waitFor(`document.querySelector('.sk-header-tab.active').dataset.tab === 'edit'`, 'the drawing-only design opens in Edit');
     await waitFor(`/This design has no photo: showing its drawing in Edit/.test(document.body.innerText)`, 'the toast');
     assert.strictEqual(await evalJs(`document.querySelectorAll('#design-canvas .shape-elem').length`), 10, "and shows the design's drawing");
     console.log('trace: a drawing-only design switched to from the Trace tab opens in Edit with the toast');

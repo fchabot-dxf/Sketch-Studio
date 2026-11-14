@@ -15,8 +15,8 @@ try {
   const res = {};
   for (const [name, url, enter] of [
     ['sketchstudio', '/apps/sketchstudio/index.html', null],
-    ['shaper', '/apps/shaper/index.html', `document.querySelector('[data-mode="design"]').click()`],
-    ['trace', '/apps/trace/index.html', `document.querySelector('.tr-tab[data-tab="edit"]').click()`]]) {
+    ['shaper', '/apps/shaper/index.html', `document.querySelector('.sk-header-tab[data-tab="design"]').click()`],
+    ['trace', '/apps/trace/index.html', `document.querySelector('.sk-header-tab[data-tab="edit"]').click()`]]) {
     await navigate(`http://127.0.0.1:${port}${url}`, 8000); await sleep(800);
     if (enter) { await evalJs(enter); await sleep(800); }
     const r = await evalJs(`(() => { const b = document.querySelector('.sk-ribbon .sk-ribbon-btn:not(.active)'); const ic = b.querySelector('.sk-ribbon-ic'); let bg = null;

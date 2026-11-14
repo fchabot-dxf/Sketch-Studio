@@ -21,6 +21,14 @@ export function createShaperHistory({ getController, getMode }) {
 
 export const MODE_KEY = 'shaper-mode';
 
+export const SHAPER_STAGES = [
+  { id: 'explore', label: 'Explore' },
+  { id: 'design',  label: 'Design' },
+  { id: 'vcarve',  label: 'Vcarve' },
+  { id: 'prepare', label: 'Prepare' },
+  { id: 'review',  label: 'Review' },
+];
+
 /** The page's mode containers. Explore is in normal flow (display); the others are absolute overlays (hidden attr). */
 export const findViews = (doc) => ({
   explore:   doc.querySelector('main.layout'),   // the existing SVG editor (normal flow)
@@ -31,12 +39,12 @@ export const findViews = (doc) => ({
 });
 
 /**
- * createModeRouter({ views, modeBtns, exploreActions, getController, ensureSketch, enter, afterShow }) -> { showMode, current }
+ * createModeRouter({ views, onActiveChange, getController, ensureSketch, enter, afterShow }) -> { showMode, current }
  *   getController(): the mounted Design sketch controller (null before it exists). ensureSketch(): mounts it (the page does so lazily).
  *   enter: { vcarve(), prepare(enteringMode), review() } — the page's / the host's per-mode work, each optional.
  *   afterShow(mode): runs after the Design loop was started / stopped (the page's drawer toggle).
  */
-export function createModeRouter({ views, modeBtns, exploreActions = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
+export function createModeRouter({ views, onActiveChange = null, getController, ensureSketch, enter = {}, afterShow = () => {} }) {
   let currentMode = 'explore';
   // The view router: show the active mode's container, hide the rest. Explore is in normal flow (display); the
   // other three are absolute overlays (hidden attr). Drives the Design RAF lifecycle + persists the active mode.
@@ -49,8 +57,7 @@ export function createModeRouter({ views, modeBtns, exploreActions = null, getCo
     views.vcarve.hidden    = (mode !== 'vcarve');   // VCARVE-3a: static skeleton — no mount needed yet (live view = 3b)
     views.prepare.hidden   = (mode !== 'prepare');
     views.review.hidden    = (mode !== 'review');
-    if (exploreActions) exploreActions.style.display = (mode === 'explore') ? '' : 'none';
-    modeBtns.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+    if (onActiveChange) onActiveChange(mode);
     if (mode === 'design') { ensureSketch(); getController().start(); } // idempotent (guards against a second RAF)
     else if (getController()) getController().stop();                   // pause the RAF off Design
     afterShow(mode);
@@ -64,6 +71,5 @@ export function createModeRouter({ views, modeBtns, exploreActions = null, getCo
     if (mode === 'review' && enter.review) enter.review();
     try { localStorage.setItem(MODE_KEY, mode); } catch (_) { /* storage blocked */ }
   }
-  modeBtns.forEach((b) => b.addEventListener('click', () => showMode(b.dataset.mode)));
   return { showMode, current: () => currentMode };
 }

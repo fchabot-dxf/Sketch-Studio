@@ -46,8 +46,8 @@ await (async () => {
 
     const loaded = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
-    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Shaper to load');
-    for (let i = 0; i < 5; i++) { await clickEl('[data-mode="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.mode-btn.active').dataset.mode`) === 'design') break; }
+    await Promise.race([loaded, sleep(8000)]); await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Shaper to load');
+    for (let i = 0; i < 5; i++) { await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === 'design') break; }
     await waitForApp('design-canvas'); await waitFor(`!!window.__designController && document.getElementById('design-canvas').getBoundingClientRect().width > 0`, 'the Design tab to show');
 
     // three sketches, one line each, spread over the canvas
@@ -135,9 +135,9 @@ await (async () => {
     const counts = `(() => { const q = (s) => document.querySelectorAll(s).length; return JSON.stringify({ add: q('.sk-tree-add'), eye: q('.sk-sketch-eye'), icon: q('.sk-sketch-icon'), name: q('.sk-sketch-name'), radio: q('.sk-sketch-radio'), gone: q('.sk-sketch-grip, .sk-sketch-up, .sk-sketch-down, .sk-sketch-solo, .sk-sketch-lock, .sk-tree-move') }); })()`;
     const hosts = [
       { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },
-      { name: 'shaper', url: '/apps/shaper/index.html', enter: `document.querySelector('[data-mode="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
-      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
-      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },
+      { name: 'shaper', url: '/apps/shaper/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
+      { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="design"]').click()`, ready: `!!document.querySelector('.sk-browser-info .sk-sketch-node')` },
+      { name: 'trace', url: '/apps/trace/index.html', enter: `document.querySelector('.sk-header-tab[data-tab="edit"]').click()`, ready: `!!document.querySelector('.sk-browser .sk-sketch-node')` },
     ];
     const perHost = {};
     for (const h of hosts) {

@@ -16,16 +16,19 @@ const aabb = (pts) => ({
 // Plain dimension text for a dimension line through (cx, cy) running along (dirX, dirY): the text is centred on the point,
 // reads along the line (rotated into (-90, 90] so it is never upside down), and sits ABOVE the line (the side its
 // rotated "up" points to) with `gap` clear. Horizontal line -> text above it; vertical line -> text beside it, rotated 90.
+// `outward` (optional unit vector, for a curved dimension line): when "above" points against it, the text sits on the outward
+// side instead (still upright), so the line never meets its ends.
 // Returns the baseline anchor {x, y}, the rotation in degrees and the text's world bounding box.
-export function placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap }) {
+export function placeDimText({ cx, cy, dirX, dirY, text, fontPx, gap, outward }) {
   let deg = Math.atan2(dirY, dirX) * 180 / Math.PI;
   while (deg > 90) deg -= 180;
   while (deg <= -90) deg += 180;
   const rad = deg * Math.PI / 180;
   const ux = Math.cos(rad), uy = Math.sin(rad);
   const nx = Math.sin(rad), ny = -Math.cos(rad);
-  const x = cx + nx * gap, y = cy + ny * gap;
   const hw = dimTextWidth(text, fontPx) / 2, h = fontPx * DIM_TEXT_ASCENT;
+  const off = outward && nx * outward.x + ny * outward.y < 0 ? -(gap + h) : gap;
+  const x = cx + nx * off, y = cy + ny * off;
   const bounds = aabb([
     [x - ux * hw, y - uy * hw], [x + ux * hw, y + uy * hw],
     [x - ux * hw + nx * h, y - uy * hw + ny * h], [x + ux * hw + nx * h, y + uy * hw + ny * h],

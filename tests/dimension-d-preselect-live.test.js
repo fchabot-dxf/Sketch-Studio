@@ -15,7 +15,7 @@ await (async () => {
     const key = async (k, code, vk, mods = 0) => { await sendRealKey(send, k, code, vk, mods); await sleep(200); };
     const tool = async (t) => { await evalJs(`document.getElementById('tool-${t}').click()`); await sleep(200); };
     const labels = () => evalJs(`[...document.querySelectorAll('#svgCanvas .dim-label')].map(e => e.textContent.trim())`);
-    const labelPos = () => evalJs(`(() => { const e = document.querySelector('#svgCanvas .dim-label rect'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`);
+    const labelPos = () => evalJs(`(() => { const e = document.querySelector('#svgCanvas .dim-label'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`);
     const toScreen = (wx, wy) => evalJs(`(() => { const s = document.querySelector('#svgCanvas'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 4000);

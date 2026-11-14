@@ -3,9 +3,10 @@
 // backmost svg beneath #pen-underlay) draw the paper from THIS one helper, so the document bounds look identical on
 // every tab. World/mm coords (the same space the geometry + toolpath overlay use); non-scaling strokes so the paper
 // outline + grid stay crisp at any zoom.
-export function paperGridMarkup(doc) {
+export function paperGridMarkup(doc, { grid = true } = {}) {
   const w = Math.max(0, +(doc && doc.w) || 0), h = Math.max(0, +(doc && doc.h) || 0);
   let s = `<rect x="0" y="0" width="${w}" height="${h}" style="fill:var(--canvas-bg)" stroke="#c8bfa8" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>`;
+  if (!grid) return s; // the Design canvas draws the shared canvas grid (#ui/canvas-grid.js) over the paper instead
   s += `<g stroke="#e6ddc8" stroke-width="0.1" vector-effect="non-scaling-stroke" pointer-events="none">`;
   for (let x = 0; x <= w; x += 10) s += `<line x1="${x}" y1="0" x2="${x}" y2="${h}"/>`;
   for (let y = 0; y <= h; y += 10) s += `<line x1="0" y1="${y}" x2="${w}" y2="${y}"/>`;

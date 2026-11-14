@@ -1620,6 +1620,17 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // Use the unified active snap (computed by input-manager) if present, otherwise fall back to snapTarget
   const effectiveSnap = activeSnap || snapTarget;
+  // The ONE place a snap / inference preview glyph is drawn (constraint type -> icon); `lifted` puts it GLYPH_OFFSET_PX above the point like the inference glyphs
+  const PREVIEW_GLYPH_ICONS = {
+    [CONSTRAINT_TYPES.COINCIDENT]: 'icon-coincident',
+    [CONSTRAINT_TYPES.POINT_ON_LINE]: 'icon-coincident',
+    [CONSTRAINT_TYPES.MIDPOINT]: 'icon-midpoint',
+  };
+  const drawPreviewGlyph = (cType, x, y, lifted) => {
+    const icon = PREVIEW_GLYPH_ICONS[cType];
+    if (!icon) return;
+    drawUnifiedGlyph({ type: cType, __isPreview: true }, x, lifted ? y - scale(GLYPH_OFFSET_PX) : y, icon, 0, { isPreview: true });
+  };
   // draw snap indicator - show when a snap target is present
   if(effectiveSnap){
     // Normalize snap point into `p` (support .pt, {x,y}, id/targetId resolving)
@@ -1703,11 +1714,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Draw a preview of the constraint that would be created by this snap (red X for coincident, orange diamond for point-on-line)
   try{
     const effectivePreviewSnap = activeSnap || snapTarget;
-    if(effectivePreviewSnap && active){
+    if(effectivePreviewSnap && (active || isDragging)){
       let previewJointId = null;
-      if (active.mode === TOOL_MODES.LINE && active.preview) previewJointId = 'preview_end';
-      else if (active.mode === TOOL_MODES.RECT && active.preview) previewJointId = 'preview_corner';
-      else if (active.mode === TOOL_MODES.CIRCLE && active.preview) previewJointId = 'preview_radius';
+      if (active && active.mode === TOOL_MODES.LINE && active.preview) previewJointId = 'preview_end';
+      else if (active && active.mode === TOOL_MODES.RECT && active.preview) previewJointId = 'preview_corner';
+      else if (active && active.mode === TOOL_MODES.CIRCLE && active.preview) previewJointId = 'preview_radius';
       else previewJointId = '__preview__';
 
       const preview = previewSnapConstraint(effectivePreviewSnap, previewJointId, { allowPointOnLine: true });
@@ -1723,21 +1734,21 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
         if(!pt) return;
 
-        if (preview.type === CONSTRAINT_TYPES.COINCIDENT) {
-          // Preview coincident using unified glyph (preview mode) with a dummy constraint for hit attributes
-          const dummyC = { type: CONSTRAINT_TYPES.COINCIDENT, __isPreview: true };
-          drawUnifiedGlyph(dummyC, pt.x, pt.y, 'icon-coincident', 0, { isPreview: true });
-        } else if (preview.type === CONSTRAINT_TYPES.POINT_ON_LINE) {
-          // Point-on-line preview: show coincident glyph in preview mode (unified Blue)
-          const dummyC = { type: CONSTRAINT_TYPES.POINT_ON_LINE, __isPreview: true };
-          drawUnifiedGlyph(dummyC, pt.x, pt.y, 'icon-coincident', 0, { isPreview: true });
+        // Every snap / inference preview glyph goes through drawPreviewGlyph (declared above the snap block)
+        if (preview.type === CONSTRAINT_TYPES.MIDPOINT) {
+          // The drag's midpoint INFERENCE draws the same glyph at the same spot below
+          if (!(inference && inference.type === INFERENCE_TYPES.MIDPOINT)) drawPreviewGlyph(CONSTRAINT_TYPES.MIDPOINT, pt.x, pt.y, true);
+        } else {
+          drawPreviewGlyph(preview.type, pt.x, pt.y, false);
         }
       }
     }
   }catch(_){ }
   
   // Draw inference hint (horizontal, vertical, perpendicular) - use unified glyphs mapped to constraint types
-  if(inference && ((active && active.start) || inference.origin)){
+  if(inference && inference.type === INFERENCE_TYPES.MIDPOINT && inference.pos){
+    drawPreviewGlyph(CONSTRAINT_TYPES.MIDPOINT, inference.pos.x, inference.pos.y, true);
+  } else if(inference && ((active && active.start) || inference.origin)){
     const start = (active && active.start) ? joints.get(active.start) : inference.origin;
     if(start){
       const offset = scale(GLYPH_OFFSET_PX);

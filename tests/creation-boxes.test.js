@@ -301,6 +301,25 @@ try {
   }
   console.log('square: ok');
 
+  // ───────────────────────────── touch (task 597): ONE rule for every creation tool: the boxes SHOW but are NOT focused (no phone keyboard on every click); a tap on a box focuses it
+  const isBox = (el) => !!el && (el.id === 'dimInput' || !!el.closest('.sk-dual-input'));
+  for (const t of ['polygon', 'rect', 'circle', 'line', 'arc']) {
+    app.esc(); app.tool(t);
+    app.click(P(0, 0).x, P(0, 0).y, { pointerType: 'touch' });
+    assert(!idleBoxes(), t + ': a touch first click shows the box(es)');
+    assert(!isBox(doc.activeElement), t + ': ...but none is focused (no keyboard): active = ' + (doc.activeElement && (doc.activeElement.id || doc.activeElement.tagName)));
+    const target = dualBox() ? dualFields()[0] : dimBox();
+    target.focus();   // the tap on a box
+    assert.strictEqual(doc.activeElement, target, t + ': a tap on the box focuses it');
+    app.esc();
+    assert(idleBoxes(), t + ': Esc closes it');
+    app.esc(); app.tool(t);
+    app.click(P(0, 0).x, P(0, 0).y);   // the mouse keeps its auto-focus
+    assert(isBox(doc.activeElement), t + ': a mouse first click still focuses the box');
+    app.esc();
+  }
+  console.log('touch: ok');
+
   // picking another tool in the middle of a draw takes the boxes away with the draw, and what was typed is forgotten
   for (const t of ['polygon', 'rect', 'circle', 'line', 'arc']) {
     app.esc(); app.tool(t); clickAt(P(0, 0)); app.type('9');

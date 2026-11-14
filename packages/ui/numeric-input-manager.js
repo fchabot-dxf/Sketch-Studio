@@ -294,7 +294,7 @@ function drawUndoKey(e) {
 
 // --- Public API ---
 
-export function showSingleInput(x, y, value, field, initialKey = null) {
+export function showSingleInput(x, y, value, field, initialKey = null, focus = true) {
     if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
@@ -303,16 +303,17 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     uiState.typed = [!!initialKey, false];
 
     // Position
-    uiState.singleInput.style.left = `${x}px`;
-    uiState.singleInput.style.top = `${y}px`;
     uiState.singleInput.style.transform = '';
     showNumericInputEl(uiState.singleInput);
+    placeLiveBox(uiState.singleInput, x, y);
     
     // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
     uiState.singleInput.inputMode = 'decimal';
     uiState.singleInput.value = initialKey || (typeof value === 'number' ? value.toFixed(1) : '');
-    uiState.singleInput.focus();
-    if (!initialKey) uiState.singleInput.select();
+    if (focus) {   // TASK 597: a touch opens the box WITHOUT focus (no phone keyboard on every click); tapping the box focuses it
+        uiState.singleInput.focus();
+        if (!initialKey) uiState.singleInput.select();
+    }
 }
 
 /**
@@ -332,15 +333,16 @@ export function showDualInput(x, y, w, h, opts = {}) {
     uiState.dualInputH.placeholder = labels[1];
     uiState.dualSep.innerText = opts.separator || '×';
 
-    uiState.dualContainer.style.left = `${x}px`;
-    uiState.dualContainer.style.top = `${y}px`;
     showNumericInputEl(uiState.dualContainer);
+    placeLiveBox(uiState.dualContainer, x, y);
 
     uiState.dualInputW.value = w.toFixed(uiState.dualDigits[0]);
     uiState.dualInputH.value = h.toFixed(uiState.dualDigits[1]);
     
-    uiState.dualInputW.focus();
-    uiState.dualInputW.select();
+    if (opts.focus !== false) {
+        uiState.dualInputW.focus();
+        uiState.dualInputW.select();
+    }
     if (opts.initialKey) {   // the digit that opened the box is the first character of the first field, never lost
         uiState.dualInputW.value = opts.initialKey;
         uiState.typed[0] = true;
@@ -446,13 +448,16 @@ export function updateInputPosition(x, y) {
     const ox = x + 15;
     const oy = y + 15;
 
-    if (uiState.mode === 'live-single') {
-        uiState.singleInput.style.left = `${ox}px`;
-        uiState.singleInput.style.top = `${oy}px`;
-    } else if (uiState.mode === 'live-dual') {
-        uiState.dualContainer.style.left = `${ox}px`;
-        uiState.dualContainer.style.top = `${oy}px`;
-    }
+    if (uiState.mode === 'live-single') placeLiveBox(uiState.singleInput, ox, oy);
+    else if (uiState.mode === 'live-dual') placeLiveBox(uiState.dualContainer, ox, oy);
+}
+
+/** TASK 597: a live box beside the cursor stays INSIDE the window: one sticking out past the right edge widened the page on a phone (the layout grew, the view shrank, taps missed). */
+function placeLiveBox(el, x, y) {
+    const w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || Infinity, vh = (typeof window !== 'undefined' && window.innerHeight) || Infinity;
+    el.style.left = `${Math.max(0, Math.min(x, vw - w - 8))}px`;
+    el.style.top = `${Math.max(0, Math.min(y, vh - h - 8))}px`;
 }
 
 // --- Internals ---

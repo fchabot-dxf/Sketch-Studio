@@ -63,8 +63,7 @@ const DEFAULT_SETTINGS = {
     DASH_LENGTH_PX: 8,
     DASH_GAP_PX: 8,
     // Look knobs a style template owns (#ui/style-templates.js). Defaults = today's look.
-    GLYPH_STYLE: 'badge',           // constraint glyphs: 'badge' (coloured disc + white icon) | 'fusion' (the owner's glyph sheet, white fill + outline)
-  GLYPH_OUTLINE_PX: 1,            // 'fusion' glyph outline width (screen px, 0.2-4)
+    GLYPH_OUTLINE_PX: 1,            // constraint glyph outline width (screen px, 0.2-4)
     DIM_LABEL_BOX: true,            // dimension value drawn on a filled label box; false = plain text on the dimension line
     HOVER_COLOR: '#1e40af',         // stroke of a hovered line/joint ('#1e40af' routes through --sk-selection; any other value is literal)
     FIXED_JOINT_FILL: 'white',      // fill of fixed / fully constrained joints: 'white' (hollow ring) | a colour (solid dot)
@@ -183,8 +182,7 @@ class SettingsManager {
     }
 
     // Convenience helpers
-    // Return settings with derived properties (GLYPH_BG_DIAMETER_PX is derived from GLYPH_SYMBOL_SIZE_PX)
-    getAll() { const base = { ...this._settings }; const symbol = Number(base.GLYPH_SYMBOL_SIZE_PX || 20); base.GLYPH_BG_DIAMETER_PX = Math.round(symbol * 1.6); return base; }
+    getAll() { return { ...this._settings }; }
     
     // Reset to factory defaults (ignores project and local overrides)
     resetToDefaults() {

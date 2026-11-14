@@ -109,7 +109,7 @@ dbg.log('constraints', '[ConstraintManager] Added distance constraint from dimen
 dbg.warn('constraints', '[ConstraintManager] pointOnLine sandbox-rejected', { residual: 5.8827314701 });
 dbg.error('app', 'BOOM', new Error('the failure'));
 const { default: Settings } = await import('#core/settings-manager.js');
-Settings.set('GLYPH_STYLE', 'fusion', { persist: 'none' }); Settings.set('DOC_UNIT', 'in', { persist: 'none' }); Settings.set('SHOW_GRID', true, { persist: 'none' }); // SHOW_GRID is at its default
+Settings.set('DOC_UNIT', 'in', { persist: 'none' }); Settings.set('SHOW_GRID', true, { persist: 'none' }); // SHOW_GRID is at its default
 const full = diag.buildReport({ appId: 'test', getState: st, full: true });
 const c = diag.buildCompactReportFor({ appId: 'test', getState: st });
 assert.ok(full.session && full.session.tool === 'line', 'the full report carries the session');
@@ -119,7 +119,7 @@ assert.ok(c.journal.folded >= 1, 'the label-only step is folded: ' + c.journal.f
 assert.ok(!c.journal.steps.some((s) => s.label === 'move label'), 'the label-only step is not listed');
 const dragStep = c.journal.steps.find((s) => s.label === 'drag points');
 assert.ok(dragStep && (dragStep.moved || dragStep.shifted), 'a drag step lists the joints that moved');
-assert.deepStrictEqual(c.summary.settings, { GLYPH_STYLE: 'fusion', DOC_UNIT: 'in' }, 'the header lists the settings that differ from their defaults');
+assert.deepStrictEqual(c.summary.settings, { DOC_UNIT: 'in' }, 'the header lists the settings that differ from their defaults');
 assert.strictEqual(c.summary.tool, 'line');
 assert.deepStrictEqual(c.summary.selection.joints, [a1]); assert.deepStrictEqual(c.summary.selection.shapes, ['S1']);
 assert.strictEqual(c.summary.counts.shapes, c.document.geometry.shapes.length);

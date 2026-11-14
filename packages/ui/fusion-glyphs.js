@@ -1,4 +1,4 @@
-// packages/ui/fusion-glyphs.js — the 'fusion' constraint-glyph markup (GLYPH_STYLE = 'fusion').
+// packages/ui/fusion-glyphs.js — the constraint-glyph markup (the outlined glyph, the only style).
 // The shapes are NOT here: they come from the owner's sheet (assets/constraint-glyphs.svg) through getGlyph() in
 // #ui/glyph-sheet.js. This module owns only the constraint type -> glyph id table and the sizing/paint.
 

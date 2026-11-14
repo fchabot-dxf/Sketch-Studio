@@ -6,8 +6,8 @@
 // nothing about templates: it just reads the settings and the CSS tokens. The chosen id lives in the STYLE_TEMPLATE setting.
 //
 // On-screen sizes (renderer): line = 6px * LINE_STROKE; joint radius = 4px * JOINT_RADIUS; joint ring =
-// line * JOINT_STROKE_MULT; selected/hovered line = line * SELECTION/HOVER_FEEDBACK_MULT; glyph badge diameter =
-// 1.6 * GLYPH_SYMBOL_SIZE_PX.
+// line * JOINT_STROKE_MULT; selected/hovered line = line * SELECTION/HOVER_FEEDBACK_MULT; glyph = the outlined icon,
+// GLYPH_SYMBOL_SIZE_PX on its longer side.
 
 import SettingsManager from '#core/settings-manager.js';
 
@@ -16,7 +16,7 @@ export const STYLE_SETTING_KEYS = [
   'LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT',
   'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'GLOW_WIDTH_PX',
   'DASH_LENGTH_PX', 'DASH_GAP_PX',
-  'GLYPH_STYLE', 'DIM_LABEL_BOX',   'HOVER_COLOR', 'FIXED_JOINT_FILL', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
+  'DIM_LABEL_BOX',   'HOVER_COLOR', 'FIXED_JOINT_FILL', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR',
 ];
 
 const FACTORY = SettingsManager.getDefaults();
@@ -31,7 +31,7 @@ export const STYLE_TEMPLATES = [
   { id: 'default', name: 'Default', settings: factory() },
 
   // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
-  // 15px white glyph icons with a dark outline (no badge), thin dashed construction, plain dimension text, blue-violet
+  // 15px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
   // hover, solid dark dots for fixed joints. `tokens` = the canvas colours (CSS --sk-* custom properties set on the
   // canvas HOST element only): free lines sketch blue, fully constrained black, brown construction, pale blue plane.
   {
@@ -41,7 +41,7 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 2.33, HOVER_FEEDBACK_MULT: 2, GLOW_WIDTH_PX: 10,
       GLYPH_SYMBOL_SIZE_PX: 15, GLYPH_INFERENCE_SIZE_PX: 16, GLYPH_OFFSET_PX: 22, GLYPH_OUTLINE_PX: 0.5,
       DASH_LENGTH_PX: 7, DASH_GAP_PX: 4,
-      GLYPH_STYLE: 'fusion', DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
+      DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
             LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
           }),
     tokens: {

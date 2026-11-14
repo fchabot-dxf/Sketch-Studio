@@ -195,25 +195,6 @@
         #btn-settings-toggle svg { color: #6b7280; /* slate-500 */ }
         #btn-settings-toggle svg path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
 
-        /* Mode B: Normal Canvas Glyph (Canvas color) */
-        .constraint-glyph use {
-            color: #3B82F6; /* Standard Fusion Blue */
-            --icon-accent: #3B82F6; /* Unify accent color */
-            stroke-width: 1.5px; /* Slightly bolder for visibility */
-            transition: all 0.2s ease;
-            transform-origin: center;
-        }
-
-        /* Mode C: Selected/Hovered Glyph (Bold Emphasis) */
-        .constraint-glyph.selected use,
-        .constraint-glyph.hovered use {
-            color: #1e40af; /* Main = Dark Blue */
-            --icon-accent: #1e40af; /* Accent = Dark Blue */
-            stroke-width: 2.5px; /* Very bold */
-            transform: scale(1.2);
-            transform-origin: center;
-        }
-
         /* Preview state */
         .constraint-glyph.preview { opacity: 0.5; pointer-events: none; }
         .constraint-glyph { transition: opacity 0.12s ease; }

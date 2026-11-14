@@ -51,6 +51,29 @@ FUSION: broken. Hangs at "Initializing", log `BaseAuth not initialized; cannot f
 if needed. Add-ins backed up to `C:\Users\danse\Documents\Fusion-backup-2026-11-11`. Then run the diagonal-dimension test
 (sketch CLAUDE_TEST_O3, delete it after) before sending 516.
 
+### Update (2026-11-14, turn 1267) — LATEST
+- MERGED since 1170 (main f1ea286; FULL 389/389 in 307 s on 90e14d6): 583 node batches C+D (live 61 -> 45), 584 arc-by-centre
+  translates + origin-held no snap + cluster drag no inference (bezier body translates whole), 585 Mirror tool, 586 floating SKETCHES
+  browser top-left in all 4 apps (no side panel, NO constraints/DOF status line: owner), 587 document tabs slices 2-4 (SketchStudio),
+  588 double-click chain select (500 ms + 5 px) + move a multi-selection + one glyph pick (on the glyph as drawn + 3 px) + hover = click
+  + glyph hover/selected WARM YELLOW (owner), 589 D key uses the preselection + "added as reference" on placement + live dim check never
+  leaves a temp constraint + LOAD DROPS constraints naming missing joints (owner's frozen drawing), 590 two-line midpoint snap removed
+  (owner's drawing still holds 3 bogus MIDPOINTs on j19/j35/j43: owner deletes them), 591 compact Copy Report (+ Save full report,
+  settings in the header), 592 badge glyph style REMOVED (outlined only, owner), 593 one Enter in #dimInput commits once, 594 dragged point
+  gets no drawing-scan inference, 595 parameter Tab-complete (list + Tab), 596 creation boxes on the first click for rect (W x H, Tab) /
+  circle / polygon (Sides field gone from the ribbon), Esc in a box = canvas Esc; docs/FUSION-COMPARISON.md is merge=union.
+- RUNNING: 597 (Sonnet) line + arc boxes on the first click, circle box = DIAMETER (Fusion), typed square gets its size constraints;
+  598 (Opus) single-point drag offers only Fusion's inferences (measure each in Fusion; near-parallel adds nothing like Fusion);
+  601 (Sonnet) node batch E: slowest live files to node + split the 85 s / 72 s files. 597 and 598 share Fusion via
+  scratchpad fusion.lock (one task at a time, real mouse).
+- OWNER RULINGS (2026-11-14): "yes as long as it's North Star and Fusion-like"; speed-ups: ONE merge-gate run per task (the
+  advisor's; seats run gate:quick + their own live tests, AGENTS.md f1ea286), batch-merge ready branches, then measure LIVE_JOBS 10-12
+  (task 600, after 601). Fusion: never save (document limit is fine: new docs read-only still draw).
+- OPEN, not asked yet: Mirror line (free construction line) rotates when a dimension is edited (least-change solve; Fusion keeps it).
+  Tabs slices 5-6. Fusion checks still to do: double-click chain, selection move, D preselection, arc Mirror rule.
+- Briefs and the shared rules for subagents: scratchpad common-rules.txt (copy it out if %TEMP% is cleaned); merge.sh / full-main.sh
+  there too (merge.sh counts PICKED lines with leading spaces now).
+
 ### Update (2026-11-11 late, turn 761)
 - Fusion REPAIRED and answering (2706.1.17). 514 merged (d74e1c7). 512: merge gate red on 3 of its own cells
   (`dim-angle-yx */shared dim-moved-geometry`, probably F3 unmasked by 510's F4 fix): sent back for classification only, then re-merge.

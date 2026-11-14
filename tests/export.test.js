@@ -29,14 +29,15 @@ function makeStateArc() {
   assert.ok(svg.includes('stroke-linecap="') && svg.includes('stroke-linejoin="'), 'SVG should include stroke-linecap and stroke-linejoin attributes on lines');
 }
 
-// SVG stroke width respects SettingsManager LINE_STROKE setting
+// SVG stroke width is the declared export constant (1, as before), whatever the LINE_STROKE display knob is (task 614)
 {
-  // Use dynamic import to access SettingsManager
   const { default: SettingsManager } = await import('#core/settings-manager.js');
-  try { SettingsManager.set('LINE_STROKE', 1.5, { persist: 'local' }); } catch(_) {}
-  const state = makeStateLine();
-  const svg = buildSVG(state, { precision: 2 });
-  assert.ok(svg && svg.includes('stroke-width="1.50"'), 'SVG should include stroke-width from LINE_STROKE setting');
+  SettingsManager.set('LINE_STROKE', 1.5, { persist: false });
+  const svg = buildSVG(makeStateLine(), { precision: 2 });
+  assert.ok(svg && svg.includes('stroke-width="1.00"'), 'SVG stroke-width is the export constant, not LINE_STROKE');
+  SettingsManager.set('LINE_STROKE', SettingsManager.getDefault('LINE_STROKE'), { persist: false });
+  assert.ok(buildSVG(makeStateLine(), { precision: 2 }).includes('stroke-width="1.00"'), 'and a default export is unchanged (1)');
+  assert.ok(buildSVG(makeStateLine(), { precision: 2, strokeWidth: 2 }).includes('stroke-width="2.00"'), 'an explicit strokeWidth still wins');
 }
 
 // Arc SVG test (path)

@@ -37,6 +37,8 @@ export const glyphPoint = (app, el) => {
 };
 /** the centre of the label's box (<g class="dim-label"><rect/>, as a browser's getBoundingClientRect centre): screen px and the world point it was drawn at */
 export const labelBoxCenter = (app, el = app.svg.querySelector('.dim-label')) => {
-  const r = el.querySelector('rect'); const w = { x: +r.getAttribute('x') + +r.getAttribute('width') / 2, y: +r.getAttribute('y') + +r.getAttribute('height') / 2 };
-  const p = px(app, w.x, w.y); return { idx: +el.getAttribute('data-constraint-idx'), x: Math.round(p.x), y: Math.round(p.y), world: w };
+  const idx = +el.getAttribute('data-constraint-idx'), r = el.querySelector('rect');
+  // a boxed label (DIM_LABEL_BOX on) has its rect; the default plain label has none: its centre is the world point the renderer stored on the constraint
+  const w = r ? { x: +r.getAttribute('x') + +r.getAttribute('width') / 2, y: +r.getAttribute('y') + +r.getAttribute('height') / 2 } : { ...app.state.constraints[idx].glyphPos };
+  const p = px(app, w.x, w.y); return { idx, x: Math.round(p.x), y: Math.round(p.y), world: w };
 };

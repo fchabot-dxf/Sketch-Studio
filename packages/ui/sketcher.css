@@ -2,7 +2,8 @@
  *
  * Declares the --sk-* custom properties the #ui renderer will consume in P2 (routed via inline
  * style="...:var(--sk-…,#fallback)" — note: var() is invalid in raw SVG presentation attributes).
- * The DEFAULTS below are SketchStudio's CURRENT colors, so linking this file changes NOTHING until P2
+ * (Task 614: the canvas DEFAULTS below are the Fusion colours, the owner's look; a host that themes its own canvas overrides them.)
+ * The DEFAULTS below were SketchStudio's colors, so linking this file changes NOTHING until P2
  * actually references the vars — P1 is byte-identical by construction.
  *
  * Each app retheme = override these in its OWN :root, loaded AFTER this file (Shaper sets a dark palette).
@@ -12,26 +13,26 @@
 :root {
   /* Canvas surface (SketchStudio: #svgCanvas bg / .snapping) */
   --sk-canvas-bg: #ffffff;
-  --sk-canvas-bg-snapping: #fff7ed;
+  --sk-canvas-bg-snapping: #F3F8FB;
 
   /* Grid (the SVG <pattern> strokes in index.html) */
-  --sk-grid-minor: #CBD5E1;
-  --sk-grid-major: #93C5FD;
+  --sk-grid-minor: #E2E6EA;
+  --sk-grid-major: #C9CFD6;
 
   /* Geometry (joints + lines) coloured by solve status */
-  --sk-geo-fixed: #202020;          /* fully rigid / fixed — near-black */
+  --sk-geo-fixed: #000000;          /* fully rigid / fixed — black */
   --sk-geo-constrained: #2563eb;    /* constrained — geometry blue */
   --sk-geo-free: #3b82f6;           /* free / under-constrained — light blue */
   --sk-geo-fully: #10b981;          /* fully constrained — green */
-  --sk-construction: #f97316;       /* construction geometry — orange */
+  --sk-construction: #A9744F;       /* construction geometry — brown */
   --sk-muted: #9ca3af;              /* faint guides / muted */
 
   /* Joints */
   --sk-joint-fill: #ffffff;
 
   /* Constraint glyphs (mirror #core CONSTRAINT_COLORS) */
-  --sk-constraint-fill: #60A5FA;
-  --sk-constraint-stroke: #2563eb;
+  --sk-constraint-fill: #2B9BD6;
+  --sk-constraint-stroke: #1F2937;
   --sk-perpendicular-stroke: #0891b2;
 
   /* Dimensions */
@@ -39,7 +40,7 @@
   --sk-dimension-snap: #10b981;
 
   /* Selection / hover / origin */
-  --sk-selection: #1e40af;
+  --sk-selection: #3B7DD8;
   --sk-hover: #3B82F6;
   /* TASK 588: a constraint's GLYPH and the geometry it binds, lit when the glyph is hovered / selected (blue stays the geometry's own hover /
      selection). Warm yellow (owner), apart from the blues in hue and lightness and from construction orange (#f97316) in hue; the selected one

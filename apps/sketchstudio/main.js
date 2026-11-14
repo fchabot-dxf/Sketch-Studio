@@ -3,7 +3,7 @@ import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput, showDimInput } from '#ui/input-manager.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
-import { CANVAS_ID, initStudioCanvas, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
+import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { setConstraintNotifier } from '#core/constraint-manager.js';
@@ -17,10 +17,8 @@ import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title +
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
-import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
-import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { isShortViewport } from '#ui/short-viewport.js'; // TASK 602: a phone in landscape (the status bar folds away: Log / Tune go to the menu)
 import './debug-overlay.js'; // side-effect: registers window.ug.debug + the spring overlay (split from core/debug.js)
@@ -69,10 +67,6 @@ const state = createSketchState(engine, view);
 // TASK 473: the sidebar's Download uses the same exporter as the Export view, with its default options.
 // TASK 566: Import SVG / DXF -> a new sketch, through the shared importer (the file menu's entry; a drop on the canvas is the second way in).
 // SketchStudio declares no options: its sketch state is what the importer works on, and the result is shown as a notification.
-function importDrawing(text, fileName) {
-  const res = importIntoSketch(text, fileName, { state, svg }, {}); // the importer frames the imported shapes (the render loop solves each frame)
-  showNotification(res.message, res.ok ? 'success' : 'error', 6000);
-}
 function sidebarExport(type) {
   const res = exportToFile(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' });
   try { showNotification(res && res.ok ? 'Export started' : 'Export failed: ' + (res && res.reason ? res.reason : 'unknown'), res && res.ok ? 'success' : 'error'); } catch (_) {}
@@ -94,6 +88,7 @@ function initApp(){
       svg.style.outline = 'none';
   }
   dbg.log('main', '[main] initApp starting, svg found:', !!svg);
+  const importer = createStudioImporter({ state, svg }); // TASK 610: design-canvas.js (the node test kit calls it too): the file menu's entry + the drop
   // design-canvas.js: the state defaults, the empty store (only j_origin), the initial view and its viewBox
   initStudioCanvas(state, engine, document.getElementById(CANVAS_ID));
   
@@ -161,7 +156,7 @@ function initApp(){
   const header = createAppHeader({
     // TASK 473: the shared app sidebar; this host declares ITS actions: Download = the existing SVG / DXF exports (default options), New.
     leading: mountProjectSidebar({
-      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importDrawing, documentTabs: true, // TASK 587: the document tab strip (TASK 602: below the header) // TASK 566: "Import SVG / DXF…" in the file menu
+      appId: 'sketchstudio', getBuffer: () => docBuffer, importFile: importer.importFile, documentTabs: true, // TASK 587: the document tab strip (TASK 602: below the header) // TASK 566: "Import SVG / DXF…" in the file menu
       hostActions: [
         { id: 'export', label: 'Export…', icon: SIDEBAR_ICONS.download, onClick: () => route('export') }, // TASK 602 (owner): Export left the header for this menu
         { id: 'download-svg', label: 'Download SVG', icon: SIDEBAR_ICONS.download, onClick: () => sidebarExport('svg') },
@@ -185,7 +180,7 @@ function initApp(){
   const headerHost = document.getElementById('app-header-host');
   if (headerHost) header.render(headerHost);
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer opened from this header button
-  sidePanel = mountDesignBrowser({ container: svg.parentElement, state, engine, toggleHost: header.el });
+  sidePanel = mountStudioBrowser({ svg, state, engine, toggleHost: header.el }); // design-canvas.js
   showView('design');
 
   // TASK 602 (owner): no "Saved" text in the header: the document tab's dot shows unsaved / saving / failed (document-tabs.js)
@@ -204,7 +199,7 @@ function initApp(){
   });
 
   setupInput(svg, state);
-  mountImportDrop(svg, importDrawing); // TASK 566: a drop on the canvas imports too
+  importer.mountDrop(); // TASK 566: a drop on the canvas imports too
 
   // Auto-focus SVG when window regains focus to ensure shortcuts work immediately
   window.addEventListener('focus', () => {

@@ -6,6 +6,7 @@
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { captureShaperDoc, applyShaperDoc } from './shaper-doc.js';
 import SettingsManager from '#core/settings-manager.js';
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 
 /** The page's Design canvas (index.html <svg id="design-canvas">). */
 export const DESIGN_CANVAS_ID = 'design-canvas';
@@ -55,4 +56,9 @@ export function applyShaperUnitDefault() {
     const persisted = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}');
     if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
   } catch (_) { /* localStorage blocked */ }
+}
+
+/** TASK 610: the floating SKETCHES browser over Shaper's Design canvas (main.js buildDesignUI did this inline): the card goes in #design-body, the phone drawer's button in the toolbar. */
+export function mountShaperBrowser({ state, engine }) {
+  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, toggleHost: document.querySelector('header.toolbar') });
 }

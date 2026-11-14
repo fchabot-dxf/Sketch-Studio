@@ -8,11 +8,10 @@ import * as inspector from './inspector.js';
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
-import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 import { sketchesSignature } from '#core/sketch-model.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
-import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
+import { DESIGN_CANVAS_ID, DESIGN_CANVAS_OPTIONS, RIBBON_OPTIONS, mountShaperBrowser, shaperBufferOptions, applyShaperUnitDefault } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { createDiagnosticLog } from '#ui/diagnostic-log.js'; // DIAG-OVERLAY: mobile-usable log + Copy Report
 import { createShaperSession } from './shaper-session.js'; // TASK 605: a document tab's stage state, declared once (the node test kit builds it too)
 import { createPrepareStage } from './prepare-stage.js'; // TASK 583: Prepare's wiring (view, cut card, cut-plan undo, keys, restore), declared once (the node test kit calls it too)
@@ -23,7 +22,6 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountVcarveView } from './vcarve-view.js';   // VCARVE-3b: the live Vcarve workspace
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
-import SettingsManager from '#core/settings-manager.js';
 import { cutPlanEntries, CUT_PLAN, planReliefItems } from './cut-plan.js'; // SP1j-4: the shared cut-plan store
 import { CUT_TYPES, exportEncoding } from './shaper.js';                   // SP1j-4: injected as the exporter's encoding
 import { exportShaperSVG } from '#core/shaper-export.js';  // SP1j: pure cut-plan → Shaper SVG serializer
@@ -36,8 +34,8 @@ applyAppIdentity('shaper');
 import { makeGroup, ungroup, groupOf } from '#core/group-model.js'; // SKETCH-4d: user Group/Ungroup organisation action
 import { findLoops } from '#core/loop-finder.js';        // enumerate loops for export boundary polygons
 import { loopPolygon } from '#core/loop-geometry.js';     // HOST computes loop polys (DOM) → serializer stays pure
-import { mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the drop (the importer itself: cut-import.js)
-import { importShaperFile } from './cut-import.js'; // TASK 583: Shaper's SVG / DXF import options, declared once
+import { createShaperImporter, getDocUnit } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
+import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 
 canvas.init(document.getElementById('canvas'));
 tree.init(document.getElementById('tree'));
@@ -54,7 +52,7 @@ if (_swHost) {
   _swHost.appendChild(mountProjectSidebar({
     appId: 'shaper', getBuffer: () => docBuffer, // the buffer is created with the sketch, at boot (ensureSketch() before the first showMode, below); null until then
     documentTabs: true, // TASK 605: the document tab strip under the header, in every mode
-    importFile: (text, name) => importFileToSketch(text, name), // TASK 566: "Import SVG / DXF…" in the file menu
+    importFile: (text, name) => shaperImporter.importFile(text, name), // TASK 566: "Import SVG / DXF…" in the file menu
     hostActions: [
       { id: 'download', label: 'Download', icon: SIDEBAR_ICONS.download, tooltip: 'Download the Shaper SVG (the Prepare cut plan)', onClick: () => {
         const payload = generateShaperSvgPayload();
@@ -90,7 +88,6 @@ document.getElementById('export').addEventListener('click', () => {
 
 // SP1j-4: the Sim/Export tab → serialize the Prepare cut plan + the design into a machine-ready Shaper Origin SVG and
 // download it. Encoding INJECTED (the app's CUT_TYPES) so #core/shaper-export stays app-agnostic; docUnit from settings.
-const getDocUnit = () => SettingsManager.get('DOC_UNIT') || 'mm';
 
 // VCARVE-4: vcarve records (a region picked in the Vcarve tab) are exportable even with no Prepare cut assigned.
 function activeVcarves() {
@@ -245,16 +242,7 @@ if (syncForm) {
 // SKETCH-4d: the GROUP / UNGROUP action (Shaper Design only). Ctrl+G groups the selected shapes (≥2) under a NEW
 // userGroupId; Ctrl+Shift+G ungroups the selection's group(s). Operates on the Design selection (state.selectedShapes);
 // the group belongs to the active sketch (makeGroup) for organisation only (no hole meaning). Shaper-only.
-let _grpStatusEl = null, _grpStatusTimer = null;
-function groupStatus(msg) {
-  if (!_grpStatusEl) {
-    _grpStatusEl = document.createElement('div'); _grpStatusEl.id = 'group-status';
-    _grpStatusEl.style.cssText = 'position:absolute; bottom:18px; left:50%; transform:translateX(-50%); background:#1b2030; color:#cbd5e1; border:1px solid #2a2d31; border-radius:8px; padding:8px 14px; font:13px system-ui,sans-serif; z-index:50; box-shadow:0 6px 20px rgba(0,0,0,0.4); pointer-events:none; opacity:0; transition:opacity 0.15s;';
-    (VIEWS.design || document.body).appendChild(_grpStatusEl);
-  }
-  _grpStatusEl.textContent = msg; _grpStatusEl.style.opacity = '1';
-  clearTimeout(_grpStatusTimer); _grpStatusTimer = setTimeout(() => { if (_grpStatusEl) _grpStatusEl.style.opacity = '0'; }, 1800);
-}
+const groupStatus = createGroupStatus(() => VIEWS.design); // TASK 610: group-status.js (the page and the node test kit both create it)
 function doGroup() {
   if (!designController) return;
   const st = designController.state;
@@ -286,15 +274,7 @@ document.addEventListener('keydown', (e) => {
 // SKETCH/IMPORT-2 + TASK 478 + TASK 566: SVG / DXF IMPORT -> a NEW sketch, through the ONE shared importer (#ui/sketch-import.js), with Shaper's own options
 // declared in cut-import.js (TASK 583: each element's cut record, kept descIds, the cuts kept in CUT_PLAN; the node test kit calls it too).
 // The entry is the sidebar's "Import SVG / DXF…" (project-actions.js, passed to mountProjectSidebar above); a drop on the Design view is the second way in.
-function importFileToSketch(text, fileName) {
-  ensureSketch();
-  const res = importShaperFile(designController, text, fileName, getDocUnit);
-  if (res.ok && infoPanel) infoPanel.refresh();
-  groupStatus(res.message);
-}
-function wireImportDrop() {
-  if (VIEWS.design) mountImportDrop(VIEWS.design, importFileToSketch);
-}
+const shaperImporter = createShaperImporter({ ensureSketch, getController: () => designController, getInfoPanel: () => infoPanel, notify: groupStatus, getDropHost: () => VIEWS.design }); // TASK 610: cut-import.js
 
 document.getElementById('fit').addEventListener('click', () => canvas.refit());
 
@@ -372,7 +352,7 @@ function panelTick() {
 // SKETCHES browser (shared, #ui/design-browser.js, task 586) floating over the canvas's top-left. Shaper's Design tab has no other panel.
 function buildDesignUI() {
   const { state, engine } = designController;
-  browser = mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, toggleHost: document.querySelector('header.toolbar') });
+  browser = mountShaperBrowser({ state, engine }); // design-canvas.js
   browser.drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
   infoPanel = browser.panel;
   ribbon = createToolRibbon({
@@ -382,7 +362,7 @@ function buildDesignUI() {
   });
   ribbon.render(document.getElementById('design-ribbon'));
 
-  wireImportDrop(); // a drop on the Design view (the menu entry is mounted with the sidebar)
+  shaperImporter.mountDrop(); // a drop on the Design view (the menu entry is mounted with the sidebar)
 }
 
 // Mount the shared sketcher ONCE. isActive is tied to the ACTIVE MODE (R-COEXIST), not just design-view

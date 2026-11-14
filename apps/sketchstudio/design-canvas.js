@@ -6,6 +6,9 @@ import { SolverConfig } from '#core/solver-config.js';
 import { draw } from '#ui/svg-renderer.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { applyDefaultState } from '#core/state.js';
+import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
+import { showNotification } from '#ui/notification-manager.js';
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
 
 /** The page's Design canvas (index.html <svg id="svgCanvas">). */
 export const CANVAS_ID = 'svgCanvas';
@@ -56,4 +59,23 @@ export function studioFrame({ engine, state, svg, worldGroup, ribbon, onSolved }
   // S7c-2d: sync the shared ribbon's active highlight to state.currentTool (covers KEYBOARD switchToTool, which
   // doesn't route through setTool). refresh() is a cheap class-toggle.
   if (ribbon) ribbon.refresh();
+}
+
+/**
+ * TASK 610: SketchStudio's SVG / DXF import, moved out of main.js unchanged: the sidebar's "Import SVG / DXF…" entry (importFile) and the drop on the canvas
+ * (mountDrop). SketchStudio declares no importer options: its sketch state is what the importer works on, and the result is shown as a notification.
+ * The page and the node test kit both call it.
+ */
+export function createStudioImporter({ state, svg }) {
+  const importFile = (text, fileName) => {
+    const res = importIntoSketch(text, fileName, { state, svg }, {}); // the importer frames the imported shapes (the render loop solves each frame)
+    showNotification(res.message, res.ok ? 'success' : 'error', 6000);
+  };
+  const mountDrop = () => mountImportDrop(svg, importFile); // a drop on the canvas imports too
+  return { importFile, mountDrop };
+}
+
+/** TASK 610: the floating SKETCHES browser over the canvas (main.js did this inline): the card goes in the canvas's parent. toggleHost: the phone drawer's button host. */
+export function mountStudioBrowser({ svg, state, engine, toggleHost = null }) {
+  return mountDesignBrowser({ container: svg.parentElement, state, engine, toggleHost });
 }

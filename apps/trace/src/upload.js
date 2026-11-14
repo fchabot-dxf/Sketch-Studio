@@ -1,7 +1,7 @@
 /**
  * upload.js
- * Handles file input (drag-drop + file picker) → ImageBitmap + raw pixel data.
- * Dispatches 'imageLoaded' on the eventBus with { bitmap, dataURL, width, height }.
+ * Handles file input (drag-drop + file picker) → a decoded canvas.
+ * Dispatches 'imageLoaded' on the eventBus with { blob, canvas, width, height, name }.
  */
 
 export function initUpload(eventBus) {
@@ -27,36 +27,35 @@ export function initUpload(eventBus) {
   });
 }
 
-async function processFile(file, eventBus) {
-  const dataURL = await readAsDataURL(file);
-  const img     = await loadImage(dataURL);
+/**
+ * decodeImageBlob(blob) -> { canvas, width, height }: the ONE decode of a photo file into a full-size canvas. The upload uses it, and so does a document tab that
+ * is shown again (TASK 609: an inactive tab keeps only the compressed file, see trace-session.js).
+ */
+export async function decodeImageBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    return { canvas, width: img.naturalWidth, height: img.naturalHeight };
+  } finally { URL.revokeObjectURL(url); }
+}
 
-  // Draw to offscreen canvas to get pixel data
-  const canvas  = document.createElement('canvas');
-  canvas.width  = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
+async function processFile(file, eventBus) {
+  const { canvas, width, height } = await decodeImageBlob(file);
 
   // Update drop zone label
   const label = document.querySelector('#drop-zone .drop-label');
-  if (label) label.innerHTML = `<strong>${file.name}</strong><br><span style="font-size:11px;color:var(--text-dim)">${img.naturalWidth}×${img.naturalHeight}px</span>`;
+  if (label) label.innerHTML = `<strong>${file.name}</strong><br><span style="font-size:11px;color:var(--text-dim)">${width}×${height}px</span>`;
 
   eventBus.emit('imageLoaded', {
-    dataURL,
+    blob: file, // the compressed original: what an inactive document tab keeps (TASK 609)
     canvas,
-    width:  img.naturalWidth,
-    height: img.naturalHeight,
+    width,
+    height,
     name:   file.name.replace(/\.[^.]+$/, ''),
-  });
-}
-
-function readAsDataURL(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload  = () => res(r.result);
-    r.onerror = rej;
-    r.readAsDataURL(file);
   });
 }
 
@@ -64,7 +63,7 @@ function loadImage(src) {
   return new Promise((res, rej) => {
     const img = new Image();
     img.onload  = () => res(img);
-    img.onerror = rej;
+    img.onerror = () => rej(new Error('the browser cannot read this image'));
     img.src = src;
   });
 }

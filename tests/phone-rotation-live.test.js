@@ -119,12 +119,12 @@ await (async () => {
           assert.strictEqual(m.ribbon[3], b.ribbon, tag + 'ribbon height unchanged');
           assert.strictEqual(m.footer[3], b.footer, tag + 'status bar height unchanged');
           assert.strictEqual(m.strip[1], m.header[4], tag + 'the tab strip is right under the header');
-          assert.strictEqual(m.strip[3], mouse ? 26 : 45, tag + 'the tab strip row height (26 mouse / 45 finger)');
+          assert.strictEqual(m.strip[3], mouse ? 26 : 31, tag + 'the tab strip row height (26 mouse / 31 finger, TASK 608)');
           assert(m.ribbon[1] >= m.strip[4], tag + 'the ribbon is under the tab strip');
           if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom, tag + 'canvas bottom unchanged'); }
         } else {
-          // TASK 605: these hosts have the tab strip too (26 px mouse / 45 px finger) right under the header; everything below it moved down by exactly that row
-          const row = mouse ? 26 : 45;
+          // TASK 605: these hosts have the tab strip too (26 px mouse / 31 px finger) right under the header; everything below it moved down by exactly that row
+          const row = mouse ? 26 : 31;
           assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header unchanged');
           assert.deepStrictEqual([m.strip[1], m.strip[3]], [m.header[4], row], tag + 'the tab strip is right under the header, ' + row + ' px tall');
           assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], [b.ribbon[0] + row, b.ribbon[1]], tag + 'ribbon unchanged in size, down by the strip row');

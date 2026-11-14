@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap } from '#ui/snap-detection.js';
 import { screenToWorld, getZoomFactor } from '#ui/coords.js';
-import { glyphPickHalfSize } from '#ui/fusion-glyphs.js';
+import { glyphPickHit } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered
@@ -11,9 +11,10 @@ import { pickScene, pickableConstraints } from '#core/sketch-model.js'; // TASK 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
 
-// THE glyph pick (task 571b right click; task 588 left click and hover; task 603 the box): a constraint glyph is under the pointer only when the
-// pointer is ON its drawn icon: the icon's bounding box plus a small margin (fusion-glyphs glyphPickHalfSize; a larger margin on touch). A
-// pointer merely NEAR a glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click and hover all call glyphAt.
+// THE glyph pick (task 571b right click; task 588 left click and hover; task 603 the drawn icon): a constraint glyph is under the pointer only when
+// the pointer is ON its drawn icon, or within a small margin of its outlines (fusion-glyphs glyphPickHit; a larger margin on touch). A pointer
+// merely NEAR a glyph (on the line beside it) is on the line. Right click (input-manager pickContextTarget), left click, hover and the drawing /
+// dimension tools' pre-pick (input-manager) all call glyphAt.
 export function glyphAt(svg, state, screenX, screenY, touch = false) {
     const settings = SettingsManager.getAll();
     const symbolPx = Number(settings.GLYPH_SYMBOL_SIZE_PX || 20), outlinePx = Number(settings.GLYPH_OUTLINE_PX ?? 1);
@@ -21,11 +22,9 @@ export function glyphAt(svg, state, screenX, screenY, touch = false) {
     const zoomFactor = getZoomFactor(svg);
     for (const c of pickableConstraints(state) || []) {
         if (c.__visible === false || !c.glyphPos) continue;
-        const box = glyphPickHalfSize(c.type, symbolPx, outlinePx, touch);
-        if (!box) continue;
         for (const pos of Array.isArray(c.glyphPos) ? c.glyphPos : [c.glyphPos]) {
             if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
-            if (Math.abs(mouseW.x - pos.x) <= box.hw * zoomFactor && Math.abs(mouseW.y - pos.y) <= box.hh * zoomFactor) return c;
+            if (glyphPickHit(c.type, (mouseW.x - pos.x) / zoomFactor, (mouseW.y - pos.y) / zoomFactor, symbolPx, outlinePx, touch)) return c;
         }
     }
     return null;

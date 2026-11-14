@@ -7,7 +7,7 @@ global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 global.document = { head: { appendChild() {} }, getElementById: () => null, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }) };
 const { default: SettingsManager } = await import('../packages/core/settings-manager.js');
 const { loadGlyphSheet } = await import('../packages/ui/glyph-sheet.js');
-const { glyphPickHalfSize, GLYPH_PICK_MARGIN_PX, GLYPH_PICK_MARGIN_TOUCH_PX } = await import('../packages/ui/fusion-glyphs.js');
+const { glyphPickHit } = await import('../packages/ui/fusion-glyphs.js');
 const { glyphAt, selectPick, updateHover } = await import('../packages/ui/hover-manager.js');
 const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
 await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
@@ -19,30 +19,34 @@ const mk = (type, extra = {}) => ({ type, joints: ['a', 'b'], glyphPos: { ...G }
 const stateOf = (c) => ({ constraints: [c], joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 200, y: 100 }]]), shapes: [], lastMouse: { x: 0, y: 0 }, hoveredJoint: null, hoveredConstraint: null, hoveredShape: null });
 const SIZE = 20, OUT = SettingsManager.get('GLYPH_OUTLINE_PX');
 
-// the box: horizontal is long and thin; the larger side is the icon size (+ the outline half-width + margin each side)
-const hb = glyphPickHalfSize('horizontal', SIZE, OUT);
-assert.ok(hb.hw > hb.hh * 1.5, 'the horizontal glyph box is long and thin: ' + JSON.stringify(hb));
-assert.ok(Math.abs(hb.hw - (SIZE / 2 + OUT / 2 + GLYPH_PICK_MARGIN_PX)) < 0.6, 'its long half side is size / 2 + outline / 2 + margin: ' + hb.hw);
-assert.ok(hb.hh < 13 - 3, 'and its short half side is far inside the old 13 px disc: ' + hb.hh);
-assert.strictEqual(glyphPickHalfSize('fixed', SIZE, OUT), null, 'a type with no glyph has no box (nothing is drawn, nothing is picked)');
-const tb = glyphPickHalfSize('horizontal', SIZE, OUT, true);
-assert.ok(Math.abs((tb.hw - hb.hw) - (GLYPH_PICK_MARGIN_TOUCH_PX - GLYPH_PICK_MARGIN_PX)) < 1e-9 && GLYPH_PICK_MARGIN_TOUCH_PX > GLYPH_PICK_MARGIN_PX, 'touch margin is larger');
-// the glyph's own size setting scales the box
-const big = glyphPickHalfSize('horizontal', 40, OUT);
-assert.ok(Math.abs((big.hw - hb.hw) - 10) < 1e-9, 'Glyph Icon Size 40 widens the long half side by 10 px: ' + big.hw);
+const hit = (type, dx, dy, size = SIZE, touch = false) => glyphPickHit(type, dx, dy, size, OUT, touch);
+// pick extent along an axis through the centre (the farthest pointer, in 0.1 px steps, that still picks) and the picked area (0.25 px grid)
+const extent = (type, ax, size = SIZE, touch = false) => { let m = 0; for (let d = 0; d < 60; d += 0.1) if (hit(type, ax === 'x' ? d : 0, ax === 'y' ? d : 0, size, touch)) m = d; return m; };
+const area = (type, size = SIZE, touch = false) => { let n = 0; for (let x = -40; x < 40; x += 0.25) for (let y = -40; y < 40; y += 0.25) if (hit(type, x, y, size, touch)) n++; return n * 0.0625; };
+const OLD_DISC = Math.PI * 13 * 13;
+assert.ok(extent('horizontal', 'x') > 1.5 * extent('horizontal', 'y'), 'the horizontal glyph is long and thin');
+assert.ok(extent('horizontal', 'y') < 8, 'its short reach is far inside the old 13 px disc: ' + extent('horizontal', 'y'));
+for (const t of ['horizontal', 'vertical', 'parallel', 'perpendicular', 'equal']) assert.ok(area(t) < OLD_DISC, t + ' pick area ' + area(t) + ' is below the old disc ' + OLD_DISC);
+assert.ok(area('parallel') < 0.8 * OLD_DISC && area('perpendicular') < 0.8 * OLD_DISC, 'parallel / perpendicular are clearly smaller than the old disc');
+assert.ok(area('parallel') < 0.8 * (2 * (SIZE / 2 + 2.5)) ** 2, 'and follow the strokes, not the bbox');
+assert.strictEqual(hit('fixed', 0, 0), false, 'a type with no glyph is never picked (nothing is drawn)');
+assert.ok(area('horizontal', SIZE, true) > area('horizontal') && extent('horizontal', 'y', SIZE, true) > extent('horizontal', 'y') + 3, 'touch margin is larger');
+assert.ok(Math.abs(extent('horizontal', 'x', 40) - extent('horizontal', 'x') - 10) < 0.3, 'Glyph Icon Size 40 widens the long reach by 10 px');
+const hb = { hh: extent('horizontal', 'y') }, tb = { hh: extent('horizontal', 'y', SIZE, true) };
 
 // pointer 8 px off the long side (inside the old 13 px circle, outside the new box) is NOT the glyph; on the icon IS
 const c = mk('horizontal'); const st = stateOf(c);
-const off = { x: G.x, y: G.y + hb.hh + 2 }; // just outside the short side
+const off = { x: G.x, y: G.y + hb.hh + 1.5 }; // just outside the short side
 assert.ok(Math.hypot(off.x - G.x, off.y - G.y) < 13, 'the off-icon point is inside the old circle');
 assert.strictEqual(glyphAt(svg, st, off.x, off.y), null, 'beside the icon: not the glyph');
 assert.strictEqual(glyphAt(svg, st, G.x, G.y), c, 'on the icon: the glyph');
-assert.strictEqual(glyphAt(svg, st, G.x + hb.hw - 0.5, G.y), c, 'at the end of the icon: the glyph');
-assert.strictEqual(glyphAt(svg, st, G.x + hb.hw + 1, G.y), null, 'past the icon end + margin: not the glyph');
+const hx = extent('horizontal', 'x');
+assert.strictEqual(glyphAt(svg, st, G.x + hx - 0.5, G.y), c, 'at the end of the icon: the glyph');
+assert.strictEqual(glyphAt(svg, st, G.x + hx + 1, G.y), null, 'past the icon end + margin: not the glyph');
 // the touch margin: a point outside the mouse box, inside the touch box
-const mid = { x: G.x, y: G.y + hb.hh + 2 };
+const mid = off;
 assert.strictEqual(glyphAt(svg, st, mid.x, mid.y, true), c, 'touch: a finger a little off the icon still picks it');
-assert.strictEqual(glyphAt(svg, st, G.x, G.y + tb.hh + 1, true), null, 'touch: but not beyond the touch box');
+assert.strictEqual(glyphAt(svg, st, G.x, G.y + tb.hh + 1.5, true), null, 'touch: but not beyond the touch box');
 
 // hover and click agree (selectPick is both): beside the icon with a line under the pointer -> the line; on the icon -> the glyph
 const hitShape = { shape: { id: 'L' }, pt: off };
@@ -52,8 +56,7 @@ updateHover(svg, off.x, off.y, st); assert.strictEqual(st.hoveredConstraint, nul
 updateHover(svg, G.x, G.y, st); assert.strictEqual(st.hoveredConstraint, c, 'hover on the icon: the glyph lit (= the click)');
 
 // the table for the report: area in px^2 and the reach (distance from the centre along each axis) vs the old 13 px disc
-const rows = ['horizontal', 'vertical', 'parallel', 'perpendicular', 'equal'].map((t) => {
-  const b = glyphPickHalfSize(t, SIZE, OUT); return `${t.padEnd(14)} box ${(2 * b.hw).toFixed(1)} x ${(2 * b.hh).toFixed(1)} = ${(4 * b.hw * b.hh).toFixed(0)} px2 (old disc ${(Math.PI * 169).toFixed(0)}), line wins beyond ${b.hh.toFixed(1)} px (x) / ${b.hw.toFixed(1)} px (y)` ;
-});
-console.log(rows.join('\n'));
+const rows = ['horizontal', 'vertical', 'parallel', 'perpendicular', 'equal'].map((t) =>
+  `${t.padEnd(14)} area ${area(t).toFixed(0)} px2 (old disc ${OLD_DISC.toFixed(0)}), pick reaches ${extent(t, 'x').toFixed(1)} px along x / ${extent(t, 'y').toFixed(1)} px along y from the centre (old 13 / 13)`);
+console.log(rows.join(String.fromCharCode(10)));
 console.log('glyph-pick-box-node.test.js: ok');

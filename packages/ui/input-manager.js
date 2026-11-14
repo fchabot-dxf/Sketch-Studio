@@ -5,10 +5,10 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, pickableConstraints, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS } from '#core/constants.js';
-import { hitConstraintAtScreen, findSnap, snapBoostFor } from '#ui/snap-detection.js';
+import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
@@ -442,7 +442,6 @@ function toolSnap(state, svg, pt, excludeIds, boost) {
 function updateSnapTarget(e, svg, state) {
     const isTouch = e.isTouch || e.pointerType === 'touch';
     const snapBoost = snapBoostFor(isTouch);
-    const constraintTol = 20 * snapBoostFor(isTouch);
 
     // Determine if we need snap (active operation) or just hover (idle)
     const isDrawingTool = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.DIMENSION].includes(state.currentTool);
@@ -472,7 +471,7 @@ function updateSnapTarget(e, svg, state) {
         // Check for constraints only when not dragging
         let hitConstraint = null;
         if (!state.drag) {
-            hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, e.clientX, e.clientY, constraintTol);
+            hitConstraint = glyphAt(svg, state, e.clientX, e.clientY, isTouch); // THE glyph pick (task 603)
         }
 
         const isDrawing = isDrawingTool;
@@ -679,8 +678,7 @@ function handlePointerDown(e, svg, state) {
 
     // Use virtual coords for constraint hit-testing as well
     let hitConstraint = null;
-    const constraintTol = 20 * snapBoostFor(isTouch);
-    try { hitConstraint = hitConstraintAtScreen(pickableConstraints(state), svg, screenX, screenY, constraintTol); } catch(_) { hitConstraint = null; }
+    try { hitConstraint = glyphAt(svg, state, screenX, screenY, isTouch); } catch(_) { hitConstraint = null; }
 
     // If clicking empty canvas while in SELECT or PAN, begin panning immediately
     if (!hitJoint && !hitShape && !hitConstraint && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.PAN)){

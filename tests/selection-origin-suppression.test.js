@@ -15,7 +15,7 @@
   const svg = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), viewBox: { baseVal: { x: 0, y: 0, width: 100, height: 100 } } };
   const state = { lastMouse: { x: 10, y: 10 }, constraints: [], joints: new Map(), shapes: [], hoveredJoint: null, hoveredConstraint: null, hoveredShape: null };
   state.joints.set('j_origin', { x: 10, y: 10 });
-  const c = { type: 'coincident', joints: ['j_origin', 'j_dummy'], glyphPos: { x: 12, y: 10 } }; // a glyph 2 px from the pointer
+  const c = { type: 'horizontal', joints: ['j_origin', 'j_dummy'], glyphPos: { x: 12, y: 10 } }; // a glyph whose solid icon is under the pointer (2 px from its centre; task 603: a glyph is picked on its drawn strokes)
   state.constraints.push(c);
   const hitJoint = { id: 'j_origin', j: state.joints.get('j_origin') };
 

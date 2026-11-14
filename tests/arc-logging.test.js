@@ -6,6 +6,7 @@
   // Minimal app state
   let counter = 1;
   const state = {
+    onDrawCancelled: () => {}, // the creation tools register their box cleanup here (TASK 596)
     joints: new Map(),
     shapes: [],
     constraints: [],

@@ -342,7 +342,7 @@ function setupMockDom() {
 
   // Set region to the loop and refresh
   const loopId = prepare.loops[0].id;
-  state.vcarves[0].region = loopId;
+  state.vcarves.push({ id: 'vcarve-1', region: loopId, vbit: { angle: 90 }, dStep: 0.5, maxDepth: 6 }); // the record a user's pick creates (mounting the view no longer creates one: TASK 609)
   vcarve.refresh();
 
   assert(vcarve.viewState.view, 'vcarve view must be initialized after refresh');

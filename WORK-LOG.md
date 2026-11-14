@@ -14316,6 +14316,16 @@ Fusion measurements (advisor, real mouse, cm): M1 a point P held on a constructi
 - Tests (fail-first, node kit): tests/dimension-line-line-reference-node.test.js (the owner's rectangle, fixture tests/fixtures/dimension/owner-rect-line-line-589.document.json; before: "1: no "added as reference" notice on the pick"), tests/live-dimension-validate-node.test.js (before: "1: no uncaught error ... TypeError: Cannot read properties of undefined (reading 'x')"), tests/document-load-drops-invalid-node.test.js (fixture owner-drag-frozen-589.document.json = the owner's document; before: "1: no constraint with a missing joint is loaded"), tests/dimension-d-preselect-node.test.js 3b + 6 updated.
 - Callers: no function removed; `hasDrivingDistanceForShape` keeps its radius caller; the inventory marker 'create-line-dim' moved to startShapeDimension's line creation (tests/harness/coverage/inventory.js reads it).
 - Evidence (local): .evidence/589/ (probe-b2.mjs, probe-c.mjs, probe-d.mjs, before-*.txt, after-*.txt, final-doc-line-line.txt, gate-merge.log).
+
+## TURN 586 (floating SKETCHES browser)
+- The SKETCHES tree moves from the right-hand panel (577b) into ONE floating card over the canvas's top-left, `mountDesignBrowser` in `packages/ui/design-browser.js` (renamed from design-side-panel.js). All four apps mount it; the row design / menus / layer behaviour are untouched (createDesignInfoPanel unchanged).
+- SketchStudio and Trace: the side panel is gone, the canvas is full width (1440 px: right edge 1423 / 1440). Shaper: its design aside was only the tree, so it is removed (canvas 1600 at 1600 px). Pen Plotter keeps its aside (Document button + style controls), only the tree left it.
+- Card: absolute, 8 px in from the canvas corner, 248 px wide, translucent white; the canvas ribbon is outside the canvas element so is not covered. Axis numbers are drawn along the axes at the origin, not at a screen corner, so the card only overlaps them when the user pans an axis under it (a Fusion-style overlay).
+- Collapse: header bar only; per-user setting BROWSER_COLLAPSED (SettingsManager, local), not in the document.
+- Phones (<= 640 px): the same element is the slide-over drawer (createMobileDrawer, breakpoint 641), opened by the header button; mobile-drawer.js styles are now per breakpoint (sk-bp-N class) so the 641 browser drawer and 768 host drawers do not mix.
+- MEASURED_CANVAS_RECT re-measured at 1600x900: sketchstudio 1566 wide, shaper 1600, penplotter 1356 (unchanged).
+- Tests: tests/design-browser-live.test.js (new, 4 hosts at 1440 + 390 touch); selectors updated in sketch-layers-live / -node, phone-header-live, dimension-delete-live, design-info-panel-right-dock (Shaper dropped: no panel).
+- Evidence: .evidence/586/{before,after}-{sketchstudio,shaper}-1440.png.
 ## TURN 585 - MIRROR tool in the Create group, like Fusion's Create > Mirror (owner approved 2026-11-13: "always the create menu"; Opus subagent)
 - WHAT: TOOL_MODES.MIRROR, a "Mirror" button in the shared ribbon's CREATE group (packages/ui/tool-ribbon.js; every Design host: SketchStudio, Shaper, Pen
   Plotter, Trace). Flow (Fusion's): the OBJECTS (the selection; a pre-selection counts and starts the tool at step 2), then the mirror LINE (a sketch line,

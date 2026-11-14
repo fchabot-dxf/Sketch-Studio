@@ -1,5 +1,6 @@
-// tests/design-info-panel-right-dock.test.js — TASK 475 #6: the Design info panel (#design-panel) docks on the RIGHT of
-// the canvas in every host that mounts it (Shaper, Pen Plotter), leaving the left edge to the app sidebar.
+// tests/design-info-panel-right-dock.test.js — TASK 475 #6: the Design side panel (#design-panel) docks on the RIGHT of
+// the canvas in every host that still has one: since task 586 only Pen Plotter (Document + Style controls); the SKETCHES tree left
+// every side panel for the floating browser (tests/design-browser-live.test.js).
 // Headless CDP. Per host: the panel's box is right of the canvas centre, does not overlap the canvas, the canvas keeps a
 // real size, and the collapse arrow points right (open) / left (collapsed). EVIDENCE_DIR=<dir> saves a screenshot per host.
 
@@ -17,7 +18,6 @@ await (async () => {
     const stable = (sel) => waitFor(`new Promise((res) => { const p = document.querySelector('${sel}'); const s = () => { const r = p.getBoundingClientRect(); return r.left + ',' + r.right + ',' + r.height; }; let last = s(), n = 0; const tick = () => { const c = s(); n = c === last ? n + 1 : 0; last = c; if (n >= 5) res(true); else requestAnimationFrame(tick); }; requestAnimationFrame(tick); })`, 'stable layout ' + sel);
 
     const hosts = [
-      { name: 'shaper', url: '/apps/shaper/index.html', enter: `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Design').click()` },
       { name: 'penplotter', url: '/apps/penplotter/index.html', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
     ];
     for (const h of hosts) {

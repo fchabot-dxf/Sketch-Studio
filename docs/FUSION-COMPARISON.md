@@ -2087,3 +2087,36 @@ parallel, perpendicular).
 
 **Divergence (reported, not changed).** Fusion showed no PARALLEL glyph when a free line end was turned parallel to another line (0.06 deg off) and added
 nothing; ours (attached-line test, ANGLE_SNAP_DEG 3) shows it and adds a Parallel at release. Fusion's Horizontal on the same drag matches ours.
+
+## Mirror (task 585)
+Measured by the advisor in Fusion 360 with the REAL UI (Create > Mirror, select the objects, select the mirror line, Enter; new unsaved document, cm; 2026-11-13).
+Ours = tests/mirror-fusion-node.test.js (the node kit: SketchStudio's ribbon Mirror, the objects by clicks, Enter, the line by a click, Enter; ours is mm, shown
+here in cm). Sketch: construction line x = 0 from (0,-1) to (0,5); line A (0,4)->(-3,4) horizontal, its start on the construction line, length dimension 3;
+line B (-3,4)->(-3,1) vertical, sharing A's end; circle (-1.5,2), diameter dimension 1 (ours: radius dimension 0.5). Mirror {A, B, circle} about the
+construction line.
+
+| item | Fusion | ours (task 585) | same? |
+|---|---|---|---|
+| new curves | Line (0,4)->(3,4), Line (3,4)->(3,1), Circle (1.5,2) r 0.5 | the same three | yes |
+| the copy's corner | shared (the chain stays connected) | ONE shared joint (our original corner is two joints + a coincident: the line tool's chain; a coincident cluster becomes one copy point) | yes |
+| the point ON the mirror line | its own copy point at (0,4), linked by symmetry, not merged | the same | yes |
+| new constraints | 4 symmetries: Pt(0,4)-Pt(0,4)', Pt(-3,4)-Pt(3,4), Pt(-3,1)-Pt(3,1), Circle-Circle' | the same 4 symmetric constraints (3 point form, 1 circle form) | yes |
+| copied | nothing else: no horizontal, vertical, coincident-to-line, no dimension (2 stay 2) | the same | yes |
+| points | 7 -> 11 (4 new) | 4 new (our total differs: the chain corner is two joints) | yes (new count) |
+| undo | one step | one step ('mirror'); redo identical | yes |
+| A 3 -> 4, diameter 1 -> 1.6 | copy (4,4), (4,1), r 0.8 | with the construction line held on x = 0: copy x 4, y 4.0008 / 0.9982, r 0.8 | x and r yes; y within 0.002 cm |
+| A 3 -> 4 with a FREE construction line | the line stayed | the line turns 3.0 degrees (to (-0.19,-1.00)-(0.13,5.00)), A's start goes to (0.080, 4.115); the copy stays its exact mirror | no (see below) |
+| arcs | not measured | the circle form (centre + equal radius) PLUS point links on both ends: the copy is the true mirror image; its sweep flips | to verify in Fusion |
+| the mirror line among the objects | not measured | refused ("the mirror line cannot be one of the objects to mirror") | to verify in Fusion |
+
+Divergences (reported, owner decides):
+- A FREE mirror line moves under a dimension edit: our edit's least-change solve (task 528) turns a free construction line, mirror or no mirror. Measured
+  (tests/harness lib sketch, mm): without the mirror, A 30 -> 40 moves the line to (1.040,-10.034)-(5.253,49.826) and A's start to (4.569, 40.104); with the
+  mirror, to (-1.905,-9.953)-(1.270,49.972), A's start (0.802, 41.146). Fusion kept the line. Held (vertical + start on the Y axis), A's height still drifts
+  by 0.008 mm (0.026 mm without the mirror): the same least-change spread.
+- Our circle dimension is a radius; Fusion's measured one is a diameter (the same driving, value halved).
+
+## Dimension tool: starting with a selection, reference notice (task 589)
+**Starting the Dimension tool with a selection (task 589; Fusion NOT measured, this follows the advisor's knowledge: with geometry selected, Sketch Dimension (D) takes the selection as its first pick, the label attached to the cursor).** Ours: a selected line = its length preview, a circle / arc = its RADIUS (the tool's click rule; Fusion's circle gives a diameter and a diameter dimension has no creation path in ours: divergence, unchanged), two joints = their distance, a line and a point = point-to-line distance, two lines = line-line distance (parallel) or the angle, one joint = a first pick waiting for the second. Three or more items, or a pair the tool cannot take (line + circle, two circles): the tool starts with no pick and the selection stays. To verify in Fusion: a selected circle's diameter, and what Fusion does with 3+ selected items.
+
+**A REFERENCE (driven) dimension is announced on placement, not on the pick (task 589; Fusion NOT measured, advisor's knowledge: Fusion says nothing when a line whose length is already determined is picked, and asks about a driven dimension when it is placed).** Ours: the line's length preview is still a reference while it follows the cursor (shown in parentheses like every placing label), but "Dimension added as reference" now shows when it is placed (click, Enter, release of a press-drag), once; a second pick (another line, a point, an axis) that turns it into another dimension shows nothing. Divergence kept: ours places it as a reference with a notice, Fusion asks first.

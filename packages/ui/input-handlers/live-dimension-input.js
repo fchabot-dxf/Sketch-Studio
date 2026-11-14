@@ -188,6 +188,9 @@ function validateWithSandbox(state, config) {
     let testConstraint = null;
     let originalValue = null;
     let originalDriven = null;
+    // Creating (Line/Rect): the distance from the line's start joint to the joint the pointer is locked on. TASK 589: both ends must be
+    // joints of the drawing; without one (no line being drawn, e.g. the Dimension tool's own pick in state.active) there is nothing to test.
+    let startId = null, endId = null;
 
     if (config.mode === 'edit') {
         testConstraint = config.constraint;
@@ -201,20 +204,28 @@ function validateWithSandbox(state, config) {
         if (!snap || !snap.isLocked || snap.type !== 'joint') {
             return { success: true, isDriven: false }; // No constraints to conflict with
         }
+        startId = state.active ? state.active.start : null;
+        endId = snap.targetId || snap.id;
+        if (!state.joints.has(startId) || !state.joints.has(endId)) {
+            return { success: true, isDriven: false }; // no line start (or no snapped joint): no distance to test
+        }
         testConstraint = {
             type: CONSTRAINT_TYPES.DISTANCE,
-            joints: [state.active.start, snap.targetId],
+            joints: [startId, endId],
             value: config.value,
             __temp: true
         };
         state.constraints.push(testConstraint);
     }
 
+    // 3 - 5. Solve, measure, and ALWAYS undo the test (TASK 589: a throw here once left the temporary constraint in the drawing, and
+    // nothing could be dragged after it): the test constraint out / its value back, the geometry restored. The error still propagates.
+    let error = 0;
+    try {
     // 3. Run Solver
     state.engine.solve(SolverConfig.ITERATIONS || 500);
 
     // 4. Measure Error
-    let error = 0;
     if (config.mode === 'edit') {
         // Evaluate error based on constraint type
         const c = testConstraint;
@@ -262,21 +273,22 @@ function validateWithSandbox(state, config) {
                 error = Math.abs(d - target);
             }
         }
-        
-        // Restore constraint props
-        testConstraint.value = originalValue;
-        testConstraint.isDriven = originalDriven;
     } else {
         // For new constraint (Line creation), simple distance check
-        const startJ = state.joints.get(state.active.start);
-        const endJ = state.joints.get(state.activeSnap.targetId || state.activeSnap.id);
-        const dist = getDist(startJ, endJ);
-        error = Math.abs(dist - config.value);
-        state.constraints.pop();
+        error = Math.abs(getDist(state.joints.get(startId), state.joints.get(endId)) - config.value);
     }
-
-    // 5. Restore Geometry
-    restoreSolverState(state.joints, state.shapes, savedPositions);
+    } finally {
+        if (config.mode === 'edit') {
+            // Restore constraint props
+            testConstraint.value = originalValue;
+            testConstraint.isDriven = originalDriven;
+        } else {
+            const idx = state.constraints.indexOf(testConstraint);
+            if (idx !== -1) state.constraints.splice(idx, 1);
+        }
+        // 5. Restore Geometry
+        restoreSolverState(state.joints, state.shapes, savedPositions);
+    }
 
     // 6. Verdict
     // Stricter threshold (0.1) to catch subtle distortions

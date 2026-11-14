@@ -16,6 +16,21 @@ import { symmetricImpossible } from './symmetric.js';
 let notify = () => {};
 export function setConstraintNotifier(fn) { notify = typeof fn === 'function' ? fn : () => {}; }
 
+// A distance that comes in as a REFERENCE because the sketch already determines it (createConstraint below): its reason and its notice.
+const EDGE_REFERENCE = 'edge already has a driving dimension — added as reference';
+const REDUNDANT_REFERENCE = 'redundant — already determined by existing dimensions/constraints';
+const REFERENCE_NOTICES = {
+    [EDGE_REFERENCE]: 'Dimension added as reference — this edge already has a driving dimension.',
+    [REDUNDANT_REFERENCE]: 'Dimension added as reference — already determined by the existing dimensions.',
+};
+// TASK 589: shows that notice for `c` (nothing when it is not such a reference). createConstraint shows it when the distance is created,
+// unless the caller passes { quietReference: true }: the dimension tool's line-length PREVIEW, which a second pick may still turn into
+// another dimension; the tool shows it when that preview is placed (Fusion asks about a driven dimension on placement, not on the pick).
+export function announceReference(c) {
+    const msg = c && REFERENCE_NOTICES[c.drivenReason];
+    if (msg) notify(msg, 'info', 2500);
+}
+
 // Structural constraint types — cannot be driven, must be rejected on conflict
 const STRUCTURAL_TYPES = new Set([
     CONSTRAINT_TYPES.COINCIDENT, CONSTRAINT_TYPES.HORIZONTAL, CONSTRAINT_TYPES.VERTICAL,
@@ -128,6 +143,7 @@ export class ConstraintManager {
             solveIterations: 500,
             source: 'unknown',
             skipVerify: false,
+            quietReference: false, // TASK 589: see announceReference
             ...options
         };
 
@@ -198,8 +214,8 @@ export class ConstraintManager {
             this._edgeHasDrivingDistance(state, normalized)) {
             normalized.isDriven = true;
             normalized.driven = true;
-            normalized.drivenReason = 'edge already has a driving dimension — added as reference';
-            notify('Dimension added as reference — this edge already has a driving dimension.', 'info', 2500);
+            normalized.drivenReason = EDGE_REFERENCE;
+            if (!opts.quietReference) announceReference(normalized);
             dbg.log('constraints', `[ConstraintManager] 2nd distance on a driven edge -> reference`);
         }
 
@@ -213,8 +229,8 @@ export class ConstraintManager {
             state.engine.isDistanceRedundant({ ...normalized, type })) {
             normalized.isDriven = true;
             normalized.driven = true;
-            normalized.drivenReason = 'redundant — already determined by existing dimensions/constraints';
-            notify('Dimension added as reference — already determined by the existing dimensions.', 'info', 2500);
+            normalized.drivenReason = REDUNDANT_REFERENCE;
+            if (!opts.quietReference) announceReference(normalized);
             dbg.log('constraints', `[ConstraintManager] rank-redundant distance -> reference`);
         }
 

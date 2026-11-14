@@ -46,6 +46,7 @@ function injectStyles(breakpoint) {
   .sk-drawer-close${bp} { display: block; position: absolute; top: 6px; right: 8px; z-index: 1; background: transparent;
     border: 0; font-size: 16px; line-height: 1; cursor: pointer; color: inherit; opacity: 0.7; padding: 4px; }
   .sk-drawer-close${bp}:hover { opacity: 1; }
+  @media (pointer: coarse) { .sk-drawer-close${bp} { min-width: 44px; min-height: 44px; top: 0; right: 0; } } /* TASK 608: a finger */
 }
 `;
   document.head.appendChild(s);

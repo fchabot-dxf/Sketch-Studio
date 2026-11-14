@@ -8,8 +8,9 @@
 // <header> (the element that holds the sidebar's button) once that button is in the page.
 // Size (TASK 602, owner "tabs can be minimal size"), declared once as the --sk-doctab* tokens below:
 //   a mouse (fine pointer): a 26 px row (25 px tabs + the 1 px line under them), 11 px text, an 18 px close x;
-//   a finger (coarse pointer, portrait or landscape): a 45 px row: every tab, close x and "+" is a real 44 px target (no enlarged hit areas reaching over the
-//   header or the ribbon), kept visually light (11 px text, a 6 px dot, a thin x on a transparent 44 px button).
+//   a finger (coarse pointer, portrait or landscape): a 31 px row (30 px tabs + its line; owner ruling TASK 608, relaxing the 44 px rule of TASK 562 for this strip): every tab,
+//   close x and "+" fills the whole row height and is 44 px wide (close x and "+" >= 24 x 24 px: WCAG 2.2 target size); no enlarged hit areas reaching over the
+//   header or the ribbon; kept visually light (11 px text, a 6 px dot, a thin x on a transparent button).
 // Tabs share the row like browser tabs: each is up to --sk-doctab-max wide (1 or 2 tabs show their whole name), they shrink evenly as more open, and
 // stop at --sk-doctab-min, after which the row scrolls sideways (the active tab is kept in view). A long name ends in an ellipsis; the tab's title holds
 // the whole name.
@@ -28,10 +29,10 @@ function injectStyles() {
   const s = document.createElement('style'); s.id = 'sk-doctabs-styles';
   s.textContent = `
 :root { --sk-doctabs-row: 26px; } /* TASK 605: the strip's whole row height (the 25 px tabs + the 1 px line), for a host whose views are placed absolutely under the header (Shaper) */
-@media (pointer: coarse) { :root { --sk-doctabs-row: 45px; } }
+@media (pointer: coarse) { :root { --sk-doctabs-row: 31px; } }
 .sk-doctabs { --sk-doctabs-h: 25px; --sk-doctab-inset: 3px; --sk-doctabs-gap: 2px; --sk-doctab-max: 240px; --sk-doctab-min: 72px; --sk-doctab-x: 18px;
   --sk-doctabs-font: 11px; --sk-doctab-dot: 6px; }
-@media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 44px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; } }
+@media (pointer: coarse) { .sk-doctabs { --sk-doctabs-h: 30px; --sk-doctab-inset: 0px; --sk-doctabs-gap: 4px; --sk-doctab-min: 104px; --sk-doctab-x: 44px; } }
 .sk-doctabs { display: flex; align-items: flex-end; gap: var(--sk-doctabs-gap); padding: 0 8px; box-sizing: border-box; flex: 0 0 auto;
   height: calc(var(--sk-doctabs-h) + 1px); background: var(--sk-doctabs-bg, var(--sk-header-sep, #e2e8f0)); border-bottom: 1px solid var(--sk-header-sep, #cbd5e1);
   color: var(--sk-header-fg, #334155); font: var(--sk-doctabs-font) system-ui, sans-serif; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }

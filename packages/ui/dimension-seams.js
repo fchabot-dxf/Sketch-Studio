@@ -14,6 +14,7 @@ import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js'
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
 import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
+import { projectDimLabel } from '#core/dim-label.js';
 import { replaceParameters, usersOf } from '#core/parameters.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
@@ -188,8 +189,8 @@ export function applyParameterChange(state, plan, label = 'change parameter', op
   return { ok: true };
 }
 
-// A dimension value dragged to a free spot: its label centre follows the pointer in X and Y (constraint.labelPos, world
-// units). Pure presentation: no solve. The first move past a few pixels is ONE undo step (the state saved before it).
+// Dragging a dimension label freely in X & Y projects onto its dimension line / arc / leader (`projectDimLabel`),
+// updating `offset` + `labelSlide` / `labelAngle` so the line, arrows, arc, or leader follow. One undo step per drag.
 export const DIM_LABEL_DRAG_THRESHOLD_PX = 4;
 export function dragDimensionLabel(state, drag, e, w) {
   if (!drag.started) {
@@ -197,7 +198,7 @@ export function dragDimensionLabel(state, drag, e, w) {
     state.saveState('move dimension label');
     drag.started = true;
   }
-  drag.constraint.labelPos = { x: w.x, y: w.y };
+  if (projectDimLabel(drag.constraint, w, state.joints, state.shapes)) delete drag.constraint.__pos;
 }
 
 // THE redundancy test for a dimension (owner ruling, task 516): is this dimension's quantity already DETERMINED by the other

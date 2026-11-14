@@ -37,7 +37,7 @@ export function roundDeep(v) {
 
 // ── constraints: identity ignores presentation ───────────────────────────────────────────────────
 // Constraint label / glyph placement: moves with the view of the drawing, not with its geometry. A step that changes only these is folded.
-export const PRESENTATION_KEYS = ['glyphPos', 'offset', '__visible', '__showGlyph'];
+export const PRESENTATION_KEYS = ['glyphPos', 'offset', 'labelSlide', 'labelAngle', '__visible', '__showGlyph'];
 const stripPresentation = (c) => { const o = {}; for (const k of Object.keys(c)) if (!PRESENTATION_KEYS.includes(k)) o[k] = c[k]; return o; };
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((q) => [q, x[q]])) : x));
 /** the identity of a constraint: its canonical JSON without the presentation keys */

@@ -34,10 +34,10 @@ export function radialLead(anchor, rect, minLen) {
   return seg(anchor, edge);
 }
 
-// A linear dimension: the dimension line runs start -> end. A text beyond one end EXTENDS the dimension line to the text; a
-// text off the line gets a thin leader from the nearest point of the (extended) line to the text edge.
+// A linear dimension: the dimension line runs start -> end. A label past one end EXTENDS the dimension line along (ax, ay)
+// to reach it (`underline`: plain text sits above the line so the extension runs under the full text width; boxed: stops at the box edge).
 // Returns { extension, leader }, each a segment {x1,y1,x2,y2} or null. The extension starts at the line's end it extends.
-export function linearLead(start, end, rect, minLen) {
+export function linearLead(start, end, rect, minLen, { underline = false } = {}) {
   const dx = end.x - start.x, dy = end.y - start.y;
   const len = Math.hypot(dx, dy);
   if (len < 1e-9) return { extension: null, leader: null };
@@ -46,8 +46,10 @@ export function linearLead(start, end, rect, minLen) {
   const half = Math.abs(rect.ux * ax + rect.uy * ay) * rect.hw + Math.abs(rect.vx * ax + rect.vy * ay) * rect.hh;
   const at = (s) => ({ x: start.x + ax * s, y: start.y + ay * s });
   let extension = null, lo = 0, hi = len;
-  if (t - half - len > minLen) { hi = t - half; extension = seg(end, at(hi)); }
-  else if (t + half < -minLen) { lo = t + half; extension = seg(start, at(lo)); }
+  const pastHi = underline ? t + half - len : t - half - len;
+  const pastLo = underline ? t - half : t + half;
+  if (pastHi > minLen) { hi = underline ? t + half : t - half; extension = seg(end, at(hi)); }
+  else if (pastLo < -minLen) { lo = underline ? t - half : t + half; extension = seg(start, at(lo)); }
   const anchor = at(Math.min(hi, Math.max(lo, t)));
   return { extension, leader: radialLead(anchor, rect, minLen) };
 }

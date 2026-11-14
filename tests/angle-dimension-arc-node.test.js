@@ -22,8 +22,8 @@ let app = await open({ host: 'sketchstudio', profile });
 try {
   const ARC_RE = /^M ([-\d.e]+) ([-\d.e]+) A ([-\d.e]+) [-\d.e]+ 0 ([01]) 1 ([-\d.e]+) ([-\d.e]+)$/;
   const arcs = () => [...app.svg.querySelectorAll('path')].map((p) => ARC_RE.exec(p.getAttribute('d') || '')).filter(Boolean);
-  // the angle dimension's arc as drawn: its two end points in WORLD units (the path is in world coordinates)
-  const arc = () => { const m = arcs().find((x) => Math.abs(+x[3] - RADIUS) < 1); return m && { sx: +m[1], sy: +m[2], large: +m[4], ex: +m[5], ey: +m[6] }; };
+  // the angle dimension's main sector arc as drawn: its two end points and radius in WORLD units
+  const arc = () => { const m = arcs()[0]; return m && { sx: +m[1], sy: +m[2], r: +m[3], large: +m[4], ex: +m[5], ey: +m[6] }; };
   const spanOf = (a) => { const d = (x) => Math.atan2(x.y - INT.y, x.x - INT.x) * 180 / Math.PI; return ((d({ x: a.ex, y: a.ey }) - d({ x: a.sx, y: a.sy })) % 360 + 360) % 360; };
   const centerOfLabel = () => labelBoxCenter(app);
   const labelTarget = (idx) => () => labelEl(app, idx);

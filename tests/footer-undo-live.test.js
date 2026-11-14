@@ -65,9 +65,9 @@ await (async () => {
       assert.strictEqual(await shapeCount(), n1, name + ': a real click on footer Redo brings it back');
       assert.strictEqual((await btn('btn-redo')).disabled, true, name + ': Redo disabled again');
       const fb = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
-        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
-      assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb.undo));
-      assert(fb.undo.l < fb.redo.l && fb.redo.l < fb.vw / 2, name + ': Undo, Redo at the left of the footer');
+        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
+      assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32 && fb.del && fb.del.w === 32 && fb.clr && fb.clr.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb));
+      assert(fb.undo.l < fb.redo.l && fb.redo.r <= fb.del.l && fb.del.r < fb.clr.l && fb.clr.l < fb.vw / 2, name + ': Undo, Redo, Delete, gap, Clear sketch at the left of the footer: ' + JSON.stringify([fb.redo, fb.del, fb.clr]));
       assert(fb.recenter && fb.recenter.r > fb.vw - 40 && fb.recenter.w === 32, name + ': Recenter at the right of the footer: ' + JSON.stringify(fb.recenter));
       assert(fb.fr.bottom <= fb.vh + 0.5 && fb.fr.bottom >= fb.vh - 1, name + ': the footer sits at the bottom of the screen: ' + JSON.stringify([fb.fr.bottom, fb.vh]));
       assert.strictEqual(fb.view, false, name + ': no VIEW readout'); assert(!/VIEW/i.test(fb.text), name + ': no VIEW text in the footer');
@@ -91,13 +91,13 @@ await (async () => {
         assert(!(await evalJs(`!!document.querySelector('header [aria-label="Sketches"]')`)), tag + 'no Sketches button in the header');
         const ft = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
           const cv = document.querySelector(${JSON.stringify(HOSTS[name].canvas)}).getBoundingClientRect(); const corner = document.querySelector('.sk-canvas-corner .sk-drawer-toggle'); const cb = corner && corner.getBoundingClientRect();
-          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), canvasH: cv.height,
+          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
-        for (const k of ['undo', 'redo', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
+        for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
         if (ft.construct) assert(ft.construct.w >= 55 && ft.construct.h >= 43.5 && ft.construct.w > ft.construct.h, tag + 'Construction is 56x44: ' + JSON.stringify(ft.construct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));
         assert.strictEqual(Math.round(ft.fr.bottom - ft.fr.top), 44, tag + 'footer bar is 44 px tall (no extra vertical padding)');
-        assert(ft.undo.r <= ft.redo.l + 0.5 && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo then Recenter fit the footer width');
+        assert(ft.undo.r <= ft.redo.l + 0.5 && ft.redo.r <= ft.del.l + 0.5 && ft.del.r < ft.clr.l && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo, Delete, gap, Clear sketch then Recenter fit the footer width: ' + JSON.stringify({ redo: ft.redo, del: ft.del, clr: ft.clr, recenter: ft.recenter }));
         const share = ft.canvasH / ft.vh;
         console.log(tag + 'canvas share ' + Math.round(share * 100) + ' %, footer ' + Math.round(ft.fr.bottom - ft.fr.top) + ' px');
         if (L.tag === 'landscape844' || L.tag === 'landscape780') assert(share >= 0.6, tag + 'the canvas keeps >= 60 % of the height: ' + share);

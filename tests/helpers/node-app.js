@@ -229,7 +229,7 @@ const HOSTS = {
     doc.body.insertBefore(header.el, doc.body.firstChild);
     modes = M.createModeRouter({ views: M.findViews(doc), onActiveChange: (id) => header.setActiveTab(id),
       getController: () => controller, ensureSketch, enter: { prepare: prepare.enter }, afterShow: () => history.refresh() });
-    (await import('#ui/app-footer.js')).mountAppFooter({ router: history }); // main.js: the footer (TASK 618)
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: history, view: () => (controller && modes.current() === 'design' ? { svg, state: controller.state } : null) }); // main.js: the footer (TASK 618/619)
     modes.showMode('design'); // the Design tab, open: ensureSketch, then the sketch loop starts
     await buffer.ready;
     const views = M.findViews(doc);
@@ -257,7 +257,7 @@ const HOSTS = {
     const router = stages.mountStages({ stagesHost: doc.getElementById('stages'), onActiveChange: (id) => { if (header) header.setActiveTab(id); }, bufferSeams: { store, doc, win } }); // the buffer's own seams, as for the other hosts
     header = createAppHeader({ tabs: stages.STAGES.map(({ id, label }) => ({ id, label })), activeTab: router.currentStageId(), onTabChange: (id) => router.showStage(id) });
     doc.body.insertBefore(header.el, doc.body.firstChild);
-    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history }); // main.js: the footer (TASK 618)
+    (await import('#ui/app-footer.js')).mountAppFooter({ router: router.history, view: router.designView }); // main.js: the footer (TASK 618/619)
     const svg = doc.getElementById('design-canvas');
     const controller = win.__sketch.controller; // the stage's own dev / test seam (sketch-stage.js): the sketcher it mounted
     const buffer = sketch.getDocBuffer();

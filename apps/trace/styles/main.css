@@ -21,6 +21,7 @@
   --sk-ribbon-bg: var(--panel); --sk-ribbon-sep: var(--line); --sk-ribbon-fg: var(--text);
   --sk-ribbon-hover: rgba(255,255,255,0.08); --sk-ribbon-grouplabel: #6b7280; --sk-ribbon-menu-bg: #1b2030;
   --sk-header-bg: var(--panel); --sk-header-fg: var(--text); --sk-header-sep: var(--line); --sk-header-hover: rgba(255,255,255,0.06);
+  --sk-footer-ink: var(--sk-header-fg);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

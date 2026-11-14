@@ -47,7 +47,7 @@ export const STYLE_TEMPLATES = [
           }),
     tokens: {
       '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
-      '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
+      '--sk-grid-minor': '#CDD3DA', '--sk-grid-major': '#A9B2BD',
       '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
       '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
       '--sk-construction': '#A9744F',

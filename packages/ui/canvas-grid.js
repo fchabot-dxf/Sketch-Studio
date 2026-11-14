@@ -14,7 +14,7 @@
 // 'lines' markup at the base level (fully opaque minors) is IDENTICAL to the <defs>/<rect> that used to live in apps/sketchstudio/index.html
 // (same ids, attribute order, values, and the same per-zoom stroke-width retune). Zoomed OUT the grid has levels of
 // detail (see gridLevel): the displayed minor spacing becomes GRID_SIZE × ratio^k (ratio = GRID_MAJOR_STEP/GRID_SIZE) so it
-// never packs the heavy lines tighter than MIN_MAJOR_PX on screen (the light lines fade out first, MIN_MINOR_PX), and the minor lines fade in so level changes don't pop. Zoomed in
+// never packs the light lines tighter than MIN_MINOR_PX on screen, and the minor lines fade in so level changes don't pop. Zoomed in
 // it never subdivides. Snapping keeps using GRID_SIZE (input-manager.js), not the displayed level. Colours: the stroke/fill ATTRIBUTES
 // keep SketchStudio's literal colours, and a tiny injected stylesheet re-routes them through --sk-grid-minor /
 // --sk-grid-major (var() is not valid in SVG presentation attributes, but CSS beats them), falling back to the very
@@ -29,13 +29,11 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export const GRID_MODES = ['lines', 'off', 'points'];
 export const normalizeGridMode = (m) => (GRID_MODES.includes(m) ? m : 'lines');
 
-// Level of detail: the displayed minor spacing is GRID_SIZE × (GRID_MAJOR_STEP/GRID_SIZE)^k, the smallest k whose
-// MAJOR on-screen spacing is >= MIN_MAJOR_PX. Minor lines fade 0 -> 1 as that spacing grows MIN_MINOR_PX -> (1+MINOR_FADE_SPAN)×.
+// Level of detail (gridLevel): the heavy spacing steps along the declared nice sequence (1-2-5 ...); the displayed level is the first whose
+// light lines are >= MIN_MINOR_PX apart on screen. Like Fusion, light lines stay clearly visible right down to that spacing: they fade in
+// over a short span only (full at (1+MINOR_FADE_SPAN) x MIN_MINOR_PX).
 export const MIN_MINOR_PX = 8;
-const MINOR_FADE_SPAN = 1;
-// The level is chosen by the HEAVY spacing: heavy lines stay until they are denser than MIN_MAJOR_PX (5 x MIN_MINOR_PX: still clearly
-// spaced; one level further the old heavies become the light lines at >= 8 px). The light lines fade out on their own spacing.
-export const MIN_MAJOR_PX = 40;
+const MINOR_FADE_SPAN = 0.05;
 
 const MINOR_COLOR = '#CBD5E1';
 const MAJOR_COLOR = '#93C5FD';
@@ -74,7 +72,7 @@ export const GRID_SPACING_BY_UNIT = {
 // inches with 10 divisions): 1, 2, 5 x 10^n. Binary inches (divisions 2/4/8/16, lodRatio 2): ... 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8 ...
 // The system follows the grid's lodRatio (the same declaration that picks the grid levels); a ratio not listed is decimal.
 export const NICE_LABEL_STEPS = {
-  decimal: { base: 10, mantissas: [1, 2, 5] },
+  decimal: { base: 10, mantissas: [1, 2, 5], subdivisions: [5, 10, 4, 2] },
   binary: { base: 2, mantissas: [1] },
 };
 const NICE_SYSTEM_BY_LOD_RATIO = { 2: 'binary' };
@@ -135,12 +133,18 @@ export function gridLevel({ GRID_SIZE, GRID_MAJOR_STEP, scale, lodRatio, unitSca
   if (divisions > 1 && Number.isFinite(pxPerUnit) && pxPerUnit > 0) {
     // Heavy spacings = the base major, then every step of the declared nice sequence above it (unitScale = world units per file unit).
     const nice = niceSteps(NICE_SYSTEM_BY_LOD_RATIO[lodRatio] || 'decimal').map((n) => n * unitScale);
-    const heavies = [GRID_MAJOR_STEP, ...nice.filter((n) => n > GRID_MAJOR_STEP * (1 + EPS))];
-    major = heavies.find((h) => h * pxPerUnit >= MIN_MAJOR_PX) ?? heavies[heavies.length - 1];
-    if (major !== GRID_MAJOR_STEP) {
-      // light lines: the largest nice step not coarser than major/divisions that divides major evenly
-      minor = nice.filter((n) => n <= major / divisions * (1 + EPS) && isWhole(major / n)).pop() ?? major / divisions;
+    const subdivisions = NICE_LABEL_STEPS[NICE_SYSTEM_BY_LOD_RATIO[lodRatio] || 'decimal'].subdivisions || [divisions];
+    const isNiceStep = (v) => nice.some((n) => Math.abs(n - v) <= EPS * v);
+    const levels = [{ major: GRID_MAJOR_STEP, minor: GRID_SIZE }];
+    for (const h of nice.filter((n) => n > GRID_MAJOR_STEP * (1 + EPS))) {
+      const prev = levels[levels.length - 1].minor;
+      // light = the first declared subdivision (decimal: 5, like Fusion; then 10, 4, 2) that is a nice step finer than the heavy and coarser
+      // than the previous level's light lines (so every heavy step shows up); else the largest nice step <= h/divisions dividing h evenly
+      const minor = subdivisions.map((d) => h / d).find((m) => isNiceStep(m) && m > prev * (1 + EPS))
+        ?? nice.filter((n) => n <= h / divisions * (1 + EPS) && isWhole(h / n)).pop() ?? h / divisions;
+      levels.push({ major: h, minor });
     }
+    ({ major, minor } = levels.find((l) => l.minor * pxPerUnit >= MIN_MINOR_PX) ?? levels[levels.length - 1]);
   }
   const minorPx = minor * pxPerUnit;
   const fade = Math.min(1, Math.max(0, (minorPx - MIN_MINOR_PX) / (MINOR_FADE_SPAN * MIN_MINOR_PX)));

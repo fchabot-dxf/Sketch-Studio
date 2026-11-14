@@ -57,10 +57,10 @@ const sp16 = gridSpacing('in', { ...S, INCH_GRID_DIVISIONS: 16 });
 const seq = [];
 for (const s of [0.07, 0.15, 0.3, 0.6, 1.2]) seq.push(gridLevel({ ...sp16, scale: (px) => px * s }).minor / IN);
 assert(seq.every((v, i) => i === 0 || near(v / seq[i - 1], 2) || near(v / seq[i - 1], 1)), 'halving/doubling only: ' + seq);
-// decimal: x10 steps
+// decimal: 1-2-5 steps
 const sp10 = gridSpacing('in', S);
 const l10 = gridLevel({ ...sp10, scale: (px) => px });
-assert(near(l10.major / IN, 2) && near(l10.minor / IN, 0.2), 'decimal inch at 1 px/mm: heavy 2 in, light 0.2 in');
+assert(near(l10.major / IN, 5) && near(l10.minor / IN, 1), 'decimal inch at 1 px/mm: heavy 5 in, light 1 in (0.2 in = 5 px is too dense)');
 // mm levels unchanged
 assert.strictEqual(gridLevel({ ...S, scale: (px) => px }).minor, 10);
 // switching the setting re-draws: different markup per divisions

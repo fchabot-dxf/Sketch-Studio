@@ -3,6 +3,10 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
 
+// Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
+// factory value was 1): a display look never changes what is exported.
+export const EXPORT_STROKE_WIDTH = 1;
+
 function getJointPos(state, jid) {
   const j = state.joints.get(jid);
   return j ? { x: j.x, y: j.y } : null;
@@ -82,7 +86,7 @@ export function buildSVG(state, opts = {}) {
   const emitPolygonFromCycle = (cycleKeys) => {
     const pts = cycleKeys.map(k => { const [x,y] = k.split(','); return { x: Number(x) * scale, y: Number(y) * scale }; });
     const pointsAttr = pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ');
-    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : (Number(SettingsManager.get('LINE_STROKE')) || 1);
+    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
     // Update bounds from polygon points
     for (const p of pts) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
     elems.push(`<polygon points="${pointsAttr}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
@@ -136,7 +140,7 @@ export function buildSVG(state, opts = {}) {
       const a = transform(a0); const b = transform(b0);
       minX = Math.min(minX, a.x, b.x); minY = Math.min(minY, a.y, b.y);
       maxX = Math.max(maxX, a.x, b.x); maxY = Math.max(maxY, a.y, b.y);
-      const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : (Number(SettingsManager.get('LINE_STROKE')) || 1);
+      const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
       elems.push(`<line x1="${formatNum(a.x, precision)}" y1="${formatNum(a.y, precision)}" x2="${formatNum(b.x, precision)}" y2="${formatNum(b.y, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
     } else if (s.type === 'arc') {
       const c0 = getJointPos(state, s.joints[0]);
@@ -159,7 +163,7 @@ export function buildSVG(state, opts = {}) {
       if (arcApprox) {
         const pts = sampleArcPoints(c0.x, c0.y, r0, startAngle, endAngle, sweep, arcSeg).map(p => transform(p));
         const pointsAttr = pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ');
-        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : (Number(SettingsManager.get('LINE_STROKE')) || 1);
+        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
         elems.push(`<polyline points="${pointsAttr}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
       } else {
         const startX = center.x + r * Math.cos(startAngle);
@@ -168,7 +172,7 @@ export function buildSVG(state, opts = {}) {
         const endY = center.y + r * Math.sin(endAngle);
         const la = largeArc ? 1 : 0;
         const sw = sweep ? 1 : 0;
-        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : (Number(SettingsManager.get('LINE_STROKE')) || 1);
+        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
         elems.push(`<path d="M ${formatNum(startX, precision)} ${formatNum(startY, precision)} A ${formatNum(r, precision)} ${formatNum(r, precision)} 0 ${la} ${sw} ${formatNum(endX, precision)} ${formatNum(endY, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
       }
     }

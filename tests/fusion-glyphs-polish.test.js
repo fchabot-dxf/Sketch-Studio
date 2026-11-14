@@ -6,6 +6,7 @@ global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem:
 global.document = { head: { appendChild() {} }, getElementById: () => null, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }) };
 
 const { draw } = await import('../packages/ui/svg-renderer.js');
+const { default: SettingsManager } = await import('../packages/core/settings-manager.js');
 const { applyStyleTemplate } = await import('../packages/ui/style-templates.js');
 const { CONSTRAINT_GLYPH, fusionGlyphMarkup } = await import('../packages/ui/fusion-glyphs.js');
 const { loadGlyphSheet, getGlyph } = await import('../packages/ui/glyph-sheet.js');
@@ -70,7 +71,7 @@ const p = placeDimText({ cx: 200, cy: 130, dirX: 1, dirY: 0, text: '200.0', font
 assert(p.bounds.y1 <= 127 + 1e-9 && p.bounds.x0 >= 100 && p.bounds.x1 <= 300, 'placeDimText: above, within span');
 
 // no glyph rectangle intersects a dimension label rectangle
-const ICON = 20; // GLYPH_SYMBOL_SIZE_PX default
+const ICON = SettingsManager.get('GLYPH_SYMBOL_SIZE_PX'); // the icon size drawn: Fusion's (applied above); was a literal 20, the old factory size
 const labelRects = [
   placeDimText({ cx: 200, cy: 130, dirX: 1, dirY: 0, text: hT.s, fontPx: hT.size, gap: 3 }).bounds,
   placeDimText({ cx: 330, cy: 150, dirX: 0, dirY: 1, text: vT.s, fontPx: vT.size, gap: 3 }).bounds,
@@ -86,6 +87,7 @@ for (const q of glyphCentres) {
 applyStyleTemplate('default');
 const d = render().html;
 assert(!/font-family/.test(d.match(/<text [^>]*>\d/g).join('')), 'Default dimension text has no font-family');
-assert(!/rotate\(/.test(d.match(/<text [^>]*>\d/g).join('')), 'Default dimension text is not rotated');
+// the default label is plain text (DIM_LABEL_BOX off, task 614): the vertical value is rotated along its line; a boxed label (on) stays upright
+assert.strictEqual(/rotate\(/.test(d.match(/<text [^>]*>\d/g).join('')), !SettingsManager.get('DIM_LABEL_BOX'), 'Default dimension text is rotated exactly when the default has no label box');
 
 console.log('fusion-glyphs-polish.test.js passed');

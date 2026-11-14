@@ -17,7 +17,7 @@ const svg = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, heigh
 const G = { x: 100, y: 100 };
 const mk = (type, extra = {}) => ({ type, joints: ['a', 'b'], glyphPos: { ...G }, ...extra });
 const stateOf = (c) => ({ constraints: [c], joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 200, y: 100 }]]), shapes: [], lastMouse: { x: 0, y: 0 }, hoveredJoint: null, hoveredConstraint: null, hoveredShape: null });
-const SIZE = 20, OUT = SettingsManager.get('GLYPH_OUTLINE_PX');
+const SIZE = SettingsManager.get('GLYPH_SYMBOL_SIZE_PX'), OUT = SettingsManager.get('GLYPH_OUTLINE_PX');
 
 const hit = (type, dx, dy, size = SIZE, touch = false) => glyphPickHit(type, dx, dy, size, OUT, touch);
 // pick extent along an axis through the centre (the farthest pointer, in 0.1 px steps, that still picks) and the picked area (0.25 px grid)
@@ -31,7 +31,7 @@ assert.ok(area('parallel') < 0.8 * OLD_DISC && area('perpendicular') < 0.8 * OLD
 assert.ok(area('parallel') < 0.8 * (2 * (SIZE / 2 + 2.5)) ** 2, 'and follow the strokes, not the bbox');
 assert.strictEqual(hit('fixed', 0, 0), false, 'a type with no glyph is never picked (nothing is drawn)');
 assert.ok(area('horizontal', SIZE, true) > area('horizontal') && extent('horizontal', 'y', SIZE, true) > extent('horizontal', 'y') + 3, 'touch margin is larger');
-assert.ok(Math.abs(extent('horizontal', 'x', 40) - extent('horizontal', 'x') - 10) < 0.3, 'Glyph Icon Size 40 widens the long reach by 10 px');
+assert.ok(Math.abs(extent('horizontal', 'x', SIZE + 20) - extent('horizontal', 'x') - 10) < 0.3, 'Glyph Icon Size +20 widens the long reach by 10 px');
 const hb = { hh: extent('horizontal', 'y') }, tb = { hh: extent('horizontal', 'y', SIZE, true) };
 
 // pointer 8 px off the long side (inside the old 13 px circle, outside the new box) is NOT the glyph; on the icon IS

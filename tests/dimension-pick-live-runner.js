@@ -24,6 +24,11 @@ await (async () => {
     const key = async (k, code, vk) => { await sendRealKey(send, k, code, vk); await sleep(150); };
     const tool = async (t) => { await evalJs(`document.getElementById('tool-${t}').click()`); await sleep(200); };
     const labels = () => evalJs(`[...document.querySelectorAll('${CANVAS} .dim-label')].map(e => e.textContent.trim())`);
+    // Under load the app renders a pointer event later than the fixed pause: wait (bounded only against a real hang) until the state read satisfies `ok`, then return the last read
+    // for the caller's own assert, which is unchanged. Time is never the condition.
+    const settled = async (read, ok) => { const end = Date.now() + 15000; let v = await read(); while (!ok(v) && Date.now() < end) { await sleep(50); v = await read(); } return v; };
+    const labelsCount = (n) => settled(labels, (ls) => ls.length === n);
+    const labelsEndAngle = (n) => settled(labels, (ls) => ls.length === n && ls[ls.length - 1].includes('°'));
     const lit = () => evalJs(`document.querySelectorAll('[data-ref-axis]').length`);
     const toScreen = (wx, wy) => evalJs(`(() => { const s = document.querySelector('${CANVAS}'); const p = s.createSVGPoint(); p.x = ${wx}; p.y = ${wy}; const q = p.matrixTransform(s.getScreenCTM()); return { x: Math.round(q.x), y: Math.round(q.y) }; })()`);
     const shot = async (name, clip) => {
@@ -47,21 +52,23 @@ await (async () => {
     const dimensionBox = () => waitFor(`(() => { const i = document.getElementById('dimInput'); return !!i && !i.classList.contains('hidden'); })()`, 'the dimension box', 8000);
     const accept = async () => { try { await dimensionBox(); } catch (err) { await shot('FAIL.png', { x: o.x - 100, y: o.y - 400, w: 800, h: 600 }); throw new Error(err.message + ' labels ' + JSON.stringify(await labels())); } await key('Enter', 'Enter', 13); await sleep(400); };
     const startLabels = (await labels()).length;
-    const newest = async (n) => { const ls = await labels(); assert.strictEqual(ls.length, startLabels + n, `label count after ${n} dimensions: ${JSON.stringify(ls)}`); return ls[ls.length - 1]; };
+    const newest = async (n) => { const ls = await labelsCount(startLabels + n); assert.strictEqual(ls.length, startLabels + n, `label count after ${n} dimensions: ${JSON.stringify(ls)}`); return ls[ls.length - 1]; };
 
     // 1. line + X axis (crossing): preview after ONE pick (the length), then after TWO picks (the angle to the axis), a click on empty space places it
     await tool('dim');
     await click(mid(L1).x, mid(L1).y);
     await move(P(300, 90).x, P(300, 90).y);
-    assert.strictEqual((await labels()).length, startLabels + 1, 'one pick: ONE preview label (the length) follows the cursor');
-    assert(!(await labels()).slice(-1)[0].includes('°'), 'one pick: the preview is the length, not an angle: ' + JSON.stringify(await labels()));
+    const l1 = await labelsCount(startLabels + 1);
+    assert.strictEqual(l1.length, startLabels + 1, 'one pick: ONE preview label (the length) follows the cursor');
+    assert(!l1.slice(-1)[0].includes('°'), 'one pick: the preview is the length, not an angle: ' + JSON.stringify(l1));
     await shot('pick1-line-length-preview.png', { x: o.x + 100, y: o.y - 220, w: 460, h: 340 });
     await move(P(520, 2).x, P(520, 2).y);
-    assert.strictEqual(await lit(), 1, 'the X axis lights up while a line previews and the pointer is on it');
+    assert.strictEqual(await settled(lit, (n) => n === 1), 1, 'the X axis lights up while a line previews and the pointer is on it');
     await click(P(520, 2).x, P(520, 2).y);
     await move(P(450, 110).x, P(450, 110).y); await move(P(452, 112).x, P(452, 112).y);
-    assert.strictEqual((await labels()).length, startLabels + 1, 'two picks: still ONE preview label (the length preview was replaced)');
-    assert((await labels()).slice(-1)[0].includes('°'), 'two picks: the preview is now the ANGLE to the axis: ' + JSON.stringify(await labels()));
+    const l2 = await labelsEndAngle(startLabels + 1);
+    assert.strictEqual(l2.length, startLabels + 1, 'two picks: still ONE preview label (the length preview was replaced)');
+    assert(l2.slice(-1)[0].includes('°'), 'two picks: the preview is now the ANGLE to the axis: ' + JSON.stringify(l2));
     await shot('pick2-line-axis-angle-preview.png', { x: o.x + 100, y: o.y - 220, w: 520, h: 360 });
     await click(P(452, 112).x, P(452, 112).y); await accept();
     assert((await newest(1)).includes('°'), 'placed: an angle label');
@@ -85,7 +92,7 @@ await (async () => {
     await click(mid(L1).x, mid(L1).y);
     await click(L3[0].x, L3[0].y);
     await shot('pick2-line-point-preview.png', { x: o.x, y: o.y - 340, w: 520, h: 360 });
-    assert.strictEqual((await labels()).length, startLabels + 4, 'line + point: still ONE preview label (the length preview was replaced)');
+    assert.strictEqual((await labelsCount(startLabels + 4)).length, startLabels + 4, 'line + point: still ONE preview label (the length preview was replaced)');
     await move(P(40, -180).x, P(40, -180).y); await move(P(42, -181).x, P(42, -181).y);
     await click(P(42, -181).x, P(42, -181).y); await accept();
     const pl = await newest(4);
@@ -94,14 +101,15 @@ await (async () => {
     // 5. Esc after one pick leaves nothing (and no preview)
     await tool('dim');
     await click(mid(L1).x, mid(L1).y); await move(P(300, 60).x, P(300, 60).y);
-    assert.strictEqual((await labels()).length, startLabels + 5, 'one pick: a preview label');
+    assert.strictEqual((await labelsCount(startLabels + 5)).length, startLabels + 5, 'one pick: a preview label');
     await key('Escape', 'Escape', 27);
-    assert.strictEqual((await labels()).length, startLabels + 4, 'Esc: the preview is gone, nothing was placed: ' + JSON.stringify(await labels()));
+    const lEsc = await labelsCount(startLabels + 4);
+    assert.strictEqual(lEsc.length, startLabels + 4, 'Esc: the preview is gone, nothing was placed: ' + JSON.stringify(lEsc));
     // ... and a first point picked, then Esc, is forgotten: the next line click starts that LINE's length
     await tool('dim');
     await click(L3[0].x, L3[0].y); await key('Escape', 'Escape', 27); await tool('dim');
     await click(mid(L2).x, mid(L2).y);
-    assert.strictEqual((await labels()).length, startLabels + 5, 'after Esc the first pick starts afresh (a line length preview)');
+    assert.strictEqual((await labelsCount(startLabels + 5)).length, startLabels + 5, 'after Esc the first pick starts afresh (a line length preview)');
     await key('Escape', 'Escape', 27);
     console.log(`dimension-pick-live ${HOST}: ok ${JSON.stringify(await labels())}`);
   } finally {

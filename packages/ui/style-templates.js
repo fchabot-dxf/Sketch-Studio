@@ -28,7 +28,7 @@ const factory = (overrides = {}) => {
 };
 
 export const STYLE_TEMPLATES = [
-  // Exactly today's look: the factory values.
+  // The factory values (task 614: the owner's look). No tokens: the canvas colours are the CSS --sk-* defaults (sketcher.css), which a host may theme.
   { id: 'default', name: 'Default', settings: factory() },
 
   // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
@@ -67,6 +67,8 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 2.5, GLOW_WIDTH_PX: 10,
       GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
+      // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
+      HOVER_FEEDBACK_MULT: 3, GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af', FIXED_JOINT_FILL: 'white',
     }),
   },
 
@@ -78,6 +80,8 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2, GLOW_WIDTH_PX: 28,
       GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56,
       DASH_LENGTH_PX: 14, DASH_GAP_PX: 8,
+      // the keys it never set, pinned (task 614: a change to the Default look must not restyle Presentation)
+      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af', FIXED_JOINT_FILL: 'white',
     }),
   },
 ];

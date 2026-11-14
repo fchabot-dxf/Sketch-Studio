@@ -14,7 +14,7 @@ const SVG = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 
 await (async () => {
   const cdp = await launchBrowser({ tag: '609', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
-  const { port, send, evalJs, waitFor, navigate } = cdp;
+  const { port, send, evalJs, waitFor, navigate, flushAutosave } = cdp;
   try {
     const url = (h) => `http://127.0.0.1:${port}/apps/${h}/index.html`;
     const mouse = async (type, x, y, buttons) => send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons: buttons || 0, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -26,31 +26,32 @@ await (async () => {
     const clickEl = async (sel, i = 0) => { const c = await centre(sel, i); await click(c.x, c.y); };
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
     const dots = () => evalJs(`document.querySelectorAll('.sk-doctab-dot').length`);
-    const newTab = async (n) => { await clickEl('.sk-doctab-new'); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === ${n}`, 'tab ' + n); await sleep(400); };
+    // The strip re-renders whenever a tab's save dot changes and ignores clicks while its own action runs: let the autosave finish first, so the press and the release land on the same button.
+    const newTab = async (n) => { await flushAutosave(); await clickEl('.sk-doctab-new'); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === ${n} && [...document.querySelectorAll('.sk-doctab')].findIndex((e) => e.classList.contains('active')) === ${n - 1}`, 'tab ' + n + ' (made and active)'); };
 
     // ---- A. Shaper -----------------------------------------------------------------------------------------------------------------------
     {
       await navigate(url('shaper'), 10000);
       await waitFor(`!!document.querySelector('.sk-doctab-name')`, 'the strip');
       const mode = (m) => evalJs(`document.querySelector('[data-mode="${m}"]').click()`);
-      await mode('vcarve'); await sleep(700);
+      await mode('vcarve'); await waitFor(`!!document.getElementById('vcarve-maxdepth') && !document.getElementById('vcarve-maxdepth').disabled`, 'the Vcarve tab is mounted');
       assert.strictEqual(await evalJs(`document.getElementById('vcarve-maxdepth').disabled`), false, 'the Vcarve tab is mounted');
-      await mode('design'); await sleep(2200); // past the buffer's 1.5 s poll
+      await mode('design'); await flushAutosave(); // the buffer's own save path, not a sleep past its 1.5 s poll
       assert.strictEqual(await dots(), 0, 'shaper: entering and leaving Vcarve in an Untitled leaves no not-saved dot');
-      await newTab(2); await mode('vcarve'); await sleep(2200);
+      await newTab(2); await mode('vcarve'); await flushAutosave();
       assert.strictEqual(await dots(), 0, 'shaper: nor in a second Untitled, with the Vcarve tab still showing');
-      await mode('design'); await sleep(300);
-      await clickEl('.sk-doctab-x', 1); await sleep(600);
+      await mode('design'); await waitFor(`!document.getElementById('vcarve-maxdepth') || document.getElementById('vcarve-maxdepth').offsetParent === null`, 'the Design tab shows');
+      await clickEl('.sk-doctab-x', 1); await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1`, 'the second Untitled closed');
       assert(!/This design is not saved/.test(await evalJs('document.body.innerText')), 'shaper: closing the untouched Untitled asks nothing');
       assert.deepStrictEqual(await names(), ['Untitled'], 'shaper: and it closed');
       // set a Vcarve value: the dot, and closing asks
-      await mode('vcarve'); await sleep(500);
+      await mode('vcarve'); await waitFor(`!!document.getElementById('vcarve-maxdepth') && !document.getElementById('vcarve-maxdepth').disabled`, 'the Vcarve tab is mounted');
       await evalJs(`(() => { const i = document.getElementById('vcarve-maxdepth'); i.value = '4 mm'; i.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       await waitFor(`document.querySelectorAll('.sk-doctab-dot').length === 1`, 'shaper: setting a Vcarve value marks the Untitled');
-      await newTab(2); await clickEl('.sk-doctab-main', 0); await sleep(500);
+      await newTab(2); await clickEl('.sk-doctab-main', 0); await waitFor(`document.querySelector('.sk-doctab.active') === document.querySelectorAll('.sk-doctab')[0]`, 'the first tab is active again');
       await clickEl('.sk-doctab-x', 0);
       await waitFor(`/This design is not saved/.test(document.body.innerText)`, 'shaper: closing the Untitled with a Vcarve value asks THE question');
-      await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
+      await sendRealKey(send, 'Escape', 'Escape', 27); await waitFor(`!/This design is not saved/.test(document.body.innerText)`, 'the question is dismissed');
       console.log('shaper: untouched Vcarve = no dot, no question; a Vcarve value = dot + question');
     }
 
@@ -70,20 +71,19 @@ await (async () => {
     const state = () => evalJs(`({ w: document.getElementById('original-canvas').width, traced: !!document.querySelector('#svg-output svg'), width: document.getElementById('global-width-val').value, alpha: (() => { const c = document.getElementById('threshold-overlay'); return c.width ? c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] : -1; })() })`);
 
     // ---- B. photo, mask, scale come back from the compressed file ------------------------------------------------------------------------------
-    await tab('trace'); await sleep(300);
+    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
     await loadPhoto(1600, 1200, 'big');
     await waitFor(`document.getElementById('threshold-overlay').width === 1600`, 'overlay sized');
-    await sleep(500);
+    await waitFor(`(() => { const c = document.getElementById('threshold-overlay'); return c.width > 0 && c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] > 0; })()`, 'the traced block shows in the threshold overlay');
     const alphaBlack = await overlayAlpha();
     assert(alphaBlack > 0, 'the block shows as traced black in the threshold overlay before masking: ' + alphaBlack);
     await clickEl('.tr-mask-btn[data-tool="exclude"]');
     const c = await centre('#threshold-overlay');
     await mouse('mouseMoved', c.x - 30, c.y); await mouse('mousePressed', c.x - 30, c.y, 1); await mouse('mouseMoved', c.x, c.y, 1); await mouse('mouseMoved', c.x + 30, c.y, 1); await mouse('mouseReleased', c.x + 30, c.y, 0);
-    await sleep(600);
+    await waitFor(`(() => { const c = document.getElementById('threshold-overlay'); return c.width > 0 && c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] === 0; })()`, 'the exclude brush cleared the block centre');
     assert.strictEqual(await overlayAlpha(), 0, 'the exclude brush clears the block centre in the overlay');
     await evalJs(`(() => { const i = document.getElementById('global-width-val'); i.value = '120'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-    await sleep(900);
-    await newTab(2);
+    await newTab(2); // flushes the autosave first, so the scale typed above is stored
     assert.strictEqual((await state()).w, 0, 'trace: the new tab shows no photo');
     await loadPhoto(800, 600, 'small');
     const tabCentre = await centre('.sk-doctab-main', 0);
@@ -91,7 +91,7 @@ await (async () => {
     await mouse('mouseMoved', tabCentre.x, tabCentre.y); await mouse('mousePressed', tabCentre.x, tabCentre.y, 1); await mouse('mouseReleased', tabCentre.x, tabCentre.y, 0);
     await waitFor(`document.getElementById('original-canvas').width === 1600 && document.getElementById('threshold-overlay').width === 1600`, 'the first tab photo is decoded again', 30000);
     const ms = Date.now() - t0;
-    await sleep(400);
+    await waitFor(`document.getElementById('global-width-val').value === '120' && !!document.querySelector('#svg-output svg')`, 'the first tab scale and trace are back');
     const back = await state();
     assert(back.w === 1600 && back.traced && back.width === '120', "trace: the first tab's photo, trace and scale are back: " + JSON.stringify(back));
     assert.strictEqual(back.alpha, 0, 'trace: and its mask (the excluded block centre) is back');
@@ -114,9 +114,9 @@ await (async () => {
     await newTab(3);
     await importViaMenu(cdp, SVG);
     await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === 10`, 'the import is drawn in Edit');
-    await tab('trace'); await sleep(400);
+    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
     await newTab(4);
-    await tab('trace'); await sleep(300);
+    await tab('trace'); await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'trace'`, 'the Trace tab shows');
     assert.strictEqual(await evalJs(`document.querySelector('.tr-tab.active').dataset.tab`), 'trace', 'in the Trace tab');
     await clickEl('.sk-doctab-main', 2);
     await waitFor(`document.querySelector('.tr-tab.active').dataset.tab === 'edit'`, 'the drawing-only design opens in Edit');

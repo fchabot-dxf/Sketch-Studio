@@ -517,7 +517,9 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     },
     async rename(id, name) {
       const n = cleanName(name);
-      const d = await adapter.updateDesign(id, (rec) => (rec ? { ...rec, name: n, updatedAt: now() } : null));
+      id = resolveMoved(id);
+      const run = () => adapter.updateDesign(id, (rec) => (rec ? { ...rec, name: n, updatedAt: now() } : null));
+      const d = await (isRemote(id) ? withLock(id, run) : run()); // never overlaps an autosave write of the same Drive file
       if (!d) throw gone('design');
       await adoptRemote(d);
       await touchProject(d.projectId, d.updatedAt);
@@ -658,7 +660,7 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
     status(id) {
       id = resolveMoved(id);
       const notice = (notices.get(id || '') || notices.get('') || {}).text || null; // a one-off explanation (conflicted copy, re-created design)
-      if (id && isRemote(id)) return { where: 'drive', ...writer.status(id), notice };
+      if (id && isRemote(id)) return { where: 'drive', ...writer.status(id), projectId: (headers.get(id) || {}).projectId || null, notice };
       return { where: 'device', state: 'saved', at: null, reason: id ? null : transientReason, notice };
     },
     /** fn(id) runs when the Drive copy of design `id` was changed elsewhere and the local edit was kept as a conflicted copy: the buffer

@@ -9,10 +9,8 @@ import { TOOL_MODES, DRAG_TYPES, DRAG_UNDO_LABELS, DRAG_SHAPE_UNDO_LABELS, DRAG_
 import { findCoincidentCluster, hitJointAtScreen } from '#ui/snap-detection.js';
 import { addConstraint } from '#core/constraints.js';
 import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
-import { perpendicularDistance, getDist, projectPointOnLine, getLineIntersection } from '#core/geometry.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#ui/dimension-seams.js';
-import { angleVertex, linearDimFrame, linearPointToParams, resolveDimEndpoints } from '#core/dim-label.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -21,7 +19,6 @@ import { BODY_POINTS } from '#core/solver/definitions.js';
 import { isWithinMagnet } from '#ui/snap-magnet.js';
 import { INFERENCE_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { placeRadiusLabel } from '#ui/input-handlers/dimension-tool.js'; // TASK 448: the one radius-label placement writer
 import { releaseDragTargets } from '#ui/sketch-state.js'; // TASK 575: the one release of a drag's solver targets
 
 // Local state for selection tools
@@ -196,7 +193,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 return true;
             }
 
-            // The value drags freely in X and Y (labelPos); the blue handle (below) moves the dimension line
+            // The value drags freely in X and Y (offset + slide/angle)
             svg.setPointerCapture(e.pointerId);
             state.drag = {
                 type: DRAG_TYPES.DIMENSION,
@@ -205,23 +202,6 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
                 initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
                 startWorld: screenToWorld(svg, e.clientX, e.clientY),
                 startClient: { x: e.clientX, y: e.clientY },
-                pointerId: e.pointerId
-            };
-            return true;
-        }
-    }
-
-    // The blue dot on a selected dimension moves the dimension LINE (its offset)
-    const dimHandle = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-offset-handle') : null;
-    if (dimHandle) {
-        const constraint = state.constraints[parseInt(dimHandle.dataset.constraintIdx)];
-        if (constraint) {
-            svg.setPointerCapture(e.pointerId);
-            state.drag = {
-                type: DRAG_TYPES.DIMENSION,
-                constraint: constraint,
-                initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
-                startWorld: screenToWorld(svg, e.clientX, e.clientY),
                 pointerId: e.pointerId
             };
             return true;
@@ -589,26 +569,10 @@ export function handleSelectionPointerMove(e, svg, state) {
 
     if (!state.drag) return false;
 
-    // 1. Dragging a Dimension: the value moves freely (labelPos); the offset handle moves the dimension line
+    // 1. Dragging a Dimension: the label moves offset + slide/angle
     if (state.drag.type === DRAG_TYPES.DIMENSION) {
         const wpt = screenToWorld(svg, e.clientX, e.clientY);
-        const c = state.drag.constraint;
-        if (state.drag.mode === 'label') {
-            dragDimensionLabel(state, state.drag, e, wpt);
-            return true;
-        }
-        // If this is a radial (circle) dimension, compute radial offset from center
-        if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-            const int = angleVertex(c, state.joints, state.shapes);
-            if (int) c.offset = getDist(int, wpt);
-            return true;
-        } else if (c && c.isRadius) {
-            const { j1: center } = resolveDimEndpoints(c, state.joints, state.shapes);
-            if (center) placeRadiusLabel(c, center, wpt);
-        } else {
-            const { j1, j2 } = resolveDimEndpoints(c, state.joints, state.shapes);
-            if (j1 && j2) c.offset = linearPointToParams(linearDimFrame(c, j1, j2), wpt).offset;
-        }
+        dragDimensionLabel(state, state.drag, e, wpt);
         return true;
     }
 

@@ -400,9 +400,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
   // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
   // goes just above/beside the line, reading along it; a leader label (dirX null: radius/angle) stays centred on its point.
-  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false) => {
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb') => {
     const fontPx = scale(11);
-    const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${DIM_TEXT_ATTRS}`;
+    const textAttrs = DIM_LABEL_BOX ? DIM_TEXT_ATTRS : `style="fill:${skv(textColor)}"`;
+    const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${textAttrs}`;
     if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)), rect: axisRect(cx, cy, boxW, scale(18)) };
     if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
     const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX) });
@@ -414,9 +415,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // a leader to the text. Both stay out of the markup when the value sits where it normally does.
   const leadLines = (lead, strokeColor, visualOpacity) => [lead.extension, lead.leader].filter(Boolean).map(s =>
     `<line class="dim-lead" x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1)}" stroke-opacity="${visualOpacity}"/>`);
-
-  // The blue dot on a selected dimension that moves the dimension LINE (its offset); the value itself drags freely.
-  const dimHandle = (cIdx, x, y) => `<circle class="dim-offset-handle" data-constraint-idx="${cIdx}" cx="${x}" cy="${y}" r="${scale(4)}" style="cursor:move; fill:${skv('#2563eb')}; stroke:${skv('white')}" stroke-width="${scale(1)}"/>`;
 
   // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
   const dimLabelBounds = [];
@@ -2392,18 +2390,15 @@ switch(c.type){
           const labelH = scale(18);
           const labelRx = scale(2);
           
+          const isHovered = highlight.kind === 'constraint' && highlight.id === c;
           const isSelected = selectedConstraints && selectedConstraints.has(c);
-          const labelStrokeColor = isSelected ? '#1e40af' : '#2563eb';
-          const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
-
-          if (isSelected) {
-            out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
-          }
+          const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
+          const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text ${placeDimLabel(labelX, labelY, null, null, displayVal).attrs}>${displayVal}</text>
+            <text ${placeDimLabel(labelX, labelY, null, null, displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2445,15 +2440,12 @@ switch(c.type){
           const labelH = scale(18);
           const labelRx = scale(2);
           
+          const isHovered = highlight.kind === 'constraint' && highlight.id === c;
           const isSelected = selectedConstraints && selectedConstraints.has(c);
-          const labelStrokeColor = isSelected ? '#1e40af' : '#2563eb';
-          const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
+          const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
+          const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
 
-          if (isSelected) {
-            out.push(`<rect x="${annotX - labelW/2}" y="${annotY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
-          }
-
-          const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred);
+          const placed = placeDimLabel(annotX, annotY, adx, ady, displayVal, undefined, centred, labelStrokeColor);
           out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
@@ -2464,7 +2456,6 @@ switch(c.type){
           try{ c.glyphPos = { x: annotX, y: annotY }; }catch(_){ }
           if (!c.__editing) {
             out.push(labelHtml);
-            if (isSelected && canEdit) out.push(dimHandle(cIdx, dimLineStart.x + (dimLineEnd.x - dimLineStart.x) * 0.2, dimLineStart.y + (dimLineEnd.y - dimLineStart.y) * 0.2));
           }
         }
       }
@@ -2550,15 +2541,12 @@ switch(c.type){
             const labelH = scale(18);
             const labelRx = scale(2);
             
+            const isHovered = highlight.kind === 'constraint' && highlight.id === c;
             const isSelected = selectedConstraints && selectedConstraints.has(c);
-            const labelStrokeColor = isSelected ? '#1e40af' : '#2563eb';
-            const labelStrokeWidth = isSelected ? scale(2.5) : scale(1.5);
+            const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
+            const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
 
-            const placedAngle = placeDimLabel(labelX, labelY, null, null, displayVal);
-
-            if (isSelected) {
-                out.push(`<rect x="${labelX - labelW/2}" y="${labelY - labelH/2 - scale(1)}" width="${labelW}" height="${labelH}" fill="none" style="stroke:${skv(labelStrokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28" rx="${labelRx}"/>`);
-            }
+            const placedAngle = placeDimLabel(labelX, labelY, null, null, displayVal, undefined, false, labelStrokeColor);
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
             const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
@@ -2570,7 +2558,6 @@ switch(c.type){
             try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
             if (!c.__editing) {
               out.push(labelHtml);
-              if (isSelected && canEdit) out.push(dimHandle(cIdx, sx, sy));
             }
           }
         }

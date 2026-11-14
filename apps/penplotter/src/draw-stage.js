@@ -60,7 +60,7 @@ export function mountDrawStage(view, ctx) {
   // dormant in interaction.js — retired fully in UNIFY-7b.
   installCanvasHandlers();
   installWheelZoom();                     // UNIFY-6: wheel-zoom the SHARED view on the plotter canvas
-  installKeyboard();
+  installKeyboard(ctx.isActive);
   installHistory(() => renderArt(), ctx.isActive, ctx.history); // keys act only on the stages history.js owns (router closure, main.js)
   // S3: the Pens palette is installed by toolpath-stage now (it was hidden in this drawHost).
 

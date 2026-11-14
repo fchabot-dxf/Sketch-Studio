@@ -9,6 +9,7 @@
 import { createEngine } from '#core/constraint-solver.js';
 import { ConstraintManager, setConstraintNotifier } from '#core/constraint-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
+import { showNotification } from '#ui/notification-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sketch-model.js'; // SKETCH-1a/2b: container + visibility
 import { draw } from '#ui/svg-renderer.js';
@@ -80,7 +81,7 @@ export function mountSketch(svgEl, opts = {}) {
   // view isn't driven yet (no pan/zoom UI); the svg's own viewBox maps world→screen.
   const view = { x: 0, y: 0, w: 120, h: 90 };
   const state = createSketchState(engine, view);
-  setConstraintNotifier(() => {}); // host has no toast surface yet
+  setConstraintNotifier(showNotification);
 
   // SHARED-TOUCH-ACTION-FIX: this canvas element already gets a COMPLETE JS-driven touch-gesture
   // system below (setupInput → select/drag + two-finger pinch-zoom) — touch-action:none hands 100%

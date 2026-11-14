@@ -124,6 +124,10 @@ const NUMERIC_INPUT_CSS = `
     color: #888;
     font-weight: bold;
 }
+/* TASK 597: a creation box beside the mouse cursor lets the pointer through (it sits 15 px from the cursor, and a quick move toward it landed ON the box, so the click never reached the canvas); typing goes to the focused field, Tab switches. A finger taps the box to focus it. */
+@media (pointer: fine) {
+    .sk-live-box { pointer-events: none; }
+}
 /* TASK 596: a finger. The two-field box (rect W x H, polygon size x sides) has fields >= 44 px tall and a 16 px font (no iOS zoom). A mouse keeps today's look. */
 @media (pointer: coarse) {
     .sk-dual-input input { width: 72px; min-height: 44px; font-size: 16px; }
@@ -304,6 +308,7 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
 
     // Position
     uiState.singleInput.style.transform = '';
+    uiState.singleInput.classList.add('sk-live-box');
     showNumericInputEl(uiState.singleInput);
     placeLiveBox(uiState.singleInput, x, y);
     
@@ -333,6 +338,7 @@ export function showDualInput(x, y, w, h, opts = {}) {
     uiState.dualInputH.placeholder = labels[1];
     uiState.dualSep.innerText = opts.separator || '×';
 
+    uiState.dualContainer.classList.add('sk-live-box');
     showNumericInputEl(uiState.dualContainer);
     placeLiveBox(uiState.dualContainer, x, y);
 
@@ -646,10 +652,11 @@ function resetState() {
     uiState.field = null;
     
     if (uiState.singleInput) {
+        uiState.singleInput.classList.remove('sk-live-box');
         if (uiState.singleInput.style) uiState.singleInput.style.transform = '';
         hideNumericInputEl(uiState.singleInput);
     }
-    if (uiState.dualContainer) hideNumericInputEl(uiState.dualContainer);
+    if (uiState.dualContainer) { uiState.dualContainer.classList.remove('sk-live-box'); hideNumericInputEl(uiState.dualContainer); }
     if (uiState.rafId) { cancelAnimationFrame(uiState.rafId); uiState.rafId = null; }
 }
 

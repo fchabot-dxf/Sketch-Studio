@@ -14624,3 +14624,13 @@ Task 604: save the current style as a named user preset (Style panel, every host
 - Tests: NEW tests/penplotter-design-panel-touch-live.test.js, tests/parameters-window-clamp-live.test.js, tests/trace-ribbon-colour-live.test.js.
 - Behaviour changes: (1) Pen Plotter panel controls 44 px on touch, panel scrolls; (2) every drawer's close button 44 px on touch; (3) Parameters window / any pop-up dock is clamped whole into the viewport, shrunk if larger, re-clamped on resize while open; (4) Trace ribbon is dark with light icons; (5) phone tab strip 31 px instead of 45.
 - Evidence (local): .evidence/608/{before,after}-{A-penplotter-panel-780x360,B-parameters-700,C-trace-ribbon,D-strip-390}.png
+
+## TURN 612
+Success / info notices showed as red error toasts (owner phone screenshot: 'Saved style preset "Fusion2".' red with the warning sign). Cause: style-panel's notify passed no level (and swallowed a throw) and showNotification defaulted to 'error'.
+- packages/ui/style-panel.js: notify(msg, level) forwards the level; 'Saved style preset', 'Deleted style preset', 'Reset to factory defaults' say 'success'; the silent catch is gone (a throwing onNotify surfaces). SketchStudio's onNotify is showNotification itself (apps/sketchstudio/main.js:131), so the level reaches the toast with no host change; Shaper passes no onNotify.
+- packages/ui/notification-manager.js: default level is now 'info' (a missing level can never paint red); the toast carries data-level (not a look change; tests read it). Copy button unchanged (the manager gives every level one; the task said not to change the look per level).
+- packages/ui/input-manager.js: the keyboard-shortcut default notifier was `(msg) => showNotification(msg)` (dropped the level, so the clipboard's 'warning's showed red); now showNotification itself.
+- packages/ui/profile-actions.js (Combine / Uncombine via keyboard shortcut, typeless before = red): refusals 'warning', 'Combined into ...' / 'Uncombined n' 'success'.
+- Colour changes: Style panel x3 red->green; Combined / Uncombined red->green; combine/uncombine refusals (3) red->amber; clipboard 'browser refused access', 'copied by a newer version', 'could not be read' (3) red->amber. Every other showNotification / constraint-manager notify call already passed a level: unchanged.
+- tests/notice-levels-node.test.js (new, happy-dom, real panel + real toast): save/delete/reset green success, no warning sign; no level = info blue; error = red with Copy; a throwing onNotify surfaces.
+- Evidence: .evidence/612/phone-preset-saved-toast.png (390x844 phone, green toast with check icon).

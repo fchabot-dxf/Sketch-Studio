@@ -72,6 +72,16 @@ const ICONS = {
         `
     },
 
+    // TASK 615: the canvas overlay's Construction (a dashed line) and Recenter (corner brackets round a centre dot) buttons
+    'icon-construction': {
+        viewBox: '0 0 24 24',
+        content: `<line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3.5" stroke-linecap="round"/>`
+    },
+    'icon-recenter': {
+        viewBox: '0 0 24 24',
+        content: `<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="12" cy="12" r="2" fill="currentColor"/>`
+    },
+
     'icon-terminal': {
         viewBox: '0 0 24 24',
         content: `<polyline points="4 17 10 12 4 7" stroke="currentColor" fill="none"/><line x1="12" y1="19" x2="20" y2="19" stroke="currentColor" fill="none"/>`

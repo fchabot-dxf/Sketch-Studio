@@ -53,6 +53,10 @@ clearToasts(); showNotification('boom', 'error');
 r = read(toasts()[0]); assert.strictEqual(r.level, 'error'); assert(same(r.bg, RED), 'red: ' + r.bg); assert.strictEqual(r.icon, '⚠️');
 assert(toasts()[0].querySelector('.notif-copy-btn'), 'the error toast keeps its Copy button');
 
+// 4b. TASK 616: Copy is for diagnostics, so only an error toast has it (success / info / warning: none)
+for (const lvl of ['success', 'info', 'warning']) { clearToasts(); showNotification('x', lvl); assert(!toasts()[0].querySelector('.notif-copy-btn'), lvl + ' toast has no Copy button'); }
+clearToasts(); showNotification('plain'); assert(!toasts()[0].querySelector('.notif-copy-btn'), 'a level-less toast (info) has no Copy button');
+
 // 5. a throw from onNotify is not swallowed
 const loud = createStylePanel({ hostId: 'notice-test-2', onNotify: () => { throw new Error('host notify broke'); } });
 loud.render(document.body); loud.open();

@@ -149,7 +149,7 @@ export function showNotification(message, type = 'info', duration = 3000) {
     });
 
     // Attach nodes to toast
-    toast.appendChild(copyBtn);
+    if (type === 'error') toast.appendChild(copyBtn); // TASK 616: Copy is for diagnostics; only an error toast carries it
     toast.appendChild(iconSpan);
     toast.appendChild(pre);
     document.getElementById('notification-container').appendChild(toast);

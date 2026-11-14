@@ -146,7 +146,7 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
     const cancel = mk('cancel', 'Cancel'); cancel.addEventListener('click', () => { const c = askCancel; closeAsk(); if (c) c(); });
     askCancel = onCancel;
     if (a.kind === 'choose') {
-      for (const o of a.options) { const b = mk('', o.label); b.dataset.choice = o.id; b.addEventListener('click', () => { closeAsk(); then(o.id); }); askEl.appendChild(b); }
+      for (const o of a.options) { const b = mk('', o.label); b.dataset.choice = o.id; b.addEventListener('click', () => { if (o.onClick) o.onClick(); closeAsk(); then(o.id); }); askEl.appendChild(b); }
       askEl.appendChild(cancel); askEl.querySelector('button').focus(); return;
     }
     let inp = null;

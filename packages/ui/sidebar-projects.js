@@ -23,7 +23,6 @@ import { createProjectActions } from './project-actions.js';
 import { createDocumentTabs } from './document-tabs.js';
 import { importSidebarAction } from './sketch-import.js';
 import { openProjectManager, relativeTime } from './project-manager.js';
-import SettingsManager from '#core/settings-manager.js';
 
 export { relativeTime };
 
@@ -66,14 +65,11 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
 
   const actions = [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); }) },
-    { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, prompt: { label: 'Save a copy as', value: () => currentName + ' copy', okLabel: 'Save' }, onClick: act(async (name) => { await projectActions.saveAs(name); }) },
+    { id: 'save-as', label: 'Save as…', icon: SIDEBAR_ICONS.save, keepOpen: true, onClick: act(async () => { if (await projectActions.saveAsPrompt()) sidebar.close(); }, { close: false }) },
     { id: 'duplicate', label: 'Duplicate', icon: SIDEBAR_ICONS.copy, keepOpen: true, onClick: act(async () => { await projectActions.duplicateCurrent(); }, { close: false }) },
     { id: 'open-recent', label: 'Open recent', icon: SIDEBAR_ICONS.recent, keepOpen: true, onClick: () => openManager('recent') },
     { id: 'projects', label: 'Projects', icon: SIDEBAR_ICONS.folder, keepOpen: true, onClick: () => openManager('projects') },
     { divider: true },
-    { id: 'save-drive', label: 'Save to Google Drive', icon: SIDEBAR_ICONS.cloud, keepOpen: true, tooltip: 'Save this design into the "My Designs" project on your Google Drive (the rest of its project stays on this device)',
-      visible: () => !!(account && account.state().signedIn && store.cloud),
-      onClick: act(async () => { await projectActions.saveCurrentToDrive(); }, { close: false }) },
     { id: 'open-file', label: 'Open from file', icon: SIDEBAR_ICONS.open, keepOpen: true, onClick: act(async () => { await projectActions.openFile(); }) },
     ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
@@ -84,13 +80,18 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     const s = store.status ? store.status(currentDesignId) : { where: 'device', state: 'saved', at: null, reason: null };
     if (s.notice) return { kind: 'error', text: s.notice };
     if (s.state === 'failed' || (s.where === 'device' && s.reason)) return { kind: 'error', text: `Not saved to Google Drive: ${s.reason}. Kept on this device.` };
-    if (s.where === 'device') return { kind: 'info', text: 'Saved on this device' };
+    if (!currentDesignId) return { kind: 'info', text: 'Not saved yet' };
+    if (s.where === 'device') {
+      return {
+        kind: 'info',
+        text: 'Saved on this device',
+        ...(store.cloud ? { action: { id: 'move-to-drive', label: 'Move to Google Drive', onClick: act(async () => { await projectActions.moveCurrentProjectToDrive(); await refreshName(); }, { close: false }) } } : {}),
+      };
+    }
     if (s.state === 'saving') return { kind: 'info', text: 'Saving to Google Drive...' };
     return { kind: 'info', text: 'Saved to Google Drive' + (s.at ? ', ' + relativeTime(s.at) : '') };
   };
   const driveControls = store.cloud ? {
-    getDefault: () => SettingsManager.get('DRIVE_DEFAULT') !== false,
-    setDefault: (on) => SettingsManager.set('DRIVE_DEFAULT', !!on),
     check: (onSteps) => store.cloud.checkConnection(onSteps),
   } : null;
 
@@ -99,7 +100,11 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     beforeGoTo: () => projectActions.settleUnsaved(),
     onRenameDoc: (name) => act(async () => {
       const b = getBuffer && getBuffer();
-      if (b && !b.isStored()) { await b.saveAs(name); return; } // naming an unsaved Untitled is its first named save
+      if (b && !b.isStored()) {
+        if (!(await projectActions.ensureSignedIn())) return;
+        await b.saveAs(name);
+        return;
+      } // naming an unsaved Untitled is its first named save
       const id = await currentId();
       if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
@@ -131,10 +136,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     if (!b) return;
     await b.ready; // a stored design may still be restoring: it is not an Untitled
     if (b.isStored()) { await b.flush(); return; }
-    const name = await sidebar.ask({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' });
-    if (!name) { sidebar.close(); return; }
-    await b.saveAs(name);
-    sidebar.close();
+    if (await projectActions.saveAsPrompt()) sidebar.close();
   }
   window.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || (e.key !== 's' && e.key !== 'S')) return;

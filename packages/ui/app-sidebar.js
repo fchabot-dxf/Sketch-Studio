@@ -91,6 +91,7 @@ function injectStyles() {
 .sk-sidebar-msg a { color: inherit; font-weight: 600; margin-left: 6px; }
 .sk-sidebar-status { margin: -4px 0 8px; font-size: 12.5px; line-height: 1.35; opacity: 0.75; }
 .sk-sidebar-status.error { opacity: 1; color: #ff9c9c; }
+.sk-sidebar-status-act { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .sk-account-toggle { display: flex; align-items: center; gap: 10px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
 .sk-account-toggle input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
 .sk-check-steps { margin: 2px 10px 4px; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.4; }
@@ -264,13 +265,8 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
     }).catch(() => { av.textContent = '?'; });
     return row;
   }
-  // Signed-in Drive rows: the default-location toggle, and the connection check with its steps listed inline (TASK 506).
+  // Signed-in Drive row: the connection check with its steps listed inline.
   function driveRows(fail) {
-    const toggle = document.createElement('label'); toggle.className = 'sk-account-toggle'; toggle.dataset.account = 'drive-default-row';
-    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.account = 'drive-default'; cb.checked = !!driveControls.getDefault();
-    cb.addEventListener('change', () => { try { driveControls.setDefault(cb.checked); } catch (e) { fail(e); } });
-    const t = document.createElement('span'); t.textContent = 'Save to Google Drive by default';
-    toggle.append(cb, t);
     const check = document.createElement('button'); check.type = 'button'; check.className = 'sk-sidebar-item'; check.dataset.account = 'check-drive';
     check.innerHTML = '<span class="sk-sidebar-ic" aria-hidden="true">&#10003;</span><span>Check Google Drive connection</span>';
     const list = document.createElement('ul'); list.className = 'sk-check-steps'; list.dataset.account = 'check-result';
@@ -291,9 +287,24 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       check.disabled = true;
       Promise.resolve(driveControls.check((steps) => { checkSteps = steps; if (list.isConnected) draw(); })).catch(fail).finally(() => { check.disabled = false; });
     });
-    return [toggle, check, list];
+    return [check, list];
   }
-  function paintStatus(el) { const s = status(); el.textContent = s.text; el.classList.toggle('error', s.kind === 'error'); el.dataset.kind = s.kind || 'info'; }
+  function paintStatus(el) {
+    const s = status();
+    el.classList.toggle('error', s.kind === 'error');
+    el.dataset.kind = s.kind || 'info';
+    el.textContent = s.text;
+    if (s.action && s.action.label) {
+      el.append(' \u00b7 ');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sk-sidebar-status-act';
+      b.dataset.action = s.action.id || 'status-action';
+      b.textContent = s.action.label;
+      b.addEventListener('click', s.action.onClick);
+      el.appendChild(b);
+    }
+  }
   if (account && account.subscribe) account.subscribe(() => { if (isOpenFlag && viewId === 'main') render(); });
 
   // an inline "are you sure" row (no window.confirm: it is unsupported in some embedded webviews)
@@ -323,7 +334,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       const btns = document.createElement('div'); btns.className = 'sk-sidebar-confirm-btns';
       const mk = (cls, text, onClick) => { const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls; b.textContent = text; b.addEventListener('click', onClick); btns.appendChild(b); return b; };
       const typed = () => { const v = inp.value.trim(); if (v) settle(v); };
-      if (spec.kind === 'choose') for (const o of spec.options) mk('ok', o.label, () => settle(o.id)).dataset.choice = o.id;
+      if (spec.kind === 'choose') for (const o of spec.options) mk('ok', o.label, () => { if (o.onClick) o.onClick(); settle(o.id); }).dataset.choice = o.id;
       mk('cancel', 'Cancel', () => settle(null));
       if (inp) {
         mk('ok', spec.okLabel || 'OK', typed);

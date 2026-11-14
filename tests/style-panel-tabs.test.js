@@ -43,7 +43,7 @@ await (async () => {
       assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');
       assert(!f.lines.hidden && f.grid.hidden && f.glyphs.hidden && f.units.hidden, host + ': only the active tab shows its fields');
       const footBtns = await evalJs(`[...document.querySelectorAll('.sk-style-panel button')].map((b) => b.textContent.trim())`);
-      assert(!footBtns.some((t) => /save/i.test(t)), host + ': the Style panel has no Save button: ' + footBtns);
+      assert(!footBtns.some((t) => /save/i.test(t) && !/preset/i.test(t)), host + ': the Style panel has no Save button (only Save as preset): ' + footBtns);
       assert(footBtns.includes('Reset') && footBtns.includes('Close'), host + ': Reset and Close remain: ' + footBtns);
 
       // TASK 532: showWhen. The metric pair shows for mm/cm files, the inch pair for inch files; a control without showWhen is

@@ -49,6 +49,11 @@ await (async () => {
 
     // the row's height is fixed: 1 tab or 10, the page below does not move (and not when the tabs first appear)
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 32, 'the strip row is 32 px tall with one tab');
+    // TASK 586 + 587: the SKETCHES box floats at the canvas's top-left; the strip is its own row ABOVE the header, so the two never overlap
+    await waitFor(`!!document.querySelector('.sk-browser') && document.querySelector('.sk-browser').getClientRects().length > 0`, 'the floating SKETCHES box');
+    const boxes = await evalJs(`(() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; }; return { strip: r('.sk-doctabs'), box: r('.sk-browser'), header: r('header') }; })()`);
+    assert(boxes.strip.bottom <= boxes.header.top + 0.5 && boxes.box.top >= boxes.strip.bottom, 'the SKETCHES box is below the strip: ' + JSON.stringify(boxes));
+    await shot('strip-with-sketches-box-1440.png', { x: 0, y: 0, width: 760, height: 260 });
     // "+" opens an Untitled tab; a click on a tab switches
     await clickEl('.sk-doctab-new');
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled']);

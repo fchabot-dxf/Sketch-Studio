@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 
-const h = await launchBrowser({ tag: '571', width: 1600, height: 900 });
+const h = await launchBrowser({ tag: '571', width: 1600, height: 1000 });
 if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } else {
   let failed = null;
   try {
@@ -113,13 +113,15 @@ if (!h) { console.log('skipped: no headless Edge/Chrome binary installed'); } el
     assert.deepStrictEqual(await menuIds(), ['geo-lock', 'geo-delete'], `mouse: right-click on the line ${Math.hypot(nearPt.x - g.x, nearPt.y - g.y).toFixed(1)} px from the glyph centre opens the line menu`);
     await esc();
     // the same by touch and hold (the finger on the glyph: its menu; the finger on the line beside it: the line's)
-    // TASK 587: a coarse pointer makes the document-tab strip 44 px tall (a finger), so the canvas moves down: read the points again from the origin
-    const originY = () => evalJs(`(() => { const s = document.getElementById('${canvas}'); const p = s.createSVGPoint(); p.x = 0; p.y = 0; return Math.round(p.matrixTransform(s.getScreenCTM()).y); })()`);
-    const y0 = await originY(); await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 }); await sleep(300); const dy = (await originY()) - y0;
+    // TASK 587: a coarse pointer makes the document-tab strip taller (a finger), so the canvas moves: read the glyph again and move the points by how far it moved
+    const glyphNow = () => evalJs(`(() => { const e = [...document.querySelectorAll('#${canvas} .constraint-glyph[data-ctype="symmetric"]')].map((e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; }); return e; })()`);
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 }); await sleep(300);
+    const g1 = (await glyphNow()).sort((u, v) => Math.hypot(u.x - g.x, u.y - g.y) - Math.hypot(v.x - g.x, v.y - g.y))[0];
+    const dx = g1.x - g.x, dy = g1.y - g.y; console.log('touch layout shift', dx, dy);
     const hold = async (p) => { await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, id: 1 }] }); await sleep(800); const ids = await menuIds(); await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await sleep(300); return ids; };
-    assert.deepStrictEqual(await hold({ x: g.x, y: g.y + dy }), ['con-delete'], 'touch hold on the glyph: the constraint menu');
+    assert.deepStrictEqual(await hold({ x: g.x + dx, y: g.y + dy }), ['con-delete'], 'touch hold on the glyph: the constraint menu');
     await esc();
-    assert.deepStrictEqual(await hold({ x: nearPt.x, y: nearPt.y + dy }), ['geo-lock', 'geo-delete'], 'touch hold on the line beside the glyph: the line menu');
+    assert.deepStrictEqual(await hold({ x: nearPt.x + dx, y: nearPt.y + dy }), ['geo-lock', 'geo-delete'], 'touch hold on the line beside the glyph: the line menu');
     await esc();
     console.log('LIVE glyph over geometry: right-click picks the glyph, the line away from it keeps the line menu');
     console.log('constraint-undo-glyph-live: ok');

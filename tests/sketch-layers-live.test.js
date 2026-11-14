@@ -156,13 +156,13 @@ await (async () => {
       await cdp.navigate(`http://127.0.0.1:${port}${h.url}`, 8000);
       if (h.enter) { await sleep(800); await evalJs(h.enter); }
       await waitFor(h.ready, h.name + ' (phone) has the tree'); await sleep(300);
-      const toggle = await center('.sk-drawer-toggle'); assert(toggle, h.name + ': the drawer button is on the phone screen');
-      // every host (Shaper too, since task 581): the real button is inside the screen and a real touch tap opens the drawer
-      assert(toggle.x > 0 && toggle.x < 390 && toggle.y > 0 && toggle.y < 844, h.name + ': the drawer button is inside the viewport: ' + JSON.stringify(toggle));
+      const toggle = await center('.sk-browser-corner-btn'); assert(toggle, h.name + ': the Sketches button is on the phone screen');
+      // every host (Shaper too, since task 581): the real button is inside the screen and a real touch tap shows the floating card
+      assert(toggle.x > 0 && toggle.x < 390 && toggle.y > 0 && toggle.y < 844, h.name + ': the Sketches button is inside the viewport: ' + JSON.stringify(toggle));
       await T('touchStart', [toggle]); await sleep(40); await T('touchEnd', []);
       await sleep(500);
-      const fit = await evalJs(`(() => { const p = document.querySelector('.sk-drawer-panel'); const r = p.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, vw: window.innerWidth, scrollW: document.documentElement.scrollWidth, open: p.classList.contains('sk-drawer-open') }; })()`);
-      assert(fit.open && fit.left >= 0 && fit.right <= fit.vw + 0.5 && fit.scrollW <= fit.vw + 1, h.name + ': the drawer opens and fits the 390 px screen without page scroll: ' + JSON.stringify(fit));
+      const fit = await evalJs(`(() => { const p = document.querySelector('.sk-browser'); const r = p.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, vw: window.innerWidth, scrollW: document.documentElement.scrollWidth, open: p.classList.contains('sk-browser-open') }; })()`);
+      assert(fit.open && fit.left >= 0 && fit.right <= fit.vw + 0.5 && fit.scrollW <= fit.vw + 1, h.name + ': the floating card opens and fits the 390 px screen without page scroll: ' + JSON.stringify(fit));
       phone[h.name] = fit;
       if (h.name === 'shaper') {
         // three sketches: Holes' name held ~380 ms then dragged above Outline reorders; a quick swipe over the name does not

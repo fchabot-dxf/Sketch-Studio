@@ -50,11 +50,11 @@ await (async () => {
           assert.strictEqual(m.stripTop, 0, tag + 'document tab strip is the top row on phones');
           assert(m.handle && m.handle.w >= 14 && m.handle.h >= 44 && m.handle.left <= 1, tag + 'peeking drawer handle visible on left edge: ' + JSON.stringify(m.handle));
           if (h.drawer) {
-            const tog = await evalJs(`(() => { const e = document.querySelector('.sk-canvas-corner .sk-drawer-toggle'); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; })()`);
+            const tog = await evalJs(`(() => { const e = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn'); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; })()`);
             assert(tog.w >= 43.5 && tog.h >= 43.5 && tog.right <= m.vw + 0.5 && tog.left >= 0, tag + 'the Sketches layers button is on screen, 44 px: ' + JSON.stringify(tog));
             await tap(tog);
-            const open = await evalJs(`(() => { const p = document.querySelector('.sk-drawer-panel'); const r = p.getBoundingClientRect(); return p.classList.contains('sk-drawer-open') && r.left >= 0 && r.right <= window.innerWidth + 0.5; })()`);
-            assert(open, tag + 'a real touch tap on the drawer button opens the drawer inside the screen');
+            const open = await evalJs(`(() => { const p = document.querySelector('.sk-browser'); const r = p.getBoundingClientRect(); return p.classList.contains('sk-browser-open') && r.left >= 0 && r.right <= window.innerWidth + 0.5; })()`);
+            assert(open, tag + 'a real touch tap on the layers button shows the floating card inside the screen');
           }
           if (h.panelToggle) {
             const pbtn = await evalJs(`(() => { const e = document.querySelector('.sk-canvas-corner .sk-drawer-toggle[aria-label="Panel"]'); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, w: r.width, h: r.height }; })()`);

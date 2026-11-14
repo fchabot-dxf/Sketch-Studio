@@ -343,7 +343,7 @@ function panelTick() {
 function buildDesignUI() {
   const { state, engine } = designController;
   browser = mountShaperBrowser({ state, engine }); // design-canvas.js
-  browser.drawer.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
+  browser.toggleEl.style.display = 'none'; // shown only while Design is the active mode (showMode below)
   infoPanel = browser.panel;
   ribbon = createToolRibbon({
     state,
@@ -391,7 +391,7 @@ function ensureSketch() {
 // The view router (modes.js): show the active mode's container, hide the rest, drive the Design RAF lifecycle, persist the active mode.
 modes = createModeRouter({
   views: VIEWS, onActiveChange: (mode) => chrome.setActiveStage(mode), getController: () => designController, ensureSketch,
-  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.drawer.close(); browser.drawer.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586: the Sketches drawer button shows only on Design
+  afterShow: (mode) => { history.refresh(); if (browser) { if (mode !== 'design') browser.close(); browser.toggleEl.style.display = (mode === 'design') ? '' : 'none'; } }, // task 586/623: the Sketches button shows only on Design
   enter: {
     vcarve: () => {
       ensureSketch();

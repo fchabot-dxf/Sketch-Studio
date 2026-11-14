@@ -18,7 +18,7 @@ import { toggleDriving } from '#ui/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
-import { updateHover } from '#ui/hover-manager.js';
+import { updateHover, glyphAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
@@ -1325,7 +1325,6 @@ function setupKeyboardShortcuts(state, opts = {}) {
     });
 }
 
-const GLYPH_PICK_MARGIN_PX = 3; // screen px around the drawn glyph badge that still count as ON it (right-click / touch hold)
 
 // What a right click at (clientX, clientY) is on: a dimension label, a joint, a shape, or a dimension's glyph
 // position. null = empty canvas (no menu, the native / line-tool right-click behaviour stays).
@@ -1336,10 +1335,10 @@ function pickContextTarget(svg, state, e) {
         if (c && !isConstraintInert(inertEntities(state), c)) return { kind: 'dimension', constraint: c };
     }
     // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
-    // shape under it. ON = inside the drawn badge (radius GLYPH_BG_DIAMETER_PX / 2, the same on touch: the badge is not bigger there) plus
-    // GLYPH_PICK_MARGIN_PX; a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
+    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the glyph as drawn plus a 3 px margin, the same on touch; task 588: the
+    // left click and the hover use it too); a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
     // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = hitConstraintAtScreen(pickableConstraints(state), svg, e.clientX, e.clientY, SettingsManager.getAll().GLYPH_BG_DIAMETER_PX / 2 + GLYPH_PICK_MARGIN_PX);
+    const glyph = glyphAt(svg, state, e.clientX, e.clientY);
     if (glyph && (glyph.type === CONSTRAINT_TYPES.DISTANCE || glyph.type === CONSTRAINT_TYPES.ANGLE)) return { kind: 'dimension', constraint: glyph };
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
     const scene = pickScene(state);

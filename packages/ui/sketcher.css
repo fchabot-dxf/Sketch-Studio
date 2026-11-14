@@ -41,6 +41,11 @@
   /* Selection / hover / origin */
   --sk-selection: #1e40af;
   --sk-hover: #3B82F6;
+  /* TASK 588: a constraint's GLYPH and the geometry it binds, lit when the glyph is hovered / selected (blue stays the geometry's own hover /
+     selection). Warm yellow (owner), apart from the blues in hue and lightness and from construction orange (#f97316) in hue; the selected one
+     deeper (stronger) than the hovered one. */
+  --sk-glyph-hover: #eab308;
+  --sk-glyph-selected: #ca8a04;
   --sk-origin: #3B82F6;
 
   /* Feedback */

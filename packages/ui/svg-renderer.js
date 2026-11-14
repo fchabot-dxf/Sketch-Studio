@@ -95,6 +95,11 @@ const SK_VAR = {
   'white': '--sk-joint-fill',
   '#7aa7e0': '--sk-profile-fill',
 };
+// TASK 588: the geometry a constraint binds is lit in the GLYPH colours (sketcher.css --sk-glyph-hover / --sk-glyph-selected), never in the
+// geometry blues: blue means the geometry itself is hovered or selected, and only that.
+// (the tokens themselves, not hex keys of SK_VAR: their warm yellow is also the crossing-marquee fill's hex, which must not follow them)
+const GLYPH_HOVER_COLOR = 'var(--sk-glyph-hover, #eab308)';
+const GLYPH_SELECTED_COLOR = 'var(--sk-glyph-selected, #ca8a04)';
 export function skv(color) {
   if (typeof color !== 'string') return color;
   const v = SK_VAR[color];
@@ -544,13 +549,19 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     // A: Bottom layer — selection/hover solid disc
     // Selected glyphs get stronger, larger feedback (disc + subtle outline). Hovered glyphs get slightly stronger disc.
+    // TASK 588: the 'fusion' style (no badge, a 20 px outlined icon) gets a warm halo of its own behind the icon, denser than the badge's
+    // (it lies on white, not around a coloured disc): the outline tint alone was too faint to see.
+    if(FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
+      out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 6)}" style="fill:${skv(isSelected ? GLYPH_SELECTED_COLOR : GLYPH_HOVER_COLOR)}" fill-opacity="${isSelected ? 0.5 : 0.4}" stroke="none"/>`);
+      if (isSelected) out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 8)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(2)}" stroke-opacity="0.8"/>`);
+    }
     if(!FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
       if (isSelected) {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv('#1e40af')}" fill-opacity="0.28" stroke="none"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv(GLYPH_SELECTED_COLOR)}" fill-opacity="0.28" stroke="none"/>`);
         // Outer subtle stroked ring to emphasize selection — use 4px screen stroke and nudge radius outward so stroke appears mostly outside
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 14)}" fill="none" style="stroke:${skv('#1e40af')}" stroke-width="${scale(4)}" stroke-opacity="0.22"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 14)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(4)}" stroke-opacity="0.22"/>`);
       } else {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 8)}" style="fill:${skv('#1e40af')}" fill-opacity="0.22" stroke="none"/>`);
+        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 8)}" style="fill:${skv(GLYPH_HOVER_COLOR)}" fill-opacity="0.22" stroke="none"/>`);
       }
     }
 
@@ -565,7 +576,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const iconStyleStr = 'style="color: white !important; --icon-accent: white !important; stroke: white !important;"';
     const icon = FUSION_GLYPHS_ON
       ? fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
-        (isHovered || isSelected) ? skv('#1e40af') : 'var(--sk-glyph-outline, #000)')
+        isHovered ? skv(GLYPH_HOVER_COLOR) : isSelected ? skv(GLYPH_SELECTED_COLOR) : 'var(--sk-glyph-outline, #000)')
       : (iconId ? `<use href="#${iconId}" x="${-ICON_PX/2}" y="${-ICON_PX/2}" width="${ICON_PX}" height="${ICON_PX}" ${iconStyleStr}/>` : '');
 
     // Append any extra custom markup (for collinear dots, tangent mark, equal lines, etc.)
@@ -1090,13 +1101,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Determine which joints and shapes are part of the selected constraint (for highlighting)
   let constraintJoints = new Set();
   let constraintShapes = new Set();
-  // The selected constraints AND the hovered one (the Design panel sets state.hoveredConstraint on row hover) light up
+  // The selected constraints AND the hovered one (the canvas glyph hover, or the Design panel's row hover) light up
   // the geometry they bind; one shared resolver (geometry-labels.js) names what a constraint binds.
   for(const hc of [...(selectedConstraints || []), ...(hoveredConstraint ? [hoveredConstraint] : [])]){
     const bound = constraintTargets(hc, shapes);
     bound.joints.forEach(jid => constraintJoints.add(jid));
     bound.shapes.forEach(sid => constraintShapes.add(sid));
   }
+  // TASK 588: what the HOVERED constraint binds (GLYPH_HOVER_COLOR); the rest of constraintJoints / constraintShapes is bound by a selected
+  // one (GLYPH_SELECTED_COLOR). The hover is the preview, so it wins over the geometry's own selection; the geometry's own hover or selection
+  // (blue) wins over a selected constraint's colour.
+  const hoverBound = hoveredConstraint ? constraintTargets(hoveredConstraint, shapes) : { joints: [], shapes: [] };
+  const hoverBoundJoints = new Set(hoverBound.joints), hoverBoundShapes = new Set(hoverBound.shapes);
   
   // draw shapes (clickable for selection)
   for(const s of shapes){ 
@@ -1120,16 +1136,19 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
 
-    if(isConstraintPart){
-      // Highlight shapes that are part of selected constraint
+    if(hoverBoundShapes.has(s.id)){
       strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
-      strokeColor = '#3B82F6'; // Fusion Blue
+      strokeColor = GLYPH_HOVER_COLOR; // bound by the hovered constraint
     } else if(isHovered){
       strokeWidth = scale(BASE_LINE_STROKE_HOVERED);
       strokeColor = HOVER_COLOR; // darker blue
     } else if(isSelected){
       strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
       strokeColor = '#1e40af'; // darker blue
+    } else if(isConstraintPart){
+      // Highlight shapes that are part of a selected constraint
+      strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
+      strokeColor = GLYPH_SELECTED_COLOR;
     }
     
     if(s.type==='line'){
@@ -1382,9 +1401,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       else if (constrainedJoints.has(id)) stroke = '#202020';
 
       let strokeW = scale(BASE_JOINT_STROKE);
-      if (isConstraintPartOrigin) { stroke = '#3B82F6'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
+      if (hoverBoundJoints.has(id)) { stroke = GLYPH_HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
       else if (isHoverOrigin) { stroke = HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_HOVERED); }
       else if (isSelectedOrigin) { stroke = '#1e40af'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
+      else if (isConstraintPartOrigin) { stroke = GLYPH_SELECTED_COLOR; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
 
       // Use the standard joint fill (no red disc) so origin behaves visually like other joints
       const fill = 'white';
@@ -1427,7 +1447,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // hidden, with the usual transparent hit target so it stays hoverable/snappable as a dimension target.
     if (j.virtualSharp) {
       const arm = scale(5);
-      const vStroke = (isSelected || isHovered || isConstraintPart) ? '#1e40af' : '#64748B';
+      const vStroke = hoverBoundJoints.has(id) ? GLYPH_HOVER_COLOR : (isSelected || isHovered) ? '#1e40af' : isConstraintPart ? GLYPH_SELECTED_COLOR : '#64748B';
       out.push(`<circle class="joint-handle" data-joint-id="${id}" cx="${j.x}" cy="${j.y}" r="${scale(BASE_JOINT_RADIUS) * 1.9}" fill="rgba(0,0,0,0)" style="cursor:pointer"/>`);
       out.push(`<path d="M ${j.x - arm} ${j.y - arm} L ${j.x + arm} ${j.y + arm} M ${j.x - arm} ${j.y + arm} L ${j.x + arm} ${j.y - arm}" fill="none" style="stroke:${skv(vStroke)}" stroke-width="${scale(1.5)}" stroke-linecap="round"/>`);
       continue;
@@ -1452,16 +1472,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
     let strokeW = scale(BASE_JOINT_STROKE); // base
 
-    if(isConstraintPart){
-      // Highlight joints that belong to a selected constraint: apply thicker stroke but DO NOT add a glow halo
-      // (Glow should only appear when the joint/geometry itself is explicitly selected)
-      stroke = '#3B82F6'; // Fusion Blue
+    // Joints bound by a constraint get a thicker stroke in the glyph colours but NO glow halo (the glow is the joint's own selection).
+    if(hoverBoundJoints.has(id)){
+      stroke = GLYPH_HOVER_COLOR; // bound by the hovered constraint
       strokeW = scale(BASE_JOINT_STROKE_SELECTED);
     } else if(isHovered){
       stroke = HOVER_COLOR; // darker blue
       strokeW = scale(BASE_JOINT_STROKE_HOVERED);
     } else if(isSelected){
       stroke = '#1e40af'; // darker blue
+      strokeW = scale(BASE_JOINT_STROKE_SELECTED);
+    } else if(isConstraintPart){
+      stroke = GLYPH_SELECTED_COLOR; // bound by a selected constraint
       strokeW = scale(BASE_JOINT_STROKE_SELECTED);
     }
 
@@ -2173,7 +2195,7 @@ switch(c.type){
         const bgRadiusE = (isHoveredE || isSelectedE) ? glyphSize + scale(8) : glyphSize + scale(5);
         const bgOpacityE = (isHoveredE || isSelectedE) ? '0.95' : '0.85';
         const bgColorE = CONSTRAINT_COLORS[CONSTRAINT_TYPES.EQUAL].fill;
-        if(!FUSION_GLYPHS_ON && !preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv('#1e40af')}" fill-opacity="0.2" stroke="none"/>`);
+        if(!FUSION_GLYPHS_ON && !preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv(isHoveredE ? GLYPH_HOVER_COLOR : GLYPH_SELECTED_COLOR)}" fill-opacity="0.2" stroke="none"/>`);
         const symSize = glyphSize * 0.6;
         const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" fill-opacity="${bgOpacityE}" stroke-width="${scale(3.5)}"/>` +
                            `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>` +

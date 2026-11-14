@@ -62,8 +62,15 @@ await (async () => {
       const line = await rectOf(`document.getElementById('tool-line')`);
       await tap(line);
       const cv = await rectOf(`document.querySelector('${h.canvas}')`);
+      const second = { x: Math.round(cv.left + cv.w * 0.7), y: Math.round(cv.top + cv.h * 0.7) };
       await tap({ x: Math.round(cv.left + cv.w * 0.3), y: Math.round(cv.top + cv.h * 0.6) });
-      await tap({ x: Math.round(cv.left + cv.w * 0.7), y: Math.round(cv.top + cv.h * 0.7) });
+      // the line's creation box takes the finger (it is tapped to type in it), so it never sits beside the finger where the next tap lands: it docks at the
+      // canvas's top centre, 64 px down (numeric-input-manager.js placeLiveBox, TASK 602; 597 put it 15 px from the tap and the second tap landed ON it)
+      const box = await rectOf(`[...document.querySelectorAll('.sk-live-box')].find((e) => e.getClientRects().length && getComputedStyle(e).display !== 'none')`);
+      assert(box, h.name + ': the line box shows on the first tap');
+      assert(Math.abs(box.top - (cv.top + 64)) <= 1 && Math.abs((box.left + box.right) / 2 - (cv.left + cv.w / 2)) <= 1, h.name + ': the touch box docks at the canvas top centre: ' + JSON.stringify({ box, cv }));
+      assert(!(second.x >= box.left && second.x <= box.right && second.y >= box.top && second.y <= box.bottom), h.name + ': the next tap is not on the box');
+      await tap(second);
       await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
       await evalJs(`document.getElementById('tool-circle').scrollIntoView({ block: 'nearest', inline: 'nearest' })`); await sleep(400);
       await tap(await rectOf(`document.getElementById('tool-circle')`));

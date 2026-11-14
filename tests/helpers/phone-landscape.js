@@ -1,4 +1,4 @@
-// tests/phone-landscape-live.test.js — TASK 602: a phone held in LANDSCAPE (the short viewport, #ui/short-viewport.js) is usable in every host of the
+// tests/helpers/phone-landscape.js — TASK 602 (one file per host runs it: tests/phone-landscape-<host>-live.test.js, so no file runs long): a phone held in LANDSCAPE (the short viewport, #ui/short-viewport.js) is usable in every host of the
 // shared Design tab (SketchStudio, Shaper, Pen Plotter, Trace), at 844 x 390 and 780 x 360, real touch emulation (coarse pointer, mobile viewport):
 //  - the canvas gets at least 60 % of the viewport height;
 //  - the tool ribbon is a vertical icon RAIL on the left (column, <= 64 px wide, from under the header to the bottom), the canvas right of it; a real
@@ -13,9 +13,9 @@
 //  - SketchStudio: the status bar (Log, Tune, the VIEW readout) is folded away; Log is in the menu and opens the log; Export is in the menu, opens the
 //    Export view, and the header's Design button comes back.
 import assert from 'node:assert';
-import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { launchBrowser, sleep } from './cdp-browser.js';
 
-const HOSTS = [
+export const LANDSCAPE_HOSTS = [
   { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas' },
   { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('[data-mode="design"]').click()` },
   { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, except: '#design-panel' },
@@ -23,8 +23,11 @@ const HOSTS = [
 ];
 const SIZES = [{ w: 844, h: 390 }, { w: 780, h: 360 }];
 
-await (async () => {
-  const cdp = await launchBrowser({ tag: '602l', width: 844, height: 390 });
+/** Runs every landscape check for ONE host at both sizes (its own browser). */
+export async function runPhoneLandscape(hostName) {
+  const HOSTS = LANDSCAPE_HOSTS.filter((h) => h.name === hostName);
+  if (HOSTS.length !== 1) throw new Error('phone-landscape: unknown host ' + hostName);
+  const cdp = await launchBrowser({ tag: '602l-' + hostName, width: 844, height: 390 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, evalJs, waitFor, navigate } = cdp;
   try {
@@ -163,6 +166,6 @@ await (async () => {
         console.log(`phone-landscape ${tag}canvas ${Math.round(share * 100)} % (${Math.round(cv.h)} px), rail ${Math.round(rail.w)} px wide, ${n} rail buttons reachable, ${tapped.length} tools tapped, ${others.length} other controls ok`);
       }
     }
-    console.log('LIVE-OK phone-landscape: 4 apps at 844x390 and 780x360: canvas >= 60 %, rail, every tool reachable + tapped, controls 44 px and uncovered');
+    console.log(`LIVE-OK phone-landscape ${hostName}: 844x390 and 780x360: canvas >= 60 %, rail, every tool reachable + tapped, controls 44 px and uncovered`);
   } finally { await cdp.close(); }
-})();
+}

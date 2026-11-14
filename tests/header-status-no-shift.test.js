@@ -35,7 +35,8 @@ await (async () => {
     }
 
     await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 10000);
-    await waitFor(`document.querySelectorAll('.sk-header-action, .sk-header-style').length >= 2 && document.querySelector('#svgCanvas').dataset.docReady === '1'`, 'sketchstudio header ready');
+    // the header is built synchronously by main.js (no autosave restore to wait for: SketchStudio has no status text, TASK 602)
+    await waitFor(`document.querySelectorAll('header .sk-header-action, header .sk-header-style').length >= 2 && !!document.querySelector('header .sk-header-tab')`, 'sketchstudio header ready', 40000);
     assert.strictEqual(await evalJs(`document.getElementById('save-status')`), null, 'sketchstudio: no "Saved" text in the header (TASK 602)');
     assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('header .sk-header-tab')].map((t) => t.dataset.tab)`), ['design'], 'sketchstudio: Design is the one mode button (Export is in the menu, TASK 602)');
     assert.strictEqual(await evalJs(`document.getElementById('coords-text')`), null, 'sketchstudio: the dead "X: 0 Y: 0" readout is gone');

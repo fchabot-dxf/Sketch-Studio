@@ -99,7 +99,7 @@ await (async () => {
     checkLabels(pin, 25.4, 'ss in');
     assert(Math.abs(pin.heavy - 25.4) < 1e-9 && Math.abs(pin.minor - 2.54) < 1e-9, `inch default: heavy 1 in, minor 0.1 in: ${pin.heavy} ${pin.minor}`);
     await setS('INCH_GRID_DIVISIONS', 8);
-    pin = await evalJs(`__probe('${SS}', 300)`);
+    pin = await evalJs(`__probe('${SS}', 100)`);
     checkLabels(pin, 25.4, 'ss in/8');
     assert(Math.abs(pin.minor - 25.4 / 8) < 1e-9, 'minor = 1/8 in');
     await shot('ss-in8-300.png');

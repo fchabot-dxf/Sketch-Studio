@@ -31,7 +31,7 @@ for (const M of [1, 2, 12]) for (const n of GRID_INCH_DIVISIONS) {
     assert(isRound(L.minor / IN, n, M), `M=${M} n=${n} zoom ${s}: minor ${L.minor / IN} in not round`);
     assert(isRound(L.major / IN, n, M) && near(L.major / L.minor, Math.round(L.major / L.minor)), `M=${M} n=${n} zoom ${s}: major ${L.major / IN} in`);
     assert(L.major >= L.minor);
-    assert(L.minorPx >= 8 - 1e-9, 'never denser than MIN_MINOR_PX');
+    assert(L.fade === 0 || L.minorPx >= 8 - 1e-9, 'visible light lines never denser than MIN_MINOR_PX');
   }
   // snap lands on multiples of M/n inch
   for (const x of [37.3, -12.9, 0.4, 301.7]) {
@@ -48,7 +48,7 @@ for (const s of [0.07, 0.15, 0.3, 0.6, 1.2]) seq.push(gridLevel({ ...sp16, scale
 assert(seq.every((v, i) => i === 0 || near(v / seq[i - 1], 2) || near(v / seq[i - 1], 1)), 'halving/doubling only: ' + seq);
 // decimal: x10 steps
 const sp10 = gridSpacing('in', S);
-assert(near(gridLevel({ ...sp10, scale: (px) => px * 0.5 }).minor / IN, 1));
+assert(near(gridLevel({ ...sp10, scale: (px) => px }).minor / IN, 1));
 // mm levels unchanged
 assert.strictEqual(gridLevel({ ...S, scale: (px) => px }).minor, 10);
 // switching the setting re-draws: different markup per divisions

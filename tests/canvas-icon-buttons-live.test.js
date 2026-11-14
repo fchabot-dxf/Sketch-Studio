@@ -7,7 +7,7 @@ const cdp = await launchBrowser({ tag: '615t', width: 1400, height: 900 });
 if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
 const { port, send, evalJs, waitFor, navigate } = cdp;
 const info = (id) => evalJs(`(() => { const b = document.getElementById('${id}'); const r = b.getBoundingClientRect(); const cs = getComputedStyle(b);
-  return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, cx: r.left + r.width / 2, cy: r.top + r.height / 2, aria: b.getAttribute('aria-label'), text: b.textContent.trim(), use: b.querySelector('svg use')?.getAttribute('href'), pressed: b.getAttribute('aria-pressed'), bg: cs.backgroundColor }; })()`);
+  return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, cx: r.left + r.width / 2, cy: r.top + r.height / 2, aria: b.getAttribute('aria-label'), text: b.textContent.trim(), use: b.querySelector('svg use')?.getAttribute('href'), pressed: b.getAttribute('aria-pressed'), bg: cs.backgroundColor, glyph: (() => { const g = b.querySelector('svg').getBoundingClientRect(); return Math.round(Math.min(g.width, g.height) * 10) / 10; })() }; })()`);
 const click = async (id) => { const i = await info(id); for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: i.cx, y: i.cy, button: 'left', clickCount: 1 }); await sleep(150); };
 try {
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 15000);
@@ -15,6 +15,7 @@ try {
   let c = await info('btn-construct-toggle'), r = await info('btn-recenter-view');
   console.log('desktop', JSON.stringify({ c, r }));
   assert.deepStrictEqual([c.w, c.h, r.w, r.h], [32, 32, 32, 32], 'desktop: both buttons are 32 px square');
+  assert.ok(c.glyph >= 20 && r.glyph >= 20, `TASK 616: the glyph fills the button (>= 20 px of 32): ${c.glyph} / ${r.glyph}`);
   assert.deepStrictEqual([c.aria, r.aria], ['Construction', 'Recenter view'], 'aria-labels');
   assert.deepStrictEqual([c.text, r.text], ['', ''], 'no text, icon only');
   assert.deepStrictEqual([c.use, r.use], ['#icon-construction', '#icon-recenter'], 'each draws its sprite glyph');
@@ -45,6 +46,7 @@ try {
   c = await info('btn-construct-toggle'); r = await info('btn-recenter-view');
   console.log('phone', JSON.stringify({ c, r }));
   assert.deepStrictEqual([c.w, c.h, r.w, r.h], [44, 44, 44, 44], 'a finger: both buttons are 44 px square');
+  assert.ok(c.glyph >= 26 && r.glyph >= 26, `TASK 616: a finger: the glyph is >= 26 px of 44: ${c.glyph} / ${r.glyph}`);
   const clearP = await evalJs(`(() => { const box = document.querySelector('.sk-browser'); if (!box) return true; const b = box.getBoundingClientRect(); if (!b.width) return true; return ['btn-construct-toggle', 'btn-recenter-view'].every((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom; }); })()`);
   assert.ok(clearP, 'phone: no overlap with the SKETCHES box');
   console.log('canvas icon buttons live: OK');

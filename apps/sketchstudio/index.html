@@ -252,7 +252,7 @@
 
         /* TASK 615 -- the canvas's Construction / Recenter buttons are 32 px square icon buttons (the glyph is a <use> of the shared icon sprite, packages/ui/cursor-manager.js ICONS). */
         #btn-construct-toggle, #btn-recenter-view { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-        #btn-construct-toggle svg, #btn-recenter-view svg { width: 20px; height: 20px; pointer-events: none; }
+        #btn-construct-toggle svg, #btn-recenter-view svg { width: 22px; height: 22px; pointer-events: none; } /* TASK 616: the glyph fills the button (stroke scales with it, like the ribbon icons) */
         /* TASK 562 -- phone layout (<= 640 px, the app's one breakpoint): the footer's Log / MAG LENS / TUNE leave the bar (Log and TUNE live in
            the menu, see main.js; the lens is automatic under a finger). */
         @media (max-width: 640px) {
@@ -263,6 +263,7 @@
         @media (pointer: coarse) {
             #btn-mag-toggle { display: none; }
             #btn-construct-toggle, #btn-recenter-view { width: 44px; height: 44px; }
+            #btn-construct-toggle svg, #btn-recenter-view svg { width: 28px; height: 28px; }
             footer .sk-diag-toggle, #btn-tuning-toggle { min-height: 44px; min-width: 44px; font-size: 12px; }
             #viewport-size { font-size: 12px; }
             #debug-panel #debug-close-btn { min-width: 44px; min-height: 44px; font-size: 22px; }

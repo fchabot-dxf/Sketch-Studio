@@ -14640,3 +14640,10 @@ Success / info notices showed as red error toasts (owner phone screenshot: 'Save
 - Glyphs declared once, in the shared ICONS table `packages/ui/cursor-manager.js` (that table builds the sprite; `injectSymbols` wipes the inline index.html sprite, so symbols there would vanish). Dashed line; corner brackets round a dot.
 - ui-manager.js: removed the `innerText = 'Construction'` line (it would wipe the icon); ON/OFF colours, title, aria-pressed unchanged. Recenter handler unchanged.
 - Test: tests/canvas-icon-buttons-live.test.js (labels, no text, sprite use, 32/44 px, real-click ON state = rgb(249,115,22), wheel then Recenter, no overlap with SKETCHES box). Evidence: .evidence/615/ (before-/after- desktop off/on, phone).
+
+## TURN 616
+- Owner: "icon bigger in the button" + "Copy on error only".
+- A. apps/sketchstudio/index.html: Construction / Recenter glyph 20 -> 22 px in the 32 px button, 28 px in the 44 px (pointer: coarse) button. Button sizes unchanged. Stroke stays 2 in the 24 viewBox, so it scales with the glyph (1.83 px at 22, 2.33 px at 28, the ribbon's 28 px icons are 2.33 px).
+- B. packages/ui/notification-manager.js: the Copy button is appended only when level === 'error' (one rule). Warning has none too (owner ruling; warnings here are refusals like "Cannot lock ...", not diagnostics). Behaviour change: success / info / warning toasts lose Copy (their text is still selectable); colours unchanged.
+- Tests: canvas-icon-buttons-live asserts svg bbox >= 20 desktop / >= 26 touch (measured 22 / 28); notice-levels-node asserts no .notif-copy-btn on success/info/warning/level-less, present on error.
+- Evidence: .evidence/616/{before,after}-{desktop,phone}.png (6x crops).

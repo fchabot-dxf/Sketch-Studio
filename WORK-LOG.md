@@ -14823,3 +14823,6 @@ TURN 630 correction: a SELECTED point now has the 100% black ring (--sk-joint-ri
 
 TURN 630 additions: (A) SNAP_MAGNETISM factory default 10; ONE source = packages/core/solver-config.js (SettingsManager and snap-magnet read it, no second literal). (B) a lit axis (reference-line hover/pick and the axis-snap highlight) is drawn bold (hover stroke width) in its OWN axis colour, full opacity, via one AXIS_COLOR helper shared with the plain axes. Tests: axis-lit-colour-node (new), snap-origin-coincident-node (12/15px-off cases became 8/9px: 16 to 10 magnetism). Evidence .evidence/630/axis-lit-y.png md5 F9B46A5B85967A6501A2E1F976B3FD65.
 
+
+TURN 630 merge-gate fixes: merged origin/main. snap-release-slip-live case 2 reworked for lock 10 / release 20 / reach 30 (drag out past release, return between lock and release, fast release: recovery puts the end on the origin; distances derived from the live numbers). Measured: a held lock now survives only to 18-19 px (was to 30); slips 20-34 px off a locked origin and released fast end at the pointer with no constraint (before: 21-30 px stayed on the origin). shaper-canvas-default-look-live uses .sk-header-tab[data-tab=design]. sketch-layers-live passed 9/9 on the merged branch (not reproduced).
+

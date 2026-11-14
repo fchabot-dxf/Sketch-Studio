@@ -7,8 +7,8 @@ if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); pr
 const { port, evalJs, waitFor, navigate, close } = cdp;
 try {
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
-  await waitFor(`!!document.querySelector('[data-mode="design"]')`, 'the Design tab button');
-  await evalJs(`document.querySelector('[data-mode="design"]').click()`);
+  await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'the Design tab button');
+  await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
   await waitFor(`!!document.querySelector('#design-canvas')`, 'the design canvas');
   const bg = await evalJs(`getComputedStyle(document.querySelector('#design-canvas')).backgroundColor`);
   assert.strictEqual(bg, 'rgb(244, 239, 225)', 'Shaper Design canvas stays cream #F4EFE1 (value before this change)');

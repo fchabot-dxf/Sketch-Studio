@@ -4,8 +4,8 @@
 //   1. press on the snapped origin with the Polygon tool, flick 120 px away and release fast (< 200 ms): the hexagon is drawn with
 //      its corner where the pointer was released (a point no snap locks on). Before task 546 the press point's snap was recovered at the release, the corner
 //      landed on the centre (radius 0) and the tool silently drew nothing (tests/polygon-tool-live.test.js failed on it).
-//   2. the recovery still does its job: the Line tool locks its end on the origin, the pointer slips just past the joint snap reach
-//      (the snap is lost) but inside the release distance, and a fast release still ends the line ON the origin.
+//   2. the recovery still does its job: the Line tool locks its end on the origin, the pointer drags out past the release distance (the snap
+//      is lost) and back to a point between the lock and the release distance (no fresh lock), and a fast release still ends the line ON the origin.
 // Shaper's Design tab on a fresh profile (an empty design whose origin is on screen); the same shared input layer serves every host.
 
 import assert from 'node:assert';
@@ -86,25 +86,28 @@ await (async () => {
     await clickEl('#btn-undo');
     assert.strictEqual(await evalJs(`${S}.shapes.length`), 0, 'one Undo removes the polygon');
 
-    // ---- 2. Line: lock the end on the origin, slip just outside the lock distance (the snap is lost), release fast -> ends ON the origin
+    // ---- 2. Line: lock the end on the origin, drag out past the release distance (the snap is lost), come back to a point between the lock
+    //         and the release distance (too far to lock afresh), release fast -> the recovery puts the end ON the origin
     await clickEl('#tool-line');
     const start = { x: origin.x - 200, y: origin.y - 120 };
-    // a held lock survives while findSnap still finds the joint (reach) and within the release distance: the snap is LOST between the
-    // two, and that is where a slip relies on the recovery
-    assert(magnet.reach < magnet.release, 'a slip band exists between the joint reach and the release distance: ' + JSON.stringify(magnet));
-    const slip = Math.round((magnet.reach + magnet.release) / 2);
+    // a held lock survives to the release distance; a point between the lock and the release distance does not lock afresh, so only the
+    // recovery (release within the release distance of the lost snap, < 200 ms after it was held) can put the end on the origin
+    assert(magnet.lock < magnet.release, 'a slip band exists between the lock and the release distance: ' + JSON.stringify(magnet));
+    const outAt = await clearPoint(magnet.release + 4);
+    const slip = Math.ceil((magnet.lock + magnet.release) / 2);
     const slipAt = await clearPoint(slip);
     await mouse('mouseMoved', start.x, start.y, 0); await sleep(60);
     await mouse('mousePressed', start.x, start.y, 1);
     await mouse('mouseMoved', origin.x - 100, origin.y - 60, 1);
     await arm();
     await mouse('mouseMoved', origin.x, origin.y, 1);
+    await mouse('mouseMoved', outAt.x, outAt.y, 1);
     await mouse('mouseMoved', slipAt.x, slipAt.y, 1);
     await mouse('mouseReleased', slipAt.x, slipAt.y, 0); await sleep(300);
     const r2 = await record();
     const moves = r2.filter((r) => r.type === 'pointermove'), up2 = r2.find((r) => r.type === 'pointerup');
-    assert(moves.length === 2 && moves[0].origin, 'the line end locks on the origin: ' + JSON.stringify(r2));
-    assert(moves[1].none, `a ${slip} px slip (joint reach ${magnet.reach} px, release ${magnet.release} px) loses the snap, so the release relies on the recovery: ` + JSON.stringify(r2));
+    assert(moves.length === 3 && moves[0].origin, 'the line end locks on the origin: ' + JSON.stringify(r2));
+    assert(moves[1].none && moves[2].none, `dragging out to ${magnet.release + 4} px (release ${magnet.release} px) loses the snap and the ${slip} px return (lock ${magnet.lock} px) does not lock afresh, so the release relies on the recovery: ` + JSON.stringify(r2));
     const slipMs = up2.t - moves[0].t;
     assert(slipMs < 200, 'the slip ran inside the 200 ms recovery window (lock -> release ' + slipMs + ' ms)');
     const line = await evalJs(`(() => { const s = ${S}; const l = s.shapes.find((x) => x.type === 'line'); if (!l) return null; const o = s.joints.get('j_origin'); const ends = l.joints.map((j) => s.joints.get(j)); const onOrigin = l.joints.some((j, i) => j === 'j_origin' || Math.hypot(ends[i].x - o.x, ends[i].y - o.y) < 1e-6 || s.constraints.some((c) => c.type === 'coincident' && c.joints && c.joints.includes('j_origin') && c.joints.includes(j))); return { lines: s.shapes.filter((x) => x.type === 'line').length, onOrigin }; })()`);

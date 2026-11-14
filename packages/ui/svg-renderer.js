@@ -12,7 +12,7 @@ import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
-import { fusionGlyphMarkup } from '#ui/fusion-glyphs.js';
+import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';
 import { symmetricOperands } from '#core/symmetric.js';
@@ -224,8 +224,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Derived sizes
   // glyphSize kept for legacy scale relationships in some calculations (kept similar to prior behavior)
   const glyphSize = scale(9.72);
-  // hitZoneRadius: the invisible disc of a glyph group (it gives the pointer cursor), the radius of the glyph as drawn
-  const hitZoneRadius = scale(SYMBOL_SIZE_PX / 2);
   // Icon pixel size for sprite use (world-space units derived from screen pixels)
   const ICON_PX = scale(SYMBOL_SIZE_PX); // smaller white icon inside the blue circle
   const INFERENCE_ICON_PX = scale(INFERENCE_SIZE_PX); // inference sprite world size
@@ -530,8 +528,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if (isSelected) out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 8)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(2)}" stroke-opacity="0.8"/>`);
     }
 
-    // B: an invisible disc keeps the DOM hit area of the glyph group (pointer-events:all); the pick itself (hover-manager glyphAt) is geometric.
-    const hitDisc = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="none" stroke="none"/>`;
+    // B: an invisible hit element (the icon's outlines with a transparent pick-pad stroke, fusion-glyphs glyphHitMarkup) keeps the DOM hit area of the glyph group (pointer-events:all); the pick itself (hover-manager glyphAt) is geometric.
+    const hitDisc = glyphHitMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX);
 
     // C: Top layer: the outlined icon (white fill, dark outline that turns the hover / selection colour)
     const icon = fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
@@ -2155,7 +2153,7 @@ switch(c.type){
   }
 
   // CONSTRAINT GLYPHS - Rendered last so they appear on top of everything
-  // glyphSize and hitZoneRadius already defined at top of function
+  // glyphSize already defined at top of function
 
   // Smart Glyph Layout (Anti-overlap): group constraints by visual target and compute glyph positions
   try {

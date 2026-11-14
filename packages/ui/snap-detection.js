@@ -241,22 +241,3 @@ function findAxisSnap(joints, svg, lastMouse, excluded, excludeLineSnap, boost =
   }
   return best;
 }
-
-export function hitConstraintAtScreen(constraints, svg, screenX, screenY, threshold = 14) {
-    const mouseW = screenToWorld(svg, screenX, screenY);
-    const zoomFactor = getZoomFactor(svg);
-    for (const c of constraints) {
-        if (c.__visible === false) continue;
-        if (c.glyphPos) {
-            const positions = Array.isArray(c.glyphPos) ? c.glyphPos : [c.glyphPos];
-            for (const pos of positions) {
-                if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
-                const dist = Math.hypot(mouseW.x - pos.x, mouseW.y - pos.y);
-                if (dist < threshold * zoomFactor) {
-                    return c;
-                }
-            }
-        }
-    }
-    return null;
-}

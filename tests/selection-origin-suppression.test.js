@@ -5,13 +5,17 @@
 (async () => {
   const { updateHoverFeedback } = await import('#ui/input-handlers/selection-tools.js');
   const { selectPick } = await import('#ui/hover-manager.js');
+  const fs = await import('node:fs'); // task 603: a glyph is picked where its icon is drawn, so the real sheet is loaded
+  const { loadGlyphSheet } = await import('#ui/glyph-sheet.js');
+  const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
+  await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // a fake svg with an identity world <-> screen mapping (1 world unit = 1 px)
   const svg = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }), viewBox: { baseVal: { x: 0, y: 0, width: 100, height: 100 } } };
   const state = { lastMouse: { x: 10, y: 10 }, constraints: [], joints: new Map(), shapes: [], hoveredJoint: null, hoveredConstraint: null, hoveredShape: null };
   state.joints.set('j_origin', { x: 10, y: 10 });
-  const c = { type: 'coincident', joints: ['j_origin', 'j_dummy'], glyphPos: { x: 12, y: 10 } }; // a glyph 2 px from the pointer
+  const c = { type: 'horizontal', joints: ['j_origin', 'j_dummy'], glyphPos: { x: 12, y: 10 } }; // a glyph whose solid icon is under the pointer (2 px from its centre; task 603: a glyph is picked on its drawn strokes)
   state.constraints.push(c);
   const hitJoint = { id: 'j_origin', j: state.joints.get('j_origin') };
 

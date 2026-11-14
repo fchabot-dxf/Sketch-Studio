@@ -12,7 +12,6 @@ const { default: SettingsManager } = await import('../packages/core/settings-man
 const { draw } = await import('../packages/ui/svg-renderer.js');
 const { STYLE_SETTING_KEYS, STYLE_TEMPLATES } = await import('../packages/ui/style-templates.js');
 const { loadGlyphSheet } = await import('../packages/ui/glyph-sheet.js');
-const { glyphDrawnRadiusPx } = await import('../packages/ui/hover-manager.js');
 const { DOMParserShim } = await import('./helpers/xml-dom-shim.js');
 await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => fs.readFileSync(new URL('../assets/constraint-glyphs.svg', import.meta.url), 'utf8') }), parser: new DOMParserShim() });
 
@@ -28,7 +27,7 @@ assert.strictEqual(SettingsManager.get('GLYPH_STYLE'), 'badge', 'the stored valu
 assert.ok(!('GLYPH_STYLE' in SettingsManager.getDefaults()) && !('GLYPH_STYLE' in (STYLE_TEMPLATES[0].settings)), 'but no default or template knows it');
 const diag = await import('../packages/ui/diagnostic-log.js');
 assert.ok(!('GLYPH_STYLE' in diag.changedSettings()), 'the report header (changedSettings) does not list it');
-assert.strictEqual(glyphDrawnRadiusPx(), 10, 'the glyph pick radius is the outlined glyph (GLYPH_SYMBOL_SIZE_PX / 2), whatever is stored');
+// (the pick is now the icon's box: tests/glyph-pick-box-node.test.js)
 
 // 3. the glyphs render outlined, with no error
 const joints = new Map([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 100, y: 60 }]]);

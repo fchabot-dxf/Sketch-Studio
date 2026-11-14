@@ -16,8 +16,8 @@
   --sk-canvas-bg-snapping: #F3F8FB;
 
   /* Grid (the SVG <pattern> strokes in index.html) */
-  --sk-grid-minor: #E2E6EA;
-  --sk-grid-major: #C9CFD6;
+  --sk-grid-minor: #CDD3DA;
+  --sk-grid-major: #A9B2BD;
 
   /* Geometry (joints + lines) coloured by solve status */
   --sk-geo-fixed: #000000;          /* fully rigid / fixed — black */

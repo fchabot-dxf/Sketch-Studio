@@ -143,7 +143,7 @@ function initApp(){
     const design = mode !== 'export';
     if (ribbonEl) ribbonEl.style.display = design ? '' : 'none';
     if (mainEl) mainEl.style.display = design ? '' : 'none';
-    if (sidePanel) { sidePanel.drawer.close(); sidePanel.drawer.toggleEl.style.display = design ? '' : 'none'; }
+    if (sidePanel) { sidePanel.close(); sidePanel.toggleEl.style.display = design ? '' : 'none'; }
     if (footerEl) footerEl.style.display = design ? '' : 'none';
     if (exportPanelEl) exportPanelEl.classList.toggle('hidden', design); // Export view = the existing export form
     if (design) setTimeout(updateView, 0); // recompute the canvas viewBox aspect once it reflows back in

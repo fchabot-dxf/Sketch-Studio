@@ -104,25 +104,48 @@ await (async () => {
       console.log(`design-browser ${h.name}: box ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)} canvas ${Math.round(cv.left)}..${Math.round(cv.right)}; collapsed ${full} -> ${small} px`);
     }
 
-    // phone: the same box is a drawer opened by the header button, the same tree
+    // phone (390x844 touch): the SAME floating card starts hidden, is toggled by the layers button (or hidden by its own collapse arrow), fits inside the canvas, keeps 44 px targets, and its rows work with real taps
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
+    const tap = async (p) => { await T('touchStart', [p]); await sleep(40); await T('touchEnd', []); await sleep(350); };
     for (const h of hosts) {
       await navigate(`http://127.0.0.1:${port}${h.url}`, 8000);
       if (h.enter) { await sleep(800); await evalJs(h.enter); }
       await waitFor(`!!document.querySelector('.sk-browser .sk-sketch-node')`, h.name + ' (phone) has the tree'); await sleep(400);
-      assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-browser')).position`), 'fixed', h.name + ' (phone): the box is the fixed drawer, not a floating card');
-      const closed = await rect('.sk-browser');
-      assert(closed.left >= 390, h.name + ' (phone): the drawer is off screen until opened: ' + JSON.stringify(closed));
-      const tog = await rect('button.sk-drawer-toggle[title="Sketches"]');
-      assert(tog && tog.x > 0 && tog.x < 390 && tog.y > 0 && tog.y < 844, h.name + ' (phone): the drawer button is on screen: ' + JSON.stringify(tog));
-      await T('touchStart', [tog]); await sleep(40); await T('touchEnd', []); await sleep(500);
-      const open1 = await rect('.sk-browser');
-      assert(open1.left >= 0 && open1.right <= 390.5, h.name + ' (phone): the open drawer fits the screen: ' + JSON.stringify(open1));
-      assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-drawer-open')`), true, h.name + ' (phone): open');
+      assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-browser')).position`), 'absolute', h.name + ' (phone): the box is the same floating card (absolute), not a fixed drawer');
+      assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-browser')).display`), 'none', h.name + ' (phone): hidden by default');
+      const tog = await rect('.sk-canvas-corner .sk-browser-corner-btn[title="Sketches"]');
+      assert(tog && tog.width >= 43.5 && tog.height >= 43.5 && tog.left >= 0 && tog.right <= 390.5 && tog.top >= 0 && tog.bottom <= 844.5, h.name + ' (phone): the layers button is on screen at >= 44 px: ' + JSON.stringify(tog));
+      await tap(tog);
+      const open1 = await rect('.sk-browser'), cv = await rect(h.canvas);
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-browser-open')`), true, h.name + ' (phone): open');
+      assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-browser')).display`), 'flex', h.name + ' (phone): shown as floating card');
+      assert(open1.left - cv.left >= 0 && open1.left - cv.left <= 16 && open1.top - cv.top >= 0 && open1.top - cv.top <= 16, `${h.name} (phone): at canvas top-left: box ${open1.left},${open1.top} canvas ${cv.left},${cv.top}`);
+      assert(open1.right <= cv.right + 0.5 && open1.bottom <= cv.bottom + 0.5, `${h.name} (phone): fits inside canvas: box ${JSON.stringify(open1)} canvas ${JSON.stringify(cv)}`);
+      assert(open1.right <= tog.left + 0.5, `${h.name} (phone): does not cover the canvas corner button (${open1.right} <= ${tog.left})`);
       assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-browser .sk-sketch-node').length`), 1, h.name + ' (phone): the same tree (a fresh page: one sketch)');
-      assert.strictEqual(await evalJs(`['.sk-tree-add', '.sk-sketch-eye', '.sk-sketch-icon', '.sk-sketch-name', '.sk-sketch-radio'].every((s) => document.querySelectorAll('.sk-browser ' + s).length === 1)`), true, h.name + ' (phone): the same row controls');
+      for (const sel of ['.sk-browser-toggle', '.sk-tree-add', '.sk-sketch-eye', '.sk-sketch-radio', '.sk-sketch-head']) {
+        const r = await rect('.sk-browser ' + sel);
+        assert(r && r.height >= 43.5 && (sel === '.sk-sketch-head' || r.width >= 43.5), `${h.name} (phone): ${sel} is a 44 px touch target: ${JSON.stringify(r)}`);
+      }
+      // rows work with real taps: +, radio, eye
+      await tap(await rect('.sk-browser .sk-tree-add'));
+      assert.deepStrictEqual(await names(), ['Sketch 1', 'Sketch 2'], h.name + ' (phone): tap + adds a sketch');
+      await tap(await part(0, '.sk-sketch-radio'));
+      assert.strictEqual(await nodeJs(0, `n.querySelector('.sk-sketch-head').classList.contains('is-active')`), true, h.name + ' (phone): tap radio activates Sketch 1');
+      await tap(await part(0, '.sk-sketch-eye'));
+      assert.strictEqual(await nodeJs(0, `n.classList.contains('is-hidden')`), true, h.name + ' (phone): tap eye hides Sketch 1');
+      // tap layers button again hides it
+      await tap(tog);
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-browser-open')`), false, h.name + ' (phone): tap layers again hides it');
+      assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-browser')).display`), 'none', h.name + ' (phone): display none after second tap');
+      // tap layers to show, then tap card collapse arrow to hide; BROWSER_COLLAPSED stays false
+      await tap(tog);
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-browser-open')`), true, h.name + ' (phone): shown again');
+      await tap(await rect('.sk-browser-toggle'));
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('sk-browser-open')`), false, h.name + ' (phone): collapse arrow hides it');
+      assert.strictEqual(await settingStored(), false, h.name + ' (phone): hiding on phone does not overwrite BROWSER_COLLAPSED');
       assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= window.innerWidth + 1`), true, h.name + ' (phone): no page scroll');
     }
     console.log('design-browser-live: all passed');

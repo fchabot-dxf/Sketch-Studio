@@ -39,7 +39,7 @@ export function mountEdit({ isActive, getHostData, applyHost, session = null }) 
   emptyEl.style.display = 'none';
   // the Edit tab's SKETCHES browser floats over the canvas's top-left (#design-body); the phone-width drawer button goes in the app header
   sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine });
-  sidePanel.drawer.toggleEl.style.display = 'none'; // shown only while the Edit tab shows (startEdit / stopEdit)
+  sidePanel.toggleEl.style.display = 'none'; // shown only while the Edit tab shows (startEdit / stopEdit)
 
   docBuffer = createDocumentBuffer({
     state: designController.state, app: 'trace', canvas: svgEl,
@@ -60,8 +60,8 @@ export const getEditBuffer = () => docBuffer;
 /** The Edit canvas's sketch state (the diagnostic report's document section reads it). */
 export const getEditState = () => designController && designController.state;
 /** The render loop runs only while the Edit tab shows (the same start / stop every host gives its Design canvas). */
-export const startEdit = () => { if (sidePanel) sidePanel.drawer.toggleEl.style.display = ''; return designController && designController.start(); };
-export const stopEdit  = () => { if (sidePanel) { sidePanel.drawer.close(); sidePanel.drawer.toggleEl.style.display = 'none'; } return designController && designController.stop(); };
+export const startEdit = () => { if (sidePanel) sidePanel.toggleEl.style.display = ''; return designController && designController.start(); };
+export const stopEdit  = () => { if (sidePanel) { sidePanel.close(); sidePanel.toggleEl.style.display = 'none'; } return designController && designController.stop(); };
 
 /**
  * Import an SVG (or DXF) text into the shared #core sketch as a new named sketch, through the ONE shared importer (#ui/sketch-import.js);

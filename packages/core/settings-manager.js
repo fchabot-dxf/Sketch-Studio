@@ -21,7 +21,7 @@ const PROJECT_FILE = 'sketch-studio.config.json';
 const DEFAULT_SETTINGS = {
     // Mirror important solver defaults for UI
     SNAP_RADIUS: SolverConfig.SNAP_RADIUS || 30,
-    SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM || 10,
+    SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM,
     GRID_MAGNETISM: SolverConfig.GRID_MAGNETISM || 10,
     // Task 537: a point drawn / dragged near the X axis (y = 0) or the Y axis (x = 0) snaps onto it and gets the horizontal /
     // vertical constraint with the origin joint. true = on (default); false = no axis snap.
@@ -48,26 +48,25 @@ const DEFAULT_SETTINGS = {
 
     // Visual defaults
     LINE_STROKE: 0.25,
-    JOINT_RADIUS: 1.4,
-    JOINT_STROKE_MULT: 1.4,
-    SELECTION_FEEDBACK_MULT: 1.5,
+    JOINT_RADIUS: 1.0,
+    JOINT_STROKE_MULT: 0.67,
+    SELECTION_FEEDBACK_MULT: 2.33,
     HOVER_FEEDBACK_MULT: 2,
     LINE_CAP: 'round',
     LINE_JOIN: 'round',
     BACKGROUND: 'light',
     LABEL_FONT_SIZE: 12,
-    GLYPH_SYMBOL_SIZE_PX: 23,
-    GLYPH_INFERENCE_SIZE_PX: 21,
-    GLYPH_OFFSET_PX: 19,
+    GLYPH_SYMBOL_SIZE_PX: 25,
+    GLYPH_INFERENCE_SIZE_PX: 16,
+    GLYPH_OFFSET_PX: 22,
     DASH_LENGTH_PX: 7,
     DASH_GAP_PX: 4,
-    // Look knobs a style template owns (#ui/style-templates.js). Defaults = the owner's look (task 614: Fusion-style thin lines, plain dimension text).
-    GLYPH_OUTLINE_PX: 0.7,          // constraint glyph outline width (screen px, 0.2-4)
+    // Look knobs a style template owns (#ui/style-templates.js). Defaults = the Fusion look (task 630); the Fusion colours are the --sk-* stylesheet defaults.
+    GLYPH_OUTLINE_PX: 0.5,          // constraint glyph outline width (screen px, 0.2-4)
     DIM_LABEL_BOX: false,           // dimension value drawn on a filled label box; false = plain text on the dimension line
-    HOVER_COLOR: '#017AFD',         // stroke of a hovered line / joint ring ('#017AFD' and '#1e40af' route through --sk-selection; any other value is literal)
-    LABEL_FONT_FAMILY: '',          // font-family of dimension values/labels: '' = inherit from the host page (today's look) | a CSS font stack
-    PROFILE_FILL: 'off',            // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
-    LOCKED_LINE_COLOR: '',          // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one
+    LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', // font-family of dimension values/labels: '' = inherit from the host page | a CSS font stack
+    PROFILE_FILL: 'on',             // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
+    LOCKED_LINE_COLOR: '#8DB84A',   // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one
 
     // Task 586: the floating Design BROWSER (SKETCHES tree, #ui/design-browser.js) is shrunk to its header bar. A per-user display preference
     // (local), shared by all four apps, never saved in a document.

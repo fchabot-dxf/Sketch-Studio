@@ -2,7 +2,7 @@
   const { draw } = await import('../packages/ui/svg-renderer.js');
   const { CONSTRAINT_TYPES } = await import('#core/constants.js');
   const SettingsManager = (await import('#core/settings-manager.js')).default;
-  const HOVER_COLOR = SettingsManager.getDefault('HOVER_COLOR');
+  const HOVER_COLOR = '#017AFD'; // the --sk-selection blue: hover has no setting
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   // Mock SVG element with minimal API used by renderer
@@ -42,7 +42,7 @@
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, 'a2', null, null, false, null);
   const hoveredWhite = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(hoveredWhite === 1, `Hovering hidden corner should reveal 1 point, got ${hoveredWhite}`);
-  assert(svg.innerHTML.includes(`stroke:var(--sk-selection, ${HOVER_COLOR})`), `Hovering hidden joint should show leader ring (${HOVER_COLOR})`);
+  assert(svg.innerHTML.includes('stroke:var(--sk-joint-ring-hover, #000000)') && !svg.innerHTML.includes('--sk-selection'), 'Hovering a hidden joint draws the 100% black ring, not blue');
   assert(!/<circle[^>]*fill="none"/.test(svg.innerHTML), 'Hovering hidden joint should draw no outer halo circle');
 
   // Select the coincident constraint c1 and assert the corresponding glyph appears (opacity:1)

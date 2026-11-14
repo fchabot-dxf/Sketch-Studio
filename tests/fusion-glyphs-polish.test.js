@@ -45,7 +45,7 @@ const render = () => {
   return { html: svg.innerHTML, cons };
 };
 
-applyStyleTemplate('fusion');
+applyStyleTemplate('default');
 const { html, cons } = render();
 
 const texts = [...html.matchAll(/<text ([^>]*)>([^<]*)<\/text>/g)].map((m) => {
@@ -83,11 +83,11 @@ for (const q of glyphCentres) {
   for (const l of labelRects) assert(!rectsIntersect(r, l), `glyph at ${q.x},${q.y} does not cover a dimension label`);
 }
 
-// Default is untouched: no font attribute, text centred on the line
-applyStyleTemplate('default');
+// Compact keeps no font attribute (the default look carries the Fusion font); its plain-vs-boxed rotation follows its own DIM_LABEL_BOX
+applyStyleTemplate('compact');
 const d = render().html;
-assert(!/font-family/.test(d.match(/<text [^>]*>\d/g).join('')), 'Default dimension text has no font-family');
-// the default label is plain text (DIM_LABEL_BOX off, task 614): the vertical value is rotated along its line; a boxed label (on) stays upright
-assert.strictEqual(/rotate\(/.test(d.match(/<text [^>]*>\d/g).join('')), !SettingsManager.get('DIM_LABEL_BOX'), 'Default dimension text is rotated exactly when the default has no label box');
+assert(!/font-family/.test(d.match(/<text [^>]*>\d/g).join('')), 'Compact dimension text has no font-family');
+// the compact label is boxed (DIM_LABEL_BOX on): the vertical value stays upright; a plain label (off) is rotated along its line
+assert.strictEqual(/rotate\(/.test(d.match(/<text [^>]*>\d/g).join('')), !SettingsManager.get('DIM_LABEL_BOX'), 'Compact dimension text is rotated exactly when it has no label box');
 
 console.log('fusion-glyphs-polish.test.js passed');

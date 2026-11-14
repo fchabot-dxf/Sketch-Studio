@@ -55,7 +55,7 @@ const render = (cons, jm = joints, sh = shapes, width = 700, selected = new Set(
 const leads = (html) => [...html.matchAll(/<line class="dim-lead" x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)"/g)].map((m) => m.slice(1).map(Number));
 const base = () => [{ id: 'k1', type: 'distance', joints: ['a', 'b'], value: 200, dimMode: 'horizontal' }, { id: 'k2', type: 'distance', joints: ['b', 'c'], value: 100, dimMode: 'vertical' }];
 
-for (const tpl of ['default', 'fusion']) {
+for (const tpl of ['default', 'compact']) {
   applyStyleTemplate(tpl);
   const plain = render(base());
   assert.strictEqual(plain, render(base().map((c) => ({ ...c, labelSlide: undefined }))), `${tpl}: absent labelSlide = identical markup`);
@@ -72,7 +72,7 @@ for (const tpl of ['default', 'fusion']) {
 }
 
 // narrow: arrows flip outside at one zoom, sit inside at the other, same dimension
-for (const tpl of ['default', 'fusion']) {
+for (const tpl of ['default', 'compact']) {
   applyStyleTemplate(tpl);
   const j = new Map([['p', { x: 100, y: 100 }], ['q', { x: 100, y: 108 }]]); // 8 world units apart
   const sh = [{ id: 'l', type: 'line', joints: ['p', 'q'] }];

@@ -30,7 +30,7 @@ const DEFAULTS = {
 
     // ── Snap (screen-space pixels) ───────────────────────────────────
     SNAP_RADIUS: 30,             // Pixel distance to detect a snap candidate
-    SNAP_MAGNETISM: 16,          // Pixel distance to "Lock" the snap; equals the drawn joint marker radius (JOINT_RADIUS 4 * 4) so a point released inside a marker is locked
+    SNAP_MAGNETISM: 10,          // Pixel distance to "Lock" the snap (factory default; the one source: SettingsManager and snap-magnet read it)
     SNAP_RELEASE_MULT: 2.0,      // Hysteresis: release = magnetism * this (prevents jitter)
     GRID_MAGNETISM: 10,          // Pixel distance to lock to grid
 

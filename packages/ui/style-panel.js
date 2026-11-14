@@ -42,8 +42,6 @@ const CONTROLS = [
   { tab: 'glyphs', key: 'GLYPH_OUTLINE_PX',        label: 'Glyph Outline',        min: 0.2, max: 4,   step: 0.1 },
   { tab: 'lines', key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
   { tab: 'lines', key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },
-  { tab: 'lines', key: 'HOVER_COLOR',             label: 'Hover Colour',         type: 'select',
-    options: [{ value: '#1e40af', label: 'Selection blue' }, { value: SettingsManager.getDefault('HOVER_COLOR'), label: 'Hover blue' }] },
   { tab: 'lines', key: 'PROFILE_FILL',            label: 'Closed Profile Fill',  type: 'select',
     options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On (tint every closed loop)' }] },
   { tab: 'lines', key: 'LOCKED_LINE_COLOR',       label: 'Locked Line Colour',   type: 'select',

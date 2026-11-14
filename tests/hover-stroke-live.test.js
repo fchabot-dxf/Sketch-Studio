@@ -3,6 +3,8 @@ import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 
+const SELECTION_MULT = (await import('../packages/core/settings-manager.js')).default.getDefault('SELECTION_FEEDBACK_MULT');
+
 const J = (x, y, fixed = false) => ({ x, y, fixed, sketchId: 'sketch-1' });
 const DOC = {
   version: 3,
@@ -148,7 +150,7 @@ try {
   await mouse('mouseMoved', s.pts.empty.x, s.pts.empty.y); await sleep(200);
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'selected constrained line: 0 glow elements');
-  assert.ok(Math.abs(s.shapes.rE2.sw - restLineSw * 1.5) < 1e-5, 'selected constrained line stroke-width is 1.5x rest');
+  assert.ok(Math.abs(s.shapes.rE2.sw - restLineSw * SELECTION_MULT) < 1e-5, 'selected constrained line stroke-width is SELECTION_FEEDBACK_MULT x rest');
   assert.strictEqual(s.shapes.rE2.stroke, 'rgb(1, 122, 253)', 'selected constrained line turns bright Fusion blue #017AFD');
 
   // 3. Hover corner point r2 (80, 60): revealed with 2x ring in bright Fusion blue, white fill, 0 halos
@@ -157,8 +159,8 @@ try {
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'hovered point: 0 halo elements');
   assert.ok(s.points['80,60'], 'hovered corner r2 is visible');
-  assert.ok(Math.abs(s.points['80,60'].sw - restJointSw * 2) < 1e-5, 'hovered point ring is 2x rest joint stroke');
-  assert.strictEqual(s.points['80,60'].stroke, 'rgb(1, 122, 253)', 'hovered point ring is bright Fusion blue #017AFD');
+  assert.ok(Math.abs(s.points['80,60'].sw - restJointSw) < 1e-5, 'hovered point ring is the rest joint stroke');
+  assert.strictEqual(s.points['80,60'].stroke, 'rgb(0, 0, 0)', 'hovered point ring is 100% black');
   assert.strictEqual(s.points['80,60'].fill, 'rgb(255, 255, 255)', 'hovered point fill stays white');
 
   // 4. Click open end p3 (185, 65): 1.5x ring in bright Fusion blue, blue-tinted fill, 0 halos
@@ -167,8 +169,8 @@ try {
   await mouse('mouseMoved', s.pts.empty.x, s.pts.empty.y); await sleep(200);
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'selected point: 0 halo elements');
-  assert.ok(Math.abs(s.points['185,65'].sw - restJointSw * 1.5) < 1e-5, 'selected point ring is 1.5x rest joint stroke');
-  assert.strictEqual(s.points['185,65'].stroke, 'rgb(1, 122, 253)', 'selected point ring is bright Fusion blue #017AFD');
+  assert.ok(Math.abs(s.points['185,65'].sw -   restJointSw) < 1e-5, 'selected point ring is the rest joint stroke');
+    assert.strictEqual(s.points['185,65'].stroke, 'rgb(0, 0, 0)', 'selected point ring is 100% black');
   assert.strictEqual(s.points['185,65'].fill, 'rgb(118, 164, 228)', 'selected point fill is blue tint #76A4E4');
 
   // 5. Hover constraint glyph: 2x outline in --sk-glyph-hover, bound line pE1 2x in --sk-glyph-hover, 0 halos

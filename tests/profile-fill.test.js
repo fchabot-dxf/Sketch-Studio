@@ -29,10 +29,10 @@ const render = (m, constraints = m.constraints) => {
 const fills = (html) => (html.match(/class="profile-fill"/g) || []).length;
 
 const sk = mk(); addRect(sk, 'a', 100, 100, 200, 100); addCircle(sk, 'c', 500, 300, 50);
-applyStyleTemplate('default');
-assert.strictEqual(fills(render(sk)), 0, 'Default draws no profile fill');
+applyStyleTemplate('compact');
+assert.strictEqual(fills(render(sk)), 0, 'Compact draws no profile fill');
 
-applyStyleTemplate('fusion');
+applyStyleTemplate('default');
 const html = render(sk);
 assert.strictEqual(fills(html), 2, 'Fusion: a rectangle and a circle give two fill paths');
 assert(html.indexOf('profile-fill') < html.indexOf('shape-elem'), 'fills are drawn behind the lines');
@@ -45,9 +45,9 @@ assert.strictEqual(fills(render(open)), 0, 'Fusion: an open polyline gets no fil
 const cons = mk(); addRect(cons, 'k', 100, 100, 100, 100, { isConstruction: true });
 assert.strictEqual(fills(render(cons)), 0, 'Fusion: a construction rectangle gets no fill');
 
-const t = getStyleTemplate('fusion').tokens;
-assert.strictEqual(t['--sk-canvas-bg'], '#FFFFFF', 'Fusion canvas is white');
-assert.strictEqual(t['--sk-geo-fixed'], '#000000', 'fully constrained (DOF 0) lines are black');
+const css = (await import('node:fs')).readFileSync(new URL('../packages/ui/sketcher.css', import.meta.url), 'utf8');
+assert.match(css, /--sk-canvas-bg:\s*#ffffff/i, 'Fusion canvas is white (stylesheet default)');
+assert.match(css, /--sk-geo-fixed:\s*#000000/i, 'fully constrained (DOF 0) lines are black (stylesheet default)');
 
 // Overlapping rectangles: one fill per loop, so the overlap is darker.
 const two = mk(); addRect(two, 'a', 0, 0, 100, 100); addRect(two, 'b', 50, 50, 100, 100);
@@ -58,8 +58,8 @@ const lk = mk(); addRect(lk, 'L', 0, 0, 100, 100, {}, true); addRect(lk, 'F', 30
 const lh = render(lk);
 assert(/data-shape-id="Ll0"[^>]*style="[^"]*#8DB84A/.test(lh), 'locked line is Fusion green');
 assert(/data-shape-id="Fl0"[^>]*style="[^"]*--sk-constraint-fill/.test(lh), 'free line uses the blue constraint token');
-applyStyleTemplate('default');
-assert(!/#8DB84A/.test(render(lk)), 'Default never uses the locked colour');
+applyStyleTemplate('compact');
+assert(!/#8DB84A/.test(render(lk)), 'Compact never uses the locked colour');
 
 // Performance: 300 shapes, steady geometry (cached loops) -- extra cost per frame of PROFILE_FILL on vs off.
 const big = mk(); for (let i = 0; i < 75; i++) addRect(big, 'r' + i, (i % 10) * 60, Math.floor(i / 10) * 60, 40, 40);

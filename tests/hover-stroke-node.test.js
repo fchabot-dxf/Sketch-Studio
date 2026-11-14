@@ -18,8 +18,8 @@ for (const tpl of STYLE_TEMPLATES) {
 const panelSrc = fs.readFileSync(new URL('../packages/ui/style-panel.js', import.meta.url), 'utf8');
 assert.ok(!panelSrc.includes('GLOW_WIDTH_PX') && !panelSrc.includes('Glow Width'), 'GLOW_WIDTH_PX removed from style-panel CONTROLS');
 
-const hoverBlue = SettingsManager.getDefault('HOVER_COLOR');
-assert.strictEqual(hoverBlue, '#017AFD', 'HOVER_COLOR default is sampled bright Fusion blue #017AFD');
+assert.strictEqual(SettingsManager.getDefault('HOVER_COLOR'), undefined, 'HOVER_COLOR is not a setting (hover is always --sk-selection)');
+assert.ok(!STYLE_SETTING_KEYS.includes('HOVER_COLOR'), 'HOVER_COLOR removed from STYLE_SETTING_KEYS');
 const cssSrc = fs.readFileSync(new URL('../packages/ui/sketcher.css', import.meta.url), 'utf8');
 assert.match(cssSrc, /--sk-constraint-fill:\s*#2B9BD6/i, 'free line token is cyan-blue #2B9BD6');
 assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is bright Fusion blue #017AFD');
@@ -81,7 +81,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const restHtml = renderState();
   noGlowUnderStrokes(restHtml);
   const restLineSw = shapeTag(restHtml, 'line_free').sw;
-  assert.match(shapeTag(restHtml, 'line_constrained').style, /--sk-geo-fixed.*#202020/, 'constrained line at rest is black');
+  assert.match(shapeTag(restHtml, 'line_constrained').style, /stroke:#8DB84A/i, 'fully locked line at rest is Fusion green (LOCKED_LINE_COLOR)');
   assert.match(shapeTag(restHtml, 'line_free').style, /--sk-constraint-fill.*#60A5FA/, 'free line at rest uses cyan-blue token');
 
   const hoverMult = SettingsManager.getDefault('HOVER_FEEDBACK_MULT');
@@ -172,23 +172,23 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const restOpenDot = getPointAt(90, 10);
   assert.ok(restOpenDot, 'open end p1 visible at rest');
   const restJointSw = Number(restOpenDot.getAttribute('stroke-width'));
-  assert.match(restOpenDot.getAttribute('style'), /stroke:var\(--sk-geo-fixed, #202020\)/, 'point at rest has dark ring');
+  assert.match(restOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring, #333333\)/, 'point at rest has the 80% black ring');
 
   // Hover open end p1: ring thickens to 2x and turns bright Fusion blue, fill stays white
   const p1s = app.toScreen(90, 10);
   app.move(p1s.x, p1s.y);
   const hovOpenDot = getPointAt(90, 10);
-  assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw * 2) < 1e-6, 'hovered point ring is 2x thicker');
+  assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw) < 1e-6, 'hovered point ring is the rest width');
   assert.match(hovOpenDot.getAttribute('style'), /fill:var\(--sk-joint-fill, white\)/, 'hovered point keeps white fill');
-  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-selection, #017AFD\)/i, 'hovered point ring is bright Fusion blue');
+  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring-hover, #000000\)/i, 'hovered point ring is 100% black');
 
   // Click open end p1: ring is 1.5x thicker and bright Fusion blue, fill is blue-tinted
   app.click(p1s.x, p1s.y);
   app.move(away.x, away.y);
   const selOpenDot = getPointAt(90, 10);
-  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) - restJointSw * 1.5) < 1e-6, 'selected point ring is 1.5x thicker');
+  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) -   restJointSw) < 1e-6, 'selected point ring is the rest width');
   assert.match(selOpenDot.getAttribute('style'), /fill:var\(--sk-joint-selected/, 'selected point has blue-tinted fill');
-  assert.match(selOpenDot.getAttribute('style'), /stroke:var\(--sk-selection, #017AFD\)/i, 'selected point ring is bright Fusion blue');
+    assert.match(selOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring-hover, #000000\)/i, 'selected point ring is 100% black');
 
   await app.close();
 }

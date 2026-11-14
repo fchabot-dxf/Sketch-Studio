@@ -42,7 +42,7 @@ const shot = async (name) => {
   const s = await send('Page.captureScreenshot', { format: 'png', clip: r });
   fs.writeFileSync(path.join(EVID, name + '.png'), Buffer.from(s.data, 'base64'));
 };
-const BUILTIN = 'Built-in:Default/Fusion/Compact/Presentation';
+const BUILTIN = 'Built-in:Fusion (default)/Compact/Presentation';
 
 try {
   await navigate(SS, 15000); await loaded('SketchStudio');
@@ -63,7 +63,7 @@ try {
   assert.ok(await vis(ask('.sk-style-ask-input')), 'the name field appears inline');
   await click(ask('.ok'));
   assert.match(await askText('.sk-style-ask-err'), /Enter a name/, 'an empty name is refused in place');
-  await type('fusion'); await enter();
+  await type('compact'); await enter();
   assert.match(await askText('.sk-style-ask-err'), /built-in/, 'a built-in name is refused');
   await click(ask('.sk-style-ask-input'), 3); await type('Chunky'); await enter();
   await waitFor(`!document.querySelector('${P} .sk-style-ask')`, 'the name field closed');
@@ -75,7 +75,7 @@ try {
   await shot('panel-with-user-preset');
 
   // 2. Default, then the preset again: both knobs back, nothing else changed
-  await pickByName('Default');
+  await pickByName('Fusion (default)');
   s = await state(); assert.strictEqual(s.LINE_STROKE, FACTORY.LINE_STROKE); assert.strictEqual(s.DASH_GAP_PX, FACTORY.DASH_GAP_PX);
   const beforePick = await state();
   await pickByName('Chunky');
@@ -98,12 +98,12 @@ try {
   assert.match(await askText('span'), /already exists\. Overwrite/, 'the overwrite question');
   await click(ask('.cancel'));
   assert.strictEqual(await asks(), 0);
-  await pickByName('Default'); await pickByName('Chunky');
+  await pickByName('Fusion (default)'); await pickByName('Chunky');
   assert.strictEqual((await state()).LINE_STROKE, 0.7, 'Cancel left the stored preset alone');
   await setKnob('LINE_STROKE', 1.9);
   await click(`${P} [data-action="save-preset"]`); await type('chunky'); await enter();
   await click(ask('.ok'));
-  await pickByName('Default'); await pickByName('Chunky');
+  await pickByName('Fusion (default)'); await pickByName('Chunky');
   assert.strictEqual((await state()).LINE_STROKE, 1.9, 'Overwrite replaced the values');
   assert.strictEqual((await picker()).groups[1], 'My presets:Chunky', 'still one preset, name as first saved');
 
@@ -134,7 +134,7 @@ try {
 
   // 8. an invalid stored entry is dropped; the good one and the panel survive (checked after a real reload)
   const goodSettings = await evalJs(`(async () => { const S = (await import('/packages/core/settings-manager.js')).default; return S.getAll(); })()`);
-  const KEYS = ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'DIM_LABEL_BOX', 'HOVER_COLOR', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'];
+  const KEYS = ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'];
   const good = Object.fromEntries(KEYS.map((k) => [k, goodSettings[k]]));
   const stored = { v: 1, presets: [{ id: 'user-bad', name: 'Broken', settings: { LINE_STROKE: 'x' } }, { id: 'user-ok', name: 'Survivor', settings: good }] };
   await evalJs(`(() => { const raw = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}'); raw.STYLE_PRESETS = ${JSON.stringify(stored)}; localStorage.setItem('sketch-studio-settings', JSON.stringify(raw)); })()`);

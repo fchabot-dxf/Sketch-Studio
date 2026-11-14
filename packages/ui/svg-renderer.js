@@ -91,6 +91,7 @@ const SK_VAR = {
   '#3B82F6': '--sk-origin',
   '#3b82f6': '--sk-geo-free',
   '#202020': '--sk-geo-fixed',
+  '#333333': '--sk-joint-ring',
   '#10b981': '--sk-geo-fully',
   '#f97316': '--sk-construction',
   '#9ca3af': '--sk-muted',
@@ -200,7 +201,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
   const LABEL_FONT_FAMILY = getStr('LABEL_FONT_FAMILY', ''); // '' = no font-family attribute (inherits the host's font)
   const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
-  const HOVER_COLOR = getStr('HOVER_COLOR', SettingsManager.getDefault('HOVER_COLOR'));
+  const HOVER_COLOR = '#017AFD'; // not a setting: skv() maps this hex to the shared --sk-selection token
+  const JOINT_RING = '#333333'; // ring of a point at rest: skv() maps it to --sk-joint-ring
+  const JOINT_RING_HOVER = 'var(--sk-joint-ring-hover, #000000)'; // hovered point (not in SK_VAR: that map is by hex and #000000 is used elsewhere)
 
   // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
   function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
@@ -575,10 +578,12 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // Draw origin axes with zoom-scaled stroke
   const originStroke = scale(1.5);
+  const AXIS_COLOR = { x: '#ef4444', y: '#22c55e' }; // the one source of the axis colour: plain axes and both lit cases
+  const litAxisStroke = scale(BASE_LINE_STROKE_HOVERED);
   // X axis (horizontal, red)
-  out.push(`<line x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0" stroke="#ef4444" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
+  out.push(`<line x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0" stroke="${AXIS_COLOR.x}" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
   // Y axis (vertical, green)  
-  out.push(`<line x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}" stroke="#22c55e" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
+  out.push(`<line x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}" stroke="${AXIS_COLOR.y}" stroke-width="${originStroke}" stroke-opacity="0.6"/>`);
 
   // Reference lines (task 539): an axis is lit ONLY while a tool is asking for a target and it is hovered, or it is the pending
   // first target (the tool put its id in the selected set). Never lit in any other mode: it is not selectable geometry there.
@@ -588,7 +593,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const hl = ref.axis === 'axis-x'
       ? `x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0"`
       : `x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}"`;
-    out.push(`<line ${hl} data-ref-axis="${ref.id}" style="stroke:${skv('#2563eb')}" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
+    out.push(`<line ${hl} data-ref-axis="${ref.id}" stroke="${ref.axis === 'axis-x' ? AXIS_COLOR.x : AXIS_COLOR.y}" stroke-width="${litAxisStroke}"/>`);
   }
 
   // Debug overlay: show joint fixed status and ids
@@ -1335,13 +1340,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
     if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
 
-    // Draw regular point styling with zoom-scaled sizes: thin dark outline at rest, bolder ring in bright Fusion blue when hovered or selected (no outer halo), white fill normally, blue tint when selected
+    // Hover only makes a hidden point appear (isPointVisible); a hovered visible point differs from rest only by a 100% black ring. Selected: same 100% black ring, blue-tint fill.
     const r = scale(BASE_JOINT_RADIUS);
     const fill = isSelected ? SELECTED_JOINT_FILL : 'white';
     const isHighlight = (highlight.kind === 'joint' && highlight.id === leader);
     const isPointHovered = isHovered || isHighlight || isActiveSnap;
-    const stroke = isPointHovered ? HOVER_COLOR : isSelected ? '#017AFD' : '#202020';
-    const strokeW = scale(isPointHovered ? BASE_JOINT_STROKE_HOVERED : isSelected ? BASE_JOINT_STROKE_SELECTED : BASE_JOINT_STROKE);
+    const stroke = (isSelected || isPointHovered) ? JOINT_RING_HOVER : JOINT_RING;
+    const strokeW = scale(BASE_JOINT_STROKE);
 
     // Main joint circle
     out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);
@@ -1689,7 +1694,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const hl = onX
         ? `x1="${vb.x}" y1="0" x2="${vb.x+vb.width}" y2="0"`
         : `x1="0" y1="${vb.y}" x2="0" y2="${vb.y+vb.height}"`;
-      out.push(`<line ${hl} data-snap-axis="${effectiveSnap.type}" style="stroke:${skv('#2563eb')}" stroke-width="${scale(4)}" stroke-opacity="0.5"/>`);
+      out.push(`<line ${hl} data-snap-axis="${effectiveSnap.type}" stroke="${onX ? AXIS_COLOR.x : AXIS_COLOR.y}" stroke-width="${litAxisStroke}"/>`);
       if(!isConstraintTool && p){
         const diamondSize = 6;
         const diamondStroke = scale(2);

@@ -10,7 +10,7 @@
 // Screenshots (EVIDENCE_DIR, when set): the line hovered, the glyph hovered, the glyph selected.
 import assert from 'node:assert';
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const HOVER_LITERAL = String((await import('../packages/core/settings-manager.js')).default.getDefault('HOVER_COLOR')).toLowerCase(); // the factory hover colour, drawn literally
+const HOVER_LITERAL = '#017afd'; // the --sk-selection blue (also its var() fallback)
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';

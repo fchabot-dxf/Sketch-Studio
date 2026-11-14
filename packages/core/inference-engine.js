@@ -158,27 +158,26 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
     }
   }
 
-  // Fallback H/V check based on the (startPt → endPt) displacement angle.
-  //
-  // This is the right signal when *drawing* a new line (startPt is the line's
-  // start, endPt is the cursor → displacement IS the line). It is the wrong
-  // signal during a *drag* — `startPt` is the joint's initial position and
-  // `endPt` is the cursor, so `angle` is the joint's motion direction, not
-  // any actual line's orientation. The smart per-attached-line H/V check
-  // above (inside the joint-drag block) already handles the drag case
-  // correctly, so skip this fallback whenever a drag is in progress.
-  if(!options || !options.draggedId){
-    // Check horizontal (0° or ±180°)
-    const horizontalDiff = Math.min(Math.abs(angle), Math.abs(Math.abs(angle) - 180));
-    if(horizontalDiff < ANGLE_SNAP_DEG){
-      return { type: INFERENCE_TYPES.HORIZONTAL, pos: { x: endPt.x, y: startPt.y }, targetId: null };
-    }
+  // Everything below is the DRAWING scan: it reads the displacement startPt -> endPt as the line being drawn (startPt is the line's start,
+  // endPt the cursor), so the inferred pose is that line made horizontal / vertical, perpendicular to a line through its start, parallel to a
+  // nearby line or tangent to a circle / arc its start lies on. During a DRAG startPt is the dragged point's start and endPt the cursor: the
+  // displacement is the point's MOTION, not a line of the sketch, so the pose the scan infers is one the point cannot take (TASK 594, measured
+  // in tests/drag-inference-scan-node.test.js: a free line end moved parallel to a nearby line was pinned on its motion line and the release
+  // added a parallel its line did not have; a line end shared with an arc end got a tangent to the arc for a line 11 mm off tangent; a free
+  // line end moved along its own line, a parallel to itself). A drag (options.draggedType) gets only the tests above, tied to the lines
+  // through the dragged joint (Fusion, real mouse, showed none of the scan's inferences: docs/FUSION-COMPARISON.md, task 594).
+  if(options && options.draggedType) return null;
 
-    // Check vertical (±90°)
-    const verticalDiff = Math.abs(Math.abs(angle) - 90);
-    if(verticalDiff < ANGLE_SNAP_DEG){
-      return { type: INFERENCE_TYPES.VERTICAL, pos: { x: startPt.x, y: endPt.y }, targetId: null };
-    }
+  // Check horizontal (0° or ±180°)
+  const horizontalDiff = Math.min(Math.abs(angle), Math.abs(Math.abs(angle) - 180));
+  if(horizontalDiff < ANGLE_SNAP_DEG){
+    return { type: INFERENCE_TYPES.HORIZONTAL, pos: { x: endPt.x, y: startPt.y }, targetId: null };
+  }
+
+  // Check vertical (±90°)
+  const verticalDiff = Math.abs(Math.abs(angle) - 90);
+  if(verticalDiff < ANGLE_SNAP_DEG){
+    return { type: INFERENCE_TYPES.VERTICAL, pos: { x: startPt.x, y: endPt.y }, targetId: null };
   }
 
   // Check perpendicular to other lines
@@ -249,7 +248,6 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
   try{
     const currentAngle = Math.atan2(endPt.y - startPt.y, endPt.x - startPt.x) * 180 / Math.PI;
     const normAngle = ((currentAngle % 360) + 360) % 360;
-    const isDraggingJoint = options && options.draggedType === 'joint';
     for(const shape of shapes){
       if(!shape) continue;
 
@@ -260,12 +258,9 @@ export function findInference(startPt, endPt, shapes, joints, snapTarget, option
         const a = joints.get(shape.joints[0]);
         const b = joints.get(shape.joints[1]);
         if(!a || !b) continue;
-        // Skip segments that include the start point only when drawing (avoid self-noise)
-        // When dragging a joint, we want to check lines attached to it for parallel/perpendicular
-        if(!isDraggingJoint){
-          const eps = 0.1;
-          if(Math.hypot(a.x - startPt.x, a.y - startPt.y) < eps || Math.hypot(b.x - startPt.x, b.y - startPt.y) < eps) continue;
-        }
+        // Skip segments that include the start point (avoid self-noise)
+        const eps = 0.1;
+        if(Math.hypot(a.x - startPt.x, a.y - startPt.y) < eps || Math.hypot(b.x - startPt.x, b.y - startPt.y) < eps) continue;
 
         const refDx = b.x - a.x, refDy = b.y - a.y;
         const refAngle = Math.atan2(refDy, refDx) * 180 / Math.PI;

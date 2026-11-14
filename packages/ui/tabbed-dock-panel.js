@@ -188,21 +188,24 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
 
   // ── Pop-up use: close button, Esc, open / close ──
   function isOpen() { return !root.hidden; }
-  function clamp() { // keep the header inside the viewport (a remembered position can be off-screen after a resize / reload)
+  function clamp() { // TASK 608: the WHOLE window inside the viewport (a position remembered on a wider screen stuck out on the right): shrink to fit when larger, else keep the remembered position
     if (st.dock || typeof window === 'undefined') return;
-    st.left = Math.max(0, Math.min(st.left, Math.max(0, window.innerWidth - 80)));
-    st.top = Math.max(0, Math.min(st.top, Math.max(0, window.innerHeight - 40)));
-    root.style.left = st.left + 'px'; root.style.top = st.top + 'px';
+    const w = Math.max(MIN_W, Math.min(st.w, window.innerWidth)), h = Math.max(MIN_H, Math.min(st.h, window.innerHeight));
+    root.style.width = w + 'px'; root.style.height = h + 'px';
+    root.style.left = Math.max(0, Math.min(st.left, window.innerWidth - w)) + 'px';
+    root.style.top = Math.max(0, Math.min(st.top, window.innerHeight - h)) + 'px';
   }
   function open() {
     if (!root.hidden) return;
     root.hidden = false;
     clamp();
+    window.addEventListener('resize', clamp);
     try { root.focus({ preventScroll: true }); } catch (_) { /* not focusable here */ }
   }
   function close(fromUser = false) {
     if (root.hidden) return;
     root.hidden = true;
+    window.removeEventListener('resize', clamp);
     if (fromUser && typeof onClose === 'function') onClose();
   }
   if (closable) {
@@ -223,6 +226,6 @@ export function createTabbedDockPanel({ tabs = [], persistKey = 'sk-dock', tabSt
     setActiveTab,
     open, close: () => close(false), isOpen,
     getState: () => ({ ...st }),
-    destroy: () => { try { root.remove(); } catch (_) {} try { tabStrip.remove(); } catch (_) {} },
+    destroy: () => { window.removeEventListener('resize', clamp); try { root.remove(); } catch (_) {} try { tabStrip.remove(); } catch (_) {} },
   };
 }

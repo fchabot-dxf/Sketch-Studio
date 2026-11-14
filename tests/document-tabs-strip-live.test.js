@@ -108,7 +108,7 @@ await (async () => {
     assert.strictEqual((await names()).length, 10, 'no 11th tab');
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');
 
-    // phone (390 x 844, a finger): a 45 px row, 44 px targets; widths at 1, 2, 5, 10 tabs (real taps on "+"); one line that scrolls, the active tab in view
+    // phone (390 x 844, a finger): a 31 px row (TASK 608, owner ruling; was 45), tabs the full row height, close x / + >= 24 x 24; widths at 1, 2, 5, 10 tabs (real taps on "+"); one line that scrolls, the active tab in view
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await navigate(url('sketchstudio'), 10000);
@@ -116,7 +116,7 @@ await (async () => {
     await waitFor(`!!document.querySelector('.sk-ribbon .sk-ribbon-btn')`, 'phone: the ribbon');
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
     const tapNew = async () => { await evalJs(`document.querySelector('.sk-doctab-new').scrollIntoView({ inline: 'nearest', block: 'nearest' })`); await sleep(80); const c = await center('.sk-doctab-new'); await T('touchStart', [c]); await sleep(40); await T('touchEnd', []); await sleep(350); };
-    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 45, 'phone: the strip row is 45 px (44 px tabs + its line)');
+    assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 31, 'phone: the strip row is 31 px (30 px tabs + its line)');
     await checkPlace('phone');
     const phoneW = { 1: await widths() };
     await tapNew(); phoneW[2] = await widths();
@@ -129,9 +129,9 @@ await (async () => {
     assert(phoneW[5].every((w) => w === 104) && phoneW[10].length === 10 && phoneW[10].every((w) => w === 104), 'phone, 5 and 10 tabs stop at the 104 px minimum: ' + JSON.stringify([phoneW[5], phoneW[10]]));
     const phone = await evalJs(`(() => { const s = document.querySelector('.sk-doctabs'); const tops = [...s.querySelectorAll('.sk-doctab')].map((e) => Math.round(e.getBoundingClientRect().top)); const a = s.querySelector('.sk-doctab.active').getBoundingClientRect(); const sr = s.getBoundingClientRect();
       const targets = [...s.querySelectorAll('.sk-doctab-main, .sk-doctab-x, .sk-doctab-new')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
-      return { oneLine: new Set(tops).size === 1, scrolls: s.scrollWidth > s.clientWidth, w: s.clientWidth, activeInView: a.left >= sr.left - 0.5 && a.right <= sr.right + 0.5, small: targets.filter(([w, h]) => w < 44 || h < 44) }; })()`);
+      return { oneLine: new Set(tops).size === 1, scrolls: s.scrollWidth > s.clientWidth, w: s.clientWidth, activeInView: a.left >= sr.left - 0.5 && a.right <= sr.right + 0.5, small: targets.filter(([w, h]) => w < 24 || h < 24) }; })()`);
     assert(phone.oneLine && phone.scrolls && phone.w <= 390 && phone.activeInView, 'phone: one line that scrolls, the active tab in view: ' + JSON.stringify(phone));
-    assert.deepStrictEqual(phone.small, [], 'phone: every tab, close x and "+" is a 44 px target');
+    assert.deepStrictEqual(phone.small, [], 'phone: every tab, close x and "+" is at least 24 x 24 (WCAG 2.2 AA minimum target)');
     await shot('strip-phone.png', { x: 0, y: 0, width: 390, height: 200 });
     console.log('strip widths: 1400 px 1/2/5 tabs 240, 10 tabs ' + w10[0] + '; phone ' + JSON.stringify(phoneW));
     await send('Emulation.setTouchEmulationEnabled', { enabled: false });

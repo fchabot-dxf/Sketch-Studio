@@ -16,6 +16,10 @@
   --success: #34d399;
   --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   --font: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  /* TASK 608: the shared tool ribbon's tokens, declared like Shaper's :root (the aliases above name them but were never set, so the ribbon kept its
+     white default background and inherited the light --text for its icons: 1.48:1). Same values as Shaper. */
+  --sk-ribbon-bg: var(--panel); --sk-ribbon-sep: var(--line); --sk-ribbon-fg: var(--text);
+  --sk-ribbon-hover: rgba(255,255,255,0.08); --sk-ribbon-grouplabel: #6b7280; --sk-ribbon-menu-bg: #1b2030;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

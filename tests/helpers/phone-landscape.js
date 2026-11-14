@@ -7,8 +7,7 @@
 //    activates with a real tap (it becomes the one active button); the rect variants menu opens beside the rail and a tapped variant is chosen; the
 //    Parameters window opens inside the viewport and closes;
 //  - every other control on the screen (header, tab strip, canvas overlays, the SKETCHES box) is inside the viewport, 44 px or more, and not covered
-//    (the point at its centre is the control). Pen Plotter's own Design panel (its aside: Document, colours, checkboxes) is the one exception,
-//    listed by the test (not in the shared Design tab; found, not changed by TASK 602);
+//    (the point at its centre is the control). Pen Plotter's own Design panel (Document, colours, checkboxes) is checked too (TASK 608);
 //  - the page does not scroll; the SKETCHES box starts collapsed, a tap expands it inside the canvas, a tap collapses it;
 //  - SketchStudio: the status bar (Log, Tune, the VIEW readout) is folded away; Log is in the menu and opens the log; Export is in the menu, opens the
 //    Export view, and the header's Design button comes back.
@@ -18,7 +17,7 @@ import { launchBrowser, sleep } from './cdp-browser.js';
 export const LANDSCAPE_HOSTS = [
   { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas' },
   { name: 'shaper', url: '/apps/shaper/index.html', canvas: '#design-canvas', enter: `document.querySelector('[data-mode="design"]').click()` },
-  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()`, except: '#design-panel' },
+  { name: 'penplotter', url: '/apps/penplotter/index.html', canvas: '#design-canvas', enter: `document.querySelector('.stage-btn[data-stage="design"]').click()` },
   { name: 'trace', url: '/apps/trace/index.html', canvas: '#design-canvas', enter: `document.querySelector('.tr-tab[data-tab="edit"]').click()` },
 ];
 const SIZES = [{ w: 844, h: 390 }, { w: 780, h: 360 }];
@@ -39,9 +38,7 @@ export async function runPhoneLandscape(hostName) {
     const btn = (i) => `document.querySelectorAll('.sk-ribbon .sk-ribbon-btn')[${i}]`;
 
     for (const size of SIZES) {
-      // each size is a different phone: no window position remembered from the previous size (the dock keeps a remembered position; found, not
-      // changed by TASK 602: it only pulls the window's header back on screen, so a window remembered on a wider screen can stick out on the right)
-      if (size !== SIZES[0]) await evalJs(`localStorage.clear()`);
+      // no storage clearing between sizes (TASK 608): a window position remembered at the wider size is clamped whole inside the narrower screen
       await send('Emulation.setDeviceMetricsOverride', { width: size.w, height: size.h, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'landscapePrimary', angle: 90 } });
       await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
       for (const h of HOSTS) {
@@ -127,9 +124,10 @@ export async function runPhoneLandscape(hostName) {
         assert.strictEqual(await evalJs(`document.querySelector('.sk-browser').classList.contains('collapsed')`), true, tag + 'a tap collapses it');
 
         // every other control on the screen: inside the viewport, 44 px, not covered
-        const others = await evalJs(`(() => { const out = []; const skip = ${JSON.stringify(h.except || '')};
+        const others = await evalJs(`(() => { const out = []; 
           for (const e of document.querySelectorAll('button, input, select, a[href], [role=tab]')) {
-            if (e.closest('.sk-ribbon') || e.closest('.sk-sidebar') || (skip && e.closest(skip))) continue;
+            if (e.closest('.sk-ribbon') || e.closest('.sk-sidebar') ) continue;
+            if (e.closest('#design-panel-actions')) e.scrollIntoView({ block: 'nearest' }); // TASK 608: Pen Plotter's panel scrolls; a control is checked where a finger reaches it
             const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
             let hidden = false; for (let p = e; p; p = p.parentElement) { const c = getComputedStyle(p); if (c.display === 'none' || c.visibility === 'hidden') { hidden = true; break; } } if (hidden) continue;
             const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
@@ -139,10 +137,11 @@ export async function runPhoneLandscape(hostName) {
         for (const c of others) {
           const t = tag + `control ${c.id} "${c.text}"`;
           assert(c.left >= -0.5 && c.top >= -0.5 && c.right <= size.w + 0.5 && c.bottom <= size.h + 0.5, t + ' is inside the viewport: ' + JSON.stringify(c));
-          assert(c.w >= 43.5 && c.h >= 43.5, t + ` is a 44 px target (${Math.round(c.w)} x ${Math.round(c.h)})`);
+          const strip = /sk-doctab/.test(c.id); // TASK 608 (owner ruling, relaxes 562): the tab strip is a thin 31 px row: every tab / x / + is at least 24 x 24 (WCAG 2.2 AA) and fills the row
+          const min = strip ? 24 : 43.5;
+          assert(c.w >= min && c.h >= min, t + ` is a ${strip ? '24' : '44'} px target (${Math.round(c.w)} x ${Math.round(c.h)})`);
           assert(c.free, t + ' is not covered by anything');
         }
-        if (h.except) console.log(`  ${tag}not checked (host panel, outside the shared Design tab): ${h.except} (${await evalJs(`document.querySelectorAll('${h.except} button, ${h.except} input').length`)} controls)`);
 
         if (h.name === 'sketchstudio') {
           // the status bar folds away; Log and Export are in the menu

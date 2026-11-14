@@ -41,6 +41,12 @@ function openLineBoxes(x, y) {
     live.boxOpen = true; live.cursor = null; live.screen = { x, y };
     openCreationBoxes({ clientX: x, clientY: y }, BOX, [0, 0]);
 }
+/** A finger has no Enter, Esc or keyboard for the boxes (it ends a chain with the Done button, which a focused box would push the page around): no boxes for a touch. */
+function openLineBoxesFor(e) {
+    live.screen = { x: e.clientX, y: e.clientY };
+    if (e.pointerType === 'touch') return;
+    openLineBoxes(e.clientX, e.clientY);
+}
 function closeLineBoxes() {
     lineState.lockedLength = null; lineState.lockedAngle = null;
     if (live.boxOpen) hideInput();
@@ -366,12 +372,12 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
             // segment creation instead of re-entering this "place start" branch forever.
             state.active._tempStart = false;
             // This pointerup was the click that created the start joint; do not finalize a line now.
-            openLineBoxes(e.clientX, e.clientY);   // TASK 597: length and angle show now, after the first click
+            openLineBoxesFor(e);   // TASK 597: length and angle show now, after the first click
             return true;
         }
 
         // If the pointerUp is essentially at the same point as the start, treat it as a click (no end created).
-        if (!movedSinceStart) { openLineBoxes(e.clientX, e.clientY); return true; }   // TASK 597: the first click on an existing point: the boxes show now
+        if (!movedSinceStart) { openLineBoxesFor(e); return true; }   // TASK 597: the first click on an existing point: the boxes show now
         // Otherwise fall through and allow the normal pointerUp logic to create the end joint
         // (this covers the UX case: click to start on an existing joint, then release elsewhere to create a line).
     }
@@ -518,7 +524,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
             polylineOrigin: state.polylineOrigin || newStart
         };
         justCreatedActive = false;
-        openLineBoxes(e.clientX, e.clientY);   // TASK 597: the next segment of the chain has its boxes at once
+        openLineBoxesFor(e);   // TASK 597: the next segment of the chain has its boxes at once
         localState.dragStartScreen = null;
     }catch(_){ }
 

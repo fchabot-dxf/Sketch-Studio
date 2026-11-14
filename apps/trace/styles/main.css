@@ -538,6 +538,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   --sk-construction: #f97316;
   --sk-muted: #8a8170;
   --sk-joint-fill: #F4EFE1;
+  --sk-joint-ring: #333333;
   --sk-constraint-fill: #60A5FA;
   --sk-constraint-stroke: #2563eb;
   --sk-perpendicular-stroke: #0891b2;

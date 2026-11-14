@@ -118,7 +118,7 @@ const render2 = (hov = null) => {
 applyStyleTemplate('default');
 const d2 = render2();
 assert(/fusion-glyph/.test(d2) && !/<use /.test(d2), 'Default glyphs are the outlined glyphs (the only style)');
-assert(/var\(--sk-geo-fixed, #202020\)/.test(d2), 'Default: fixed line uses the geo-fixed token');
+assert(/var\(--sk-joint-ring, #333333\)/.test(d2), 'Default: points at rest use the joint-ring token');
 assert(/var\(--sk-construction, #f97316\)/.test(d2), 'Default: construction line uses the construction token');
 applyStyleTemplate('compact');
 const f2 = render2();

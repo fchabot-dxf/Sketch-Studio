@@ -172,7 +172,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const restOpenDot = getPointAt(90, 10);
   assert.ok(restOpenDot, 'open end p1 visible at rest');
   const restJointSw = Number(restOpenDot.getAttribute('stroke-width'));
-  assert.match(restOpenDot.getAttribute('style'), /stroke:var\(--sk-geo-fixed, #202020\)/, 'point at rest has dark ring');
+  assert.match(restOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring, #333333\)/, 'point at rest has the 80% black ring');
 
   // Hover open end p1: ring thickens to 2x and turns bright Fusion blue, fill stays white
   const p1s = app.toScreen(90, 10);
@@ -180,7 +180,7 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const hovOpenDot = getPointAt(90, 10);
   assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw) < 1e-6, 'hovered point ring is the rest width');
   assert.match(hovOpenDot.getAttribute('style'), /fill:var\(--sk-joint-fill, white\)/, 'hovered point keeps white fill');
-  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-geo-fixed, #202020\)/i, 'hovered point ring is the normal dark ring');
+  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring, #333333\)/i, 'hovered point ring is the normal rest ring');
 
   // Click open end p1: ring is 1.5x thicker and bright Fusion blue, fill is blue-tinted
   app.click(p1s.x, p1s.y);

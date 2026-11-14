@@ -29,6 +29,7 @@
 
   /* Joints */
   --sk-joint-fill: #ffffff;
+  --sk-joint-ring: #333333;         /* ring of a point drawn at rest — 80% black */
   --sk-joint-selected: #76A4E4;
 
   /* Constraint glyphs (mirror #core CONSTRAINT_COLORS) */

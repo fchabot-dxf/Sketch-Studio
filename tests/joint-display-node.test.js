@@ -97,7 +97,7 @@ const makeDoc = (joints, shapes, constraints = []) => ({
   assert.strictEqual(dots[0].cx, 50);
   assert.strictEqual(dots[0].cy, 40);
   assert.match(dots[0].fill, /--sk-joint-fill/, 'hovered unselected point stays white fill');
-  assert.match(dots[0].stroke, /--sk-geo-fixed.*#202020/i, 'hovered point ring is the normal dark ring (no blue)');
+  assert.match(dots[0].stroke, /--sk-joint-ring.*#333333/i, 'hovered point ring is the normal rest ring (no blue)');
   assert.ok(!/--sk-selection/.test(dots[0].stroke), 'hovered point is not blue');
   const halos = hoverHaloDots(app.svg);
   assert.strictEqual(halos.length, 0, 'hovered point draws no outer halo');
@@ -154,7 +154,7 @@ const makeDoc = (joints, shapes, constraints = []) => ({
 
   for (const d of dots) {
     assert.match(d.fill, /--sk-joint-fill/, `point (${d.cx},${d.cy}) has white fill (stale FIXED_JOINT_FILL ignored)`);
-    assert.match(d.stroke, /--sk-geo-fixed.*#202020/, `point (${d.cx},${d.cy}) has dark #202020 outline regardless of fixed/constrained/free state`);
+    assert.match(d.stroke, /--sk-joint-ring.*#333333/, `point (${d.cx},${d.cy}) has the 80% black #333333 ring regardless of fixed/constrained/free state`);
   }
 
   // Hovering hidden polyline middle corner p2 reveals it

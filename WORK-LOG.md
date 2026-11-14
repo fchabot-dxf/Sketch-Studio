@@ -14763,3 +14763,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 - Addition: a HOVERED point is drawn like a visible point at rest (white fill, normal thin dark ring, no blue, no thicker ring); hover only reveals a hidden point. Selected points and lines unchanged. One place: svg-renderer.js joint loop (isPointHovered removed; also covers highlight/active-snap joints, which no longer turn blue). Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual. gate:quick 363/363; hover-stroke-live, joint-display-live, glyph-pick-hover-live, chain-select-move-live, style-panel-tabs, shell-smoke pass.
 
+
+- Addition: the ring of a point drawn at rest (open ends, centres, lone points, hovered points) is 80% black #333333 via a new token --sk-joint-ring (sketcher.css default; svg-renderer.js JOINT_RING + SK_VAR). Hosts that override --sk-geo-fixed per theme also set it so their look is unchanged: Shaper dark root #e6e6e6, Shaper cream Design #333333 (was #202020), Trace Edit canvas #333333 (was #202020). Selected points keep the blue ring; origin keeps its own look. Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual, style-templates.
+

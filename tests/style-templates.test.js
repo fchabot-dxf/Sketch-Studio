@@ -63,7 +63,7 @@ for (const k of STYLE_SETTING_KEYS) assert.strictEqual(getStyleTemplate('default
 applyStyleTemplate('fusion');
 const f = SettingsManager.getAll();
 assert.strictEqual(f.STYLE_TEMPLATE, 'fusion');
-assert.strictEqual(f.LINE_STROKE, 0.25); assert.strictEqual(f.JOINT_RADIUS, 0.75);
+assert.strictEqual(f.LINE_STROKE, 0.25); assert.strictEqual(f.JOINT_RADIUS, 1.0);
 assert.strictEqual(f.HOVER_FEEDBACK_MULT, 2); assert.strictEqual(f.SELECTION_FEEDBACK_MULT, 2.33);
 assert.strictEqual(activeStyleTemplateId(f), 'fusion');
 const fusion = render();

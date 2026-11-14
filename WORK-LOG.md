@@ -14747,3 +14747,5 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 - Tests updated: default-look, hover-stroke-node, joint-display-node, joint-display-live, style-templates, style-panel-tabs, style-presets-live, svg-renderer-coincident-visual, chain-select-move-live, glyph-pick-hover-live; scripts/shell-smoke.cjs. New: tests/hover-color-removed-node.test.js (stored '#5B6CF0' in settings and in an applied preset -> hovered line draws --sk-selection, no violet; no panel control).
 - gate:quick 355/355; shell-smoke 12/12; style-presets-live, style-panel-tabs, hover-stroke-live, joint-display-live, chain-select-move-live, glyph-pick-hover-live pass.
 - Addition: Fusion template GLYPH_SYMBOL_SIZE_PX 15 -> 25 (Fusion only; Default/factory unchanged). Glyph pick area scales with size (task 603), so it grows too. No test asserted the literal 15 (fusion-glyphs-polish reads the applied size). gate:quick 363/363.
+
+- Addition: Fusion template JOINT_RADIUS 0.75 -> 1.0 (Fusion only); tests/style-templates.test.js assertion updated. gate:quick 363/363.

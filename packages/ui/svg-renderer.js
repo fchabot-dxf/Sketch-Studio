@@ -8,6 +8,7 @@ import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
 import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '#core/reference-lines.js';
+import { curveEnds } from '#core/loop-finder.js';
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
@@ -100,6 +101,7 @@ const SK_VAR = {
 // (the tokens themselves, not hex keys of SK_VAR: their warm yellow is also the crossing-marquee fill's hex, which must not follow them)
 const GLYPH_HOVER_COLOR = 'var(--sk-glyph-hover, #eab308)';
 const GLYPH_SELECTED_COLOR = 'var(--sk-glyph-selected, #ca8a04)';
+const SELECTED_JOINT_FILL = 'var(--sk-joint-selected, #76A4E4)';
 export function skv(color) {
   if (typeof color !== 'string') return color;
   const v = SK_VAR[color];
@@ -141,6 +143,16 @@ export const defaultRenderCtx = {
 
 // TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).
 let lastLoggedConstraints = { total: -1, visible: -1 };
+
+/**
+ * Single point-visibility rule (Fusion-style):
+ * hidden follower duplicates are skipped; a regular point is drawn only if it is
+ * hovered, selected, active snap target, an open curve end, an arc/circle center, or a lone point.
+ */
+export function isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower }) {
+  if (isHiddenFollower) return false;
+  return !!(isHovered || isSelected || isActiveSnap || isOpenEnd || isCenter || isLone);
+}
 
 export function draw(joints, shapes, svg, active, snapTarget, constraints=[], selectedJoints=new Set(), selectedConstraints=new Set(), currentTool=null, inference=null, selectedShapes=new Set(), hoveredShape=null, hoveredJoint=null, hoveredConstraint=null, activeSnap=null, tempMousePos=null, isDragging=false, renderTarget, ctx=defaultRenderCtx){ 
   // Update cursor based on tool
@@ -185,8 +197,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
   const LABEL_FONT_FAMILY = getStr('LABEL_FONT_FAMILY', ''); // '' = no font-family attribute (inherits the host's font)
   const DIM_FONT = LABEL_FONT_FAMILY ? `font-family="${LABEL_FONT_FAMILY}" ` : '';
-  const HOVER_COLOR = getStr('HOVER_COLOR', '#1e40af');
-  const FIXED_JOINT_FILL = getStr('FIXED_JOINT_FILL', 'white');
+  const HOVER_COLOR = getStr('HOVER_COLOR', SettingsManager.getDefault('HOVER_COLOR'));
 
   // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
   function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
@@ -1285,26 +1296,59 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   
   // pointsCoincidentToOrigin computed above (moved up to draw origin beneath joints)
 
-  // --- Coincident visibility: hide joints that are coincident with any other joint
-  // However, always keep visible any joint that acts as a circle center or an arc center.
-  // Also mark arc endpoints so we can draw larger, easier-to-drag handles.
-  const coincidentJoints = new Set();
+  // --- Point visibility precomputation (Fusion-style: single rule via isPointVisible) ---
+  // Always keep visible any joint that acts as a circle center or an arc center.
+  // Also mark arc endpoints so we can draw larger, easier-to-drag handles when visible.
   const centerJoints = new Set();
+  const centerClusters = new Set();
   const endpointJoints = new Set();
+  const curveJoints = new Set();
+  const curveEndJoints = new Set();
+  const clusterEndCount = new Map();
+  const shapeById = new Map();
   for (const s of shapes) {
-    if(!s || !s.type) continue;
-    if (s.type === 'circle' && s.joints && s.joints[0]) centerJoints.add(s.joints[0]);
+    if (!s || !s.type) continue;
+    if (s.id) shapeById.set(s.id, s);
+    if (Array.isArray(s.joints)) {
+      for (const jid of s.joints) { if (jid) curveJoints.add(jid); }
+    }
+    if (s.type === 'circle' && s.joints && s.joints[0]) {
+      centerJoints.add(s.joints[0]);
+      centerClusters.add(getClusterLeader(s.joints[0]));
+    }
     if (s.type === 'arc') {
-      if (s.subType === 'CENTER' && s.joints && s.joints[0]) centerJoints.add(s.joints[0]);
+      if (s.subType === 'CENTER' && s.joints && s.joints[0]) {
+        centerJoints.add(s.joints[0]);
+        centerClusters.add(getClusterLeader(s.joints[0]));
+      }
       if (s.joints && s.joints[1]) endpointJoints.add(s.joints[1]);
       if (s.joints && s.joints[2]) endpointJoints.add(s.joints[2]);
     }
+    const ends = curveEnds(s);
+    if (ends) {
+      for (const eid of ends) {
+        if (!eid) continue;
+        curveEndJoints.add(eid);
+        const leader = getClusterLeader(eid);
+        clusterEndCount.set(leader, (clusterEndCount.get(leader) || 0) + 1);
+      }
+    }
   }
+  const onCurveClusters = new Set();
   for (const c of constraints) {
-    if (c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2) {
-      const [a, b] = c.joints;
-      if (a !== 'j_origin') coincidentJoints.add(a);
-      if (b !== 'j_origin') coincidentJoints.add(b);
+    if (!c) continue;
+    if (c.type === CONSTRAINT_TYPES.POINT_ON_LINE) {
+      if (c.joint && c.shape && !isReferenceShapeId(c.shape) && shapeById.has(c.shape)) {
+        onCurveClusters.add(getClusterLeader(c.joint));
+      } else if (!c.shape && Array.isArray(c.joints) && c.joints.length >= 3) {
+        onCurveClusters.add(getClusterLeader(c.joints[0]));
+      }
+    } else if (c.type === CONSTRAINT_TYPES.MIDPOINT) {
+      if (Array.isArray(c.joints) && c.joints.length >= 3 && c.joints[2]) {
+        onCurveClusters.add(getClusterLeader(c.joints[2]));
+      } else if (c.joint && c.shape && !isReferenceShapeId(c.shape) && shapeById.has(c.shape)) {
+        onCurveClusters.add(getClusterLeader(c.joint));
+      }
     }
   }
   const isClusterSelected = (id) => {
@@ -1328,6 +1372,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Map joint highlights to cluster leaders so the visible leader shows hover/active glow when a follower is hovered
   if (highlight.kind === 'joint' && highlight.id) { highlight.id = getClusterLeader(highlight.id); }
 
+  let originDrawn = false;
   for(const [id,j] of joints.entries()){ 
     // Render the origin as part of the joint pass so it shares the same z-order and is interactable
     if(id === 'j_origin'){
@@ -1371,6 +1416,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       } catch (_){ }
 
       // Draw the origin as a normal joint (white fill) with the shared stroke
+      originDrawn = true;
       out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);
 
       // If origin is single, behave like an endpoint: add larger invisible hit-target + subtle ring
@@ -1384,70 +1430,42 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       continue;
     }
 
+    const leader = getClusterLeader(id);
     const isSelected = isClusterSelected(id);
-    const isHovered = (hoveredJoint && getClusterLeader(hoveredJoint) === id) && !hoveredConstraint && !hoveredShape;
+    const isHovered = !!(hoveredJoint && getClusterLeader(hoveredJoint) === leader && !hoveredConstraint && !hoveredShape);
     const isConstraintPart = constraintJoints.has(id);
-    // Hide coincident joints unless actively interacted — but keep the cluster leader visible
-    const isActiveSnap = (activeSnap && activeSnap.type === 'joint' && activeSnap.targetId === id);
-    // Never hide center joints for circles/arcs even if coincident; also never hide the cluster leader
-    const isLeader = (getClusterLeader(id) === id);
-    const isHiddenCoincident = coincidentJoints.has(id) && !isLeader && !centerJoints.has(id) && !isHovered && !isSelected && !isConstraintPart && !isActiveSnap;
-    if (isHiddenCoincident) continue;
+    const isActiveSnap = !!(activeSnap && activeSnap.type === 'joint' && getClusterLeader(activeSnap.targetId) === leader);
+    const isHiddenFollower = (leader !== id) && (leader !== 'j_origin' || originDrawn);
 
     // Fillet virtual-sharp joint V (the corner as it was; overall dimensions attach here): a small CROSS, never
     // hidden, with the usual transparent hit target so it stays hoverable/snappable as a dimension target.
     if (j.virtualSharp) {
+      if (isHiddenFollower) continue;
       const arm = scale(5);
       const vStroke = hoverBoundJoints.has(id) ? GLYPH_HOVER_COLOR : (isSelected || isHovered) ? '#1e40af' : isConstraintPart ? GLYPH_SELECTED_COLOR : '#64748B';
       out.push(`<circle class="joint-handle" data-joint-id="${id}" cx="${j.x}" cy="${j.y}" r="${scale(BASE_JOINT_RADIUS) * 1.9}" fill="rgba(0,0,0,0)" style="cursor:pointer"/>`);
       out.push(`<path d="M ${j.x - arm} ${j.y - arm} L ${j.x + arm} ${j.y + arm} M ${j.x - arm} ${j.y + arm} L ${j.x + arm} ${j.y - arm}" fill="none" style="stroke:${skv(vStroke)}" stroke-width="${scale(1.5)}" stroke-linecap="round"/>`);
       continue;
     }
-    
-    // Draw regular point styling with zoom-scaled sizes
+
+    const isCenter = centerJoints.has(id) || (leader === id && centerClusters.has(leader));
+    const isLone = !curveJoints.has(id) && !(clusterMembers.get(leader) || []).some((m) => curveJoints.has(m));
+    const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
+    if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
+
+    // Draw regular point styling with zoom-scaled sizes: always thin dark outline, white fill normally, blue tint when selected, true-blue hover halo
     const r = scale(BASE_JOINT_RADIUS);
-    let fill = 'white';
-    let stroke = '#60A5FA'; // base blue (paler)
+    const fill = isSelected ? SELECTED_JOINT_FILL : 'white';
+    const stroke = '#202020';
+    const strokeW = scale(BASE_JOINT_STROKE);
 
-    if (fixedJoints.has(id)) {
-        fill = FIXED_JOINT_FILL;
-        stroke = (LOCKED_LINE_COLOR && j.fixed === true) ? LOCKED_LINE_COLOR : '#202020';
-        if (LOCKED_LINE_COLOR && j.fixed === true && FIXED_JOINT_FILL !== 'white') fill = LOCKED_LINE_COLOR;
-    } else if (constrainedJoints.has(id)) {
-        fill = FIXED_JOINT_FILL;
-        stroke = '#202020';
-    } else {
-        fill = 'white';
-        stroke = '#60A5FA';
+    // Draw outer hover/snap glow in HOVER_COLOR so hover stays crisp and never swallows the white/blue center
+    const isHighlight = (highlight.kind === 'joint' && highlight.id === leader);
+    if (isHovered || isHighlight || isActiveSnap) {
+      const glowR = r;
+      const glowStroke = scale(GLOW_WIDTH_PX);
+      out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv(HOVER_COLOR)}" stroke-width="${glowStroke}" stroke-opacity="0.4" fill="none"/>`);
     }
-
-    let strokeW = scale(BASE_JOINT_STROKE); // base
-
-    // Joints bound by a constraint get a thicker stroke in the glyph colours but NO glow halo (the glow is the joint's own selection).
-    if(hoverBoundJoints.has(id)){
-      stroke = GLYPH_HOVER_COLOR; // bound by the hovered constraint
-      strokeW = scale(BASE_JOINT_STROKE_SELECTED);
-    } else if(isHovered){
-      stroke = HOVER_COLOR; // darker blue
-      strokeW = scale(BASE_JOINT_STROKE_HOVERED);
-    } else if(isSelected){
-      stroke = '#1e40af'; // darker blue
-      strokeW = scale(BASE_JOINT_STROKE_SELECTED);
-    } else if(isConstraintPart){
-      stroke = GLYPH_SELECTED_COLOR; // bound by a selected constraint
-      strokeW = scale(BASE_JOINT_STROKE_SELECTED);
-    }
-
-    // Only draw ONE glow per frame for the active highlight, but allow selected joints to also show glow
-    try {
-      const isHighlight = (highlight.kind === 'joint' && highlight.id === id);
-      if (isHighlight || isClusterSelected(id)) {
-        // FIX: Use dynamic radius and scaled stroke width so the glow appears outside the joint
-        const glowR = r; // match the joint radius
-        const glowStroke = scale(GLOW_WIDTH_PX); // thicker outward stroke for better visibility
-        out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv('#3B82F6')}" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
-      }
-    } catch (_){ }
 
     // Main joint circle
     out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);

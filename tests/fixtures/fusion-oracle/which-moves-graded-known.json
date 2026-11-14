@@ -1201,33 +1201,11 @@
    "0"
   ]
  },
- "dim-length|L": {
-  "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
-  "total": 4,
-  "cells": [
-   "0",
-   "3"
-  ]
- },
- "dim-length|C": {
-  "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
-  "total": 2,
-  "cells": [
-   "0"
-  ]
- },
  "dim-length|R": {
   "reason": "Fusion refuses a length dimension on a fully held line; ours adds it as a reference (task 526)",
   "total": 2,
   "cells": [
    "8"
-  ]
- },
- "dim-radius|A": {
-  "reason": "same shape (the arc and its own centre): no pre-placement (task 525 rule), the solve deforms the arc where Fusion scales it about its centre",
-  "total": 4,
-  "cells": [
-   "0"
   ]
  }
 }

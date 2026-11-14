@@ -2134,7 +2134,7 @@ construction line.
 | points | 7 -> 11 (4 new) | 4 new (our total differs: the chain corner is two joints) | yes (new count) |
 | undo | one step | one step ('mirror'); redo identical | yes |
 | A 3 -> 4, diameter 1 -> 1.6 | copy (4,4), (4,1), r 0.8 | with the construction line held on x = 0: copy x 4, y 4.0008 / 0.9982, r 0.8 | x and r yes; y within 0.002 cm |
-| A 3 -> 4 with a FREE construction line | the line stayed | the line turns 3.0 degrees (to (-0.19,-1.00)-(0.13,5.00)), A's start goes to (0.080, 4.115); the copy stays its exact mirror | no (see below) |
+| A 3 -> 4 with a FREE construction line | the line stayed | task 585: the line turned 3.0 degrees (to (-0.19,-1.00)-(0.13,5.00)), A's start went to (0.080, 4.115). Since task 611: the line stays, A (0,4)->(-4,4), the copy (4,4), (4,1) exactly (mirror-fusion-node, the line free) | yes since task 611 ("Dimension edit: what moves (task 611)") |
 | arcs | not measured | the circle form (centre + equal radius) PLUS point links on both ends: the copy is the true mirror image; its sweep flips | to verify in Fusion |
 | the mirror line among the objects | not measured | refused ("the mirror line cannot be one of the objects to mirror") | to verify in Fusion |
 
@@ -2173,3 +2173,27 @@ Fusion was NOT measured: the task needs the REAL mouse in Fusion and this sessio
 | Circle | diameter | the DIAMETER box (was radius); the circle keeps its radius and a typed one adds the SAME radius dimension (isRadius, value = diameter / 2) |
 
 Not the same / not done: a typed line ANGLE adds no constraint (geometry exact only; ours never had an angle constraint for a line); a typed arc sweep adds none either; a typed length is the existing distance constraint.
+
+## Dimension edit: what moves (task 611)
+Measured in Fusion 2706.1.17 with the REAL mouse and keys (2026-11-14): a new unsaved document (CLAUDE_MARK_611, cm), one sketch CLAUDE_TEST_611_A built through the API (geometry, constraints, dimensions; no command run), sketch edit mode by a real double-click on the timeline, then for each cell a real double-click on the dimension's value, the new value typed, Enter; every point read back after each edit; the document closed without saving. Ours = tests/dimension-edit-who-moves.test.js (mm = cm x10, the dimension box's seam commitDimensionEdit) and tests/mirror-fusion-node.test.js. Evidence (local): .evidence/611/fusion-read-*.json, fusion-*-box-crop.png, fusion-C2-*-crop.png.
+
+| cell (Fusion, cm) | Fusion | ours before (main) | ours now |
+|---|---|---|---|
+| C1 free CONSTRUCTION line K x = 0 (0,-1)-(0,5); A (0,4)->(-3,4) horizontal, start on K; length 3 -> 4 | A's END to (-4,4); K and A's start stay | K turns to (0.068,-1.001)-(0.341,4.994), A's start slides to (0.296,4.004) | as Fusion |
+| C2 = C1 + B (-3,4)->(-3,1) vertical sharing A's end + circle (-1.5,2) d 1, all mirrored about K (Fusion's 4 symmetries); 3 -> 4 | A's end and B move by -1 in x, the copy by +1; K and both circles stay | K turns (-0.190,-0.996)-(0.127,4.997), everything moves | as Fusion |
+| C3 = C1 with K a NORMAL line | as C1 | as C1 before | as Fusion |
+| C4 = C1 without the horizontal (A to (-3,3)); 3.162 -> 4 | A's end slides along A to (-3.795,2.735); K, A's start stay | K and A's start move | as Fusion |
+| C5 point-to-line distance, free A's start (-1,2) to free line L x = 0; 1 -> 2 | L translates +1 in x; A stays | both move (L +0.333, A's start -0.667) | as Fusion |
+| C6 angle between free L x = 0 and free A (0,2)->(-3,2), A's start on L; 90 -> 60 deg | L stays; A turns, its start sliding down L: (0,1.480), (-2.475,2.909) | L stays; A (0,1.213), (-2.726,2.787) | unchanged (same operand; the two ends share the turn differently: divergence) |
+| C7 A (0,4)->(-3,4) horizontal, start on free L1 x = 0, end on free L2 x = -3; 3 -> 4 | BOTH lines translate, L1 +0.556, L2 -0.444; A stays at y 4 | both lines turn, A rises to y 4.023 | L1 and A's start stay, A stays at y 4, L2 turns through (-4,4): divergence |
+| C8 = C7 without the horizontal (A to (-3,3)); 3.162 -> 4 | A's end slides down L2 to (-3,1.354); both lines and A's start stay | everything moves | as Fusion |
+| R1 / R4 / R8 = C1 / C4 / C8 with the dimension picked END first | the same as C1 / C4 / C8 (the pick order does not decide) | as C1 / C4 / C8 before | as Fusion |
+| R9 = C1 drawn the other way (A (-3,4)->(0,4), its END on K) | A's free START to (-4,4); K and A's end stay | K and A's end move | as Fusion |
+
+**Fusion's rule, from these cells and the task 528 recordings:** a typed value moves the operand that GIVES WAY and what must follow it (a chain corner, a mirror copy); everything else stays, a free construction or normal line included; a moving point slides along a line it sits on rather than moving the line. Two points of one line: the point NOT attached to other geometry gives way (R1, R9); both attached (C2, C8, R8): the line's END point gives way, whichever was picked first. Two bodies: the who-moves table (task 525). A point-to-line distance: the point-on-line ranking of the table (a lone free point gives way; a line's end against a free line is a tie and the line gives way: C5, and 528's PL / LL cells).
+
+**Ours (task 611):** `solveGivingWay` (packages/core/creation-placement.js), called by commitDimensionEdits for every value step of a SINGLE edit, after the who-moves placement: the giving operand (`editGiver`: the rule above; a radius edit: the rim gives way, the centre stays) is the only unknown, every other joint and circle radius held; when that cannot satisfy every driving constraint, the constraints left unsatisfied bring their operands in (never a symmetric's line; the anchor only through a constraint of its own), stage by stage; then the anchor; then the plain least-change solve of the whole sketch (the old behaviour). A batch of edits (a formula changing several dimensions, a paste) keeps the plain solve. Before, every edit solved every free unknown by least change, so a free line that only shared a point with the dimensioned line took part of the change (the 585 Mirror divergence).
+
+Oracles after task 611 (before -> after, nothing that agreed stopped agreeing): fusion-dim-edit 615 -> 656 same of 864 (36 both-operands runs: line length L|0, L|3, C|0, R|0 and point-to-line PL|0,0 / 0,3 / 0,4, LL|0,0 now move Fusion's one operand; the 5 arc-centre runs: the arc's centre stays on a radius edit); which-moves 286 -> 289 of 315 (dim-length.free.A, dim-length.A_hv.A, dim-radius-arc.free.A); graded 1987 -> 1991 of 2438 (dim-length L|0, L|3, C|0, dim-radius A|0); drawings 829 of 954 unchanged; fusion-drag 146 of 161 unchanged; constraint-audit, coverage-matrix, coverage-properties, extreme-arcs, drag-like-fusion-node, solver-perf-guard pass unchanged.
+
+Divergences (reported, owner decides): C6 (angle: the same operand moves, the turn is shared differently between A's ends); C7 (when the dimensioned line cannot absorb the change, Fusion translates both lines it sits between; ours keeps the first and turns the second); a batch edit still moves free geometry (not measured in Fusion: does Fusion's Change Parameters hold a free mirror line?); dim-line-line LL|0,0 (Fusion moves line 1, the first pick; ours both lines: no giver rule for a line-line distance yet).

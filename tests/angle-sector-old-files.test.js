@@ -30,6 +30,11 @@ const { serializeDocument, validateDocument } = await import('../packages/core/d
 
 const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/angle-dimension/legacy-angles.json', import.meta.url), 'utf8'));
 const TOL = 1e-9;
+// TASK 611: a typed value's solve holds what does not give way (#core/creation-placement.js solveGivingWay), where main solved every unknown. The
+// edits land on main's poses within 1e-6 of the drawing's size (the owner's trapezoid, arcs of ~20 m radius: its two angle edits end 0.006 mm
+// from main's, the same points moving); a document's load and jitter stay exact (TOL).
+const EDIT_REL = 1e-6;
+const sizeOf = (js) => Math.max(1, ...js.map((x) => Math.max(Math.abs(x[1]), Math.abs(x[2]))));
 const quiet = (f) => { const e = console.error, w = console.warn, l = console.log; console.error = console.warn = console.log = () => {}; try { return f(); } finally { console.error = e; console.warn = w; console.log = l; } };
 const worstJoints = (a, b) => {
   // TASK 554: a document saved WITHOUT j_origin (the owner's) now loads with it (fixed at 0,0, nothing attached); main had no such joint
@@ -98,8 +103,9 @@ for (const d of fx.docs) {
     const f = was.edits[i];
     assert.strictEqual(e.refused, f.refused, `${d.name}: edit to ${e.to} refused ${e.refused}, main ${f.refused}`);
     const we = worstJoints(e.joints, f.joints);
-    assert(we < TOL, `${d.name}: the edit to ${e.to} lands ${we} away from main's`);
-    if (!typedPast180 && worstArc(e.arc, f.arc) >= TOL) {
+    const tolEdit = Math.max(TOL, EDIT_REL * sizeOf(f.joints));
+    assert(we < tolEdit, `${d.name}: the edit to ${e.to} lands ${we} away from main's (allowed ${tolEdit})`);
+    if (!typedPast180 && worstArc(e.arc, f.arc) >= tolEdit) {
       // main picked the arc from where the label was left; when the edit moves the crossing point the label can end up nearer the
       // OPPOSITE sector of the same span, and main drew that one. The stored sector stays on its rays: the vertical opposite of main's.
       const opposite = Math.abs((e.arc.sx + f.arc.sx) - (e.arc.ex + f.arc.ex)) < 1e-6 && Math.abs((e.arc.sy + f.arc.sy) - (e.arc.ey + f.arc.ey)) < 1e-6 && e.arc.large === f.arc.large;

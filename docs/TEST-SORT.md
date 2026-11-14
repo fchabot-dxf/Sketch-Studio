@@ -481,3 +481,58 @@ the autosave wait (3.2 s) is the kit's page-hide flush. Setup differs in the nod
 | the shared importer takes two undo snapshots (`sketch-import.js` line 134) | sketch-import-shared-node | `AssertionError [ERR_ASSERTION]: import-basic.svg: ONE undo snapshot per import` |
 | deleting a non-empty project is allowed (`project-store.js` deleteProject guard) | sidebar-projects-node | `AssertionError [ERR_ASSERTION]: delete of a non-empty project shows the store reason: ` |
 | the mirror leaves out the circle's symmetric link (`mirror.js` line 130) | mirror-sketchstudio-node | `AssertionError [ERR_ASSERTION]: 4 new constraints, all symmetric about the Y axis: [...3 constraints...]` |
+
+## Phase 2, batch F: the import wiring and the Design info panel into modules (task 610)
+
+Owner, 2026-11-14 ("All of them"): 601 left two things live because their wiring was page-only. (1) Import: SketchStudio's and Shaper's `importFile` (+ the drop) lived in `apps/*/main.js`. (2) The Design
+info panel (the SKETCHES browser, `mountDesignBrowser`) was mounted inline by each page script. Both are now declared in modules the page and the kit call; nothing was weakened.
+
+### App change (declared, no behaviour change): the page calls the module, the kit calls the same module
+- `apps/sketchstudio/design-canvas.js`: `createStudioImporter({ state, svg })` -> `{ importFile, mountDrop }` (the importer call + the notification, the drop on the canvas) and `mountStudioBrowser({ svg, state, engine, toggleHost })`, moved out of `main.js` unchanged (main.js creates the importer in `initApp`, where `svg` is known, and calls both).
+- `apps/shaper/src/cut-import.js`: `createShaperImporter({ ensureSketch, getController, getInfoPanel, notify, getDropHost })` -> `{ importFile, mountDrop }` (ensureSketch, `importShaperFile`, the info-panel refresh, the status line; the drop on the Design view) and `getDocUnit` (moved from main.js, which imports it). `apps/shaper/src/group-status.js` (new): `createGroupStatus(getHost)`, the one-line `#group-status` toast (was inline in main.js). `apps/shaper/src/design-canvas.js`: `mountShaperBrowser({ state, engine })`.
+- Pen Plotter needed no change: its `importDrawing` (sketch-stage.js) was already importable and its Design stage already mounts the browser.
+- Behaviour changes for existing users: none. Re-verified in the real pages by `import-polish-fit-a` (SketchStudio + Shaper menu import) and `sketch-import` (Trace) live runs.
+- Left as is, reported: `apps/shaper/src/cut-panel.js` has its own `getDocUnit` copy (same expression); not touched (a separate de-duplication).
+
+### Kit additions (tests/helpers/node-app.js, declared in its header; additions 1-16 unchanged)
+17. design browser: `open({ designBrowser: true })` mounts the SKETCHES browser through the host's own declared mount and ticks it each frame; `app.browser`. 18. import: `open({ sidebar: true })` now gives the sidebar the host's `importFile` (the "Import SVG / DXF…" entry works), the host's drop is mounted, `app.importFile`. 19. `app.dropFile(target, { name, text })`: happy-dom's DragEvent drops the `dataTransfer` it is given, so the event carries a DataTransfer-shaped `{ types: ['Files'], files: [File] }` (the app's own drop listener runs).
+
+### Decisions
+| old file | decision | reason |
+|---|---|---|
+| sketch-import (B) | SPLIT: node (SketchStudio, Shaper, Pen Plotter) + live (Trace) | menu entry, chooser, one undo step, drop: state / DOM the kit runs. Trace is not a kit host |
+| import-polish-undo | MOVE to node | Pen Plotter paper / pens / styles / static ids and Shaper's cut plan are state |
+| dxf-import-live | MOVE to node | status text, shape kinds, loops, a selected loop shows the cut card, the cut plan: all state / DOM; its two screenshots asserted nothing (EVIDENCE_DIR) and are dropped |
+| dimension-delete-live | MOVE to node (dimension-delete-panel-node) | what was left is the info-panel row route; the kit now mounts the panel |
+| import-polish-fit-a / -b | KEEP live | the FIT rule reads rendered shape boxes against the canvas box (real layout); they also run the page scripts' refactored wiring for real |
+| design-browser-live, phone-header-live, sketch-layers-live, document-tabs-strip-live, phone-rotation-live, penplotter-cosmetics, app-sidebar, trace-projects | KEEP live | layout / real pointer / real touch / Trace / the real hosts' menus |
+
+### Old-vs-new assert table (assert calls in the source, counted with `grep -o "assert\(\.[a-zA-Z]*\)\?("`)
+| old file | asserts | new file(s) | asserts |
+|---|---|---|---|
+| sketch-import (B) | 3 (per app, 4 apps) | sketch-import-node (3 apps) + sketch-import (Trace) | 3 + 3 (the same three asserts per app) |
+| import-polish-undo | 10 | import-polish-undo-node | 10 |
+| dxf-import-live | 14 | dxf-import-node | 14 |
+| dimension-delete-live | 11 | dimension-delete-panel-node | 9 |
+
+dimension-delete: the 2 not carried are the browser test's setup guards for the real tab click (`clickEl`: selector not found; `openMode`: could not open the tab); the kit opens Design itself and there is no click to guard. Every assert of the delete route (panel row found, line selected, the row drops the geometry selection and selects the constraint, no shape removed, no joint removed, no joint moved, exactly one constraint removed) is kept, plus a guard that each label is on screen.
+Differences noted: the old sleeps are the kit's events (the import's own async file read is waited for with `waitFor`); the file chooser is the kit's (override 15).
+
+### Times (`node <file>`, one run each, the live gate not running)
+| old live file | s (gate:live, before) | new | s |
+|---|---|---|---|
+| sketch-import (B, 4 apps) | 47.4 (batch E) | sketch-import-node (3 apps) / sketch-import (Trace only, live) | 2.9 / 19 |
+| import-polish-undo | 26 (batch E) | import-polish-undo-node | 2.0 |
+| dimension-delete-live | 36.1 (batch E merge run) | dimension-delete-panel-node | 0.67 |
+| dxf-import-live | not in batch E's slowest 15 (not measured) | dxf-import-node | 0.65 |
+
+One `npm run gate:live` at the end (this task's exception): `GATE tier=live jobs=live=6 files=62 pass=62 fail=0 elapsed=288s`, `SMOKE 12/12`, `HEADLESS-LEFT 0`. Slowest 15 (s): design-browser-live 58.0, phone-landscape-sketchstudio-live 48.0, clipboard-live-cross 46.5, phone-rotation-live 46.3, clipboard-live-sketchstudio 44.3, phone-landscape-penplotter-live 41.7, phone-landscape-shaper-live 41.5, phone-landscape-trace-live 41.2, sketch-layers-live 39.5, trace-projects 39.1, canvas-grid-labels-live 38.7, phone-header-live 36.9, rect-menu-landscape-live 36.9, rect-menu-portrait-live 36.7, rect-menu-desktop-live 35.2.
+
+`node scripts/gate.cjs --list`: before 345 quick + 65 live = 410; after 349 quick + 62 live = 411 (the live count falls by 3: dxf-import-live, dimension-delete-live, import-polish-undo went to node; the 4 node files are quick).
+
+### Bites (a behaviour broken on purpose, the node test fails, reverted; `git status` shows tests / docs / the declared modules only)
+| break | test | failure |
+|---|---|---|
+| the info panel's row click keeps the geometry selection (`design-info-panel.js` line 143, `selectedShapes.clear()` removed) | dimension-delete-panel-node | `AssertionError [ERR_ASSERTION]: distance (two points): picking the row drops the geometry selection` |
+| Shaper's afterImport reports no kept cuts (`cut-import.js`, `return n ? ...` -> `return false ? ...`) | dxf-import-node | `AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Imported 39 shapes .* 6 cuts kept/` |
+| SketchStudio's drop is not mounted (`design-canvas.js` createStudioImporter `mountDrop` -> `() => {}`) | sketch-import-node | `Error: node-app: timed out waiting for SketchStudio: the dropped SVG's 10 shapes` |

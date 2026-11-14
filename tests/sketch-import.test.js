@@ -2,6 +2,8 @@
 //  A. (moved to tests/sketch-import-shared-node.test.js, TASK 601) the shared importer on small SVG / DXF fixtures gives the SAME shapes the old Shaper-only path gave and lands as ONE undo step;
 //  B. in SketchStudio, Shaper, Pen Plotter AND Trace: the File menu has "Import SVG / DXF…", a real file chooser import of an SVG and of a DXF
 //     shows the shapes, Ctrl+Z removes each import in ONE step, and a dropped file imports through the same importer.
+//     TASK 610: SketchStudio, Shaper and Pen Plotter moved to tests/sketch-import-node.test.js (their import wiring is in modules the kit calls); this browser
+//     file keeps TRACE, which is not a kit host (its File menu, import and reload run in the page script).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,9 +25,6 @@ await (async () => {
 
     // ── B. every app with the shared sidebar ──────────────────────────────────────────────────────────────────────────────────────────────────
     const apps = [
-      { name: 'SketchStudio', url: '/apps/sketchstudio/index.html', ready: `!!document.getElementById('tool-line')`, canvas: '#svgCanvas', drop: '#svgCanvas' },
-      { name: 'Shaper', url: '/apps/shaper/index.html', ready: `!!document.querySelector('[data-mode="design"]')`, prep: `document.querySelector('[data-mode="design"]').click()`, canvas: '#design-canvas', drop: '#design-view' },
-      { name: 'Pen Plotter', url: '/apps/penplotter/index.html', ready: `!!window.__sketch`, prep: `(document.querySelector('.stage-btn[data-stage="design"]') || document.body).click()`, canvas: '#design-canvas', count: `window.__sketch.controller.state.shapes.length`, drop: '#design-canvas-wrap' },
       { name: 'Trace', url: '/apps/trace/index.html', ready: `!!document.getElementById('tab-edit')`, canvas: '#design-canvas', drop: '#tab-edit' },
     ];
     const svgText = fs.readFileSync(FIX('svg', 'import-basic.svg'), 'utf8');

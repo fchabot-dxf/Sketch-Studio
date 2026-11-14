@@ -199,7 +199,7 @@ Convert the LOGIC tests and the LOGIC half of the MIXED ones in three batches, k
 | shaper-persist.test.js | 20.2 | LOGIC | Shaper | cut plan + stock survive a reload via doc.hosts.shaper; an old document gets defaults; a SketchStudio save keeps the sidecar; export byte-identical | reload = reopen; needs the Shaper sidecar in the kit |
 | sidebar-account.test.js | 16.4 | REAL-INPUT | fixture | account row states, avatar fallback, signIn() called synchronously from the click, sign out, the 404 -> GIS popup path | user-gesture popup rule |
 | sidebar-drive.test.js | 15.7 | MIXED | fixture | Drive status line, the Save to Google Drive action, the default toggle, the connection check steps (real Drive adapter over a fake Drive) | UI + Drive adapter logic |
-| sidebar-projects.test.js | 44.8 | MIXED | Shaper | the sidebar wired to the store: new design, inline rename, Open recent, browse / move / pin, refused delete, refused newer file | UI flow + store LOGIC |
+| sidebar-projects.test.js | 44.8 | MIXED | Shaper | the sidebar wired to the store: new design, inline rename, Open recent, browse / move / pin, refused delete, refused newer file | CONVERTED (task 601): sidebar-projects-node.test.js; the real-chooser refusal with a GC stays in sidebar-open-refused-live.test.js |
 | sketch-import.test.js | 45.2 | MIXED | all 4 | A: the shared importer gives the baseline shapes as ONE undo step; B: every host's File menu imports SVG and DXF through the real file chooser | A LOGIC; B REAL-INPUT (file chooser) |
 | snap-origin-coincident.test.js | 72.4 | LOGIC | SS | a point snapped onto the origin leaves a COINCIDENT with j_origin (line end 0 / 12 / 15 px, not 24 px; circle centre); a line started on it uses j_origin | CONVERTED (task 569): tests/snap-origin-coincident-node.test.js |
 | snap-release-slip-live.test.js | 13.2 | REAL-INPUT | Shaper | the < 200 ms release recovery puts back a SLIP, not a fast flick away | real event timing |
@@ -424,3 +424,60 @@ Differences noted: Pen Plotter in `sketch-layers-node` starts from the 120-unit 
 | Ctrl+S on a named design no longer flushes (`sidebar-projects.js`) | save-key-leave-sketchstudio-node | `Error: node-app: timed out waiting for Ctrl+S on a named design wrote the new line at once` |
 | "Don't save" does nothing (`document-buffer.js` discardUnsaved) | unsaved-prompt-penplotter-discard-node | `Error: node-app: timed out waiting for open-projects: the action goes on after discard` |
 | the leave-page warning never armed (`document-buffer.js` onBeforeUnload) | save-key-leave-penplotter-node | `AssertionError [ERR_ASSERTION]: an unsaved Untitled with content: the leave-page warning is armed` (`false !== true`) |
+
+## Phase 2, batch E: the slowest live files (task 601)
+
+Owner, 2026-11-14: speed the gate up "as long as it is north star" (nothing gets weaker). The 15 slowest live files of the merge run, with the decision made BEFORE
+converting. No kit addition was needed (the kit's declared additions stay 1-16); no app code changed (only `scripts/gate.cjs` DECLARED_DEPS, for the renamed import files).
+
+### Decisions
+
+| file (merge run s) | decision | reason |
+|---|---|---|
+| constraint-undo-glyph-live (85.2) | SPLIT: node + trimmed browser | BUG 1 (a constraint is ONE undo step) is state read from the stored design: node. BUG 2 (right click / touch hold on a glyph over a line, measured from the glyph's real rect) needs real pixels and a real touch hold: browser, renamed constraint-glyph-menu-live |
+| import-polish (71.9) | SPLIT, stays live (3 files) | the FIT rule reads rendered shape boxes against the canvas box in 4 apps (real layout); the undo part reads Pen Plotter / Shaper state after a real chooser import. Importing goes through each host's page-script `importFile` (SketchStudio and Shaper keep it in main.js, not importable by the kit): moving that wiring into modules is a separate move, so it stays live, split into import-polish-fit-a (SS + Shaper), -fit-b (PP + Trace), -undo; the assert code is shared (tests/helpers/import-polish-fit.js) |
+| design-browser-live (55.4) | KEEP | the floating box's place, size, `position`, hit testing (`elementFromPoint`), the phone drawer off screen and on screen, no page scroll: layout throughout; the row controls need the real drag |
+| sketch-import (47.3) | SPLIT: node half + the rest | part A (the shared importer = the old Shaper path, one undo snapshot) is a pure function on a stand-in state: node. Part B (File menu entry, real chooser, a drop, in 4 apps) needs each page script's import wiring: stays live |
+| sidebar-projects (46.4) | MOVE to node (+ a small browser file) | every assert reads the store, the title, the drawer's DOM, which the kit's `sidebar: true` runs as the app's own code. The refused file through the REAL chooser with a garbage collection while the picker is open stays in the browser (sidebar-open-refused-live), with the same asserts |
+| clipboard-live-cross (45.4) | KEEP | the system clipboard across a reload and another app: the browser's clipboard permission and page load |
+| clipboard-live-sketchstudio (42.8) | KEEP | already trimmed by batch B to the browser-native text-field copy / paste (real clipboard); the logic half is clipboard-node |
+| sketch-layers-live (40.8) | KEEP | by design the REAL-pointer twin of sketch-layers-node (task 577): real drag of a name, real touch hold on the phone drawer |
+| trace-projects (40.1) | KEEP | Trace is not a kit host; its File menu, import and reload run in the page |
+| mirror-live-sketchstudio (38.1) | MOVE to node | the tool, the pre-selection, the lit axis (`[data-ref-axis]`), the copies and the symmetric links, one undo step: all state / DOM the kit runs; its two screenshots asserted nothing (EVIDENCE_DIR) and are dropped |
+| canvas-grid-labels-live (38.0) | KEEP | SCREEN: label overlap, layout, zoom |
+| phone-header-live (36.2) | KEEP | SCREEN: header rects at 390 / 360 px, real touch tap |
+| dimension-delete-live (36.1) | KEEP | what is left after batch A is the Design info panel route (rows of `.sk-browser-info`); that panel is a page-only hook the kit does not mount. Moving its wiring into a module is a candidate for a later batch |
+| drag-follow-live (35.1) | KEEP | measures the drawn point against the pointer EVERY animation frame at 16 ms events (real rAF, `getScreenCTM`); the node twin tests/drag-follow.test.js covers the solver step |
+| parameters-window-live (32.4) | KEEP | the window's place, drag, remembered position after a reload, the 390 px bottom sheet, focus in / out: layout and real focus |
+
+### Old-vs-new assert table (assert calls in the source, counted with `grep -o "assert\(\.[a-zA-Z]*\)\?("`)
+
+| old file | asserts | new file(s) | asserts |
+|---|---|---|---|
+| constraint-undo-glyph-live | 20 | constraint-undo-steps-node + constraint-glyph-menu-live | 11 + 9 = 20 |
+| mirror-live-sketchstudio | 15 | mirror-sketchstudio-node | 15 |
+| sketch-import | 10 | sketch-import-shared-node + sketch-import (B) | 7 + 3 = 10 |
+| sidebar-projects | 30 | sidebar-projects-node + sidebar-open-refused-live | 30 + 6 (the refused-file asserts run in both, on purpose) |
+| import-polish | 13 | import-polish-fit-a / -fit-b (helpers/import-polish-fit.js) + import-polish-undo | 13 |
+
+Differences noted: in the node sidebar test the file chooser is awaited (`waitFor`, the click comes after the app's own async steps) and the sidebar drawer is opened only if the Projects modal left it shut;
+the autosave wait (3.2 s) is the kit's page-hide flush. Setup differs in the node constraint test only by the document being read through `storedDoc()`.
+
+### Times (one run each, same machine, `node <file>`)
+
+| old live file | s (merge run) | new | s |
+|---|---|---|---|
+| constraint-undo-glyph-live | 85.2 | constraint-undo-steps-node / constraint-glyph-menu-live | 0.6 / 23.6 |
+| import-polish | 71.9 | import-polish-fit-a / -fit-b / -undo (live) | 33 / 33 / 26 |
+| sidebar-projects | 46.4 | sidebar-projects-node / sidebar-open-refused-live | 6.3 / 15 |
+| sketch-import | 47.3 | sketch-import-shared-node / sketch-import (B, live) | 0.3 / 47.4 |
+| mirror-live-sketchstudio | 38.1 | mirror-sketchstudio-node | 0.4 |
+
+`node scripts/gate.cjs --list`: quick 336 -> 340, live 53 -> 54 (four node files added, the live file count grows by one because two files became four and three left).
+
+### Bites (a behaviour broken on purpose, the node test fails, reverted with `git checkout`; `git status` shows tests / docs only)
+| break | test | failure |
+|---|---|---|
+| the shared importer takes two undo snapshots (`sketch-import.js` line 134) | sketch-import-shared-node | `AssertionError [ERR_ASSERTION]: import-basic.svg: ONE undo snapshot per import` |
+| deleting a non-empty project is allowed (`project-store.js` deleteProject guard) | sidebar-projects-node | `AssertionError [ERR_ASSERTION]: delete of a non-empty project shows the store reason: ` |
+| the mirror leaves out the circle's symmetric link (`mirror.js` line 130) | mirror-sketchstudio-node | `AssertionError [ERR_ASSERTION]: 4 new constraints, all symmetric about the Y axis: [...3 constraints...]` |

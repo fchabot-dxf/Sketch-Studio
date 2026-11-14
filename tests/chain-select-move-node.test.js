@@ -114,6 +114,10 @@ const rect = (p, [x0, y0, x1, y1], sk) => ({
     assert.deepStrictEqual(sel(st), [...edges, 'S'].sort(), 'Shift + double click adds the chain');
     // two clicks on the same line slower than the pairing window are two clicks
     await click(app, 'rE2'); await click(app, 'rE2'); assert.deepStrictEqual(sel(st), ['rE2'], 'two slow clicks select one line');
+    // a double click is two presses within 500 ms AND 5 px (as an OS double click): two quick clicks 8 px apart on the same line are two
+    // clicks; an Esc between two quick clicks on the same spot ends the pairing too (task 589's test clicked a line, Esc, the same spot again)
+    { await app.pause(PAIR_GAP_MS); const a = on(app, 'rE1', 0.3), b = on(app, 'rE1', 0.5); assert(Math.abs(a.x - b.x) > 5, 'the two presses are more than 5 px apart'); app.click(a.x, a.y); app.click(b.x, b.y); measured.quickClicksApart = sel(st); assert.deepStrictEqual(sel(st), ['rE1'], 'two quick clicks 8+ px apart are two clicks'); }
+    { await app.pause(PAIR_GAP_MS); const a = on(app, 'rE1'); app.click(a.x, a.y); app.esc(); app.click(a.x, a.y); measured.quickClicksEsc = sel(st); assert.deepStrictEqual(sel(st), ['rE1'], 'Esc between two quick clicks: two clicks'); }
     // a chain with an arc: double click the arc -> the arc, the line on its coincident start and the line on its shared end; not construction
     await dbl(app, 'A'); measured.arcChain = sel(st);
     assert.deepStrictEqual(sel(st), ['A', 'K1', 'K2'], 'a double click on the arc selects its chain (coincident and shared ends), no construction');

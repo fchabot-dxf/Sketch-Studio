@@ -56,8 +56,19 @@ await (async () => {
       if (process.env.EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, name), buf);
       md5s.push(name + '=' + createHash('md5').update(buf).digest('hex'));
     };
-    // empty canvas near its top-left corner (not over a panel: the Design panel's rows hover their constraint too)
-    const away = async () => { const p = await evalJs(`(() => { const r = document.getElementById('svgCanvas').getBoundingClientRect(); return { x: Math.round(r.left + 60), y: Math.round(r.top + 60) }; })()`); await mouse('mouseMoved', p.x, p.y, 0); await sleep(250); };
+    // a point of the CANVAS itself (what the browser hit-tests there is #svgCanvas or inside it: not a panel floating over it, whose rows
+    // hover their constraint too) and away from the drawing (the shapes' and glyphs' bounding box + 80 px)
+    const away = async () => { const p = await evalJs(`(() => { const c = document.getElementById('svgCanvas'), r = c.getBoundingClientRect();
+      const bs = [...c.querySelectorAll('.shape-elem, .constraint-glyph, .joint-handle')].map((e) => e.getBoundingClientRect());
+      const g = { left: Math.min(...bs.map((b) => b.left)), right: Math.max(...bs.map((b) => b.right)), top: Math.min(...bs.map((b) => b.top)), bottom: Math.max(...bs.map((b) => b.bottom)) };
+      for (let fy = 0.1; fy < 1; fy += 0.1) for (let fx = 0.1; fx < 1; fx += 0.1) {
+        const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height * fy);
+        if (x > g.left - 80 && x < g.right + 80 && y > g.top - 80 && y < g.bottom + 80) continue;
+        const e = document.elementFromPoint(x, y); if (e && e.closest('#svgCanvas')) return { x, y };
+      }
+      return null; })()`);
+      assert.ok(p, 'an empty point of the canvas, off the drawing and off any panel');
+      await mouse('mouseMoved', p.x, p.y, 0); await sleep(250); };
     const clearSel = async (g) => { await away(g); await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(700); };
     const open = async (style) => {
       await navigate(url, 8000); await waitForApp('svgCanvas');

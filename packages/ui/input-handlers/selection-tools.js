@@ -29,6 +29,7 @@ let selectionState = {
     dragStartScreen: null,
     lastClickTime: 0,
     lastClickedIndex: -1, // FIX: Track index
+    lastClickAt: null, // TASK 588: where the last press was (a double click's second press lands within DOUBLE_CLICK_SLOP_PX of it)
     isMarqueeActive: false,
     marqueeStart: null,
     marqueeEnd: null,
@@ -156,14 +157,20 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
     const isSelectOrDim = (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION);
     if (!isSelectOrDim) return false;
     
-    // Track double-clicks: a double click is two presses on the SAME target within DOUBLE_CLICK_MS, keyed by what the press landed on: a
-    // dimension label ('dim:' + its index: the value edit) or a shape body ('shape:' + its id, task 588: the chain select). Any other press
-    // (a joint, a glyph, empty space, a label child element without its own dataset) records no key, so it never pairs with another.
+    // Track double-clicks: a double click is two presses on the SAME target within DOUBLE_CLICK_MS and DOUBLE_CLICK_SLOP_PX of each other (as an
+    // OS double click: the time AND a few px), keyed by what the press landed on: a dimension label ('dim:' + its index: the value edit) or a
+    // shape body ('shape:' + its id, task 588: the chain select). Any other press (a joint, a glyph, empty space, a label child element without
+    // its own dataset) records no key, so it never pairs with another; Esc forgets the pending press (resetSelectionState).
     const now = Date.now();
-    const prevPress = { time: selectionState.lastClickTime, key: selectionState.lastClickedIndex };
+    const prevPress = { time: selectionState.lastClickTime, key: selectionState.lastClickedIndex, at: selectionState.lastClickAt };
     selectionState.lastClickTime = now;
     selectionState.lastClickedIndex = null;
-    const pressOn = (key) => { selectionState.lastClickedIndex = key; return key != null && prevPress.key === key && now - prevPress.time < DOUBLE_CLICK_MS; };
+    selectionState.lastClickAt = { x: e.clientX, y: e.clientY };
+    const pressOn = (key) => {
+        selectionState.lastClickedIndex = key;
+        return key != null && prevPress.key === key && now - prevPress.time < DOUBLE_CLICK_MS && !!prevPress.at
+            && Math.hypot(e.clientX - prevPress.at.x, e.clientY - prevPress.at.y) <= DOUBLE_CLICK_SLOP_PX;
+    };
     // Test environments may pass synthetic pointer events whose target lacks
     // .closest(); fall back to null so the dim-label branch is skipped.
     const dimLabel = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.dim-label') : null;
@@ -269,6 +276,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
 }
 
 const DOUBLE_CLICK_MS = 500; // two presses on the same target within this pair into a double click (the app's one pairing window)
+const DOUBLE_CLICK_SLOP_PX = 5; // ... and no farther apart than this (screen px; the click radius a press may move and stay a click)
 
 function clearSelection(state) {
     if(state.selectedJoints) state.selectedJoints.clear();
@@ -1263,6 +1271,7 @@ export function handleSelectionPointerUp(e, svg, state) {
  * Reset selection state
  */
 export function resetSelectionState() {
+    selectionState.lastClickTime = 0; selectionState.lastClickedIndex = null; selectionState.lastClickAt = null; // TASK 588: Esc ends a double click
     selectionState.isDragging = false;
     selectionState.dragStartScreen = null;
     selectionState.isMarqueeActive = false;

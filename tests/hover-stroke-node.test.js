@@ -186,9 +186,9 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   app.click(p1s.x, p1s.y);
   app.move(away.x, away.y);
   const selOpenDot = getPointAt(90, 10);
-  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) - restJointSw * SettingsManager.getDefault('SELECTION_FEEDBACK_MULT')) < 1e-6, 'selected point ring is SELECTION_FEEDBACK_MULT thicker');
+  assert.ok(Math.abs(Number(selOpenDot.getAttribute('stroke-width')) -   restJointSw) < 1e-6, 'selected point ring is the rest width');
   assert.match(selOpenDot.getAttribute('style'), /fill:var\(--sk-joint-selected/, 'selected point has blue-tinted fill');
-  assert.match(selOpenDot.getAttribute('style'), /stroke:var\(--sk-selection, #017AFD\)/i, 'selected point ring is bright Fusion blue');
+    assert.match(selOpenDot.getAttribute('style'), /stroke:var\(--sk-joint-ring-hover, #000000\)/i, 'selected point ring is 100% black');
 
   await app.close();
 }

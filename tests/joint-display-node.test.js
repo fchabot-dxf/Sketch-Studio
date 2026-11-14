@@ -113,7 +113,7 @@ const makeDoc = (joints, shapes, constraints = []) => ({
   dots = regularJointDots(app.svg);
   assert.strictEqual(dots.length, 1, 'selected corner stays visible when mouse leaves');
   assert.match(dots[0].fill, /--sk-joint-selected/, 'selected point is filled with blue tint (--sk-joint-selected)');
-  assert.match(dots[0].stroke, new RegExp(`--sk-selection.*${hoverColor}`, 'i'), 'selected point ring uses bright Fusion blue (--sk-selection)');
+  assert.match(dots[0].stroke, /--sk-joint-ring-hover.*#000000/i, 'selected point ring is 100% black');
 
   await app.close();
 }

@@ -167,8 +167,8 @@ try {
   await mouse('mouseMoved', s.pts.empty.x, s.pts.empty.y); await sleep(200);
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'selected point: 0 halo elements');
-  assert.ok(Math.abs(s.points['185,65'].sw - restJointSw * SELECTION_MULT) < 1e-5, 'selected point ring is SELECTION_FEEDBACK_MULT x rest joint stroke');
-  assert.strictEqual(s.points['185,65'].stroke, 'rgb(1, 122, 253)', 'selected point ring is bright Fusion blue #017AFD');
+  assert.ok(Math.abs(s.points['185,65'].sw -   restJointSw) < 1e-5, 'selected point ring is the rest joint stroke');
+    assert.strictEqual(s.points['185,65'].stroke, 'rgb(0, 0, 0)', 'selected point ring is 100% black');
   assert.strictEqual(s.points['185,65'].fill, 'rgb(118, 164, 228)', 'selected point fill is blue tint #76A4E4');
 
   // 5. Hover constraint glyph: 2x outline in --sk-glyph-hover, bound line pE1 2x in --sk-glyph-hover, 0 halos

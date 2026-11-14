@@ -14769,3 +14769,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 - Refinement: a HOVERED point's ring is 100% black via --sk-joint-ring-hover (#000000, declared next to --sk-joint-ring in sketcher.css; Shaper dark root #ffffff, Shaper cream and Trace #000000). Same thickness, white fill, no blue; hover set = hovered cluster, highlighted joint, active snap (as before). Used as a full var() string in the joint loop, not through SK_VAR (that map is by hex and #000000 is used elsewhere). Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual.
 
+
+TURN 630 correction: a SELECTED point now has the 100% black ring (--sk-joint-ring-hover), rest thickness, blue-tint fill kept. Tests updated: hover-stroke-node/live, joint-display-node/live.
+

@@ -155,7 +155,7 @@ try {
   const p1Dot = s.points.find((p) => p.cx === 65 && p.cy === 10);
   assert.ok(p1Dot, 'selected open end visible');
   assert.match(p1Dot.styleFill, /--sk-joint-selected/, 'selected point has blue-tinted fill');
-  assert.match(p1Dot.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'selected point ring uses bright Fusion blue');
+  assert.match(p1Dot.styleStroke, /--sk-joint-ring-hover.*#000000/i, 'selected point ring is 100% black');
   assert.strictEqual(s.halos.length, 0, 'selected point draws no outer halo');
 
   if (EVID) {
@@ -178,7 +178,7 @@ try {
   const r3Sel = s.points.find((p) => p.cx === 50 && p.cy === 40);
   assert.ok(r3Sel, 'hidden corner clicked remains visible while selected');
   assert.match(r3Sel.styleFill, /--sk-joint-selected/, 'selected corner uses blue-tinted fill');
-  assert.match(r3Sel.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'selected corner ring uses bright Fusion blue');
+  assert.match(r3Sel.styleStroke, /--sk-joint-ring-hover.*#000000/i, 'selected corner ring is 100% black');
 
   console.log('joint-display-live.test.js passed' + (md5s.length ? ' [' + md5s.join(', ') + ']' : ''));
 } finally {

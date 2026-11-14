@@ -244,7 +244,7 @@ const dragBy = quiet(async (app, a, dx, dy) => {
 
 // ---- 3. THE glyph pick (task 588, owner 2026-11-13: two clicks on a rectangle's vertical edge 14.3 / 15.9 px from its V glyph selected the
 // glyph, never the line). Left click, hover and right click share ONE rule (hover-manager glyphAt): a glyph is picked only when the pointer is
-// ON the glyph as drawn (badge style: the disc, GLYPH_BG_DIAMETER_PX / 2 = 16 px; fusion style: the icon, GLYPH_SYMBOL_SIZE_PX / 2 = 10 px)
+// ON the glyph as drawn (the outlined icon, GLYPH_SYMBOL_SIZE_PX / 2 = 10 px)
 // + 3 px. HOVER = CLICK: what the hover lights is what the click selects. The V glyph is placed 12 px beside its line (its __pos).
 {
   const R = rect('r', [0, 0, 40, 30]);
@@ -265,23 +265,19 @@ const dragBy = quiet(async (app, a, dx, dy) => {
       return { hover, click };
     };
     const rows = {};
-    for (const style of ['badge', 'fusion']) {
-      SettingsManager.set('GLYPH_STYLE', style, { persist: 'none' }); app.frames(2);
-      for (const d of [0, 15, 21]) rows[style + ' ' + d + 'px'] = await hoverAndClick(d ? onLineAt(d) : G);
-    }
+    for (const d of [0, 15, 21]) rows[d + 'px'] = await hoverAndClick(d ? onLineAt(d) : G);
     measured.glyphPick = rows;
     const line = { shape: 'rE2', constraint: null }, glyph = { shape: null, constraint: 'vertical' };
-    const expect = { 'badge 0px': glyph, 'badge 15px': glyph, 'badge 21px': line, 'fusion 0px': glyph, 'fusion 15px': line, 'fusion 21px': line };
+    const expect = { '0px': glyph, '15px': line, '21px': line };
     for (const [row, want] of Object.entries(expect)) {
       assert.deepStrictEqual(rows[row].click, want, row + ': the click selects ' + JSON.stringify(want) + ' (' + JSON.stringify(rows[row]) + ')');
       assert.deepStrictEqual(rows[row].hover, want, row + ': the hover lights what the click selects (' + JSON.stringify(rows[row]) + ')');
     }
-    // the double click beside the glyph (off it) selects the line's chain, not the glyph (fusion style, 15 px: the owner's case)
+    // the double click beside the glyph (off it) selects the line's chain, not the glyph (15 px: the owner's case)
     await app.pause(PAIR_GAP_MS); app.esc(); { const p = onLineAt(15); app.dblclick(p.x, p.y); }
     measured.glyphPick.dblclickBeside = sel(st);
     assert.deepStrictEqual(sel(st), ['rE1', 'rE2', 'rE3', 'rE4'], 'a double click on the line beside its glyph selects the chain');
     assert.strictEqual(st.selectedConstraints.size, 0, 'and no constraint');
-    SettingsManager.set('GLYPH_STYLE', 'badge', { persist: 'none' });
   } finally { await app.close(); }
 }
 

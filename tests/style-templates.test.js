@@ -107,13 +107,12 @@ const render2 = (hov = null) => {
 };
 applyStyleTemplate('default');
 const d2 = render2();
-assert(!/fusion-glyph/.test(d2), 'Default glyphs are badges');
+assert(/fusion-glyph/.test(d2) && !/<use /.test(d2), 'Default glyphs are the outlined glyphs (the only style)');
 assert(/var\(--sk-geo-fixed, #202020\)/.test(d2), 'Default: fixed line uses the geo-fixed token');
 assert(/var\(--sk-construction, #f97316\)/.test(d2), 'Default: construction line uses the construction token');
 applyStyleTemplate('fusion');
 const f2 = render2();
 assert(/fusion-glyph/.test(f2), 'Fusion renders outlined fusion glyphs');
-assert(!/<circle[^>]*class="glyph-badge/.test(f2), 'Fusion glyphs have no badge circle');
 assert(f2 !== d2, 'Fusion differs from Default on the same sketch');
 assert(/#5B6CF0/i.test(render2('freeLine')), 'Fusion hover colour is blue-violet');
 assert(!/#5B6CF0/i.test(render2('freeLine') && d2), 'Default never uses the Fusion hover colour');

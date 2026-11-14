@@ -8,7 +8,7 @@ import { updateGridFromSettings, gridSpacing } from '#ui/canvas-grid.js';
 import { worldToScreen } from '#ui/coords.js';
 import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoincidentConstraint, getFannedPosition, getLineIntersection, arcSweepInfo, getDist, angleInArcSweep, isPointLineDistance } from '#core/geometry.js';
 import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '#core/reference-lines.js';
-import { CONSTRAINT_TYPES, CONSTRAINT_COLORS, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
+import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
 import SettingsManager from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
@@ -180,7 +180,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
   const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio } = gridSpacing(SettingsManager.get('DOC_UNIT') || 'mm', { GRID_SIZE: getNum('GRID_SIZE', SettingsManager.getDefault('GRID_SIZE')), GRID_MAJOR_STEP: getNum('GRID_MAJOR_STEP', SettingsManager.getDefault('GRID_MAJOR_STEP')), INCH_GRID_DIVISIONS: SettingsManager.get('INCH_GRID_DIVISIONS'), INCH_GRID_MAJOR: SettingsManager.get('INCH_GRID_MAJOR') });
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
-  const FUSION_GLYPHS_ON = getStr('GLYPH_STYLE', 'badge') === 'fusion';
   const PROFILE_FILL_ON = getStr('PROFILE_FILL', 'off') === 'on';
   const LOCKED_LINE_COLOR = getStr('LOCKED_LINE_COLOR', ''); // '' = a locked line looks like any fully constrained one
   const DIM_LABEL_BOX = SettingsManager.get('DIM_LABEL_BOX') !== false;
@@ -200,11 +199,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const BASE_JOINT_STROKE_HOVERED = BASE_JOINT_STROKE * 3;
   
   // --- UNIFIED VISUAL CONFIGURATION (Screen Pixels) ---
-  // GLYPH_BG_DIAMETER_PX is the diameter of the visible background circle (screen px)
-  // SYMBOL_SIZE_PX is the actual icon size (screen px) placed inside the background
+  // SYMBOL_SIZE_PX is the icon size (screen px) of an outlined glyph (its longer side)
   const SYMBOL_SIZE_PX = getNum('GLYPH_SYMBOL_SIZE_PX', 20);       // Icon size (screen px)
-  // Derive background diameter from symbol size (multiplier 1.6 to match previous defaults)
-  const GLYPH_BG_DIAMETER_PX = Math.round(SYMBOL_SIZE_PX * 1.6); // derived background circle size (was 32 when symbol=20) 
   const GLYPH_OUTLINE_PX = getNum('GLYPH_OUTLINE_PX', 1);     // Fusion glyph outline width (screen px)
   const INFERENCE_SIZE_PX = getNum('GLYPH_INFERENCE_SIZE_PX', 24);    // Inference hint icon size
   const GLYPH_OFFSET_PX = getNum('GLYPH_OFFSET_PX', 40);      // Offset from joints/shapes (increased to avoid overlap)
@@ -228,8 +224,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Derived sizes
   // glyphSize kept for legacy scale relationships in some calculations (kept similar to prior behavior)
   const glyphSize = scale(9.72);
-  // hitZoneRadius matches the background circle radius
-  const hitZoneRadius = scale(GLYPH_BG_DIAMETER_PX / 2);
+  // hitZoneRadius: the invisible disc of a glyph group (it gives the pointer cursor), the radius of the glyph as drawn
+  const hitZoneRadius = scale(SYMBOL_SIZE_PX / 2);
   // Icon pixel size for sprite use (world-space units derived from screen pixels)
   const ICON_PX = scale(SYMBOL_SIZE_PX); // smaller white icon inside the blue circle
   const INFERENCE_ICON_PX = scale(INFERENCE_SIZE_PX); // inference sprite world size
@@ -325,21 +321,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       && (highlight.id === c || (opts.parent && highlight.id === opts.parent));
     const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
     return { isHovered, isSelected, active: isHovered || isSelected };
-  }
-
-  /**
-   * Get visual style for constraint glyph based on interaction state.
-   * @param {boolean} active - Is glyph hovered or selected?
-   * @param {function} scale - Scale function for screen→world conversion
-   * @param {number} glyphSize - Base glyph size in world units
-   * @returns {{strokeW: number, bgRadius: number, bgOpacity: string}}
-   */
-  function getGlyphStyle(active, scale, glyphSize) {
-    return {
-      strokeW: active ? scale(4) : scale(2.5),
-      bgRadius: active ? glyphSize + scale(8) : glyphSize + scale(5),
-      bgOpacity: active ? '0.95' : '0.85'
-    };
   }
 
   // --- Dimension geometry, shared by the dimension drawing below and the glyph/label overlap rule ---
@@ -515,7 +496,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Fusion: the dimension labels no glyph may cover (see freeGlyphSpot). Default keeps its glyph positions untouched.
   const dimLabelBounds = [];
-  if (FUSION_GLYPHS_ON) {
+  {
     for (const c of constraints) {
       if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
       const { j1, j2 } = resolveDimEnds(c);
@@ -539,48 +520,22 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isHovered = !isPreview && c && highlight.kind === 'constraint' && (highlight.id === c || (opts.parent && highlight.id === opts.parent));
     const isSelected = !isPreview && c && selectedConstraints && selectedConstraints.has(c);
 
-    // Resolve colors (allow override via opts) with explicit fallbacks to Unified Blue theme
-    const colors = (c && CONSTRAINT_COLORS[c.type]) || { fill: '#60A5FA', stroke: '#2563eb' };
-    const bgFill = (opts && opts.bgFill) ? opts.bgFill : colors.fill;
-    const bgStroke = (opts && opts.bgStroke) ? opts.bgStroke : colors.stroke;
-
     // Sync pos for hit testing if we have a constraint object
     try{ if(c) c.glyphPos = { x, y }; }catch(_){ }
 
-    // A: Bottom layer — selection/hover solid disc
-    // Selected glyphs get stronger, larger feedback (disc + subtle outline). Hovered glyphs get slightly stronger disc.
-    // TASK 588: the 'fusion' style (no badge, a 20 px outlined icon) gets a warm halo of its own behind the icon, denser than the badge's
-    // (it lies on white, not around a coloured disc): the outline tint alone was too faint to see.
-    if(FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
+    // A: Bottom layer: the selection / hover halo behind the icon (TASK 588: a warm halo of its own, denser than a tint of the outline alone,
+    // which was too faint to see on white).
+    if(!isPreview && (isHovered || isSelected)){
       out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 6)}" style="fill:${skv(isSelected ? GLYPH_SELECTED_COLOR : GLYPH_HOVER_COLOR)}" fill-opacity="${isSelected ? 0.5 : 0.4}" stroke="none"/>`);
       if (isSelected) out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 8)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(2)}" stroke-opacity="0.8"/>`);
     }
-    if(!FUSION_GLYPHS_ON && !isPreview && (isHovered || isSelected)){
-      if (isSelected) {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 10)}" style="fill:${skv(GLYPH_SELECTED_COLOR)}" fill-opacity="0.28" stroke="none"/>`);
-        // Outer subtle stroked ring to emphasize selection — use 4px screen stroke and nudge radius outward so stroke appears mostly outside
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 14)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(4)}" stroke-opacity="0.22"/>`);
-      } else {
-        out.push(`<circle cx="${x}" cy="${y}" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 8)}" style="fill:${skv(GLYPH_HOVER_COLOR)}" fill-opacity="0.22" stroke="none"/>`);
-      }
-    }
 
-    // B: Middle layer — background circle. 'fusion' glyphs have no badge: an invisible disc keeps the hit area and the
-    // white icon carries a dark outline that turns the selection colour when hovered/selected.
-    // NOTE: Increased stroke width for better visibility (doubled from 1.5 -> 3)
-    const bgCircle = FUSION_GLYPHS_ON
-      ? `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="none" stroke="none"/>`
-      : `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(3)}"/>`;
+    // B: an invisible disc keeps the DOM hit area of the glyph group (pointer-events:all); the pick itself (hover-manager glyphAt) is geometric.
+    const hitDisc = `<circle cx="0" cy="0" r="${hitZoneRadius}" fill="none" stroke="none"/>`;
 
-    // C: Top layer — icon (optional)
-    const iconStyleStr = 'style="color: white !important; --icon-accent: white !important; stroke: white !important;"';
-    const icon = FUSION_GLYPHS_ON
-      ? fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
-        isHovered ? skv(GLYPH_HOVER_COLOR) : isSelected ? skv(GLYPH_SELECTED_COLOR) : 'var(--sk-glyph-outline, #000)')
-      : (iconId ? `<use href="#${iconId}" x="${-ICON_PX/2}" y="${-ICON_PX/2}" width="${ICON_PX}" height="${ICON_PX}" ${iconStyleStr}/>` : '');
-
-    // Append any extra custom markup (for collinear dots, tangent mark, equal lines, etc.)
-    const extra = FUSION_GLYPHS_ON ? '' : (opts.extra || '');
+    // C: Top layer: the outlined icon (white fill, dark outline that turns the hover / selection colour)
+    const icon = fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
+      isHovered ? skv(GLYPH_HOVER_COLOR) : isSelected ? skv(GLYPH_SELECTED_COLOR) : 'var(--sk-glyph-outline, #000)');
 
     // Data attrs and interaction styling
     const dataAttrs = (typeof buildDataAttrs === 'function' && c) ? buildDataAttrs(c) : '';
@@ -591,7 +546,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const colorOverrides = 'color: white !important; --icon-accent: white !important;';
     const styleStr = `opacity:${opacity}; ${groupStyle}; ${colorOverrides}`;
 
-    out.push(`<g class="constraint-glyph"${dataAttrs ? ' ' + dataAttrs : ''} transform="translate(${x},${y})" style="${styleStr}">${bgCircle}${icon}${extra}</g>`);
+    out.push(`<g class="constraint-glyph"${dataAttrs ? ' ' + dataAttrs : ''} transform="translate(${x},${y})" style="${styleStr}">${hitDisc}${icon}</g>`);
   };
 
   // Update SVG pattern grid stroke widths to maintain constant screen pixel width
@@ -1283,8 +1238,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
               const { nx, ny, len } = perpendicularNormal(a, b);
               const offset = scale(GLYPH_OFFSET_PX);
               const gx = mx + nx * offset, gy = my + ny * offset;
-              const symbolSize = glyphSize * 0.6;
-              const bgRadius = glyphSize + scale(5);
               const previewC = { type: CONSTRAINT_TYPES.TANGENT, line: active.line, circle: active.circle, __isPreview: true, __pos: { x: gx, y: gy } };
               // Use unified glyph (default Blue) for preview
               drawUnifiedGlyph(previewC, gx, gy, 'icon-tangent', 0, { isPreview: true });
@@ -1942,15 +1895,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     let clusterLeader = null; let clusterSelected = false;
     
 
-    // Centralized styling: derive fills/strokes from CONSTRAINT_COLORS and unify icon color
-    const col = CONSTRAINT_COLORS[c.type] || { fill: '#60A5FA', stroke: '#2563eb' };
-    const bgFill = col.fill;
-    const bgStroke = col.stroke;
-    // Force white icon and accent with !important to override external CSS (selected state etc.)
-    const iconStyle = 'style="color: white !important; --icon-accent: white !important;"';
-    // Reusable background circle (uses hitZoneRadius derived from GLYPH_BG_DIAMETER_PX)
-    const bgCircle = `<circle cx="0" cy="0" r="${hitZoneRadius}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" stroke-width="${scale(1.5)}"/>`; 
-    
     if (c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2) {
       const leaderA = getClusterLeader(c.joints[0]);
       const leaderB = getClusterLeader(c.joints[1]);
@@ -1996,11 +1940,6 @@ switch(c.type){
         // Respect centralized highlight precedence (computed outside)
         const isHovered = isGlyphHovered;
         const isSelected = isGlyphSelected;
-        const stroke = (isHovered || isSelected) ? '#1e40af' : '#2563eb';
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-        const symbolSize = glyphSize * 0.6;
         // Render coincident glyph with unified helper (bg first, icon last)
         drawUnifiedGlyph(c, posObj.x, posObj.y, 'icon-coincident');
         break;
@@ -2017,9 +1956,6 @@ switch(c.type){
         try{ c.glyphPos = pos; }catch(_){ }
         const isHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
         const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         // Draw unified horizontal glyph (bg first, icon last)
         drawUnifiedGlyph(c, pos.x, pos.y, 'icon-hv', 0);
         break;
@@ -2036,9 +1972,6 @@ switch(c.type){
         try{ c.glyphPos = pos; }catch(_){ }
         const isHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
         const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
         // Draw unified vertical glyph (bg first, icon last)
         drawUnifiedGlyph(c, pos.x, pos.y, 'icon-hv', 0);
         break;
@@ -2060,11 +1993,6 @@ switch(c.type){
         try{ c.glyphPos = pos; }catch(_){ }
         const isHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
         const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
-        const stroke = (isHovered || isSelected) ? '#1e40af' : (c.type === CONSTRAINT_TYPES.PERPENDICULAR ? '#0891b2' : CONSTRAINT_COLORS[CONSTRAINT_TYPES.PERPENDICULAR].stroke);
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-        const bgColor = (c.type === CONSTRAINT_TYPES.PERPENDICULAR) ? CONSTRAINT_COLORS[CONSTRAINT_TYPES.PERPENDICULAR].fill : CONSTRAINT_COLORS[CONSTRAINT_TYPES.PARALLEL].fill;
         // Parallel / Perpendicular: use helper to ensure consistent layering
         drawUnifiedGlyph(c, pos.x, pos.y, c.type === CONSTRAINT_TYPES.PARALLEL ? 'icon-parallel' : 'icon-perpendicular');
         break;
@@ -2076,9 +2004,6 @@ switch(c.type){
         const isSelected = isGlyphSelected;
 
         // Draw selection halo (offset upwards to sit above the joint)
-        const strokeW = (isHovered || isSelected) ? scale(4) : scale(2.5);
-        const bgRadius = (isHovered || isSelected) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
 
         const smartPos = smartGlyphPosMap.get(c);
         const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : (smartPos ? { x: smartPos.x, y: smartPos.y } : { x: pt.x, y: pt.y - scale(GLYPH_OFFSET_PX) });
@@ -2190,17 +2115,7 @@ switch(c.type){
         const smartPos = smartGlyphPosMap.get(c);
         const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : (smartPos ? { x: smartPos.x, y: smartPos.y } : { x: gx, y: gy });
         try{ c.glyphPos = pos; }catch(_){ }
-        const isHoveredE = isGlyphHovered;
-        const isSelectedE = isGlyphSelected;
-        const bgRadiusE = (isHoveredE || isSelectedE) ? glyphSize + scale(8) : glyphSize + scale(5);
-        const bgOpacityE = (isHoveredE || isSelectedE) ? '0.95' : '0.85';
-        const bgColorE = CONSTRAINT_COLORS[CONSTRAINT_TYPES.EQUAL].fill;
-        if(!FUSION_GLYPHS_ON && !preview && (isHoveredE || isSelectedE)) out.push(`<circle cx="0" cy="0" r="${scale(GLYPH_BG_DIAMETER_PX/2 + 6)}" style="fill:${skv(isHoveredE ? GLYPH_HOVER_COLOR : GLYPH_SELECTED_COLOR)}" fill-opacity="0.2" stroke="none"/>`);
-        const symSize = glyphSize * 0.6;
-        const extraEqual = `<circle cx="0" cy="0" r="${bgRadiusE}" style="fill:${skv(bgFill)}; stroke:${skv(bgStroke)}" fill-opacity="${bgOpacityE}" stroke-width="${scale(3.5)}"/>` +
-                           `<line x1="-${symSize}" y1="-${symSize/3}" x2="${symSize}" y2="-${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>` +
-                           `<line x1="-${symSize}" y1="${symSize/3}" x2="${symSize}" y2="${symSize/3}" style="stroke:${skv('white')}" stroke-width="${scale(2)}"/>`;
-        drawUnifiedGlyph(c, pos.x, pos.y, null, 0, { extra: extraEqual });
+        drawUnifiedGlyph(c, pos.x, pos.y);
         break;
       }
 

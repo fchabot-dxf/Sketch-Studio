@@ -21,7 +21,7 @@ const PROJECT_FILE = 'sketch-studio.config.json';
 const DEFAULT_SETTINGS = {
     // Mirror important solver defaults for UI
     SNAP_RADIUS: SolverConfig.SNAP_RADIUS || 30,
-    SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM || 10,
+    SNAP_MAGNETISM: SolverConfig.SNAP_MAGNETISM,
     GRID_MAGNETISM: SolverConfig.GRID_MAGNETISM || 10,
     // Task 537: a point drawn / dragged near the X axis (y = 0) or the Y axis (x = 0) snaps onto it and gets the horizontal /
     // vertical constraint with the origin joint. true = on (default); false = no axis snap.

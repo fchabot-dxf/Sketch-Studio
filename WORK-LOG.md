@@ -14772,3 +14772,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 TURN 630 correction: a SELECTED point now has the 100% black ring (--sk-joint-ring-hover), rest thickness, blue-tint fill kept. Tests updated: hover-stroke-node/live, joint-display-node/live.
 
+
+TURN 630 additions: (A) SNAP_MAGNETISM factory default 10; ONE source = packages/core/solver-config.js (SettingsManager and snap-magnet read it, no second literal). (B) a lit axis (reference-line hover/pick and the axis-snap highlight) is drawn bold (hover stroke width) in its OWN axis colour, full opacity, via one AXIS_COLOR helper shared with the plain axes. Tests: axis-lit-colour-node (new), snap-origin-coincident-node (12/15px-off cases became 8/9px: 16 to 10 magnetism). Evidence .evidence/630/axis-lit-y.png md5 F9B46A5B85967A6501A2E1F976B3FD65.
+

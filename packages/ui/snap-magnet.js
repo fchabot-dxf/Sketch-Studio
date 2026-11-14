@@ -25,8 +25,7 @@ export function getMagnetThreshold(kind = 'snap', hysteresis = false) {
             || 10;
     } else {
         base = SettingsManager.get('SNAP_MAGNETISM')
-            || SolverConfig.SNAP_MAGNETISM
-            || 10;
+            || SolverConfig.SNAP_MAGNETISM;
     }
     if (hysteresis) {
         const mult = SolverConfig.SNAP_RELEASE_MULT || 2.0;

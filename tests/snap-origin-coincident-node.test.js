@@ -15,8 +15,8 @@ const fresh = async () => { const profile = await createProfile(); await createN
 
 const scenarios = {
   'line end': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x, o.y); app.esc(); },
-  'line end (12px off)': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x + 12, o.y); app.esc(); },
-  'line end (15px off)': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x + 15, o.y); app.esc(); },
+  'line end (8px off)': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x + 8, o.y); app.esc(); },
+  'line end (9px off)': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x + 9, o.y); app.esc(); },
   'line end (24px off)': (app, o) => { app.tool(TOOL.l); app.click(o.x + 160, o.y - 90); app.click(o.x + 24, o.y); app.esc(); },
   'line start': (app, o) => { app.tool(TOOL.l); app.click(o.x, o.y); app.click(o.x + 160, o.y - 90); app.esc(); },
   'circle centre': (app, o) => { app.tool(TOOL.c); app.click(o.x, o.y); app.click(o.x + 120, o.y); app.esc(); },

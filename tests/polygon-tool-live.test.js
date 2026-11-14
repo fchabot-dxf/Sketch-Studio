@@ -1,7 +1,7 @@
 // tests/polygon-tool-live.test.js — TASK 483 (live headless, REAL mouse): the regular Polygon tool is in the Create group of EVERY
-// host that mounts the shared ribbon (SketchStudio, Shaper, Pen Plotter, Trace's Edit tab), its Sides field clamps (3..64), shows
-// the kept value and is remembered across a reload, a real drag draws N plain lines + N construction radii, and ONE Undo click
-// removes the whole polygon.
+// host that mounts the shared ribbon (SketchStudio, Shaper, Pen Plotter, Trace's Edit tab). TASK 596: the ribbon has NO Sides field; the
+// number of sides is typed in the on-canvas box that shows after the centre click, and is remembered across a reload. Real clicks draw
+// N plain lines + N construction radii, and ONE Undo click removes the whole polygon.
 
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
@@ -25,10 +25,19 @@ await (async () => {
       await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers }); await sleep(150);
     };
-    const typeInto = async (sel, text) => { await clickEl(sel); await key('a', 'KeyA', 65, 2); await send('Input.insertText', { text }); await key('Tab', 'Tab', 9); await sleep(150); };
     const goto = async (url, canvasId, readyExpr) => { const loaded = once('Page.loadEventFired'); await send('Page.navigate', { url: `http://127.0.0.1:${port}${url}` }); await Promise.race([loaded, sleep(8000)]); await waitFor(readyExpr, 'the page to be ready'); if (canvasId) await waitForApp(canvasId); };
     const frame = () => send('Page.captureScreenshot', { format: 'png' });
-    const sides = () => evalJs(`document.getElementById('polygon-sides').value`);
+    // TASK 596: the on-canvas boxes (size R, sides N) after the centre click; N is typed with real keys, the second click places the polygon
+    const boxes = () => evalJs(`[...document.querySelectorAll('.sk-dual-input')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => [...b.querySelectorAll('input')].map((i) => [i.placeholder, i.value]))`);
+    const placePolygon = async (canvasSel, n, dx = 120, dy = 15) => {
+      const c = await centerOf(canvasSel);
+      await click(c.x, c.y);
+      const shown = await boxes(); assert.strictEqual(shown.length, 1, 'one box shows after the centre click: ' + JSON.stringify(shown));
+      if (n != null) { await key('Tab', 'Tab', 9); await send('Input.insertText', { text: String(n) }); await sleep(100); }
+      await mouse('mouseMoved', c.x + 40, c.y + 5, 0); await sleep(30);
+      await click(c.x + dx, c.y + dy);
+      assert.deepStrictEqual(await boxes(), [], 'the boxes are gone once it is placed');
+    };
 
     const HOSTS = {
       studio:     { url: '/apps/sketchstudio/index.html', enter: null,                                      canvas: '#svgCanvas',      state: null },
@@ -42,20 +51,20 @@ await (async () => {
     const present = {};
     for (const name of Object.keys(HOSTS)) {
       await open(name);
-      present[name] = await evalJs(`(() => { const ids = ['tool-rect', 'tool-circle', 'tool-polygon']; const r = ids.map((i) => document.getElementById(i)); const create = r[2] && r[2].closest('.sk-ribbon-group'); return { all: r.every(Boolean), inCreate: !!create && /create/i.test(create.textContent) && !!create.querySelector('#tool-rect') && !!create.querySelector('#tool-circle'), visible: !!r[2] && r[2].getBoundingClientRect().width > 0, sides: !!document.getElementById('polygon-sides') }; })()`);
-      assert(present[name].all && present[name].inCreate && present[name].visible && present[name].sides, name + ' has the Polygon tool + Sides field in the Create group: ' + JSON.stringify(present[name]));
+      present[name] = await evalJs(`(() => { const ids = ['tool-rect', 'tool-circle', 'tool-polygon']; const r = ids.map((i) => document.getElementById(i)); const create = r[2] && r[2].closest('.sk-ribbon-group'); return { all: r.every(Boolean), inCreate: !!create && /create/i.test(create.textContent) && !!create.querySelector('#tool-rect') && !!create.querySelector('#tool-circle'), visible: !!r[2] && r[2].getBoundingClientRect().width > 0, sides: !!document.getElementById('polygon-sides') || !!document.querySelector('.sk-ribbon-poly') }; })()`);
+      assert(present[name].all && present[name].inCreate && present[name].visible && !present[name].sides, name + ' has the Polygon tool in the Create group and NO Sides field in the ribbon: ' + JSON.stringify(present[name]));
     }
     console.log('polygon tool present in:', Object.keys(present).join(', '));
 
-    // ---- 2. the Sides field: clamped, shows the kept value, remembered across a reload (and shared by the hosts: same origin)
+    // ---- 2. nothing extra before the click; after it, R and N show on the canvas (default 6)
     await open('penplotter');
-    assert.strictEqual(await sides(), '6', 'the default is 6');
-    for (const [typed, kept] of [['99', '64'], ['2', '3'], ['', '3'], ['8', '8']]) {
-      if (typed === '') { await clickEl('#polygon-sides'); await key('a', 'KeyA', 65, 2); await key('Backspace', 'Backspace', 8); await key('Tab', 'Tab', 9); } else await typeInto('#polygon-sides', typed);
-      assert.strictEqual(await sides(), kept, `typed ${JSON.stringify(typed)}: the field shows the kept value ${kept}`);
-    }
-    await goto(HOSTS.penplotter.url, null, `!!document.getElementById('polygon-sides')`);
-    assert.strictEqual(await sides(), '8', 'remembered across a reload');
+    await clickEl('#tool-polygon');
+    assert.deepStrictEqual(await boxes(), [], 'before the centre click no box shows');
+    const c2 = await centerOf(HOSTS.penplotter.canvas);
+    await click(c2.x, c2.y);
+    assert.deepStrictEqual(await boxes(), [[['R', '0.0'], ['N', '6']]], 'after the centre click: the size and the sides (default 6)');
+    await key('Escape', 'Escape', 27);
+    assert.deepStrictEqual(await boxes(), [], 'Esc closes them');
 
     // ---- 3. a REAL-mouse octagon in the Pen Plotter: 8 plain lines + 8 construction radii, closed; ONE Undo removes it all
     const pp = HOSTS.penplotter;
@@ -64,7 +73,7 @@ await (async () => {
     await clickEl('#tool-polygon');
     const cv = await centerOf(pp.canvas);
     const before = await summary(pp);
-    await drag([[cv.x, cv.y], [cv.x + 40, cv.y + 5], [cv.x + 120, cv.y + 15]]);
+    await placePolygon(pp.canvas, 8);
     const octo = await summary(pp);
     console.log('Pen Plotter octagon:', JSON.stringify(octo));
     assert.strictEqual(octo.sides, 8, '8 sides'); assert.strictEqual(octo.radii, 8, '8 construction radii'); assert.strictEqual(octo.lines, 16, 'plain lines only');
@@ -76,14 +85,16 @@ await (async () => {
     assert.deepStrictEqual(undone, before, 'ONE click on Undo removes the whole polygon: ' + JSON.stringify(undone));
 
     // ---- 4. a hexagon in Shaper and in Studio (sides back to 6), real mouse; Undo once
-    await open('penplotter'); await typeInto('#polygon-sides', '6');
+    // the 8 typed above is remembered across a reload (localStorage): the next polygon starts with it
+    await goto(HOSTS.penplotter.url, null, `!!document.querySelector('.stage-btn[data-stage="design"]')`);
+    await open('penplotter'); await clickEl('#tool-polygon'); await clickEl(pp.canvas);
+    assert.deepStrictEqual(await boxes(), [[['R', '0.0'], ['N', '8']]], 'remembered across a reload');
+    await key('Escape', 'Escape', 27);
     for (const name of ['shaper']) {
       const h = await open(name);
-      assert.strictEqual(await sides(), '6', name + ': the remembered side count is shared (same origin)');
       const c0 = await summary(h);
       await clickEl('#tool-polygon');
-      const c = await centerOf(h.canvas);
-      await drag([[c.x, c.y], [c.x + 40, c.y + 5], [c.x + 120, c.y + 15]]);
+      await placePolygon(h.canvas, 6);
       const hex = await summary(h);
       // (a delta: the design is carried across apps, so Shaper may open with what the plotter autosaved)
       assert.strictEqual(hex.sides - c0.sides, 6, name + ': a hexagon'); assert.strictEqual(hex.lines - c0.lines, 12);
@@ -93,10 +104,9 @@ await (async () => {
     // Studio keeps no global state handle: count the drawn shape elements, and use the real Undo button
     await open('studio');
     await clickEl('#tool-polygon');
-    const sc = await centerOf('#svgCanvas');
     const shapeCount = () => evalJs(`document.querySelectorAll('.shape-elem').length`);
     const s0 = await shapeCount();
-    await drag([[sc.x, sc.y], [sc.x + 40, sc.y + 5], [sc.x + 120, sc.y + 15]]);
+    await placePolygon('#svgCanvas', 6);
     const s1 = await shapeCount();
     assert(s1 - s0 >= 6, 'Studio: the hexagon is drawn (shape elements ' + s0 + ' -> ' + s1 + ')');
     await frame();

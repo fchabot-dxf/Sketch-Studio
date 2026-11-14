@@ -1161,6 +1161,11 @@ function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : (msg) => { try { showNotification(msg); } catch (_) {} };
     const clipboard = createClipboard({ state, notify: notifyFn, unit: () => SettingsManager.get('DOC_UNIT') || 'mm' });
+    // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
+    window.addEventListener('liveDimensionCancelled', () => {
+        if (!isActiveFn()) return;
+        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) handleEscape(state);
+    });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
         // CRITICAL: If the target is an INPUT, the dimension input, or a TEXTAREA, do not process global shortcuts

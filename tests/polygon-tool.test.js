@@ -137,22 +137,24 @@ for (const n of [3, 4, 5, 6, 8]) {
   assert.strictEqual(state.shapes.length, 12, 'and Redo restores it');
 }
 
-// 7. click-click flow, and a second click on the centre makes nothing (no leftover joint)
+// 7. click-click flow, and a second click on the centre makes nothing (no leftover joint). Task 596: the first click opens the on-canvas
+// boxes (the shared numeric box needs the DOM), so this runs in the node kit on the real SketchStudio page, with real pointer events.
 {
-  const { engine, state } = realState(5);
-  const joints0 = state.joints.size;   // the engine keeps an origin joint
-  handlePolygonPointerDown(ev(100, 100), null, state, null, { x: 0, y: 0 });
-  assert.strictEqual(handlePolygonPointerUp(ev(100, 100), null, state, null, { x: 0, y: 0 }), true);
-  assert(state.active && state.active.waitingForSecondClick, 'a click waits for the corner');
-  handlePolygonPointerDown(ev(100, 100), null, state, null, { x: 0, y: 0 });             // consumed: does not start a new polygon
-  assert.strictEqual(handlePolygonPointerUp(ev(100, 100), null, state, null, { x: 0, y: 0 }), true);
-  assert.strictEqual(state.shapes.length, 0, 'a corner on the centre is not a polygon');
-  assert.strictEqual(state.joints.size, joints0, 'and the centre joint made by the first click is gone'); assert.strictEqual(state.active, null);
-  handlePolygonPointerDown(ev(100, 100), null, state, null, { x: 0, y: 0 });
-  handlePolygonPointerUp(ev(100, 100), null, state, null, { x: 0, y: 0 });
-  handlePolygonPointerDown(ev(150, 100), null, state, null, { x: 6, y: 0 });
-  handlePolygonPointerUp(ev(150, 100), null, state, null, { x: 6, y: 0 });
-  assert.strictEqual(edgesOf(state.shapes).length, 5, 'click, click = a pentagon');
+  const { open } = await import('./helpers/node-app.js');
+  const app = await open({ host: 'sketchstudio' });
+  const st = app.state; st.polygonSides = 5;
+  const o = app.toScreen(0, 0), P = (dx, dy) => ({ x: o.x + 200 + dx, y: o.y + 100 + dy }); // away from the origin, where a click snaps
+  const joints0 = st.joints.size, shapes0 = st.shapes.length;
+  app.tool('polygon');
+  app.click(P(0, 0).x, P(0, 0).y);
+  assert(st.active && st.active.waitingForSecondClick, 'a click waits for the corner');
+  app.click(P(0, 0).x, P(0, 0).y);
+  assert.strictEqual(st.shapes.length, shapes0, 'a corner on the centre is not a polygon');
+  assert.strictEqual(st.joints.size, joints0, 'and the centre joint made by the first click is gone'); assert.strictEqual(st.active, null);
+  app.click(P(0, 0).x, P(0, 0).y);
+  app.click(P(80, 0).x, P(80, 0).y);
+  assert.strictEqual(edgesOf(st.shapes).length, 5, 'click, click = a pentagon');
+  await app.close();
 }
 
 // 8. the preview: no NaN / undefined, and an invalid one is not a preview

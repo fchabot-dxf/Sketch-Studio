@@ -8,8 +8,7 @@
 
 import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
-import { TOOL_MODES, RECT_MODES, POLYGON_SIDES } from '#core/constants.js';
-import { clampPolygonSides } from '#core/shapes.js';
+import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
@@ -20,7 +19,7 @@ const CREATE = [
   { tool: TOOL_MODES.LINE,   icon: 'icon-tool-line',    label: 'Line' },
   { tool: TOOL_MODES.RECT,   icon: 'icon-tool-rect-2pt', label: 'Rect', rectDropdown: true },
   { tool: TOOL_MODES.CIRCLE, icon: 'icon-tool-circle',  label: 'Circle' },
-  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon', label: 'Polygon', polygonField: true }, // TASK 483: regular polygon, Sides field in its menu
+  { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon', label: 'Polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
   { tool: TOOL_MODES.ARC,    icon: 'icon-tool-arc-cse', label: 'Arc' }, // single-mode in the source (no dropdown)
   { tool: TOOL_MODES.BEZIER, icon: 'icon-tool-bezier',  label: 'Bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
   // TASK 585: like Fusion's Create > Mirror (owner: "always the create menu"). `begin` runs when the button starts the tool (the pre-selection).
@@ -122,11 +121,10 @@ function injectStyles() {
 .sk-ribbon-menu-item:hover { background: var(--sk-ribbon-hover, #f3f4f6); }
 .sk-ribbon-menu-item.active { background: var(--sk-selection, #3B82F6); color: #fff; }
 .sk-ribbon-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-/* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, the polygon Sides box 44 x 44, menu rows 44 px. Desktop (a mouse) is untouched. */
+/* TASK 562: a finger. Buttons >= 44 px (here 62 x 60), labels >= 12 px, menu rows 44 px. Desktop (a mouse) is untouched. */
 @media (pointer: coarse) {
   .sk-ribbon-btn { width: 62px; height: 60px; }
   .sk-ribbon-lbl, .sk-ribbon-group-label { font-size: 12px; font-weight: 700; }
-  .sk-ribbon-poly input { width: 52px !important; height: 44px; font-size: 16px !important; }
   .sk-ribbon-menu-item { min-height: 44px; font-size: 14px; }
 }
 /* TASK 562: at phone width an edge fade says the ribbon scrolls: the JS sets data-fade (left / right / both) from the scroll position. */
@@ -245,38 +243,6 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     wrap.append(b, menu);
     return wrap;
   }
-  // TASK 483: the Polygon button + its SIDES field. The field sits right beside the button (always visible: a dropdown menu would
-  // be clipped by the ribbon's own scroll area). 3..64, default 6, remembered in localStorage; the value actually kept (clamped)
-  // is shown back in the box and written to state.polygonSides, which the tool reads when it draws.
-  const SIDES_KEY = 'sk-polygon-sides';
-  function polygonButton(t) {
-    if (state && state.polygonSides == null) {
-      let stored = null; try { stored = localStorage.getItem(SIDES_KEY); } catch (_) { /* storage blocked: the default applies */ }
-      state.polygonSides = clampPolygonSides(stored == null ? POLYGON_SIDES.default : stored);
-    }
-    const wrap = document.createElement('div'); wrap.className = 'sk-ribbon-poly';
-    wrap.style.cssText = 'display:flex;align-items:center;gap:2px;';
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
-    b.dataset.tool = t.tool; b.title = t.label; b.id = 'tool-' + t.tool;
-    b.innerHTML = iconSvg(t.icon) + `<span class="sk-ribbon-lbl">${t.label}</span>`;
-    b.addEventListener('click', () => selectTool(t.tool));
-    toolBtns.push({ btn: b, tool: t.tool });
-    const input = document.createElement('input'); input.type = 'number'; input.id = 'polygon-sides';
-    input.min = POLYGON_SIDES.min; input.max = POLYGON_SIDES.max; input.step = 1; input.value = state ? state.polygonSides : POLYGON_SIDES.default;
-    input.className = 'sk-ribbon-poly-input'; input.title = `Number of sides (${POLYGON_SIDES.min}-${POLYGON_SIDES.max})`; input.setAttribute('aria-label', 'Polygon sides');
-    input.style.cssText = 'width:38px;box-sizing:border-box;font:600 12px system-ui,sans-serif;padding:3px 2px;text-align:center;border:1px solid var(--sk-ribbon-sep,#cbd5e1);border-radius:6px;background:var(--sk-ribbon-bg,#fff);color:var(--sk-ribbon-fg,inherit);';
-    const commit = () => {
-      const kept = clampPolygonSides(input.value === '' ? (state && state.polygonSides) : input.value);
-      input.value = kept;                                   // show the value actually kept
-      if (state) state.polygonSides = kept;
-      try { localStorage.setItem(SIDES_KEY, String(kept)); } catch (_) { /* storage blocked */ }
-      fire('polygonSides', kept);
-    };
-    input.addEventListener('change', commit);
-    input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') { commit(); input.blur(); } }); // typing a number is not a tool shortcut
-    wrap.append(b, input);
-    return wrap;
-  }
   function extraButton(bd) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'sk-ribbon-btn';
     if (bd.id) b.id = bd.id; b.title = bd.title || bd.label || '';
@@ -291,7 +257,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
     el.appendChild(group(label, frag));
   }
   // CREATE (rect gets the dropdown), EDIT (trim/break/fillet + opt-in profile actions), INSPECT, CONSTRAIN
-  buildGroup('Create', CREATE, (t) => (t.rectDropdown ? rectButton(t) : t.polygonField ? polygonButton(t) : toolButton(t)));
+  buildGroup('Create', CREATE, (t) => (t.rectDropdown ? rectButton(t) : toolButton(t)));
   const modifyTools = profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT;
   buildGroup('Modify', modifyTools, toolButton);  // TRACE-1: trim + break
   buildGroup('Inspect', parameters ? [...INSPECT, PARAMETERS] : INSPECT, toolButton);

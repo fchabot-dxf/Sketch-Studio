@@ -124,6 +124,10 @@ const NUMERIC_INPUT_CSS = `
     color: #888;
     font-weight: bold;
 }
+/* TASK 596: a finger. The two-field box (rect W x H, polygon size x sides) has fields >= 44 px tall and a 16 px font (no iOS zoom). A mouse keeps today's look. */
+@media (pointer: coarse) {
+    .sk-dual-input input { width: 72px; min-height: 44px; font-size: 16px; }
+}
 `;
 
 export function ensureNumericInputStyles() {
@@ -158,11 +162,14 @@ let uiState = {
     field: null, // 'length', 'radius', 'width', 'height' (for live mode)
     
     // DOM Elements
-    container: null,
     singleInput: null,
     dualContainer: null,
     dualInputW: null,
     dualInputH: null,
+    dualSep: null,
+    dualKind: null, // TASK 596: who opened the box ('polygon': size x sides); null = the rect tool's W x H. Rides on every live event as detail.kind
+    dualDigits: [1, 1], // decimals each field shows when the box opens
+    typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
     
     // State
     rafId: null,
@@ -183,10 +190,10 @@ export function setupNumericInput(svg, state) {
         return;
     }
 
-    if (uiState.container) return; // Already setup
-    ensureNumericInputStyles();
     uiState.svg = svg;
-    uiState.appState = state;
+    uiState.appState = state;   // always the latest page / state; the elements and their listeners are made ONCE per document
+    if (uiState.dualContainer && uiState.dualContainer.isConnected) return; // TASK 596: already set up in THIS document (the old `uiState.container` guard was never assigned, so every tool's setup built another hidden #dualInput)
+    ensureNumericInputStyles();
 
     // --- 1. Create Single/Edit Input (Reuses #dimInput if present, or creates one) ---
     let existingSingle = (typeof document.getElementById === 'function') ? document.getElementById('dimInput') : null;
@@ -240,6 +247,7 @@ export function setupNumericInput(svg, state) {
     uiState.dualContainer = dualDiv;
     uiState.dualInputW = inputW;
     uiState.dualInputH = inputH;
+    uiState.dualSep = sep;
 
     // --- Event Listeners ---
     setupListeners();
@@ -257,7 +265,7 @@ function setupListeners() {
         e.stopPropagation(); // Prevent global shortcuts
     });
     
-    uiState.singleInput.addEventListener('input', () => { handlePreview(); updateAssist(); });
+    uiState.singleInput.addEventListener('input', () => { uiState.typed[0] = true; handlePreview(); updateAssist(); });
 
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
@@ -275,8 +283,8 @@ function setupListeners() {
     uiState.dualInputW.addEventListener('keydown', (e) => handleDualKey(e, 'width'));
     uiState.dualInputH.addEventListener('keydown', (e) => handleDualKey(e, 'height'));
     
-    uiState.dualInputW.addEventListener('input', () => handlePreview());
-    uiState.dualInputH.addEventListener('input', () => handlePreview());
+    uiState.dualInputW.addEventListener('input', () => { uiState.typed[0] = true; handlePreview(); });
+    uiState.dualInputH.addEventListener('input', () => { uiState.typed[1] = true; handlePreview(); });
 }
 
 // --- Public API ---
@@ -286,6 +294,7 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     uiState.active = true;
     uiState.mode = 'live-single';
     uiState.field = field; // 'length', 'radius'
+    uiState.typed = [!!initialKey, false];
 
     // Position
     uiState.singleInput.style.left = `${x}px`;
@@ -300,20 +309,47 @@ export function showSingleInput(x, y, value, field, initialKey = null) {
     if (!initialKey) uiState.singleInput.select();
 }
 
-export function showDualInput(x, y, w, h) {
+/**
+ * The two-field on-canvas box. The rect tool opens it as W x H; TASK 596: the polygon tool as size x sides through `opts`
+ * ({ kind, labels: [first, second], separator, digits: [first, second] }), the same element, keys and events, so Tab, Enter, Esc are ONE code path.
+ */
+export function showDualInput(x, y, w, h, opts = {}) {
     resetState();
     uiState.active = true;
     uiState.mode = 'live-dual';
+    uiState.dualKind = opts.kind || null;
+    uiState.typed = [false, false];
+    uiState.dualDigits = opts.digits || [1, 1];
+    const labels = opts.labels || ['W', 'H'];
+    uiState.dualInputW.placeholder = labels[0];
+    uiState.dualInputH.placeholder = labels[1];
+    uiState.dualSep.innerText = opts.separator || '×';
 
     uiState.dualContainer.style.left = `${x}px`;
     uiState.dualContainer.style.top = `${y}px`;
     showNumericInputEl(uiState.dualContainer);
 
-    uiState.dualInputW.value = w.toFixed(1);
-    uiState.dualInputH.value = h.toFixed(1);
+    uiState.dualInputW.value = w.toFixed(uiState.dualDigits[0]);
+    uiState.dualInputH.value = h.toFixed(uiState.dualDigits[1]);
     
     uiState.dualInputW.focus();
     uiState.dualInputW.select();
+    if (opts.initialKey) {   // the digit that opened the box is the first character of the first field, never lost
+        uiState.dualInputW.value = opts.initialKey;
+        uiState.typed[0] = true;
+        handlePreview();
+    }
+}
+
+/**
+ * TASK 596: show the live value of field `index` (0 = first) in the open creation box (the size follows the cursor). A field the user has
+ * typed in keeps its text; the one with focus stays selected so the next typed character replaces the live value.
+ */
+export function setLiveInputValue(index, value) {
+    if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single') || uiState.typed[index]) return;
+    const el = uiState.mode === 'live-single' ? uiState.singleInput : (index === 0 ? uiState.dualInputW : uiState.dualInputH);
+    el.value = value.toFixed(uiState.mode === 'live-single' ? 1 : uiState.dualDigits[index]);
+    if (typeof document !== 'undefined' && document.activeElement === el) el.select();
 }
 
 // Replaces showDimInput
@@ -445,6 +481,8 @@ function handleCommit() {
     } else {
         // Dispatch event for Tool to handle
         const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single', confirmedBy: 'enter' };
+        detail.typed = uiState.typed.slice();   // which fields the user typed in: only those are the user's numbers, the rest shows the live preview
+        if (uiState.mode === 'live-dual') detail.kind = uiState.dualKind;
         if (uiState.mode === 'live-dual') {
             detail.width = parseFloat(uiState.dualInputW.value);
             detail.height = parseFloat(uiState.dualInputH.value);
@@ -453,6 +491,7 @@ function handleCommit() {
             detail.value = parseFloat(uiState.singleInput.value);
         }
         window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
+        if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
     }
 }
@@ -462,12 +501,15 @@ function handlePreview() {
     
     const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single' };
     if (uiState.mode === 'live-dual') {
+        detail.kind = uiState.dualKind;
+        detail.typed = uiState.typed.slice();
         const w = parseFloat(uiState.dualInputW.value);
         const h = parseFloat(uiState.dualInputH.value);
         if (!isNaN(w)) detail.width = w;
         if (!isNaN(h)) detail.height = h;
     } else {
         const v = parseFloat(uiState.singleInput.value);
+        detail.typed = uiState.typed.slice();
         if (!isNaN(v)) {
             detail.field = uiState.field;
             detail.value = v;

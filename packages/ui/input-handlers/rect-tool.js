@@ -4,48 +4,46 @@ import { TOOL_MODES, RECT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
 import { findNearbyJoint } from '#core/joints.js';
-import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive, updateInputPosition } from '#ui/numeric-input-manager.js';
+import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes } from '#ui/input-handlers/base-tool.js';
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
-const localState = { isDragging: false, dragStartScreen: null };
+const localState = { isDragging: false, dragStartScreen: null, boxes: false, cursor: null };
+// TASK 596: after the first click of a two-point rectangle the W x H boxes show at once (base-tool's shared creation-box path); the sides follow the cursor until typed
+const BOX = { dual: { kind: 'rect', labels: ['W', 'H'], separator: '×', digits: [1, 1] } };
+
+/** The second corner: the cursor, but a typed width / height holds its side (the other still follows the cursor). */
+function lockedCorner(c1, pt) {
+    const signX = pt.x - c1.x >= 0 ? 1 : -1, signY = pt.y - c1.y >= 0 ? 1 : -1;
+    return { x: c1.x + (rectState.lockedWidth ? rectState.lockedWidth * signX : pt.x - c1.x), y: c1.y + (rectState.lockedHeight ? rectState.lockedHeight * signY : pt.y - c1.y) };
+}
 
 export function setupRectTool(svg, state){
     setupNumericInput(svg, state);
+    state.onDrawCancelled(() => { if (localState.boxes) closeRectBoxes(); });   // another tool picked / Undo mid-draw: the boxes go with the draw
     setupDimensionListeners(state, TOOL_MODES.RECT, {
+        guard: (detail) => detail.mode === 'dual' && detail.kind === 'rect',
         onApply: (detail) => {
             dbg.log('rect-tool', '[DEBUG RECT] liveDimensionApplied event:', { tool: state.currentTool, hasActive: !!state.active, detail });
-            if (detail.mode === 'dual') {
-                rectState.lockedHeight = detail.height;
-                rectState.lockedWidth = detail.width;
-                dbg.log('rect-tool', '[DEBUG RECT] Dimensions locked:', { width: rectState.lockedWidth, height: rectState.lockedHeight, confirmedBy: detail.confirmedBy });
-                if (detail.confirmedBy === 'enter') {
-                    dbg.log('rect-tool', '[DEBUG RECT] Auto-finalizing rectangle');
-                    try{ finalizeRectFromActive(svg, state); }catch(_){ }
-                }
+            // a typed side is locked already (onPreview); Enter places the rectangle at the preview: typed sides exact, the others at the cursor
+            if (detail.confirmedBy === 'enter') {
+                try{ finalizeRectFromActive(svg, state); }catch(_){ }
             }
         },
         onPreview: (detail) => {
-            if (detail.mode !== 'dual') return;
             dbg.log('rect-tool', '[DEBUG RECT] liveDimensionPreview:', detail);
-            rectState.previewWidth = detail.width;
-            rectState.previewHeight = detail.height;
-            const c1 = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
-            if (c1 && state.active.preview) {
-                const signX = (state.active.preview.pt.x >= c1.x) ? 1 : -1;
-                const signY = (state.active.preview.pt.y >= c1.y) ? 1 : -1;
-                const corner2 = {
-                    x: c1.x + (rectState.previewWidth || Math.abs(state.active.preview.pt.x - c1.x)) * signX,
-                    y: c1.y + (rectState.previewHeight || Math.abs(state.active.preview.pt.y - c1.y)) * signY
-                };
-                safeUpdatePreview(state, 'rect', [state.active.start], corner2, { mode: RECT_MODES.TWO_POINT });
+            if (detail.typed[0]) rectState.lockedWidth = detail.width > 0 ? detail.width : null;   // only a TYPED side locks; the other shows the live cursor size
+            if (detail.typed[1]) rectState.lockedHeight = detail.height > 0 ? detail.height : null;
+            const c1 = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
+            if (c1 && (state.rectMode || RECT_MODES.TWO_POINT) === RECT_MODES.TWO_POINT) {
+                safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1), { mode: RECT_MODES.TWO_POINT });
             }
         },
-        onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; }
+        onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 
@@ -117,10 +115,13 @@ export function finalizeRectFromActive(svg, state){
                 rectState.lockedWidth = null; rectState.lockedHeight = null; try{ hideInput(); }catch(_){ }
             }
         }
+        closeRectBoxes();
         state.endUndoGroup(); state.active = null; return true;
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }
 }
-export function resetRectState(state){ if(state && state.active && state.active.mode===TOOL_MODES.RECT) state.active=null }
+/** The W x H boxes and the sides typed in them go away (a rectangle was placed, or the tool was left). */
+function closeRectBoxes(){ rectState.lockedWidth = null; rectState.lockedHeight = null; localState.boxes = false; localState.cursor = null; try{ hideInput(); }catch(_){ } }
+export function resetRectState(state){ if(state && state.active && state.active.mode===TOOL_MODES.RECT){ closeRectBoxes(); state.active=null } }
 
 export function handleRectPointerDown(e, svg, state, hitSnap, w){
 		// If we're already in a 3-point rect and have the second point set, don't reset state.active.
@@ -151,8 +152,9 @@ export function handleRectPointerDown(e, svg, state, hitSnap, w){
 export function handleRectPointerMove(e, svg, state, w){
 	if(!state.active || state.active.mode!==TOOL_MODES.RECT) return false;
 	if (checkDragThreshold(e, localState.dragStartScreen)) localState.isDragging = true;
-	if (isInputActive()) { updateInputPosition(e.clientX, e.clientY); return true; }
 	const previewPt = state.snapTarget ? state.snapTarget.pt : w;
+	localState.cursor = previewPt;
+	if (isInputActive() && !localState.boxes) { followCreationBoxes(e, []); return true; }   // a box opened by a typed digit in the other rect modes: the preview waits for Enter
 	const rectMode = state.rectMode || RECT_MODES.TWO_POINT;
 	if (rectMode === RECT_MODES.CENTER) {
 		safeUpdatePreview(state, 'rect', [state.active.start], previewPt, { mode: 'center' });
@@ -162,16 +164,8 @@ export function handleRectPointerMove(e, svg, state, w){
 		const c1 = state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null);
 		let corner2 = previewPt;
 		if (c1) {
-			let dx = previewPt.x - c1.x;
-			let dy = previewPt.y - c1.y;
-			const signX = dx >= 0 ? 1 : -1;
-			const signY = dy >= 0 ? 1 : -1;
-			corner2 = {
-				x: c1.x + (rectState.lockedWidth ? rectState.lockedWidth * signX : dx),
-				y: c1.y + (rectState.lockedHeight ? rectState.lockedHeight * signY : dy)
-			};
-			dx = rectState.lockedWidth || dx;
-			dy = rectState.lockedHeight || dy;
+			corner2 = lockedCorner(c1, previewPt);
+			if (localState.boxes) followCreationBoxes(e, [Math.abs(previewPt.x - c1.x), Math.abs(previewPt.y - c1.y)]);
 		}
 		safeUpdatePreview(state, 'rect', [state.active.start], corner2, { mode: 'two-point', lockedWidth: rectState.lockedWidth || undefined, lockedHeight: rectState.lockedHeight || undefined });
 	}
@@ -187,12 +181,14 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 		state.active.waitingForSecondClick = true;
 		localState.dragStartScreen = null;
 		localState.isDragging = false;
+		if (rectMode === RECT_MODES.TWO_POINT) { localState.boxes = true; localState.cursor = null; openCreationBoxes(e, BOX, [0, 0]); } // TASK 596: W and H show now, not after a typed digit
 		return true;
 	}
 
 	dbg.log('rect-tool', '[rect-tool] pointerUp entry', { snap: state.activeSnap || hitSnap, wasDragging });
 	const snap = state.activeSnap || hitSnap;
-	const endPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
+	let endPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
+	if (rectMode === RECT_MODES.TWO_POINT && state.active.startPt) endPt = lockedCorner(state.active.startPt, endPt); // a typed side holds at the click too
 	const endId = state.genJ();
 	state.joints.set(endId, { x:endPt.x, y:endPt.y, fixed:false });
 	dbg.log('rect-tool', '[rect-tool] created corner', { endId, endPt });
@@ -249,7 +245,7 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 
 // Extracted: apply locked width/height as distance constraints
 function applyLockedDims(state, rectResult, rectMode) {
-	if (!rectState.lockedWidth && !rectState.lockedHeight) return;
+	if (!rectState.lockedWidth && !rectState.lockedHeight) { closeRectBoxes(); return; }
 	const lines = rectResult && rectResult.shapes ? rectResult.shapes : [];
 	if (rectMode === RECT_MODES.THREE_POINT || rectMode === RECT_MODES.CENTER) {
 		if (rectState.lockedWidth) {
@@ -282,9 +278,7 @@ function applyLockedDims(state, rectResult, rectMode) {
 			}
 		}
 	}
-	rectState.lockedWidth = null;
-	rectState.lockedHeight = null;
-	try{ hideInput(); }catch(_){ }
+	closeRectBoxes();
 }
 
 export function handleRectKeyDown(e, svg, state) {
@@ -301,7 +295,7 @@ export function handleRectKeyDown(e, svg, state) {
 		const midWorld = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
 		const midScreen = worldToScreen(svg, midWorld);
 		dbg.log('rect-tool', '[DEBUG RECT] Input position:', midScreen);
-		showDualInput(midScreen.x, midScreen.y, currentWidth, currentHeight);
+		showDualInput(midScreen.x, midScreen.y, currentWidth, currentHeight, { kind: 'rect', initialKey: e.key }); // the typed digit is the first character of W, never lost
 		return true;
 	}
 	return false;

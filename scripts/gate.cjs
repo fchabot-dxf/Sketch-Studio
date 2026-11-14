@@ -148,7 +148,6 @@ const DECLARED_DEPS = {
   'tests/sketch-import.test.js': ['tests/fixtures/'], // FIX('svg', name) / FIX('dxf', name): a helper builds the fixture path, the names are never one literal
   'tests/import-polish-fit-a.test.js': ['tests/fixtures/'], // the same FIX(...) helper (in tests/helpers/import-polish-fit.js)
   'tests/import-polish-fit-b.test.js': ['tests/fixtures/'], // the same
-  'tests/import-polish-undo.test.js': ['tests/fixtures/'], // the same
 };
 const HTML_REF_RE = /(?:src|href)\s*=\s*["']([^"'#?]+)["']/g;
 

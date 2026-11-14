@@ -1,8 +1,5 @@
-// tests/import-polish.test.js — TASK 570: (1) after an import the shared importer FITS the view to the imported shapes, in all four apps;
-// (2) ONE Ctrl+Z of an import also restores what the host's afterImport changed: Pen Plotter's paper size / pens / shapeStyles / static ids,
-// Shaper's cut plan; Ctrl+Y brings the import state back. Live, headless Edge.
-//  FIT RULE: the screen box of the imported shapes lies inside the canvas box (1.5 px tolerance) AND fills at least half of the canvas in its
-//  tighter dimension (the fit leaves a 10 % margin on every side, so the box takes about 80 %).
+// tests/import-polish-undo.test.js — TASK 570 / 601 (the undo part of the old import-polish.test.js): ONE Ctrl+Z of an import also restores what the host's
+// afterImport changed: Pen Plotter's paper size / pens / shapeStyles / static ids, Shaper's cut plan; Ctrl+Y brings the import state back. Live, headless Edge.
 import assert from 'node:assert';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +11,7 @@ const FIX = (...p) => path.join(REPO_ROOT, 'tests', 'fixtures', ...p);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await (async () => {
-  const cdp = await launchBrowser({ tag: '570', width: 1400, height: 800 });
+  const cdp = await launchBrowser({ tag: '570u', width: 1400, height: 800 });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); return; }
   const { port, send, once, evalJs, waitFor } = cdp;
   try {
@@ -27,36 +24,6 @@ await (async () => {
     };
     const undo = async () => { await sleep(1000); await ctrl('z', 'KeyZ', 90); }; // the menu drawer has closed and focus is back on the page
     const redo = async () => { await sleep(300); await ctrl('y', 'KeyY', 89); };
-
-    // ── 1. FIT in every app ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    const apps = [
-      { name: 'SketchStudio', url: '/apps/sketchstudio/index.html', ready: `!!document.getElementById('tool-line')`, canvas: '#svgCanvas', shapes: '#svgCanvas .shape-elem' },
-      { name: 'Shaper', url: '/apps/shaper/index.html', ready: `!!document.querySelector('[data-mode="design"]')`, prep: `document.querySelector('[data-mode="design"]').click()`, canvas: '#design-canvas', shapes: '#design-canvas .shape-elem' },
-      { name: 'Pen Plotter', url: '/apps/penplotter/index.html', ready: `!!window.__sketch`, prep: `(document.querySelector('.stage-btn[data-stage="design"]') || document.body).click()`, canvas: '#design-canvas', shapes: '#design-paper > rect' }, // TASK 573: Pen Plotter frames the whole PAPER (the SVG sets the paper size, the DXF does not: both)
-      { name: 'Trace', url: '/apps/trace/index.html', ready: `!!document.getElementById('tab-edit')`, canvas: '#design-canvas', shapes: '#design-canvas .shape-elem' },
-    ];
-    const boxes = (app) => evalJs(`(() => {
-      const c = document.querySelector('${app.canvas}').getBoundingClientRect();
-      let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity, n = 0;
-      for (const e of document.querySelectorAll('${app.shapes}')) { const q = e.getBoundingClientRect(); if (!q.width && !q.height) continue; n++; l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom); }
-      return JSON.stringify({ n, canvas: [c.left, c.top, c.right, c.bottom], shapes: [l, t, r, b] });
-    })()`).then(JSON.parse);
-    for (const app of apps) {
-      await nav(app.url);
-      await waitFor(`!!document.querySelector('.sk-sidebar-btn') && ${app.ready}`, 'the ' + app.name + ' page'); await sleep(800);
-      if (app.prep) { await evalJs(app.prep); await sleep(1200); }
-      for (const file of [FIX('svg', 'import-basic.svg'), FIX('dxf', 'part-mm.dxf')]) {
-        await importViaMenu(cdp, file); await sleep(2000);
-        const { n, canvas: c, shapes: s } = await boxes(app);
-        assert.ok(n > 0, `${app.name}: ${path.basename(file)} shows shapes`);
-        const tol = 1.5;
-        assert.ok(s[0] >= c[0] - tol && s[1] >= c[1] - tol && s[2] <= c[2] + tol && s[3] <= c[3] + tol, `${app.name} ${path.basename(file)}: the shapes' box ${JSON.stringify(s)} lies inside the canvas ${JSON.stringify(c)}`);
-        const fill = Math.max((s[2] - s[0]) / (c[2] - c[0]), (s[3] - s[1]) / (c[3] - c[1]));
-        assert.ok(fill >= 0.5, `${app.name} ${path.basename(file)}: the shapes fill ${fill.toFixed(2)} of the canvas (>= 0.5)`);
-        console.log(`${app.name} ${path.basename(file)}: inside the canvas, fills ${fill.toFixed(2)}`);
-        await undo(); // the next file is measured alone
-      }
-    }
 
     // ── 2. Pen Plotter: one Ctrl+Z puts back paper, pens, styles, static ids ─────────────────────────────────────────────────────────────────
     await nav('/apps/penplotter/index.html');
@@ -100,7 +67,7 @@ await (async () => {
     await redo();
     assert.deepStrictEqual(await plan(), planAfter, 'Ctrl+Y: the import cut plan again');
     console.log('Shaper: import undo / redo restore the cut plan');
-    console.log('import-polish: ok');
+    console.log('import-polish-undo: ok');
   } finally {
     await cdp.close();
   }

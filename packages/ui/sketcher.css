@@ -29,6 +29,7 @@
 
   /* Joints */
   --sk-joint-fill: #ffffff;
+  --sk-joint-selected: #76A4E4;
 
   /* Constraint glyphs (mirror #core CONSTRAINT_COLORS) */
   --sk-constraint-fill: #2B9BD6;

@@ -37,7 +37,7 @@ await (async () => {
       const f = await evalJs(fields);
       assert.deepStrictEqual(f.active, ['lines'], host + ': first tab active by default');
       assert(f.templateAboveTabs, host + ': the Template select sits above the tabs');
-      assert.deepStrictEqual(f.lines.keys, ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLOW_WIDTH_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'HOVER_COLOR', 'FIXED_JOINT_FILL', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'], host + ' lines tab');
+      assert.deepStrictEqual(f.lines.keys, ['LINE_STROKE', 'JOINT_RADIUS', 'JOINT_STROKE_MULT', 'SELECTION_FEEDBACK_MULT', 'HOVER_FEEDBACK_MULT', 'GLOW_WIDTH_PX', 'DASH_LENGTH_PX', 'DASH_GAP_PX', 'HOVER_COLOR', 'PROFILE_FILL', 'LOCKED_LINE_COLOR'], host + ' lines tab');
       assert.deepStrictEqual(f.grid.keys, ['SHOW_GRID', 'GRID_MODE', 'SNAP_MAGNETISM', 'AXIS_SNAP', 'GRID_MAGNETISM', 'GRID_MAJOR_STEP', 'GRID_SIZE', 'INCH_GRID_MAJOR', 'INCH_GRID_DIVISIONS'], host + ' grid tab');
       assert.deepStrictEqual(f.glyphs.keys, ['GLYPH_SYMBOL_SIZE_PX', 'GLYPH_INFERENCE_SIZE_PX', 'GLYPH_OFFSET_PX', 'GLYPH_OUTLINE_PX', 'DIM_LABEL_BOX', 'LABEL_FONT_FAMILY'], host + ' glyphs tab');
       assert.deepStrictEqual(f.units.keys, ['DOC_UNIT'], host + ': every host has the Units tab with DOC_UNIT');

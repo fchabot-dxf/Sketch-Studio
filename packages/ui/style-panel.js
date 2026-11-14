@@ -1,6 +1,6 @@
 // packages/ui/style-panel.js — the shared sketcher STYLE panel (S7c-2b).
 // The shared panel BUILDS its own DOM from a control SPEC (a bare host has no #s-* markup) and
-// owns its open/close. The 17 controls ARE the shared renderer knobs — they read/write the already-shared
+// owns its open/close. The 16 controls ARE the shared renderer knobs — they read/write the already-shared
 // SettingsManager (#core/settings-manager.js), so the shared renderer reacts live. App-agnostic chrome; themed via
 // --sk-* (light defaults → SketchStudio); self-contained <style>. Imports ONLY the settings store.
 
@@ -44,9 +44,7 @@ const CONTROLS = [
   { tab: 'lines', key: 'DASH_LENGTH_PX',          label: 'Dash Length',          min: 1,   max: 40,  step: 1 },
   { tab: 'lines', key: 'DASH_GAP_PX',             label: 'Dash Gap',             min: 1,   max: 40,  step: 1 },
   { tab: 'lines', key: 'HOVER_COLOR',             label: 'Hover Colour',         type: 'select',
-    options: [{ value: '#1e40af', label: 'Selection blue' }, { value: '#5B6CF0', label: 'Blue-violet' }] },
-  { tab: 'lines', key: 'FIXED_JOINT_FILL',        label: 'Fixed Joint Fill',     type: 'select',
-    options: [{ value: 'white', label: 'Hollow' }, { value: '#202020', label: 'Solid dark' }] },
+    options: [{ value: '#1e40af', label: 'Selection blue' }, { value: SettingsManager.getDefault('HOVER_COLOR'), label: 'Hover blue' }] },
   { tab: 'lines', key: 'PROFILE_FILL',            label: 'Closed Profile Fill',  type: 'select',
     options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On (tint every closed loop)' }] },
   { tab: 'lines', key: 'LOCKED_LINE_COLOR',       label: 'Locked Line Colour',   type: 'select',

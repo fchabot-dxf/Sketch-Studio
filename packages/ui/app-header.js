@@ -16,6 +16,10 @@ function injectStyles() {
   background: var(--sk-header-bg, #fff); border-bottom: 1px solid var(--sk-header-sep, #e2e8f0);
   color: var(--sk-header-fg, #334155); font: 13px system-ui, sans-serif; }
 .sk-header * { box-sizing: border-box; }
+/* TASK 618 (owner): when the controls do not fit, the header row scrolls sideways (no scrollbar, no wrapping); its menus are position: fixed on <body>. */
+.sk-header { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.sk-header::-webkit-scrollbar { display: none; }
+.sk-header > * { flex-shrink: 0; }
 .sk-header-tabs { display: flex; gap: 4px; align-items: center; }
 .sk-header-tab { background: transparent; color: inherit; border: 0; border-radius: 6px; padding: 6px 14px;
   cursor: pointer; font: inherit; opacity: 0.7; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

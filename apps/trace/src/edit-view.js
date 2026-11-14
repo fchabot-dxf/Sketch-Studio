@@ -10,7 +10,7 @@ import { mountSketch }     from '#ui/sketch-canvas.js';
 import { createToolRibbon } from '#ui/tool-ribbon.js';
 import { importIntoSketch } from '#ui/sketch-import.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
-import { mountDesignSidePanel } from '#ui/design-side-panel.js'; // task 577b: the shared side panel with the SKETCHES tree (the same mount SketchStudio uses)
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // TASK 567: the SAME autosave / project buffer every other app binds its Design canvas to
 
 
@@ -37,8 +37,8 @@ export function mountEdit({ isActive, getHostData, applyHost, onStatusChange }) 
   ribbonEl.hidden = false;
   bodyEl.hidden   = false;
   emptyEl.style.display = 'none';
-  // the Edit tab's side panel: the SKETCHES tree beside the canvas (#design-body is a flex row); the phone-width drawer button goes in the app header
-  sidePanel = mountDesignSidePanel({ container: bodyEl, state: designController.state, engine: designController.engine, storageKey: 'trace-design-panel-collapsed', toggleHost: document.querySelector('.tr-header') });
+  // the Edit tab's SKETCHES browser floats over the canvas's top-left (#design-body); the phone-width drawer button goes in the app header
+  sidePanel = mountDesignBrowser({ container: bodyEl, state: designController.state, engine: designController.engine, toggleHost: document.querySelector('.tr-header') });
   sidePanel.drawer.toggleEl.style.display = 'none'; // shown only while the Edit tab shows (startEdit / stopEdit)
 
   docBuffer = createDocumentBuffer({

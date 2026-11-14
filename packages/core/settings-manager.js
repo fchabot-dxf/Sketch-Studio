@@ -72,6 +72,10 @@ const DEFAULT_SETTINGS = {
     PROFILE_FILL: 'off',            // 'on' = every closed loop gets a translucent tint behind the geometry (--sk-profile-tint)
     LOCKED_LINE_COLOR: '',          // colour of fully LOCKED lines/joints (all joints fixed:true); '' = same as any fully constrained one
 
+    // Task 586: the floating Design BROWSER (SKETCHES tree, #ui/design-browser.js) is shrunk to its header bar. A per-user display preference
+    // (local), shared by all four apps, never saved in a document.
+    BROWSER_COLLAPSED: false,
+
     // Debug
     SHOW_DEBUG_OVERLAY: false,
     DEBUG_OFFSET_X: 23,             // Right-side gutter for debug labels (screen px) — reduced to 0.5×

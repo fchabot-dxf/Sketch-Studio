@@ -147,12 +147,10 @@ await (async () => {
     assert(shY.some((i) => i.at[1] < 0) && shY.every((i) => Math.sign(Number(i.text)) === -Math.sign(i.at[1])), 'Shaper Design: Y numbers above the origin are positive');
     await shot('shaper-design-200.png');
 
-    // ---- hosts that do not use the shared grid ----
-    for (const url of ['/apps/penplotter/index.html', '/apps/trace/index.html']) {
-      await navigate(`http://127.0.0.1:${port}${url}`, 4000);
-      await sleep(1200);
-      assert.strictEqual(await evalJs(`document.querySelectorAll('#grid-labels, #infinite-grid').length`), 0, url + ': no shared-grid labels or rect');
-    }
+    // ---- Pen Plotter's Design canvas also uses the shared grid (TASK 629; Trace's mounts with the Edit tab, its declaration is checked in design-grid-hosts-node.test.js) ----
+    await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 4000);
+    await sleep(1200);
+    assert.strictEqual(await evalJs(`document.querySelectorAll('#design-canvas #infinite-grid').length`), 1, '/apps/penplotter/index.html: the shared grid rect is in the Design canvas');
     console.log('canvas-grid-labels-live: ok');
   } finally {
     await cdp.close();

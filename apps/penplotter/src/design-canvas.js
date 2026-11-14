@@ -9,6 +9,7 @@ import { state } from './state.js';
 /** mountSketch options (the page adds isActive / onRender / isStatic / shouldSolve, which are page hooks). */
 export const DESIGN_CANVAS_OPTIONS = Object.freeze({
   seedDemo: false, // PERSIST-2: the autosave buffer decides what geometry to show
+  grid: true,      // the shared GRID_MODE-driven canvas grid, over the paper (the paper rectangle is drawn by sketch-stage.js paperGridMarkup)
 });
 
 /**

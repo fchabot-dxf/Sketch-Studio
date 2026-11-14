@@ -6,6 +6,7 @@ import { setTool, cancelInteraction } from "./tools.js";
 import { renderArt as render } from "./render-art.js"; // PP-3b: Draw's trimmed renderer, not render.js
 import { commitPolyline, deleteActiveNode } from "./interaction.js";
 import { exitTargetEditing } from "./toolpath-layers-panel.js"; // PP-4b: real target-editing exit (un-stubbed)
+import { isTextEditingTarget } from "#ui/clipboard.js";
 import { deleteSelection } from "#core/delete-manager.js"; // BURN-DOWN-1: Delete removes #core geometry (art store retired)
 
 const TOOL_KEYS = {
@@ -14,13 +15,13 @@ const TOOL_KEYS = {
     x: "scissors", n: "node",
 };
 
-export function installKeyboard() {
-    window.addEventListener("keydown", onKeyDown);
+export function installKeyboard(isActive) {
+    window.addEventListener("keydown", (e) => { if (isActive()) onKeyDown(e); });
     window.addEventListener("keyup", onKeyUp);
 }
 
 function onKeyDown(e) {
-    if (e.target.tagName === "INPUT") return;
+    if (isTextEditingTarget(e.target)) return;
 
     if (e.code === "Space") {
         state.spaceDown = true;

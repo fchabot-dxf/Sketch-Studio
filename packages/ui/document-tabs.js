@@ -66,23 +66,39 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
   el.className = 'sk-doctabs'; // the row has its fixed height from the first paint (nothing below it moves when the tabs appear); the tabs are drawn once the stored design has restored
   el.setAttribute('role', 'tablist'); el.setAttribute('aria-label', 'Open designs');
   const msg = doc.createElement('span'); msg.className = 'sk-doctabs-msg'; msg.setAttribute('role', 'status');
+  const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'sk-doctab-new'; plus.title = 'New design in a new tab'; plus.setAttribute('aria-label', 'New design in a new tab'); plus.textContent = '+';
+  plus.addEventListener('click', () => run('new', null, () => actions.newDesign()));
+  el.append(plus, msg);
   let names = new Map();     // stored design id -> its current name (a rename happens in the store; the buffer's copy is not updated)
   let shown = '';            // the signature of what is drawn: the strip is rebuilt only when it changes
   let lastActive = null;     // `${key}|${designId}|${name}` of the active tab, to tell the sidebar when it changed
   let msgTimer = null;
   let watched = null;        // the buffer whose `ready` we wait on
   let restored = false;      // its first restore is done
-  let busy = false;          // an action of this strip is running: its clicks are ignored until it settles
+  let busy = false;          // an action of this strip is running: new requests wait in `pending` until it settles
 
   function say(text) {
     msg.textContent = text;
     clearTimeout(msgTimer);
     if (text) msgTimer = setTimeout(() => { msg.textContent = ''; }, 5000);
   }
-  async function run(fn) {
+  // A request made while an action runs is QUEUED and runs when the current one settles (one action at a time, in click order). Every "+" click is kept (two clicks, two
+  // new tabs); a later switch replaces an earlier pending switch (only the last one matters); a close is kept once per tab. A queued switch or close whose tab has
+  // closed in the meantime is dropped (there is nothing left to act on).
+  const pending = [];
+  async function run(kind, key, fn) {
+    if (kind === 'activate') { const i = pending.findIndex((p) => p.kind === 'activate'); if (i >= 0) pending.splice(i, 1); }
+    if (kind === 'close' && pending.some((p) => p.kind === 'close' && p.key === key)) return;
+    pending.push({ kind, key, fn });
     if (busy) return;
     busy = true;
-    try { await fn(); say(''); } catch (e) { say(e && e.message ? e.message : String(e)); } finally { busy = false; refresh(); }
+    try {
+      while (pending.length) {
+        const next = pending.shift();
+        if (next.key != null) { const b = getBuffer && getBuffer(); if (b && !b.tabs().some((t) => t.key === next.key)) continue; }
+        try { await next.fn(); say(''); } catch (e) { say(e && e.message ? e.message : String(e)); }
+      }
+    } finally { busy = false; refresh(); }
     const a = doc.activeElement; if (a && el.contains(a)) a.blur(); // keys (Ctrl+Z, tool letters) go to the canvas's handlers, not to a strip button
   }
 
@@ -97,7 +113,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
 
   function render(list) {
     const focusKey = el.contains(doc.activeElement) && doc.activeElement.closest('[data-key]') ? doc.activeElement.closest('[data-key]').dataset.key : null;
-    el.textContent = '';
+    for (const w of el.querySelectorAll('.sk-doctab')) w.remove(); // the "+" is never rebuilt: a redraw between its press and its release (a save dot changing) would swallow the click
     for (const t of list) {
       const name = nameOf(t);
       const dot = dotOf(t);
@@ -107,15 +123,12 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
       const label = doc.createElement('span'); label.className = 'sk-doctab-name'; label.textContent = name;
       main.appendChild(label);
       if (dot) { const d = doc.createElement('span'); d.className = 'sk-doctab-dot ' + dot.cls; d.setAttribute('aria-hidden', 'true'); main.appendChild(d); }
-      main.addEventListener('click', () => run(() => actions.activateTab(t.key)));
+      main.addEventListener('click', () => run('activate', t.key, () => actions.activateTab(t.key)));
       const x = doc.createElement('button'); x.type = 'button'; x.className = 'sk-doctab-x'; x.tabIndex = -1; x.title = 'Close'; x.setAttribute('aria-label', `Close ${name}`); x.textContent = '×';
-      x.addEventListener('click', () => run(() => actions.closeTab(t.key)));
+      x.addEventListener('click', () => run('close', t.key, () => actions.closeTab(t.key)));
       wrap.append(main, x);
-      el.appendChild(wrap);
+      el.insertBefore(wrap, plus);
     }
-    const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'sk-doctab-new'; plus.title = 'New design in a new tab'; plus.setAttribute('aria-label', 'New design in a new tab'); plus.textContent = '+';
-    plus.addEventListener('click', () => run(() => actions.newDesign()));
-    el.append(plus, msg);
     if (focusKey) { const f = el.querySelector(`[data-key="${focusKey}"] .sk-doctab-main`); if (f) f.focus(); }
     const act = el.querySelector('.sk-doctab.active');
     if (act) { // phone width: the one line scrolls; keep the active tab in view (the strip's own scroll only, never the page's)
@@ -167,7 +180,7 @@ export function createDocumentTabs({ getBuffer, store, actions, onChange = () =>
     else if (e.key === 'ArrowLeft') to = (i - 1 + mains.length) % mains.length;
     else if (e.key === 'Home') to = 0;
     else if (e.key === 'End') to = mains.length - 1;
-    else if (e.key === 'Delete') { e.preventDefault(); const key = mains[i].closest('[data-key]').dataset.key; run(() => actions.closeTab(key)); return; }
+    else if (e.key === 'Delete') { e.preventDefault(); const key = mains[i].closest('[data-key]').dataset.key; run('close', key, () => actions.closeTab(key)); return; }
     else return;
     e.preventDefault();
     mains.forEach((m, j) => { m.tabIndex = j === to ? 0 : -1; });

@@ -31,13 +31,6 @@ import { capturePlotterDoc, applyPlotterDoc, resetPlotterDoc, captureImportState
 import { renderArt } from './render-art.js';
 import { recalcPreview } from './preview.js';
 import { paperGridMarkup } from './paper-grid.js';                      // DESIGN-PAPER-BOUNDS: the doc paper+grid, shared with render-art
-import SettingsManager from '#core/settings-manager.js';               // BURN-DOWN-6: plotter-side joint-size override (runtime only)
-
-// BURN-DOWN-6: the Design joint markers were too big for the plotter. JOINT_RADIUS is the existing #ui knob
-// (default 4 -> 16px base); shrink it plotter-side. persist:false = RUNTIME ONLY (not written to the shared
-// 'sketch-studio-settings' localStorage key), so Studio/Shaper -- separate page instances -- render the default 4.
-const PLOTTER_JOINT_RADIUS = 2;
-
 // STYLE-3: how solid a fill preview is on the Design canvas. Translucent on purpose — a pen plotter realises a fill
 // as HATCHING, not flood colour, so the preview should read as "this region gets filled", not as printed ink.
 const FILL_PREVIEW_OPACITY = 0.35;
@@ -105,7 +98,6 @@ const SCAFFOLD = `
 
 export function mountSketchStage(view, ctx = {}) {
   view.innerHTML = SCAFFOLD;
-  try { SettingsManager.set('JOINT_RADIUS', PLOTTER_JOINT_RADIUS, { persist: false }); } catch (_) {} // BURN-DOWN-6
   const underlay = view.querySelector('#pen-underlay');
   const paperSvg = view.querySelector('#design-paper'); // DESIGN-PAPER-BOUNDS: backmost paper+grid layer
   const designCanvas = view.querySelector('#design-canvas');
@@ -148,7 +140,7 @@ export function mountSketchStage(view, ctx = {}) {
   };
   // DESIGN-PAPER-BOUNDS: draw the document paper+grid (0,0)-(doc.w,doc.h) as the BACKMOST Design layer — same helper +
   // world/mm coords the plotter canvas (render-art) uses, so the Design area IS the paper. Redrawn on doc-size change.
-  const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc); };
+  const renderPaper = () => { if (paperSvg) paperSvg.innerHTML = paperGridMarkup(state.doc, { grid: false }); };
   // IMPORT-DOC-SIZE / UNIFY-6: fit the SHARED view to the CURRENT doc on THIS canvas, then apply it. The plotter-side
   // fitViewport() measures #canvasWrap — hidden while Design is up — so the Design tab has to do its own fit. Used on
   // stage entry (first fit) AND after an import changes the paper size.

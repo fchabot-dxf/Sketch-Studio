@@ -495,17 +495,28 @@ input[type="range"]:hover::-webkit-slider-thumb {
 
 /* Shared Design canvas inside Edit tab */
 #design-canvas, #vcarve-canvas {
-  background-color: #F4EFE1;
+  background-color: var(--sk-canvas-bg);
   --sk-canvas-bg: #F4EFE1;
+  --sk-canvas-bg-snapping: #F1E9D6;
+  --sk-grid-minor: #d8cfba; --sk-grid-major: #c4b896;
   --sk-geo-fixed: #202020;
   --sk-geo-constrained: #2563eb;
   --sk-geo-free: #3b82f6;
+  --sk-geo-fully: #10b981;
+  --sk-construction: #f97316;
+  --sk-muted: #8a8170;
   --sk-joint-fill: #F4EFE1;
+  --sk-constraint-fill: #60A5FA;
+  --sk-constraint-stroke: #2563eb;
+  --sk-perpendicular-stroke: #0891b2;
+  --sk-dimension: #2563eb;
+  --sk-dimension-snap: #10b981;
   --sk-selection: #1e40af;
   --sk-hover: #3B82F6;
   --sk-origin: #3B82F6;
   --sk-error: #ef4444;
 }
+#design-canvas.snapping { background-color: var(--sk-canvas-bg-snapping); }
 
 /* ── Export tab ───────────────────────────────────────── */
 #tab-export { align-items: center; justify-content: center; }

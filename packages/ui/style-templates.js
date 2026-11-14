@@ -27,24 +27,9 @@ const factory = (overrides = {}) => {
   return out;
 };
 
-// The canvas colours of the Fusion look (CSS --sk-* custom properties set on the canvas HOST element only). Declared once: the
-// Fusion template and (task 614) the Default template both use them.
-const FUSION_TOKENS = {
-  '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
-  '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
-  '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
-  '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
-  '--sk-construction': '#A9744F',
-  '--sk-constraint-stroke': '#1F2937', // dimension lines + text
-  '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
-  '--sk-profile-fill': '#5B9BF0',
-  '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
-  '--sk-joint-fill': '#FFFFFF',
-};
-
 export const STYLE_TEMPLATES = [
-  // The factory look (task 614: the owner's current look) with the Fusion canvas colours.
-  { id: 'default', name: 'Default', settings: factory(), tokens: FUSION_TOKENS },
+  // The factory values (task 614: the owner's look). No tokens: the canvas colours are the CSS --sk-* defaults (sketcher.css), which a host may theme.
+  { id: 'default', name: 'Default', settings: factory() },
 
   // Fusion 360 proportions: 1.5px lines, hover 3px (2x), selected 3.5px (2.33x), 3px-radius joints with a 1px ring,
   // 15px white glyph icons with a dark outline, thin dashed construction, plain dimension text, blue-violet
@@ -60,7 +45,18 @@ export const STYLE_TEMPLATES = [
       DIM_LABEL_BOX: false, HOVER_COLOR: '#5B6CF0', FIXED_JOINT_FILL: '#202020',
             LABEL_FONT_FAMILY: 'Segoe UI, Arial, Helvetica, sans-serif', PROFILE_FILL: 'on', LOCKED_LINE_COLOR: '#8DB84A',
           }),
-    tokens: FUSION_TOKENS,
+    tokens: {
+      '--sk-canvas-bg': '#FFFFFF', '--sk-canvas-bg-snapping': '#F3F8FB',
+      '--sk-grid-minor': '#E2E6EA', '--sk-grid-major': '#C9CFD6',
+      '--sk-constraint-fill': '#2B9BD6',   // free / under-constrained lines + joints
+      '--sk-geo-fixed': '#000000',         // fully constrained (DOF 0) lines + joints; locked ones use LOCKED_LINE_COLOR (green)
+      '--sk-construction': '#A9744F',
+      '--sk-constraint-stroke': '#1F2937', // dimension lines + text
+      '--sk-selection': '#3B7DD8',         // selected outline + selected glyph outline
+      '--sk-profile-fill': '#5B9BF0',
+      '--sk-profile-tint': '#3AA0DC',      // PROFILE_FILL: the closed-loop tint (drawn at 12% opacity)
+      '--sk-joint-fill': '#FFFFFF',
+    },
   },
 
   // Dense drawings: thin lines, small joints and glyphs, tight glow.
@@ -71,6 +67,8 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 2.5, GLOW_WIDTH_PX: 10,
       GLYPH_SYMBOL_SIZE_PX: 12, GLYPH_INFERENCE_SIZE_PX: 14, GLYPH_OFFSET_PX: 26,
       DASH_LENGTH_PX: 5, DASH_GAP_PX: 4,
+      // the keys it never set, pinned (task 614: a change to the Default look must not restyle Compact)
+      HOVER_FEEDBACK_MULT: 3, GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af', FIXED_JOINT_FILL: 'white',
     }),
   },
 
@@ -82,6 +80,8 @@ export const STYLE_TEMPLATES = [
       SELECTION_FEEDBACK_MULT: 1.5, HOVER_FEEDBACK_MULT: 2, GLOW_WIDTH_PX: 28,
       GLYPH_SYMBOL_SIZE_PX: 28, GLYPH_INFERENCE_SIZE_PX: 32, GLYPH_OFFSET_PX: 56,
       DASH_LENGTH_PX: 14, DASH_GAP_PX: 8,
+      // the keys it never set, pinned (task 614: a change to the Default look must not restyle Presentation)
+      GLYPH_OUTLINE_PX: 1, DIM_LABEL_BOX: true, HOVER_COLOR: '#1e40af', FIXED_JOINT_FILL: 'white',
     }),
   },
 ];

@@ -18,7 +18,7 @@ SettingsManager.set('LINE_STROKE', 0.7); SettingsManager.set('DASH_GAP_PX', 3);
 const p = T.saveUserPreset('  Mine ');
 assert.strictEqual(p.name, 'Mine');
 assert.deepStrictEqual(Object.keys(p.settings).sort(), [...T.STYLE_SETTING_KEYS].sort());
-assert.deepStrictEqual(p.tokens, T.getStyleTemplate('default').tokens, 'a preset saved from Default carries the Default tokens (task 614)');
+assert.strictEqual(p.tokens, undefined, 'Default has no tokens, so the preset has none');
 assert.strictEqual(SettingsManager.get('STYLE_TEMPLATE'), p.id, 'the saved preset becomes the chosen template');
 assert.strictEqual(T.activeStyleTemplateId(SettingsManager.getAll()), p.id);
 

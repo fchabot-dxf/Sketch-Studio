@@ -5,6 +5,7 @@
 // It also pins that the PORTRAIT (390 x 844, touch) and DESKTOP (1440 x 900, mouse) layouts are unchanged: the chrome rows and the canvas measured
 // before TASK 602 (.evidence/602/before-measurements.json). SketchStudio's own changes there are the owner's (TASK 602): the document tab strip is
 // BELOW the header (26 px with a mouse, 45 px under a finger: 44 px tabs + its line), the header lost Export (now in the menu) and the "Saved" text.
+// TASK 605: Shaper, Pen Plotter and Trace have the same strip: their rows below the header move down by exactly the strip row, nothing else changes.
 import assert from 'node:assert';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 
@@ -122,10 +123,12 @@ await (async () => {
           assert(m.ribbon[1] >= m.strip[4], tag + 'the ribbon is under the tab strip');
           if (mouse) { assert.strictEqual(m.canvas[2], b.canvasW, tag + 'canvas width unchanged'); assert.strictEqual(m.canvas[4], b.canvasBottom, tag + 'canvas bottom unchanged'); }
         } else {
+          // TASK 605: these hosts have the tab strip too (26 px mouse / 45 px finger) right under the header; everything below it moved down by exactly that row
+          const row = mouse ? 26 : 45;
           assert.deepStrictEqual([m.header[1], m.header[3]], b.header, tag + 'header unchanged');
-          assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], b.ribbon, tag + 'ribbon unchanged');
-          assert.deepStrictEqual(m.canvas.slice(0, 4), b.canvas, tag + 'canvas unchanged');
-          assert.strictEqual(m.strip, null, tag + 'no tab strip');
+          assert.deepStrictEqual([m.strip[1], m.strip[3]], [m.header[4], row], tag + 'the tab strip is right under the header, ' + row + ' px tall');
+          assert.deepStrictEqual([m.ribbon[1], m.ribbon[3]], [b.ribbon[0] + row, b.ribbon[1]], tag + 'ribbon unchanged in size, down by the strip row');
+          assert.deepStrictEqual([m.canvas[0], m.canvas[1], m.canvas[2], m.canvas[3]], [b.canvas[0], b.canvas[1] + row, b.canvas[2], b.canvas[3] - row], tag + 'canvas: same width, starts a strip row lower, ends where it did');
         }
         console.log(`unchanged ${tag}${JSON.stringify(m)}`);
       }

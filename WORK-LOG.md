@@ -14634,3 +14634,9 @@ Success / info notices showed as red error toasts (owner phone screenshot: 'Save
 - Colour changes: Style panel x3 red->green; Combined / Uncombined red->green; combine/uncombine refusals (3) red->amber; clipboard 'browser refused access', 'copied by a newer version', 'could not be read' (3) red->amber. Every other showNotification / constraint-manager notify call already passed a level: unchanged.
 - tests/notice-levels-node.test.js (new, happy-dom, real panel + real toast): save/delete/reset green success, no warning sign; no level = info blue; error = red with Copy; a throwing onNotify surfaces.
 - Evidence: .evidence/612/phone-preset-saved-toast.png (390x844 phone, green toast with check icon).
+
+## TURN 615
+- Canvas Construction / Recenter (SketchStudio only: grep shows no other host has them) are icon buttons: `<svg><use href="#icon-construction|#icon-recenter">`, `aria-label` "Construction" / "Recenter view", no text; 32 px square (44 px under `pointer: coarse`, replacing the old min-height rule), same canvas top-right place.
+- Glyphs declared once, in the shared ICONS table `packages/ui/cursor-manager.js` (that table builds the sprite; `injectSymbols` wipes the inline index.html sprite, so symbols there would vanish). Dashed line; corner brackets round a dot.
+- ui-manager.js: removed the `innerText = 'Construction'` line (it would wipe the icon); ON/OFF colours, title, aria-pressed unchanged. Recenter handler unchanged.
+- Test: tests/canvas-icon-buttons-live.test.js (labels, no text, sprite use, 32/44 px, real-click ON state = rgb(249,115,22), wheel then Recenter, no overlap with SKETCHES box). Evidence: .evidence/615/ (before-/after- desktop off/on, phone).

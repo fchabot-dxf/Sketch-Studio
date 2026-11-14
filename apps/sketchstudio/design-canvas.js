@@ -42,7 +42,7 @@ export function studioBufferOptions({ state, engine, svg, statusEl }) {
   return {
     state,
     app: 'sketchstudio', canvas: svg, // TASK 474: the design records who saved it last
-    onRestored: () => { try { engine.solve(500); } catch (_) {} fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view)
+    onRestored: ({ reason }) => { try { engine.solve(500); } catch (_) {} if (reason !== 'switch') fitToDrawing(svg, state); }, // after the initial restore AND after Open / New / Open from file; TASK 494: the restored drawing is framed (an empty one keeps the view). TASK 587: a TAB SWITCH keeps the tab's own view (the buffer already put it back)
     onStatusChange: (s) => { statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved' : ''; },
   };
 }

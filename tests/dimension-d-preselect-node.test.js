@@ -13,7 +13,7 @@ try {
   const isRef = (c) => (c.shapes || []).some((id) => String(id).startsWith('ref_')) || (c.joints || []).some((j) => j === 'j_origin' || String(j).startsWith('j_ref'));
   const mine = () => st.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !isRef(c));
   const dims = () => mine().filter((c) => c.type === 'distance');
-  const clear = () => { app.esc(); app.tool('select'); app.esc(); app.document.getElementById('btn-clear').click(); app.frames(); };
+  const clear = () => { app.esc(); app.tool('select'); app.esc(); st.clearDocument(); app.frames(); };
   const draw = (tool, ...pts) => { app.tool(tool); for (const p of pts) app.click(p.x, p.y); app.esc(); app.tool('select'); };
   const selectAt = (p, opt) => app.click(p.x, p.y, opt);
   const step = () => st.history.length;

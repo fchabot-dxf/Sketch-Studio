@@ -3,7 +3,7 @@ import { DEFAULT_VIEW } from '#core/constants.js';
 import { createSketchState } from '#ui/sketch-state.js';
 import { setupInput, showDimInput, sketchHistory } from '#ui/input-manager.js';
 import { createHistoryRouter } from '#ui/history-control.js'; // TASK 618
-import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618: Undo / Redo, Construction, Recenter in the footer
+import { mountAppFooter } from '#ui/app-footer.js'; // TASK 618/619: Undo / Redo / Delete / Clear sketch (left), Recenter (right) in the footer
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
 import { CANVAS_ID, createStudioImporter, initStudioCanvas, mountStudioBrowser, studioBufferOptions, studioFrame } from './design-canvas.js'; // TASK 569: the Design canvas setup, declared once (the node test kit reads it too)
 import { setupUI } from './ui/ui-manager.js';
@@ -179,7 +179,7 @@ function initApp(){
       { id: 'tune', label: 'Tune solver', icon: SIDEBAR_ICONS.gear, visible: () => shouldLoadTuning, onClick: () => toggleTune && toggleTune() },
     ],
   });
-  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), construction: true, footer: document.querySelector('footer.sk-statusbar') }); // TASK 618/619: Undo / Redo (left), Construction + Recenter (right)
+  mountAppFooter({ router: createHistoryRouter({ current: () => sketchHistory(state) }), view: () => ({ svg, state }), footer: document.querySelector('footer.sk-statusbar') }); // TASK 618/619: Undo / Redo / Delete / Clear (left), Recenter (right); Construction lives in .sk-canvas-corner (design-browser.js)
   // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer
   sidePanel = mountStudioBrowser({ svg, state, engine }); // design-canvas.js
   showView('design');

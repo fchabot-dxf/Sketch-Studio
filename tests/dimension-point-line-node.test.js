@@ -63,7 +63,7 @@ try {
   console.log('A. point-to-line: ok');
 
   // ---------------------------------------------------------------- B. line to line, both click orders
-  clickBtn('btn-clear');
+  app.state.clearDocument(); app.frames();
   drawLine(cv.x - 200, cv.y - 100, cv.x + 100, cv.y - 100);
   drawLine(cv.x - 200, cv.y + 100, cv.x + 100, cv.y + 100);
   for (const [first, second, name] of [[-100, 100, 'upper line then lower line'], [100, -100, 'lower line then upper line']]) {

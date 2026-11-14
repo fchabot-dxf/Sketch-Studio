@@ -150,8 +150,8 @@ try {
   // b1. SketchStudio: Style (closes sidebar first), Log, Debug, Tune solver, Export… + footer check (no Log/Tune/MAG LENS)
   await navigate(`http://127.0.0.1:${port}/apps/sketchstudio/index.html`, 15000);
   await waitFor(`!!document.getElementById('svgCanvas') && !!document.getElementById('btn-construct-toggle')`, 'SketchStudio ready');
-  const ssFooter = await evalJs(`({ diag: !!document.getElementById('status-diag-slot'), tune: !!document.getElementById('btn-tuning-toggle'), mag: !!document.getElementById('btn-mag-toggle'), undo: !!document.getElementById('btn-undo'), redo: !!document.getElementById('btn-redo'), cons: !!document.getElementById('btn-construct-toggle'), rec: !!document.getElementById('btn-recenter-view') })`);
-  assert.deepStrictEqual(ssFooter, { diag: false, tune: false, mag: false, undo: true, redo: true, cons: true, rec: true }, 'SketchStudio footer = Undo/Redo left + Construction/Recenter right only');
+  const ssFooter = await evalJs(`({ diag: !!document.getElementById('status-diag-slot'), tune: !!document.getElementById('btn-tuning-toggle'), mag: !!document.getElementById('btn-mag-toggle'), undo: !!document.getElementById('btn-undo'), redo: !!document.getElementById('btn-redo'), consFooter: !!document.querySelector('footer #btn-construct-toggle'), consCorner: !!document.querySelector('.sk-canvas-corner #btn-construct-toggle'), rec: !!document.getElementById('btn-recenter-view') })`);
+  assert.deepStrictEqual(ssFooter, { diag: false, tune: false, mag: false, undo: true, redo: true, consFooter: false, consCorner: true, rec: true }, 'SketchStudio footer = Undo/Redo/Delete/Clear left + Recenter right; Construction in .sk-canvas-corner');
 
   await clickSel('.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar')?.classList.contains('open')`, 'SketchStudio sidebar opened');
@@ -219,12 +219,14 @@ try {
   await clickSel('.sk-sidebar-item[data-action="log"]');
   await waitFor(`!document.querySelector('.sk-diag-panel').classList.contains('sk-hidden')`, 'Pen Plotter Log opened from ☰ menu');
   await clickSel('.sk-diag-close');
+  await clickSel('.sk-header-tab[data-tab="design"]');
+  await waitFor(`!!document.querySelector('#design-canvas-wrap .sk-canvas-corner')`, 'Pen Plotter Design stage mounted');
 
   await setViewport(600, 800, false);
   await sleep(200);
   const corner = await evalJs(`(() => {
     const p = document.querySelector('#design-canvas-wrap .sk-canvas-corner .sk-drawer-toggle-icon[aria-label="Panel"]');
-    const l = document.querySelector('#design-canvas-wrap .sk-canvas-corner .sk-drawer-toggle-icon[aria-label="Sketches"]');
+    const l = document.querySelector('#design-canvas-wrap .sk-canvas-corner .sk-browser-corner-btn[aria-label="Sketches"]');
     if (!p || !l) return null;
     const pr = p.getBoundingClientRect(), lr = l.getBoundingClientRect();
     return { pVis: getComputedStyle(p).display !== 'none', lVis: getComputedStyle(l).display !== 'none', gap: Math.round(pr.left - lr.right) };

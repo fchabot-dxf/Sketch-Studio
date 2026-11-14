@@ -99,7 +99,7 @@ const ICONS = {
     },
     'icon-trash': {
         viewBox: '0 0 24 24',
-        content: `<path d="M9.5 6V4.5A1.5 1.5 0 0 1 11 3h2a1.5 1.5 0 0 1 1.5 1.5V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="4" y="6" width="16" height="3.2" rx="1.4" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M5.7 9.2L7 19.3A2 2 0 0 0 9 21h6a2 2 0 0 0 2-1.7L18.3 9.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.2 12.2l.4 5.8M12 12.2v5.8M14.8 12.2l-.4 5.8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>`
+        content: `<g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M9.5 6V4.5A1.5 1.5 0 0 1 11 3h2a1.5 1.5 0 0 1 1.5 1.5V6"/><rect x="4" y="6" width="16" height="3.2" rx="1.4"/><path d="M5.7 9.2L7 19.3A2 2 0 0 0 9 21h6a2 2 0 0 0 2-1.7L18.3 9.2"/><path d="M9.2 12.2l.4 5.8M12 12.2v5.8M14.8 12.2l-.4 5.8"/></g>`
     },
 
     'icon-terminal': {

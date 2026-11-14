@@ -77,5 +77,5 @@ export function createStudioImporter({ state, svg }) {
 
 /** TASK 610: the floating SKETCHES browser over the canvas (main.js did this inline): the card goes in the canvas's parent. */
 export function mountStudioBrowser({ svg, state, engine }) {
-  return mountDesignBrowser({ container: svg.parentElement, state, engine });
+  return mountDesignBrowser({ container: svg.parentElement, state, engine, construction: true });
 }

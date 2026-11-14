@@ -65,13 +65,16 @@ await (async () => {
       assert.strictEqual(await shapeCount(), n1, name + ': a real click on footer Redo brings it back');
       assert.strictEqual((await btn('btn-redo')).disabled, true, name + ': Redo disabled again');
       const fb = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
-        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
+        const fc = f.querySelector('#btn-construct-toggle'); const cc = document.querySelector('.sk-canvas-corner #btn-construct-toggle');
+        return { vw: innerWidth, vh: innerHeight, fr: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!fc, cornerConstruct: cc ? { w: cc.getBoundingClientRect().width, h: cc.getBoundingClientRect().height } : null, view: !!document.getElementById('viewport-size'), text: f.textContent }; })()`);
       assert(fb.undo.w === 32 && fb.undo.h === 32 && fb.redo.w === 32 && fb.del && fb.del.w === 32 && fb.clr && fb.clr.w === 32, name + ': a mouse footer button is 32 px: ' + JSON.stringify(fb));
       assert(fb.undo.l < fb.redo.l && fb.redo.r <= fb.del.l && fb.del.r < fb.clr.l && fb.clr.l < fb.vw / 2, name + ': Undo, Redo, Delete, gap, Clear sketch at the left of the footer: ' + JSON.stringify([fb.redo, fb.del, fb.clr]));
       assert(fb.recenter && fb.recenter.r > fb.vw - 40 && fb.recenter.w === 32, name + ': Recenter at the right of the footer: ' + JSON.stringify(fb.recenter));
       assert(fb.fr.bottom <= fb.vh + 0.5 && fb.fr.bottom >= fb.vh - 1, name + ': the footer sits at the bottom of the screen: ' + JSON.stringify([fb.fr.bottom, fb.vh]));
       assert.strictEqual(fb.view, false, name + ': no VIEW readout'); assert(!/VIEW/i.test(fb.text), name + ': no VIEW text in the footer');
-      assert.strictEqual(!!fb.construct, name === 'studio', name + ': Construction is in the footer of SketchStudio only (the one host with a construction toggle)');
+      assert.strictEqual(fb.footerConstruct, false, name + ': Construction is NOT in the footer (TASK 619)');
+      if (name === 'penplotter') assert.strictEqual(fb.cornerConstruct, null, 'penplotter: Construction stays disabled (safety check)');
+      else assert(fb.cornerConstruct && fb.cornerConstruct.w === 32 && fb.cornerConstruct.h === 32, name + ': Construction is 32x32 in .sk-canvas-corner');
       await shot(`desktop-${name}.png`, { x: 0, y: fb.fr.top - 2, width: fb.vw, height: fb.vh - fb.fr.top + 2 });
       console.log('desktop', name, 'ok');
     }
@@ -91,10 +94,14 @@ await (async () => {
         assert(!(await evalJs(`!!document.querySelector('header [aria-label="Sketches"]')`)), tag + 'no Sketches button in the header');
         const ft = await evalJs(`(() => { const f = document.querySelector('footer'); const r = f.getBoundingClientRect(); const q = (id) => { const e = document.getElementById(id); if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, w: b.width, h: b.height }; };
           const cv = document.querySelector(${JSON.stringify(HOSTS[name].canvas)}).getBoundingClientRect(); const corner = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn'); const cb = corner && corner.getBoundingClientRect();
-          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), construct: q('btn-construct-toggle'), canvasH: cv.height,
+          const cbtn = document.querySelector('.sk-canvas-corner #btn-construct-toggle'); const cbr = cbtn && cbtn.getBoundingClientRect();
+          return { vw: innerWidth, vh: innerHeight, fr: { top: r.top, bottom: r.bottom, left: r.left, right: r.right }, undo: q('btn-undo'), redo: q('btn-redo'), del: q('btn-delete-selection'), clr: q('btn-clear-sketch'), recenter: q('btn-recenter-view'), footerConstruct: !!f.querySelector('#btn-construct-toggle'),
+            cornerConstruct: cbr ? { w: cbr.width, h: cbr.height, l: cbr.left, r: cbr.right, t: cbr.top } : null, canvasH: cv.height,
             sk: cb ? { w: cb.width, h: cb.height, l: cb.left, r: cb.right, t: cb.top, vis: getComputedStyle(corner).display !== 'none', aria: corner.getAttribute('aria-label') } : null }; })()`);
         for (const k of ['undo', 'redo', 'del', 'clr', 'recenter']) assert(ft[k] && ft[k].w >= 55 && ft[k].h >= 43.5 && ft[k].w > ft[k].h, tag + k + ' is a wide 56x44 touch target in the footer: ' + JSON.stringify(ft[k]));
-        if (ft.construct) assert(ft.construct.w >= 55 && ft.construct.h >= 43.5 && ft.construct.w > ft.construct.h, tag + 'Construction is 56x44: ' + JSON.stringify(ft.construct));
+        assert.strictEqual(ft.footerConstruct, false, tag + 'Construction is NOT in the footer');
+        if (name === 'penplotter') assert.strictEqual(ft.cornerConstruct, null, tag + 'penplotter: Construction stays disabled');
+        else assert(ft.cornerConstruct && ft.cornerConstruct.w >= 43.5 && ft.cornerConstruct.h >= 43.5, tag + 'Construction in .sk-canvas-corner is 44x44: ' + JSON.stringify(ft.cornerConstruct));
         assert(ft.fr.left >= -0.5 && ft.fr.right <= ft.vw + 0.5 && ft.fr.bottom <= ft.vh + 0.5, tag + 'the footer is inside the screen: ' + JSON.stringify(ft.fr));
         assert.strictEqual(Math.round(ft.fr.bottom - ft.fr.top), 44, tag + 'footer bar is 44 px tall (no extra vertical padding)');
         assert(ft.undo.r <= ft.redo.l + 0.5 && ft.redo.r <= ft.del.l + 0.5 && ft.del.r < ft.clr.l && ft.recenter.r <= ft.vw + 0.5, tag + 'Undo, Redo, Delete, gap, Clear sketch then Recenter fit the footer width: ' + JSON.stringify({ redo: ft.redo, del: ft.del, clr: ft.clr, recenter: ft.recenter }));

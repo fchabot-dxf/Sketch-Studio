@@ -78,7 +78,7 @@ async function cdpRun(cdp, url) {
       ['header has no extra Style/Debug buttons (TASK 619)', c.headerActions === 0, c.headerActions],
       ['menu Style, Debug & Log items', c.hasStyle === true && c.hasDebug === true && c.hasLog === true, [c.hasStyle, c.hasDebug, c.hasLog]],
       ['menu closes when Style opens', c.menuClosedOnStyle === true, c.menuClosedOnStyle],
-      ['ribbon groups = Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups === 'Create,Modify,Inspect,Constrain,Actions', c.ribbonGroups],
+      ['ribbon groups = Create,Modify,Inspect,Constrain', c.ribbonGroups === 'Create,Modify,Inspect,Constrain', c.ribbonGroups],
       ['canvas visible (Design default)', c.canvasVisible === true, c.canvasVisible],
       ['Export tab shows the export view', c.exportShows === true, c.exportShows],
       ['Design hides under Export', c.designHidesOnExport === true, c.designHidesOnExport],

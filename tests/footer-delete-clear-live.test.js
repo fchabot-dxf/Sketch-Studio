@@ -99,7 +99,15 @@ await (async () => {
       };
       const modal = document.querySelector('.sk-footer-confirm[role="alertdialog"]');
       const msg = modal?.querySelector('.sk-footer-confirm-msg')?.textContent || null;
-      return { vw: innerWidth, vh: innerHeight, fr: fr && { top: fr.top, bottom: fr.bottom, left: fr.left, right: fr.right }, del: g('btn-delete-selection'), clr: g('btn-clear-sketch'), undo: g('btn-undo'), redo: g('btn-redo'), modalMsg: msg };
+      const cbtn = document.getElementById('btn-construct-toggle');
+      const cr = cbtn && cbtn.getBoundingClientRect();
+      const sbtn = document.querySelector('.sk-canvas-corner .sk-browser-corner-btn');
+      const sr = sbtn && getComputedStyle(sbtn).display !== 'none' ? sbtn.getBoundingClientRect() : null;
+      return { vw: innerWidth, vh: innerHeight, fr: fr && { top: fr.top, bottom: fr.bottom, left: fr.left, right: fr.right }, del: g('btn-delete-selection'), clr: g('btn-clear-sketch'), undo: g('btn-undo'), redo: g('btn-redo'),
+        footerHasConstruct: !!(f && f.querySelector('#btn-construct-toggle')),
+        cornerConstruct: cr ? { inCorner: !!cbtn.closest('.sk-canvas-corner'), w: Math.round(cr.width * 10) / 10, h: Math.round(cr.height * 10) / 10, l: cr.left, r: cr.right, t: cr.top, pressed: cbtn.getAttribute('aria-pressed'), bg: getComputedStyle(cbtn).backgroundColor } : null,
+        cornerSketches: sr ? { w: Math.round(sr.width * 10) / 10, h: Math.round(sr.height * 10) / 10, l: sr.left, r: sr.right, t: sr.top } : null,
+        modalMsg: msg };
     })()`);
 
     const drawLine = async (canvasSel, dx = 0, dy = -50, isTouch = false) => {
@@ -139,6 +147,23 @@ await (async () => {
       // Empty initial state
       const s0 = await inspect();
       assert(s0.del && s0.clr, name + ': Delete and Clear sketch buttons exist');
+      assert.strictEqual(s0.footerHasConstruct, false, name + ': Construction is NOT in footer');
+      if (name === 'penplotter') {
+        assert.strictEqual(s0.cornerConstruct, null, 'penplotter: Construction stays disabled (safety check)');
+      } else {
+        assert(s0.cornerConstruct && s0.cornerConstruct.inCorner && s0.cornerConstruct.w === 32 && s0.cornerConstruct.h === 32,
+          name + ': desktop Construction is 32x32 in .sk-canvas-corner: ' + JSON.stringify(s0.cornerConstruct));
+        assert.strictEqual(s0.cornerSketches, null, name + ': desktop hides Sketches corner button so Construction sits alone');
+        if (name === 'studio') {
+          await clickEl('#btn-construct-toggle');
+          const sOn = await inspect();
+          assert.strictEqual(sOn.cornerConstruct.pressed, 'true');
+          assert.strictEqual(sOn.cornerConstruct.bg, 'rgb(249, 115, 22)', 'desktop Construction ON is orange');
+          const cTop = Math.max(0, Math.floor(sOn.cornerConstruct.t - 12));
+          await shot('corner-desktop-studio.png', { x: Math.max(0, Math.floor(sOn.cornerConstruct.l - 24)), y: cTop, width: 80, height: 64 });
+          await clickEl('#btn-construct-toggle');
+        }
+      }
       assert.strictEqual(s0.del.hidden, false); assert.strictEqual(s0.clr.hidden, false);
       assert.strictEqual(s0.del.aria, 'Delete'); assert.strictEqual(s0.clr.aria, 'Clear sketch');
       assert.strictEqual(s0.del.useHref, '#icon-circle-x');
@@ -232,6 +257,21 @@ await (async () => {
       const s = await inspect();
       assert(s.del.w >= 55 && s.del.h >= 43.5 && s.clr.w >= 55 && s.clr.h >= 43.5, name + ' phone: 56x44 buttons: ' + JSON.stringify([s.del, s.clr]));
       assert(s.clr.l - s.del.r >= 4, name + ' phone: gap preserved');
+      assert.strictEqual(s.footerHasConstruct, false, name + ' phone: Construction is NOT in footer');
+      if (name === 'penplotter') {
+        assert.strictEqual(s.cornerConstruct, null, 'penplotter phone: Construction stays disabled');
+      } else {
+        assert(s.cornerConstruct && s.cornerConstruct.inCorner && s.cornerConstruct.w === 44 && s.cornerConstruct.h === 44,
+          name + ' phone: Construction is 44x44 in .sk-canvas-corner: ' + JSON.stringify(s.cornerConstruct));
+        assert(s.cornerSketches && s.cornerSketches.w === 44 && s.cornerSketches.h === 44 && s.cornerConstruct.r < s.cornerSketches.l,
+          name + ' phone: Construction sits beside Sketches in .sk-canvas-corner: ' + JSON.stringify({ c: s.cornerConstruct, s: s.cornerSketches }));
+        if (name === 'studio') {
+          await tapEl('#btn-construct-toggle');
+          const cTop = Math.max(0, Math.floor(s.cornerConstruct.t) - 16);
+          await shot('corner-portrait-studio.png', { x: Math.max(0, s.vw - 140), y: cTop, width: 140, height: 80 });
+          await tapEl('#btn-construct-toggle');
+        }
+      }
       await shot(`delete-clear-portrait-${name}.png`, { x: 0, y: s.fr.top - 2, width: s.vw, height: s.vh - s.fr.top + 2 });
 
       // Tap Delete -> deletes -> Tap Undo -> restores

@@ -1,12 +1,11 @@
 // packages/ui/app-footer.js: the ONE app footer (TASK 618), mounted by every host: a thin row under the work area.
 //   left:  Undo, Redo (history-control.js: the same dispatch as Ctrl+Z / Ctrl+Y in the showing stage),
 //          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm)
-//   right: Construction (hosts that declare `construction`: SketchStudio), Recenter (every host whose Design / Explore surface the footer is told about)
-// mountAppFooter({ router, view, construction, footer }) -> { el, refresh, destroy }
+//   right: Recenter (every host whose Design / Explore surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
+// mountAppFooter({ router, view, footer }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
 //   view(): { svg, state } of the Design surface that shows now, { fit } for Shaper's Explore, or null while the stage has none (Pen Plotter's Toolpath, ...):
-//     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Construction and Recenter show whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents (or `v.fit()`).
-//   construction: true where the host draws construction geometry with a toggle (the K key and the button); today SketchStudio only.
+//     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents (or `v.fit()`).
 //   footer: an element the host already has (SketchStudio's status bar): the groups go into it. Without one a footer is created at the page's bottom
 //     (position fixed; body gets class sk-has-footer and the height is --sk-footer-h, which a host with absolutely placed views subtracts).
 import { mountHistoryButtons } from '#ui/history-control.js';
@@ -15,7 +14,6 @@ import { fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { handleDelete } from '#ui/input-manager.js';
 import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection } from '#core/delete-manager.js';
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
-import { dbg } from '#core/debug.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -119,9 +117,9 @@ function askConfirm(message, { okLabel = 'OK', returnFocusTo = null } = {}) {
   });
 }
 
-export function mountAppFooter({ router, view = () => null, construction = false, footer = null }) {
+export function mountAppFooter({ router, view = () => null, footer = null }) {
   injectStyles();
-  ensureIconSymbols(['icon-construction', 'icon-recenter', 'icon-circle-x', 'icon-trash']);
+  ensureIconSymbols(['icon-recenter', 'icon-circle-x', 'icon-trash']);
   let el = footer;
   if (!el) {
     el = document.createElement('footer'); el.className = 'sk-footer';
@@ -164,35 +162,6 @@ export function mountAppFooter({ router, view = () => null, construction = false
     refresh();
   });
 
-  let paintConstruct = null, constructBtn = null;
-  if (construction) {
-    constructBtn = mk(end, 'btn-construct-toggle', 'Construction', 'icon-construction');
-    paintConstruct = () => {
-      const v = view(); const on = !!(v && v.state && v.state.isConstructionMode);
-      constructBtn.style.backgroundColor = on ? '#f97316' : '#fed7aa'; // dark orange when active, light orange when idle
-      constructBtn.style.color = on ? 'white' : '#9a3412';
-      constructBtn.setAttribute('aria-pressed', String(on));
-      constructBtn.title = on ? 'Construction: ON (K)' : 'Construction: OFF (K)';
-    };
-    constructBtn.addEventListener('click', () => {
-      const v = view(); if (!v || !v.state) return;
-      const state = v.state;
-      if (state.selectedShapes && state.selectedShapes.size > 0) { // shapes selected: toggle THEIR construction state (undoable)
-        state.beginUndoGroup('toggle construction');
-        for (const sid of state.selectedShapes) { const s = state.shapes.find((x) => x.id === sid); if (s) s.isConstruction = !s.isConstruction; }
-        state.saveState();
-        state.endUndoGroup();
-      } else state.isConstructionMode = !state.isConstructionMode; // else the global mode for the next draws
-      paintConstruct();
-      dbg.log('ui', '[ui] isConstructionMode set to', state.isConstructionMode);
-    });
-    if (typeof document !== 'undefined' && document.addEventListener) {
-      document.addEventListener('keydown', (e) => {
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-        if (e.key && e.key.toLowerCase() === 'k' && view()) constructBtn.click();
-      });
-    }
-  }
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
   recenterBtn.addEventListener('click', () => {
     const v = view(); if (!v) return;
@@ -216,7 +185,6 @@ export function mountAppFooter({ router, view = () => null, construction = false
       (st.selectedConstraints && st.selectedConstraints.size) || 0,
       id,
       sk && sk.locked === true ? 1 : 0,
-      st.isConstructionMode ? 1 : 0,
     ].join('|');
   };
 
@@ -231,7 +199,6 @@ export function mountAppFooter({ router, view = () => null, construction = false
     clearBtn.hidden = !hasSketch;
     clearBtn.disabled = !hasSketch || !canClearActiveSketch(v.state);
     recenterBtn.hidden = !shown;
-    if (constructBtn) { constructBtn.hidden = !shown; if (shown) paintConstruct(); }
     lastSig = sigOf();
   };
 

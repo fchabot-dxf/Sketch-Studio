@@ -91,7 +91,7 @@ function checkLoad(label, doc, { sameAsInput = false } = {}) {
 
 // ── 3. a version-2 document without parameters (a host with no parameter list) loads with none ──
 {
-  const doc = { version: 2, geometry: { joints: [], shapes: [], constraints: [{ type: 'distance', joints: ['a', 'b'], value: 5, name: 'len' }, { type: 'distance', joints: ['b', 'c'], value: 6 }] }, hosts: {} };
+  const doc = { version: 2, geometry: { joints: [['a', { x: 0, y: 0 }], ['b', { x: 5, y: 0 }], ['c', { x: 11, y: 0 }]], shapes: [], constraints: [{ type: 'distance', joints: ['a', 'b'], value: 5, name: 'len' }, { type: 'distance', joints: ['b', 'c'], value: 6 }] }, hosts: {} };
   state.parameters.push({ name: 'leftover', unit: '', expression: '1' });
   assert(deserializeDocument(doc, state).ok, 'loads');
   eq(state.parameters, [], 'no parameters');

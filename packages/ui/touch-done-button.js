@@ -3,7 +3,8 @@
 // of the drawing area's centre) and ends the chain exactly like Enter does (finishLineChain: the committed segments stay, the rubber
 // band is dropped). It is hidden for a mouse and disappears by itself the moment the chain ends, by whatever route (a frame loop
 // runs only while the button is shown, so no caller has to announce the end).
-//   createTouchDoneButton({ svg, isChainOpen: () => bool, onDone: () => void }) → { sync(touchInput), destroy() }
+//   createTouchDoneButton({ svg, isChainOpen: () => bool, onDone: () => void, label?: () => string }) → { sync(touchInput), destroy() }
+//   label (task 585): the button's title / aria-label while it shows (the Mirror tool's steps use the same button); default the line chain's.
 //   sync(touchInput): call after any pointer event; touchInput = the pointer that just acted was a finger.
 
 const STYLE_ID = 'sk-touch-done-styles';
@@ -16,7 +17,7 @@ const CSS = `
 `;
 const MARGIN = 16;
 
-export function createTouchDoneButton({ svg, isChainOpen, onDone }) {
+export function createTouchDoneButton({ svg, isChainOpen, onDone, label = () => 'Finish the line chain' }) {
   if (!document.getElementById(STYLE_ID)) { const s = document.createElement('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.appendChild(s); }
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'sk-touch-done'; btn.hidden = true; btn.textContent = 'Done';
@@ -35,7 +36,7 @@ export function createTouchDoneButton({ svg, isChainOpen, onDone }) {
     const r = svg.getBoundingClientRect();
     const show = touchInput && r.width > 0 && r.height > 0 && !!isChainOpen();
     btn.hidden = !show;
-    if (show) { place(); frame = requestAnimationFrame(refresh); }
+    if (show) { const t = label(); btn.title = t; btn.setAttribute('aria-label', t); place(); frame = requestAnimationFrame(refresh); }
   }
   btn.addEventListener('click', (e) => { e.preventDefault(); onDone(); refresh(); });
   return {

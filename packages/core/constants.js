@@ -115,8 +115,13 @@ export const TOOL_MODES = {
   TANGENT: 'tangent',
   DIMENSION: 'dim',
   MIDPOINT: 'midpoint',
-  SYMMETRIC: 'symmetric' // task 563: entity, entity, then the symmetry line
+  SYMMETRIC: 'symmetric', // task 563: entity, entity, then the symmetry line
+  MIRROR: 'mirror' // task 585: like Fusion's Create > Mirror: the objects, then the mirror line, then Enter (#core/mirror.js)
 };
+
+// TASK 585: the Mirror tool's two steps (state.mirror.step): pick the OBJECTS (the selection), then the mirror LINE (a sketch line, a construction
+// line or an X / Y axis: #core/reference-lines.js REFERENCE_PICK_STEP makes the axes pickable at this step only).
+export const MIRROR_STEPS = Object.freeze({ OBJECTS: 'objects', LINE: 'line' });
 
 // The constraint tools (the picks become a geometric constraint): ONE list for the tool router, the pre-selection on activation and the
 // constraint cursor. (Dimension is not one of them: it has its own tool.)

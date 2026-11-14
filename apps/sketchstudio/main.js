@@ -17,7 +17,7 @@ import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title +
 applyAppIdentity('sketchstudio');
 import { exportToFile } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
-import { mountDesignSidePanel } from '#ui/design-side-panel.js'; // task 577b: the shared side panel with the SKETCHES tree (the same mount Trace uses)
+import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas (the same mount all four apps use)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
@@ -30,7 +30,7 @@ let svg = document.getElementById('svgCanvas');
 let worldGroup = svg ? document.getElementById('world-group') : null;
 let view = { ...DEFAULT_VIEW };
 let docBuffer = null; // TASK 474: the autosave buffer / project actions of this app; a sidebar reads it lazily
-let sidePanel = null; // task 577b: the Design side panel (SKETCHES tree + constraint list); the render loop ticks it
+let sidePanel = null; // task 586: the floating Design browser (SKETCHES tree + constraint lists); the render loop ticks it
 let toolRibbon = null; // S7c-2d: the shared tool ribbon (from setupUI); the render loop refreshes its active highlight
 
 function updateView(){ 
@@ -179,9 +179,8 @@ function initApp(){
   });
   const headerHost = document.getElementById('app-header-host');
   if (headerHost) header.render(headerHost);
-  // the SKETCHES tree beside the canvas (<main> is a flex row); at phone width it is a slide-over drawer opened from this header button
-  sidePanel = mountDesignSidePanel({ container: mainEl, state, engine, storageKey: 'sketchstudio-design-panel-collapsed', toggleHost: header.el });
-  if (typeof ResizeObserver !== 'undefined' && svg) new ResizeObserver(() => updateView()).observe(svg); // the side panel (collapse, phone drawer) resizes the canvas: keep its viewBox aspect
+  // the SKETCHES browser floats over the canvas's top-left; at phone width it is a slide-over drawer opened from this header button
+  sidePanel = mountDesignBrowser({ container: svg.parentElement, state, engine, toggleHost: header.el });
   showView('design');
 
   // PERSIST-2: a passive autosave status indicator (never a blocking prompt).

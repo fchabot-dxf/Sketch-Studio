@@ -58,13 +58,13 @@ const base = () => [{ id: 'k1', type: 'distance', joints: ['a', 'b'], value: 200
 for (const tpl of ['default', 'fusion']) {
   applyStyleTemplate(tpl);
   const plain = render(base());
-  assert.strictEqual(plain, render(base().map((c) => ({ ...c, labelPos: undefined }))), `${tpl}: absent labelPos = identical markup`);
+  assert.strictEqual(plain, render(base().map((c) => ({ ...c, labelSlide: undefined }))), `${tpl}: absent labelSlide = identical markup`);
   assert.strictEqual(leads(plain).length, 0, `${tpl}: no lead lines when the value sits where it normally does`);
-  const moved = base(); moved[0].labelPos = { x: 450, y: 40 };
+  const moved = base(); moved[0].labelSlide = 250;
   const html = render(moved);
-  assert.notStrictEqual(html, plain, `${tpl}: labelPos changes the drawing`);
+  assert.notStrictEqual(html, plain, `${tpl}: labelSlide changes the drawing`);
   const L = leads(html);
-  assert(L.length >= 1, `${tpl}: lead lines drawn for a dragged value`);
+  assert(L.length >= 1, `${tpl}: lead lines drawn for a slid value past the arrow`);
   // the horizontal dimension line is y=130 (offset 30 below the midpoint y=100) from x=100..300; the extension continues it
   const ext = L.find(([x1, y1, , y2]) => Math.abs(y1 - 130) < 1e-6 && Math.abs(y2 - 130) < 1e-6);
   assert(ext && Math.abs(ext[0] - 300) < 1e-6 && ext[2] > 300, `${tpl}: the dimension line extends from its end toward the value`);
@@ -92,7 +92,7 @@ for (const tpl of ['default', 'fusion']) {
   assert(!html.includes('class="dim-stub"'), `${tpl}: wide: no stubs`);
 }
 
-// radius + angle: a dragged value gets a leader from the rim / arc to the text edge
+// radius + angle: label sits on its radial leader / arc, extending the arc when slid past its sector
 applyStyleTemplate('default');
 {
   const j = new Map([['c', { x: 0, y: 0 }], ['rim', { x: 10, y: 0 }]]);
@@ -103,19 +103,17 @@ applyStyleTemplate('default');
   const m = [...svg.innerHTML.matchAll(/<line x1="([-\d.e]+)" y1="([-\d.e]+)" x2="([-\d.e]+)" y2="([-\d.e]+)" style="stroke:var\(--sk-constraint-stroke[^"]*" stroke-width="[^"]*" stroke-opacity="1"\/>/g)][0];
   const ang = Math.atan2(-40, 60);
   near(+m[1], 10 * Math.cos(ang), 'radius leader starts on the rim toward the value'); near(+m[2], 10 * Math.sin(ang), 'radius leader starts on the rim');
-  const w = 0.5 * 50 * (140 / 700) * 5; // box half width (scale(50)/2, zoom 0.2)
-  assert(Math.hypot(+m[3] - 60, +m[4] + 40) > 0 && Math.abs(+m[3] - 60) <= 25 * 0.2 + 1e-6 && Math.abs(+m[4] + 40) <= 9 * 0.2 + 1e-6, 'radius leader ends on the text box edge');
-  assert(w > 0);
+  near(+m[3], 60, 'radius leader ends at projected label X'); near(+m[4], -40, 'radius leader ends at projected label Y');
 }
 {
   const j = new Map([['p1', { x: 0, y: 0 }], ['p2', { x: 100, y: 0 }], ['p3', { x: 0, y: 0 }], ['p4', { x: 0, y: 100 }]]);
   const sh = [{ id: 'l1', type: 'line', joints: ['p1', 'p2'] }, { id: 'l2', type: 'line', joints: ['p3', 'p4'] }];
   const dim = { id: 'an', type: 'angle', shapes: ['l1', 'l2'], value: 90, offset: 40 };
   const r0 = render([dim], j, sh);
-  const r1 = render([{ ...dim, labelPos: { x: 200, y: 200 } }], j, sh);
-  assert.notStrictEqual(r0, r1, 'angle: labelPos moves the value');
-  assert(leads(r1).length === 1, 'angle: one leader from the arc to the value');
-  assert.strictEqual(leads(r0).length, 0, 'angle: no leader at the default spot');
+  const r1 = render([{ ...dim, offset: 141, labelAngle: 3 * Math.PI / 4 }], j, sh);
+  assert.notStrictEqual(r0, r1, 'angle: offset + labelAngle moves the arc and label');
+  assert(r1.includes('class="dim-arc-extension"'), 'angle: label outside sector draws an arc extension');
+  assert(!r0.includes('class="dim-arc-extension"'), 'angle: no arc extension at the default bisect');
 }
 
 // ── persistence ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -124,12 +122,22 @@ const mkState = () => { const e = createEngine(); e.init(); return createSketchS
   const s = mkState();
   for (const [id, p] of joints) s.joints.set(id, { ...p });
   s.shapes.push(...shapes.map((x) => ({ ...x, joints: [...x.joints] })));
-  assert(addConstraintObject(s, { type: 'distance', joints: ['a', 'b'], value: 200, dimMode: 'horizontal', labelPos: { x: 450, y: 40 } }));
+  assert(addConstraintObject(s, { type: 'distance', joints: ['a', 'b'], value: 200, dimMode: 'horizontal', offset: -60, labelSlide: 250 }));
   const doc = JSON.parse(JSON.stringify(serializeDocument(s)));
   const s2 = mkState(); deserializeDocument(doc, s2);
-  assert.deepStrictEqual(s2.constraints.find((c) => c.type === 'distance').labelPos, { x: 450, y: 40 }, 'labelPos round-trips through serialize/deserialize');
+  const c2 = s2.constraints.find((c) => c.type === 'distance');
+  near(c2.offset, -60, 'offset round-trips through serialize/deserialize');
+  near(c2.labelSlide, 250, 'labelSlide round-trips through serialize/deserialize');
+  // Legacy doc with free labelPos converts ONTO the dimension line on load
+  const docOld = JSON.parse(JSON.stringify(serializeDocument(mkStateWithoutLabelPos())));
+  docOld.geometry.constraints[0].labelPos = { x: 450, y: 40 };
+  const sOld = mkState(); deserializeDocument(docOld, sOld);
+  const cOld = sOld.constraints[0];
+  assert(!('labelPos' in cOld), 'legacy labelPos converted and removed on load');
+  near(cOld.offset, -60, 'legacy labelPos projects perpendicular offset=-60');
+  near(cOld.labelSlide, 250, 'legacy labelPos projects along-line labelSlide=250');
   const s3 = mkState(); deserializeDocument(JSON.parse(JSON.stringify(serializeDocument(mkStateWithoutLabelPos()))), s3);
-  assert(!('labelPos' in s3.constraints[0]), 'an old document without labelPos stays without it');
+  assert(!('labelPos' in s3.constraints[0]) && !('labelSlide' in s3.constraints[0]), 'an old document without labelPos stays without it');
 }
 function mkStateWithoutLabelPos() {
   const s = mkState();
@@ -139,7 +147,7 @@ function mkStateWithoutLabelPos() {
   return s;
 }
 
-// ── a real pointer drag: label follows the pointer, geometry/constraints untouched, one undo step ───────────────────────
+// ── a real pointer drag: label moves offset & slide, geometry untouched, one undo step ──────────────────────────────────
 {
   const s = mkStateWithoutLabelPos();
   s.currentTool = TOOL_MODES.SELECT;
@@ -150,38 +158,39 @@ function mkStateWithoutLabelPos() {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 700, height: 320 }),
   };
   const labelEl = { dataset: { constraintIdx: '0' }, closest: (q) => (q === '.dim-label' ? { dataset: { constraintIdx: '0' } } : null) };
-  const before = JSON.stringify([...s.joints.entries()]) + JSON.stringify(s.constraints.map((k) => ({ ...k, labelPos: undefined, glyphPos: undefined })));
+  const before = JSON.stringify([...s.joints.entries()]) + JSON.stringify(s.constraints.map((k) => ({ ...k, offset: undefined, labelSlide: undefined, glyphPos: undefined })));
   const hist0 = s.history.length;
   handleSelectionPointerDown({ target: labelEl, pointerId: 1, clientX: 200, clientY: 130, shiftKey: false, preventDefault() {}, stopPropagation() {} }, svg, s, null, null, null);
   assert.strictEqual(s.history.length, hist0, 'pressing the label saves nothing');
   handleSelectionPointerMove({ pointerId: 1, clientX: 201, clientY: 130 }, svg, s);
-  assert(!c.labelPos, 'a 1 px jiggle is a click, not a drag');
+  assert(!('labelSlide' in c) && c.offset === 30, 'a 1 px jiggle is a click, not a drag');
   handleSelectionPointerMove({ pointerId: 1, clientX: 400, clientY: 40 }, svg, s);
   handleSelectionPointerMove({ pointerId: 1, clientX: 520, clientY: 260 }, svg, s);
-  assert.deepStrictEqual(c.labelPos, { x: 520, y: 260 }, 'the label sits at the pointer in X and Y');
+  near(c.offset, 160, 'perpendicular Y=260 sets offset=160');
+  near(c.labelSlide, 320, 'along X=520 sets labelSlide=320');
   handleSelectionPointerUp({ pointerId: 1, clientX: 520, clientY: 260 }, svg, s);
-  const after = JSON.stringify([...s.joints.entries()]) + JSON.stringify(s.constraints.map((k) => ({ ...k, labelPos: undefined, glyphPos: undefined })));
+  const after = JSON.stringify([...s.joints.entries()]) + JSON.stringify(s.constraints.map((k) => ({ ...k, offset: undefined, labelSlide: undefined, glyphPos: undefined })));
   assert.strictEqual(after, before, 'geometry and constraint data are unchanged by the drag');
   assert.strictEqual(s.history.length, hist0 + 1, 'the whole drag is ONE undo step');
   s.undo();
-  assert(!s.constraints[0].labelPos, 'one Undo restores the label');
+  assert(!('labelSlide' in s.constraints[0]) && s.constraints[0].offset === 30, 'one Undo restores the label');
   assert.strictEqual(s.history.length, hist0, 'and the history is back');
 }
 
-// ── selected dimension: the blue handle dot drives the line offset and never clears labelPos ────────────────────────────
+// ── selected dimension: the blue handle dot drives the line offset and keeps labelSlide ─────────────────────────────────
 {
-  const sel = base(); sel[0].labelPos = { x: 450, y: 40 };
+  const sel = base();
   const html = render(sel, joints, shapes, 700, new Set([sel[0]]));
   assert(html.includes('class="dim-offset-handle"'), 'a selected linear dimension shows the offset handle');
   assert(!render(sel).includes('dim-offset-handle'), 'an unselected one does not');
   const s = mkStateWithoutLabelPos();
-  s.currentTool = TOOL_MODES.SELECT; s.constraints[0].labelPos = { x: 450, y: 40 };
+  s.currentTool = TOOL_MODES.SELECT; s.constraints[0].labelSlide = 250;
   const svg = { setPointerCapture() {}, releasePointerCapture() {}, viewBox: { baseVal: { x: 0, y: 0, width: 700, height: 320 } }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 700, height: 320 }) };
   const handle = { dataset: { constraintIdx: '0' }, closest: (q) => (q === '.dim-offset-handle' ? { dataset: { constraintIdx: '0' } } : null) };
   handleSelectionPointerDown({ target: handle, pointerId: 1, clientX: 140, clientY: 130, shiftKey: false, preventDefault() {}, stopPropagation() {} }, svg, s, null, null, null);
   handleSelectionPointerMove({ pointerId: 1, clientX: 140, clientY: 180 }, svg, s);
   handleSelectionPointerUp({ pointerId: 1, clientX: 140, clientY: 180 }, svg, s);
   near(s.constraints[0].offset, 80, 'the handle moved the dimension line offset');
-  assert.deepStrictEqual(s.constraints[0].labelPos, { x: 450, y: 40 }, 'moving the offset does not clear labelPos');
+  near(s.constraints[0].labelSlide, 250, 'moving the offset does not clear labelSlide');
 }
 console.log('dimension-label-drag: md5', md5(render(base())), 'ok');

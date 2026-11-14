@@ -17,6 +17,7 @@
 //         refuses the clipboard, an in-memory copy is used and the user is told once. Text that is not ours is ignored without a message.
 import { serializeDocument, validateDocument } from '#core/document.js';
 import { addConstraintObject } from '#core/constraints.js';
+import { projectDimLabel } from '#core/dim-label.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { newShapeId } from '#core/shape-id.js';
 import { evaluateAll, isDimension, isReferenceDimension, remapExpressionNames } from '#core/parameters.js';
@@ -142,7 +143,7 @@ export function pasteDocument(state, document, { step = 1, unit = 'mm' } = {}) {
       if (src.shape) c.shape = shapeMap.get(src.shape);
       if (src.line) c.line = shapeMap.get(src.line);
       if (src.circle) c.circle = shapeMap.get(src.circle);
-      if (src.labelPos) c.labelPos = { x: src.labelPos.x + dx, y: src.labelPos.y + dy };
+      if (src.labelPos) projectDimLabel(c, { x: src.labelPos.x + dx, y: src.labelPos.y + dy }, state.joints, state.shapes);
       const count = state.constraints.length;
       addConstraintObject(state, c);
       if (state.constraints.length > count && isDimension(state.constraints[count]) && name) renamed.set(name, state.constraints[count]);

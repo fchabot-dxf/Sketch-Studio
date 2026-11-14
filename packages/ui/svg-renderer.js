@@ -86,6 +86,8 @@ const SK_VAR = {
   '#60A5FA': '--sk-constraint-fill',
   '#2563eb': '--sk-constraint-stroke',
   '#1e40af': '--sk-selection',
+  '#017AFD': '--sk-selection',
+  '#017afd': '--sk-selection',
   '#3B82F6': '--sk-origin',
   '#3b82f6': '--sk-geo-free',
   '#202020': '--sk-geo-fixed',
@@ -207,8 +209,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const BASE_LINE_STROKE_HOVERED = BASE_LINE_STROKE * HOVER_FEEDBACK_MULT;
   const BASE_JOINT_RADIUS = computeBaseJointRadiusFor(JOINT_RADIUS_SETTING); // keep in screen px via multiplier
   const BASE_JOINT_STROKE = BASE_LINE_STROKE * JOINT_STROKE_MULT;
-  const BASE_JOINT_STROKE_SELECTED = BASE_JOINT_STROKE * 2;
-  const BASE_JOINT_STROKE_HOVERED = BASE_JOINT_STROKE * 3;
+  const BASE_JOINT_STROKE_SELECTED = BASE_JOINT_STROKE * SELECTION_FEEDBACK_MULT;
+  const BASE_JOINT_STROKE_HOVERED = BASE_JOINT_STROKE * HOVER_FEEDBACK_MULT;
   
   // --- UNIFIED VISUAL CONFIGURATION (Screen Pixels) ---
   // SYMBOL_SIZE_PX is the icon size (screen px) of an outlined glyph (its longer side)
@@ -224,7 +226,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     ? `<rect x="${cx - w/2}" y="${cy - h/2 - zoom}" width="${w}" height="${h}" style="fill:${skv('#9ca3af')}; stroke:${skv(strokeColor)}" fill-opacity="0.9" rx="${rx}" stroke-width="${strokeW}"/>`
     : '');
   const DIM_TEXT_ATTRS = DIM_LABEL_BOX ? `style="fill:${skv('white')}" font-weight="bold"` : `style="fill:${skv('#2563eb')}"`;
-  const GLOW_WIDTH_PX = getNum('GLOW_WIDTH_PX', 20);        // Width of hover/select highlights
 
   // Scale function to convert screen-space sizes to world-space
   const scale = (screenSize) => screenSize * zoom;
@@ -445,18 +446,18 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // Sync pos for hit testing if we have a constraint object
     try{ if(c) c.glyphPos = { x, y }; }catch(_){ }
 
-    // A: Bottom layer: the selection / hover halo behind the icon (TASK 588: a warm halo of its own, denser than a tint of the outline alone,
-    // which was too faint to see on white).
-    if(!isPreview && (isHovered || isSelected)){
-      out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 6)}" style="fill:${skv(isSelected ? GLYPH_SELECTED_COLOR : GLYPH_HOVER_COLOR)}" fill-opacity="${isSelected ? 0.5 : 0.4}" stroke="none"/>`);
-      if (isSelected) out.push(`<circle cx="${x}" cy="${y}" r="${scale(SYMBOL_SIZE_PX/2 + 8)}" fill="none" style="stroke:${skv(GLYPH_SELECTED_COLOR)}" stroke-width="${scale(2)}" stroke-opacity="0.8"/>`);
-    }
-
-    // B: an invisible hit element (the icon's outlines with a transparent pick-pad stroke, fusion-glyphs glyphHitMarkup) keeps the DOM hit area of the glyph group (pointer-events:all); the pick itself (hover-manager glyphAt) is geometric.
+    // A: an invisible hit element (the icon's outlines with a transparent pick-pad stroke, fusion-glyphs glyphHitMarkup) keeps the DOM hit area of the glyph group (pointer-events:all); the pick itself (hover-manager glyphAt) is geometric.
     const hitDisc = glyphHitMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX);
 
-    // C: Top layer: the outlined icon (white fill, dark outline that turns the hover / selection colour)
-    const icon = fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, GLYPH_OUTLINE_PX, 'var(--sk-glyph-fill, white)',
+    // B: Top layer: the outlined icon (white fill, dark outline that turns the hover / selection colour with a thicker stroke; no halo disc)
+    const iconOutlinePx = isPreview
+      ? GLYPH_OUTLINE_PX
+      : isHovered
+        ? GLYPH_OUTLINE_PX * HOVER_FEEDBACK_MULT
+        : isSelected
+          ? GLYPH_OUTLINE_PX * SELECTION_FEEDBACK_MULT
+          : GLYPH_OUTLINE_PX;
+    const icon = fusionGlyphMarkup(c && c.type, ICON_PX, SYMBOL_SIZE_PX, iconOutlinePx, 'var(--sk-glyph-fill, white)',
       isHovered ? skv(GLYPH_HOVER_COLOR) : isSelected ? skv(GLYPH_SELECTED_COLOR) : 'var(--sk-glyph-outline, #000)');
 
     // Data attrs and interaction styling
@@ -1014,14 +1015,14 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     }
 
     if(hoverBoundShapes.has(s.id)){
-      strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
+      strokeWidth = scale(BASE_LINE_STROKE_HOVERED);
       strokeColor = GLYPH_HOVER_COLOR; // bound by the hovered constraint
     } else if(isHovered){
       strokeWidth = scale(BASE_LINE_STROKE_HOVERED);
-      strokeColor = HOVER_COLOR; // darker blue
+      strokeColor = HOVER_COLOR; // bright Fusion blue
     } else if(isSelected){
       strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
-      strokeColor = '#1e40af'; // darker blue
+      strokeColor = '#017AFD'; // bright Fusion blue (routes through --sk-selection)
     } else if(isConstraintPart){
       // Highlight shapes that are part of a selected constraint
       strokeWidth = scale(BASE_LINE_STROKE_SELECTED);
@@ -1032,9 +1033,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       const a = s.joints && s.joints[0] ? joints.get(s.joints[0]) : null;
       const b = s.joints && s.joints[1] ? joints.get(s.joints[1]) : null;
       if(!a || !b) continue;
-      if(isHovered || isSelected){
-        out.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
-      }
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
       out.push(`<line class="shape-elem" data-shape-id="${s.id}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
@@ -1046,9 +1044,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if (typeof s.radius === 'number') r = s.radius;
       // If radius is missing or non-positive, treat as zero
       if(isNaN(r) || r <= 0) r = 0;
-      if(isHovered || isSelected){
-        out.push(`<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-opacity="0.28"/>`);
-      }
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
       out.push(`<circle class="shape-elem" data-shape-id="${s.id}" cx="${c.x}" cy="${c.y}" r="${r}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}"${constructionAttr}/>`);
@@ -1059,15 +1054,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
       const opts = { sweep: s.sweep };   // TASK 550: direction only; the large-arc choice is derived (geometry.js arcSweepInfo)
       const pathData = calculateArcPath(p1, p2, p3, s.subType, opts);
-
-      // Glow only when the arc shape itself is selected (constraint glyph selection should not add arc glow)
-      if (isSelected) {
-        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
-      }
-      // Draw thick glow for hovered/selected arcs
-      if (isHovered || isSelected) {
-        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(20)}" stroke-linecap="round" stroke-opacity="0.2"/>`);
-      }
 
       // Use unified construction style helper
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
@@ -1082,14 +1068,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if (!p0 || !p3 || !s.c1 || !s.c2) continue;
       const c1 = { x: s.c1[0], y: s.c1[1] }, c2 = { x: s.c2[0], y: s.c2[1] };
       const pathData = cubicPathD(p0, c1, c2, p3);
-
-      // Glow when the bezier is hovered/selected (mirror the arc treatment).
-      if (isSelected) {
-        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(GLOW_WIDTH_PX)}" stroke-linecap="round" stroke-opacity="0.28"/>`);
-      }
-      if (isHovered || isSelected) {
-        out.push(`<path d="${pathData}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(20)}" stroke-linecap="round" stroke-opacity="0.2"/>`);
-      }
 
       const { attr: constructionAttr, strokeW: effStrokeW, color: effStrokeColor } = getConstructionStyles(s, strokeWidth, strokeColor, scale);
       out.push(`<path class="shape-elem" data-shape-id="${s.id}" d="${pathData}" fill="none" style="cursor:pointer; stroke:${skv(effStrokeColor)}" stroke-width="${effStrokeW}" stroke-linecap="round"${constructionAttr}/>`);
@@ -1310,23 +1288,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       else if (constrainedJoints.has(id)) stroke = '#202020';
 
       let strokeW = scale(BASE_JOINT_STROKE);
-      if (hoverBoundJoints.has(id)) { stroke = GLYPH_HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
+      if (hoverBoundJoints.has(id)) { stroke = GLYPH_HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_HOVERED); }
       else if (isHoverOrigin) { stroke = HOVER_COLOR; strokeW = scale(BASE_JOINT_STROKE_HOVERED); }
-      else if (isSelectedOrigin) { stroke = '#1e40af'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
+      else if (isSelectedOrigin) { stroke = '#017AFD'; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
       else if (isConstraintPartOrigin) { stroke = GLYPH_SELECTED_COLOR; strokeW = scale(BASE_JOINT_STROKE_SELECTED); }
 
       // Use the standard joint fill (no red disc) so origin behaves visually like other joints
       const fill = 'white';
-
-      // Draw glow if highlighted (same rule as joints)
-      try {
-        const isHighlightOrigin = (highlight.kind === 'joint' && highlight.id === id);
-        if (isHighlightOrigin || isSelectedOrigin) {
-          const glowR = r;
-          const glowStroke = scale(GLOW_WIDTH_PX);
-          out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv('#3B82F6')}" stroke-width="${glowStroke}" stroke-opacity="0.3" fill="none"/>`);
-        }
-      } catch (_){ }
 
       // Draw the origin as a normal joint (white fill) with the shared stroke
       originDrawn = true;
@@ -1366,19 +1334,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
     if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
 
-    // Draw regular point styling with zoom-scaled sizes: always thin dark outline, white fill normally, blue tint when selected, true-blue hover halo
+    // Draw regular point styling with zoom-scaled sizes: thin dark outline at rest, bolder ring in bright Fusion blue when hovered or selected (no outer halo), white fill normally, blue tint when selected
     const r = scale(BASE_JOINT_RADIUS);
     const fill = isSelected ? SELECTED_JOINT_FILL : 'white';
-    const stroke = '#202020';
-    const strokeW = scale(BASE_JOINT_STROKE);
-
-    // Draw outer hover/snap glow in HOVER_COLOR so hover stays crisp and never swallows the white/blue center
     const isHighlight = (highlight.kind === 'joint' && highlight.id === leader);
-    if (isHovered || isHighlight || isActiveSnap) {
-      const glowR = r;
-      const glowStroke = scale(GLOW_WIDTH_PX);
-      out.push(`<circle cx="${j.x}" cy="${j.y}" r="${glowR}" style="stroke:${skv(HOVER_COLOR)}" stroke-width="${glowStroke}" stroke-opacity="0.4" fill="none"/>`);
-    }
+    const isPointHovered = isHovered || isHighlight || isActiveSnap;
+    const stroke = isPointHovered ? HOVER_COLOR : isSelected ? '#017AFD' : '#202020';
+    const strokeW = scale(isPointHovered ? BASE_JOINT_STROKE_HOVERED : isSelected ? BASE_JOINT_STROKE_SELECTED : BASE_JOINT_STROKE);
 
     // Main joint circle
     out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);

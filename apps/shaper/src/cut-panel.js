@@ -4,8 +4,8 @@
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
 import { availableTypes, cutTypeById, cutTypeHasParam, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS } from './shaper.js';
-import SettingsManager from '#core/settings-manager.js';
-import { parse as parseUnit, format as formatUnit, docUnit } from '#core/units.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import { parse as parseUnit, format as formatUnit } from '#core/units.js';
 
 // Menu order per the Shaper mockup: path types first (on line / guide), then region (inside / pocket / outside).
 const MENU_ORDER = ['online', 'guide', 'interior', 'pocket', 'exterior', 'stock']; // TASK 472: Stock last (it is the board, not a cut)

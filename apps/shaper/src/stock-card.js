@@ -4,7 +4,8 @@
 // so the field is disabled and the note says so. Moved out of main.js unchanged.
 import { getStock, setStockField, resolveStock } from './stock.js';
 import { CUT_PLAN } from './cut-plan.js';
-import { parse as parseUnit, format as formatUnit, docUnit } from '#core/units.js';
+import { parse as parseUnit, format as formatUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
 
 /** createStockCard({ input, noteEl, getController, onChange }) -> { show }. getController(): the Design sketch controller (null before it exists). onChange(): after a typed value. */
 export function createStockCard({ input: thick, noteEl: note, getController, onChange = () => {} }) {

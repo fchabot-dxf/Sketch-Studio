@@ -21,8 +21,8 @@
 // same literals — so SketchStudio resolves to exactly its old colours while a host (Shaper's cream palette) retints.
 
 import { dbg } from '#core/debug.js';
-import SettingsManager from '#core/settings-manager.js';
-import { basePer, UNITS, format as formatUnit, worldToUserY, docUnit } from '#core/units.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import { basePer, UNITS, format as formatUnit, worldToUserY } from '#core/units.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

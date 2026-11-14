@@ -12,7 +12,7 @@
 
 import { createTabbedDockPanel } from '#ui/tabbed-dock-panel.js';
 import { createParameterTable } from '#ui/parameter-table.js';
-import { docUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
 
 export const PARAMETERS_PERSIST_KEY = 'sk-parameters';
 const SIZE = { w: 460, h: 360 };

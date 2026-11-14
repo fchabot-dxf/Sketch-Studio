@@ -5,7 +5,8 @@ import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
-import { format as formatUnit, docUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
+import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 

@@ -40,12 +40,11 @@ import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import SettingsManager from '#core/settings-manager.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createClipboard, clipboardKeyAction, isTextEditingTarget } from '#ui/clipboard.js'; // TASK 559: Ctrl+C / Ctrl+X / Ctrl+V
-import { docUnit } from '#core/units.js';
 
 // Apply some visual settings to CSS variables at startup and when changed
 function applyVisualSettings(settings) {

@@ -13,7 +13,8 @@ import {
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
 import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
-import { format as formatUnit, docUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
+import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
 

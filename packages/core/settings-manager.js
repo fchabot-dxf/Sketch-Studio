@@ -109,6 +109,9 @@ const DEFAULT_SETTINGS = {
     DOC_UNIT: 'mm'
 };
 
+/** The active document unit ('mm' | 'cm' | 'in'), defaulting to 'mm'. */
+export const docUnit = () => mgr.get('DOC_UNIT') || 'mm';
+
 class SettingsManager {
     constructor() {
         this._settings = { ...DEFAULT_SETTINGS };

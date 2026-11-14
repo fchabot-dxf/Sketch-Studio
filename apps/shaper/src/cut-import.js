@@ -4,7 +4,7 @@
 // in (afterImport; a compound <path> becomes ONE pocket-with-hole profile: see assignImportedCuts). Moved out of main.js unchanged; the page keeps its status
 // line and panel refresh.
 import { importIntoSketch, mountImportDrop } from '#ui/sketch-import.js'; // TASK 566: the ONE SVG / DXF importer (+ the drop)
-import { docUnit } from '#core/units.js';
+import { docUnit } from '#core/settings-manager.js';
 import { extractCutRecord } from './shaper.js';
 import { CUT_PLAN, assignImportedCuts } from './cut-plan.js';
 

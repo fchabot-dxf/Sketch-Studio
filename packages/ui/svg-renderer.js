@@ -10,8 +10,8 @@ import { calculateArcPath, cubicPathD, perpendicularNormal, resolveJoints, isCoi
 import { REFERENCE_SHAPES, isReferenceShapeId, sceneJoints, sceneShapes } from '#core/reference-lines.js';
 import { CONSTRAINT_TYPES, TOOL_MODES, INFERENCE_TYPES, AXIS_SNAP_TARGETS } from '#core/constants.js';
 import { SolverConfig } from '#core/solver-config.js';
-import SettingsManager from '#core/settings-manager.js';
-import { format as formatUnit, docUnit } from '#core/units.js';
+import SettingsManager, { docUnit } from '#core/settings-manager.js';
+import { format as formatUnit } from '#core/units.js';
 import { fusionGlyphMarkup, glyphHitMarkup } from '#ui/fusion-glyphs.js';
 import { placeDimText, placeDimTextCentred, centredRect, dimTextWidth, DIM_TEXT_GAP_PX, freeGlyphSpot } from '#ui/dim-placement.js';
 import { angleDimensionSector, angleLabelAngle, angleSectorArc, angleSectorOf } from '#core/angle-sector.js';

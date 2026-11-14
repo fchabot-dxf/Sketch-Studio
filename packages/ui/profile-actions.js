@@ -15,7 +15,7 @@ export function doCombine(state, notify = () => {}) {
   if (!state) return null;
   const sel = (state.selectedShapes instanceof Set) ? [...state.selectedShapes] : [];
   if (sel.length < 2) {
-    notify('Select shapes forming at least 2 closed loops to combine');
+    notify('Select shapes forming at least 2 closed loops to combine', 'warning');
     return null;
   }
   const loops = findLoops(state);
@@ -23,12 +23,12 @@ export function doCombine(state, notify = () => {}) {
   const loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, state, sb)]));
   const val = validateCombine(sel, loops, loopPolys);
   if (!val.ok) {
-    notify(val.reason || 'Cannot combine selection');
+    notify(val.reason || 'Cannot combine selection', 'warning');
     return null;
   }
   try { state.saveState && state.saveState('combine'); } catch (_) {}
   const prof = makeProfile(state, val.outerLoop, val.innerLoops);
-  notify(`Combined into ${prof.name || prof.id} (${val.innerLoops.length} hole${val.innerLoops.length === 1 ? '' : 's'})`);
+  notify(`Combined into ${prof.name || prof.id} (${val.innerLoops.length} hole${val.innerLoops.length === 1 ? '' : 's'})`, 'success');
   return prof;
 }
 
@@ -42,7 +42,7 @@ export function doUncombine(state, notify = () => {}) {
   if (!state) return 0;
   const sel = (state.selectedShapes instanceof Set) ? [...state.selectedShapes] : [];
   if (!sel.length) {
-    notify('Select a combined profile to uncombine');
+    notify('Select a combined profile to uncombine', 'warning');
     return 0;
   }
   const toRemove = new Set();
@@ -51,11 +51,11 @@ export function doUncombine(state, notify = () => {}) {
     if (p) toRemove.add(p.id);
   }
   if (!toRemove.size) {
-    notify('No combined profile on the selection');
+    notify('No combined profile on the selection', 'warning');
     return 0;
   }
   try { state.saveState && state.saveState('uncombine'); } catch (_) {}
   for (const pid of toRemove) uncombineProfile(state, pid);
-  notify(`Uncombined ${toRemove.size} profile${toRemove.size === 1 ? '' : 's'}`);
+  notify(`Uncombined ${toRemove.size} profile${toRemove.size === 1 ? '' : 's'}`, 'success');
   return toRemove.size;
 }

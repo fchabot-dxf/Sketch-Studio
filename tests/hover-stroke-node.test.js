@@ -178,9 +178,9 @@ assert.match(cssSrc, /--sk-selection:\s*#017AFD/i, '--sk-selection token is brig
   const p1s = app.toScreen(90, 10);
   app.move(p1s.x, p1s.y);
   const hovOpenDot = getPointAt(90, 10);
-  assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw * 2) < 1e-6, 'hovered point ring is 2x thicker');
+  assert.ok(Math.abs(Number(hovOpenDot.getAttribute('stroke-width')) - restJointSw) < 1e-6, 'hovered point ring is the rest width');
   assert.match(hovOpenDot.getAttribute('style'), /fill:var\(--sk-joint-fill, white\)/, 'hovered point keeps white fill');
-  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-selection, #017AFD\)/i, 'hovered point ring is bright Fusion blue');
+  assert.match(hovOpenDot.getAttribute('style'), /stroke:var\(--sk-geo-fixed, #202020\)/i, 'hovered point ring is the normal dark ring');
 
   // Click open end p1: ring is 1.5x thicker and bright Fusion blue, fill is blue-tinted
   app.click(p1s.x, p1s.y);

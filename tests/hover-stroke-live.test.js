@@ -157,8 +157,8 @@ try {
   s = await inspect();
   assert.strictEqual(s.glowCount, 0, 'hovered point: 0 halo elements');
   assert.ok(s.points['80,60'], 'hovered corner r2 is visible');
-  assert.ok(Math.abs(s.points['80,60'].sw - restJointSw * 2) < 1e-5, 'hovered point ring is 2x rest joint stroke');
-  assert.strictEqual(s.points['80,60'].stroke, 'rgb(1, 122, 253)', 'hovered point ring is bright Fusion blue #017AFD');
+  assert.ok(Math.abs(s.points['80,60'].sw - restJointSw) < 1e-5, 'hovered point ring is the rest joint stroke');
+  assert.strictEqual(s.points['80,60'].stroke, 'rgb(0, 0, 0)', 'hovered point ring is the normal dark ring');
   assert.strictEqual(s.points['80,60'].fill, 'rgb(255, 255, 255)', 'hovered point fill stays white');
 
   // 4. Click open end p3 (185, 65): 1.5x ring in bright Fusion blue, blue-tinted fill, 0 halos

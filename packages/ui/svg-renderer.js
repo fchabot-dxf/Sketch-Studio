@@ -1334,13 +1334,11 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isOpenEnd = (clusterEndCount.get(leader) || 0) === 1 && !onCurveClusters.has(leader);
     if (!isPointVisible({ isHovered, isSelected, isActiveSnap, isOpenEnd, isCenter, isLone, isHiddenFollower })) continue;
 
-    // Draw regular point styling with zoom-scaled sizes: thin dark outline at rest, bolder ring in bright Fusion blue when hovered or selected (no outer halo), white fill normally, blue tint when selected
+    // Hover only makes a hidden point appear (isPointVisible); a visible point is drawn the same hovered or not. Selected: blue ring, tinted fill.
     const r = scale(BASE_JOINT_RADIUS);
     const fill = isSelected ? SELECTED_JOINT_FILL : 'white';
-    const isHighlight = (highlight.kind === 'joint' && highlight.id === leader);
-    const isPointHovered = isHovered || isHighlight || isActiveSnap;
-    const stroke = isPointHovered ? HOVER_COLOR : isSelected ? '#017AFD' : '#202020';
-    const strokeW = scale(isPointHovered ? BASE_JOINT_STROKE_HOVERED : isSelected ? BASE_JOINT_STROKE_SELECTED : BASE_JOINT_STROKE);
+    const stroke = isSelected ? '#017AFD' : '#202020';
+    const strokeW = scale(isSelected ? BASE_JOINT_STROKE_SELECTED : BASE_JOINT_STROKE);
 
     // Main joint circle
     out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);

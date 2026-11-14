@@ -133,7 +133,7 @@ try {
   s = await readCanvas();
   const r3Dot = s.points.find((p) => p.cx === 50 && p.cy === 40);
   assert.ok(r3Dot, 'hovering hidden rectangle corner reveals it');
-  assert.match(r3Dot.styleStroke, new RegExp(`--sk-selection.*${HOVER_COLOR}`, 'i'), 'hovered corner ring uses bright Fusion blue');
+  assert.match(r3Dot.styleStroke, /--sk-geo-fixed.*#202020/i, 'hovered corner ring is the normal dark ring (no blue)');
   assert.strictEqual(s.halos.length, 0, 'hovered corner draws no outer halo');
 
   // 3. Move away -> r3 hides again

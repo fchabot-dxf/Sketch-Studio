@@ -42,7 +42,7 @@
   draw(joints, shapes, svg, null, null, constraints, new Set(), new Set(), null, null, new Set(), null, 'a2', null, null, false, null);
   const hoveredWhite = (svg.innerHTML.match(/fill:var\(--sk-joint-fill, white\)/g) || []).length;
   assert(hoveredWhite === 1, `Hovering hidden corner should reveal 1 point, got ${hoveredWhite}`);
-  assert(svg.innerHTML.includes(`stroke:var(--sk-selection, ${HOVER_COLOR})`), `Hovering hidden joint should show leader ring (${HOVER_COLOR})`);
+  assert(svg.innerHTML.includes('stroke:var(--sk-geo-fixed, #202020)') && !svg.innerHTML.includes('--sk-selection'), 'Hovering a hidden joint draws the normal dark ring, not blue');
   assert(!/<circle[^>]*fill="none"/.test(svg.innerHTML), 'Hovering hidden joint should draw no outer halo circle');
 
   // Select the coincident constraint c1 and assert the corresponding glyph appears (opacity:1)

@@ -14760,3 +14760,6 @@ HOVER_COLOR removed as a setting; hover always draws the shared selection blue (
 
 - Correction: Compact GLYPH_SYMBOL_SIZE_PX 16 (not 15) and GLYPH_OUTLINE_PX 0.5 (was 1). Compact only. default-look.test.js updated.
 
+
+- Addition: a HOVERED point is drawn like a visible point at rest (white fill, normal thin dark ring, no blue, no thicker ring); hover only reveals a hidden point. Selected points and lines unchanged. One place: svg-renderer.js joint loop (isPointHovered removed; also covers highlight/active-snap joints, which no longer turn blue). Tests updated: hover-stroke-node, hover-stroke-live, joint-display-node, joint-display-live, svg-renderer-coincident-visual. gate:quick 363/363; hover-stroke-live, joint-display-live, glyph-pick-hover-live, chain-select-move-live, style-panel-tabs, shell-smoke pass.
+

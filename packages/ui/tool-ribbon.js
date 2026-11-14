@@ -12,7 +12,7 @@ import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
-import { SHORT_VIEWPORT_QUERY } from '#ui/short-viewport.js';
+import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
 
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label).
 const CREATE = [
@@ -113,7 +113,7 @@ function injectStyles() {
   border-left: 3px solid transparent; border-right: 3px solid transparent;
   border-top: 3px solid var(--sk-ribbon-grouplabel, #94a3b8); }
 .sk-ribbon-btn.active .sk-ribbon-dd-ind { border-top-color: #fff; }
-.sk-ribbon-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 9999; min-width: 160px;
+.sk-ribbon-menu { display: none; position: fixed; left: 0; top: 0; z-index: 9999; min-width: 160px; overflow-y: auto;
   padding: 4px 0; background: var(--sk-ribbon-menu-bg, #fff); border: 1px solid var(--sk-ribbon-sep, #cbd5e1);
   border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
 .sk-ribbon-menu.show { display: block; }
@@ -155,9 +155,6 @@ function injectStyles() {
   .sk-ribbon-btn { width: 48px; height: 48px; }
   .sk-ribbon-ic { width: 24px; height: 24px; }
   .sk-ribbon-lbl { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-  /* the rail is a scroll container, which clips an absolute menu: the variant menu opens beside its button, fixed to the viewport (the
-     button's place is written to --sk-menu-x / --sk-menu-y when the menu opens) */
-  .sk-ribbon-menu { position: fixed; left: var(--sk-menu-x, 56px); top: var(--sk-menu-y, 0px); max-height: calc(100vh - var(--sk-menu-y, 0px) - 4px); overflow-y: auto; }
 }
 `;
   document.head.appendChild(s);
@@ -187,6 +184,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
 
   const el = document.createElement('div'); el.className = 'sk-ribbon';
   const toolBtns = []; // { btn, tool } — for active-sync
+  const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
   // TASK 535-4: the Parameters window is made on first use; closing it (button, X, Esc) returns focus to its button.
   let paramsWin = null;
   const parametersWindow = () => paramsWin || (paramsWin = createParametersWindow({
@@ -258,21 +256,41 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
         if (state) state.rectMode = v.mode;
         if (useEl) useEl.setAttribute('href', '#' + v.icon);
         menu.querySelectorAll('.sk-ribbon-menu-item').forEach(i => i.classList.toggle('active', i.dataset.mode === v.mode));
-        menu.classList.remove('show');
+        closeMenu();
         selectTool(t.tool);     // switch to rect with the chosen variant
         fire('rectMode', v.mode);
       });
       menu.appendChild(item);
     });
+    // TASK 607: the variants menu is a POPOVER: it lives on document.body (a ribbon is a scroll box and clips any child, absolute or fixed under a
+    // mask) and is placed from the button's rect, kept inside the viewport: below the button in the bar, beside it in the short-viewport rail.
+    // It closes on Esc, an outside click, the ribbon scrolling and the window resizing; the listeners exist only while it is open.
+    const closeMenu = () => {
+      menu.classList.remove('show');
+      document.removeEventListener('click', onOutside); document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', closeMenu); el.removeEventListener('scroll', closeMenu);
+    };
+    const onOutside = (ev) => { if (!menu.contains(ev.target)) closeMenu(); };
+    const onKey = (ev) => { if (ev.key === 'Escape') closeMenu(); };
+    const openMenu = () => {
+      menu.classList.add('show');
+      const r = b.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, pad = 4;
+      menu.style.maxHeight = (vh - 2 * pad) + 'px';
+      const w = menu.offsetWidth, h = menu.offsetHeight;
+      const beside = isShortViewport();
+      const left = beside ? r.right + pad : r.left, top = beside ? r.top : r.bottom + 2;
+      menu.style.left = Math.round(Math.max(pad, Math.min(left, vw - w - pad))) + 'px';
+      menu.style.top = Math.round(Math.max(pad, Math.min(top, vh - h - pad))) + 'px';
+      document.addEventListener('click', onOutside); document.addEventListener('keydown', onKey);
+      window.addEventListener('resize', closeMenu); el.addEventListener('scroll', closeMenu);
+    };
     b.addEventListener('click', (ev) => {
       ev.stopPropagation(); selectTool(t.tool);
-      const r = b.getBoundingClientRect(); // where the rail's fixed menu opens: beside the button (only the rail's CSS reads these)
-      menu.style.setProperty('--sk-menu-x', Math.round(r.right + 4) + 'px');
-      menu.style.setProperty('--sk-menu-y', Math.round(r.top) + 'px');
-      menu.classList.toggle('show');
+      if (menu.classList.contains('show')) closeMenu(); else openMenu();
     });
-    document.addEventListener('click', () => menu.classList.remove('show')); // close on outside click
-    wrap.append(b, menu);
+    menus.push(menu);
+    document.body.appendChild(menu);
+    wrap.append(b);
     return wrap;
   }
   function extraButton(bd) {
@@ -384,6 +402,7 @@ export function createToolRibbon({ state, extraGroups = [], on = null, onToolCli
       document.removeEventListener('keyup', syncSoon);
       window.removeEventListener('resize', syncFade);
       if (fadeObserver) fadeObserver.disconnect();
+      menus.forEach(m => m.remove());
       try { el.remove(); } catch (_) {}
     },
   };

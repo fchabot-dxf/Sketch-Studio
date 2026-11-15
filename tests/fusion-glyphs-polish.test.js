@@ -16,10 +16,10 @@ await loadGlyphSheet({ fetchFn: async () => ({ ok: true, text: async () => readF
 const { CONSTRAINT_TYPES } = await import('../packages/core/constants.js');
 const { rectsIntersect, placeDimText } = await import('../packages/ui/dim-placement.js');
 
-// every constraint type the renderer draws a glyph for maps to a glyph in the sheet (fixed / angle / distance / offset have none: the offset
+// every constraint type the renderer draws a glyph for maps to a glyph in the sheet (fixed / angle / distance / offset / the patterns (a label, task 658) have none: the offset
 // is drawn as its distance dimension, task 650)
 for (const t of Object.values(CONSTRAINT_TYPES)) {
-  if (['distance', 'angle', 'fixed', 'offset'].includes(t)) continue;
+  if (['distance', 'angle', 'fixed', 'offset', 'circularPattern', 'rectangularPattern'].includes(t)) continue;
   assert(CONSTRAINT_GLYPH[t] && getGlyph(CONSTRAINT_GLYPH[t]), `renderer constraint type ${t} has a sheet glyph`);
 }
 

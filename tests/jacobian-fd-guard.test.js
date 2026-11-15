@@ -45,6 +45,12 @@ const CASES = {
   symmetric: { type: 'symmetric', joints: ['m', 'n'], line: 'L1' },
   // task 650: L2 as the offset of L1 (open: N + T rows at both ends)
   offset: { type: 'offset', shapes: ['L1', 'L2'], rev: [false], sides: [1], joins: [], closed: false, value: 5 },
+  // task 658: L2 as the copy of L1 turned 120 degrees about m ('pt' rows: the copy, the source and the centre columns)
+  circularPattern: { type: 'circularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, centre: 'm', quantity: 3, angle: 360,
+    symmetric: false, suppressed: [], instances: [{ at: [1], shapes: ['L2'], joints: ['c', 'd'] }] },
+  // task 658: L2 as the copy of L1 moved 5 along X (constant directions)
+  rectangularPattern: { type: 'rectangularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, directions: [null, null],
+    quantity: [2, 1], distance: [5, 5], distanceType: 'spacing', symmetric: [false, false], suppressed: [], instances: [{ at: [1, 0], shapes: ['L2'], joints: ['c', 'd'] }] },
 };
 
 // One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on
@@ -109,6 +115,16 @@ const RADIUS_CASES = [
   // task 654: a line then an arc at a TANGENT join: the join's T row is the arc's (Q on the ray from A1's centre through its start rim as)
   ['offset (line then arc, tangent join: the arc\'s ray row)', { type: 'offset', shapes: ['L1', 'L2', 'A1', 'A2'], rev: [false, false], sides: [1, -1], joins: ['tangent'], closed: false, value: 1 }, ['as']],
 ];
+// task 658: the pattern rows that read a radius (a circle copy: both radius unknowns) and the arc copy's 'ray' row (A2 as the copy of A1: its
+// reduced end rim be on the ray from its centre bc along the turned / moved source direction ae - ac), and the rectangular rows along a LINE
+// direction (L2's ends: the direction's columns)
+const PAT = (type, extra) => ({ type, suppressed: [], ...(type === 'circularPattern' ? { centre: 'd', quantity: 4, angle: 300, symmetric: false } : { directions: ['L2', null], quantity: [3, 1], distance: [4, 4], distanceType: 'spacing', symmetric: [false, false] }), ...extra });
+RADIUS_CASES.push(
+  ['circularPattern (a circle copy)', PAT('circularPattern', { sources: { shapes: ['C1'], points: ['m'], shapeJoints: [[0]] }, instances: [{ at: [2], shapes: ['C2'], joints: ['n'] }] }), ['C1', 'C2']],
+  ['rectangularPattern (a circle copy, along a line)', PAT('rectangularPattern', { sources: { shapes: ['C1'], points: ['m'], shapeJoints: [[0]] }, instances: [{ at: [2, 0], shapes: ['C2'], joints: ['n'] }] }), ['C1', 'C2', 'c', 'd']],
+  ['circularPattern (an arc copy: the ray row)', PAT('circularPattern', { sources: { shapes: ['A1'], points: ['ac', 'as', 'ae'], shapeJoints: [[0, 1, 2]] }, instances: [{ at: [1], shapes: ['A2'], joints: ['bc', 'bs', 'be'] }] }), ['ae', 'be', 'ac', 'bc']],
+  ['rectangularPattern (an arc copy: the ray row, along a line)', PAT('rectangularPattern', { sources: { shapes: ['A1'], points: ['ac', 'as', 'ae'], shapeJoints: [[0, 1, 2]] }, instances: [{ at: [1, 0], shapes: ['A2'], joints: ['bc', 'bs', 'be'] }] }), ['ae', 'be']],
+);
 for (const [label, c, uses] of RADIUS_CASES) {
   const col = guard(label, c);
   for (const id of uses) assert.ok(col[id] > 0.5, `${label}: the ${id} radius/rim column is ${col[id]} (expected it in the row)`);

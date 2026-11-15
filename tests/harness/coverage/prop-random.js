@@ -45,9 +45,10 @@ export const CASES = 300;
 // ---------------------------------------------------------------- the op kinds, derived from the inventory
 const MODE_TO_KIND = { aligned: 'dist-aligned', horizontal: 'dist-horizontal', vertical: 'dist-vertical', 'line length': 'dist-line', 'point-line': 'dist-point-line', 'line-line': 'dist-line-line', angle: 'angle', radius: 'radius' };
 // 'lock' = the Lock action of inventory.editFeatures ('lock / fix'): j.fixed = true, then a solve (input-manager.js toggleFixedSelection)
-// (not 'offset', task 650: the Offset tool makes it with its own new chain, not between existing operands; tests/offset-650.test.js covers it)
+// (not 'offset', task 650: the Offset tool makes it with its own new chain, not between existing operands; tests/offset-650.test.js covers it;
+// not the patterns, task 658: their tools make them with their own copies; tests/pattern-658.test.js covers them)
 export const KINDS = [...new Set([
-  ...inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset'),
+  ...inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset' && t !== 'circularPattern' && t !== 'rectangularPattern'),
   ...inventory.dimensionModes.map(m => MODE_TO_KIND[m.mode]),
   'lock',
 ])];

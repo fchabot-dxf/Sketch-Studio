@@ -9,6 +9,7 @@ import { SolverConfig } from './solver-config.js';
 import { isDimension, nextDimensionName } from './parameters.js';
 import { angleSectorOf } from './angle-sector.js';
 import { offsetConstraintRecord } from './offset.js';
+import { patternConstraintRecord, patternRefs } from './pattern.js';
 
 /**
  * Given a constraint and the list of shapes, returns the joints and shapes affected by the constraint.
@@ -124,6 +125,15 @@ export function getConstrainedGeometry(constraint, shapes) {
             // task 650: the source pieces and their offset pieces
             if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
             break;
+
+        case CONSTRAINT_TYPES.CIRCULAR_PATTERN:
+        case CONSTRAINT_TYPES.RECTANGULAR_PATTERN: {
+            // task 658: the sources, every copy, the centre / the direction lines (#core/pattern.js patternRefs)
+            const refs = patternRefs(constraint);
+            refs.joints.forEach((j) => constraintJoints.add(j));
+            refs.shapes.forEach((s) => constraintShapes.add(s));
+            break;
+        }
 
         case CONSTRAINT_TYPES.SYMMETRIC:
             // the two entities (points, or shapes) and the symmetry line
@@ -315,6 +325,11 @@ export function createConstraint(type, params) {
             const rec = offsetConstraintRecord(params);
             return rec ? withDimensionState(rec, params) : null;
         }
+
+        case CONSTRAINT_TYPES.CIRCULAR_PATTERN:
+        case CONSTRAINT_TYPES.RECTANGULAR_PATTERN:
+            // task 658: the stored form is #core/pattern.js patternConstraintRecord's (load, undo, paste)
+            return patternConstraintRecord({ ...params, type });
 
         default:
             dbg.warn('app', 'Unknown constraint type:', type);

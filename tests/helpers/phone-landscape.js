@@ -110,23 +110,22 @@ export async function runPhoneLandscape(hostName) {
               await tap(centre);
               assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon-menu.show') && document.querySelector('.sk-ribbon-menu [data-mode="${centre.mode}"]').classList.contains('active') && ${btn(i)}.classList.contains('active')`), true, t + ': the tapped variant is chosen, rect stays active');
             }
-          } else if (info.id === 'btn-parameters') {
-            await tap(b); await checkParams(t);
           }
         }
-        // TASK 647: Parameters is in the Inspect dropdown by default (Inspect shows Dim): tap the section's name, then its row
-        if (await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').hidden`)) {
-          await tap(await rectOf(`document.querySelector('[data-section="inspect"] .sk-ribbon-group-label')`));
-          await tap(await rectOf(`document.querySelector('.sk-ribbon-sect-menu.show [data-id="btn-parameters"]')`));
-          await checkParams(tag + 'Parameters from the Inspect dropdown');
-        }
-        async function checkParams(t) { // the Parameters window opens inside the viewport; its close button closes it
+        // TASK 677: the Parameters button is in the footer's floating cluster (inside the canvas), not on the rail: a tap opens the window inside the
+        // viewport (aria-expanded true), a second tap on the same button closes it; Trace has no Parameters button (O14)
+        assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon #btn-parameters')`), true, tag + 'no Parameters button on the rail');
+        if (await evalJs(`!!document.getElementById('btn-parameters')`)) {
+            const pSel = `document.getElementById('btn-parameters')`;
+            const pb = await rectOf(pSel);
+            assert(pb && pb.w >= 44 && pb.h >= 44 && (await hits(pSel, pb)), tag + 'the footer Parameters button: 44 px, not covered: ' + JSON.stringify(pb));
+            await tap(pb);
             const win = await rectOf(`document.querySelector('.sk-pwin')`);
-            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'true', t + ': a tap opens the Parameters window');
-            assert(win && win.left >= 0 && win.top >= 0 && win.right <= size.w + 0.5 && win.bottom <= size.h + 0.5, t + ': the window is inside the viewport: ' + JSON.stringify(win));
-            const x = await rectOf(`document.querySelector('.sk-pwin [aria-label="Close"]')`);
-            await tap(x);
-            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'false', t + ': its close button closes it');
+            assert.strictEqual(await evalJs(`${pSel}.getAttribute('aria-expanded')`), 'true', tag + 'a tap opens the Parameters window');
+            assert(win && win.left >= 0 && win.top >= 0 && win.right <= size.w + 0.5 && win.bottom <= size.h + 0.5, tag + 'the window is inside the viewport: ' + JSON.stringify(win));
+            assert(await hits(pSel, pb), tag + 'the open window leaves the Parameters button uncovered');
+            await tap(pb);
+            assert.strictEqual(await evalJs(`${pSel}.getAttribute('aria-expanded')`), 'false', tag + 'a second tap closes it');
         }
         assert(tapped.includes('select') && tapped.includes('line') && tapped.includes('dim') && tapped.includes('coincident'), tag + 'tools tapped: ' + tapped.join(','));
         await evalJs(`document.getElementById('tool-select').scrollIntoView({ block: 'nearest' })`); await sleep(100);

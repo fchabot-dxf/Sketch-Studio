@@ -6,7 +6,7 @@ import { sleep } from './cdp-browser.js';
 const centreOf = (evalJs, sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
 
-/** press(point) is the test's real click / tap. id is the bar button's id (e.g. 'tool-fillet', 'btn-parameters'). */
+/** press(point) is the test's real click / tap. id is the bar button's id (e.g. 'tool-fillet', 'tool-dim'). */
 export async function pressRibbonTool(evalJs, press, id) {
   const where = await evalJs(`(() => { const b = document.getElementById(${JSON.stringify(id)}); return b ? { hidden: b.hidden, section: b.closest('.sk-ribbon-group').dataset.section } : null; })()`);
   if (!where) throw new Error('pressRibbonTool: no ribbon button #' + id);

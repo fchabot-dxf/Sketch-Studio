@@ -197,6 +197,25 @@
     .sk-stock-label { fill: var(--sk-prep-stock); font-family: system-ui, sans-serif; font-size: 5px; font-weight: 600; letter-spacing: 0.04em; }
     #prepare-notice { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: var(--sk-prep-chip-bg); color: var(--sk-prep-chip-text); border: 1px solid var(--sk-prep-stock); border-radius: 6px; padding: 7px 14px; font: 13px system-ui, sans-serif; z-index: 6; pointer-events: none; }
     #prepare-notice[hidden] { display: none; }
+    #prepare-notice.is-error { background: #3f1518; color: #fecaca; border-color: #ef4444; }
+    /* TASK 663: Fusion-mode bar inside Prepare (mounted in JS only when ?host=fusion). */
+    .shaper-fusion-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0;
+      padding: 8px 12px; background: #1e2024; border-bottom: 1px solid #32353b; color: #e5e7eb;
+      font: 13px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; z-index: 7; }
+    .shaper-fusion-btn { display: inline-flex; align-items: center; justify-content: center; height: 30px;
+      padding: 0 12px; border: 1px solid #4c9aff; border-radius: 6px; background: #2c65ff; color: #fff;
+      font: 600 13px/1 system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+    .shaper-fusion-btn:hover:not(:disabled) { background: #3b74ff; }
+    .shaper-fusion-btn:disabled { background: #2a2d33; border-color: #464950; color: #9ca3af; cursor: not-allowed; opacity: 0.85; }
+    .shaper-fusion-status { font-size: 12px; color: #a7f3d0; min-width: 0; overflow-wrap: anywhere; }
+    .shaper-fusion-status[data-state="connecting"] { color: #cbd5e1; }
+    .shaper-fusion-status[data-state="unavailable"] { color: #fcd34d; }
+    .shaper-fusion-status[data-state="error"] { color: #fca5a5; }
+    #view-prepare.is-fusion #prepare-notice { top: 56px; pointer-events: auto; }
+    #view-prepare.is-fusion #prepare-panel { top: 56px; }
+    @media (max-width: 640px) {
+      #view-prepare.is-fusion #prepare-notice { left: 12px; transform: none; max-width: calc(100% - 236px); }
+    }
     .sk-hl { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
     .sk-hl-select { stroke: var(--sk-prep-geo-selected); stroke-width: 2.25; }
     .sk-hl-hover-cut { stroke: var(--sk-prep-geo-hover-cut); stroke-width: 3; }

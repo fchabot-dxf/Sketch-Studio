@@ -207,24 +207,30 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
       }
       content.appendChild(sb);
     }
-    const top = document.createElement('div'); top.className = 'sk-sidebar-top';
-    const h = document.createElement('h2'); h.className = 'sk-sidebar-doc'; h.textContent = name; top.appendChild(h);
-    if (onRenameDoc) {
-      h.classList.add('renamable'); h.title = 'Rename'; h.tabIndex = 0;
-      const edit = () => {
-        const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'sk-sidebar-input sk-sidebar-docinput'; inp.value = name;
-        let done = false;
-        const commit = () => { if (done) return; done = true; const v = inp.value.trim(); if (v && v !== name) { try { onRenameDoc(v); } catch (e) { notify(e.message, 'error'); } } render(); };
-        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; render(); } });
-        inp.addEventListener('blur', commit);
-        h.replaceWith(inp); inp.focus(); inp.select();
-      };
-      h.addEventListener('click', edit);
-      h.addEventListener('keydown', (e) => { if (e.key === 'Enter') edit(); });
+    if (name != null || status) {
+      const top = document.createElement('div'); top.className = 'sk-sidebar-top';
+      if (name != null) {
+        const h = document.createElement('h2'); h.className = 'sk-sidebar-doc'; h.textContent = name; top.appendChild(h);
+        if (onRenameDoc) {
+          h.classList.add('renamable'); h.title = 'Rename'; h.tabIndex = 0;
+          const edit = () => {
+            const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'sk-sidebar-input sk-sidebar-docinput'; inp.value = name;
+            let done = false;
+            const commit = () => { if (done) return; done = true; const v = inp.value.trim(); if (v && v !== name) { try { onRenameDoc(v); } catch (e) { notify(e.message, 'error'); } } render(); };
+            inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; render(); } });
+            inp.addEventListener('blur', commit);
+            h.replaceWith(inp); inp.focus(); inp.select();
+          };
+          h.addEventListener('click', edit);
+          h.addEventListener('keydown', (e) => { if (e.key === 'Enter') edit(); });
+        }
+      }
+      if (status) { const s = document.createElement('div'); s.className = 'sk-sidebar-status'; s.dataset.section = 'status'; top.appendChild(s); paintStatus(s); }
+      content.appendChild(top);
+      drawMessage(top);
+    } else if (message) {
+      drawMessage(content);
     }
-    if (status) { const s = document.createElement('div'); s.className = 'sk-sidebar-status'; s.dataset.section = 'status'; top.appendChild(s); paintStatus(s); }
-    content.appendChild(top);
-    drawMessage(top);
     const box = document.createElement('div'); box.className = 'sk-sidebar-actions'; box.dataset.section = 'actions';
     for (const a of acts) {
       if (a.visible && !a.visible()) continue;

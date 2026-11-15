@@ -30,24 +30,27 @@ export { relativeTime };
 // TASK 587: `documentTabs: true` opts the host into DOCUMENT TABS (document-tabs.js; docs/DOCUMENT-TABS-DESIGN.md): the strip is inserted as its own row
 // immediately AFTER the host's <header> (the element holding this sidebar's button; TASK 602, owner: between the header and the tool ribbon), Open / Open recent / Open from file / New open a new tab, and the name,
 // status line and page title below follow the ACTIVE tab's design (the buffer's), not the device-wide "current" pointer. A host without it is unchanged.
-export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
+// TASK 663: `projects: false` opts the host out of the project/file layer (document name/status header, New/Templates/Save/Duplicate/Open recent/Projects/Open file/Import file actions, Drive/Google account controls, Projects modal, document tab strip, Ctrl+S save prompt, and unsaved-leave prompt) while keeping `hostActions`, stage switcher, and GO TO.
+export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostActions = [], documentTabs = false, projects = true, store = getProjectStore(), account = getGoogleAccount(), stages = [], activeStage = null, onStageChange = null } = {}) {
   let sidebar = null;
   let currentName = 'Untitled';
   let currentDesignId = null;
   let manager = null;   // the open project manager modal, if any
+  const showDocumentTabs = Boolean(documentTabs && projects);
   // what can be done with a design / a project: declared once (project-actions.js), shared with the project manager
-  const projectActions = createProjectActions({ store, getBuffer, account, importFile, tabs: documentTabs, pickTemplate: openTemplatePicker, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) });
+  const projectActions = projects ? createProjectActions({ store, getBuffer, account, importFile, tabs: showDocumentTabs, pickTemplate: openTemplatePicker, notify: (...a) => (manager ? manager.notify : sidebar.notify)(...a), ask: (spec) => (manager ? manager.ask(spec) : sidebar.ask(spec)) }) : null;
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
   const currentId = async () => { const b = getBuffer && getBuffer(); return (b && b.designId && b.designId()) || ((await store.current()) || {}).id || null; };
 
   async function refreshName() {
+    if (!projects) return;
     let c = null;
     try {
-      const b = documentTabs && getBuffer && getBuffer();
+      const b = showDocumentTabs && getBuffer && getBuffer();
       const id = b ? b.designId() : null;
-      c = documentTabs ? (id ? await store.get(id) : null) : await store.current(); // with tabs: the design SHOWN (the active tab's), not the device-wide pointer
+      c = showDocumentTabs ? (id ? await store.get(id) : null) : await store.current(); // with tabs: the design SHOWN (the active tab's), not the device-wide pointer
     } catch (_) { c = null; }
     const live = getBuffer && getBuffer();
     currentName = c ? c.name : (live && live.designName ? live.designName() : 'Untitled'); // an unsaved design started from a template carries its name (TASK 651)
@@ -56,16 +59,14 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     applyAppIdentity(appId, { designName: c ? c.name : undefined });
   }
 
-  const openDesignById = projectActions.openDesign;
-
   // "Projects": the modal. The drawer closes first (focus goes back to the menu button, where the modal returns it on close).
   function openManager(start) {
-    if (manager) return;
+    if (!projects || manager) return;
     sidebar.close();
     manager = openProjectManager({ store, actions: projectActions, toolbar: projectActions.toolbarItems(), account, start, onClose: () => { manager = null; } });
   }
 
-  const actions = [
+  const actions = projects ? [
     { id: 'new-design', label: 'New design', icon: SIDEBAR_ICONS.new, tooltip: 'Start an empty design (the current one is kept)', keepOpen: true, onClick: act(async () => { await projectActions.newDesign(); await refreshName(); }) },
     // TASK 651: the same template modal the "+" tab button and New design open, here WITHOUT the Blank card (that is New design's)
     { id: 'templates', label: 'Templates…', icon: SIDEBAR_ICONS.templates, tooltip: 'Start a new design from a template drawing', keepOpen: true, onClick: act(async () => { sidebar.close(); await projectActions.newDesign({ blank: false }); await refreshName(); }, { close: false }) },
@@ -77,7 +78,7 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     { id: 'open-file', label: 'Open from file', icon: SIDEBAR_ICONS.open, keepOpen: true, onClick: act(async () => { await projectActions.openFile(); }) },
     ...(importFile ? [importSidebarAction({ importFile, getSidebar: () => sidebar, icon: SIDEBAR_ICONS.open })] : []),
     ...(hostActions.length ? [{ divider: true }, ...hostActions] : []),
-  ];
+  ] : [...hostActions];
 
   // The one-line state under the document name, derived from the store (where the current design lives + how its last save went).
   const statusLine = () => {
@@ -99,15 +100,20 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       ...(s.projectId ? { action: { id: 'open-in-drive', label: 'Open in Drive', href: driveFolderUrl(s.projectId) } } : {}),
     };
   };
-  const driveControls = store.cloud ? {
+  const driveControls = (projects && store.cloud) ? {
     check: (onSteps) => store.cloud.checkConnection(onSteps),
   } : null;
 
   sidebar = createAppSidebar({
-    current: appId, docName: currentName, actions, account, driveControls, status: statusLine,
+    current: appId,
+    docName: projects ? currentName : null,
+    actions,
+    account: projects ? account : null,
+    driveControls,
+    status: projects ? statusLine : null,
     stages, activeStage, onStageChange,
-    beforeGoTo: () => projectActions.settleUnsaved(),
-    onRenameDoc: (name) => act(async () => {
+    beforeGoTo: projects ? (() => projectActions.settleUnsaved()) : null,
+    onRenameDoc: projects ? (name) => act(async () => {
       const b = getBuffer && getBuffer();
       if (b && !b.isStored()) {
         if (!(await projectActions.ensureSignedIn())) return;
@@ -117,13 +123,16 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       const id = await currentId();
       if (!id) throw new Error('This design is not saved yet. Save it with a name first (Save as…).'); // TASK 558: an unsaved Untitled is named by its first save
       await store.rename(id, name);
-    }, { close: false })(),
+    }, { close: false })() : null,
   });
-  store.subscribe(refreshName);
-  refreshName();
+  if (projects) {
+    store.subscribe(refreshName);
+    refreshName();
+  }
 
   let tabStrip = null;
-  if (documentTabs) {
+  let tabObserver = null;
+  if (showDocumentTabs) {
     tabStrip = createDocumentTabs({ getBuffer, store, actions: { activateTab: projectActions.activateTab, closeTab: projectActions.closeTab, newDesign: projectActions.newDesign }, onChange: refreshName });
     // the host appends the sidebar's button into its header AFTER this call: place the strip as soon as the button has a <header>
     const place = () => {
@@ -133,8 +142,8 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
       return true;
     };
     if (!place()) {
-      const mo = new MutationObserver(() => { if (place()) mo.disconnect(); });
-      mo.observe(document.documentElement, { childList: true, subtree: true });
+      tabObserver = new MutationObserver(() => { if (place()) { tabObserver.disconnect(); tabObserver = null; } });
+      tabObserver.observe(document.documentElement, { childList: true, subtree: true });
     }
   }
 
@@ -147,10 +156,20 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     if (b.isStored()) { await b.flush(); return; }
     if (await projectActions.saveAsPrompt()) sidebar.close();
   }
-  window.addEventListener('keydown', (e) => {
+  const onKeyDown = projects ? (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || (e.key !== 's' && e.key !== 'S')) return;
     e.preventDefault(); e.stopImmediatePropagation();
     saveNow().catch(fail);
-  }, true);
-  return sidebar;
+  } : null;
+  if (onKeyDown) window.addEventListener('keydown', onKeyDown, true);
+  const baseDestroy = sidebar.destroy;
+  return {
+    ...sidebar,
+    destroy() {
+      if (onKeyDown) window.removeEventListener('keydown', onKeyDown, true);
+      if (tabObserver) { tabObserver.disconnect(); tabObserver = null; }
+      if (tabStrip) { tabStrip.destroy(); tabStrip = null; }
+      baseDestroy();
+    },
+  };
 }

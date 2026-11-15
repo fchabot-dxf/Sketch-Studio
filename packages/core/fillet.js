@@ -192,8 +192,9 @@ export function findCornerAtPoint(state, worldPt, tolerance = 15) {
 /**
  * Why did a fillet click near `worldPt` do nothing? Returns a user-facing message, or null when the
  * click was nowhere near a joint (empty space needs no toast). Call only after findCornerAtPoint failed.
+ * include(shape) is the caller's pick rule (a locked / hidden sketch is out): only the curves it accepts are judged, none -> null (task 649).
  */
-export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
+export function diagnoseNoFillet(state, worldPt, tolerance = 15, include = () => true) {
   if (!state || !state.joints || !worldPt) return null;
   let best = null, bestDist = tolerance;
   for (const [jid, j] of state.joints.entries()) {
@@ -203,7 +204,9 @@ export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
   }
   if (!best) return null;
   const cluster = getCoincidentCluster(state, best);
-  const touching = (state.shapes || []).filter(sh => sh && Array.isArray(sh.joints) && sh.joints.some(j => cluster.has(j)));
+  const near = (state.shapes || []).filter(sh => sh && Array.isArray(sh.joints) && sh.joints.some(j => cluster.has(j)));
+  const touching = near.filter(sh => include(sh));
+  if (near.length && !touching.length) return null; // only curves the pick leaves out (a locked / hidden sketch): nothing to say
   const arcs = touching.filter(sh => sh.type === 'arc');
   if (arcs.some(a => (state.constraints || []).some(c => c && c.type === 'tangent' && c.circle === a.id))) {
     return 'This corner is already filleted';
@@ -426,6 +429,14 @@ export function applyFillet(state, cornerInfo, radius = 5) {
         }
       }
 
+      // An ARC leg's own structural equal (makeArc: [centre, rim, centre, rim], it keeps the arc a circle) is part of that arc, not a
+      // measurement: its corner rim follows the leg's tangent joint, like the arc itself (task 649).
+      const ownArc = c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length === 4 ? [[lineA, jTA], [lineB, jTB]].find(([leg]) => leg.shape.type === 'arc' && c.joints[0] === leg.shape.joints[0] && c.joints[2] === leg.shape.joints[0]) : null;
+      if (ownArc) {
+        for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = ownArc[1];
+        continue;
+      }
+
       // MEASUREMENT constraints (a joint-pair DISTANCE, a joint-form EQUAL) keep meaning the SHARP corner: any
       // joint of the corner cluster is re-linked to the virtual-sharp joint V and the ORIGINAL value is kept,
       // so editing the fillet radius never changes an overall dimension (Fusion's behaviour).
@@ -438,10 +449,12 @@ export function applyFillet(state, cornerInfo, radius = 5) {
       }
 
       // DIRECTIONAL constraints (H/V, parallel, perpendicular, angle, ...) keep relinking to the tangent joints:
-      // the line survives (trimmed) and keeps its direction.
+      // the line survives (trimmed) and keeps its direction. When the two curves SHARE the corner joint (a line drawn from another
+      // curve's end), a constraint that names curve B's far end is about curve B: it follows B's tangent point (task 649).
       if (Array.isArray(c.joints)) {
+        const onB = lineA.cornerJoint === lineB.cornerJoint && c.joints.includes(lineB.otherJoint) && !c.joints.includes(lineA.otherJoint);
         for (let k = 0; k < c.joints.length; k++) {
-          if (c.joints[k] === lineA.cornerJoint) c.joints[k] = jTA;
+          if (c.joints[k] === lineA.cornerJoint) c.joints[k] = onB ? jTB : jTA;
           else if (c.joints[k] === lineB.cornerJoint) c.joints[k] = jTB;
         }
       }
@@ -534,6 +547,14 @@ export function filletLines(state, arc) {
 }
 
 /**
+ * Is this arc still a whole fillet: its virtual sharp V exists and both tangent legs are there (task 649)? A fillet arc that lost a leg
+ * or V (deleted, or the arc pasted alone) is a plain arc: its radius is edited like any arc's, not through seedFilletForRadius.
+ */
+export function isLiveFillet(state, arc) {
+  return !!(state && arc && arc.filletSharp && state.joints && state.joints.has(arc.filletSharp) && filletLines(state, arc).length === 2);
+}
+
+/**
  * Place the fillet's centre + two tangent joints at the ANALYTIC positions for `radius` (from V and the two
  * lines' far endpoints), so the solver starts at the answer and only polishes -- it never has to walk a line
  * through zero length. Returns {ok:true} or {ok:false, reason} (collinear / collapse / not a fillet).
@@ -610,13 +631,21 @@ export function findFilletShapeAtPoint(state, worldPt, tolerance = 10) {
 /**
  * The fillet corner formed by exactly these two shapes (lines or arcs; they must meet at a shared/coincident joint and
  * nothing else may touch that corner), or null. Same shape as findCornerAtJoint's result.
+ * Two curves can meet at BOTH ends (a line and an arc forming a "D", a lens of two arcs): `near` (optional, world points: where the user
+ * picked) chooses the corner nearest them (least summed distance); without it the first corner in lineA's joint order (task 649).
  */
-export function findCornerBetweenLines(state, lineA, lineB) {
+export function findCornerBetweenLines(state, lineA, lineB, near = null) {
   if (!state || !lineA || !lineB || lineA.id === lineB.id) return null;
+  const pts = Array.isArray(near) ? near.filter(Boolean) : [];
+  const away = (corner) => pts.reduce((s, p) => s + Math.hypot(p.x - corner.cornerPt.x, p.y - corner.cornerPt.y), 0);
+  let best = null;
   for (const jid of lineA.joints) {
     const corner = findCornerAtJoint(state, jid);
     if (corner && ((corner.lineA.shape.id === lineA.id && corner.lineB.shape.id === lineB.id) ||
-                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) return corner;
+                   (corner.lineA.shape.id === lineB.id && corner.lineB.shape.id === lineA.id))) {
+      if (!pts.length) return corner;
+      if (!best || away(corner) < away(best)) best = corner;
+    }
   }
-  return null;
+  return best;
 }

@@ -9,7 +9,7 @@ import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
 import { measureShapeSizes, findCollapsedShape } from '#core/constraint-verifier.js';
-import { seedFilletForRadius, filletHasCollapsedLine, filletLines } from '#core/fillet.js';
+import { seedFilletForRadius, filletHasCollapsedLine, filletLines, isLiveFillet } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
@@ -85,7 +85,8 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   const attempt = (list) => {
     // A fillet arc: start the solver AT the analytic answer for the new radius (never walks a line through zero length), and
     // refuse the one singular value where a line would collapse. Each is seeded first; a refusal restores the ones already seeded.
-    const fillets = list.map(e => (e.c.isRadius && e.c.shape && state.shapes) ? state.shapes.find(s => s.id === e.c.shape && s.type === 'arc' && s.filletSharp) || null : null);
+    // (a fillet arc that lost a leg or its virtual sharp is a plain arc here: isLiveFillet, task 649)
+    const fillets = list.map(e => (e.c.isRadius && e.c.shape && state.shapes) ? state.shapes.find(s => s.id === e.c.shape && s.type === 'arc' && isLiveFillet(state, s)) || null : null);
     for (let i = 0; i < list.length; i++) {
       if (!fillets[i]) continue;
       const seeded = seedFilletForRadius(state, fillets[i], list[i].value);

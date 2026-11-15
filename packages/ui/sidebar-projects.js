@@ -10,8 +10,8 @@
 // its own `hostActions` array. A refused open / file / delete shows the store's message in the drawer and changes nothing.
 // The tab title follows the current design through the registry (appTitle).
 // TASK 558 (owner rulings 2026-11-12): an unsaved Untitled with content is never replaced or left without THE question (project-actions.js
-// settleUnsaved: Save… / Don't save / Cancel), asked in the UI the action came from (this drawer, or the Projects modal while it is open),
-// also before a GO TO entry leaves the page. Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
+// settleUnsaved: Save… / Don't save / Cancel), asked in the UI the action came from (this drawer, or the Projects modal while it is open).
+// TASK 684: a GO TO entry no longer asks it: the open tabs go across to the other app (one shared buffer), nothing is left behind. Naming an unsaved Untitled (the name heading) is its first named save. Ctrl+S: on an unsaved
 // design, the Save as name prompt; on a stored one, the pending autosave is written now (nothing visible when there is nothing pending).
 
 import { createAppSidebar, SIDEBAR_ICONS } from './app-sidebar.js';
@@ -42,6 +42,13 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
   const fail = (e) => sidebar.notify(driveErrorText(e), 'error');
   // run a store-backed action: errors stay in the drawer (nothing changed); success closes it
   const act = (fn, { close = true } = {}) => async (...args) => { try { await fn(...args); if (close) sidebar.close(); } catch (e) { fail(e); } };
+  async function keepTabsBeforeGoTo() {
+    const b = getBuffer && getBuffer();
+    if (!b) return true;
+    await b.ready;
+    if (!(await b.keepTabs())) throw new Error('Your open tabs could not be kept on this device, so this app stays open. Try again, or save the design first.');
+    return true;
+  }
   const currentId = async () => { const b = getBuffer && getBuffer(); return (b && b.designId && b.designId()) || ((await store.current()) || {}).id || null; };
 
   async function refreshName() {
@@ -113,7 +120,9 @@ export function mountProjectSidebar({ appId, getBuffer, importFile = null, hostA
     status: projects ? statusLine : null,
     stages, activeStage, onStageChange,
     goTo,
-    beforeGoTo: projects ? (() => projectActions.settleUnsaved()) : null,
+    // TASK 684: GO TO asks nothing: the open tabs (unsaved Untitled tabs included) go across in the shared buffer. They are written NOW, before the page
+    // is left; if they cannot be written the page stays and says why (leaving would lose them).
+    beforeGoTo: projects ? keepTabsBeforeGoTo : null,
     onRenameDoc: projects ? (name) => act(async () => {
       const b = getBuffer && getBuffer();
       if (b && !b.isStored()) {

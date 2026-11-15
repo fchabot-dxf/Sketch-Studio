@@ -18,7 +18,8 @@
 //             updateProject(id, fn) -> stored | null; deleteProject(id)
 //   designs:  listDesigns() -> [{ id, projectId, name, app, updatedAt }] (no bodies); getDesign(id) -> full | null;
 //             putDesign(d); putDesignIfAbsent(d) -> boolean; updateDesign(id, fn) -> stored | null; deleteDesign(id)
-//   meta:     getMeta(key); setMeta(key, value|null); setMetaIfAbsent(key, value) -> boolean   (the current pointer, flags)
+//   meta:     getMeta(key); setMeta(key, value|null); setMetaIfAbsent(key, value) -> boolean   (the current pointer, flags);
+//             updateMeta(key, fn) -> stored | null (TASK 684: the shared open-tabs buffer is read, merged and written in one step)
 //   update*(id, fn): fn(recordOrNull) returns the new record (or null = delete) and runs ATOMICALLY (IndexedDB: one transaction).
 //   OPTIONAL hooks a remote adapter implements (the store uses them when present, nothing else changes):
 //     newId(kind: 'p'|'d') -> id | Promise<id>   ids are OPAQUE strings the adapter owns (Drive: files.generateIds); only the local
@@ -53,8 +54,10 @@ import { createDriveWriter } from '#ui/cloud/drive-writer.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js';
 
 const CURRENT = CURRENT_DESIGN_KEY;
+// TASK 684 (owner turns 1768-1775): ONE open-tabs working buffer for ALL apps (the same tabs, order and active tab in SketchStudio, Shaper, Pen Plotter
+// and Trace). TASK 624 kept one per app under `openTabsBuffer:<app>`: those LEGACY keys are merged into the one buffer on its first read (mergeLegacyBuffers).
 const OPEN_TABS_BUFFER = 'openTabsBuffer';
-const bufferKey = (app) => `${OPEN_TABS_BUFFER}:${app}`; // meta key of one app's open-tabs working buffer
+const LEGACY_BUFFER_PREFIX = `${OPEN_TABS_BUFFER}:`; // meta key prefix of TASK 624's per-app buffers (openTabsBuffer:<app>)
 const LEGACY_MIGRATED = 'legacyMigrated';
 const BASE = 'driveBase:';     // meta key: the Drive `version` a design's local edits are based on (what a recovery compares with)
 const SHADOW = 'driveShadow:'; // meta key of the LOCAL copy of a design that lives on Drive and has a write not yet confirmed (the safety net)
@@ -95,6 +98,11 @@ export function createMemoryAdapter() {
     async getMeta(k) { return meta.has(k) ? meta.get(k) : null; },
     async setMeta(k, v) { if (v == null) meta.delete(k); else meta.set(k, v); },
     async setMetaIfAbsent(k, v) { if (meta.has(k) && meta.get(k) != null) return false; meta.set(k, v); return true; },
+    async updateMeta(k, fn) { // values are copied in and out (structuredClone: what IndexedDB does), so a caller never shares an object with the store
+      const next = fn(meta.has(k) && meta.get(k) != null ? structuredClone(meta.get(k)) : null);
+      if (next == null) { meta.delete(k); return null; }
+      meta.set(k, structuredClone(next)); return structuredClone(next);
+    },
   };
 }
 
@@ -176,6 +184,18 @@ export function createIdbAdapter() {
       g.onsuccess = () => { if (g.result == null) { set = true; tx.objectStore('meta').put(v, k); } };
       await txDone(tx); return set;
     },
+    async updateMeta(k, fn) {
+      const db = await open(); const tx = db.transaction('meta', 'readwrite'); let out = null, failed = null;
+      const g = tx.objectStore('meta').get(k);
+      g.onsuccess = () => {
+        try {
+          const next = fn(g.result === undefined ? null : g.result);
+          if (next == null) tx.objectStore('meta').delete(k); else { tx.objectStore('meta').put(next, k); out = next; }
+        } catch (e) { failed = e; tx.abort(); } // fn threw, or the value cannot be stored (DataCloneError): nothing is written, the caller gets the error
+      };
+      try { await txDone(tx); } catch (e) { throw failed || e; }
+      return out;
+    },
   };
 }
 
@@ -193,6 +213,45 @@ export async function readLegacySlot() {
       g.onsuccess = () => resolve(g.result || null); g.onerror = () => resolve(null);
     });
   } catch (_) { return null; } // unreadable slot = nothing to migrate; the slot itself stays untouched
+}
+
+/**
+ * TASK 684, the MIGRATION of TASK 624's per-app open-tabs buffers into the one shared buffer: `legacy` = [{ app, buffer }] (buffer: a v1 snapshot
+ * { activeKey, tabs: [{ key, designId, name, emptySig, saveOk, doc, view, hostSession }] } or null). No tab is lost: every unsaved Untitled of every
+ * app is kept; a STORED design open in two apps appears once (its content is in the store; the first app's tab, with its view, is kept). The
+ * reading app's tabs come first and its active tab stays active (else the first app's); then the other apps in a fixed order. Keys are made unique
+ * by their app (two apps both had a 't1'). A v1 tab's session belonged to the app that wrote it: it moves into hostSessions[thatApp]; its content
+ * flag is read from its own app's empty signature (a v1 doc and emptySig were written by the same app, so they compare).
+ * `existing`: the shared buffer when it already exists (an older build wrote a per-app key after the first migration): its tabs and active tab stay
+ * first, the legacy tabs are added after them (a key already there is not added twice).
+ * Returns a v2 buffer, or null when no app had anything open.
+ */
+export const LEGACY_BUFFER_APPS = ['sketchstudio', 'shaper', 'penplotter', 'trace'];
+export function mergeLegacyBuffers(legacy, app = null, existing = null) {
+  const rank = (a) => (a === app ? -1 : (LEGACY_BUFFER_APPS.indexOf(a) + 1) || LEGACY_BUFFER_APPS.length + 1);
+  const rows = (legacy || []).filter((l) => l && l.buffer && Array.isArray(l.buffer.tabs) && l.buffer.tabs.length)
+    .sort((a, b) => rank(a.app) - rank(b.app) || String(a.app).localeCompare(String(b.app)));
+  const tabs = existing && Array.isArray(existing.tabs) ? [...existing.tabs] : [];
+  const storedIds = new Set(tabs.filter((t) => t && t.designId).map((t) => t.designId));
+  const keys = new Set(tabs.map((t) => t && t.key));
+  let activeKey = tabs.length ? existing.activeKey : null;
+  for (const { app: from, buffer } of rows) {
+    for (const t of buffer.tabs) {
+      if (!t) continue;
+      if (t.designId) { if (storedIds.has(t.designId)) continue; storedIds.add(t.designId); }
+      const key = `${from}-${t.key}`;
+      if (keys.has(key)) continue;
+      keys.add(key);
+      const content = t.content !== undefined ? !!t.content : (!t.designId && t.emptySig != null && JSON.stringify(t.doc) !== t.emptySig);
+      tabs.push({
+        key, designId: t.designId || null, name: t.name, content, saveOk: t.saveOk !== false, doc: t.doc, view: t.view || null,
+        hostSessions: t.hostSessions || (t.hostSession !== undefined ? { [from]: t.hostSession } : {}),
+      });
+      if (activeKey == null && t.key === buffer.activeKey) activeKey = key;
+    }
+  }
+  if (!tabs.length) return null;
+  return { v: 2, activeKey: activeKey || tabs[0].key, currentId: existing ? existing.currentId || null : null, tabs };
 }
 
 // ---- the store ---------------------------------------------------------------------------------------------------------
@@ -469,10 +528,23 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       return d;
     },
     currentId: () => adapter.getMeta(CURRENT),
-    /** The open-tabs working buffer of `app` (TASK 624): what that app had open (Untitled tabs included), so a refresh reopens it. One
-     *  key per app: another app never reopens this app's tabs (the shared CURRENT pointer still carries a stored design across apps). */
-    readBuffer: ({ app }) => adapter.getMeta(bufferKey(app)),
-    writeBuffer: (data, { app }) => adapter.setMeta(bufferKey(app), data),
+    /** THE open-tabs working buffer (TASK 624; ONE for all apps since TASK 684): what was open (Untitled tabs included), so a refresh or a GO TO
+     *  to another app reopens the same tabs. `app` (the reading app) only orders a first-read migration of TASK 624's per-app buffers: its own tabs
+     *  come first and its active tab stays active (mergeLegacyBuffers). */
+    async readBuffer({ app } = {}) {
+      const legacyKeys = adapter.listMetaKeys ? await adapter.listMetaKeys(LEGACY_BUFFER_PREFIX) : [];
+      if (!legacyKeys.length) return adapter.getMeta(OPEN_TABS_BUFFER);
+      const legacy = [];
+      for (const key of legacyKeys) legacy.push({ app: key.slice(LEGACY_BUFFER_PREFIX.length), buffer: await adapter.getMeta(key) });
+      const merged = await adapter.updateMeta(OPEN_TABS_BUFFER, (cur) => mergeLegacyBuffers(legacy, app, cur)); // another page migrated first: its tabs stay first
+      for (const key of legacyKeys) await adapter.setMeta(key, null); // merged once: the per-app keys are gone, so they can never come back
+      return merged;
+    },
+    /** Replace the buffer (null = nothing open but an empty Untitled). A page writes through updateBuffer (it merges with what other pages wrote). */
+    writeBuffer: (data) => adapter.setMeta(OPEN_TABS_BUFFER, data),
+    /** Read, change and write the buffer in ONE step (fn(stored | null) -> the new buffer | null): two pages writing at the same moment never
+     *  interleave a read and a write (document-buffer.js mergeTabBuffers decides what fn keeps). */
+    updateBuffer: (fn) => adapter.updateMeta(OPEN_TABS_BUFFER, fn),
     isRemote,
     resolveId: resolveMoved,
     hasPendingDrive: (id) => { id = resolveMoved(id); return !!(id && isRemote(id) && writer.status(id).state === 'failed'); },

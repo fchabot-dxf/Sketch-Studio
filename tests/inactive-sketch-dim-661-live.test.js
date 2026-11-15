@@ -3,6 +3,7 @@
 // opacity; making the other sketch active swaps it at once; a REAL click on an inactive line selects it and its highlight is fully opaque.
 // Screenshots: EVIDENCE_DIR (default .evidence/661).
 import assert from 'node:assert';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
@@ -82,6 +83,7 @@ await (async () => {
     assert.strictEqual(await opacityOf(line(two)), 0.33, 'deselected and not hovered, it dims again');
 
     // 4. the Style panel row (Lines & Joints tab; Shaper and SketchStudio mount the panel): a real edit changes the computed opacity live; Reset restores 33
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: a new host starts from an empty Untitled, not the previous host's drawing
     const loaded2 = once('Page.loadEventFired');
     await send('Page.navigate', { url: `http://127.0.0.1:${port}/apps/shaper/index.html` });
     await Promise.race([loaded2, sleep(8000)]);

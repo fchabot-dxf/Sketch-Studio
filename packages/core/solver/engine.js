@@ -654,6 +654,7 @@ export class NewtonSolver {
           else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
             params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
           }
+          if (c.isDiameter) params.isDiameter = true;
         }
         // Distance line-line — {shapes:[s1,s2], value}: perpendicular distance.
         // Synthesize as joints = [P, A, B] reusing the point_on_line residual

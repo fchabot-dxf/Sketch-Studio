@@ -155,6 +155,7 @@ function withDimensionState(obj, params) {
     const driven = !!(params.isDriven || params.driven);
     obj.isDriven = driven;
     obj.driven = driven;
+    if (params.isDiameter) obj.isDiameter = true;
     if (params.drivenReason) obj.drivenReason = params.drivenReason;
     if (params.dimMode !== undefined) obj.dimMode = params.dimMode;
     if (params.dimSign === 1 || params.dimSign === -1) obj.dimSign = params.dimSign;

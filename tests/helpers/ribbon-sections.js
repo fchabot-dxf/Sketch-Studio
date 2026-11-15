@@ -118,16 +118,14 @@ export async function runRibbonSections(hostName, part) {
           await pressSel(row, t);
           assert.strictEqual(await menuOpen(), false, t + ': running a tool closes the dropdown');
           const tool = await evalJs(`document.getElementById('${id}').dataset.tool || null`);
-          if (id === 'tool-rect') {
-            assert.strictEqual(await evalJs(`!!document.querySelector('.sk-ribbon-menu.show')`), true, t + ': Rect from the dropdown opens its variants menu');
-            await pressSel('.sk-ribbon-menu.show [data-mode="rect-center"]', t);
-            assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon-menu.show') && document.querySelector('.sk-ribbon-menu [data-mode="rect-center"]').classList.contains('active') && document.getElementById('tool-rect').classList.contains('active')`), true, t + ': the variant is chosen, Rect is the active tool');
+          if (id === 'tool-rect' || id === 'tool-slot') {
+            const targetMode = id === 'tool-rect' ? 'rect-center' : 'slot-center';
+            assert.strictEqual(await evalJs(`!!document.querySelector('.sk-ribbon-menu.show')`), true, t + ': ' + id + ' from the dropdown opens its variants menu');
+            await pressSel(`.sk-ribbon-menu.show [data-mode="${targetMode}"]`, t);
+            assert.strictEqual(await evalJs(`!document.querySelector('.sk-ribbon-menu.show') && document.querySelector('.sk-ribbon-menu [data-mode="${targetMode}"]').classList.contains('active') && document.getElementById('${id}').classList.contains('active')`), true, t + ': the variant is chosen, ' + id + ' is the active tool');
           } else if (tool) {
             assert.strictEqual(await evalJs(`(() => { const b = document.getElementById('${id}'); const act = [...document.querySelectorAll('.sk-ribbon .sk-ribbon-btn.active')].map((x) => x.id);
               const lit = document.querySelector(${JSON.stringify(nameSel(sec.key))}).classList.contains('active'); return act.length === 1 && act[0] === '${id}' && lit === b.hidden; })()`), true, t + ': the tool is the one active tool; the section name is lit exactly when it is not in the bar');
-          } else if (id === 'btn-parameters') {
-            assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').getAttribute('aria-pressed')`), 'true', t + ': the Parameters window opens');
-            await evalJs(`document.getElementById('btn-parameters').click()`); await sleep(150); // close it again (its own toggle)
           } else if (MESSAGES[id]) {
             assert.strictEqual(await evalJs(`document.body.innerText.includes(${JSON.stringify(MESSAGES[id])})`), true, t + ': the action runs (its message with nothing selected)');
           } else if (id === 'freehand-btn') {

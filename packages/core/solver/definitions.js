@@ -206,7 +206,8 @@ export const Definitions = {
   distance: {
     rows: 1,
     computeError: (params, positions) => {
-      if (typeof params.radiusAt === 'number') return positions[params.radiusAt] - (params.value || 0);   // a circle's radius
+      const targetVal = (params.value || 0) * (params.isDiameter ? 0.5 : 1);
+      if (typeof params.radiusAt === 'number') return positions[params.radiusAt] - targetVal;   // a circle's radius (or diameter / 2)
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -228,7 +229,7 @@ export const Definitions = {
       if (params.dimMode === 'horizontal') return (params.dimSign || 1) * (bx - ax) - (params.value || 0);
       if (params.dimMode === 'vertical') return (params.dimSign || 1) * (by - ay) - (params.value || 0);
       const dx = ax - bx, dy = ay - by;
-      return Math.hypot(dx, dy) - (params.value || 0);
+      return Math.hypot(dx, dy) - targetVal;
     },
     computeJacobian: (params, positions, outRow) => {
       if (typeof params.radiusAt === 'number') { outRow[params.radiusAt] += 1; return; }

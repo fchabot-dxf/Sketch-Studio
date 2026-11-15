@@ -4,7 +4,7 @@
 import { worldToScreen } from '#ui/coords.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { applyParameterChange, dimensionEditLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
+import { applyParameterChange, dimensionInputLabel, isDimensionDetermined } from '#ui/dimension-seams.js';
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { previewDimensionInput } from '#core/parameters.js';
@@ -499,7 +499,7 @@ function handleCommit() {
             delete target.__restoredDimension;
             target.__placing = false;
             if (state.placingConstraint === target) state.placingConstraint = null;
-            const label = pv.kind === 'create' ? `create parameter ${pv.name}` : pv.kind === 'set' ? `change parameter ${pv.name}` : dimensionEditLabel(target, pv.value);
+            const label = dimensionInputLabel(target, pv);
             // the FIRST value of a just-placed dimension rides the snapshot taken at its birth (no second undo step)
             const res = applyParameterChange(state, pv.plan, label, { snapshot: !isFirstValue });
             if (res.reverted) {

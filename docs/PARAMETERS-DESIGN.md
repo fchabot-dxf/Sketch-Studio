@@ -25,8 +25,8 @@ floats over the drawing, can be dragged, and remembers where you left it. The wi
 **What you will be able to do.**
 - Type a formula into any dimension, on the canvas or in the window: `120`, `5 in`, `width`, `width / 2 + 5 mm`, `d2 / 4`,
   `sqrt(d1^2 + d2^2)`, `max(width; 50 mm)`.
-- **Create a parameter by writing it**: type `width = 120` in a dimension's box on the canvas. The parameter `width` is created
-  (if it did not exist) and that dimension now follows it. Same in the window.
+- **Name a dimension by writing it** (owner ruling, task 677, like Fusion): type `width = 120` in a dimension's box on the canvas. That dimension is
+  now called `width` and holds 120; a dimension typed `width` follows it. Same in the window. (User parameters are made with + Add in the window.)
 - Change `width` once: every dimension that uses it changes together, in ONE solve and ONE undo step. If the new drawing is
   impossible, nothing changes and you are told which value is the problem.
 - A dimension that follows a formula shows `fx: 60.0` on the canvas (Fusion's mark).
@@ -49,8 +49,8 @@ writing `name = value` creates the parameter.
 |---|---|---|---|
 | O1 | Parameters per document or per sketch? | **Per document**, one name space for all sketches (Fusion: per design, measured (API) that d-names share one counter) | Per sketch: names repeat between sketches, cross-sketch formulas impossible |
 | O2 | File version | **Always write document version 2** once shipped; v1 files load and are migrated | Write v2 only when a parameter / formula / renamed dimension exists (keeps open->save of an untouched v1 file byte-identical, but two writers to keep correct) |
-| O3 | `name = value` on the canvas | DECIDED (R2): creates a USER parameter `name`, the dimension's expression becomes `name`. Divergence to report: Fusion's API refuses `gap = 33 mm` (measured (API)); whether the Fusion UI accepts it and whether it RENAMES the dimension instead is **to verify in Fusion UI** | Make it rename the dimension (`d7` -> `gap`) like Fusion may do |
-| O4 | `name = value` when `name` already exists | **Set that parameter's expression**, with a live hint under the box BEFORE Enter: `sets width 120 -> 140 mm, also changes d3, d7`. Enter applies it through the batch rule (D), one undo step | Refuse with "width already exists: type `width` to use it, or change it in Parameters" |
+| O3 | `name = value` on the canvas | **OWNER RULING (task 677, turns 1720-1729), replaces R2's "creates a USER parameter"**: a free `name` RENAMES THAT DIMENSION to `name` (a model parameter, listed under the sketch's dimensions) and sets its expression to the value; no user parameter is made. `name` = another DIMENSION's name is refused (NAME_TAKEN); = this dimension's own name sets its value. A named dimension shows its PLAIN value on the canvas with the hover tag `name : expression` (`name : value unit` for a plain value); its followers show `fx:`. A plain number typed into a follower unlinks only that follower. Documents saved with user parameters made by the old rule keep working unchanged (no migration). **measured (Fusion, advisor via API + owner in the UI)**: d1 renamed `thickness` = 18 mm, d2 = d3 = `thickness`; typing 12 into d1 gave d2 = d3 = 12; typing 15 into d2 unlinked only d2; the Change Parameters table listed `thickness` as a Model Parameter (Linear Dimension-2); on the canvas `thickness` showed a plain 0.4724 and d3 `fx: 0.4724`. The owner typed `param = 2` in a rectangle's width box: a plain 2.00 with the hover tag `param : 2"`, the height (= param) `fx: 2.00`; typing 1 into the width made the height `fx: 1.00` | (was: creates a USER parameter `name`) |
+| O4 | `name = value` when `name` is an existing USER parameter (kept by the task 677 ruling; another dimension's name is O3's NAME_TAKEN) | **Set that parameter's expression**, with a live hint under the box BEFORE Enter: `sets width 120 -> 140 mm, also changes d3, d7`. Enter applies it through the batch rule (D), one undo step | Refuse with "width already exists: type `width` to use it, or change it in Parameters" |
 | O5 | A bare unknown name, no `=` (`gap`) | **Refuse**: "unknown parameter 'gap' (type `gap = 30` to create it)". A typo must never create a parameter | Offer to create `gap` with the dimension's current value |
 | O6 | Name case | **Case-sensitive like Fusion** (measured (API): `w` beside `width`; Fusion names are case-sensitive). `Width` and `width` may both exist | Refuse a name that differs from an existing one only by case |
 | O7 | Names of the form `d12` | **Reserved for automatic dimension names**: a user parameter cannot be called `d<digits>`; a dimension may be renamed to anything valid | Allow any free name (Fusion refuses only names already taken: measured (API)) |
@@ -368,9 +368,9 @@ delete a parameter, rename a dimension. Renames and comment edits produce no `ed
 |---|---|
 | `60`, `2.5 in`, `1/2 in` | plain number: `value` set, `expression` deleted (Fusion: a number replaces the formula) |
 | `width`, `width / 2 + 5`, `d2 / 4` | formula: `expression` = canonical text (`width / 2 + 5 mm`), `value` = its result |
-| `width = 120` (width does not exist) | creates user parameter `width` (unit: the dimension's kind in the document unit, e.g. `mm`; `deg` for an angle dimension; a radius is a length), expression `120 mm`; d3's expression becomes `width`. One undo step removes the parameter AND restores d3's previous expression and value |
-| `width = 140` (width exists, O4) | live hint under the box while typing: `sets width 120 -> 140 mm, also changes d7, d9`; Enter = set width's expression and rewire d3 to `width`; batch rule D for d3 + d7 + d9 |
-| `gap = width / 4 + 2 mm` | as above with a formula; the parameter's unit comes from the dimension's kind; a result of the wrong kind (`gap = 30 deg` in a length box) is UNIT_MISMATCH and nothing is created |
+| `width = 120` (width does not exist) | (task 677 ruling, O3) d3 is RENAMED `width` and holds 120 (no formula); every formula that read `d3` now reads `width`. No user parameter. One undo step restores the name, the value and the followers |
+| `width = 140` (width is a USER parameter, O4) | live hint under the box while typing: `sets width 120 -> 140 mm, also changes d7, d9`; Enter = set width's expression and rewire d3 to `width`; batch rule D for d3 + d7 + d9 |
+| `gap = width / 4 + 2 mm` | (task 677 ruling) d3 is renamed `gap` and holds that formula (it shows `fx:`); a result of the wrong kind (`gap = 30 deg` in a length box) is UNIT_MISMATCH and nothing changes |
 | `d5 = 40`, `mm = 3`, `sqrt = 2` | refused: the left side must be a user-parameter name (NAME_TAKEN / RESERVED_NAME) |
 | `gap` (unknown) | refused, O5 message |
 | empty / Esc | cancel, as today |
@@ -419,6 +419,12 @@ Owner: "Writing a param name in an input box like `pa` should show results in a 
   Default ON for every host of the Design tab; a host opts OUT with `createToolRibbon({ parameters: false })` (the inverse of the
   `profiles` opt-in at :262, because the north star is ONE Design tab and only Trace is excluded, O14). Test: Trace's ribbon has
   no `#btn-parameters`; SketchStudio / Shaper / Pen Plotter have it.
+  **MOVED (task 677, owner turn 1730: "param table should be beside the clear all button, or somewhere always visible")**: the opener is now
+  ONE always-visible button DECLARED in the shared FOOTER (packages/ui/app-footer.js), right after Delete / Clear sketch: the fx icon,
+  `aria-label="Parameters"`, `aria-haspopup="dialog"`, `aria-expanded`; 32 px with a mouse, the footer's finger size with a finger; in phone landscape
+  it is in the footer's floating cluster. A host opts out with `mountAppFooter({ parameters: false })` (Trace, O14). It is no longer in the
+  ribbon's Inspect group. The window opens right-aligned at the top of the Design canvas (no longer "below the ribbon"), and the narrow-screen
+  bottom sheet sits on the footer (`bottom: var(--sk-footer-h)`) so the button that opened it stays visible to close it.
 - **Component** (O13): `createTabbedDockPanel` (tabbed-dock-panel.js:68) with one tab "Parameters" whose `render(body)` is the
   new `packages/ui/parameter-table.js`. The dock already floats, drags, resizes, docks to an edge and persists position/size
   (`persistKey: 'sk-parameters'`). Additions to the dock (it has no users today, so no host can regress): a close button in its
@@ -466,6 +472,17 @@ Owner: "Writing a param name in an input box like `pa` should show results in a 
 - **Accessibility**: the dock gets `role="dialog"`, `aria-label="Parameters"`; the ribbon button `aria-haspopup="dialog"` and
   `aria-expanded`; a real `<table>` with `<th scope="col">`; group headings as `<th scope="rowgroup">`; error text linked with
   `aria-describedby`; focus returns to the ribbon button on close. Not modal, so no focus trap.
+- **AS BUILT (slice 5, task 677).** One pure `planTableEdit(state, edit)` in packages/ui/parameter-table.js turns a cell into its `planChange` plan
+  (a dimension's Expression through `previewDimensionInput`, the canvas box's own function); `commitTableEdit` applies it with
+  `applyParameterChange` (one undo step; nothing changes = no undo step). Choices the text above left open: (a) the + Add row has a Unit select
+  (`PARAMETER_UNITS`, starting at the document unit, Fusion's Add-dialog default); existing rows' units stay read only (planChange has no unit
+  change). (b) The bin stays in the Tab order after Comment (a keyboard can delete); it is `aria-disabled` (not `disabled`, so its tooltip
+  listing the users shows) and pressing it anyway writes the IN_USE message under the row. (c) Ctrl+Z / Ctrl+Y typed in a cell with no pending
+  text run the Design surface's own undo (the footer's history router: the same dispatch as its Undo / Redo buttons); with pending text they are the input's own text undo.
+  (d) A dimension row is no longer a Tab stop of its own (its Name / Expression cells are); hovering or focusing any of its cells hovers it on
+  the canvas, a click outside its cells selects it. (e) Narrow screens: the row's tap shows the Comment in the Value's place (one row at a time);
+  focusing its Name / Expression, or leaving the Comment, shows the Value again. (f) An invalid text left by leaving the cell stays in the cell,
+  marked, with its message, until it is fixed or reverted (Esc); the stored expression is unchanged meanwhile.
 
 ---
 

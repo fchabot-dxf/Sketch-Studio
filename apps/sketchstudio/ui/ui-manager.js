@@ -1,5 +1,5 @@
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, RECT_MODES, ARC_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, SLOT_MODES, ARC_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { exportToFile } from './export-manager.js';
@@ -17,8 +17,9 @@ export function setupUI(state){
   // S7c-2d: the shared tool ribbon (mounted below). setTool syncs its active highlight via refresh().
   let toolRibbon = null;
 
-  // Track rect sub-mode
+  // Track rect and slot sub-modes
   state.rectMode = RECT_MODES.TWO_POINT; // default: 2-point corner rect
+  state.slotMode = SLOT_MODES.CENTER_TO_CENTER; // default: center-to-center slot
   
   function setTool(t){ 
   dbg.log('app', 'Setting tool to:', t); // Debug log

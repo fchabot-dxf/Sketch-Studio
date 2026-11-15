@@ -1,11 +1,14 @@
 // packages/ui/app-footer.js: the ONE app footer (TASK 618), mounted by every host: a thin row under the work area.
 //   left:  Undo, Redo (history-control.js: the same dispatch as Ctrl+Z / Ctrl+Y in the showing stage),
-//          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm)
+//          Delete (red filled circle + white X: the exact Delete key path handleDelete), Clear sketch (outlined trash can, near-black ink, after a small gap: one-step undoable clear of active sketch after confirm),
+//          Parameters (TASK 677, owner turn 1730: the "fx" opener of the Parameters window, always visible; it was hidden in the ribbon's Inspect dropdown)
 //   right: Recenter (every host whose Design / Explore surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
-// mountAppFooter({ router, view, footer }) -> { el, refresh, destroy }
+// mountAppFooter({ router, view, footer, parameters }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
 //   view(): { svg, state } of the Design surface that shows now, { fit } for Shaper's Explore, or null while the stage has none (Pen Plotter's Toolpath, ...):
 //     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents (or `v.fit()`).
+//   parameters (default true): the Parameters button + its window (#ui/parameters-window.js, opened over `view().svg`, undo / redo through `router`);
+//     false = a declared opt-out (Trace: no project file, decision O14). ONE declaration here for every host.
 //   footer: an element the host already has (SketchStudio's status bar): the groups go into it. Without one a footer is created at the page's bottom
 //     (position fixed; body gets class sk-has-footer and the height is --sk-footer-h, which a host with absolutely placed views subtracts).
 import { mountHistoryButtons } from '#ui/history-control.js';
@@ -14,6 +17,7 @@ import { fitViewToExtents } from '#ui/input-handlers/pan-zoom.js';
 import { handleDelete } from '#ui/input-manager.js';
 import { activeSketchName, canClearActiveSketch, clearActiveSketch, hasSelection } from '#core/delete-manager.js';
 import { DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
+import { createParametersWindow } from '#ui/parameters-window.js';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -48,6 +52,7 @@ function injectStyles() {
 .sk-footer-btn.danger { color: var(--sk-footer-danger); }
 .sk-footer-btn.danger:disabled { color: var(--sk-muted, #9ca3af); opacity: 0.5; }
 .sk-footer-btn.ink { color: var(--sk-footer-ink); }
+.sk-footer-btn[aria-expanded="true"] { background: var(--sk-header-hover, rgba(0,0,0,0.08)); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); } /* TASK 677: the Parameters window is open */
 .sk-footer-end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex: 0 0 auto; }
 body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box; }
 .sk-footer-confirm-backdrop { position: fixed; inset: 0; z-index: 9600; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -64,6 +69,8 @@ body.sk-has-footer { padding-bottom: var(--sk-footer-h); box-sizing: border-box;
 }
 
 const ICON = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#${id}"/></svg>`;
+// Fusion's "fx" mark (the Parameters command), drawn as text so it needs no symbol sheet
+const FX_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="16.5" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="13" fill="currentColor" stroke="none">fx</text></svg>';
 
 function askConfirm(message, { okLabel = 'OK', returnFocusTo = null } = {}) {
   return new Promise((resolve) => {
@@ -117,7 +124,7 @@ function askConfirm(message, { okLabel = 'OK', returnFocusTo = null } = {}) {
   });
 }
 
-export function mountAppFooter({ router, view = () => null, footer = null }) {
+export function mountAppFooter({ router, view = () => null, footer = null, parameters = true }) {
   injectStyles();
   ensureIconSymbols(['icon-recenter', 'icon-circle-x', 'icon-trash']);
   let el = footer;
@@ -162,6 +169,32 @@ export function mountAppFooter({ router, view = () => null, footer = null }) {
     refresh();
   });
 
+  // TASK 677: the Parameters window's opener, right after Delete / Clear sketch (one toggle: open / close; aria-expanded follows the window).
+  // The window is made on first use over the Design canvas showing now; closing it (its X, Esc) returns the focus here.
+  let paramsBtn = null;
+  let paramsWin = null;
+  const syncParams = () => { if (paramsBtn) paramsBtn.setAttribute('aria-expanded', String(!!(paramsWin && paramsWin.isOpen()))); };
+  if (parameters) {
+    paramsBtn = document.createElement('button');
+    paramsBtn.type = 'button'; paramsBtn.id = 'btn-parameters'; paramsBtn.className = 'sk-footer-btn ink';
+    paramsBtn.title = 'Parameters (fx)'; paramsBtn.setAttribute('aria-label', 'Parameters');
+    paramsBtn.setAttribute('aria-haspopup', 'dialog'); paramsBtn.setAttribute('aria-expanded', 'false');
+    paramsBtn.innerHTML = FX_ICON;
+    actions.appendChild(paramsBtn);
+    const windowOf = (st) => paramsWin || (paramsWin = createParametersWindow({
+      state: st,
+      anchor: () => { const v = view(); return v && v.state ? v.svg : null; },
+      above: paramsBtn,
+      history: { undo: () => router.run('undo'), redo: () => router.run('redo') },
+      onClose: () => { syncParams(); paramsBtn.focus(); },
+    }));
+    paramsBtn.addEventListener('click', () => {
+      const v = view(); if (!v || !v.state) return;
+      windowOf(v.state).toggle();
+      syncParams();
+    });
+  }
+
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
   recenterBtn.addEventListener('click', () => {
     const v = view(); if (!v) return;
@@ -198,6 +231,8 @@ export function mountAppFooter({ router, view = () => null, footer = null }) {
     deleteBtn.disabled = !hasSketch || !hasSelection(v.state);
     clearBtn.hidden = !hasSketch;
     clearBtn.disabled = !hasSketch || !canClearActiveSketch(v.state);
+    if (paramsBtn) paramsBtn.hidden = !hasSketch;
+    syncParams();
     recenterBtn.hidden = !shown;
     lastSig = sigOf();
   };
@@ -234,6 +269,7 @@ export function mountAppFooter({ router, view = () => null, footer = null }) {
         for (const ev of docEvs) document.removeEventListener(ev, scheduleRefresh, false);
       }
       history.destroy();
+      if (paramsWin) paramsWin.destroy();
       if (start.remove) start.remove();
       if (end.remove) end.remove();
       if (!footer && el.remove) el.remove();

@@ -20,6 +20,8 @@ import { linearDimFrame, linearParamsToPoint, linearPointToParams, polarPointToP
 import { symmetricOperands } from '#core/symmetric.js';
 import { isPatternConstraint, patternHandles, patternSpacing } from '#core/pattern.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
+import { quantityText, dimensionUnit } from '#core/parameters.js';
+import { isAutoDimName } from '#core/expression.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -38,6 +40,18 @@ export function formatConstraintValue(c, options = {}) {
   // TASK 535: a dimension driven by a formula (and not being placed) shows Fusion's mark in front of its value: 'fx: 60.0'
   return text && c && typeof c.expression === 'string' && c.expression !== '' && !(c.isDriven || c.driven) && !(typeof options === 'object' && options.isPlacing) ? `fx: ${text}` : text;
 }
+/**
+ * TASK 677 (owner ruling, Fusion measured): the hover tag of a NAMED dimension (one renamed from its automatic dN, e.g. by typing
+ * `thickness = 18` into its box): "name : expression", or "name : value unit" when it holds a plain value (Fusion: 'param : 2"'). Its label
+ * shows the plain value (no fx:); the dimensions that read its name show fx:. '' for an automatic name. ONE definition, every dimension label.
+ */
+export function dimensionNameTag(c) {
+  if (!c || typeof c.name !== 'string' || c.name === '' || isAutoDimName(c.name)) return '';
+  const u = dimensionUnit(c, docUnit());
+  const what = typeof c.expression === 'string' && c.expression !== '' ? c.expression : `${quantityText(c.value, u)} ${u}`;
+  return `${c.name} : ${what}`;
+}
+const dimensionNameTitle = (c) => { const t = dimensionNameTag(c); return t ? `<title>${t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>` : ''; };
 function constraintValueText(c, options) {
   if (!c) return '';
   const val = (typeof options === 'number') ? options :
@@ -57,11 +71,11 @@ function constraintValueText(c, options) {
   }
   const lenStr = formatLenLabel(val);
   const numStr = wrapParens ? `(${lenStr})` : lenStr;
-  if (c.isRadius || c.type === 'radius') {
-    return 'R ' + numStr;
-  }
   if (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') {
     return 'Ø ' + numStr;
+  }
+  if (c.isRadius || c.type === 'radius') {
+    return 'R ' + numStr;
   }
   return numStr;
 }
@@ -1480,6 +1494,67 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       });
     }
 
+    if (active.preview.type === 'slot') {
+      const sp = active.preview;
+      const drawArcD = (c, s, e, sweepFlag) => calculateArcPath(c, s, e, 'CENTER', { sweep: !!sweepFlag });
+      if (sp.phase === 'span' || sp.phase === 'span2') {
+        const { cl1, cl2, centerPt, span } = sp;
+        if (cl1 && cl2) {
+          out.push(`<line x1="${cl1.x}" y1="${cl1.y}" x2="${cl2.x}" y2="${cl2.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${cl1.x}" cy="${cl1.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${cl2.x}" cy="${cl2.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+          if (centerPt) out.push(`<circle cx="${centerPt.x}" cy="${centerPt.y}" r="${scale(3.5)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity * 0.9}"/>`);
+          if (span > 0.5) {
+            const mx = (cl1.x + cl2.x) / 2, my = (cl1.y + cl2.y) / 2;
+            out.push(`<text x="${mx}" y="${my - scale(10)}" style="fill:${skv(previewStroke)}" font-size="${scale(12)}" font-weight="bold" text-anchor="middle">${formatLenLabel(span)}</text>`);
+          }
+        }
+      } else if (sp.phase === 'arc3' && sp.arc) {
+        const a = sp.arc;
+        if (a.collinear && a.c1 && a.c2) {
+          out.push(`<line x1="${a.c1.x}" y1="${a.c1.y}" x2="${a.c2.x}" y2="${a.c2.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        } else if (a.center && a.c1 && a.c2) {
+          const d = drawArcD(a.center, a.c1, a.c2, a.sweep);
+          out.push(`<path d="${d}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${a.center.x}" cy="${a.center.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${a.c1.x}" cy="${a.c1.y}" r="${scale(2.5)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+          out.push(`<circle cx="${a.c2.x}" cy="${a.c2.y}" r="${scale(2.5)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+        } else if (a.center && a.c1) {
+          out.push(`<line x1="${a.center.x}" y1="${a.center.y}" x2="${a.c1.x}" y2="${a.c1.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(1.5)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity * 0.7}"/>`);
+        }
+      } else if (sp.phase === 'width' && sp.straightGeom) {
+        const g = sp.straightGeom;
+        const e1D = drawArcD(g.c1, g.a1, g.a2, true);
+        const e2D = drawArcD(g.c2, g.b1, g.b2, false);
+        const drawSegs = (wPx, op, dash = null) => {
+          const dAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+          out.push(`<line x1="${g.a1.x}" y1="${g.a1.y}" x2="${g.b1.x}" y2="${g.b1.y}" style="stroke:${skv(previewStroke)}" stroke-width="${wPx}"${dAttr} stroke-opacity="${op}" stroke-linecap="round"/>`);
+          out.push(`<line x1="${g.b2.x}" y1="${g.b2.y}" x2="${g.a2.x}" y2="${g.a2.y}" style="stroke:${skv(previewStroke)}" stroke-width="${wPx}"${dAttr} stroke-opacity="${op}" stroke-linecap="round"/>`);
+          out.push(`<path d="${e1D}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${wPx}"${dAttr} stroke-opacity="${op}" stroke-linecap="round"/>`);
+          out.push(`<path d="${e2D}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${wPx}"${dAttr} stroke-opacity="${op}" stroke-linecap="round"/>`);
+        };
+        drawSegs(scale(20), 0.2);
+        drawSegs(scale(2), previewOpacity, previewDash);
+        out.push(`<line x1="${g.cl1.x}" y1="${g.cl1.y}" x2="${g.cl2.x}" y2="${g.cl2.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(1.5)}" stroke-dasharray="${scale(4)},${scale(4)}" stroke-opacity="${previewOpacity * 0.7}"/>`);
+        if (g.m) out.push(`<circle cx="${g.m.x}" cy="${g.m.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+        out.push(`<text x="${(g.a1.x + g.b1.x) / 2}" y="${(g.a1.y + g.b1.y) / 2 - scale(10)}" style="fill:${skv(previewStroke)}" font-size="${scale(12)}" font-weight="bold" text-anchor="middle">Ø ${formatLenLabel(g.width)}</text>`);
+      } else if (sp.phase === 'width' && sp.arcGeom) {
+        const g = sp.arcGeom;
+        const acD = drawArcD(g.center, g.c1, g.c2, g.sweep);
+        const aoD = drawArcD(g.center, g.o1, g.o2, g.sweep);
+        const aiD = drawArcD(g.center, g.i1, g.i2, g.sweep);
+        const e1D = drawArcD(g.c1, g.i1, g.o1, g.sweep);
+        const e2D = drawArcD(g.c2, g.o2, g.i2, g.sweep);
+        for (const d of [aoD, e2D, aiD, e1D]) {
+          out.push(`<path d="${d}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(20)}" stroke-opacity="0.2" stroke-linecap="round"/>`);
+          out.push(`<path d="${d}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
+        }
+        out.push(`<path d="${acD}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(1.5)}" stroke-dasharray="${scale(4)},${scale(4)}" stroke-opacity="${previewOpacity * 0.7}"/>`);
+        out.push(`<circle cx="${g.center.x}" cy="${g.center.y}" r="${scale(3)}" style="fill:${skv(previewStroke)}" fill-opacity="${previewOpacity}"/>`);
+        out.push(`<text x="${g.o1.x}" y="${g.o1.y - scale(10)}" style="fill:${skv(previewStroke)}" font-size="${scale(12)}" font-weight="bold" text-anchor="middle">Ø ${formatLenLabel(g.width)}</text>`);
+      }
+    }
+
     // Resolve active.start safely (ensure joint exists) or fall back to transient startPt
     let a = null;
     if(active.start){ a = joints.has(active.start) ? joints.get(active.start) : null; }
@@ -2394,7 +2469,8 @@ switch(c.type){
           const hasValue = (typeof c.value === 'number');
           
           // If driven or placing, show actual geometry value. If driving, show target value.
-          const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualRadius;
+          const actualVal = c.isDiameter ? actualRadius * 2 : actualRadius;
+          const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualVal;
           const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
 
           // Direction from center to label (use offset as radial distance)
@@ -2446,7 +2522,7 @@ switch(c.type){
           const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
           </g>`;
@@ -2499,7 +2575,7 @@ switch(c.type){
           out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placed.attrs}>${displayVal}</text>
           </g>`;
@@ -2599,7 +2675,7 @@ switch(c.type){
             const placedAngle = placeDimLabel(labelX, labelY, -Math.sin(theta), Math.cos(theta), displayVal, undefined, false, labelStrokeColor, { x: Math.cos(theta), y: Math.sin(theta) });
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-            const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+            const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
                 ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
                 <text ${placedAngle.attrs}>${displayVal}</text>
             </g>`;

@@ -356,9 +356,9 @@ function buildShelfPins(p) {
 // their edges (one line and one pair of joints per shared edge: no gaps, no overlaps). Joint grid: four x levels (0, t, W - t, W) and 2 (N + 1)
 // y levels (the bottom and the top of the N + 1 cross boards); the inner columns carry a joint at every level. Every segment is horizontal / vertical.
 // TASK 670 (no FOLD): every board thickness and every opening but the top one is a SIGNED horizontal / vertical dimension (the solver locks which
-// side its second joint is on, engine.js dimSign), a formula: the left side's thickness dimension reads `thickness`, every other board reads THAT
-// dimension, an opening is (the length dimension - (N + 1) * the thickness dimension) / N, so a number typed into the length or the thickness
-// dimension moves every board as the parameter does (as the task 669 equal rules did). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
+// side its second joint is on, engine.js dimSign), a formula of the USER PARAMETERS: every board's thickness dimension reads `thickness`, an
+// opening is (length - (N + 1) * thickness) / N (TASK 672, owner ruling: every dimension reads the parameters directly, none reads another
+// dimension; the parameter is what moves every board). The top opening is what the overall length leaves (linear: it cannot flip either). The task 669 equal-LENGTH rules were unsigned, so
 // shrinking the length could land the solve on a folded branch (the top end board flipped above the top edge, the top opening absorbing it).
 // TASK 670 LAYOUT: 'Vertical' (above) or 'Horizontal' = the SAME construction with x and y swapped (a mirror in the diagonal through the
 // origin, which stays the bottom-left corner): the full-length boards become the bottom and the top, the ends and dividers stand between
@@ -407,14 +407,16 @@ function buildBoxFrame(p) {
   const J = (q) => board.J(world(q)), col = (i) => J({ x: t, y: levels[i] });
   const L0 = J({ x: 0, y: 0 }), R0 = J({ x: W, y: 0 });
   s.dim(L0, R0, W, 'horizontal', -12, 'width');
-  const dL = s.dim(L0, J({ x: 0, y: Lg }), Lg, 'vertical', -12, 'length');
-  const dT = s.dim(L0, J(BL.vInner), t, 'horizontal', 12, 'thickness'); // the left side: THE thickness dimension, the other boards read it
-  s.dim(J(BR.vInner), R0, t, 'horizontal', 12, dT); // the right side
+  // TASK 672 (owner ruling, turn 1729): every dimension reads the USER PARAMETERS directly (`thickness`, `length`), never another dimension:
+  // no dimension is a special "driver" box
+  s.dim(L0, J({ x: 0, y: Lg }), Lg, 'vertical', -12, 'length');
+  s.dim(L0, J(BL.vInner), t, 'horizontal', 12, 'thickness'); // the left side
+  s.dim(J(BR.vInner), R0, t, 'horizontal', 12, 'thickness'); // the right side
   // the right column has the same levels (horizontal rows), so the left column (and its corners) carries the cross boards' rules
-  s.dim(J(BL.hOuter), J(BL.hInner), t, 'vertical', 10, dT); // the bottom end
-  for (let k = 1; k < n; k++) s.dim(col(2 * k), col(2 * k + 1), t, 'vertical', 10, dT); // each divider
-  s.dim(J(TL.hInner), J(TL.hOuter), t, 'vertical', 10, dT); // the top end
-  for (let k = 0; k + 1 < n; k++) s.dim(col(2 * k + 1), col(2 * k + 2), g, 'vertical', 10, `(${dL} - ${n + 1} * ${dT}) / ${n}`); // the openings but the top one
+  s.dim(J(BL.hOuter), J(BL.hInner), t, 'vertical', 10, 'thickness'); // the bottom end
+  for (let k = 1; k < n; k++) s.dim(col(2 * k), col(2 * k + 1), t, 'vertical', 10, 'thickness'); // each divider
+  s.dim(J(TL.hInner), J(TL.hOuter), t, 'vertical', 10, 'thickness'); // the top end
+  for (let k = 0; k + 1 < n; k++) s.dim(col(2 * k + 1), col(2 * k + 2), g, 'vertical', 10, `(length - ${n + 1} * thickness) / ${n}`); // the openings but the top one
   return s.finish(L0);
 }
 
@@ -424,8 +426,8 @@ function buildBoxFrame(p) {
 // cornerBoards (frame-calc's cornerJointPoints) in WORLD coordinates (Y down, as frame-calc's), so the seam moves exactly as frame-calc's does.
 // The boards SHARE their seam: every polygon corner is one joint, every edge is split at the other board's corners lying on it and drawn once.
 // Rules: each straight edge horizontal / vertical (a miter seam is the only slanted one); the two lengths and the two boards' thicknesses are
-// SIGNED horizontal / vertical dimensions (no fold): the first thickness reads `thickness`, the second reads the first (with the miter: the
-// 45 degree seam). Outer corner
+// SIGNED horizontal / vertical dimensions (no fold): both thicknesses read `thickness` (TASK 672, owner: every dimension reads the parameter;
+// with the miter: the 45 degree seam). Outer corner
 // at the origin.
 function buildRightAngleCorner(p) {
   const lh = num(p.horizontalLength, 300), lv = num(p.verticalLength, 200), t = num(p.thickness, 18);
@@ -436,7 +438,7 @@ function buildRightAngleCorner(p) {
   for (const { a: u, b: v } of pieces) if (Math.abs(u.q.y - v.q.y) < 1e-9) s.h(u.j, v.j); else if (Math.abs(u.q.x - v.q.x) < 1e-9) s.v(u.j, v.j);
   const O = J({ x: 0, y: 0 }), A = J(boards.h[1]), B = J(boards.h[2]), C = J(boards.v[1]), D = J(boards.v[2]);
   s.dim(O, A, lh, 'horizontal', 12, 'horizontal_length'); s.dim(O, C, lv, 'vertical', -12, 'vertical_length');
-  const dT = s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, dT);
+  s.dim(A, B, t, 'vertical', 10, 'thickness'); s.dim(C, D, t, 'horizontal', 10, 'thickness'); // TASK 672: both read the parameter (owner ruling)
   return s.finish(O);
 }
 
@@ -484,7 +486,7 @@ function buildStringer(p) {
 // slat are real ARCS on the ring's two circles. Rules, every one LOCAL to the slats (a rule about a side's tiny distance from the far centre,
 // a tangent to a gap-sized circle there or equal side lengths, flips or crawls: a side 1000 away turns 0.6 degree to pass the centre):
 //   every corner on its circle: each arc's own rule, the arcs of a circle equal, the two radius dimensions;
-//   each GAP: its two sides parallel and a gap dimension (the first reads `gap`, the others read the first: two distinct parallel lines
+//   each GAP: its two sides parallel and a gap dimension (each reads `gap`, the user parameter: two distinct parallel lines
 //   `gap` apart cannot merge, so no gap can close);
 //   IDENTICAL slats: every slat's outer chord and inner chord equal to the first slat's (the same angle and the same width);
 //   the first and the last slat SYMMETRIC (their two diagonals equal): with the gaps, every slat is, so each side is gap / 2 from its radial;
@@ -514,8 +516,7 @@ function buildBenchSeat(p) {
   s.radius(slats[0].outer, Ro, 10, 'outer_radius');
   s.radius(slats[0].inner, Ri, 10, 'inner_radius');
   s.angle(slats[n - 1].B, slats[0].A, sw, 40, 'sweep_angle');
-  let dG = null;
-  for (let k = 0; k + 1 < n; k++) { const d = s.gap(slats[k].B, slats[k + 1].A, gap, 8, dG || 'gap'); dG = dG || d; } // each gap's width
+  for (let k = 0; k + 1 < n; k++) s.gap(slats[k].B, slats[k + 1].A, gap, 8, 'gap'); // each gap's width: every one reads the parameter
   return s.finish(C);
 }
 

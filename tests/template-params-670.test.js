@@ -160,8 +160,9 @@ const noFold = (S, horizontal, Lg, th, n, m) => {
       got.push(geo(S));
     }
     chain.forEach((Lg, i) => sameGeometry(got[i], geo(open(t, { layout, length: Lg })), `${layout} length -> ${Lg} = built at ${Lg}`));
-    // the advisor's repro: a NUMBER typed into the length DIMENSION (the dimension box's path: previewDimensionInput's planChange setDimension ->
-    // applyParameterChange) then solve 500, from the default each time; and a number typed into the thickness dimension
+    // the advisor's repro, through the length DIMENSION's box (previewDimensionInput's planChange setDimension -> applyParameterChange) then solve
+    // 500, from the default each time. TASK 672 (owner ruling, turn 1729): no dimension is a "driver" box, every one reads the user parameter, so
+    // the box sets the PARAMETER (`length = 1200`, the dimension box's assignment); a plain number would detach that one dimension only
     const typeIntoDimension = (D, expr, text) => {
       const c = drivingDims(D).find((x) => x.expression === expr);
       const plan = planChange(D.state, { type: 'setDimension', name: c.name, text });
@@ -170,11 +171,11 @@ const noFold = (S, horizontal, Lg, th, n, m) => {
     };
     for (const Lg of [1200, 900, 750, 591, 600]) {
       const D = open(t, { layout });
-      typeIntoDimension(D, 'length', String(Lg));
+      typeIntoDimension(D, 'length', `length = ${Lg}`);
       noFold(D, H, Lg, 18, 5, `${layout} length dimension -> ${Lg}`);
     }
     const D = open(t, { layout });
-    typeIntoDimension(D, 'thickness', '12');
+    typeIntoDimension(D, 'thickness', 'thickness = 12');
     noFold(D, H, 1500, 12, 5, `${layout} thickness dimension -> 12: every board follows`);
     // five small steps 1500 -> 591
     const F = open(t, { layout });

@@ -10,10 +10,13 @@
 //   3. no fold in the polygon frame at other N: side length and thickness x1.3 / x0.7 through the parameter path = built at that value (the
 //      task 670 test, tests/template-params-670.test.js, does every live param of every template and every joint option at the default N)
 //   4. stair stringer and curved bench seat: their geometry from the solved drawing (steps, cuts, throat, board; arcs, identical slats, gaps)
+//   5. (owner ruling, turn 1729: no dimension is a "driver" box) EVERY template's every driving dimension reads only USER PARAMETERS and numbers,
+//      never another dimension's name (d1, d2, ...), in every joint / layout option
 import assert from 'node:assert';
 import fs from 'node:fs';
 import * as L from './harness/audit/lib.js';
-import { buildTemplate, templateById, defaultParams } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, templateById, defaultParams } from '#core/templates.js';
+import { parseInput, dependencies } from '#core/expression.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
 import { cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 import { deserializeDocument } from '#core/document.js';
@@ -217,6 +220,20 @@ const loopOk = (S, m) => { // ONE closed outline: every joint of the solid piece
     assert.ok(sides.flat().every((q) => q.y > 0), `${m}: the seat above the centre`);
     loopOk(S, m);
     checks++;
+  }
+}
+// ---- 5. every dimension reads the user parameters directly
+for (const t of TEMPLATES) {
+  const opts = Object.entries(t.params).filter(([, spec]) => spec.kind === 'choice').flatMap(([k, spec]) => spec.options.map((o) => ({ [k]: o.value })));
+  for (const extra of [{}, ...opts]) {
+    const g = buildTemplate(t, extra).geometry, params = new Set(g.parameters.map((p) => p.name));
+    const dims = g.constraints.filter((c) => (c.type === 'distance' || c.type === 'angle') && !c.isDriven && !c.driven);
+    const dimNames = new Set(dims.map((c) => c.name));
+    for (const c of dims) {
+      const deps = dependencies(parseInput(c.expression, { allowAssign: false }));
+      assert.ok(deps.length > 0 && deps.every((d) => params.has(d) && !dimNames.has(d)), `${t.id} ${JSON.stringify(extra)}: ${c.name} = ${c.expression} reads only user parameters (${[...params]}), no dimension`);
+      checks++;
+    }
   }
 }
 console.log(`templates-672: ${checks} checks ok`);

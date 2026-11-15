@@ -1,4 +1,4 @@
-// TASK 645: fillet where a line meets an ARC, and where an arc meets an arc (the line-line tests are tests/fillet.test.js).
+// TASK 645: fillet where a line meets an ARC (the line-line tests are tests/fillet.test.js).
 // A leg is trimmed to its tangent point: a line keeps its direction, an arc keeps its centre, radius and direction.
 import assert from 'node:assert';
 import { findCornerAtJoint, findCornerAtPoint, findCornerBetweenLines, findFilletShapeAtPoint, applyFillet, cornerFilletGeometry, diagnoseNoFillet } from '#core/fillet.js';
@@ -108,34 +108,11 @@ for (const bodyDir of [1, -1]) for (const atStart of [true, false]) for (const c
   n++;
 }
 
-// --- arc + arc: the two circles meet at P (centre (30,10), radius sqrt(200)); every direction / end pairing ---
-for (const dir1 of [1, -1]) for (const dir2 of [1, -1]) for (const start1 of [true, false]) {
-  const S = mk(), r = 0.5, c2 = { x: 30, y: 10 }, R2 = Math.hypot(10, 10), ang2 = Math.atan2(-10, -10);
-  const a1 = addArc(S, 'A', { x: 0, y: 0 }, 20, 0, dir1, start1);
-  const a2 = addArc(S, 'B', c2, R2, ang2, dir2, !start1);
-  const t1 = arcTangent(0, dir1), t2 = arcTangent(ang2, dir2);
-  const label = `arc+arc dir1=${dir1} dir2=${dir2} A-${start1 ? 'start' : 'end'}`;
-  if (Math.abs(t1.x * t2.x + t1.y * t2.y) > 0.9999) continue;
-  // which side of each circle the fillet sits: the circle's normal toward the other arc's direction, against the direction to the centre
-  const inside = (c, t, other) => { let nn = { x: -t.y, y: t.x }; if (nn.x * other.x + nn.y * other.y < 0) nn = { x: -nn.x, y: -nn.y }; return nn.x * (c.x - P.x) + nn.y * (c.y - P.y) > 0; };
-  const spans = [a1, a2].map(a => arcSweepInfo(pos(S, a.joints[0]), pos(S, a.joints[1]), pos(S, a.joints[2]), { sweep: a.sweep }).span);
-  const corner = findCornerAtPoint(S, P, 1);
-  assert(corner, `${label}: corner found`);
-  const res = applyFillet(S, corner, r);
-  checkFillet(S, res, r, [
-    { shape: a1, u: t1, c: { x: 0, y: 0 }, R: 20, sweep: a1.sweep, span: spans[0], branch: inside({ x: 0, y: 0 }, t1, t2) ? 'internal' : 'external' },
-    { shape: a2, u: t2, c: c2, R: R2, sweep: a2.sweep, span: spans[1], branch: inside(c2, t2, t1) ? 'internal' : 'external' }
-  ], label);
-  S.engine = createNewtonSolver(S.joints, S.constraints, S.shapes, {});
-  S.engine.solve(200);
-  const rc = S.constraints.find(c => c.isRadius && c.shape === res.arc.id);
-  const ed = commitDimensionEdit(S, rc, 0.8);
-  assert.strictEqual(ed.reverted, false, `${label}: radius edit converges (${ed.clash || ed.reason})`);
-  const O = pos(S, res.arc.joints[0]);
-  near(Math.hypot(pos(S, res.arc.joints[1]).x - O.x, pos(S, res.arc.joints[1]).y - O.y), 0.8, `${label}: edited radius`);
-  near(Math.abs(Math.hypot(O.x, O.y) - 20), 0.8, `${label}: edited fillet still tangent to arc A`);
-  near(Math.abs(Math.hypot(O.x - c2.x, O.y - c2.y) - R2), 0.8, `${label}: edited fillet still tangent to arc B`);
-  n++;
+// --- arc + arc is NOT built (owner ruling): no corner, and a clear message ---
+{
+  const S = mk(); addArc(S, 'A', { x: 0, y: 0 }, 20, 0, 1, true); addArc(S, 'B', { x: 30, y: 10 }, Math.hypot(10, 10), Math.atan2(-10, -10), 1, false);
+  assert.strictEqual(findCornerAtPoint(S, P, 1), null, 'two arcs: no corner');
+  assert.strictEqual(diagnoseNoFillet(S, P, 1), 'Fillet needs a line on at least one side');
 }
 
 // --- both pick styles reach the same corner; a pick lands on an arc's drawn sweep only ---
@@ -184,4 +161,4 @@ for (const dir1 of [1, -1]) for (const dir2 of [1, -1]) for (const start1 of [tr
 }
 function mkLineArc() { const S = mk(); addArc(S, 'A', { x: 0, y: 0 }, 20, 0, 1, true); addLine(S, 'L', { x: 1, y: 0 }, 30); return S; }
 
-console.log(`fillet-arc-645 tests passed (${n} line+arc / arc+arc cases)`);
+console.log(`fillet-arc-645 tests passed (${n} line+arc cases)`);

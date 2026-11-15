@@ -65,7 +65,7 @@ try {
   await openSb(); pressEl('[data-action="new-design"]'); await settle();
   pressEl('.sk-tp-card[data-template="blank"]'); await settle(400);
   // the template design is an unsaved design with content: replacing it asks THE question (Save... / Don't save / Cancel) like any unsaved Untitled
-  const dont = qa('.sk-sidebar-ask button').find((b) => /Don.t save/.test(b.textContent));
+  const dont = qa('.sk-tp-backdrop [role="dialog"] button').find((b) => /Don.t save/.test(b.textContent));
   assert(dont, "the unsaved template design asks Save... / Don't save / Cancel before it is replaced");
   app.press(dont); await settle(400);
   assert.strictEqual(st.shapes.length, 0, 'Blank: the empty design');

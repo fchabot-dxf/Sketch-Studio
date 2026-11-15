@@ -16,7 +16,7 @@ import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
 // TASK 587: `tabs: true` (the host shows the document-tab strip, sidebar-projects.js `documentTabs`) makes Open / Open recent / Open from file / New open a
 // NEW TAB instead of replacing the shown design (docs/DOCUMENT-TABS-DESIGN.md T2, T3): the unsaved Untitled is not replaced then, so those ask no question.
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null }) {
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null, chooseModal = null, promptModal = null }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
 
@@ -34,15 +34,17 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     return !!account.state().signedIn;
   }
 
-  /** THE unsaved-design question. Resolves true = go on (nothing unsaved, or saved under a name, or discarded); false = Cancel. */
+  /** THE unsaved-design question. Resolves true = go on (nothing unsaved, or saved under a name, or discarded); false = Cancel.
+   *  TASK 681 (owner 1765): ALWAYS asked in the ONE modal (the host's `chooseModal` / `promptModal`, template-picker.js), whichever action asks it (close a tab, open, new design, open file, GO TO);
+   *  a host that passes none (tests with a scripted `ask`) asks through `ask`. */
   async function settleUnsaved() {
     const b = buf();
     if (b.needsSavePrompt() !== 'unsaved') return true;
-    const choice = await ask({ kind: 'choose', label: 'This design is not saved.', options: [{ id: 'save', label: 'Save…' }, { id: 'discard', label: "Don't save" }] });
+    const choice = await (chooseModal || ask)({ kind: 'choose', label: 'This design is not saved.', options: [{ id: 'save', label: 'Save…' }, { id: 'discard', label: "Don't save" }] });
     if (choice === 'discard') { b.discardUnsaved(); return true; }
     if (choice !== 'save') return false;
     if (!(await ensureSignedIn())) return false;
-    const name = await ask({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' });
+    const name = await (promptModal || ask)({ kind: 'prompt', label: 'Save as', value: b.designName(), okLabel: 'Save' }); // the name prompt that follows Save… (the menu's Save as… stays inline)
     if (!name) return false;
     await b.saveAs(name);
     return true;
@@ -142,7 +144,7 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
       if (t.needsSavePrompt === 'unsaved') {
         if (!(await settleUnsaved())) return false;
       } else {
-        const choice = await ask({ kind: 'choose', label: 'The last save of this design failed.', options: [{ id: 'retry', label: 'Try saving again' }, { id: 'close', label: 'Close anyway' }] });
+        const choice = await (chooseModal || ask)({ kind: 'choose', label: 'The last save of this design failed.', options: [{ id: 'retry', label: 'Try saving again' }, { id: 'close', label: 'Close anyway' }] });
         if (choice === 'retry') { await b.flush(); if (b.needsSavePrompt()) throw new Error('This design still could not be saved.'); }
         else if (choice !== 'close') return false;
       }

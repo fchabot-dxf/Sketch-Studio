@@ -20,7 +20,7 @@ try {
   const pressEl = (sel) => { const e = typeof sel === 'string' ? q(sel) : sel; assert(e, sel + ' not found'); app.press(e); };
   const settle = (ms = 120) => app.pause(ms);
   const openModal = async () => { pressEl('.sk-sidebar-btn'); await settle(); pressEl('[data-action="templates"]'); await settle(); };
-  const dontSave = async () => { const b = qa('.sk-sidebar-ask button').find((x) => /Don.t save/.test(x.textContent)); if (b) { app.press(b); await settle(400); } };
+  const dontSave = async () => { const b = qa('.sk-tp-backdrop [role="dialog"] button').find((x) => /Don.t save/.test(x.textContent)); if (b) { app.press(b); await settle(400); } };
   const startOf = async (id) => { await openModal(); pressEl(`.sk-tp-card[data-template="${id}"]`); await settle(); assert(q(`.sk-tp-start[data-template="${id}"]`), `${id}: the start view`); };
   const visibleChoices = (param) => qa(`.sk-tp-field[data-param="${param}"] .sk-tp-choice button`).filter((b) => !b.hidden);
   const typeInto = (input, text) => { input.focus(); input.value = ''; app.type(text); };

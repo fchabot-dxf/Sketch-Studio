@@ -1,5 +1,5 @@
 // tests/inactive-sketch-dim-661-live.test.js -- TASK 661 (live headless, REAL mouse via CDP, Pen Plotter = the shared Design tab): two overlapping
-// sketches. The inactive sketch's group computes opacity 0.5 (the token --sk-inactive-sketch-opacity) and the active sketch's markup is at full
+// sketches. The inactive sketch's group computes opacity 0.33 (the token --sk-inactive-sketch-opacity) and the active sketch's markup is at full
 // opacity; making the other sketch active swaps it at once; a REAL click on an inactive line selects it and its highlight is fully opaque.
 // Screenshots: EVIDENCE_DIR (default .evidence/661).
 import assert from 'node:assert';
@@ -53,11 +53,11 @@ await (async () => {
     await tool('tool-select');
     await sleep(300);
 
-    // 1. Sketch 1 active: Sketch 2 dimmed to the token's 0.5, Sketch 1 at 1
+    // 1. Sketch 1 active: Sketch 2 dimmed to the token's 0.33, Sketch 1 at 1
     const token = await evalJs(`getComputedStyle(document.documentElement).getPropertyValue('--sk-inactive-sketch-opacity').trim()`);
-    assert.strictEqual(token, '0.5', 'the token --sk-inactive-sketch-opacity is declared once, as 0.5: ' + token);
-    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('#design-canvas .sketch-inactive[data-sketch-id="sketch-2"]')).opacity`), '0.5', 'the inactive group computes opacity 0.5');
-    assert.strictEqual(await opacityOf(line(two)), 0.5, 'Sketch 2 line draws at 0.5');
+    assert.strictEqual(token, '0.33', 'the token --sk-inactive-sketch-opacity is declared once, as 0.33: ' + token);
+    assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('#design-canvas .sketch-inactive[data-sketch-id="sketch-2"]')).opacity`), '0.33', 'the inactive group computes opacity 0.33');
+    assert.strictEqual(await opacityOf(line(two)), 0.33, 'Sketch 2 line draws at 0.33');
     assert.strictEqual(await opacityOf(line(one)), 1, 'Sketch 1 (active) line draws at 1');
     assert.strictEqual(await evalJs(`!!document.querySelector('#design-canvas .sketch-inactive[data-sketch-id="sketch-1"]')`), false, 'the active sketch has no dimmed group');
     await shot('after-1-sketch-1-active.png', clip);
@@ -65,7 +65,7 @@ await (async () => {
     // 2. making Sketch 2 active swaps it at once
     await activate('sketch-2');
     assert.strictEqual(await opacityOf(line(two)), 1, 'Sketch 2 line is now at 1');
-    assert.strictEqual(await opacityOf(line(one)), 0.5, 'Sketch 1 line is now at 0.5');
+    assert.strictEqual(await opacityOf(line(one)), 0.33, 'Sketch 1 line is now at 0.33');
     await shot('after-2-sketch-2-active.png', clip);
     await activate('sketch-1');
 
@@ -78,7 +78,7 @@ await (async () => {
     await mouse('mouseMoved', C.x + arm, C.y - arm, 0); await key('Escape', 'Escape', 27); // off the line, then deselect
     await tap({ x: C.x + arm, y: C.y - Math.round(arm / 2) }); // a click on empty canvas
     assert.deepStrictEqual(await world(`[...${STATE}.selectedShapes]`), [], 'nothing selected');
-    assert.strictEqual(await opacityOf(line(two)), 0.5, 'deselected and not hovered, it dims again');
+    assert.strictEqual(await opacityOf(line(two)), 0.33, 'deselected and not hovered, it dims again');
     console.log('inactive-sketch-dim-661-live.test.js: ok');
   } finally { await cdp.close(); }
 })();

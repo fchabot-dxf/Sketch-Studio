@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sendRealKey } from './helpers/cdp-browser.js';
 import { pressRibbonTool } from './helpers/ribbon-tool.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const EVID = path.join(process.cwd(), '.evidence', '682');
@@ -56,6 +57,7 @@ await (async () => {
         fs.writeFileSync(path.join(EVID, file), Buffer.from(r.data, 'base64'));
       };
 
+      await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: each phase starts from an empty Untitled, not the previous phase's drawing
       await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`, 8000);
       await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'shaper design tab');
       await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);
@@ -242,6 +244,7 @@ await (async () => {
         fs.writeFileSync(path.join(EVID, file), Buffer.from(r.data, 'base64'));
       };
 
+      await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: each phase starts from an empty Untitled, not the previous phase's drawing
       await navigate(`http://127.0.0.1:${port}/apps/penplotter/index.html`, 8000);
       await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, '[phone] design tab');
       await evalJs(`document.querySelector('.sk-header-tab[data-tab="design"]').click()`);

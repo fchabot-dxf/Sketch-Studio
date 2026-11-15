@@ -6,7 +6,7 @@
 //   closes: the UI closes itself after a successful run (Open); run returning null means "cancelled" (a file picker) and keeps it open.
 // Failures THROW (a readable message); the UI shows it and changes nothing.
 // TASK 558 (owner ruling 2026-11-12): an action that would replace an UNSAVED Untitled with content (Open, Open recent, Open from file, New
-// design, GO TO another app) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
+// design; GO TO another app no longer since TASK 684: the tabs go across) first asks THE question settleUnsaved() declares: Save… (the Save as name prompt, then go on) / Don't save
 // (discard it, then go on) / Cancel (nothing happens). TASK 624: all named saves go ONLY to Google Drive; if signed out, saving first asks
 // to sign in to Google (calling account.signIn() synchronously inside the click gesture), then continues seamlessly or cancels cleanly.
 
@@ -35,7 +35,7 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
   }
 
   /** THE unsaved-design question. Resolves true = go on (nothing unsaved, or saved under a name, or discarded); false = Cancel.
-   *  TASK 681 (owner 1765): ALWAYS asked in the ONE modal (the host's `chooseModal` / `promptModal`, template-picker.js), whichever action asks it (close a tab, open, new design, open file, GO TO);
+   *  TASK 681 (owner 1765): ALWAYS asked in the ONE modal (the host's `chooseModal` / `promptModal`, template-picker.js), whichever action asks it (close a tab, open, new design, open file);
    *  a host that passes none (tests with a scripted `ask`) asks through `ask`. */
   async function settleUnsaved() {
     const b = buf();

@@ -1,6 +1,6 @@
 // tests/document-tabs-unsaved-callers-live.test.js — TASK 681 (owner 1765 / 1767): every place the app ASKS "This design is not saved." (or the failed-save question) uses the ONE modal
 // (template-picker.js openChoiceModal / openPromptModal); and the places that open a NEW TAB ask nothing. SketchStudio, mouse and phone tap:
-//   - GO TO another app with an unsaved Untitled: the modal; Cancel stays on the page; Dont save leaves it
+//   - closing an unsaved Untitled: the modal, Save... asks the name in the same modal; GO TO another app (TASK 684): NO question, the other app opens on the same tabs
 //   - a stored design whose last save failed, tab closed: "The last save of this design failed." in the modal (Try saving again / Close anyway / Cancel); Cancel keeps the tab, Close anyway closes it
 //   - Save... then asks the name in the same modal (a name field + Save / Cancel), not inline in the drawer
 //   - Open recent (a stored design) and New design with an unsaved active tab: NO question of any kind, a NEW tab opens, the unsaved tab stays
@@ -93,23 +93,29 @@ await (async () => {
       await press('.sk-doctab-x', 1); await modalUp('the failed-save question again'); await press('.sk-tp-btn[data-choice="close"]');
       await waitFor(`document.querySelectorAll('.sk-doctab').length === 2`, mode + ': Close anyway closes the tab');
 
-      // ---- GO TO with the unsaved Untitled active: the modal; Save... asks the name in the modal; Cancel stays; Dont save leaves ----
+      // ---- closing the unsaved Untitled: the modal; Save... asks the name in the same modal; Cancel keeps it ----
       await press('.sk-doctab-main', 0); await sleep(500);
       assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-dot') !== null`), true, mode + ': the unsaved tab is active');
-      await openMenu(); await press('.sk-sidebar-goto [data-app="shaper"]'); await modalUp('GO TO asks');
+      await press('.sk-doctab-x', 0); await modalUp('closing the unsaved tab asks');
       m = await modal();
-      assert(/This design is not saved/.test(m.text) && !m.inline, mode + ': GO TO asks in the modal: ' + JSON.stringify(m));
-      assert.deepStrictEqual(m.buttons, ['Save…', "Don't save", 'Cancel'], mode + ': GO TO: the three answers');
-      await shot(`goto-${mode}.png`, w, phone ? 844 : 800);
+      assert(/This design is not saved/.test(m.text) && !m.inline, mode + ': the close question is in the modal: ' + JSON.stringify(m));
+      assert.deepStrictEqual(m.buttons, ['Save…', "Don't save", 'Cancel'], mode + ': the three answers');
       await press('.sk-tp-btn[data-choice="save"]');
       await waitFor(`!!document.querySelector('.sk-tp-backdrop [role="dialog"] input')`, mode + ': the Save as name prompt');
       m = await modal();
       assert(/Save as/.test(m.text) && m.input && !m.inline && m.buttons.join() === 'Save,Cancel', mode + ': the name prompt is in the same modal (name field, Save, Cancel): ' + JSON.stringify(m));
       await shot(`save-as-${mode}.png`, w, phone ? 844 : 800);
       await press('.sk-tp-backdrop .sk-tp-cancel'); await sleep(400);
-      assert(/\/apps\/sketchstudio\//.test(await evalJs('location.pathname')), mode + ': Cancel stays on the page');
-      await openMenu(); await press('.sk-sidebar-goto [data-app="shaper"]'); await modalUp('GO TO asks again'); await press('.sk-tp-btn[data-choice="discard"]');
-      await waitFor(`/\\/apps\\/shaper\\//.test(location.pathname)`, mode + ': Dont save leaves for Shaper');
+      assert.strictEqual((await names()).length, 2, mode + ': Cancel keeps the tab');
+      // ---- GO TO with the unsaved Untitled active (TASK 684): NO question; Shaper opens on the SAME tabs, the unsaved one active ----
+      await openMenu(); await press('.sk-sidebar-goto [data-app="shaper"]');
+      await waitFor(`/\\/apps\\/shaper\\//.test(location.pathname)`, mode + ': GO TO leaves for Shaper at once');
+      await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 2`, mode + ': Shaper shows the two tabs');
+      assert.deepStrictEqual(await names(), ['Untitled', 'Untitled'], mode + ': the same tabs in Shaper (the unsaved one, the empty new one)');
+      assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent`), 'Untitled', mode + ': the same active tab');
+      await waitFor(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`, mode + ': still unsaved (its dot)');
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab')[1].querySelector('.sk-doctab-dot')`), null, mode + ': the EMPTY Untitled has no dot in Shaper');
+      await noModal('GO TO');
       if (phone) { await send('Emulation.setTouchEmulationEnabled', { enabled: false }); await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false }); }
     }
     console.log('document-tabs-unsaved-callers-live: ok');

@@ -6,7 +6,8 @@
 //   open-recent    the sidebar's Open recent (the Projects modal on its Recent pane; a design tile there)
 //   open-file      the sidebar's Open from file (the page's file chooser, answered with a design file)
 //   new            the sidebar's New design
-//   goto           the sidebar's GO TO another app (leaves the page)
+//   goto           the sidebar's GO TO another app (leaves the page): TASK 684, NO question any more (the open tabs go across): the other app shows the
+//                  same unsaved Untitled, whatever the choice
 // and checks what each choice must do:
 //   save     the Save as name prompt (typing) stores the Untitled under that name, THEN the action goes on
 //   discard  the Untitled is thrown away (nothing stored), THEN the action goes on
@@ -81,6 +82,21 @@ export async function runUnsavedPrompt({ host, choice, paths = PATHS }) {
       await openSidebar(); pressEl('[data-action="new-design"]', 'New design'); await app.waitFor(() => !!q('.sk-tp-card[data-template="blank"]'), 'the template modal'); pressEl('.sk-tp-card[data-template="blank"]', 'the Blank design card'); // TASK 651: New design asks for a template first
     } else if (p === 'goto') {
       await openSidebar(); pressEl(`.sk-sidebar-goto [data-app="${H.goto}"]`, 'GO TO ' + H.goto);
+    }
+    if (p === 'goto') { // TASK 684: GO TO asks nothing (one shared open-tabs buffer): the page leaves, and the other app shows the SAME unsaved Untitled
+      await app.waitFor(() => pathname().startsWith(H.gotoUrl), `${p}: GO TO leaves the page without a question`, 5000);
+      assert.strictEqual(q('.sk-tp-backdrop'), null, `${p}: no Save… / Don't save / Cancel question`);
+      const names = await recent();
+      assert.ok(!names.includes('Untitled') && !names.includes(keptName), `${p}: nothing was stored: ${JSON.stringify(names)}`);
+      await app.close(); await openApp(H.goto);
+      const otherApp = HOSTS[H.goto];
+      await app.waitFor(() => shapesOnCanvas(otherApp.canvas) === 1, `${p}: ${H.goto} shows the same unsaved Untitled (its line)`, 5000);
+      await app.waitFor(() => title() === appTitle(otherApp.name), `${p}: ${H.goto}'s title is the unsaved Untitled's`, 5000);
+      assert.strictEqual(app.buffer.needsSavePrompt(), 'unsaved', `${p}: there it is still an unsaved Untitled with content (closing it asks)`);
+      const r = { names, title: title(), path: pathname() };
+      results[p] = r;
+      console.log(`${host} ${choice} ${p.padEnd(13)} ${JSON.stringify(r)}`);
+      continue;
     }
     // 2. THE question, where the action came from
     const bar = '.sk-tp-backdrop [role="dialog"]'; // TASK 681: THE question is always the modal, whichever UI the action came from

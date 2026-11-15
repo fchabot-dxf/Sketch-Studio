@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '535-4', width: 1400, height: 800 });
@@ -184,6 +185,7 @@ await (async () => {
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false });
 
     // ================================================================== C. Shaper
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: this host starts from an empty Untitled, not the previous host's drawing
     await navigate(url('/apps/shaper/index.html'), 8000);
     await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="design"]')`, 'Shaper to load');
     for (let i = 0; i < 5; i++) { await clickEl('.sk-header-tab[data-tab="design"]'); await sleep(300); if (await evalJs(`document.querySelector('.sk-header-tab.active').dataset.tab`) === 'design') break; }
@@ -282,6 +284,7 @@ await (async () => {
     await key('Escape', 'Escape', 27);
 
     // ================================================================== D. Pen Plotter
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: this host starts from an empty Untitled, not the previous host's drawing
     await navigate(url('/apps/penplotter/index.html'), 8000);
     await waitFor(`!!window.__sketch && !!document.getElementById('btn-parameters')`, 'Pen Plotter Design with its Parameters button');
     await sleep(1000);
@@ -306,6 +309,7 @@ await (async () => {
     assert.strictEqual(await evalJs(`!!document.getElementById('btn-parameters') && document.getElementById('btn-parameters').offsetParent === null`), true, 'the footer button is hidden on the Toolpath stage (no sketch shown)');
 
     // ================================================================== A. Trace has NO button
+    await resetBufferLive(cdp); // TASK 684: the open tabs are ONE list for all apps: this host starts from an empty Untitled, not the previous host's drawing
     await navigate(url('/apps/trace/index.html'), 8000);
     await waitFor(`!!document.querySelector('.sk-header-tab[data-tab="edit"]')`, 'Trace to load');
     await clickEl('.sk-header-tab[data-tab="edit"]');

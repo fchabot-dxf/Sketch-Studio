@@ -4,6 +4,7 @@
 // (30 px buttons), phone portrait 390 and 360 (44 px, inside the screen, the header scrolls sideways when too long, a real swipe moves it, every control can be
 // brought on screen, the app menu opens fully inside the screen), phone landscape 844x390 (header one row, buttons 44 px). Header screenshots: .evidence/618.
 import assert from 'node:assert';
+import { resetBufferLive } from './helpers/reset-buffer.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
@@ -22,7 +23,8 @@ await (async () => {
     const tap = async (x, y) => { await T('touchStart', [{ x, y }]); await sleep(40); await T('touchEnd', []); await sleep(400); };
     const centerOf = (sel) => evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     const clickEl = async (sel) => { const c = await centerOf(sel); assert(c, sel + ' not found'); await click(c.x, c.y); };
-    const goto = async (url, readyExpr) => { const loaded = once('Page.loadEventFired'); await send('Page.navigate', { url: `http://127.0.0.1:${port}${url}` }); await Promise.race([loaded, sleep(8000)]); await waitFor(readyExpr, url + ' ready'); await sleep(600); };
+    let lastApp = null; // TASK 684: the open tabs are ONE list for all apps: a new host starts from an empty Untitled, not the previous host's drawing
+    const goto = async (url, readyExpr) => { const app = url.split('/')[2]; if (lastApp && lastApp !== app) await resetBufferLive(cdp); lastApp = app; const loaded = once('Page.loadEventFired'); await send('Page.navigate', { url: `http://127.0.0.1:${port}${url}` }); await Promise.race([loaded, sleep(8000)]); await waitFor(readyExpr, url + ' ready'); await sleep(600); };
     const shot = async (file, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) }); fs.writeFileSync(path.join(EVID, file), Buffer.from(r.data, 'base64')); };
     const HOSTS = {
       studio:     { url: '/apps/sketchstudio/index.html', enter: null, ready: `!!document.querySelector('#svgCanvas')`, canvas: '#svgCanvas' },

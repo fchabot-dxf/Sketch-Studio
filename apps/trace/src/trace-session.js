@@ -6,7 +6,7 @@
 // TASK 609, the memory bound: only the SHOWN tab holds the photo decoded (a 12 MP phone photo is 48 MB as a canvas, and its mask another 48 MB). A tab put aside keeps the
 // original file (a few MB) and the encoded mask (a few KB when little is painted), and the photo is decoded again when the tab is shown (async: the restore starts the decode and
 // the tab's photo appears when it is done). Nothing is evicted: the original bytes stay with the tab until it closes, so no photo the user has open is ever lost.
-// createTraceSession({ state, preview, scale, ui, codec }) -> { capture, restore, cancelPending }
+// createTraceSession({ state, preview, scale, ui, codec }) -> { capture, restore, stored, cancelPending }
 //   state: the app's state object (imageCanvas, imageBlob, imageW, imageH, imageName, svgString)  preview / scale: preview.js / scale.js controls
 //   ui: { cancelTrace(), showPhotoUi(has, traced), fallbackName(), onNoPhoto(), onDecodeError(err) } — the page's bits: drop a pending / running trace of the photo that was
 //   shown, the empty-state label + Send to Editor button, the name a photo-less design shows, the answer to a tab that has a drawing but no photo while the Trace tab shows
@@ -35,6 +35,9 @@ export function createTraceSession({ state, preview, scale, ui, codec }) {
       }
       return rec;
     },
+    // TASK 684: what the shared open-tabs working buffer (IndexedDB) keeps of a tab across a reload or a GO TO to another app: its image name and scale, NOT the photo,
+    // its mask or the trace made from it (TASK 567: the photo is never stored). Back in Trace such a tab has no photo (the Trace tab says so and shows its drawing in Edit).
+    stored: (rec) => ({ blob: null, w: 0, h: 0, name: rec.name, svg: null, mask: null, maskBlob: null, scale: rec.scale }),
     restore: (s) => {
       ui.cancelTrace(); // a trace of the photo that was shown is not this tab's
       pending = null;

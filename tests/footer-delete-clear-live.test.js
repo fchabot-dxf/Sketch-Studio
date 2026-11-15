@@ -151,9 +151,7 @@ await (async () => {
       const s0 = await inspect();
       assert(s0.del && s0.clr, name + ': Delete and Clear sketch buttons exist');
       assert.strictEqual(s0.footerHasConstruct, false, name + ': Construction is NOT in footer');
-      if (name === 'penplotter') {
-        assert.strictEqual(s0.cornerConstruct, null, 'penplotter: Construction stays disabled (safety check)');
-      } else {
+      {
         assert(s0.cornerConstruct && s0.cornerConstruct.inCorner && s0.cornerConstruct.w === 32 && s0.cornerConstruct.h === 32,
           name + ': desktop Construction is 32x32 in .sk-canvas-corner: ' + JSON.stringify(s0.cornerConstruct));
         assert.strictEqual(s0.cornerSketches, null, name + ': desktop hides Sketches corner button so Construction sits alone');
@@ -261,9 +259,7 @@ await (async () => {
       assert(s.del.w >= 55 && s.del.h >= 43.5 && s.clr.w >= 55 && s.clr.h >= 43.5, name + ' phone: 56x44 buttons: ' + JSON.stringify([s.del, s.clr]));
       assert(s.clr.l - s.del.r >= 4, name + ' phone: gap preserved');
       assert.strictEqual(s.footerHasConstruct, false, name + ' phone: Construction is NOT in footer');
-      if (name === 'penplotter') {
-        assert.strictEqual(s.cornerConstruct, null, 'penplotter phone: Construction stays disabled');
-      } else {
+      {
         assert(s.cornerConstruct && s.cornerConstruct.inCorner && s.cornerConstruct.w === 44 && s.cornerConstruct.h === 44,
           name + ' phone: Construction is 44x44 in .sk-canvas-corner: ' + JSON.stringify(s.cornerConstruct));
         assert(s.cornerSketches && s.cornerSketches.w === 44 && s.cornerSketches.h === 44 && s.cornerConstruct.r < s.cornerSketches.l,

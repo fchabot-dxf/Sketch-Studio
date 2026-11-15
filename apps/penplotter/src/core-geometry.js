@@ -17,6 +17,7 @@ export function resolveCoreShapes(ids) {
     const out = [];
     for (const sh of cs.shapes) {
         if (want && !want.has(sh.id)) continue;
+        if (sh.isConstruction) continue; // a drawing aid, never plotted (even when a toolpath names it)
         const pts = coreShapeToPolyline(sh, cs.joints);
         if (pts && pts.length >= 2) out.push({ id: sh.id, type: "polyline", points: pts });
     }

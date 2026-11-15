@@ -14888,3 +14888,11 @@ Follow-on: tests/snap-release-slip-live.test.js case 2 now presses Escape after 
 ## TURN 640
 The phone drawer (packages/ui/mobile-drawer.js) and the Style panel (packages/ui/style-panel.js) now close on a pointerdown outside them as well as a click, so a DISABLED button (footer Clear sketch / Undo on an empty sketch) closes them. ONE shared helper, packages/ui/outside-press.js listenOutsidePress(onOutside) (pointerdown + click, started next tick so the opening press does not close it, returns a stop fn); tool-ribbon.js's Rect menu (TURN 619) uses it too. Each keeps its own inside test (drawer: panel + toggle; Style: composedPath). Escape untouched. Test: tests/outside-press-live.test.js (fail-first: drawer and Style each failed before, pass after). Note: at 390 px the open drawer covers Clear sketch, so the drawer test presses the uncovered disabled Undo.
 
+
+## TURN 641
+Pen Plotter: Construction toggle ON; construction is never plotted (like Fusion: a drawing aid, never output).
+- core-geometry.js `resolveCoreShapes`: ONE skip of `isConstruction` (also for explicit targetShapeIds). `collectToolpathShapes` (preview, export `buildGcodeEntries`) reaches #core shapes only through it.
+- render-art.js `buildCoreGeometry` (paper view) skips construction; interaction.js hit-test (`coreShapeAtPoint`) and marquee skip it, so a toolpath cannot target it via click/box-select. (`coreGhost` only runs for ids already targeted; they can no longer be construction.)
+- sketch-stage.js: `construction: true`; underlay (static/imported shapes) draws construction dashed at 50% opacity. Comments updated (sketch-stage.js, main.js).
+- Behaviour changes: Pen Plotter gains the Construction toggle + K; imported DXF construction entities (isConstruction) are no longer plotted nor drawn/selectable on the Toolpath/Export canvas; static underlay draws construction dashed.
+- Tests: construction-toggle-output-node (pen plotter section now asserts skip; failed first), new penplotter-construction-live (fails first on core-geometry/render-art), footer-delete-clear-live (no penplotter exception). Evidence: .evidence/641/design-stage.png, export-preview.png.

@@ -347,6 +347,7 @@ function updateMarquee(it) {
         const cs = state.coreSketch;
         const shapeNext = new Set(it.additive ? (it.initialShapeSelection || []) : []);
         if (cs && cs.shapes) for (const sh of cs.shapes) {
+            if (sh.isConstruction) continue; // construction is not targetable
             const pts = coreShapeToPolyline(sh, cs.joints);
             if (!pts || !pts.length) continue;
             let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
@@ -800,6 +801,7 @@ function coreShapeAtPoint(p, tol) {
     if (!cs || !cs.shapes) return null;
     for (let i = cs.shapes.length - 1; i >= 0; i--) {
         const sh = cs.shapes[i];
+        if (sh.isConstruction) continue; // construction is not targetable
         const pts = coreShapeToPolyline(sh, cs.joints);
         if (!pts || pts.length < 2) continue;
         const a = pts[0], b = pts[pts.length - 1];

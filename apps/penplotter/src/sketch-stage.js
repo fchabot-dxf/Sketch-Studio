@@ -196,7 +196,8 @@ export function mountSketchStage(view, ctx = {}) {
       const strokePaint = st.stroke || st.fill;
       const ring = st.fill ? closedPolygonFor({ type: 'polyline', points: pts }) : null;
       const d = 'M ' + pts.map(p => p[0] + ' ' + p[1]).join(' L ');
-      parts.push('<path data-shape-id="' + sh.id + '" d="' + d + '"' +
+      const dash = sh.isConstruction ? ' stroke-dasharray="4 3" stroke-opacity="0.5"' : '';
+      parts.push('<path data-shape-id="' + sh.id + '" d="' + d + '"' + dash +
         (ring ? ' fill="' + st.fill + '" fill-opacity="' + FILL_PREVIEW_OPACITY + '" fill-rule="evenodd"' : ' fill="none"') +
         (strokePaint ? ' stroke="' + strokePaint + '" stroke-width="' + st.width + '"' : ' stroke="none"') +
         ' stroke-linecap="round" stroke-linejoin="round"/>');
@@ -285,8 +286,8 @@ export function mountSketchStage(view, ctx = {}) {
 
   // Design UI: the shared info/DOF panel + the shared tool ribbon (+ a host FREEHAND button via extraGroups; #ui
   // unchanged). A #core tool click ('tool') de-highlights Freehand; the plotter-side capture tool does the drawing.
-  // Safety check (TASK 619): keep construction disabled here until Pen Plotter skips sh.isConstruction in core-geometry.js (resolveCoreShapes, collectToolpathShapes), render-art.js (buildCoreGeometry), and export.js (buildGcodeEntries).
-  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine, construction: false });
+  // TASK 641: Construction is on here; Pen Plotter never plots it (core-geometry.js resolveCoreShapes skips isConstruction; render-art.js and interaction.js skip it too).
+  browser = mountDesignBrowser({ container: view.querySelector('#design-canvas-wrap'), state: controller.state, engine: controller.engine, construction: true });
   browser.toggleEl.style.display = 'none'; // shown only while Design is the active stage (onEnter/onLeave below)
   infoPanel = browser.panel;
   const freehandActive = (on) => { const b = view.querySelector('#freehand-btn'); if (b) b.classList.toggle('active', on); };

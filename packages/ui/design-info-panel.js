@@ -117,8 +117,8 @@ function typeMeta(t) { return TYPE_META[t] || { icon: '◦', label: String(t || 
 
 // The row's type label (Radius/Diameter are distance dimensions); also the key rows are grouped by.
 function rowLabel(c) {
-  return c.isRadius || c.type === 'radius' ? 'Radius'
-    : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter'
+  return c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter'
+    : c.isRadius || c.type === 'radius' ? 'Radius'
       : c.type === 'angle' ? 'Angle' : typeMeta(c.type).label;
 }
 const GROUP_ORDER = Object.values(TYPE_META).map((m) => m.label).flatMap((l) => (l === 'Distance' ? [l, 'Radius', 'Diameter'] : [l]));

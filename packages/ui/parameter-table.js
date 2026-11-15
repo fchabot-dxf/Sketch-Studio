@@ -31,7 +31,7 @@ export const USER_EMPTY_TEXT = 'No user parameters yet. Press + Add to make one.
 export const DIMENSION_EMPTY_TEXT = 'No dimensions yet. Use the Dim tool to add one.';
 
 const isAngle = (c) => c.type === CONSTRAINT_TYPES.ANGLE;
-const kindLabelOf = (c) => (isAngle(c) ? 'Angle' : c.isRadius || c.type === 'radius' ? 'Radius' : c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter' ? 'Diameter' : 'Distance');
+const kindLabelOf = (c) => (isAngle(c) ? 'Angle' : (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') ? 'Diameter' : (c.isRadius || c.type === 'radius') ? 'Radius' : 'Distance');
 
 const dimensionValueText = (c, unit) => (isAngle(c) ? Number(c.value).toFixed(1) : formatUnit(c.value, unit, { decimals: 1 }));
 

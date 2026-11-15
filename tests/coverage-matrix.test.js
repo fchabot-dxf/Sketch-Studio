@@ -18,14 +18,14 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.stringify([...b].sort())}`;
 
 const EXPECTED = {
-  tools: ['select', 'line', 'rect', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
+  tools: ['select', 'line', 'rect', 'slot', 'circle', 'polygon', 'arc', 'bezier', 'trim', 'break', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
   notInRibbon: ['pan'],
   constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern'],
   definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'mouse_spring'],
   shapeKinds: ['line', 'construction line', 'circle', 'arc (centre, start, end)', 'fillet arc', 'polygon side', 'rect side', 'bezier', 'point / joint'],
   shapeTypeLiterals: ['arc', 'bezier', 'circle', 'line'],
   dimensionModes: ['aligned', 'horizontal', 'vertical', 'line length', 'point-line', 'line-line', 'angle', 'radius'],
-  editFeatures: ['fillet', 'fillet radius edit', 'trim', 'break', 'polygon', 'rect rect-2pt', 'rect rect-center', 'rect rect-3pt', 'construction toggle', 'lock / fix',
+  editFeatures: ['fillet', 'fillet radius edit', 'trim', 'break', 'polygon', 'rect rect-2pt', 'rect rect-center', 'rect rect-3pt', 'slot slot-c2c', 'slot slot-overall', 'slot slot-center', 'slot slot-arc-3pt', 'slot slot-arc-center', 'construction toggle', 'lock / fix',
     'delete constraints', 'delete shapes', 'delete joints', 'delete selection', 'undo', 'redo', 'driving / reference (context menu)', 'driving / reference (toggleDriving)',
     'delete dimension (context menu)', 'lock / delete (geometry context menu)', 'drag (mouse_spring)'],
 };
@@ -47,14 +47,14 @@ check('shape type literals the tools create', I.shapeTypeLiterals, EXPECTED.shap
 check('dimension modes', I.dimensionModes.map(d => d.mode), EXPECTED.dimensionModes);
 check('edit features', I.editFeatures.map(e => e.feature), EXPECTED.editFeatures);
 ok('offset / copy-paste are absent from SketchStudio (scan finds no code; mirror is the task-585 tool)', I.absent.hits.length === 0, JSON.stringify(I.absent.hits));
-ok('diameter has a label branch but no creator', I.diameter.line > 0);
+ok('diameter has a label branch (used by Slot width)', I.diameter.line > 0);
 ok('every inventory item carries a file:line', [...I.tools, ...I.constraintTypes, ...I.dimensionModes, ...I.editFeatures.map(e => ({ ...e.where })), ...I.shapeKinds.map(k => ({ ...k.where }))].every(x => x.file && x.line > 0));
 
 
 // ---------------------------------------------------------------------------------------------------------------- coverage: inventory -> matrix
 const rowIds = ROWS.map(r => r.id), kindLetters = KINDS.map(k => k.k);
 const COVER = {
-  tools: { select: ['deferred', 'drag + pick: not a constraint x geometry cell'], line: ['kinds', 'L', 'C'], rect: ['kinds', 'R'], circle: ['kinds', 'O'], polygon: ['kinds', 'S'], arc: ['kinds', 'A'], bezier: ['kinds', 'B'],
+  tools: { select: ['deferred', 'drag + pick: not a constraint x geometry cell'], line: ['kinds', 'L', 'C'], rect: ['kinds', 'R'], slot: ['deferred', 'five straight / arc slot modes (#core/slot.js): tests/slot-tool-node.test.js, tests/slot-tool-live.test.js'], circle: ['kinds', 'O'], polygon: ['kinds', 'S'], arc: ['kinds', 'A'], bezier: ['kinds', 'B'],
     trim: ['deferred', 'rewrites shapes/joints: a part 2/3 edit audit'], break: ['deferred', 'splits a line: a part 2/3 edit audit'], fillet: ['kinds', 'F'],
     dim: ['rows', 'dim-aligned', 'dim-horizontal', 'dim-vertical', 'dim-length', 'dim-point-line', 'dim-line-line', 'dim-angle-xy', 'dim-radius'],
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
@@ -74,7 +74,7 @@ const COVER = {
   shapeKinds: { line: 'L', 'construction line': 'C', circle: 'O', 'arc (centre, start, end)': 'A', 'fillet arc': 'F', 'polygon side': 'S', 'rect side': 'R', bezier: 'B', 'point / joint': 'P' },
   // edit features: the matrix exercises these on every cell; the rest are deferred to the edit audit (parts 2/3) and listed so a NEW feature cannot slip through
   editCovered: ['fillet', 'fillet radius edit', 'polygon', 'rect rect-2pt', 'lock / fix', 'delete constraints', 'undo'],
-  editDeferred: ['trim', 'break', 'rect rect-center', 'rect rect-3pt', 'construction toggle', 'delete shapes', 'delete joints', 'delete selection', 'redo', 'driving / reference (context menu)',
+  editDeferred: ['trim', 'break', 'rect rect-center', 'rect rect-3pt', 'slot slot-c2c', 'slot slot-overall', 'slot slot-center', 'slot slot-arc-3pt', 'slot slot-arc-center', 'construction toggle', 'delete shapes', 'delete joints', 'delete selection', 'redo', 'driving / reference (context menu)',
     'driving / reference (toggleDriving)', 'delete dimension (context menu)', 'lock / delete (geometry context menu)', 'drag (mouse_spring)'],
 };
 for (const t of I.tools) {
@@ -87,7 +87,7 @@ for (const d of I.dimensionModes) ok(`dimension mode '${d.mode}' has a matrix ro
 for (const k of I.shapeKinds) ok(`shape kind '${k.kind}' is a matrix column`, kindLetters.includes(COVER.shapeKinds[k.kind]), k.kind);
 const editOk = (e) => COVER.editCovered.includes(e.feature) !== COVER.editDeferred.includes(e.feature);
 ok('every edit feature is covered by the matrix or explicitly deferred', I.editFeatures.every(editOk), I.editFeatures.filter(e => !editOk(e)).map(e => e.feature).join());
-ok('a diameter dimension has no creation path (not a matrix row)', !ROWS.some(r => /diameter/.test(r.id)) && I.diameter.line > 0);
+ok('a diameter dimension is covered through Slot width (not a separate matrix row)', !ROWS.some(r => /diameter/.test(r.id)) && I.diameter.line > 0);
 
 // ---------------------------------------------------------------------------------------------------------------- the matrix
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.

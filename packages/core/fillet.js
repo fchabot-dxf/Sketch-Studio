@@ -426,6 +426,14 @@ export function applyFillet(state, cornerInfo, radius = 5) {
         }
       }
 
+      // An ARC leg's own structural equal (makeArc: [centre, rim, centre, rim], it keeps the arc a circle) is part of that arc, not a
+      // measurement: its corner rim follows the leg's tangent joint, like the arc itself (task 649).
+      const ownArc = c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length === 4 ? [[lineA, jTA], [lineB, jTB]].find(([leg]) => leg.shape.type === 'arc' && c.joints[0] === leg.shape.joints[0] && c.joints[2] === leg.shape.joints[0]) : null;
+      if (ownArc) {
+        for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = ownArc[1];
+        continue;
+      }
+
       // MEASUREMENT constraints (a joint-pair DISTANCE, a joint-form EQUAL) keep meaning the SHARP corner: any
       // joint of the corner cluster is re-linked to the virtual-sharp joint V and the ORIGINAL value is kept,
       // so editing the fillet radius never changes an overall dimension (Fusion's behaviour).

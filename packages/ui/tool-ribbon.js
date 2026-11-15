@@ -164,6 +164,7 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 .sk-ribbon-grip { display: flex; align-items: center; justify-content: center; width: 28px; flex-shrink: 0; cursor: grab; color: var(--sk-ribbon-grouplabel, #94a3b8); }
 .sk-ribbon-sect-row.dragging .sk-ribbon-grip { cursor: grabbing; }
 .sk-ribbon-grip svg { width: 12px; height: 16px; }
+.sk-ribbon-sect-head { display: none; padding: 6px 12px 2px; font: 800 11px system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.65; } /* the section's name, shown on the phone-landscape rail only (its name button has no text there) */
 .sk-ribbon-sect-foot { display: flex; justify-content: flex-end; padding: 2px 6px 0; border-top: 1px solid var(--sk-ribbon-sep, #e2e8f0); margin-top: 4px; }
 .sk-ribbon-sect-reset { border: 0; background: transparent; padding: 6px; font: 600 11px system-ui, sans-serif; color: var(--sk-selection, #3B82F6);
   text-decoration: underline; cursor: pointer; }
@@ -210,10 +211,12 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
   .sk-ribbon { flex: 1 1 auto; flex-direction: column; align-items: stretch; min-height: 0; height: 100%; gap: 0; padding: 2px; }
   .sk-ribbon-group { flex-direction: row; align-items: flex-start; padding: 0; border-right: 0; border-bottom: 1px solid var(--sk-ribbon-sep, #e2e8f0); }
   .sk-ribbon-group:last-child { border-bottom: 0; }
-  .sk-ribbon-btns { flex-direction: column; gap: 0; }
+  .sk-ribbon-btns { display: grid; grid-template-columns: repeat(2, 44px); gap: 0; } /* TASK 676: the tools two per row */
   .sk-ribbon-group-label { margin: 0; }
-  button.sk-ribbon-group-label { position: relative; writing-mode: vertical-rl; min-width: 44px; min-height: 44px; padding: 2px 6px 2px 0; }
-  button.sk-ribbon-group-label::after { position: absolute; right: 8px; top: 50%; margin-top: -2px; }
+  /* TASK 676: no section name text on the rail (it is the dropdown's header, .sk-ribbon-sect-head): the name button is the caret strip beside the tools */
+  button.sk-ribbon-group-label { position: relative; align-self: stretch; font-size: 0; min-width: 44px; min-height: 44px; padding: 0; }
+  .sk-ribbon-sect-head { display: block; }
+  button.sk-ribbon-group-label::after { position: absolute; left: 50%; margin-left: -3px; top: 50%; margin-top: -2px; }
   .sk-ribbon-group[data-fixed] .sk-ribbon-group-label { display: none; }
   .sk-ribbon-btn { width: 44px; height: 44px; }
   .sk-ribbon-ic { width: 24px; height: 24px; }
@@ -459,11 +462,12 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
       const chrome = rail ? px(gs.paddingTop) + px(gs.paddingBottom) + px(gs.borderTopWidth) + px(gs.borderBottomWidth)
         : px(gs.paddingLeft) + px(gs.paddingRight) + px(gs.borderLeftWidth) + px(gs.borderRightWidth);
       const ns = getComputedStyle(sec.nameEl), nr = sec.nameEl.getBoundingClientRect();
-      const name = rail ? nr.height + px(ns.marginTop) + px(ns.marginBottom) : nr.width + px(ns.marginLeft) + px(ns.marginRight);
+      const name = rail ? px(ns.minHeight) + px(ns.marginTop) + px(ns.marginBottom) : nr.width + px(ns.marginLeft) + px(ns.marginRight);
       const n = sec.layout.order.filter((id) => !sec.layout.off.has(id)).length;
-      return { chrome, gap: px(rail ? rs.rowGap : rs.columnGap), name, n, fixed: sec.fixed };
+      const cols = rail ? getComputedStyle(sec.row).gridTemplateColumns.split(' ').length : 1; // TASK 676: the rail's tools are in columns ('none' = 1)
+      return { chrome, gap: px(rail ? rs.rowGap : rs.columnGap), name, n, fixed: sec.fixed, cols };
     });
-    const size = (g, k) => g.chrome + Math.max(k > 0 ? k * unit + (k - 1) * g.gap : 0, g.name);
+    const size = (g, k) => { const rows = Math.ceil(k / g.cols); return g.chrome + Math.max(k > 0 ? rows * unit + (rows - 1) * g.gap : 0, g.name); };
     const room = avail - 1; // 1 px for sub-pixel rounding
     const grow = (ks, cap) => {
       let used = ks.reduce((t, k, i) => t + size(geo[i], k), 0) + sectionGap * (geo.length - 1);
@@ -500,6 +504,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
   function fillSection(sec) {
     sectMenu.innerHTML = '';
     sectMenu.dataset.section = sec.key;
+    const head = document.createElement('div'); head.className = 'sk-ribbon-sect-head'; head.textContent = sec.label;
     const list = document.createElement('div'); list.className = 'sk-ribbon-sect-list';
     sec.layout.order.forEach((id) => list.appendChild(sectionRow(sec, itemOf(sec, id))));
     const foot = document.createElement('div'); foot.className = 'sk-ribbon-sect-foot';
@@ -509,7 +514,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
       fillSection(sec); relayout(sec);
     });
     foot.appendChild(reset);
-    sectMenu.append(list, foot);
+    sectMenu.append(head, list, foot);
     syncRows();
   }
   function sectionRow(sec, it) {

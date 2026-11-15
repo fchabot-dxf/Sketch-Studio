@@ -39,7 +39,7 @@ import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrim
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
-import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658
+import { setupPatternTool, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
 import { initCursors } from '#ui/cursor-manager.js';
 import { setupLiveDimensionInput, handleLiveRectKeyDown, updateLiveRectPreview, applyLiveRectConstraints, hideLiveInputs, getLiveLockedPoint } from '#ui/input-handlers/live-dimension-input.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -990,7 +990,7 @@ function setupEventListeners(svg, state) {
                     onDone: () => doneAction().done(),
                     label: () => doneAction().label,
                     anchor: () => { const a = doneAction(); const w = a && a.end && a.end(); return w ? worldToScreen(svg, w) : null; },
-                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}, .${PATTERN_DIALOG_CLASS}, #pattern-tool-overlay .pattern-handle`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
+                    avoid: () => [...document.querySelectorAll(`.sk-dual-input, #liveDimSingleInput, #fillet-radius-input, #fillet-tool-overlay .fillet-handle, #offset-tool-overlay .offset-handle, #${OFFSET_INPUT_ID}, .${PATTERN_DIALOG_CLASS}, .${PATTERN_INLINE_CLASS}, #pattern-tool-overlay .pattern-handle`)].filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()),
                 });
             }
             if (doneButton) doneButton.sync(e.pointerType === 'touch');

@@ -66,8 +66,11 @@ try {
   app.esc();
   ok(!dialog() && st.shapes.length === n0 && st.history.length === h0 && st.currentTool === 'select', 'Esc: no dialog, nothing made, no undo step, Select');
 
-  // ---- Circular: the line, Enter, the corner -> live; values
+  // ---- Circular: the line, Enter, the corner -> live; Distribution (Full | Angle | Symmetric), spinner, Suppression
   app.tool('circularPattern');
+  const circLabels = [...dialog().querySelectorAll('.sk-pat-row > label')].map((l) => l.textContent);
+  ok(JSON.stringify(circLabels) === JSON.stringify(['Objects', 'Center Point', 'Distribution', 'Suppression', 'Quantity', 'Angle']), `Circular rows match Fusion (${circLabels})`);
+  ok(field('Distribution').value === 'full' && field('Angle').closest('.sk-pat-row').hidden === true, 'Circular Distribution defaults to Full (Angle row hidden)');
   click(at(-150, -50));
   ok(st.selectedShapes.has(vertical.id), 'a click on the vertical line picks it');
   app.enter();
@@ -77,8 +80,17 @@ try {
   ok(st.history.length === h0 + 1, 'the live pattern holds ONE undo step');
   const c = pats()[0];
   ok(c.centre === vertical.joints[1] || c.centre === horizontal.joints[0] || st.constraints.some((k) => k.type === 'coincident' && k.joints.includes(c.centre)), 'the centre is the corner point');
-  typeIn('Quantity', '5'); typeIn('Total angle', '90');
-  ok(c.quantity === 5 && c.angle === 90 && c.instances.length === 4, `Quantity 5, Total angle 90 (${c.quantity} / ${c.angle} / ${c.instances.length})`);
+  // Spinner steps Quantity by 1
+  doc.querySelector('.sk-pattern-dialog [data-spin-for="Quantity"][data-spin="up"]').click(); app.frames();
+  ok(c.quantity === 4 && field('Quantity').value === '4', `Circular spinner up: 3 -> 4 (${c.quantity})`);
+  doc.querySelector('.sk-pattern-dialog [data-spin-for="Quantity"][data-spin="down"]').click(); app.frames();
+  ok(c.quantity === 3 && field('Quantity').value === '3', `Circular spinner down: 4 -> 3 (${c.quantity})`);
+  // Switch Distribution to Angle -> Angle row shows
+  const setDist = (val) => { const sel = field('Distribution'); sel.value = val; sel.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames(); };
+  setDist('angle');
+  ok(field('Angle').closest('.sk-pat-row').hidden === false, 'Distribution = Angle shows the Angle row');
+  typeIn('Quantity', '5'); typeIn('Angle', '90');
+  ok(c.quantity === 5 && c.angle === 90 && c.instances.length === 4, `Quantity 5, Angle 90 (${c.quantity} / ${c.angle} / ${c.instances.length})`);
   const Cw = P(c.centre);
   const ang = (s) => { const a = P(s.joints[0]), b = P(s.joints[1]), m = { x: (a.x + b.x) / 2 - Cw.x, y: -((a.y + b.y) / 2 - Cw.y) }; return Math.atan2(m.y, m.x) * 180 / Math.PI; };
   const base = ang(vertical);
@@ -91,13 +103,13 @@ try {
   ok(dialog() && /quantity must be a whole number of 2 or more/.test(toasts()), `Enter on it: refused with a warning, the dialog stays (${toasts()})`);
   typeIn('Quantity', '4');
   ok(c.quantity === 4 && c.instances.length === 3, 'Quantity 4 accepted');
-  // Symmetric (Fusion): the same 4 in total, the same step, around the source: -2, -1, (0), 1
-  app.press(field('Symmetric'));
+  // Distribution = Symmetric (Fusion): the same 4 in total, the same step, around the source: -2, -1, (0), 1
+  setDist('symmetric');
   ok(c.symmetric === true && JSON.stringify(c.instances.map((i) => i.at[0])) === JSON.stringify([-2, -1, 1]), `Symmetric: 4 in total around the source (${c.instances.map((i) => i.at[0])})`);
-  app.press(field('Symmetric'));
-  ok(c.symmetric === false && c.instances.length === 3, 'Symmetric off again');
-  // Suppress: a click on a copy leaves its instance out, a click on its dashed ghost brings it back
-  app.press(field('Suppress'));
+  setDist('angle');
+  ok(c.symmetric === false && c.instances.length === 3, 'Angle mode: Symmetric off again');
+  // Suppression: a click on a copy leaves its instance out, a click on its dashed ghost brings it back
+  app.press(field('Suppression'));
   const victim = c.instances[2], vs = st.shapes.find((s) => s.id === victim.shapes[0]);
   const vm = app.toScreen((P(vs.joints[0]).x + P(vs.joints[1]).x) / 2, (P(vs.joints[0]).y + P(vs.joints[1]).y) / 2);
   click(vm);
@@ -112,29 +124,73 @@ try {
   app.redo();
   ok(pats().length === 1 && pats()[0].instances.length === 3, 'Redo brings it back');
 
-  // ---- Rectangular: pre-selected horizontal line, live at once; Direction 1 on the vertical line; Total; Quantity 1 = 3; touch check
+  // ---- Rectangular: pre-selected horizontal line, live at once (Extent default); Direction/s; One Direction -> Symmetric; spinner; inline boxes; touch check
   st.selectedShapes.clear(); st.selectedShapes.add(horizontal.id);
   const h1 = st.history.length;
   app.tool('rectangularPattern');
   const q = pats().find((k) => k.type === 'rectangularPattern');
   ok(q && q.instances.length === 1 && dialog().getAttribute('aria-label') === 'Rectangular Pattern', 'Rectangular: live at once from the pre-selection (2 x 1)');
-  doc.querySelector('.sk-pattern-dialog [data-pick="dir0"]').click(); app.frames();
-  ok(st.pattern.step === 'dir0', 'the Direction 1 button: pick a line');
+  const rectLabels = [...dialog().querySelectorAll('.sk-pat-row > label')].map((l) => l.textContent);
+  ok(JSON.stringify(rectLabels) === JSON.stringify(['Objects', 'Direction/s', 'Distribution', 'Suppression', 'Quantity', 'Distance', 'Direction', 'Quantity', 'Distance', 'Direction']), `Rectangular rows match Fusion (${rectLabels})`);
+  ok(q.distanceType === 'total' && field('Distribution').value === 'total', `Distribution defaults to Extent (stored 'total', ${q.distanceType})`);
+  doc.querySelector('.sk-pattern-dialog [data-pick="dirs"]').click(); app.frames();
+  ok(st.pattern.step === 'dir0', 'the Direction/s button: pick direction 1');
   click(at(-150, -100));
-  ok(q.directions[0] === vertical.id && st.pattern.step === 'values', `Direction 1 is the vertical line (${q.directions[0]})`);
+  ok(q.directions[0] === vertical.id && st.pattern.step === 'dir1', `Direction 1 is the vertical line, moves to dir1 (${q.directions[0]})`);
+  app.enter();
+  ok(st.pattern.step === 'values', 'Enter finishes Direction/s picking');
   const copy0 = () => { const s = st.shapes.find((x) => x.id === q.instances[0].shapes[0]); return P(s.joints[0]); };
   const before = { ...copy0() };
-  const typeSel = field('Distance type'); typeSel.value = 'total'; typeSel.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
-  ok(q.distanceType === 'total' && Math.abs(copy0().x - before.x) < 1e-9 && Math.abs(copy0().y - before.y) < 1e-9, 'Spacing -> Total keeps the copies where they are');
-  typeIn('Quantity 1', '3');
-  ok(q.quantity[0] === 3 && q.instances.length === 2, 'Quantity 1 = 3 (Total kept: the copies close up)');
+  const typeSel = field('Distribution');
+  typeSel.value = 'spacing'; typeSel.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
+  ok(q.distanceType === 'spacing' && Math.abs(copy0().x - before.x) < 1e-9 && Math.abs(copy0().y - before.y) < 1e-9, 'Extent -> Spacing keeps the copies where they are');
+  typeSel.value = 'total'; typeSel.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
+  ok(q.distanceType === 'total' && Math.abs(copy0().x - before.x) < 1e-9 && Math.abs(copy0().y - before.y) < 1e-9, 'Spacing -> Extent keeps the copies where they are');
+  // Spinner steps Quantity 1 by 1 (2 -> 3)
+  doc.querySelector('.sk-pattern-dialog [data-spin-for="Quantity 1"][data-spin="up"]').click(); app.frames();
+  ok(q.quantity[0] === 3 && q.instances.length === 2, 'Quantity 1 spinner = 3 (Extent kept: the copies close up)');
+  // One Direction -> Symmetric moves copies to Fusion's symmetric positions (-1, 0, 1)
+  const dirMode1 = field('Direction 1');
+  dirMode1.value = 'symmetric'; dirMode1.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
+  ok(q.symmetric[0] === true && JSON.stringify(q.instances.map((i) => i.at[0])) === JSON.stringify([-1, 1]), `Direction 1 Symmetric: [-1, 1] (${q.instances.map((i) => i.at[0])})`);
+  dirMode1.value = 'one'; dirMode1.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
+  ok(q.symmetric[0] === false && JSON.stringify(q.instances.map((i) => i.at[0])) === JSON.stringify([1, 2]), 'back to One Direction');
+  // Inline boxes beside arrow: focusing Distance 1 activates inline boxes with document unit; typing bare number or suffix + blur/Enter reformats both with unit
+  field('Distance 1').focus(); app.frames();
+  const inline = doc.querySelector('.sk-pat-inline:not([hidden])');
+  ok(inline && inline.dataset.dir === '0', 'inline boxes appear for direction 1 when focused');
+  const inlineQty = inline.querySelector('[data-inline-field="quantity"]');
+  const inlineDist = inline.querySelector('[data-inline-field="distance"]');
+  ok(inlineQty.value === '3' && inlineDist.value === field('Distance 1').value && inlineDist.value.endsWith('mm'), `inline boxes match dialog values with unit (${inlineDist.value})`);
+  inline.querySelector('[data-inline-spin="up"]').click(); app.frames();
+  ok(q.quantity[0] === 4 && field('Quantity 1').value === '4' && inlineQty.value === '4', 'inline spinner steps quantity 3 -> 4 and updates dialog');
+  inline.querySelector('[data-inline-spin="down"]').click(); app.frames();
+  ok(q.quantity[0] === 3 && field('Quantity 1').value === '3' && inlineQty.value === '3', 'inline spinner steps quantity 4 -> 3');
+  inlineDist.focus(); inlineDist.select(); app.type('15');
+  ok(Math.abs(q.distance[0] - 15) < 1e-6 && field('Distance 1').value === '15mm', `typing bare number in inline distance updates pattern and formatted dialog (${field('Distance 1').value})`);
+  inlineDist.blur(); app.frames();
+  ok(inlineDist.value === '15mm', `inline distance reformats with unit on blur (${inlineDist.value})`);
+  inlineDist.focus(); inlineDist.select(); app.type('2cm');
+  inlineDist.blur(); app.frames();
+  ok(Math.abs(q.distance[0] - 20) < 1e-6 && inlineDist.value === '20mm' && field('Distance 1').value === '20mm', `suffix input works and formats to document unit (${inlineDist.value})`);
+  const d2El = field('Distance 2');
+  d2El.focus(); d2El.select(); app.type('8');
+  ok(Math.abs(q.distance[1] - 8) < 1e-6, 'typing bare number in dialog Distance 2 updates pattern');
+  d2El.blur(); app.frames();
+  ok(d2El.value === '8mm', `dialog Distance 2 reformats with unit on blur (${d2El.value})`);
+  // Clear Objects button enters objects step
+  doc.querySelector('.sk-pattern-dialog [data-clear="objects"]').click(); app.frames();
+  ok(st.pattern.step === 'objects' && st.selectedShapes.size === 0, 'Objects clear button clears selection and enters objects step');
+  click(at(0, 100)); app.frames();
+  ok(st.selectedShapes.has(horizontal.id), 're-picking object after clear updates pattern');
+  app.enter();
   const check = doc.querySelector('.sk-done');
   app.move(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' }); app.down(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' }); app.up(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' });
   ok(check && !check.hidden && check.getAttribute('aria-label') === 'Apply the pattern', `the green check shows (${check && check.getAttribute('aria-label')})`);
   check.click(); app.frames();
-  ok(!dialog() && st.history.length === h1 + 1, 'the check applies (ONE undo step)');
+  ok(!dialog() && !inline.isConnected && st.history.length === h1 + 1, 'the check applies and hides inline boxes (ONE undo step)');
 
-  // ---- the label: a double click opens the dialog on the stored pattern; Quantity 2 = 2, Enter
+  // ---- the label: a double click opens the dialog on the stored pattern; Quantity 2 = 2, Distance 2 = 9 + Enter
   app.tool('select');
   const iq = st.constraints.indexOf(q);
   const lab = labelEl(app, iq);
@@ -147,8 +203,10 @@ try {
   await app.waitFor(() => doc.activeElement === field('Distance 1'), 'the distance field focused');
   ok(true, 'its distance field has the focus (type, Enter: like the offset label)');
   typeIn('Quantity 2', '2');
+  const d2Edit = field('Distance 2');
+  d2Edit.focus(); d2Edit.select(); app.type('9');
   app.enter();
-  ok(!dialog() && q.quantity[1] === 2 && q.instances.length === 5 && st.history.length === h2 + 1, `Enter: 3 x 2 regenerated, ONE undo step (${q.instances.length})`);
+  ok(!dialog() && q.quantity[1] === 2 && Math.abs(q.distance[1] - 9) < 1e-6 && d2Edit.value === '9mm' && q.instances.length === 5 && st.history.length === h2 + 1, `Enter: reformats Distance 2 (${d2Edit.value}) and applies 3 x 2, ONE undo step (${q.instances.length})`);
   app.undo();
   const q2 = pats().find((k) => k.type === 'rectangularPattern');
   ok(q2 && q2.quantity[1] === 1 && q2.instances.length === 2, 'Undo: back to 3 x 1');
@@ -200,7 +258,7 @@ try {
     a2.esc(); clear();
     st.selectedShapes.clear(); st.selectedShapes.add('own');
     a2.tool('rectangularPattern'); clear();
-    doc.querySelector('.sk-pattern-dialog [data-pick="dir0"]').click(); a2.frames();
+    doc.querySelector('.sk-pattern-dialog [data-pick="dirs"]').click(); a2.frames();
     a2.move(P(60, 20).x, P(60, 20).y);
     ok(toasts().length === 0, 'rectangular: a hover on another sketch\'s line warns nothing');
     a2.click(P(60, 20).x, P(60, 20).y);

@@ -192,8 +192,9 @@ export function findCornerAtPoint(state, worldPt, tolerance = 15) {
 /**
  * Why did a fillet click near `worldPt` do nothing? Returns a user-facing message, or null when the
  * click was nowhere near a joint (empty space needs no toast). Call only after findCornerAtPoint failed.
+ * include(shape) is the caller's pick rule (a locked / hidden sketch is out): only the curves it accepts are judged, none -> null (task 649).
  */
-export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
+export function diagnoseNoFillet(state, worldPt, tolerance = 15, include = () => true) {
   if (!state || !state.joints || !worldPt) return null;
   let best = null, bestDist = tolerance;
   for (const [jid, j] of state.joints.entries()) {
@@ -203,7 +204,9 @@ export function diagnoseNoFillet(state, worldPt, tolerance = 15) {
   }
   if (!best) return null;
   const cluster = getCoincidentCluster(state, best);
-  const touching = (state.shapes || []).filter(sh => sh && Array.isArray(sh.joints) && sh.joints.some(j => cluster.has(j)));
+  const near = (state.shapes || []).filter(sh => sh && Array.isArray(sh.joints) && sh.joints.some(j => cluster.has(j)));
+  const touching = near.filter(sh => include(sh));
+  if (near.length && !touching.length) return null; // only curves the pick leaves out (a locked / hidden sketch): nothing to say
   const arcs = touching.filter(sh => sh.type === 'arc');
   if (arcs.some(a => (state.constraints || []).some(c => c && c.type === 'tangent' && c.circle === a.id))) {
     return 'This corner is already filleted';

@@ -187,7 +187,7 @@ function pressAt(svg, state, viewState, clientX, clientY) {
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
     return true;
   }
-  const why = diagnoseNoFillet(state, world, thresh);
+  const why = diagnoseNoFillet(state, world, thresh, (s) => !!lineOf(s, state)); // a locked / hidden sketch's corner: nothing to say (task 649)
   if (why) showNotification(why, 'warning');
   return false;
 }

@@ -206,11 +206,21 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     return restored({ restored: true, hosts: result.hosts, name: design.name, reason });
   }
   /** Replace the app state with an empty, UNSAVED Untitled (the same empty document a stored New design had) and tell the host. */
-  function loadUntitled(reason) {
+  function loadUntitled(reason, template = null) {
     const result = deserializeDocument(emptyDocument(), state);
     bindUntitled();
-    const out = restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
+    let out = restored({ restored: true, hosts: result.hosts, name: UNTITLED, reason });
     lastSig = emptySig = sigNow(); // the empty baseline is taken AFTER the host reset its own data (its sidecar is part of the signature)
+    if (template) {
+      // TASK 651: a design started from a TEMPLATE ({ name, document }) is the same unsaved Untitled, shown under the template's name and holding its
+      // drawing as its STARTING document (not an edit: the undo history stays empty). emptySig stays the EMPTY baseline, so it has content: closing it asks
+      // Save... / Don't save, and a named save stores it.
+      const r = deserializeDocument(template.document, state);
+      if (!r.ok) throw new Error(`This template could not be opened: ${r.reason}`);
+      name = template.name;
+      out = restored({ restored: true, hosts: r.hosts, name, reason });
+      lastSig = sigNow();
+    }
     return out;
   }
 
@@ -339,7 +349,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   // (saveAs) or discards (discardUnsaved) before calling these. An empty Untitled is simply replaced.
   async function openDesign(id) { refuseIfUnsaved(); await flush(); const out = load(await store.open(id), 'open'); await saveWorkingBuffer(); return out; }
   /** New design: an empty, UNSAVED Untitled (stored at its first named save). No design is current while it shows. */
-  async function newDesign() { refuseIfUnsaved(); await flush(); await store.setCurrent(null); const out = loadUntitled('new'); await saveWorkingBuffer(); return out; }
+  async function newDesign(template = null) { refuseIfUnsaved(); await flush(); await store.setCurrent(null); const out = loadUntitled('new', template); await saveWorkingBuffer(); return out; }
   /** Save as: on an unsaved Untitled, the FIRST NAMED SAVE (it is stored under `newName`, and autosaves from then on); on a stored design,
    *  a copy under `newName` that becomes the bound one (unchanged). */
   async function saveAs(newName) {
@@ -421,10 +431,10 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     return out;
   }
   /** A fresh tab record becomes active with an empty unsaved Untitled (its history starts empty). */
-  function bringInUntitled() {
+  function bringInUntitled(template = null) {
     active = newRecord();
     if (Array.isArray(state.history)) { state.history = []; state.redoStack = []; }
-    const out = loadUntitled('new');
+    const out = loadUntitled('new', template);
     if (session) session.restore(undefined);
     if (typeof state._notifyHistory === 'function') state._notifyHistory();
     notify('idle');
@@ -477,11 +487,11 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     const p = await store.importFile(seam, { app });
     return p ? openTab(p.id, 'file') : null;
   }
-  /** New design in a NEW tab (T3): an unsaved Untitled. */
-  async function newTab() {
+  /** New design in a NEW tab (T3): an unsaved Untitled, or one started from a template { name, document } (TASK 651). */
+  async function newTab(template = null) {
     if (tabList.length >= MAX_TABS) throw full();
     await putAside();
-    const out = bringInUntitled();
+    const out = bringInUntitled(template);
     tabList.push(active);
     await store.setCurrent(null);
     await saveWorkingBuffer();

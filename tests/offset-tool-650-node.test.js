@@ -1,5 +1,5 @@
 // tests/offset-tool-650-node.test.js - TASK 650: the OFFSET tool in the real app (tests/helpers/node-app.js: the page's own modules, its ribbon,
-// input-manager, renderer, history and autosave; SketchStudio's own tool switch). The ribbon: Offset in the Modify group after Fillet (also in
+// input-manager, renderer, history and autosave; SketchStudio's own tool switch). The ribbon: Offset in the Modify group after Mirror (also in
 // Shaper and Pen Plotter, the shared ribbon). The flow on an L of two lines drawn with the Line tool:
 //   pick a line -> the chain (both lines) lights up, the distance box opens with the remembered 5, the preview follows the cursor side and flips;
 //   Esc -> nothing made, no undo step; pick again, type 5, Enter -> two new lines 5 from their sources, joined, ONE offset dimension drawn as a
@@ -12,7 +12,7 @@ import { labelEl, labelBoxCenter } from './helpers/node-dom-read.js';
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
 
-// ---- the ribbon in the hosts that mount it here: Offset in Modify, right after Fillet
+// ---- the ribbon in the hosts that mount it here: Offset in Modify, right after Mirror
 for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
   const profile = await createProfile();
   await createNamedDesign(profile, host, 'Offset 650 ' + host);
@@ -22,7 +22,7 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
     const g = b && b.closest('.sk-ribbon-group');
     ok(b && g.querySelector('.sk-ribbon-group-label').textContent === 'Modify' && b.textContent.trim() === 'Offset', `${host}: an Offset button in the Modify group`);
     const tools = [...g.querySelectorAll('.sk-ribbon-btn')].map((x) => x.id);
-    ok(tools.indexOf('tool-offset') === tools.indexOf('tool-fillet') + 1, `${host}: Offset right after Fillet (${tools})`);
+    ok(tools.indexOf('tool-offset') === tools.indexOf('tool-mirror') + 1, `${host}: Offset right after Mirror (${tools})`);
     ok(b.querySelector('svg.sk-ribbon-ic'), `${host}: an inline icon in the ribbon's icon style`);
   } finally { await app.close(); }
 }

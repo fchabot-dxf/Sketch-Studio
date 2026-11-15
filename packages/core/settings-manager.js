@@ -71,6 +71,9 @@ const DEFAULT_SETTINGS = {
     // Task 586: the floating Design BROWSER (SKETCHES tree, #ui/design-browser.js) is shrunk to its header bar. A per-user display preference
     // (local), shared by all four apps, never saved in a document.
     BROWSER_COLLAPSED: false,
+    // Task 647: the user's tool-ribbon layout per app and section (which tools are in the bar, their order); null = the declared defaults.
+    // The shape and the merge rules are #ui/ribbon-layout.js. A per-user display preference (local), never saved in a document.
+    RIBBON_LAYOUT: null,
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

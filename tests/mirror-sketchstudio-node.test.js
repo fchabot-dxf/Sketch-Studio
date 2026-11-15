@@ -1,6 +1,6 @@
 // tests/mirror-sketchstudio-node.test.js — TASK 601 (node port of tests/mirror-live-sketchstudio.test.js, TASK 585), SketchStudio through
 // tests/helpers/node-app.js: the MIRROR tool. Draw a two-line chain and a circle left of the Y axis; with the Select tool click line 1, Shift+click
-// line 2 and the circle (the pre-selection); the ribbon's Mirror (Create group) starts at the mirror-LINE step; click the Y axis (it lights up);
+// line 2 and the circle (the pre-selection); the ribbon's Mirror (Modify group since TASK 647) starts at the mirror-LINE step; click the Y axis (it lights up);
 // Enter -> the mirrored copies right of the axis, linked by 4 symmetric constraints about the Y axis and nothing else; Ctrl+Z removes the whole
 // mirror in ONE step, Ctrl+Y brings back the identical document. Same asserts, same picks. Dropped: the cropped screenshots of the ribbon's Create
 // group and of the canvas (EVIDENCE_DIR evidence, they asserted nothing).
@@ -23,11 +23,11 @@ try {
   const move = (p) => app.move(p.x, p.y);
   const tool = (n) => app.tool(n);
 
-  // ---- the ribbon: Mirror in the Create group
+  // ---- the ribbon: Mirror in the Modify group (TASK 647 owner ruling)
   const b = doc.getElementById('tool-mirror');
   const g = b && b.closest('.sk-ribbon-group');
   const grp = g && { label: g.querySelector('.sk-ribbon-group-label').textContent, text: b.textContent.trim() };
-  assert.ok(grp && grp.label === 'Create' && grp.text === 'Mirror', 'the ribbon has a Mirror button in the Create group: ' + JSON.stringify(grp));
+  assert.ok(grp && grp.label === 'Modify' && grp.text === 'Mirror', 'the ribbon has a Mirror button in the Modify group: ' + JSON.stringify(grp));
 
   // ---- the drawing (left of the Y axis, >= 60 px from both axes): a chain A1 - A2 - B2 (two lines, the corner joined) and a circle
   const A1 = at(-80, -260), A2 = at(-330, -260), B2 = at(-330, -80), C = at(-190, -150), R = 40;

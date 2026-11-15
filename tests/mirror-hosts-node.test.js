@@ -19,7 +19,7 @@ for (const host of ['shaper', 'penplotter']) {
   try {
     const st = app.state, at = (x, y) => app.toScreen(x, y), click = (p) => app.click(p.x, p.y);
     const btn = app.document.getElementById('tool-mirror');
-    assert.ok(btn && btn.closest('.sk-ribbon-group').querySelector('.sk-ribbon-group-label').textContent === 'Create', `${host}: Mirror in the ribbon's Create group`);
+    assert.ok(btn && btn.closest('.sk-ribbon-group').querySelector('.sk-ribbon-group-label').textContent === 'Modify', `${host}: Mirror in the ribbon's Modify group (TASK 647)`);
     assert.strictEqual(st.shapes.length, 1, `${host}: the stored line is restored`);
     const h0 = st.history.length;
     app.tool('mirror');

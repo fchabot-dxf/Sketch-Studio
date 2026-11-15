@@ -8,6 +8,7 @@
 // TASK 605: Shaper, Pen Plotter and Trace have the same strip: their rows below the header move down by exactly the strip row, nothing else changes.
 import assert from 'node:assert';
 import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
+import { pressRibbonTool } from './helpers/ribbon-tool.js';
 
 const HOSTS = [
   { name: 'sketchstudio', url: '/apps/sketchstudio/index.html', canvas: '#svgCanvas' },
@@ -73,8 +74,7 @@ await (async () => {
       assert(!(second.x >= box.left && second.x <= box.right && second.y >= box.top && second.y <= box.bottom), h.name + ': the next tap is not on the box');
       await tap(second);
       await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
-      await evalJs(`document.getElementById('tool-circle').scrollIntoView({ block: 'nearest', inline: 'nearest' })`); await sleep(400);
-      await tap(await rectOf(`document.getElementById('tool-circle')`));
+      await pressRibbonTool(evalJs, tap, 'tool-circle'); // TASK 647: from the Create dropdown when Circle is not in the bar
       await evalJs(`document.documentElement.dataset.t602 = 'no-reload'`); // a reload would drop this mark
       const p0 = await snapshot(h);
       assert.strictEqual(p0.dir, 'row', h.name + ': portrait has the ribbon across the top');

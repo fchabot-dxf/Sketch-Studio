@@ -39,7 +39,7 @@ function listFiles(dir) {
 const RIBBON = 'packages/ui/tool-ribbon.js';
 const TOOL_BY_VALUE = Object.fromEntries(Object.entries(TOOL_MODES).map(([k, v]) => [k, v]));
 
-// ---- tools: the ribbon button arrays (CREATE / EDIT / INSPECT / CONSTRAIN), scanned entry by entry -------------------------------
+// ---- tools: the ribbon button arrays (SELECT / CREATE / EDIT / INSPECT / CONSTRAIN), scanned entry by entry -------------------------------
 function ribbonGroup(name) {
   const L = source(RIBBON);
   const start = L.findIndex(l => new RegExp(`^const ${name} = \\[`).test(l));
@@ -66,7 +66,7 @@ const TOOL_SOLVER_ROLE = {
   offset: 'creates the offset of a chain (lines / arcs / a circle, shared joints, each arc its equal) + ONE offset constraint that is its distance dimension (task 650, #core/offset.js)',
 };
 function buildTools() {
-  const groups = ['CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup);
+  const groups = ['SELECT', 'CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup); // TASK 647: Select is its own section
   return groups.map(g => ({ ...g, solverRole: TOOL_SOLVER_ROLE[g.tool] || null }));
 }
 

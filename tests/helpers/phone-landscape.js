@@ -68,12 +68,18 @@ export async function runPhoneLandscape(hostName) {
         }
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('.sk-ribbon')).flexDirection`), 'column', tag + 'the ribbon is a column (a rail)');
         assert.strictEqual(await evalJs(`getComputedStyle(document.querySelector('header.sk-header')).display`), 'none', tag + 'no header bar in short landscape');
-        assert(rail.left <= 26 && rail.w <= 100 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
+        assert(rail.left <= 26 && rail.w <= 165 && rail.bottom >= size.h - 1 && rail.top >= (stripRect ? stripRect.bottom : 0) - 1, tag + 'the rail runs down the left edge beside the handle from under the tab strip: ' + JSON.stringify(rail));
         assert(cv.left >= rail.right - 1, tag + `the canvas is right of the rail (canvas ${cv.left}, rail ${rail.right})`);
         assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1`), true, tag + 'the page does not scroll');
         // TASK 647: the rail never scrolls; each section (but Select) has its name beside its icons: the 44 px dropdown button
         assert.strictEqual(await evalJs(`(() => { const r = document.querySelector('.sk-ribbon'); return r.scrollHeight <= r.clientHeight; })()`), true, tag + 'the rail does not scroll');
         assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group:not([data-fixed]) .sk-ribbon-group-label')].every((g) => { const r = g.getBoundingClientRect(); return g.tagName === 'BUTTON' && r.width >= 44 && r.height >= 44; }) && getComputedStyle(document.querySelector('.sk-ribbon-group[data-fixed] .sk-ribbon-group-label')).display === 'none'`), true, tag + 'every section name is a 44 px dropdown button in the rail; Select has none');
+        // TASK 676: no section name text on the rail; the tools are two per row; the open dropdown has the section's name as its header
+        assert.strictEqual(await evalJs(`[...document.querySelectorAll('.sk-ribbon-group:not([data-fixed]) .sk-ribbon-group-label')].every((g) => getComputedStyle(g).fontSize === '0px')`), true, tag + 'no section label text is visible in the rail');
+        const cols = await evalJs(`[...document.querySelectorAll('.sk-ribbon-group')].map((g) => { const xs = [...g.querySelectorAll('.sk-ribbon-btn:not([hidden])')].map((b) => Math.round(b.getBoundingClientRect().left)); return { n: xs.length, cols: new Set(xs).size }; })`);
+        assert(cols.every((c) => c.cols <= 2) && cols.some((c) => c.n >= 2 && c.cols === 2), tag + 'the rail tools are in 2 columns: ' + JSON.stringify(cols));
+        const sect = await evalJs(`(() => { const b = document.querySelector('.sk-ribbon-group:not([data-fixed]) button.sk-ribbon-group-label'); b.click(); const h = document.querySelector('.sk-ribbon-sect-menu.show .sk-ribbon-sect-head'); const r = { name: b.textContent, head: h && h.textContent, shown: !!h && h.getBoundingClientRect().height > 0 }; b.click(); return r; })()`);
+        assert(sect.shown && sect.head === sect.name && sect.name, tag + 'the expanded section dropdown shows its name as the header: ' + JSON.stringify(sect));
 
         // every rail button: reachable, 44 px, not covered; a tool button activates with a real tap
         const n = await evalJs(`document.querySelectorAll('.sk-ribbon .sk-ribbon-btn:not([hidden])').length`);

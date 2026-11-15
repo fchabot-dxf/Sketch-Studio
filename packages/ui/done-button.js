@@ -18,7 +18,7 @@ const CSS = `
   background: var(--sk-done); color: #fff; cursor: pointer;
   box-shadow: 0 0 0 3px #1f2937, 0 4px 14px rgba(0,0,0,0.3); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .sk-done.sk-done-touch { width: 52px; height: 52px; }
-.sk-done svg { width: 60%; height: 60%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.sk-done svg { width: 72%; height: 72%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .sk-done[hidden] { display: none; }
 .sk-done:active { transform: scale(0.96); }
 `;

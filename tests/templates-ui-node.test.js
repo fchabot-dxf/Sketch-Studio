@@ -1,7 +1,7 @@
 // tests/templates-ui-node.test.js -- TASK 651 / 668 (node half of tests/templates-live.test.js): the template modal through the shared sidebar of Shaper's Design tab
 // (tests/helpers/node-app.js open({ sidebar: true })). Templates... and New design open the SAME modal (Blank first, then every template of the bank
-// with a drawn SVG preview); ONE press on a template card makes the unsaved design named after the template holding its shapes; Blank makes the empty
-// design; Esc and the X make no new design; Undo leaves the starting drawing; the preview is generated from the template's own document.
+// with a drawn SVG preview); a press on a template card shows its start view (TASK 670) whose Open makes the unsaved design named after the template
+// holding its shapes and its user parameters; Blank makes the empty design; Esc and the X make no new design; Undo leaves the starting drawing; the preview is generated from the template's own document.
 import assert from 'node:assert';
 import { open, createProfile } from './helpers/node-app.js';
 import { TEMPLATES, buildTemplate } from '#core/templates.js';
@@ -35,10 +35,22 @@ try {
   assert.strictEqual(q('.sk-tp'), null, 'Esc closes the modal');
   assert.strictEqual(st.shapes.length, 0, 'Esc: nothing was created');
 
-  // ONE press on a card opens it directly as a new design
+  // TASK 670: a press on a card opens its START view (its params, Open + Cancel); Cancel / Esc go back to the cards; Open opens the defaults
   await openSb(); pressEl('[data-action="templates"]'); await settle();
-  pressEl('.sk-tp-card[data-template="hexagon"]'); await settle(400);
-  assert.strictEqual(q('.sk-tp'), null, 'the modal closed on one press');
+  pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
+  assert(q('.sk-tp.sk-tp-small .sk-tp-start[data-template="hexagon"]'), 'a card opens the small start view of its template');
+  assert.strictEqual(q('.sk-tp-field[data-param="acrossFlats"] input').value, '20', 'the param prefilled with its default');
+  assert.strictEqual(doc.activeElement, q('.sk-tp-open'), 'Open has the focus');
+  pressEl('.sk-tp-cancel'); await settle();
+  assert(q('.sk-tp-card[data-template="hexagon"]') && !q('.sk-tp-start') && q('.sk-tp'), 'Cancel: back to the cards, the modal stays');
+  assert.strictEqual(doc.activeElement, q('.sk-tp-card[data-template="hexagon"]'), 'Cancel: the focus is back on the card');
+  pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
+  app.key('Escape'); await settle();
+  assert(q('.sk-tp-card[data-template="hexagon"]') && !q('.sk-tp-start'), 'Esc in the start view: back to the cards');
+  pressEl('.sk-tp-card[data-template="hexagon"]'); await settle();
+  pressEl('.sk-tp-open'); await settle(400);
+  assert.strictEqual(q('.sk-tp'), null, 'Open closed the modal');
+  assert.deepStrictEqual(st.parameters.map((p) => [p.name, p.expression, p.unit, p.comment]), [['across_flats', '20 mm', 'mm', 'Across flats']], 'the template opened with its user parameter');
   assert.strictEqual(st.shapes.length, buildTemplate(TEMPLATES.find((t) => t.id === 'hexagon')).geometry.shapes.length, 'the hexagon is the new design');
   await openSb();
   assert.strictEqual(q('.sk-sidebar-doc').textContent, 'Hexagon', 'the new design is named after the template');

@@ -2,10 +2,16 @@
 // template drawings declared in #core/templates.js), each with a crisp PREVIEW drawn as SVG from the template's own document (its geometry and its
 // dimensions, not an image). One click/tap on any card opens it as a new design. The "+" tab button, the menu's "New design" and "Templates..."
 // all open THIS same modal with Blank first (one picker configuration, not two).
+// TASK 670: a press on a TEMPLATE card turns the same modal into a small START view (one view for every template, built from its declared
+// params): each param prefilled with its default (label + value + unit; a count as a whole-number spinner; a CHOICE as a glyph picker,
+// template-glyphs.js), a live preview, Cancel and Open (Enter). Open right away = the defaults. The lengths / angles typed here become the
+// document's live user parameters (#core/templates.js buildTemplate); counts and choices are chosen here because they cannot change after
+// opening. Cancel / Esc go back to the cards. Blank design opens at once. Phones: the start view is a small card that fits 390 px.
 //   openTemplatePicker() -> Promise of { blank: true } | { template, document, name } | null (Esc, a press outside, the X: no new design)
 // Phones: full-screen, two cards per row. Esc / an outside press (outside-press.js) / the X close it; focus goes back to where it was.
 
-import { TEMPLATES, buildTemplate } from '#core/templates.js';
+import { TEMPLATES, buildTemplate, paramKind, paramUnit, paramRefusal, defaultParams } from '#core/templates.js';
+import { GLYPHS } from './template-glyphs.js';
 import { calculateArcPath, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 import { listenOutsidePress } from './outside-press.js';
 
@@ -261,6 +267,36 @@ function injectStyles() {
   .sk-tp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .sk-tp-desc { display: none; }
 }
+/* TASK 670: the START view of a template (the same panel, small) */
+.sk-tp.sk-tp-small { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); border-radius: 10px; }
+.sk-tp-start { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; min-height: 0; overflow: auto; }
+.sk-tp-start .sk-tp-prev { aspect-ratio: auto; height: 140px; flex: none; }
+.sk-tp-fields { display: flex; flex-direction: column; gap: 6px; }
+.sk-tp-field { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.sk-tp-field > label, .sk-tp-field > .sk-tp-label { flex: 1; min-width: 0; }
+.sk-tp-input { width: 104px; font: inherit; padding: 8px; border-radius: 6px; color: inherit; background: transparent; min-height: 40px;
+  border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.45)); }
+.sk-tp-input[aria-invalid="true"] { border-color: var(--sk-error, #e5484d); }
+.sk-tp-unit { width: 30px; opacity: 0.75; }
+.sk-tp-err { color: var(--sk-error, #e5484d); font-size: 12.5px; min-height: 1em; }
+.sk-tp-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.sk-tp-btn { font: inherit; min-height: 44px; min-width: 88px; padding: 0 16px; border-radius: 8px; cursor: pointer; color: inherit; background: transparent;
+  border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.45)); }
+.sk-tp-btn:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
+.sk-tp-btn.sk-tp-open { background: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); border-color: transparent; color: #fff; font-weight: 600; }
+.sk-tp-btn:focus-visible, .sk-tp-choice button:focus-visible { outline: 2px solid var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); outline-offset: 1px; }
+/* the glyph picker (frame-calc's CornerJointPicker interaction): the active option only; a tap shows all; a pick selects and folds back */
+.sk-tp-choice { display: flex; gap: 6px; padding: 4px; border-radius: 12px; border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); }
+.sk-tp-choice button { width: 44px; height: 44px; padding: 4px; border-radius: 8px; cursor: pointer; color: inherit; display: flex; align-items: center; justify-content: center;
+  background: rgba(127,127,127,0.08); border: 1px solid var(--sk-sidebar-sep, rgba(127,127,127,0.35)); touch-action: manipulation; }
+.sk-tp-choice button[aria-pressed="true"] { border-color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff));
+  background: color-mix(in srgb, var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)) 12%, transparent); }
+.sk-tp-choice button[hidden] { display: none; }
+.sk-tp-glyph { width: 100%; height: 100%; overflow: visible; color: inherit; }
+.sk-tp-glyph-active { color: var(--sk-sidebar-accent, var(--sk-selection, #2c65ff)); }
+.sk-tp-board { stroke: currentColor; fill: currentColor; stroke-dasharray: none; } /* none: Shaper's page styles its toolpath class .sk-tp with a dash that the panel would pass down */
+.sk-tp-board-light { fill-opacity: 0.14; }
+.sk-tp-board-dark { fill-opacity: 0.32; }
 `;
   document.head.appendChild(s); stylesInjected = true;
 }
@@ -283,15 +319,18 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
       resolve(value);
     };
     // Esc closes from anywhere in the modal; it does not reach a modal underneath (the Projects window) or the canvas
+    let backToCards = null; // set while the START view of a template shows: Esc / Cancel go back to the cards
     function onKey(e) {
       if (e.key !== 'Escape') return;
-      e.preventDefault(); e.stopImmediatePropagation(); finish(null);
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (backToCards) backToCards(); else finish(null);
     }
     document.addEventListener('keydown', onKey, true);
     let pressInside = null;
     stopOutside = listenOutsidePress((e) => {
-      if (e.type === 'pointerdown') pressInside = panel.contains(e.target);
-      const inside = pressInside !== null ? pressInside : panel.contains(e.target);
+      // the event's path, not contains(): a pressed button of the start view (Cancel, a glyph) may already be replaced when this runs (TASK 670)
+      if (e.type === 'pointerdown') pressInside = e.composedPath().includes(panel);
+      const inside = pressInside !== null ? pressInside : e.composedPath().includes(panel);
       if (e.type === 'click') pressInside = null;
       if (!inside) finish(null);
     });
@@ -318,12 +357,109 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     blankCard.addEventListener('click', () => finish({ blank: true }));
     grid.appendChild(blankCard);
     for (const t of templates) {
-      const doc = buildTemplate(t);
-      const c = card(t.id, t.name, t.description, renderTemplatePreview(doc));
-      c.addEventListener('click', () => finish({ template: t, document: doc, name: t.name }));
+      const c = card(t.id, t.name, t.description, renderTemplatePreview(buildTemplate(t)));
+      c.addEventListener('click', () => startView(t, c));
       grid.appendChild(c);
     }
     body.appendChild(grid); panel.appendChild(body);
     blankCard.focus();
+
+    // TASK 670: the START view of a template, in THIS panel: its declared params; Open (Enter) builds it with these values
+    function startView(t, fromCard) {
+      const values = defaultParams(t);
+      const valid = () => Object.entries(t.params).every(([k, spec]) => !paramRefusal(spec, values[k]));
+      const view = document.createElement('div'); view.className = 'sk-tp-start'; view.dataset.template = t.id;
+      const prev = document.createElement('div'); prev.className = 'sk-tp-prev';
+      const redraw = () => { if (valid()) prev.replaceChildren(renderTemplatePreview(buildTemplate(t, values))); };
+      const fields = document.createElement('div'); fields.className = 'sk-tp-fields';
+      const err = document.createElement('div'); err.className = 'sk-tp-err'; err.setAttribute('role', 'alert');
+      const inputs = new Map(); // param key -> its value box
+      for (const [k, spec] of Object.entries(t.params)) {
+        const row = document.createElement('div'); row.className = 'sk-tp-field'; row.dataset.param = k;
+        const kind = paramKind(spec);
+        if (kind === 'choice') {
+          const name = document.createElement('span'); name.className = 'sk-tp-label'; name.textContent = spec.label;
+          row.append(name, choicePicker(spec, values[k], (v) => { values[k] = v; redraw(); }));
+        } else {
+          const id = `sk-tp-f-${t.id}-${k}`;
+          const label = document.createElement('label'); label.htmlFor = id; label.textContent = spec.label;
+          const input = document.createElement('input'); input.id = id; input.className = 'sk-tp-input'; input.type = 'number';
+          input.value = String(values[k]);
+          if (kind === 'count') { input.step = '1'; input.min = String(spec.min); input.max = String(spec.max); input.inputMode = 'numeric'; } else { input.step = 'any'; input.min = '0'; input.inputMode = 'decimal'; }
+          input.addEventListener('input', () => { values[k] = input.value.trim() === '' ? NaN : Number(input.value); input.removeAttribute('aria-invalid'); err.textContent = ''; redraw(); });
+          const unit = document.createElement('span'); unit.className = 'sk-tp-unit'; unit.textContent = paramUnit(spec);
+          row.append(label, input, unit);
+          inputs.set(k, input);
+        }
+        fields.appendChild(row);
+      }
+      const actions = document.createElement('div'); actions.className = 'sk-tp-actions';
+      const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'sk-tp-btn sk-tp-cancel'; cancel.textContent = 'Cancel';
+      const openBtn = document.createElement('button'); openBtn.type = 'button'; openBtn.className = 'sk-tp-btn sk-tp-open'; openBtn.textContent = 'Open';
+      actions.append(cancel, openBtn);
+      const open = () => {
+        for (const [k, spec] of Object.entries(t.params)) { // the ONE value rule (#core/templates.js paramRefusal): the first refused value is named
+          const why = paramRefusal(spec, values[k]);
+          if (!why) continue;
+          err.textContent = why;
+          const input = inputs.get(k);
+          if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
+          return;
+        }
+        finish({ template: t, document: buildTemplate(t, values), name: t.name });
+      };
+      openBtn.addEventListener('click', open);
+      cancel.addEventListener('click', () => backToCards());
+      // Enter in a value box opens (on a button, Enter is that button's own click)
+      view.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') { e.preventDefault(); open(); } });
+      view.append(prev, fields, err, actions);
+      redraw();
+      const cards = [...panel.children];
+      const startHead = head(t.name);
+      startHead.querySelector('.sk-tp-x').remove(); // the start view closes with Cancel / Esc (back to the cards) or Open
+      panel.classList.add('sk-tp-small'); panel.setAttribute('aria-label', t.name);
+      panel.replaceChildren(startHead, view);
+      backToCards = () => {
+        backToCards = null;
+        panel.classList.remove('sk-tp-small'); panel.setAttribute('aria-label', 'New design');
+        panel.replaceChildren(...cards);
+        if (fromCard.isConnected) fromCard.focus();
+      };
+      openBtn.focus();
+    }
   });
+}
+
+/**
+ * TASK 670: the GLYPH PICKER of a choice param (frame-calc's CornerJointPicker interaction, built with this app's own DOM): collapsed it shows only
+ * the active option as its glyph; a tap expands it to every option; a pick selects that option and collapses it again. Each option is a 44 px
+ * button named by its label (aria-label and title), aria-pressed on the active one. onPick(value) after every pick.
+ */
+export function choicePicker(spec, value, onPick) {
+  const wrap = document.createElement('div'); wrap.className = 'sk-tp-choice'; wrap.setAttribute('role', 'group'); wrap.setAttribute('aria-label', spec.label);
+  let current = value, expanded = false;
+  const glyph = GLYPHS[spec.glyph];
+  const buttons = spec.options.map((o) => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.value = o.value;
+    b.setAttribute('aria-label', o.label); b.title = o.label;
+    b.addEventListener('click', () => {
+      if (!expanded) { expanded = true; render(); return; }
+      current = o.value; expanded = false; render(); onPick(current);
+      b.focus();
+    });
+    return b;
+  });
+  function render() {
+    wrap.dataset.expanded = expanded ? 'true' : 'false';
+    spec.options.forEach((o, i) => {
+      const b = buttons[i], active = o.value === current;
+      b.hidden = !expanded && !active;
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      b.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      b.replaceChildren(glyph(o.value, { active }));
+    });
+  }
+  wrap.append(...buttons);
+  render();
+  return wrap;
 }

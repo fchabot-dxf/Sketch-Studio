@@ -52,7 +52,7 @@ await (async () => {
   const startOf = async (id) => {
     await openMenu(); await press('[data-action="templates"]'); await waitFor(`!!document.querySelector('.sk-tp-card')`, 'the template modal');
     await press(`.sk-tp-card[data-template="${id}"]`);
-    await waitFor(`!!document.querySelector('.sk-tp.sk-tp-small .sk-tp-start[data-template="${id}"]')`, id + ': the start view');
+    await waitFor(`!!document.querySelector('.sk-tp-panel.sk-tp-small .sk-tp-start[data-template="${id}"]')`, id + ': the start view');
   };
   const dontSave = async () => { await sleep(300); const has = await evalJs(`[...document.querySelectorAll('.sk-sidebar-ask button')].some((b) => /Don.t save/.test(b.textContent))`); if (has) { await press('.sk-sidebar-ask button:nth-of-type(2)').catch(() => {}); } };
   const openShaper = async () => {
@@ -70,10 +70,10 @@ await (async () => {
     await startOf('box-frame');
     assert.strictEqual(await evalJs(`document.activeElement && document.activeElement.classList.contains('sk-tp-open')`), true, 'Open has the focus');
     assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-tp-field')].map((r) => [r.dataset.param, (r.querySelector('input') || {}).value || null])`),
-      [['length', '1500'], ['width', '400'], ['thickness', '18'], ['compartments', '5'], ['layout', null]], 'the box frame start view: its params prefilled');
-    await sleep(300); await shot('start-view-box-frame-desktop.png', '.sk-tp', { pad: 4 });
+      [['length', '1500'], ['width', '400'], ['thickness', '18'], ['compartments', '5'], ['layout', null], ['joint', null]], 'the box frame start view: its params prefilled');
+    await sleep(300); await shot('start-view-box-frame-desktop.png', '.sk-tp-panel', { pad: 4 });
     await press('.sk-tp-open');
-    await waitFor(`!document.querySelector('.sk-tp')`, 'Open closes the modal');
+    await waitFor(`!document.querySelector('.sk-tp-panel')`, 'Open closes the modal');
     await dontSave();
     await waitFor(`window.__designController.state.shapes.length > 20`, 'the box frame drawn');
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['thickness', '18 mm']], 'the box frame opened with its user parameters');
@@ -87,6 +87,12 @@ await (async () => {
     await sleep(300); await shot('parameters-table-box-frame.png', '.sk-pwin', { pad: 4, scale: 2 });
     // thickness 18 -> 12 through the dimension box: a double click on the thickness dimension's label, `thickness = 12`, Enter
     const idx = await S(`s.constraints.findIndex((c) => c.expression === 'thickness')`);
+    // TASK 672: the template's dimensions sit outside the outline (one placement rule) and Recenter fits the geometry: zoom out (wheel, about the
+    // canvas centre) until the thickness label is inside the canvas
+    const inCanvas = () => evalJs(`(() => { const l = document.querySelector('#design-canvas .dim-label[data-constraint-idx="${idx}"]'), c = document.getElementById('design-canvas'); if (!l) return false; const a = l.getBoundingClientRect(), b = c.getBoundingClientRect(); return a.width > 0 && a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom; })()`);
+    const mid = await center('#design-canvas');
+    for (let k = 0; k < 8 && !(await inCanvas()); k++) { await mouseEv('mouseMoved', mid.x, mid.y); await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 120 }); await sleep(300); }
+    assert.ok(await inCanvas(), 'the thickness label is on the canvas');
     const lp = await center(`#design-canvas .dim-label[data-constraint-idx="${idx}"]`);
     await press('#tool-select');
     await dblclick(lp.x, lp.y);
@@ -115,8 +121,8 @@ await (async () => {
     await sleep(200); await shot('layout-picker-expanded.png', '.sk-tp-field[data-param="layout"]', { pad: 6, scale: 3 });
     await press(choiceSel('layout', 'Horizontal'));
     assert.deepStrictEqual(await visibleChoices('layout'), [['Horizontal', 'Horizontal layout', 'true']], 'Horizontal picked, collapsed');
-    await sleep(300); await shot('start-view-box-frame-horizontal.png', '.sk-tp', { pad: 4 });
-    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp')`, 'opened'); await dontSave();
+    await sleep(300); await shot('start-view-box-frame-horizontal.png', '.sk-tp-panel', { pad: 4 });
+    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, 'opened'); await dontSave();
     await waitFor(`window.__designController.state.shapes.length > 20`, 'the horizontal box frame drawn');
     const ext = await S(`JSON.stringify((() => { const p = [...s.joints.values()]; return [Math.max(...p.map((j) => j.x)) - Math.min(...p.map((j) => j.x)), Math.max(...p.map((j) => -j.y)) - Math.min(...p.map((j) => -j.y))].map((v) => Math.round(v * 1e4) / 1e4); })())`).then(JSON.parse);
     assert.deepStrictEqual(ext, [1500, 400], 'Horizontal: 1500 wide and 400 tall');
@@ -134,8 +140,8 @@ await (async () => {
     await sleep(200); await shot('corner-picker-expanded.png', '.sk-tp-field[data-param="joint"]', { pad: 6, scale: 3 });
     await press(choiceSel('joint', 'Miter'));
     assert.deepStrictEqual(await visibleChoices('joint'), [['Miter', 'Mitered', 'true']], 'Mitered picked, collapsed');
-    await sleep(300); await shot('start-view-corner-mitered.png', '.sk-tp', { pad: 4 });
-    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp')`, 'opened'); await dontSave();
+    await sleep(300); await shot('start-view-corner-mitered.png', '.sk-tp-panel', { pad: 4 });
+    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, 'opened'); await dontSave();
     await waitFor(`window.__designController.state.shapes.length === 7`, 'the mitered corner: 7 lines');
     assert.deepStrictEqual(await params(), [['horizontal_length', '300 mm'], ['vertical_length', '200 mm'], ['thickness', '18 mm']], 'the corner parameters');
     await press('#btn-recenter-view'); await sleep(700);
@@ -151,7 +157,7 @@ await (async () => {
     await key('Escape', 'Escape', 27); await sleep(200);
     assert.strictEqual(await evalJs(`!!document.querySelector('.sk-tp-card') && !document.querySelector('.sk-tp-start')`), true, 'Esc: back to the cards');
     await key('Escape', 'Escape', 27); await sleep(200);
-    assert.strictEqual(await evalJs(`!document.querySelector('.sk-tp')`), true, 'Esc again closes the modal');
+    assert.strictEqual(await evalJs(`!document.querySelector('.sk-tp-panel')`), true, 'Esc again closes the modal');
 
     // ================================================================== D. phone, real touch
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
@@ -159,7 +165,7 @@ await (async () => {
     pointer = touch;
     await openShaper();
     await startOf('box-frame');
-    const box = await rectOf('.sk-tp');
+    const box = await rectOf('.sk-tp-panel');
     assert.ok(box.x >= 0 && box.x + box.width <= 390 && box.y >= 0 && box.y + box.height <= 844, 'phone: the start view fits the screen ' + JSON.stringify(box));
     assert.strictEqual(await evalJs(`document.documentElement.scrollWidth <= 390`), true, 'phone: no sideways scroll');
     const fits = await evalJs(`[...document.querySelectorAll('.sk-tp-start input, .sk-tp-start button:not([hidden])')].every((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= 390; })`);
@@ -167,7 +173,7 @@ await (async () => {
     const tgt = await evalJs(`[...document.querySelectorAll('.sk-tp-open, .sk-tp-cancel, .sk-tp-choice button:not([hidden])')].map((e) => Math.round(e.getBoundingClientRect().height))`);
     assert.ok(tgt.every((h) => h >= 44), 'phone: Open, Cancel and the glyphs are 44 px tall ' + JSON.stringify(tgt));
     await sleep(300); await shot('start-view-box-frame-phone.png');
-    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp')`, 'phone: a tap on Open opens it'); await dontSave();
+    await press('.sk-tp-open'); await waitFor(`!document.querySelector('.sk-tp-panel')`, 'phone: a tap on Open opens it'); await dontSave();
     await waitFor(`window.__designController.state.parameters.length === 3`, 'phone: the box frame with its parameters');
     console.log('template-start-670-live: ok');
   } finally { await cdp.close(); }

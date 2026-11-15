@@ -16,7 +16,7 @@
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import {
-  findCornerAtPoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
+  findCornerAtPoint, findCornerAtJoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
   diagnoseNoFillet, T_JUNCTION_MESSAGE, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
 import { SNAP, TOOL_MODES } from '#core/constants.js';
@@ -39,9 +39,9 @@ let hoverCorner = null;
 let currentRadius = null; // WORLD mm (1 unit = 1 mm); null until first setup. Survives tool switches.
 let _radiusUnit = null;   // doc unit the default was seeded for; a unit change re-seeds it
 let _pick = null;         // { line1, at } once the first line is picked (at = the world point it was picked at)
-let _input = null;        // { el, corner, radius, ... } while the radius input is open; radius = the ONE radius, typed or dragged
-let _hover = false;       // the pointer is over the handle (it draws darker)
-let _drag = null;         // { pointerId, grab } while the handle is dragged
+let _input = null;        // { el, corners, radius, ... } while the radius input is open; radius = the ONE radius, typed or dragged
+let _hover = null;        // the pending corner whose drag handle is currently hovered (or null)
+let _drag = null;         // { pointerId, corner, grab } while a handle is dragged
 let _press = null;        // a press on empty canvas while the input is open: a click abandons it on release, a pan / pinch does not
 let _viewListening = false;
 let _committing = false;  // commitFilletInput is saving its own history step
@@ -102,6 +102,13 @@ const curveAt = (state, world, thresh) => findFilletShapeAtPoint(state, world, t
 const otherCurveAt = (state, world, thresh) => findFilletShapeAtPoint(state, world, thresh, (s) => otherSketchPick(state, s));
 function cornerOf(corner, state) { return corner && lineOf(corner.lineA.shape, state) && lineOf(corner.lineB.shape, state) ? corner : null; }
 
+function sameCorner(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.cornerJointId && b.cluster) return b.cluster.has(a.cornerJointId);
+  return !!(a.cornerPt && b.cornerPt && Math.hypot(a.cornerPt.x - b.cornerPt.x, a.cornerPt.y - b.cornerPt.y) < 1e-6);
+}
+
 export function handleFilletPointerMove(e, ctx, state, viewState) {
   _ctx = ctx || _ctx;
   _state = state || _state;
@@ -111,9 +118,25 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
     if (_drag && _drag.pointerId === e.pointerId) dragHandleTo(svg, e);
     else if (_press && _press.pointerId === e.pointerId && Math.hypot(e.clientX - _press.x, e.clientY - _press.y) > PRESS_SLOP_PX) _press.moved = true;
     else if (e.pointerType !== 'touch') {
-      const over = overHandle(svg, e);
-      setCanvasCursor(svg, over ? 'pointer' : 'crosshair');
-      if (over !== _hover) { _hover = over; refreshPreview(); }
+      const hitH = overHandle(svg, e);
+      const nextHover = hitH ? hitH.corner : null;
+      setCanvasCursor(svg, nextHover ? 'pointer' : 'crosshair');
+      const scale = getScale(svg, viewState);
+      const world = screenToWorld(svg, e.clientX, e.clientY);
+      const thresh = SNAP.JOINT_PX / scale;
+      let nextHoverCorner = null;
+      if (!nextHover) {
+        if (_pick) {
+          const line2 = curveAt(state, world, thresh);
+          const cand = line2 ? cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state) : null;
+          if (cand && !_input.corners.some((c) => sameCorner(c, cand))) nextHoverCorner = cand;
+        } else {
+          const cand = cornerOf(findCornerAtPoint(state, world, thresh, (c) => !!lineOf(c, state)), state);
+          if (cand && !_input.corners.some((c) => sameCorner(c, cand))) nextHoverCorner = cand;
+        }
+      }
+      const hoverChanged = nextHover !== _hover || !!nextHoverCorner !== !!hoverCorner || (nextHoverCorner && hoverCorner && !sameCorner(nextHoverCorner, hoverCorner));
+      if (hoverChanged) { _hover = nextHover; hoverCorner = nextHoverCorner; refreshPreview(); }
     }
     return;
   }
@@ -141,15 +164,73 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   _state = state || _state;
   ensureRadius();
   if (_input) {
-    // the handle starts a drag; anything else is a press whose meaning (click = abandon, pan / pinch = keep) is known on release
-    if (overHandle(svg, e)) {
-      const grab = handleWorld(); const w = screenToWorld(svg, e.clientX, e.clientY);
-      _drag = { pointerId: e.pointerId, grab: grab ? { x: grab.x - w.x, y: grab.y - w.y } : { x: 0, y: 0 } };
+    // the handle starts a drag; anything else is a press whose meaning (add corner, line-1/2 pick, or empty = abandon; pan / pinch = keep) is known on release
+    const hitH = overHandle(svg, e);
+    if (hitH) {
+      const w = screenToWorld(svg, e.clientX, e.clientY);
+      _drag = { pointerId: e.pointerId, corner: hitH.corner, grab: { x: hitH.point.x - w.x, y: hitH.point.y - w.y } };
       refreshPreview(); // the arrow draws darker while dragged
     } else _press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false, svg, state, viewState };
     return true;
   }
   return pressAt(svg, state, viewState, e.clientX, e.clientY);
+}
+
+function refocusInput() {
+  if (!_input || !_input.el) return;
+  const el = _input.el;
+  const focusIt = () => { if (_input && _input.el === el) { el.focus(); el.select(); } };
+  focusIt();
+  setTimeout(focusIt, 0);
+}
+
+function addPendingCorner(corner) {
+  _pick = null;
+  hoverCorner = null;
+  if (!_input.corners.some((c) => sameCorner(c, corner))) {
+    _input.corners.push(corner);
+  }
+  refreshPreview();
+  refocusInput();
+}
+
+// A click on the canvas while the radius box is open either adds another corner to the pending fillet (Fusion session)
+// or abandons the box when the user clicked empty canvas.
+function pickWhileInputOpen(svg, state, viewState, clientX, clientY) {
+  const scale = getScale(svg, viewState);
+  const world = screenToWorld(svg, clientX, clientY);
+  const thresh = SNAP.JOINT_PX / scale;
+
+  if (_pick) {
+    const line2 = curveAt(state, world, thresh);
+    if (!line2) {
+      if (warnOtherSketch(state, 'Fillet', otherCurveAt(state, world, thresh))) { refocusInput(); return; }
+      _pick = null; hoverCorner = null; refreshPreview(); refocusInput(); return;
+    }
+    if (line2.id === _pick.line1.id) { _pick = null; hoverCorner = null; refreshPreview(); refocusInput(); return; }
+    const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2, [_pick.at, world]), state);
+    if (!corner) { showNotification('Curves must meet at a corner to fillet', 'warning'); refocusInput(); return; }
+    addPendingCorner(corner);
+    return;
+  }
+
+  const hit = cornerOf(findCornerAtPoint(state, world, thresh, (c) => !!lineOf(c, state)), state);
+  if (hit) { addPendingCorner(hit); return; }
+
+  const why = diagnoseNoFillet(state, world, thresh, (s) => !!lineOf(s, state));
+  if (why === T_JUNCTION_MESSAGE) { showNotification(why, 'warning'); refocusInput(); return; }
+
+  const line1 = curveAt(state, world, thresh);
+  if (line1) {
+    _pick = { line1, at: world };
+    hoverCorner = null;
+    refreshPreview();
+    refocusInput();
+    return;
+  }
+  if (warnOtherSketch(state, 'Fillet', otherCurveAt(state, world, thresh))) { refocusInput(); return; }
+  if (why) { showNotification(why, 'warning'); refocusInput(); return; }
+  cancelAll(); // truly empty canvas click abandons the pending fillet
 }
 
 // A fresh click at a client point: pick line 1 / line 2, or a corner (opens the radius input).
@@ -191,13 +272,12 @@ function pressAt(svg, state, viewState, clientX, clientY) {
 export function handleFilletPointerUp(e) {
   if (_drag && e && _drag.pointerId === e.pointerId) { // releasing the handle keeps the input open; Enter (or the check) applies
     _drag = null;
-    if (_input) refreshPreview();
-    if (_input) { _input.el.focus(); _input.el.select(); }
+    if (_input) { refreshPreview(); refocusInput(); }
     return;
   }
   if (_press && e && _press.pointerId === e.pointerId) {
     const p = _press; _press = null;
-    if (!p.moved && _input) { cancelInput(); pressAt(p.svg, p.state, p.viewState, e.clientX, e.clientY); } // a click on the canvas abandons the input, then acts as a fresh click
+    if (!p.moved && _input) pickWhileInputOpen(p.svg, p.state, p.viewState, e.clientX, e.clientY);
   }
 }
 
@@ -242,7 +322,7 @@ function openInput(svg, state, viewState, corner) {
   document.body.appendChild(el);
   // a history change (Undo / Redo) ends the fillet in progress; the corner it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _input = { el, corner, radius: currentRadius, invalid: false, svg, state, viewState, unsubHistory };
+  _input = { el, corners: [corner], radius: currentRadius, invalid: false, svg, state, viewState, unsubHistory };
   ensureViewListener();
 
   const applyInputValue = () => {
@@ -272,7 +352,8 @@ function openInput(svg, state, viewState, corner) {
 // the radius box sits beside the corner, wherever the view has moved it, and always fully inside the canvas (task 653): below-right first, then
 // below-left, above-right, above-left, then a box higher up; the first that stays inside the canvas and off the drag arrow (the green check keeps clear of the box)
 function placeInput() {
-  const { el, corner, svg } = _input || {};
+  const { el, corners, svg } = _input || {};
+  const corner = corners && corners[0];
   if (!el || !corner || !svg) return;
   const q = worldToScreen(svg, corner.cornerPt);
   const c = svg.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight, G = 14;
@@ -287,7 +368,13 @@ function placeInput() {
 }
 
 function refreshPreview() {
-  renderFilletOverlay(_input.svg, _input.corner, _input.viewState, { radius: _input.invalid ? null : _input.radius, handle: !_input.invalid });
+  if (!_input) return;
+  renderFilletOverlay(_input.svg, _input.corners, _input.viewState, {
+    radius: _input.invalid ? null : _input.radius,
+    handle: !_input.invalid,
+    hoverCorner: !_input.invalid && hoverCorner && !_input.corners.some((c) => sameCorner(c, hoverCorner)) ? hoverCorner : null,
+    highlight: _pick ? [_pick.line1] : []
+  });
 }
 
 // ---- the radius handle ------------------------------------------------------------------------------------------
@@ -302,15 +389,17 @@ function arcMidpoint(geom) {
   return { x: O.x + radius * mx / m, y: O.y + radius * my / m };
 }
 
-function handleWorld() {
-  return _input ? arcMidpoint(cornerFilletGeometry(_input.corner, _input.radius)) : null;
-}
-
-// the handle is the shared drag arrow: it is picked within the arrow's reach (a 44 px target, x the touch boost for a finger)
+// the handle is the shared drag arrow: any pending corner's handle can be dragged within the arrow's reach
 function overHandle(svg, e) {
-  const h = handleWorld();
-  if (!h) return false;
-  return dragArrowHit({ x: e.clientX, y: e.clientY }, worldToScreen(svg, h), e.pointerType === 'touch', snapBoostFor(e.pointerType === 'touch'));
+  if (!_input || _input.invalid) return null;
+  const isTouch = e.pointerType === 'touch', boost = snapBoostFor(isTouch);
+  for (const corner of _input.corners) {
+    const h = arcMidpoint(cornerFilletGeometry(corner, _input.radius));
+    if (h && dragArrowHit({ x: e.clientX, y: e.clientY }, worldToScreen(svg, h), isTouch, boost)) {
+      return { corner, point: h };
+    }
+  }
+  return null;
 }
 
 // The radius whose preview arc midpoint lies nearest the world point q. The midpoints of the fillets of all radii form the corner's
@@ -334,7 +423,8 @@ function radiusNearest(corner, q) {
 // one drag step: the ONE radius state takes the new value (written into the box, in the box's own formatting), the preview follows
 function dragHandleTo(svg, e) {
   const w = screenToWorld(svg, e.clientX, e.clientY);
-  const r = radiusNearest(_input.corner, { x: w.x + _drag.grab.x, y: w.y + _drag.grab.y });
+  const corner = (_drag && _drag.corner) || _input.corners[0];
+  const r = radiusNearest(corner, { x: w.x + _drag.grab.x, y: w.y + _drag.grab.y });
   if (r == null) return;
   const unit = docUnit();
   const text = formatLenLabel(r);
@@ -366,30 +456,70 @@ export function filletInputOpen() { return !!_input; }
 export function filletInputValid() { return !!(_input && !_input.invalid); }
 
 /** The open corner's world point: where the check button sits beside; null when no input is open. */
-export function filletCornerPoint() { return _input ? _input.corner.cornerPt : null; }
+export function filletCornerPoint() { return (_input && _input.corners[0]) ? _input.corners[0].cornerPt : null; }
 
-/** Enter / the check button: apply the fillet with the radius in the box. The input stays open (with a warning) when it cannot be applied. */
+/** Enter / the check button: apply all pending corners in ONE undo step (first gets radius dim, rest get EQUAL to the first). */
 export function commitFilletInput() {
   if (!_input) return;
-  const { el, corner, state } = _input;
+  const { el, corners, state } = _input;
   const unit = docUnit();
   const val = parseFilletRadius(el.value, unit);
   if (val == null) { showNotification('Enter a radius greater than zero', 'warning'); return; }
-  const pre = cornerFilletGeometry(corner, val);
-  if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return; } // input stays open
+  for (const c of corners) {
+    const pre = cornerFilletGeometry(c, val);
+    if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return; } // input stays open
+  }
 
-  // One history step per fillet, owned here in the tool layer like every other tool (core does not saveState).
+  const hasSnap = typeof state._captureSnapshot === 'function' && typeof state._restoreSnapshot === 'function';
+  const snapBefore = hasSnap ? state._captureSnapshot() : null;
+  const histBefore = Array.isArray(state.history) ? state.history.length : 0;
+
+  // One history step for the entire pending fillet set, owned here in the tool layer like every other tool.
   // The step is this fillet's own: it must not end the fillet through the history listener.
   _committing = true;
-  let res;
-  try { state.saveState?.('fillet'); res = applyFillet(state, corner, val); } finally { _committing = false; }
-  if (!res || !res.success) { showNotification(`Can't fillet: ${(res && res.reason) || 'unknown'}`, 'warning'); return; }
+  const results = [];
+  let failReason = null;
+  try {
+    state.saveState?.('fillet');
+    const res0 = applyFillet(state, corners[0], val);
+    if (!res0 || !res0.success) {
+      failReason = (res0 && res0.reason) || 'unknown';
+    } else {
+      results.push(res0);
+      const firstArcId = res0.arc.id;
+      for (let i = 1; i < corners.length; i++) {
+        const orig = corners[i];
+        const liveCorner = cornerOf(findCornerAtJoint(state, orig.cornerJointId, [orig.lineA.shape.id, orig.lineB.shape.id]), state);
+        if (!liveCorner) { failReason = 'corner no longer valid'; break; }
+        const resI = applyFillet(state, liveCorner, val, { equalTo: firstArcId });
+        if (!resI || !resI.success) { failReason = (resI && resI.reason) || 'unknown'; break; }
+        results.push(resI);
+      }
+    }
+    if (failReason && hasSnap) {
+      state._restoreSnapshot(snapBefore);
+      if (Array.isArray(state.history) && state.history.length > histBefore) state.history.length = histBefore;
+      if (typeof state._notifyHistory === 'function') state._notifyHistory();
+    }
+  } finally {
+    _committing = false;
+  }
+  if (failReason) {
+    showNotification(`Can't fillet: ${failReason}`, 'warning');
+    if (typeof state.triggerDraw === 'function') state.triggerDraw();
+    return;
+  }
 
   currentRadius = val; // the value USED becomes the remembered default
   removeInput();
+  _pick = null;
+  hoverCorner = null;
   clearFilletOverlay();
   if (typeof state.triggerDraw === 'function') state.triggerDraw();
-  showNotification(`Fillet applied (${fmtRadiusLabel(res.radius)})`, 'info');
+  const msg = results.length > 1
+    ? `${results.length} fillets applied (${fmtRadiusLabel(results[0].radius)})`
+    : `Fillet applied (${fmtRadiusLabel(results[0].radius)})`;
+  showNotification(msg, 'info');
 }
 
 function removeInput() {
@@ -397,7 +527,7 @@ function removeInput() {
   if (_input && _input.el && _input.el.parentNode) _input.el.parentNode.removeChild(_input.el);
   _input = null;
   _drag = null;
-  _hover = false;
+  _hover = null;
   _press = null;
 }
 
@@ -420,10 +550,15 @@ function clearFilletOverlay() {
  * Draw the fillet preview. opts.radius overrides the remembered radius (live typing); opts.highlight is a list of
  * line shapes to highlight (the picked first line). With no corner and nothing to highlight, clears the overlay.
  */
-function renderFilletOverlay(svg, corner, viewState, opts = {}) {
+function renderFilletOverlay(svg, cornerOrCorners, viewState, opts = {}) {
   let g = document.getElementById(OVERLAY_ID);
   const highlight = opts.highlight || [];
-  if (!corner && highlight.length === 0) {
+  const pending = Array.isArray(cornerOrCorners) ? cornerOrCorners : (cornerOrCorners ? [cornerOrCorners] : []);
+  const targets = pending.map((corner) => ({ corner, allowHandle: true }));
+  if (opts.hoverCorner && !pending.some((c) => sameCorner(c, opts.hoverCorner))) {
+    targets.push({ corner: opts.hoverCorner, allowHandle: false });
+  }
+  if (targets.length === 0 && highlight.length === 0) {
     if (g) g.remove();
     return;
   }
@@ -473,17 +608,18 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     return `<path d="M ${t.x} ${t.y} L ${P.x} ${P.y}" ${GHOST} />`;
   };
 
-  if (corner && opts.radius !== null) {
+  if (opts.radius !== null) {
     const radiusReq = (typeof opts.radius === 'number') ? opts.radius : currentRadius;
-    const geom = cornerFilletGeometry(corner, radiusReq);
-    if (geom && geom.valid) {
-      const { tA, tB, centerPt, radius } = geom;
-      let diff = Math.atan2(tB.y - centerPt.y, tB.x - centerPt.x) - Math.atan2(tA.y - centerPt.y, tA.x - centerPt.x);
-      while (diff <= -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      const sweep = diff > 0 ? 1 : 0;
-      const arcD = `M ${tA.x} ${tA.y} A ${radius} ${radius} 0 0 ${sweep} ${tB.x} ${tB.y}`;
-      html += `
+    for (const { corner, allowHandle } of targets) {
+      const geom = cornerFilletGeometry(corner, radiusReq);
+      if (geom && geom.valid) {
+        const { tA, tB, centerPt, radius } = geom;
+        let diff = Math.atan2(tB.y - centerPt.y, tB.x - centerPt.x) - Math.atan2(tA.y - centerPt.y, tA.x - centerPt.x);
+        while (diff <= -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        const sweep = diff > 0 ? 1 : 0;
+        const arcD = `M ${tA.x} ${tA.y} A ${radius} ${radius} 0 0 ${sweep} ${tB.x} ${tB.y}`;
+        html += `
     <circle cx="${corner.cornerPt.x}" cy="${corner.cornerPt.y}" r="${rDot * 1.5}" fill="none" stroke="#38bdf8" stroke-width="${strokeW}" />
     <circle cx="${tA.x}" cy="${tA.y}" r="${rDot}" fill="#38bdf8" />
     <circle cx="${tB.x}" cy="${tB.y}" r="${rDot}" fill="#38bdf8" />
@@ -491,18 +627,20 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     ${trimSvg(corner.curveA, tA, corner.cornerPt)}
     ${trimSvg(corner.curveB, tB, corner.cornerPt)}
     <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">${fmtRadiusLabel(radius)}</text>`;
-      const hp = opts.handle ? arcMidpoint(geom) : null;
-      if (hp) {
-        // the drag handle: the shared drag ARROW on the preview arc's midpoint, pointing the way the radius grows (away from the corner);
-        // .fillet-handle is what the Done button keeps clear of
-        const dir = dragArrowDirection((r) => arcMidpoint(cornerFilletGeometry(corner, r)), radiusReq, radiusReq * 0.02);
-        html += dragArrowSvg({ point: hp, dir, scale, state: _drag ? 'drag' : (_hover ? 'hover' : 'idle'), className: 'fillet-handle' });
-      }
-    } else if (geom && geom.reason) {
-      // singular radius (a line would collapse) / collinear: say so right at the corner instead of an arc
-      html += `
+        const hp = (allowHandle && opts.handle) ? arcMidpoint(geom) : null;
+        if (hp) {
+          // the drag handle: the shared drag ARROW on the preview arc's midpoint, pointing the way the radius grows (away from the corner);
+          // .fillet-handle is what the Done button keeps clear of
+          const dir = dragArrowDirection((r) => arcMidpoint(cornerFilletGeometry(corner, r)), radiusReq, radiusReq * 0.02);
+          const hState = (_drag && _drag.corner === corner) ? 'drag' : (_hover === corner ? 'hover' : 'idle');
+          html += dragArrowSvg({ point: hp, dir, scale, state: hState, className: 'fillet-handle' });
+        }
+      } else if (geom && geom.reason) {
+        // singular radius (a line would collapse) / collinear: say so right at the corner instead of an arc
+        html += `
     <circle cx="${corner.cornerPt.x}" cy="${corner.cornerPt.y}" r="${rDot * 1.5}" fill="none" stroke="#f43f5e" stroke-width="${strokeW}" />
     <text x="${corner.cornerPt.x}" y="${corner.cornerPt.y - 10 / scale}" fill="#f43f5e" font-size="${10 / scale}" font-family="system-ui, sans-serif" text-anchor="middle">${geom.reason.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`;
+      }
     }
   }
   g.innerHTML = html;

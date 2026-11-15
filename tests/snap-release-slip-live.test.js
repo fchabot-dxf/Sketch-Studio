@@ -119,8 +119,17 @@ await (async () => {
     assert(lineA && lineA.lines === 1 && lineA.onOrigin, 'a slip just past the reach, inside the release distance, still ends the line on the origin: ' + JSON.stringify(lineA));
     // 2b. drag out past the release distance (the snap is lost), come back to a point between the lock and the release distance (too far to
     //     lock afresh), fast release -> the recovery puts the end ON the origin
-    for (let i = 0; i < 3 && (await endsOnOrigin(1)).lines; i++) await clickEl('#btn-undo'); // the line and its coincident constraint undo as separate steps
-    assert.strictEqual((await endsOnOrigin(1)).lines, 0, 'Undo removes the classic-slip line');
+    // The Line tool stays active after a segment (the chain continues), and Undo mid-draw only cancels that half-drawn next segment: Escape ends the chain first.
+    const counts = () => evalJs(`({ lines: ${S}.shapes.filter((x) => x.type === 'line').length, constraints: ${S}.constraints.length })`);
+    for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(200);
+    assert.deepStrictEqual(await counts(), { lines: 1, constraints: 1 }, 'the slip line and its coincident are drawn');
+    await clickEl('#btn-undo');
+    assert.deepStrictEqual(await counts(), { lines: 0, constraints: 0 }, 'ONE Undo removes the line and its coincident constraint');
+    await clickEl('#btn-redo');
+    assert.deepStrictEqual(await counts(), { lines: 1, constraints: 1 }, 'ONE Redo brings the line and its coincident back');
+    await clickEl('#btn-undo');
+    assert.deepStrictEqual(await counts(), { lines: 0, constraints: 0 }, 'Undo removes the classic-slip line again');
     await clickEl('#tool-line');
     const outAt = await clearPoint(magnet.release + 4);
     const slip = Math.ceil((magnet.lock + magnet.release) / 2);

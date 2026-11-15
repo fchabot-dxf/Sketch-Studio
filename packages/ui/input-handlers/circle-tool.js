@@ -30,7 +30,7 @@ export function setupCircleTool(svg, state){
         onPreview: (detail) => {
             if (detail.mode !== 'single' || detail.field !== 'diameter') return;
             const v = detail.value / 2;
-            circleState.lockedRadius = v > 0 ? v : null;
+            circleState.lockedRadius = (detail.reset && detail.reset[0]) ? null : (v > 0 ? v : null);
             const center = state.joints.get(state.active.start) || state.active.startPt;
             if (center && state.active.preview) {
                 const pt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : center;

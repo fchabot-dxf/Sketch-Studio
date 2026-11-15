@@ -38,8 +38,10 @@ export function setupPolygonTool(svg, state) {
     setupDimensionListeners(state, TOOL_MODES.POLYGON, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'polygon',
         onPreview: (detail) => {
-            if (detail.typed[1] && Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
-            if (detail.typed[0]) live.lockedRadius = detail.width > 0 ? detail.width : null;
+            if (detail.reset && detail.reset[1]) live.sides = null;
+            else if (detail.typed[1] && Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
+            if (detail.reset && detail.reset[0]) live.lockedRadius = null;
+            else if (detail.typed[0]) live.lockedRadius = detail.width > 0 ? detail.width : null;
             redrawPreview(state);
         },
         onApply: (detail) => {

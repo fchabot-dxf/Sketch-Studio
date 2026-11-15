@@ -23,7 +23,7 @@ import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
-import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 
 const OVERLAY_ID = 'offset-tool-overlay';
@@ -164,7 +164,8 @@ function openInput(svg, state, chain, pickId, side) {
   el.type = 'text';
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Offset distance');
-  el.value = formatUnit(currentDistance, unit, { decimals: decimalsFor(unit) });
+  const defaultValue = formatUnit(currentDistance, unit, { decimals: decimalsFor(unit) });
+  el.value = defaultValue;
   el.style.position = 'fixed';
   el.style.width = '90px';
   document.body.appendChild(el);
@@ -172,13 +173,15 @@ function openInput(svg, state, chain, pickId, side) {
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
   _open = { chain, pickId, side, d: currentDistance, el, svg, state, unsubHistory };
   ensureViewListener();
-  el.addEventListener('input', () => {
+  const applyInputValue = () => {
     const v = parseOffsetDistance(el.value, docUnit());
     if (v != null) _open.d = v;
     refresh();
-  });
+  };
+  el.addEventListener('input', applyInputValue);
   el.addEventListener('keydown', (ev) => {
     ev.stopPropagation(); // typing never reaches the canvas shortcuts (Delete, F, ...)
+    if (handleBoxUndoKey(ev, el, defaultValue, applyInputValue)) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitOffsetInput(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });

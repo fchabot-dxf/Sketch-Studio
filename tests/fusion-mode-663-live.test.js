@@ -117,15 +117,16 @@ try {
   await evalJs(`document.querySelector('.sk-header-tab[data-tab="review"]').click()`);
   await waitFor(`!document.getElementById('view-review').hidden && !!document.getElementById('btn-generate-svg') && !!document.getElementById('btn-sync-shaper')`, 'Review stage with export/upload in Fusion mode');
 
-  // ---- 2. Fusion mode (?host=fusion) WITHOUT window.adsk -> Add selection disabled with hint
+  // ---- 2. Fusion mode (?host=fusion) WITHOUT window.adsk -> waits with Add selection disabled
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: stubId });
   await evalJs(`(() => { try { localStorage.removeItem('shaper-mode'); } catch (e) {} })()`);
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
   await waitForApp('design-canvas');
   await waitFor(`!document.getElementById('view-prepare').hidden && !!document.getElementById('btn-fusion-add-selection')`, 'Fusion Prepare without adsk');
-  const noAdsk = await evalJs(`({ disabled: document.getElementById('btn-fusion-add-selection').disabled, status: document.getElementById('shaper-fusion-status').textContent, title: document.getElementById('btn-fusion-add-selection').title })`);
+  const noAdsk = await evalJs(`({ disabled: document.getElementById('btn-fusion-add-selection').disabled, status: document.getElementById('shaper-fusion-status').textContent, state: document.getElementById('shaper-fusion-status').dataset.state, title: document.getElementById('btn-fusion-add-selection').title })`);
   assert.strictEqual(noAdsk.disabled, true, 'Add selection disabled when window.adsk missing');
-  assert.ok(noAdsk.status.includes('window.adsk missing'), `status shows disabled hint (${noAdsk.status})`);
+  assert.strictEqual(noAdsk.status, 'Waiting for Fusion…', `status shows Waiting while polling for adsk (${noAdsk.status})`);
+  assert.strictEqual(noAdsk.state, 'waiting', 'status state is waiting');
   await shot('fusion-no-adsk-1280x800.png');
 
   // ---- 3. Normal Shaper (no ?host=fusion) unchanged

@@ -63,6 +63,7 @@ const TOOL_SOLVER_ROLE = {
   coincident: 'coincident', hv: 'horizontal | vertical', parallel: 'parallel', perp: 'perpendicular', collinear: 'collinear',
   tangent: 'tangent', equal: 'equal', midpoint: 'midpoint', symmetric: 'symmetric (two points, two lines or two circles / arcs about a line)',
   mirror: 'creates mirrored copies (shapes + joints) linked to the originals by symmetric constraints only (task 585, #core/mirror.js)',
+  offset: 'creates the offset of a chain (lines / arcs / a circle, shared joints, each arc its equal) + ONE offset constraint that is its distance dimension (task 650, #core/offset.js)',
 };
 function buildTools() {
   const groups = ['CREATE', 'EDIT', 'INSPECT', 'CONSTRAIN'].flatMap(ribbonGroup);
@@ -96,6 +97,10 @@ function creationSites() {
       if (m) return add(m[1], file, i + 1);
       m = l.match(/addViaManager\(\s*CONSTRAINT_TYPES\.(\w+)/);   // snap-constraints.js: a snapped joint-on-line (the only site of pointOnLine once the Dimension tool stopped making a helper joint)
       if (m) return add(valueOfKey(m[1]), file, i + 1);
+      if (file.endsWith('/offset.js')) {   // task 650: the offset constraint's one record builder (offsetConstraintRecord)
+        m = l.match(/^\s*type:\s*CONSTRAINT_TYPES\.(\w+),/);
+        if (m) return add(valueOfKey(m[1]), file, i + 1);
+      }
       if (file.endsWith('/shapes.js') || file.endsWith('/fillet.js')) {
         m = l.match(/\{\s*type:\s*'(\w+)'.*(?:joints|shapes|line|circle|joint)/);
         if (m && Object.values(CONSTRAINT_TYPES).includes(m[1])) add(m[1], file, i + 1);

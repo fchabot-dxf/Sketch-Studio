@@ -10,7 +10,6 @@ import { switchToTool, toggleFixedSelection, selectionLockState } from '#ui/inpu
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
-import { createParametersWindow } from '#ui/parameters-window.js';
 import { beginMirror } from '#ui/input-handlers/mirror-tool.js';
 import { beginCircularPattern, beginRectangularPattern } from '#ui/input-handlers/pattern-tool.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
@@ -65,9 +64,6 @@ const PROFILE_ACTIONS = [
 const INSPECT = [
   { tool: TOOL_MODES.DIMENSION, icon: 'icon-tool-dim', label: 'Dim' },
 ];
-// TASK 535-4: the Parameters window opener. Default ON for every host of the Design tab (ONE declaration); a host opts OUT with
-// createToolRibbon({ parameters: false }) (Trace, decision O14).
-const PARAMETERS = { action: 'parameters', id: 'btn-parameters', iconSvg: '<text x="12" y="16.5" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="13" fill="currentColor" stroke="none">fx</text>', label: 'Params', title: 'Parameters (fx)', ariaLabel: 'Parameters', popup: true };
 const CONSTRAIN = [
   { tool: TOOL_MODES.COINCIDENT,          icon: 'icon-coincident',   label: 'Coinc' },
   { tool: TOOL_MODES.HORIZONTAL_VERTICAL, icon: 'icon-hv',           label: 'H/V' },
@@ -125,7 +121,6 @@ button.sk-ribbon-group-label.active { background: var(--sk-selection, #3B82F6); 
 .sk-ribbon-btn[hidden] { display: none; } /* TASK 647: a tool that is not in the bar, or does not fit (it is in its section's dropdown) */
 .sk-ribbon-btn:hover { background: var(--sk-ribbon-hover, #f0f0f0); }
 .sk-ribbon-btn:active { transform: scale(0.95); }
-.sk-ribbon-btn[aria-haspopup]:focus-visible { outline: 2px solid var(--sk-selection, #3B82F6); outline-offset: -2px; } /* the pop-up opener only (TASK 535-4) */
 .sk-ribbon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .sk-ribbon-btn:disabled:hover { background: transparent; transform: none; }
 .sk-ribbon-btn[aria-pressed="true"] { background: var(--sk-ribbon-hover, #f0f0f0); border-color: var(--sk-ribbon-sep, #cbd5e1);
@@ -286,28 +281,18 @@ const px = (v) => parseFloat(v) || 0;
  *   appId: the host's id (the one it gives app-chrome); the user's layout (checkboxes, order) is saved per appId (#ui/ribbon-layout.js).
  *   extraGroups: [{ label, defaultInBar?, buttons:[{ icon?|svg?, label?, title?, id?, event?, onClick? }] }] — host-appended sections.
  *   on(name, detail): optional event hook ('tool' on a tool switch, 'rectMode', 'action' for extra buttons).
- *   parameters (default true): the "fx Parameters" button + its pop-up window in the Inspect group; false = a declared opt-out (Trace).
+ *   (TASK 677: the Parameters window's opener moved from Inspect to the shared footer, #ui/app-footer.js; its opt-out is the footer's.)
  *   onToolClick(tool): optional host override — when given, a tool-button click (and a rect-variant select, after
  *     state.rectMode is set) calls THIS instead of the internal switchToTool, so a host (e.g. SketchStudio) routes
  *     tool activation to its OWN rich handler. When absent, the ribbon uses switchToTool (Shaper/standalone path).
  */
-export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, parameters = true, notify = null } = {}) {
+export function createToolRibbon({ state, appId = 'default', extraGroups = [], on = null, onToolClick = null, profiles = false, notify = null } = {}) {
   injectStyles();
   ensureIconSymbols(ICON_IDS);
 
   const el = document.createElement('div'); el.className = 'sk-ribbon';
   const toolBtns = []; // { btn, tool } — for active-sync
   const menus = [];    // TASK 607: popovers on document.body, removed in destroy()
-  // TASK 535-4: the Parameters window is made on first use; closing it (button, X, Esc) returns focus to its button
-  // (TASK 647: to its section's name when the button is not in the bar: it was opened from the dropdown).
-  let paramsWin = null;
-  const parametersWindow = () => paramsWin || (paramsWin = createParametersWindow({
-    state, anchorEl: el, onClose: () => {
-      refresh();
-      const b = el.querySelector('#btn-parameters');
-      if (b) (b.hidden ? sections.find((sec) => sec.items.some((it) => it.btn === b)).nameEl : b).focus();
-    },
-  }));
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
   function selectTool(tool, begin = null) {
@@ -329,7 +314,6 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     if (t.tool) b.dataset.tool = t.tool;
     if (t.action) b.dataset.action = t.action;
     if (t.ariaLabel) b.setAttribute('aria-label', t.ariaLabel);
-    if (t.popup) { b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-pressed', 'false'); }
     // Support both symbol-id icons (icon) and raw inline SVG paths (iconSvg) for newer tools
     const icon = t.iconSvg
       ? `<svg class="sk-ribbon-ic" viewBox="0 0 24 24" fill="none" aria-hidden="true">${t.iconSvg}</svg>`
@@ -341,7 +325,6 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
         if (t.action === 'lock') { toggleFixedSelection(state); refresh(); }
         else if (t.action === 'combine') doCombine(state, notify || undefined);
         else if (t.action === 'uncombine') doUncombine(state, notify || undefined);
-        else if (t.action === 'parameters') { parametersWindow().toggle(); refresh(); }
         fire('action', { id: b.id, action: t.action });
       } else {
         selectTool(t.tool, t.begin);
@@ -402,7 +385,7 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     { key: 'select', label: 'Select', fixed: true, tools: SELECT },
     { key: 'create', label: 'Create', tools: CREATE },
     { key: 'modify', label: 'Modify', defaultInBar: 1, tools: profiles ? [...EDIT, ...PROFILE_ACTIONS] : EDIT }, // TRACE-1: trim + break (+ opt-in profile actions)
-    { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: parameters ? [...INSPECT, PARAMETERS] : INSPECT },
+    { key: 'inspect', label: 'Inspect', defaultInBar: 1, tools: INSPECT },
     { key: 'constrain', label: 'Constrain', tools: [...CONSTRAIN, LOCK] },
     // app-specific groups (Draw / …) appended by the host behave like the built-in ones
     ...(extraGroups || []).map((g, i) => ({ key: String(g.label || 'group-' + i).toLowerCase(), label: g.label || '', defaultInBar: g.defaultInBar, buttons: g.buttons || [] })),
@@ -604,8 +587,6 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     const lock = state ? selectionLockState(state) : { has: false, locked: false };
     lockBtn.disabled = !lock.has;
     lockBtn.setAttribute('aria-pressed', String(lock.locked));
-    const paramsBtn = el.querySelector('#btn-parameters');
-    if (paramsBtn) paramsBtn.setAttribute('aria-pressed', String(!!(paramsWin && paramsWin.isOpen())));
     // TASK 647: the active tool lives only in its section's dropdown -> the section's name is lit
     sections.forEach((sec) => { if (!sec.fixed) sec.nameEl.classList.toggle('active', sec.items.some((it) => it.tool && it.tool === cur && it.btn.hidden)); });
     syncRows();
@@ -632,7 +613,6 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
     refresh,
     destroy: () => {
       if (unlistenHistory) unlistenHistory();
-      if (paramsWin) paramsWin.destroy();
       sectPop.close();
       document.removeEventListener('pointerup', syncSoon);
       document.removeEventListener('keyup', syncSoon);

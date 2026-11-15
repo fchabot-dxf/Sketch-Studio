@@ -20,6 +20,8 @@ import { linearDimFrame, linearParamsToPoint, linearPointToParams, polarPointToP
 import { symmetricOperands } from '#core/symmetric.js';
 import { isPatternConstraint, patternHandles, patternSpacing } from '#core/pattern.js';
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
+import { quantityText, dimensionUnit } from '#core/parameters.js';
+import { isAutoDimName } from '#core/expression.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -38,6 +40,18 @@ export function formatConstraintValue(c, options = {}) {
   // TASK 535: a dimension driven by a formula (and not being placed) shows Fusion's mark in front of its value: 'fx: 60.0'
   return text && c && typeof c.expression === 'string' && c.expression !== '' && !(c.isDriven || c.driven) && !(typeof options === 'object' && options.isPlacing) ? `fx: ${text}` : text;
 }
+/**
+ * TASK 677 (owner ruling, Fusion measured): the hover tag of a NAMED dimension (one renamed from its automatic dN, e.g. by typing
+ * `thickness = 18` into its box): "name : expression", or "name : value unit" when it holds a plain value (Fusion: 'param : 2"'). Its label
+ * shows the plain value (no fx:); the dimensions that read its name show fx:. '' for an automatic name. ONE definition, every dimension label.
+ */
+export function dimensionNameTag(c) {
+  if (!c || typeof c.name !== 'string' || c.name === '' || isAutoDimName(c.name)) return '';
+  const u = dimensionUnit(c, docUnit());
+  const what = typeof c.expression === 'string' && c.expression !== '' ? c.expression : `${quantityText(c.value, u)} ${u}`;
+  return `${c.name} : ${what}`;
+}
+const dimensionNameTitle = (c) => { const t = dimensionNameTag(c); return t ? `<title>${t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>` : ''; };
 function constraintValueText(c, options) {
   if (!c) return '';
   const val = (typeof options === 'number') ? options :
@@ -2446,7 +2460,7 @@ switch(c.type){
           const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
           </g>`;
@@ -2499,7 +2513,7 @@ switch(c.type){
           out.push(...leadLines(linearLead(leadStart, leadEnd, placed.rect, scale(DIM_LEAD_MIN_PX), { underline: !DIM_LABEL_BOX }), strokeColor, visualOpacity));
 
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+          const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(annotX, annotY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
             <text ${placed.attrs}>${displayVal}</text>
           </g>`;
@@ -2599,7 +2613,7 @@ switch(c.type){
             const placedAngle = placeDimLabel(labelX, labelY, -Math.sin(theta), Math.cos(theta), displayVal, undefined, false, labelStrokeColor, { x: Math.cos(theta), y: Math.sin(theta) });
 
             const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
-            const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">
+            const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
                 ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
                 <text ${placedAngle.attrs}>${displayVal}</text>
             </g>`;

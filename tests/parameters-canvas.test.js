@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-import { completionsFor, previewDimensionInput, MAX_COMPLETIONS } from '#core/parameters.js';
+import { completionsFor, previewDimensionInput, MAX_COMPLETIONS, planChange } from '#core/parameters.js';
 import { functionTable } from '#core/expression.js';
 import { applyParameterChange, toggleDriving } from '#ui/dimension-seams.js';
 import { formatConstraintValue } from '#ui/svg-renderer.js';
@@ -58,6 +58,13 @@ function typeInto(S, c, text, { enter = true } = {}) {
 }
 const D = (S, name) => S.state.constraints.find((c) => c.name === name); // undo / redo REBUILD the constraints: look a dimension up by name afterwards
 const measuredLen = (S, c) => { const [a, b] = c.joints.map((j) => S.state.joints.get(j)); return c.dimMode === 'horizontal' ? Math.abs(b.x - a.x) : c.dimMode === 'vertical' ? Math.abs(b.y - a.y) : Math.hypot(b.x - a.x, b.y - a.y); };
+// a USER parameter, made the way the Parameters window's + Add makes one (TASK 677 owner ruling: `name = value` typed into a dimension box NAMES
+// that dimension; it no longer creates a user parameter), then a dimension box typed with its name follows it
+const userParam = (S, name, text, unit = 'mm') => {
+  const p = planChange(S.state, { type: 'createParameter', name, unit, text });
+  assert(p.ok, `create ${name}: ${p.message}`);
+  assert(applyParameterChange(S.state, p, `create parameter ${name}`).ok, `create ${name} applied`);
+};
 // everything an undo must restore, as one image
 const sortKeys = (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).filter(([a]) => !a.startsWith('__')).sort(([a], [b]) => (a < b ? -1 : 1))) : x);
 const image = (st) => JSON.stringify({ j: [...st.joints], c: st.constraints, p: st.parameters }, sortKeys);
@@ -109,38 +116,43 @@ function drawing() {
   ok(nothing.opened && !nothing.stillOpen, 'an empty box closes like before'); near(d1.value, 33, 'and changes nothing');
 }
 
-// ================================================================ 2. `name = value`: create, then use; change the existing one with the hint listing the others (O4)
+// ================================================================ 2. `name = value` NAMES the dimension (TASK 677 owner ruling, Fusion measured); the named dimension drives
+//    the ones that read its name; another dimension's name is refused
 {
   const { S, d1, d2, d3, d4 } = drawing();
   const h0 = S.state.history.length, before = image(S.state);
   const pv = previewDimensionInput(S.state, d1, 'width = 120');
-  ok(pv.ok && pv.kind === 'create' && pv.hint === 'creates width = 120.0 mm', 'create hint: ' + pv.hint);
-  ok(S.state.parameters.length === 0, 'the preview creates nothing');
+  ok(pv.ok && pv.kind === 'name' && pv.hint === 'names it width = 120.0 mm', 'name hint: ' + pv.hint);
+  ok(S.state.parameters.length === 0 && d1.name === 'd1', 'the preview changes nothing');
   typeInto(S, d1, 'width = 120');
-  eq(S.state.parameters, [{ name: 'width', unit: 'mm', expression: '120 mm' }], 'parameter created (R2)');
-  ok(d1.expression === 'width', 'the dimension now follows it'); near(measuredLen(S, d1), 120, 'geometry = 120');
-  eq(S.state.history.length, h0 + 1, 'create + link = ONE undo step');
+  eq(S.state.parameters, [], 'no user parameter is created');
+  ok(d1.name === 'width' && d1.expression === undefined, 'd1 is now called width and holds the plain value'); near(measuredLen(S, d1), 120, 'geometry = 120');
+  eq(formatConstraintValue(d1), '120.0', 'a named dimension shows its plain value (no fx)');
+  eq(S.state.history.length, h0 + 1, 'name + value = ONE undo step');
   S.state.undo();
-  eq(image(S.state), before, 'ONE undo removes the parameter AND restores the dimension, exactly');
-  S.state.redo(); ok(S.state.parameters.length === 1 && D(S, 'd1').expression === 'width', 'redo brings it back');
+  eq(image(S.state), before, 'ONE undo restores the name and the value, exactly');
+  S.state.redo(); ok(!!D(S, 'width') && !D(S, 'd1'), 'redo brings the name back');
 
-  // parameters can use parameters (R1): gap = width / 4 + 2 mm on d3
+  // a named dimension can hold a formula over another one (R1 chains through dimensions): gap = width / 4 + 2 mm on d3
   typeInto(S, D(S, 'd3'), 'gap = width / 4 + 2 mm');
-  near(D(S, 'd3').value, 120 / 4 + 2, 'gap = width / 4 + 2 mm');
-  eq(S.state.parameters.map((p) => p.name), ['width', 'gap'], 'two parameters, gap uses width');
-  eq(S.state.parameters[1].expression, 'width / 4 + 2 mm', 'stored with units');
+  near(D(S, 'gap').value, 120 / 4 + 2, 'gap = width / 4 + 2 mm');
+  eq(D(S, 'gap').expression, 'width / 4 + 2 mm', 'stored with units');
+  eq(S.state.parameters, [], 'still no user parameter');
 
-  // a dimension that reads gap changes when width does (chains): d2 = gap * 2 -> the hint of width = 150 lists d1, d2 (through gap), d3
+  // d2 reads gap; another dimension's name cannot be assigned; a plain number typed into width moves everything that reads it
   typeInto(S, D(S, 'd2'), 'gap * 2');
-  const hint = previewDimensionInput(S.state, D(S, 'd4'), 'width = 150');
-  ok(hint.ok && hint.kind === 'set', 'existing name: a SET');
-  eq(hint.others, ['d1', 'd2', 'd3'], 'the hint also lists dimensions that depend on width THROUGH another parameter');
+  const taken = previewDimensionInput(S.state, D(S, 'd4'), 'width = 150');
+  ok(!taken.ok && taken.code === 'NAME_TAKEN', "another dimension's name is refused: " + taken.hint);
+  const h1 = S.state.history.length;
+  typeInto(S, D(S, 'width'), '150');
+  near(D(S, 'gap').value, 150 / 4 + 2, 'gap follows width'); near(D(S, 'd2').value, (150 / 4 + 2) * 2, 'd2 follows gap');
+  eq(S.state.history.length, h1 + 1, 'ONE undo step');
   void d1; void d2; void d3; void d4;
 }
 // O4 in full: the hint before Enter, Enter, ONE undo
 {
   const { S, d1, d2, d3, d4 } = drawing();
-  typeInto(S, d1, 'width = 120');
+  userParam(S, 'width', '120'); typeInto(S, d1, 'width');
   typeInto(S, d3, 'width');
   typeInto(S, d2, 'width / 2');                              // d2 reads width as well
   const h0 = S.state.history.length;
@@ -160,7 +172,7 @@ function drawing() {
 // ================================================================ 3. refusals: the hint says why; the box stays open; NOTHING changes (no undo step either)
 {
   const { S, d1, d2, d3 } = drawing();
-  typeInto(S, d1, 'width = 120');
+  userParam(S, 'width', '120'); typeInto(S, d1, 'width');
   const cases = [
     ['gap', 'UNKNOWN_NAME', "unknown parameter 'gap' (type gap = 30 to create it)", 'O5: a bare unknown name'],
     ['width + gap', 'UNKNOWN_NAME', "unknown parameter 'gap' (type gap = 30 to create it)", 'O5 inside a formula'],
@@ -211,7 +223,7 @@ function drawing() {
 {
   const { S, d1, d2 } = drawing();
   eq(formatConstraintValue(d1), '100.0', 'no formula: the label is unchanged');
-  typeInto(S, d1, 'width = 120');
+  userParam(S, 'width', '120'); typeInto(S, d1, 'width');
   eq(formatConstraintValue(d1), 'fx: 120.0', 'a formula: fx: 120.0');
   eq(formatConstraintValue(d1, { isPlacing: true }), '(120.0)', 'a dimension being placed shows no fx');
   eq(formatConstraintValue({ ...d1, isDriven: true }), '(120.0)', 'a reference never has a formula');
@@ -224,7 +236,7 @@ function drawing() {
 // ================================================================ 7. toggleDriving (O11)
 {
   const { S, d1, d2, d3 } = drawing();
-  typeInto(S, d1, 'width = 120'); typeInto(S, d3, 'd1 / 2');
+  userParam(S, 'width', '120'); typeInto(S, d1, 'width'); typeInto(S, d3, 'd1 / 2');
   // d1 is read by d3: refused, nothing changed
   const img = image(S.state);
   const r1 = toggleDriving(S.state, d1);
@@ -240,7 +252,7 @@ function drawing() {
 {
   // a plain driving dimension read by a parameter's formula is refused too
   const { S, d1, d2 } = drawing();
-  typeInto(S, d1, 'wide = d2 * 2');                           // the parameter wide reads d2 (and d1 follows wide)
+  userParam(S, 'wide', 'd2 * 2'); typeInto(S, d1, 'wide');   // the parameter wide reads d2 (and d1 follows wide)
   const r3 = toggleDriving(S.state, d2);
   ok(r3.refused && r3.reason === 'd2 is used by wide', 'a dimension read by a parameter cannot become a reference: ' + r3.reason);
 }
@@ -248,7 +260,7 @@ function drawing() {
 // ================================================================ 8. fillet (O12): like Fusion, the line-length dimension KEEPS its formula and its value, measured to the sharp corner
 {
   const { S, A, d1 } = drawing();
-  typeInto(S, d1, 'width = 100');
+  userParam(S, 'width', '100'); typeInto(S, d1, 'width');
   const edge = A.r.top, right = A.r.right; // d1 measures the y = 0 edge (the shape L.rect calls top): fillet ITS corner with the right edge
   const f = L.fillet(S, edge, right, 8);
   ok(S.state.shapes.some((s) => s.id === f.arc), 'the fillet was made');
@@ -343,7 +355,7 @@ function drawing() {
 // ================================================================ 6. save -> load -> the same labels, formulas and parameters; undo / redo
 {
   const { S, d1, d3 } = drawing();
-  typeInto(S, d1, 'width = 120'); typeInto(S, d3, 'width / 2');
+  userParam(S, 'width', '120'); typeInto(S, d1, 'width'); typeInto(S, d3, 'width / 2');
   const doc = serializeDocument(S.state);
   const json = JSON.stringify(doc);
   const S2 = L.newSketch();

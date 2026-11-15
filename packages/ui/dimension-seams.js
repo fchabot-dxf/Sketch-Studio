@@ -129,7 +129,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
     // radius edit goes through the same rule for every shape (the fillet arc included: its two ends must not meet) EXCEPT the fillet's own
     // tangent legs, judged above by filletHasCollapsedLine: they legitimately get very short as R approaches the singular value (a short leg,
     // under 1 % of its length, is no collapse; only a zero-length leg is).
-    const legs = new Set(fillets.filter(Boolean).flatMap(f => filletLines(state, f).map(l => l.line.id)));
+    const legs = new Set(fillets.filter(Boolean).flatMap(f => filletLines(state, f).map(l => l.shape.id)));
     const collapsed = findCollapsedShape(state, sizesBefore, legs);
     if (collapsed) {
       const own = list.find((e, i) => !fillets[i]) || list[0];

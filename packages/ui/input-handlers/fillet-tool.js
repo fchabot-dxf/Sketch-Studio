@@ -8,10 +8,11 @@
 
 import { screenToWorld } from '#ui/coords.js';
 import {
-  findCornerAtPoint, findLineAtPoint, findCornerBetweenLines, calculateFilletGeometry, applyFillet,
+  findCornerAtPoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
   diagnoseNoFillet, defaultFilletRadius, parseFilletRadius
 } from '#core/fillet.js';
 import { SNAP } from '#core/constants.js';
+import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, isShapeInert } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not filleted
 import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
@@ -107,7 +108,7 @@ export function handleFilletPointerMove(e, ctx, state, viewState) {
 
   if (_pick) {
     // line 1 is picked: preview the arc for the candidate line 2 under the cursor
-    const line2 = lineOf(findLineAtPoint(state, world, thresh), state);
+    const line2 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
     hoverCorner = line2 ? cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state) : null;
     renderFilletOverlay(svg, hoverCorner, viewState, { highlight: [_pick.line1] });
     return;
@@ -129,11 +130,11 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   const thresh = SNAP.JOINT_PX / scale;
 
   if (_pick) {
-    const line2 = lineOf(findLineAtPoint(state, world, thresh), state);
+    const line2 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
     if (!line2) return true; // clicked empty space: keep waiting for line 2 (Esc cancels)
     if (line2.id === _pick.line1.id) { cancelAll(); return true; } // click line 1 again: un-pick
     const corner = cornerOf(findCornerBetweenLines(state, _pick.line1, line2), state);
-    if (!corner) { showNotification('Lines must meet at a corner to fillet', 'warning'); return true; }
+    if (!corner) { showNotification('Curves must meet at a corner to fillet', 'warning'); return true; }
     openInput(svg, state, viewState, corner);
     return true;
   }
@@ -142,7 +143,7 @@ export function handleFilletPointerDown(e, ctx, state, viewState) {
   const hit = cornerOf(findCornerAtPoint(state, world, thresh), state);
   if (hit) { openInput(svg, state, viewState, hit); return true; }
 
-  const line1 = lineOf(findLineAtPoint(state, world, thresh), state);
+  const line1 = lineOf(findFilletShapeAtPoint(state, world, thresh), state);
   if (line1) {
     _pick = { line1 };
     renderFilletOverlay(svg, null, viewState, { highlight: [line1] });
@@ -231,7 +232,7 @@ function commitInput() {
   const unit = docUnit();
   const val = parseFilletRadius(el.value, unit);
   if (val == null) { showNotification('Enter a radius greater than zero', 'warning'); return; }
-  const pre = calculateFilletGeometry(corner.pA, corner.cornerPt, corner.pB, val);
+  const pre = cornerFilletGeometry(corner, val);
   if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return; } // input stays open
 
   // One history step per fillet, owned here in the tool layer like every other tool (core does not saveState).
@@ -294,13 +295,31 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
   let html = '';
   const joints = (_state && _state.joints) || null;
   for (const ln of highlight) {
+    const stroke = `stroke="#f59e0b" stroke-width="${strokeW * 2.5}" stroke-linecap="round" opacity="0.75"`;
+    if (ln.type === 'arc') {
+      const c = joints && joints.get(ln.joints[0]), a = joints && joints.get(ln.joints[1]), b = joints && joints.get(ln.joints[2]);
+      if (c && a && b) {
+        const info = arcSweepInfo(c, a, b, { sweep: ln.sweep });
+        html += `<path d="M ${a.x} ${a.y} A ${Math.hypot(a.x - c.x, a.y - c.y)} ${Math.hypot(a.x - c.x, a.y - c.y)} 0 ${info.large ? 1 : 0} ${info.dir > 0 ? 1 : 0} ${b.x} ${b.y}" fill="none" ${stroke} />`;
+      }
+      continue;
+    }
     const a = joints && joints.get(ln.joints[0]), b = joints && joints.get(ln.joints[1]);
-    if (a && b) html += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#f59e0b" stroke-width="${strokeW * 2.5}" stroke-linecap="round" opacity="0.75" />`;
+    if (a && b) html += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" ${stroke} />`;
   }
+
+  // the dashed trim from a tangent point back to the corner: straight along a line, along the circle for an arc
+  const trimD = (curve, t, P) => {
+    if (curve && curve.kind === 'arc') {
+      const delta = (((Math.atan2(t.y - curve.c.y, t.x - curve.c.x) - curve.aP) * curve.bodyDir) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      return `M ${t.x} ${t.y} A ${curve.R} ${curve.R} 0 ${delta > Math.PI ? 1 : 0} ${curve.bodyDir > 0 ? 0 : 1} ${P.x} ${P.y}`;
+    }
+    return `M ${t.x} ${t.y} L ${P.x} ${P.y}`;
+  };
 
   if (corner) {
     const radiusReq = (typeof opts.radius === 'number') ? opts.radius : currentRadius;
-    const geom = calculateFilletGeometry(corner.pA, corner.cornerPt, corner.pB, radiusReq);
+    const geom = cornerFilletGeometry(corner, radiusReq);
     if (geom && geom.valid) {
       const { tA, tB, centerPt, radius } = geom;
       let diff = Math.atan2(tB.y - centerPt.y, tB.x - centerPt.x) - Math.atan2(tA.y - centerPt.y, tA.x - centerPt.x);
@@ -313,8 +332,8 @@ function renderFilletOverlay(svg, corner, viewState, opts = {}) {
     <circle cx="${tA.x}" cy="${tA.y}" r="${rDot}" fill="#38bdf8" />
     <circle cx="${tB.x}" cy="${tB.y}" r="${rDot}" fill="#38bdf8" />
     <path d="${arcD}" fill="none" stroke="#38bdf8" stroke-width="${strokeW * 1.25}" stroke-dasharray="${4 / scale} ${3 / scale}" />
-    <line x1="${tA.x}" y1="${tA.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
-    <line x1="${tB.x}" y1="${tB.y}" x2="${corner.cornerPt.x}" y2="${corner.cornerPt.y}" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
+    <path d="${trimD(corner.curveA, tA, corner.cornerPt)}" fill="none" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
+    <path d="${trimD(corner.curveB, tB, corner.cornerPt)}" fill="none" stroke="#f43f5e" stroke-width="${strokeW * 0.75}" stroke-dasharray="${2 / scale} ${2 / scale}" opacity="0.7" />
     <text x="${centerPt.x}" y="${centerPt.y}" fill="#38bdf8" font-size="${11 / scale}" font-family="system-ui, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">R ${fmtR(radius)}</text>`;
     } else if (geom && geom.reason) {
       // singular radius (a line would collapse) / collinear: say so right at the corner instead of an arc

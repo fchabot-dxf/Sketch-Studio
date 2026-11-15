@@ -10,9 +10,30 @@
 //   together).
 
 import { dbg } from '#core/debug.js';
+import SettingsManager from '#core/settings-manager.js';
+import { UNITS } from '#core/units.js';
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
+
+// Map Fusion 360 `unitsManager.defaultLengthUnits` values to supported app units (`UNITS = ['mm', 'cm', 'in']`).
+export const FUSION_UNIT_MAP = Object.freeze({
+  mm: 'mm',
+  cm: 'cm',
+  m: 'cm',
+  in: 'in',
+  ft: 'in',
+});
+
+/**
+ * Map a Fusion length unit string (e.g. `'mm'`, `'cm'`, `'m'`, `'in'`, `'ft'`) to an app `DOC_UNIT`
+ * from `#core/units.js`, or return `null` when missing/unrecognized.
+ */
+export function mapFusionLengthUnit(raw) {
+  if (typeof raw !== 'string') return null;
+  const mapped = FUSION_UNIT_MAP[raw.trim().toLowerCase()];
+  return mapped && UNITS.includes(mapped) ? mapped : null;
+}
 
 // Message action names (declared once; D:/APPS/shaper-addin/bridge.py holds the matching Python copy — keep both in sync).
 export const FUSION_ACTIONS = Object.freeze({
@@ -130,12 +151,16 @@ export function createFusionBridge({
 
     if (action === FUSION_ACTIONS.PONG) {
       const docName = typeof data.documentName === 'string' ? data.documentName.trim() : '';
+      const mappedUnit = mapFusionLengthUnit(data.lengthUnits);
+      // Session-only override: follow the active Fusion document unit without touching persisted user preferences.
+      if (mappedUnit) SettingsManager.set('DOC_UNIT', mappedUnit, { persist: false });
       const statusText = docName ? `Connected to Fusion: ${docName}` : 'Connected to Fusion';
-      dbg.log('fusion', statusText, { fusionVersion: data.fusionVersion || '' });
+      dbg.log('fusion', statusText, { fusionVersion: data.fusionVersion || '', lengthUnits: mappedUnit });
       onStatus(statusText, {
         connected: true,
         documentName: docName,
         fusionVersion: typeof data.fusionVersion === 'string' ? data.fusionVersion : '',
+        lengthUnits: mappedUnit,
       });
       return 'OK';
     }

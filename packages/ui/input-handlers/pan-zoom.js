@@ -35,6 +35,54 @@ export function updateViewBox(svg, view) {
  * with margin padding (default 1.2x, minimum width 10) and container aspect-ratio preservation; falls back to
  * `DEFAULT_VIEW` when the sketch has no geometry.
  */
+const DEFAULT_AVOID_GAP = 8;
+
+/**
+ * Compute per-edge screen-pixel insets (`{ left, top, right, bottom }`) inside `svg` from an explicit `options.inset`
+ * and/or an overlapping floating element `options.avoidEl` (e.g. a floating cut card over top-right).
+ * Non-overlapping elements (zero size or lying outside `svg`'s box, such as a side column) contribute 0 inset.
+ */
+function resolveFitInset(svg, svgRect, options = {}) {
+    const raw = options.inset || {};
+    let left = Math.max(0, Number(raw.left) || 0);
+    let top = Math.max(0, Number(raw.top) || 0);
+    let right = Math.max(0, Number(raw.right) || 0);
+    let bottom = Math.max(0, Number(raw.bottom) || 0);
+
+    const avoidEl = options.avoidEl;
+    if (avoidEl && avoidEl.getBoundingClientRect && svgRect && svgRect.width > 0 && svgRect.height > 0) {
+        const ar = avoidEl.getBoundingClientRect();
+        if (ar && ar.width > 0 && ar.left < svgRect.right && ar.right > svgRect.left) {
+            const gap = Number.isFinite(options.avoidGap) ? Math.max(0, options.avoidGap) : DEFAULT_AVOID_GAP;
+            const distToRight = svgRect.right - ar.right;
+            const distToLeft = ar.left - svgRect.left;
+            if (distToRight <= distToLeft) {
+                right = Math.max(right, svgRect.right - ar.left + gap);
+            } else {
+                left = Math.max(left, ar.right - svgRect.left + gap);
+            }
+        }
+    }
+
+    if (svgRect && svgRect.width > 0) {
+        const maxTrimX = svgRect.width * 0.8;
+        if (left + right > maxTrimX) {
+            const scale = maxTrimX / (left + right);
+            left *= scale;
+            right *= scale;
+        }
+    }
+    if (svgRect && svgRect.height > 0) {
+        const maxTrimY = svgRect.height * 0.8;
+        if (top + bottom > maxTrimY) {
+            const scale = maxTrimY / (top + bottom);
+            top *= scale;
+            bottom *= scale;
+        }
+    }
+    return { left, top, right, bottom };
+}
+
 export function fitViewToExtents(svg, view, state, options = {}) {
     if (!svg || !view) return;
     const padding = options.padding || 1.2;
@@ -53,15 +101,25 @@ export function fitViewToExtents(svg, view, state, options = {}) {
         const h = Math.max(1e-3, bounds.h);
 
         const rect = (svg.getBoundingClientRect && svg.getBoundingClientRect()) || null;
-        const aspect = (rect && rect.width > 0 && rect.height > 0)
-            ? (rect.width / rect.height)
+        const W = rect && rect.width > 0 ? rect.width : 0;
+        const H = rect && rect.height > 0 ? rect.height : 0;
+        const aspect = (W > 0 && H > 0)
+            ? (W / H)
             : (DEFAULT_VIEW.w / DEFAULT_VIEW.h);
 
-        view.x = cx;
-        view.y = cy;
-        const requiredW = Math.max(w, h * aspect);
-        view.w = Math.max(minWidth, requiredW * padding);
+        const inset = resolveFitInset(svg, rect, options);
+        const hasInset = W > 0 && H > 0 && (inset.left > 0 || inset.top > 0 || inset.right > 0 || inset.bottom > 0);
+        const safeW = hasInset ? Math.max(1, W - inset.left - inset.right) : W;
+        const safeH = hasInset ? Math.max(1, H - inset.top - inset.bottom) : H;
+        const safeAspect = hasInset ? (safeW / safeH) : aspect;
+
+        const requiredSafeW = Math.max(w, h * safeAspect);
+        const fittedSafeW = Math.max(minWidth, requiredSafeW * padding);
+        view.w = hasInset ? fittedSafeW * (W / safeW) : fittedSafeW;
         view.h = view.w / aspect;
+        const worldPerPx = W > 0 ? (view.w / W) : 0;
+        view.x = cx - ((inset.left - inset.right) / 2) * worldPerPx;
+        view.y = cy - ((inset.top - inset.bottom) / 2) * worldPerPx;
     }
 
     updateViewBox(svg, view);
@@ -82,13 +140,13 @@ const pendingFits = new WeakMap(); // svg -> stop() of its armed "fit once the c
  * A canvas with no size yet (hidden tab) is not fitted: the fit is armed and runs at the first real size, unless the user
  * has panned or zoomed `state.view` in the meantime. The next call for the same svg replaces an armed fit.
  */
-export function fitToDrawing(svg, state, { margin = FIT_MARGIN } = {}) {
+export function fitToDrawing(svg, state, { margin = FIT_MARGIN, inset, avoidEl, avoidGap } = {}) {
     if (!svg || !state || !state.view) return false;
     const armed = pendingFits.get(svg);
     if (armed) armed();
     if (!computeGeometryBounds(state)) return false;
     const sized = () => { const r = svg.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    const fit = () => fitViewToExtents(svg, state.view, state, { padding: 1 + 2 * margin, minWidth: FIT_MIN_WIDTH });
+    const fit = () => fitViewToExtents(svg, state.view, state, { padding: 1 + 2 * margin, minWidth: FIT_MIN_WIDTH, inset, avoidEl, avoidGap });
     if (sized()) { fit(); return true; }
     if (typeof ResizeObserver === 'undefined') return false;
     const { x, y, w } = state.view;

@@ -101,7 +101,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       if (vcarveUpdated > 0) parts.push(`${vcarveUpdated} vcarve region${vcarveUpdated === 1 ? '' : 's'} updated`);
       notify(`Cut plan updated: ${parts.join(', ')}`);
     }
-    prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice });
+    prepareView = mountPrepareView(st, canvasEl, { onSelectionChange: refreshCutPanel, onNotice: prepareNotice, avoidEl: panelEl });
     prepareSig = geomSig(st);
     applyPendingSession();
     onViewChange(prepareView);

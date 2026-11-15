@@ -15181,3 +15181,22 @@ Fusion `selection_data` importer into Shaper Prepare cut plan & stock + Fusion m
   - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=396 pass=396 fail=0 elapsed=70s`.
   - Direct live tests: `fusion-import-664-live.test.js`, `fusion-mode-663-live.test.js`, `app-sidebar.test.js`, `sketch-import.test.js`, `prepare-look.test.js`, `review-live.test.js`, `document-tabs-stages-live.test.js` (all exit 0).
 - **Evidence (`.evidence/664/`, local)**: `fusion-import-palette-480x731.png`, `fusion-import-drawer-no-goto-480x731.png`.
+
+## TURN 665
+Polish items on Fusion Shaper mode: session `DOC_UNIT` follows `pong.lengthUnits` + Prepare fit avoids the floating cut card. Antigravity worker, worktree `shaper-fusion-polish`, branch `agents/shaper-fusion-polish` (from `main 341fc1f`).
+- **Units follow Fusion document (`apps/shaper/src/fusion-bridge.js`, `apps/shaper/src/prepare-view.js`)**:
+  - Declared `FUSION_UNIT_MAP` (`mm -> mm`, `cm -> cm`, `m -> cm`, `in -> in`, `ft -> in`) and `mapFusionLengthUnit(raw)` derived from `#core/units.js` `UNITS`.
+  - In `PONG` handler of `createFusionBridge`, when `data.lengthUnits` maps to a supported unit, calls `SettingsManager.set('DOC_UNIT', mappedUnit, { persist: false })` — session-only override that leaves `localStorage['sketch-studio-settings']` untouched for normal Shaper. Missing or unrecognized `lengthUnits` leaves `DOC_UNIT` unchanged.
+  - `mountPrepareView` subscribes to `SettingsManager` `'DOC_UNIT'` changes (`refreshLook()`) and unsubscribes on `destroy()`.
+- **Prepare fit clears the floating cut card (`packages/ui/input-handlers/pan-zoom.js`, `apps/shaper/src/prepare-stage.js`, `apps/shaper/src/prepare-view.js`)**:
+  - Extended the single `fitViewToExtents` path (and `fitToDrawing` forwarding) with `resolveFitInset(svg, svgRect, { inset, avoidEl, avoidGap })`. When `avoidEl` horizontally overlays the canvas (including before `.cut-card` opens inside `#prepare-panel`), reserves that overlay strip + `8px` gap (`safeW = W - right`) and centers the drawing inside the remaining canvas area; non-overlapping or zero-size elements contribute `0` inset.
+  - `createPrepareStage` passes `avoidEl: panelEl` into `mountPrepareView`, which forwards `{ avoidEl, inset, avoidGap }` to `fitViewToExtents`. Since `#prepare-panel` floats over `#prepare-canvas` in normal Shaper as well (`position: absolute; top: 12px; right: 12px; width: 200px`), this avoids the card overlay in both normal Shaper and Fusion mode (only where `#prepare-panel` overlaps `#prepare-canvas`).
+- **Behaviour changes for existing users**:
+  - Normal Shaper Prepare (`#view-prepare`) now frames geometry into the open canvas area left of the floating `#prepare-panel` overlay rather than centering behind `right: 12px; width: 200px`; SketchStudio/Trace/PenPlotter and desktop Design/non-overlapping layouts are unchanged (`avoidEl` unset or outside `svgRect`). Inside `?host=fusion`, `pong` with `lengthUnits` updates `DOC_UNIT` for the session without touching `localStorage['sketch-studio-settings']`.
+- **Tests & gate**:
+  - NEW `tests/fusion-polish-665-node.test.js` (31 assertions) & `tests/fusion-polish-665-live.test.js` (`480x731` CDP: cut card shows `mm` after `pong`, `maxEdgeRight=238 <= cardLeft=268`, normal Shaper reload preserves `DOC_UNIT='in'`).
+  - `npm.cmd run gate:quick`: `GATE tier=quick jobs=quick=22 files=397 pass=397 fail=0 elapsed=71s`.
+  - Direct live tests: `fusion-polish-665-live.test.js`, `fusion-import-664-live.test.js`, `fusion-mode-663-live.test.js`, `prepare-look.test.js`, `stock-loop-live.test.js`, `review-live.test.js`, `sketch-import.test.js`, `document-tabs-stages-live.test.js` (all exit 0).
+- **Evidence (`.evidence/665/`, local)**:
+  - Before (`341fc1f`): `before-palette-480x731.png` (`MD5 2B23BC252927D94055615231AAC1E518` — cut card displays `in` and covers right edge + diagonal open chain, `maxEdgeRight=440 > card.left=268`).
+  - After: `after-palette-480x731.png` (`MD5 A7E33B3ED60A7846EFA94601EEBCC1D7` — cut card displays `mm`, entire drawing sits left of `.cut-card`, `maxEdgeRight=238 <= card.left=268`).

@@ -5,7 +5,7 @@
 // type, thumb-sized (52 px) after a finger and 40 px after a mouse / pen, and disappears by itself the moment the chain ends, by whatever
 // route (a frame loop runs only while the button is shown, so no caller has to announce the end). Colour: the --sk-done token (sketcher.css).
 //   createDoneButton({ svg, isChainOpen: () => bool, onDone: () => void, label?: () => string, anchor?: () => {x, y} | null, avoid?: () => DOMRect[] }) → { sync(touchInput), destroy() }
-//   label: the button's title / aria-label while it shows (the Mirror tool's steps use the same button); default the line chain's.
+//   label: the button's aria-label (no tooltip) while it shows (the Mirror tool's steps use the same button); default the line chain's.
 //   anchor (task 642): the live end point of the open chain's rubber band in client px (Fusion puts its check beside it); null / omitted = the
 //   canvas corner (the Mirror tool has no rubber band). avoid: the numeric length / angle boxes' rects, which the button never covers.
 //   sync(touchInput): call after any pointer event; touchInput = the pointer that just acted was a finger (picks the size).
@@ -30,7 +30,7 @@ export function createDoneButton({ svg, isChainOpen, onDone, label = () => 'Fini
   if (!document.getElementById(STYLE_ID)) { const s = document.createElement('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.appendChild(s); }
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'sk-done'; btn.hidden = true; btn.innerHTML = CHECK_SVG;
-  btn.setAttribute('aria-label', 'Finish the line chain'); btn.title = 'Finish the line chain';
+  btn.setAttribute('aria-label', 'Finish the line chain');
   document.body.appendChild(btn);
 
   let touchInput = false;
@@ -61,7 +61,7 @@ export function createDoneButton({ svg, isChainOpen, onDone, label = () => 'Fini
     const r = svg.getBoundingClientRect();
     const show = r.width > 0 && r.height > 0 && !!isChainOpen();
     btn.hidden = !show;
-    if (show) { const t = label(); btn.title = t; btn.setAttribute('aria-label', t); btn.classList.toggle('sk-done-touch', touchInput); place(); frame = requestAnimationFrame(refresh); }
+    if (show) { btn.setAttribute('aria-label', label()); btn.classList.toggle('sk-done-touch', touchInput); place(); frame = requestAnimationFrame(refresh); }
   }
   btn.addEventListener('click', (e) => { e.preventDefault(); onDone(); refresh(); });
   return {

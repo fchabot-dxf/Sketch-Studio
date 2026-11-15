@@ -1,8 +1,8 @@
 // TASK 659 (owner, Fusion's way): Fillet, Trim, Break, Offset and Mirror work ONLY on curves of the ACTIVE sketch; a curve of another sketch is
-// not a pick (as empty canvas: no hover, no pick, no message). They are not used implicitly either: the cutting lines of a Trim, the mirror line.
+// not a pick (no hover, no pick; task 660: a press on it warns, tests/active-sketch-warn-660.test.js). They are not used implicitly either: the cutting lines of a Trim, the mirror line.
 // ONE rule (#core/sketch-model.js inActiveSketch / activeSketchPick).
 //  1. core entries refuse and write nothing: trimShape, breakShape, applyOffset, mirrorObjects (objects and line);
-//  2. each tool in SketchStudio: Sketch 1 active, a Sketch 2 curve picks nothing (no message, no undo step); Sketch 2 active: it works and every
+//  2. each tool in SketchStudio: Sketch 1 active, a Sketch 2 curve picks nothing (one warning since task 660, no undo step); Sketch 2 active: it works and every
 //     new joint / shape is in sketch-2; a Trim ignores another sketch's cutting line.
 import assert from 'node:assert';
 import * as L from './harness/audit/lib.js';
@@ -47,7 +47,7 @@ try {
   const r = app.svg.getBoundingClientRect();
   const C = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
   for (let i = 0; i < 20 && Math.abs(app.toScreen(60, 0).x - app.toScreen(0, 0).x) > 300; i++) app.wheel(C.x, C.y, 300);
-  const toasts = () => [...doc.querySelectorAll('#notification-container [data-level]')].map((e) => e.textContent.trim());
+  const toasts = () => [...doc.querySelectorAll('#notification-container [data-level]')].map((e) => e.textContent.trim().replace(/^[^A-Za-z]+/, ''));
   const clear = () => doc.querySelectorAll('#notification-container [data-level]').forEach((e) => e.remove());
   const J = (x, y, sk) => { const id = st.genJ(); st.joints.set(id, { x, y, fixed: false, sketchId: sk }); return id; };
   const line = (id, a, b, sk) => st.shapes.push({ id, type: 'line', joints: [a, b], sketchId: sk });
@@ -69,7 +69,7 @@ try {
     assert.ok(!doc.getElementById('trim-tool-overlay'), 'trim: no hover preview');
     app.click(P(10, 0).x, P(10, 0).y);
     assert.strictEqual(pos(), p0, 'trim: nothing moved'); assert.strictEqual(st.shapes.length, n0, 'trim: no shape change');
-    assert.strictEqual(st.history.length, h, 'trim: no undo step'); assert.deepStrictEqual(toasts(), [], 'trim: no message'); }
+    assert.strictEqual(st.history.length, h, 'trim: no undo step'); assert.deepStrictEqual(toasts(), ['Trim works in the active sketch: make Sketch 2 active first'], 'trim: the one warning'); }
   trimDoc('sketch-2');
   { app.click(P(10, 0).x, P(10, 0).y);
     const t1 = st.shapes.find((x) => x.id === 't1'), xs = t1.joints.map((j) => st.joints.get(j).x).sort((a, b) => a - b);
@@ -85,7 +85,7 @@ try {
   breakDoc('sketch-1');
   { const h = st.history.length, p0 = pos(); app.click(P(30, 0).x, P(30, 0).y);
     assert.strictEqual(pos(), p0, 'break: nothing moved'); assert.strictEqual(st.shapes.length, 1, 'break: no new half');
-    assert.strictEqual(st.history.length, h, 'break: no undo step'); assert.deepStrictEqual(toasts(), [], 'break: no message'); }
+    assert.strictEqual(st.history.length, h, 'break: no undo step'); assert.deepStrictEqual(toasts(), ['Break works in the active sketch: make Sketch 2 active first'], 'break: the one warning'); }
   breakDoc('sketch-2');
   { app.click(P(30, 0).x, P(30, 0).y);
     assert.strictEqual(st.shapes.length, 2, 'break in the active sketch: two halves');
@@ -96,7 +96,7 @@ try {
   const offDoc = (active) => { fresh(active); line('o1', J(0, 0, 'sketch-2'), J(60, 0, 'sketch-2'), 'sketch-2'); app.frames(); app.tool('offset'); clear(); };
   offDoc('sketch-1');
   { const h = st.history.length; app.click(P(30, 0).x, P(30, 0).y);
-    assert.strictEqual(box(), null, 'offset: no distance box'); assert.strictEqual(st.history.length, h, 'offset: no undo step'); assert.deepStrictEqual(toasts(), [], 'offset: no message'); }
+    assert.strictEqual(box(), null, 'offset: no distance box'); assert.strictEqual(st.history.length, h, 'offset: no undo step'); assert.deepStrictEqual(toasts(), ['Offset works in the active sketch: make Sketch 2 active first'], 'offset: the one warning'); }
   offDoc('sketch-2');
   { app.click(P(30, 0).x, P(30, 0).y); assert.ok(box(), 'offset in the active sketch: the box opens'); app.enter();
     assert.strictEqual(st.shapes.length, 2, 'offset: the new line');

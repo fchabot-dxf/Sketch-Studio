@@ -13,6 +13,7 @@ import { activeSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TAS
 import { referenceShape } from '#core/reference-lines.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { showNotification } from '#ui/notification-manager.js';
+import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
 
 const HINT_MS = 6000;
 export const MIRROR_HINTS = Object.freeze({
@@ -36,17 +37,18 @@ export function beginMirror(state) {
 /** The current step while the Mirror tool is on, else null. */
 export const mirrorStep = (state) => (state.currentTool === TOOL_MODES.MIRROR && state.mirror ? state.mirror.step : null);
 
-export function handleMirrorPointerDown(e, svg, state, hitJoint, hitShape) {
+export function handleMirrorPointerDown(e, svg, state, hitJoint, hitShape, otherShape = null) {
   const step = mirrorStep(state);
   const shape = !hitJoint && hitShape && hitShape.shape ? hitShape.shape : null;
   if (step === MIRROR_STEPS.OBJECTS) {
     if (hitJoint && hitJoint.id !== ORIGIN_JOINT_ID && inActiveSketch(state, hitJoint.j)) toggle(state.selectedJoints, hitJoint.id);
     else if (shape && !shape.reference && activeSketchPick(state, shape)) toggle(state.selectedShapes, shape.id);
-    else return false;
+    else return warnOtherSketch(state, 'Mirror', otherShape); // another sketch's curve: the warning (task 660); empty canvas: false (a pan)
     return true;
   }
   if (step === MIRROR_STEPS.LINE) {
-    if (!shape || shape.type !== 'line' || (!shape.reference && !activeSketchPick(state, shape))) return false;
+    if (!shape) return otherShape && otherShape.type === 'line' ? warnOtherSketch(state, 'Mirror', otherShape) : false; // another sketch's line is not a mirror line: the warning (task 660)
+    if (shape.type !== 'line' || (!shape.reference && !activeSketchPick(state, shape))) return false;
     const m = state.mirror;
     const why = mirrorLineRefusal(state, m.objects, shape.id);
     if (why) { refuse(why); return true; }

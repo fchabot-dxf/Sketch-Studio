@@ -14,6 +14,7 @@ import { removeOrphanJoints } from './joints.js';
 import { parse as parseUnit } from './units.js';
 import { nextDimensionName } from './parameters.js';
 import { newJointId } from './shape-id.js';
+import { sketchOf, DEFAULT_SKETCH_ID } from './sketch-model.js';
 
 /** A trimmed line shorter than this (world mm) counts as collapsed. */
 export const COLLAPSE_TOL = 1e-3;
@@ -113,9 +114,10 @@ function legAt(state, shape, cornerJoint, P) {
  * @param {object} state
  * @param {string} jointId
  * @param {string[]} [only]
+ * @param {(shape: object) => boolean} [include] - the pick rule: a curve it rejects is ignored as if absent (task 657: only the active sketch's curves decide whether there is a corner)
  * @returns {object|null}
  */
-export function findCornerAtJoint(state, jointId, only = null) {
+export function findCornerAtJoint(state, jointId, only = null, include = () => true) {
   if (!state || !state.joints || !state.joints.has(jointId)) return null;
   const cJoint = state.joints.get(jointId);
   const cluster = getCoincidentCluster(state, jointId);
@@ -123,7 +125,7 @@ export function findCornerAtJoint(state, jointId, only = null) {
   // Construction lines (a Polygon's radials) hang off the corner but are not part of it: they do not count as a third
   // line. They stay attached through the fillet (applyFillet re-links them to the virtual sharp). A corner made ONLY
   // of construction lines still counts them (nothing else to fillet).
-  const curves = (state.shapes || []).filter(s => isLineShape(s) || isArcShape(s));
+  const curves = (state.shapes || []).filter(s => (isLineShape(s) || isArcShape(s)) && include(s));
   // an arc touches a corner by ONE end in the cluster and its centre outside it; a line by one end
   const touches = (s) => { const [e0, e1] = endJoints(s); return cluster.has(e0) !== cluster.has(e1) && !(s.type === 'arc' && cluster.has(s.joints[0])); };
   const solid = curves.filter(s => !s.isConstruction);
@@ -176,7 +178,7 @@ export const T_JUNCTION_MESSAGE = 'Pick the two curves to fillet';
  * @param {number} tolerance
  * @returns {object|null}
  */
-export function findCornerAtPoint(state, worldPt, tolerance = 15) {
+export function findCornerAtPoint(state, worldPt, tolerance = 15, include = () => true) {
   if (!state || !state.joints || !worldPt) return null;
 
   let bestCorner = null;
@@ -186,7 +188,7 @@ export function findCornerAtPoint(state, worldPt, tolerance = 15) {
     if (!j || typeof j.x !== 'number' || typeof j.y !== 'number') continue;
     const d = Math.hypot(worldPt.x - j.x, worldPt.y - j.y);
     if (d < bestDist) {
-      const corner = findCornerAtJoint(state, jid);
+      const corner = findCornerAtJoint(state, jid, null, include);
       if (corner) {
         bestDist = d;
         bestCorner = corner;
@@ -387,6 +389,9 @@ export function calculateFilletGeometry(pA, cornerPt, pB, requestedRadius = 5) {
  */
 export function applyFillet(state, cornerInfo, radius = 5) {
   if (!state || !cornerInfo) return null;
+  // Fusion edits only the active sketch: a corner with a curve of another sketch is refused, never written into the active one (task 657)
+  const active = state.activeSketchId || DEFAULT_SKETCH_ID;
+  if ([cornerInfo.lineA, cornerInfo.lineB].some((l) => l && l.shape && sketchOf(l.shape) !== active)) return { success: false, reason: 'Fillet works in the active sketch only' };
 
   const geom = cornerFilletGeometry(cornerInfo, radius);
   if (!geom.valid) return { success: false, reason: geom.reason };

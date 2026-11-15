@@ -1,10 +1,11 @@
 // packages/ui/parameters-window.js — TASK 535 slice 4: the "fx Parameters" pop-up (docs/PARAMETERS-DESIGN.md F, O13).
-// The shared tabbed dock panel as a modeless floating window over the canvas, holding the read-only Parameters table.
-//   createParametersWindow({ state, anchorEl, onClose }) -> { open, close, toggle, isOpen, destroy, el }
-//   - anchorEl: the ribbon element. First run the window opens just below it (never over it); when there is no room below it (the
-//     phone-landscape rail runs to the bottom of the screen, TASK 602) it opens at the anchor's top instead, right-aligned (beside the rail), and
-//     no taller than the screen leaves; while the anchor is not on screen (a host's
-//     Design tab is hidden behind another tab) the window is hidden with it.
+// The shared tabbed dock panel as a modeless floating window over the canvas, holding the Parameters table (editable since TASK 677, slice 5).
+//   createParametersWindow({ state, anchor, above, onClose, history }) -> { open, close, toggle, isOpen, destroy, el }
+//   - history: { undo(), redo() } of the Design surface (the footer's history router), handed to the table for Ctrl+Z / Ctrl+Y typed in a cell.
+//   - anchor(): the surface the window opens over (the Design canvas showing now; null = none). First run the window opens right-aligned at the
+//     anchor's top (so never over the ribbon above the canvas, nor beside a phone-landscape rail), no taller than the anchor leaves; while there
+//     is no anchor on screen (a host's Design tab is hidden behind another tab) the window is hidden with it. TASK 677: the opener is the footer.
+//   - above: an element the first-run window stays above (the footer's Parameters button: in phone landscape the footer floats inside the canvas).
 //   - Live: while OPEN a requestAnimationFrame tick compares a cheap signature of the rows (the same per-frame signature check the hosts' panelTick
 //     does for the side panel); it rebuilds only on a change and otherwise only re-lights the hovered / selected rows. Closed = no tick.
 //   - Keys typed in the window are not tool shortcuts (they stop at the window).
@@ -34,16 +35,20 @@ function injectStyles() {
   stylesInjected = true;
 }
 
-export function createParametersWindow({ state, anchorEl = null, onClose = null } = {}) {
-  injectStyles();
-  const table = createParameterTable({ state, getUnit: docUnit });
+const shownEl = (e) => !!e && e.getClientRects().length > 0;
 
-  // first run: right-aligned just below the anchor (the ribbon); a remembered position wins (the dock merges it over this)
-  const a = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
-  const w = Math.min(SIZE.w, Math.max(280, window.innerWidth - 24));
-  const below = a ? Math.round(a.bottom + 8) : 80;
-  const top = a && window.innerHeight - below < MIN_ROOM ? Math.round(a.top + 8) : below; // TASK 602: no room under a tall anchor (the rail): open at its top
-  const initial = { w, h: Math.min(SIZE.h, Math.max(MIN_ROOM, window.innerHeight - top - 8)), left: Math.max(8, window.innerWidth - w - 16), top };
+export function createParametersWindow({ state, anchor = () => null, above = null, onClose = null, history = null } = {}) {
+  injectStyles();
+  const table = createParameterTable({ state, getUnit: docUnit, history });
+
+  // first run: right-aligned at the top of the anchor (the canvas), above `above`; a remembered position wins (the dock merges it over this)
+  const anchorEl = anchor();
+  const a = shownEl(anchorEl) ? anchorEl.getBoundingClientRect() : null;
+  const right = a ? Math.min(window.innerWidth, a.right) : window.innerWidth;
+  const w = Math.min(SIZE.w, Math.max(280, (a ? a.width : window.innerWidth) - 24));
+  const top = a ? Math.round(Math.max(0, a.top) + 8) : 80;
+  const floor = Math.min(a ? a.bottom : window.innerHeight, window.innerHeight, shownEl(above) ? above.getBoundingClientRect().top : Infinity);
+  const initial = { w, h: Math.min(SIZE.h, Math.max(MIN_ROOM, floor - top - 8)), left: Math.max(8, Math.round(right - w - 16)), top };
 
   const dock = createTabbedDockPanel({
     tabs: [{ label: 'Parameters', render: (body) => body.appendChild(table.el) }],
@@ -57,7 +62,7 @@ export function createParametersWindow({ state, anchorEl = null, onClose = null 
   const tick = () => {
     raf = null;
     if (!dock.isOpen()) return;
-    const onScreen = !anchorEl || anchorEl.offsetParent !== null;
+    const onScreen = shownEl(anchor());
     dock.el.style.display = onScreen ? '' : 'none';
     if (onScreen) table.refresh();
     raf = requestAnimationFrame(tick);

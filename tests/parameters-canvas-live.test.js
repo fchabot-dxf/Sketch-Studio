@@ -43,7 +43,7 @@ await (async () => {
       return { l, t, w: r - l, h: b - t };
     };
     const box = () => evalJs(`(() => { const i = document.getElementById('dimInput'); const h = document.getElementById('dimHint'); const c = document.getElementById('dimComplete'); const open = !i.classList.contains('hidden'); return { open, value: i.value, type: i.type, inputmode: i.inputMode, hint: h && !h.classList.contains('hidden') ? h.textContent : null, hintErr: !!(h && h.classList.contains('err')), invalid: i.getAttribute('aria-invalid'), list: c && !c.classList.contains('hidden') ? [...c.querySelectorAll('li')].map((li) => ({ name: li.querySelector('.dc-name').textContent, val: li.querySelector('.dc-val').textContent, sel: li.getAttribute('aria-selected') })) : null, active: document.activeElement && document.activeElement.id }; })()`);
-    const labels = (sel) => evalJs(`JSON.stringify([...document.querySelectorAll('${sel} .dim-label')].map((g) => g.textContent.trim().replace(/\\s+/g, ' ')))`).then(JSON.parse);
+    const labels = (sel) => evalJs(`JSON.stringify([...document.querySelectorAll('${sel} .dim-label')].map((g) => (g.querySelector('text') || g).textContent.trim().replace(/\\s+/g, ' ')))`).then(JSON.parse);
 
     // ================================================================== setup: SketchStudio with one formula dimension (parts A and C moved to node, task 580)
     await navigate(url('/apps/sketchstudio/index.html'), 8000);
@@ -62,20 +62,20 @@ await (async () => {
     await key('Enter', 'Enter', 13, 0, '\r'); await sleep(500);
     let b;
     let lab = await labels('#svgCanvas');
-    assert(lab.some((t) => /^fx: 6\.0$/.test(t)), 'the label reads "fx: 6.0": ' + JSON.stringify(lab));
+    assert(lab.includes('6.0'), 'TASK 677: `width = 6` names the dimension; its label reads a plain "6.0": ' + JSON.stringify(lab));
 
     // ================================================================== B. 390 px phone layout
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(800);
     await clickEl('#tool-select').catch(async () => { await evalJs(`document.getElementById('tool-select').scrollIntoView({ inline: 'center' })`); await sleep(200); await clickEl('#tool-select'); });
-    const fx = await evalJs(`(() => { const g = [...document.querySelectorAll('#svgCanvas .dim-label')].find((x) => /fx/.test(x.textContent)); if (!g) return null; g.scrollIntoView({ block: 'center', inline: 'center' }); const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-    assert(fx, 'a formula label is on the 390 px canvas');
+    const fx = await evalJs(`(() => { const g = [...document.querySelectorAll('#svgCanvas .dim-label')].find((x) => /6\.0/.test(x.querySelector('text').textContent)); if (!g) return null; g.scrollIntoView({ block: 'center', inline: 'center' }); const r = g.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    assert(fx, 'the width label is on the 390 px canvas');
     await dblclick(fx.x, fx.y);
     await waitFor(`!document.getElementById('dimInput').classList.contains('hidden')`, 'the box on a phone-width screen', 5000);
     await evalJs(`(() => { const i = document.getElementById('dimInput'); i.focus(); i.select(); })()`);
     await type('p');
     await type('a');
-    await evalJs(`(() => { const i = document.getElementById('dimInput'); i.value = 'width / 2 + w'; i.setSelectionRange(13, 13); i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await evalJs(`(() => { const i = document.getElementById('dimInput'); i.value = 'd2 / 2 + s'; i.setSelectionRange(10, 10); i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await sleep(200);
     b = await box();
     assert.deepStrictEqual([b.type, b.inputmode], ['text', 'text'], 'the box asks a phone for the TEXT keyboard (type=text, inputmode=text)');

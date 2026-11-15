@@ -274,12 +274,19 @@ try {
           tabsTop: Math.round(tabs.top),
           hdlLeft: Math.round(hr.left), hdlW: Math.round(hr.width), hdlH: Math.round(hr.height),
           hdlFree: !!hit && (hit === hdl || hdl.contains(hit)),
+          hdlTop: hr.top, hdlBottom: hr.bottom, hdlRight: hr.right, vh: innerHeight,
+          overlaps: [...document.querySelectorAll('.sk-ribbon, .sk-doctabs, .sk-canvas-corner > *')].filter((e) => {
+            const r = e.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && r.left < hr.right && r.right > hr.left && r.top < hr.bottom && r.bottom > hr.top;
+          }).map((e) => e.className + JSON.stringify(e.getBoundingClientRect())),
         };
       })()`);
       assert.strictEqual(st.hdrDisp, 'none', `${app.name} ${vp.name}: header bar hidden`);
       assert.strictEqual(st.hdrVar, '0px', `${app.name} ${vp.name}: --sk-header-h === 0px`);
       assert.strictEqual(st.tabsTop, 0, `${app.name} ${vp.name}: .sk-doctabs is top row (top=0)`);
-      assert(st.hdlLeft <= 1 && st.hdlW >= 14 && st.hdlH >= 44 && st.hdlFree, `${app.name} ${vp.name}: peeking handle valid & unobstructed: ${JSON.stringify(st)}`);
+      assert(st.hdlLeft <= 1 && st.hdlW === 24 && st.hdlH === 72 && st.hdlFree, `${app.name} ${vp.name}: peeking handle valid & unobstructed: ${JSON.stringify(st)}`);
+      assert.deepStrictEqual(st.overlaps, [], `${app.name} ${vp.name}: handle overlaps no ribbon / tab strip / canvas-corner button: ${JSON.stringify(st)}`);
+      if (vp.h > vp.w) assert(Math.abs((st.hdlTop + st.hdlBottom) / 2 - st.vh / 3) <= 12, `${app.name} ${vp.name}: handle centre at ~1/3 of viewport height: ${JSON.stringify(st)}`);
 
       // Tap handle -> sidebar opens; stage buttons are at the top of the sidebar (>= 44 px tall)
       await tapSel('.sk-sidebar-handle');

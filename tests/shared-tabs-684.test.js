@@ -14,8 +14,7 @@
 import assert from 'node:assert';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
 import { createDocumentBuffer, mergeTabBuffers } from '../packages/ui/document-buffer.js';
-import { serializeDocument, deserializeDocument } from '../packages/core/document.js';
-import { createSketchState } from '../packages/ui/sketch-state.js';
+import { createSketchState } from '../packages/core/sketch-state.js';
 import { createFakeDrive } from './harness/fake-drive.js';
 import { createDriveAdapter } from '../packages/ui/cloud/drive-adapter.js';
 import { createRouterAdapter } from '../packages/ui/cloud/router-adapter.js';
@@ -25,8 +24,7 @@ import { createEngine } from '../packages/core/constraint-solver.js';
 let t = 9000;
 const mkStore = (adapter) => { let n = 0; return createProjectStore({ adapter, legacySource: async () => null, idFn: () => 'd' + (++n), now: () => ++t, channel: null }); };
 const docWith = (...ids) => ({ ...emptyDocument(), geometry: { joints: ids.map((id, i) => [id, { x: i, y: 0 }]), shapes: [], constraints: [] } });
-const engine = createEngine(null);
-const mkState = () => { engine.init(); return createSketchState(engine, { x: 0, y: 0, w: 100, h: 80 }); };
+const mkState = () => { const engine = createEngine(null); engine.init(); return createSketchState(engine, { x: 0, y: 0, w: 100, h: 80 }); }; // each page: its own engine store (TASK 679)
 const ids = (st) => [...st.joints.keys()].filter((k) => k !== 'j_origin').sort();
 const step = (st, label, id) => { st.saveState(label); st.joints.set(id, { x: 1, y: 2 }); };
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -186,28 +184,24 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   const store = mkStore(createMemoryAdapter());
   const seed = page('sketchstudio', store);
   await seed.buf.restore(); step(seed.st, 'line', 'j1'); await seed.buf.keepTabs();
-  // two pages are two JS realms; here they share this process's ONE engine store (constraint-solver.js, module level), so each page's live geometry is put
-  // back into it before that page acts (the page's own state otherwise: history, its buffer, its tab records)
-  let current = null; const live = new Map();
-  const on = async (P, fn) => { if (current && current !== P) live.set(current, serializeDocument(current.st)); if (current !== P && live.has(P)) deserializeDocument(live.get(P), P.st); current = P; await fn(); };
   const A = page('sketchstudio', store);
   const B = page('shaper', store, { session: true });
-  await on(A, () => A.buf.restore()); await on(B, () => B.buf.restore());
+  await A.buf.restore(); await B.buf.restore();
   const k1 = A.buf.tabs()[0].key;
   assert.strictEqual(B.buf.tabs()[0].key, k1, 'both pages hold the same tab');
-  await on(A, async () => { await A.buf.newTab(); step(A.st, 'line', 'jA'); await A.buf.keepTabs(); });
-  await on(B, async () => { await B.buf.newTab(); step(B.st, 'line', 'jB'); B.side.sel = 'b-sel'; await B.buf.keepTabs(); });
+  await A.buf.newTab(); step(A.st, 'line', 'jA'); await A.buf.keepTabs();
+  await B.buf.newTab(); step(B.st, 'line', 'jB'); B.side.sel = 'b-sel'; await B.buf.keepTabs();
   let buffer = await store.readBuffer({});
   const docs = () => buffer.tabs.map((x) => x.doc.geometry.joints.map((j) => j[0]).filter((k) => k !== 'j_origin').join() || '-');
   assert.deepStrictEqual(docs().sort(), ['j1', 'jA', 'jB'], 'a tab each page opened: both kept (B wrote last and kept A\'s)');
   // both edit the SAME tab: both versions are kept
-  await on(A, async () => { await A.buf.activate(k1); step(A.st, 'line', 'jA2'); await A.buf.keepTabs(); });
-  await on(B, async () => { await B.buf.activate(k1); step(B.st, 'line', 'jB2'); await B.buf.keepTabs(); });
+  await A.buf.activate(k1); step(A.st, 'line', 'jA2'); await A.buf.keepTabs();
+  await B.buf.activate(k1); step(B.st, 'line', 'jB2'); await B.buf.keepTabs();
   buffer = await store.readBuffer({});
   assert.ok(docs().includes('j1,jB2') && docs().includes('j1,jA2'), 'a tab both pages changed: both versions kept: ' + JSON.stringify(docs()));
   // A closes its own tab (B never touched it): dropped. B's session of its tab survives A's write.
   const kA = A.buf.tabs().find((x) => x.key !== k1).key;
-  await on(A, async () => { await A.buf.closeTab(kA); await A.buf.keepTabs(); });
+  await A.buf.closeTab(kA); await A.buf.keepTabs();
   buffer = await store.readBuffer({});
   assert.ok(!docs().includes('jA'), 'the tab A closed is gone: ' + JSON.stringify(docs()));
   const bTab = buffer.tabs.find((x) => docs()[buffer.tabs.indexOf(x)] === 'jB');

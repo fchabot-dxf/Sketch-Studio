@@ -22,8 +22,65 @@ import { applyPattern, patternDefaults } from '#core/pattern.js';
 import { planChange, nextDimensionName } from '#core/parameters.js';
 import { cornerBoards, cornerJointPoints, CORNER_JOINT_TYPES } from '#core/corner-joint.js';
 import { calculateFramingGeometry, calculatePolygonFrameGeometry, regularPolygonVertices, BRACE_JOINTS, POLYGON_JOINT_TYPES } from '#core/frame-geometry.js';
+import { resolveDimEndpoints, linearDimFrame } from '#core/dim-label.js';
+import { arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
 
 const R = (v) => Math.round(v * 1e6) / 1e6;
+
+// ── TASK 672 (owner, turn 1732: "template dimension should be offset further away"): THE placement rule of every linear template dimension ──
+// A template call gives a dimension only its SIDE (the sign of its `offset`: along the dimension frame's normal, #core/dim-label.js
+// linearDimFrame, the frame the canvas draws it in). Its dimension line (and its label, on it) then sits OUTSIDE the drawing: DIM_GAP past the
+// solid outline's extent in that direction, DIM_GAP = DIM_FRACTION of the larger side of the drawing's bounding box, never under DIM_FLOOR mm;
+// the dimensions on one side are stacked in lanes, DIM_GAP apart, shorter spans nearer the outline, two in one lane only when their spans
+// (each at least DIM_GAP long: the label's room) do not overlap. Radius / angle dimensions keep their offsets.
+export const DIM_FRACTION = 0.15, DIM_FLOOR = 10;
+/** The rule's distance for a drawing (world joints Map, shapes): DIM_FRACTION of its larger side, at least DIM_FLOOR. */
+export function dimensionGap(joints, shapes) {
+  const ext = solidExtent(joints, shapes);
+  return Math.max(DIM_FLOOR, DIM_FRACTION * Math.max(ext(1, 0) + ext(-1, 0), ext(0, 1) + ext(0, -1)));
+}
+// the solid (non-construction) drawing's extent along a unit direction: max of p . u over its line ends, circles and arc sweeps
+function solidExtent(joints, shapes) {
+  const solid = shapes.filter((x) => !x.isConstruction);
+  return (ux, uy) => {
+    let m = -Infinity;
+    const ang = Math.atan2(uy, ux);
+    for (const sh of solid) {
+      const P = sh.joints.map((id) => joints.get(id));
+      if (sh.type === 'line') for (const p of P) m = Math.max(m, p.x * ux + p.y * uy);
+      else if (sh.type === 'circle') m = Math.max(m, P[0].x * ux + P[0].y * uy + sh.radius);
+      else if (sh.type === 'arc') {
+        const [c, a, e] = P, r = Math.hypot(a.x - c.x, a.y - c.y);
+        m = Math.max(m, a.x * ux + a.y * uy, e.x * ux + e.y * uy);
+        if (angleInArcSweep(arcSweepInfo(c, a, e, { sweep: sh.sweep }), ang)) m = Math.max(m, c.x * ux + c.y * uy + r);
+      }
+    }
+    return m;
+  };
+}
+function placeDimensions(joints, shapes, constraints) {
+  const ext = solidExtent(joints, shapes), gap = dimensionGap(joints, shapes);
+  const groups = new Map(); // side (the outward direction, to a degree) -> its dimensions
+  for (const c of constraints) {
+    if (c.type !== 'distance' || c.isRadius) continue;
+    const { j1, j2 } = resolveDimEndpoints(c, joints, shapes), f = linearDimFrame(c, j1, j2), side = c.offset < 0 ? -1 : 1;
+    const ux = side * f.nx, uy = side * f.ny, along = (p) => p.x * f.ax + p.y * f.ay;
+    const a = Math.min(along(j1), along(j2)), b = Math.max(along(j1), along(j2)), mid = (a + b) / 2, half = Math.max(b - a, gap) / 2;
+    const key = `${Math.round(Math.atan2(uy, ux) * 180 / Math.PI)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ c, side, ux, uy, len: b - a, span: [mid - half, mid + half], at: f.mid.x * ux + f.mid.y * uy });
+  }
+  for (const items of groups.values()) {
+    items.sort((p, q) => p.len - q.len);
+    const lanes = [];
+    for (const it of items) {
+      let lane = 0;
+      while ((lanes[lane] || []).some(([s0, s1]) => it.span[0] < s1 && it.span[1] > s0)) lane++;
+      (lanes[lane] = lanes[lane] || []).push(it.span);
+      it.c.offset = R(it.side * (ext(it.ux, it.uy) + gap * (1 + lane) - it.at));
+    }
+  }
+}
 
 // One small sketch builder: joints in user coordinates, shapes and constraints as plain records.
 function sketcher(id) {
@@ -67,6 +124,7 @@ function sketcher(id) {
       const dx = p.x, dy = p.y;
       for (const q of joints.values()) { q.x = R(q.x - dx); q.y = R(q.y - dy); }
       constraints.push({ type: 'coincident', joints: [j, ORIGIN_JOINT_ID] });
+      placeDimensions(joints, shapes, constraints); // TASK 672: the one placement rule of the linear dimensions
       return serializeDocument({ joints, shapes, constraints, parameters: [] });
     },
   };

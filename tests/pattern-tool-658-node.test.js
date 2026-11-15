@@ -155,19 +155,29 @@ try {
   ok(q.symmetric[0] === true && JSON.stringify(q.instances.map((i) => i.at[0])) === JSON.stringify([-1, 1]), `Direction 1 Symmetric: [-1, 1] (${q.instances.map((i) => i.at[0])})`);
   dirMode1.value = 'one'; dirMode1.dispatchEvent(new app.window.Event('change', { bubbles: true })); app.frames();
   ok(q.symmetric[0] === false && JSON.stringify(q.instances.map((i) => i.at[0])) === JSON.stringify([1, 2]), 'back to One Direction');
-  // Inline boxes beside arrow: focusing Distance 1 activates inline boxes; typing in inline box updates dialog + pattern (ONE state)
+  // Inline boxes beside arrow: focusing Distance 1 activates inline boxes with document unit; typing bare number or suffix + blur/Enter reformats both with unit
   field('Distance 1').focus(); app.frames();
   const inline = doc.querySelector('.sk-pat-inline:not([hidden])');
   ok(inline && inline.dataset.dir === '0', 'inline boxes appear for direction 1 when focused');
   const inlineQty = inline.querySelector('[data-inline-field="quantity"]');
   const inlineDist = inline.querySelector('[data-inline-field="distance"]');
-  ok(inlineQty.value === '3' && inlineDist.value === field('Distance 1').value, 'inline boxes match dialog values');
+  ok(inlineQty.value === '3' && inlineDist.value === field('Distance 1').value && inlineDist.value.endsWith('mm'), `inline boxes match dialog values with unit (${inlineDist.value})`);
   inline.querySelector('[data-inline-spin="up"]').click(); app.frames();
   ok(q.quantity[0] === 4 && field('Quantity 1').value === '4' && inlineQty.value === '4', 'inline spinner steps quantity 3 -> 4 and updates dialog');
   inline.querySelector('[data-inline-spin="down"]').click(); app.frames();
   ok(q.quantity[0] === 3 && field('Quantity 1').value === '3' && inlineQty.value === '3', 'inline spinner steps quantity 4 -> 3');
   inlineDist.focus(); inlineDist.select(); app.type('15');
-  ok(Math.abs(q.distance[0] - 15) < 1e-6 && parseFloat(field('Distance 1').value) === 15, 'typing in inline distance updates pattern and dialog');
+  ok(Math.abs(q.distance[0] - 15) < 1e-6 && field('Distance 1').value === '15mm', `typing bare number in inline distance updates pattern and formatted dialog (${field('Distance 1').value})`);
+  inlineDist.blur(); app.frames();
+  ok(inlineDist.value === '15mm', `inline distance reformats with unit on blur (${inlineDist.value})`);
+  inlineDist.focus(); inlineDist.select(); app.type('2cm');
+  inlineDist.blur(); app.frames();
+  ok(Math.abs(q.distance[0] - 20) < 1e-6 && inlineDist.value === '20mm' && field('Distance 1').value === '20mm', `suffix input works and formats to document unit (${inlineDist.value})`);
+  const d2El = field('Distance 2');
+  d2El.focus(); d2El.select(); app.type('8');
+  ok(Math.abs(q.distance[1] - 8) < 1e-6, 'typing bare number in dialog Distance 2 updates pattern');
+  d2El.blur(); app.frames();
+  ok(d2El.value === '8mm', `dialog Distance 2 reformats with unit on blur (${d2El.value})`);
   // Clear Objects button enters objects step
   doc.querySelector('.sk-pattern-dialog [data-clear="objects"]').click(); app.frames();
   ok(st.pattern.step === 'objects' && st.selectedShapes.size === 0, 'Objects clear button clears selection and enters objects step');
@@ -178,9 +188,9 @@ try {
   app.move(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' }); app.down(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' }); app.up(at(300, 0).x, at(300, 0).y, { pointerType: 'touch' });
   ok(check && !check.hidden && check.getAttribute('aria-label') === 'Apply the pattern', `the green check shows (${check && check.getAttribute('aria-label')})`);
   check.click(); app.frames();
-  ok(!dialog() && !doc.querySelector('.sk-pat-inline:not([hidden])') && st.history.length === h1 + 1, 'the check applies and hides inline boxes (ONE undo step)');
+  ok(!dialog() && !inline.isConnected && st.history.length === h1 + 1, 'the check applies and hides inline boxes (ONE undo step)');
 
-  // ---- the label: a double click opens the dialog on the stored pattern; Quantity 2 = 2, Enter
+  // ---- the label: a double click opens the dialog on the stored pattern; Quantity 2 = 2, Distance 2 = 9 + Enter
   app.tool('select');
   const iq = st.constraints.indexOf(q);
   const lab = labelEl(app, iq);
@@ -193,8 +203,10 @@ try {
   await app.waitFor(() => doc.activeElement === field('Distance 1'), 'the distance field focused');
   ok(true, 'its distance field has the focus (type, Enter: like the offset label)');
   typeIn('Quantity 2', '2');
+  const d2Edit = field('Distance 2');
+  d2Edit.focus(); d2Edit.select(); app.type('9');
   app.enter();
-  ok(!dialog() && q.quantity[1] === 2 && q.instances.length === 5 && st.history.length === h2 + 1, `Enter: 3 x 2 regenerated, ONE undo step (${q.instances.length})`);
+  ok(!dialog() && q.quantity[1] === 2 && Math.abs(q.distance[1] - 9) < 1e-6 && d2Edit.value === '9mm' && q.instances.length === 5 && st.history.length === h2 + 1, `Enter: reformats Distance 2 (${d2Edit.value}) and applies 3 x 2, ONE undo step (${q.instances.length})`);
   app.undo();
   const q2 = pats().find((k) => k.type === 'rectangularPattern');
   ok(q2 && q2.quantity[1] === 1 && q2.instances.length === 2, 'Undo: back to 3 x 1');

@@ -293,13 +293,10 @@ function syncQuantityInputs(k, skipEl = null) {
 
 function syncDistanceInputs(k, skipEl = null) {
   if (!_s || !_s.els || !_s.els.distance) return;
-  const rec = currentRec();
-  const val = fmtLen(Math.abs(rec.distance[k]));
-  const dlgEl = _s.els.distance[k];
-  if (dlgEl && dlgEl !== skipEl) { dlgEl.value = val; dlgEl.setAttribute('aria-invalid', 'false'); }
-  if (_s.inline && _s.activeDir === k && _s.inline.dist !== skipEl) {
-    _s.inline.dist.value = val; _s.inline.dist.setAttribute('aria-invalid', 'false');
-  }
+  const val = fmtLen(Math.abs(currentRec().distance[k]));
+  const set = (el) => { if (el && el !== skipEl) { el.value = val; el.setAttribute('aria-invalid', 'false'); } };
+  set(_s.els.distance[k]);
+  if (_s.inline && _s.activeDir === k) set(_s.inline.dist);
 }
 
 // ---- canvas picks ------------------------------------------------------------------------------------------------------------
@@ -545,13 +542,18 @@ function fitHeight() {
   if (phone && box) el.style.top = Math.max(0, Math.round(box.bottom - need)) + 'px';
 }
 
-function wireFieldKeys(input, onEnterInvalid) {
+function wireFieldKeys(input, onEnterInvalid, onCommitFormat = null) {
+  if (onCommitFormat) input.addEventListener('blur', () => {
+    if (_s && input.getAttribute('aria-invalid') !== 'true') onCommitFormat();
+  });
   input.addEventListener('keydown', (ev) => {
     ev.stopPropagation();
     if (ev.key === 'Enter') {
       ev.preventDefault();
-      if (input.getAttribute('aria-invalid') !== 'true') commitPattern();
-      else showNotification(`${_s.kind.title}: ${onEnterInvalid()}.`, 'warning', HINT_MS);
+      if (input.getAttribute('aria-invalid') !== 'true') {
+        if (onCommitFormat) onCommitFormat();
+        commitPattern();
+      } else showNotification(`${_s.kind.title}: ${onEnterInvalid()}.`, 'warning', HINT_MS);
     } else if (ev.key === 'Escape') {
       ev.preventDefault();
       userCancel();
@@ -638,12 +640,12 @@ function buildForm(body) {
     i.addEventListener('change', () => onChange(i.checked));
     return i;
   };
-  const makeText = (name, value, onValue, onFocus) => {
+  const makeText = (name, value, onValue, onFocus, onCommitFormat = null) => {
     const i = document.createElement('input');
     i.type = 'text'; i.value = value; i.setAttribute('aria-label', name); i.dataset.field = name;
     i.addEventListener('focus', () => { ensureValuesStep(); if (onFocus) onFocus(); });
     i.addEventListener('input', () => { const ok = onValue(i.value, i); i.setAttribute('aria-invalid', ok ? 'false' : 'true'); });
-    wireFieldKeys(i, () => invalidText(i));
+    wireFieldKeys(i, () => invalidText(i), onCommitFormat);
     return i;
   };
 
@@ -689,7 +691,7 @@ function buildForm(body) {
     const a = makeText('Angle', fmtAngle(_s.values.angle), (v) => {
       const n = parseAngle(v);
       return n != null && n > 0 && n <= 360 && liveEdit({ angle: n });
-    });
+    }, null, () => { if (_s && els.angle) els.angle.value = fmtAngle(currentRec().angle); });
     els.angle = a;
     els.angleRow = addRow('Angle', a);
     els.angleRow.hidden = initDist === 'full';
@@ -729,7 +731,7 @@ function buildForm(body) {
       els.quantity.push(qSpin.input);
       addRow('Quantity', qSpin.wrap);
 
-      const d = makeText(`Distance ${k + 1}`, fmtLen(Math.abs(_s.values.distance[k])), (v, el) => setDistanceValue(k, v, el), activateDir);
+      const d = makeText(`Distance ${k + 1}`, fmtLen(Math.abs(_s.values.distance[k])), (v, el) => setDistanceValue(k, v, el), activateDir, () => syncDistanceInputs(k));
       els.distance.push(d);
       addRow('Distance', d);
 
@@ -788,7 +790,7 @@ function buildInlineBox() {
     dist.setAttribute('aria-invalid', ok ? 'false' : 'true');
     if (_s.els.distance && _s.els.distance[k]) _s.els.distance[k].setAttribute('aria-invalid', ok ? 'false' : 'true');
   });
-  wireFieldKeys(dist, () => 'distance must be a number greater than 0');
+  wireFieldKeys(dist, () => 'distance must be a number greater than 0', () => { if (_s && _s.activeDir != null) syncDistanceInputs(_s.activeDir); });
 
   const spinWrap = document.createElement('div');
   spinWrap.className = 'sk-pat-spin sk-pat-inline-spin';
@@ -837,8 +839,8 @@ function placeInline() {
 
   root.hidden = false;
   root.dataset.dir = String(k);
-  if (document.activeElement !== dist) dist.value = fmtLen(Math.abs(_s.c.distance[k]));
-  if (document.activeElement !== qty) qty.value = fmtNum(_s.c.quantity[k]);
+  syncDistanceInputs(k, document.activeElement);
+  syncQuantityInputs(k, document.activeElement);
 
   const px = getZoomFactor(_s.svg);
   const ap = worldToScreen(_s.svg, arrowPoint(h, px));

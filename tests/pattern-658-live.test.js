@@ -185,10 +185,12 @@ await (async () => {
       await P.drag(arrow, { x: arrow.x + 30, y: arrow.y });
       const d1mm = (await pats())[0].distance[0];
       assert(Math.abs(d1mm - (d0mm + 30 / pxPerMm)) < 0.6, `[${kind}] the arrow drag sets the distance (${d0mm} -> ${d1mm})`);
-      assert.strictEqual(parseFloat(await evalJs(`document.querySelector(${JSON.stringify(field('Distance 1'))}).value`)), Number(d1mm.toFixed(2)), `[${kind}] dialog Distance 1 matches dragged distance`);
+      const dlgDist1 = await evalJs(`document.querySelector(${JSON.stringify(field('Distance 1'))}).value`);
+      assert.strictEqual(parseFloat(dlgDist1), Number(d1mm.toFixed(2)), `[${kind}] dialog Distance 1 matches dragged distance`);
+      assert(dlgDist1.endsWith('mm'), `[${kind}] dialog Distance 1 carries unit (${dlgDist1})`);
       const inl = await inlineBox();
       assert(inl && inl.dir === '0', `[${kind}] inline boxes appear beside arrow 0 and stay after drag release`);
-      assert.strictEqual(parseFloat(inl.dist), Number(d1mm.toFixed(2)), `[${kind}] inline distance matches dialog`);
+      assert.strictEqual(inl.dist, dlgDist1, `[${kind}] inline distance matches formatted dialog (${inl.dist} vs ${dlgDist1})`);
       assert.strictEqual(inl.qty, '2', `[${kind}] inline quantity matches dialog (2)`);
       assert(inl.l >= 0 && inl.r <= vw + 0.5 && inl.t >= 0 && inl.b <= vh + 0.5, `[${kind}] inline boxes inside viewport ${JSON.stringify(inl)}`);
       // Inline spinner steps Quantity 1 (2 -> 3) and updates dialog + pattern
@@ -196,10 +198,12 @@ await (async () => {
       assert.strictEqual((await pats())[0].quantity[0], 3, `[${kind}] inline spinner steps quantity 2 -> 3`);
       assert.strictEqual(await evalJs(`document.querySelector(${JSON.stringify(field('Quantity 1'))}).value`), '3', `[${kind}] dialog Quantity 1 updated to 3`);
       assert.strictEqual((await inlineBox()).qty, '3', `[${kind}] inline quantity updated to 3`);
-      // Typing in inline distance updates dialog + pattern (ONE value state)
+      // Typing in inline distance updates dialog + pattern (ONE value state); blurring inline distance reformats with unit
       await typeSelector(P, '.sk-pat-inline [data-inline-field="distance"]', '12');
       assert(Math.abs((await pats())[0].distance[0] - 12) < 1e-6, `[${kind}] typing in inline distance drives pattern (12)`);
-      assert.strictEqual(parseFloat(await evalJs(`document.querySelector(${JSON.stringify(field('Distance 1'))}).value`)), 12, `[${kind}] dialog Distance 1 updated to 12`);
+      assert.strictEqual(await evalJs(`document.querySelector(${JSON.stringify(field('Distance 1'))}).value`), '12mm', `[${kind}] dialog Distance 1 updated to 12mm`);
+      await P.tap(await centre('.sk-pat-inline [data-inline-field="quantity"]'));
+      assert.strictEqual((await inlineBox()).dist, '12mm', `[${kind}] blurred inline distance shows unit (12mm)`);
       const inlAfter = await inlineBox();
       const arrowAfter = await centre('#pattern-tool-overlay .pattern-handle-0');
       await shot(`${kind}-rect-inline-boxes.png`, {
@@ -223,6 +227,8 @@ await (async () => {
       await P.tap(await centre('.sk-pattern-dialog [data-spin-for="Quantity 2"][data-spin="up"]'));
       assert.strictEqual((await pats())[0].quantity[1], 3, `[${kind}] dialog spinner steps Quantity 2: 2 -> 3`);
       await typeField(P, 'Distance 2', '8');
+      await P.tap(await centre(field('Quantity 2')));
+      assert.strictEqual(await evalJs(`document.querySelector(${JSON.stringify(field('Distance 2'))}).value`), '8mm', `[${kind}] Distance 2 reformats with unit on blur (8mm)`);
       ls = await lines();
       assert.strictEqual(ls.length, 9, `[${kind}] 3 x 3 = 9 lines (${ls.length})`);
       const rbox = await linesBox(), rdlg = await dialog();

@@ -14935,3 +14935,11 @@ Fillet preview: a drag HANDLE for the radius, the preview shows the lines as the
 - Undo / Redo end the fillet in progress (history listener, not while the fillet saves its own step); tool switch, Esc, Enter already cleared it.
 Tests: tests/fillet-handle-646.test.js (live, real mouse on desktop and real touch on a 390x844 phone): fails on the old code ("timed out waiting for [mouse] the handle"), passes now. Evidence .evidence/646/*.png.
 Behaviour changes: see the REPORT of task 646.
+
+## TURN 648
+Fillet between two ARCS, and the fillet handle becomes ONE drag ARROW.
+- packages/core/fillet.js: lifted the 9a86384 two-arc refusal (findCornerAtJoint + diagnoseNoFillet). The generic per-leg code (legAt / filletGeometryForLegs / applyFillet) already handled arc legs; arcs running tangent at the joint keep "These curves already run tangent to each other: nothing to fillet".
+- tests/fillet-arc-645.test.js: restored the 94efefe arc+arc cases; added 648 sweep (R2 x centre angle x directions x ends: convex/convex, concave/concave, mixed; centres/radii unchanged, trimmed, tangent, inside the wedge) and the tangent-arcs refusal. Grazing corners (|t1.t2| > 0.9) skipped there: the centre is far from the tangent wedge by curvature.
+- packages/ui/drag-arrow-handle.js (new, shared, API in its header) + sketcher.css tokens --sk-arrow-*: dragArrowSvg / dragArrowHit / dragArrowDirection. fillet-tool.js uses it in place of the joint-style circle (same drag, same reach rules: now a 44 px target); arrow centred on the preview arc midpoint, pointing the way the radius grows; darker on hover / drag.
+- tests/fillet-arc-arc-648.test.js (live, mouse + phone touch): two arcs, Fillet, tap corner, arrow drag, Enter -> tangent fillet, one Undo / Redo, check button. Screenshots in .evidence/648 (local).
+Behaviour changes: two-arc corners now fillet (were refused); the fillet handle's look (arrow, not a joint circle) and 44 px reach, hover cursor also darkens it. Fusion: a thin lens corner (R1+R2 barely above the centre distance) refuses with "does not fit"; near-tangent corners are accepted by us and Fusion may refuse them (unverified).

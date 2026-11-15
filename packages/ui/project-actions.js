@@ -16,7 +16,7 @@ import { IMPORT_ACTION_LABEL, pickAndImport } from './sketch-import.js';
 // without a Design canvas passes none, and then has no "Import SVG / DXF…" action at all.
 // TASK 587: `tabs: true` (the host shows the document-tab strip, sidebar-projects.js `documentTabs`) makes Open / Open recent / Open from file / New open a
 // NEW TAB instead of replacing the shown design (docs/DOCUMENT-TABS-DESIGN.md T2, T3): the unsaved Untitled is not replaced then, so those ask no question.
-export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false }) {
+export function createProjectActions({ store, getBuffer, account = null, notify = () => {}, importFile = null, ask = async () => null, tabs = false, pickTemplate = null }) {
   const buf = () => { const b = getBuffer && getBuffer(); if (!b) throw new Error('This app is still starting. Try again in a moment.'); return b; };
   const signedInDrive = () => !!(account && account.state().signedIn && store.cloud);
 
@@ -114,7 +114,15 @@ export function createProjectActions({ store, getBuffer, account = null, notify 
     notify('Moved to Google Drive.', 'info');
     return r;
   }
-  const newDesign = async () => (tabs ? buf().newTab() : (await settleUnsaved()) ? buf().newDesign() : null);
+  // TASK 651: a new design starts from the template modal (template-picker.js; the host passes `pickTemplate`, like `ask`): "Blank design" = the empty
+  // Untitled as before, a template = an unsaved Untitled holding it, under its name; closing the modal = no new design (null). A host that passes none
+  // (a headless caller) gets the blank one at once. `{ blank: false }` (the sidebar's "Templates...") leaves the Blank card out.
+  const newDesign = async ({ blank = true } = {}) => {
+    const choice = pickTemplate ? await pickTemplate({ blank }) : { blank: true };
+    if (!choice) return null;
+    const template = choice.template ? { name: choice.name, document: choice.document } : null;
+    return tabs ? buf().newTab(template) : (await settleUnsaved()) ? buf().newDesign(template) : null;
+  };
   const openFile = async () => {
     if (!tabs && !(await settleUnsaved())) return null;
     if (!(await ensureSignedIn())) return null;

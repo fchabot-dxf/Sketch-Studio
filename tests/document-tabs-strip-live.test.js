@@ -34,6 +34,8 @@ await (async () => {
       assert(c, sel + ' #' + i + ' not found'); return c;
     };
     const clickEl = async (sel, i = 0) => { const c = await center(sel, i); await click(c.x, c.y); };
+    // TASK 651: "+" opens the template modal; the Blank design card makes the empty Untitled tab
+    const newTab = async () => { await clickEl('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await clickEl('.sk-tp-card[data-template="blank"]'); };
     const names = () => evalJs(`[...document.querySelectorAll('.sk-doctab-name')].map((e) => e.textContent)`);
     const widths = () => evalJs(`[...document.querySelectorAll('.sk-doctab')].map((e) => Math.round(e.getBoundingClientRect().width))`);
     // TASK 602: the strip is between the header's bottom and the ribbon's top, and overlaps none of the header, the ribbon, the SKETCHES box, the canvas buttons
@@ -74,7 +76,7 @@ await (async () => {
     await shot('strip-with-sketches-box-1440.png', { x: 0, y: 0, width: 760, height: 260 });
     assert.deepStrictEqual(await widths(), [240], '1 tab: full width (240 px)');
     // "+" opens an Untitled tab; a click on a tab switches
-    await clickEl('.sk-doctab-new');
+    await newTab();
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled']);
     assert.deepStrictEqual(await widths(), [240, 240], '2 tabs: both at full width');
     await clickEl('.sk-doctab-main', 0);
@@ -88,7 +90,7 @@ await (async () => {
     await sendRealKey(send, 'Escape', 'Escape', 27); await sleep(300);
     await waitFor(`!!document.querySelector('.sk-doctab-dot')`, 'the not-saved dot');
     // a third tab, so the evidence shows 3 tabs, one unsaved
-    await clickEl('.sk-doctab-new');
+    await newTab();
     await shot('strip-3-tabs.png', { x: 0, y: 0, width: 700, height: 130 });
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled', 'Untitled']);
     // close the unsaved tab: THE question, Cancel keeps it
@@ -98,17 +100,17 @@ await (async () => {
     assert.deepStrictEqual(await names(), ['Beta', 'Untitled', 'Untitled'], 'Cancel keeps the tab');
 
     // the 11th tab (T7); widths at 5 and 10 tabs
-    for (let i = 0; i < 2; i++) await clickEl('.sk-doctab-new');
+    for (let i = 0; i < 2; i++) await newTab();
     assert.strictEqual((await names()).length, 5);
     assert.deepStrictEqual(await widths(), [240, 240, 240, 240, 240], '5 tabs fit at 1400 px: full width');
-    for (let i = 0; i < 5; i++) await clickEl('.sk-doctab-new');
+    for (let i = 0; i < 5; i++) await newTab();
     assert.strictEqual((await names()).length, 10);
     const w10 = await widths();
     assert(w10.every((w) => w === w10[0]) && w10[0] < 240 && w10[0] >= 72, '10 tabs shrink evenly, not below 72 px: ' + JSON.stringify(w10));
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').scrollWidth <= document.querySelector('.sk-doctabs').clientWidth`), true, '10 tabs fit at 1400 px without scrolling');
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 26, 'still 26 px with ten tabs');
     await checkPlace('1400 px, 10 tabs');
-    await clickEl('.sk-doctab-new');
+    await newTab();
     assert.strictEqual((await names()).length, 10, 'no 11th tab');
     assert(/Close a tab first/.test(await evalJs(`document.querySelector('.sk-doctabs-msg').textContent`)), 'the strip says why');
 
@@ -120,7 +122,8 @@ await (async () => {
     await waitFor(`document.querySelectorAll('.sk-doctab-name').length === 1`, 'phone: one restored tab');
     await waitFor(`!!document.querySelector('.sk-ribbon .sk-ribbon-btn')`, 'phone: the ribbon');
     const T = (type, pts) => send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p.x, y: p.y, id: i, radiusX: 1, radiusY: 1, force: 1 })) });
-    const tapNew = async () => { await evalJs(`document.querySelector('.sk-doctab-new').scrollIntoView({ inline: 'nearest', block: 'nearest' })`); await sleep(80); const c = await center('.sk-doctab-new'); await T('touchStart', [c]); await sleep(40); await T('touchEnd', []); await sleep(350); };
+    const tap = async (sel) => { await evalJs(`document.querySelector('${sel}').scrollIntoView({ inline: 'nearest', block: 'nearest' })`); await sleep(80); const c = await center(sel); await T('touchStart', [c]); await sleep(40); await T('touchEnd', []); await sleep(350); };
+    const tapNew = async () => { await tap('.sk-doctab-new'); await waitFor(`!!document.querySelector('.sk-tp-card[data-template="blank"]')`, 'the template modal'); await tap('.sk-tp-card[data-template="blank"]'); }; // TASK 651: through the Blank card
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctabs').offsetHeight`), 31, 'phone: the strip row is 31 px (30 px tabs + its line)');
     await checkPlace('phone');
     const phoneW = { 1: await widths() };

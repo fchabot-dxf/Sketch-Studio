@@ -80,6 +80,17 @@ const hor2 = sc.C.find((c) => c.type === 'horizontal' && c.joints[0] === 'bj0');
 ({ inside, outside } = split(render(sc, 'sketch-1', { selC: new Set([hor2]) })));
 assert.ok(has(outside, /data-cj0="bj0"/) && !has(inside['sketch-2'], /data-ctype="horizontal"/), 'selected inactive glyph is lit');
 
+// 5. a pattern's label (task 658) belongs to the sketch of its source shapes: dimmed with it, full when that sketch is active.
+const { patternConstraintRecord } = await import('../packages/core/pattern.js');
+const pat = patternConstraintRecord({ type: 'circularPattern', sources: { shapes: ['bs0'], points: ['bj0', 'bj1'], shapeJoints: [[0, 1]] }, centre: 'j_origin', quantity: 3, angle: 90, instances: [] });
+assert.ok(pat, 'a pattern record');
+sc.C.push(pat);
+let r = split(render(sc, 'sketch-1'));
+assert.ok((r.inside['sketch-2'].match(/pattern-label/g) || []).length >= 1 && !has(r.outside, /pattern-label/), 'the pattern label of a sketch-2 pattern is dimmed with sketch 2');
+r = split(render(sc, 'sketch-2'));
+assert.ok(has(r.outside, /pattern-label/) && !has(r.inside['sketch-1'] || '', /pattern-label/), 'and full when sketch 2 is active');
+sc.C.pop();
+
 // 4. a one-sketch drawing is byte-identical to the markup of a host that does not dim (no group, no wrapper).
 const one = scene([['sketch-1', 'a', -50]]);
 const withProvider = render(one, 'sketch-1'), without = render(one, 'sketch-1', { provider: false });

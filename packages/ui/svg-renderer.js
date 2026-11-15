@@ -91,7 +91,7 @@ import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
 import { constraintTargets } from '#ui/geometry-labels.js';
 import { profileFillLoops } from '#ui/profile-fill.js';
-import { sketchOf, inActiveSketch, constraintSketch, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
+import { sketchOf, inActiveSketch, constraintSketch, hiddenSketchIds, DEFAULT_SKETCH_ID } from '#core/sketch-model.js';
 import { ORIGIN_JOINT_ID } from '#core/constants.js';
 
 // TASK 661: the markup collector. Behaves as the plain array draw() always built (push / join); while `dim` names a sketch, the chunks pushed
@@ -180,6 +180,223 @@ export const defaultRenderCtx = {
 
 // TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).
 let lastLoggedConstraints = { total: -1, visible: -1 };
+
+function radiusLabelPos(c, center, offset) {
+  if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
+  const legacy = (c && c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
+  const effOffset = legacy ? legacy.offset : offset;
+  const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacy ? legacy.labelAngle : 0);
+  return { x: center.x + Math.cos(angle) * effOffset, y: center.y + Math.sin(angle) * effOffset };
+}
+
+function radiusDimInfoFor(c, j1, j2, opJoints, opShapes, offset) {
+  const center = j1;
+  const shape = opShapes.find(s => s.id === c.shape);
+  const arcStart = (shape && shape.type === 'arc' && shape.joints && shape.joints[1]) ? opJoints.get(shape.joints[1]) : null;
+  const actualRadius = (shape && typeof shape.radius === 'number') ? shape.radius : (arcStart ? getDist(center, arcStart) : 0);
+  const radius = actualRadius;
+  const isPlacing = !!c.__placing;
+  const isDrivenFlag = !!(c.isDriven || c.driven);
+  const hasValue = (typeof c.value === 'number');
+  const actualVal = c.isDiameter ? actualRadius * 2 : actualRadius;
+  const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualVal;
+  const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+  const legacyRad = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
+  const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyRad ? legacyRad.labelAngle : (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0));
+  const { x: labelX, y: labelY } = radiusLabelPos(c, center, offset);
+  return { center, shape, radius, isPlacing, isDrivenFlag, displayVal, angle, labelX, labelY };
+}
+
+function linearDimGeomFor(c, j1, j2, defaultOffset, scaleFn, boxMode) {
+  const frame = linearDimFrame(c, j1, j2);
+  const { dimMode, len, ax: adx, ay: ady, nx, ny } = frame;
+  const legacy = (c && c.labelPos) ? linearPointToParams(frame, c.labelPos) : null;
+  const offset = legacy ? legacy.offset : defaultOffset;
+  const hasSlide = Number.isFinite(c.labelSlide) || !!legacy;
+  const slide = legacy ? legacy.labelSlide : (Number.isFinite(c.labelSlide) ? c.labelSlide : 0);
+  const isPlacing = !!c.__placing;
+  const isDrivenFlag = !!(c.isDriven || c.driven);
+  const hasValue = (typeof c.value === 'number');
+
+  let projDist, ext1End, ext2End;
+  if (dimMode === 'horizontal') {
+    projDist = Math.abs(j2.x - j1.x);
+    const dimY = frame.mid.y + offset;
+    ext1End = { x: j1.x, y: dimY };
+    ext2End = { x: j2.x, y: dimY };
+  } else if (dimMode === 'vertical') {
+    projDist = Math.abs(j2.y - j1.y);
+    const dimX = frame.mid.x + offset;
+    ext1End = { x: dimX, y: j1.y };
+    ext2End = { x: dimX, y: j2.y };
+  } else {
+    projDist = len;
+    ext1End = { x: j1.x + nx * offset, y: j1.y + ny * offset };
+    ext2End = { x: j2.x + nx * offset, y: j2.y + ny * offset };
+  }
+
+  const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
+  const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+  const ext1Start = { x: j1.x, y: j1.y };
+  const ext2Start = { x: j2.x, y: j2.y };
+  const dimLineStart = ext1End;
+  const dimLineEnd = ext2End;
+
+  let { x: annotX, y: annotY } = (c && c.__pos)
+    ? { x: c.__pos.x, y: c.__pos.y }
+    : linearParamsToPoint(frame, offset, slide);
+
+  const narrow = isNarrowDim(Math.hypot(dimLineEnd.x - dimLineStart.x, dimLineEnd.y - dimLineStart.y), scaleFn(1));
+  if (narrow && !hasSlide && !(c && c.__pos)) {
+    const alongHalf = boxMode ? Math.abs(adx) * scaleFn(20) + Math.abs(ady) * scaleFn(9) : dimTextWidth(displayVal, scaleFn(11)) / 2;
+    const reach = scaleFn(DIM_ARROW_PX + DIM_NARROW_STUB_PX) + alongHalf;
+    annotX = dimLineEnd.x + adx * reach;
+    annotY = dimLineEnd.y + ady * reach;
+  }
+  return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred: false };
+}
+
+function angleDimGeomFor(c, opJoints, opShapes) {
+  if (!c || c.type !== CONSTRAINT_TYPES.ANGLE || !c.shapes || c.shapes.length !== 2) return null;
+  const s1 = opShapes.find(s => s.id === c.shapes[0]);
+  const s2 = opShapes.find(s => s.id === c.shapes[1]);
+  if (!s1 || !s2 || !s1.joints || !s2.joints) return null;
+  const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
+  const j3 = opJoints.get(s2.joints[0]), j4 = opJoints.get(s2.joints[1]);
+  if (!j1 || !j2 || !j3 || !j4) return null;
+  const int = getLineIntersection(j1, j2, j3, j4);
+  if (!int) return null;
+  const legacyAngle = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(int, c.labelPos) : null;
+  const radius = legacyAngle ? Math.max(0.01, legacyAngle.offset) : (Number.isFinite(c.offset) ? Math.max(0.01, c.offset) : (SolverConfig.ANGLE_OFFSET || 40));
+  const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
+  const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
+  const { start: startAngle, end: endAngle } = (c.isDriven || c.driven)
+    ? angleDimensionSector(a1, a2, angleLabelAngle(c, int, a1, a2), null)
+    : angleSectorArc(angleSectorOf(c), a1, a2);
+  const bisect = (startAngle + endAngle) / 2;
+  const theta = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyAngle ? legacyAngle.labelAngle : bisect);
+  const labelX = int.x + Math.cos(theta) * radius;
+  const labelY = int.y + Math.sin(theta) * radius;
+  let delta = endAngle - startAngle;
+  while (delta < 0) delta += Math.PI * 2;
+  while (delta >= Math.PI * 2) delta -= Math.PI * 2;
+  const isPlacing = !!c.__placing;
+  const isDrivenFlag = !!(c.isDriven || c.driven);
+  const hasValue = (typeof c.value === 'number');
+  const currentAngleDeg = delta * 180 / Math.PI;
+  const currentAngleShown = (currentAngleDeg > 180) ? (360 - currentAngleDeg) : currentAngleDeg;
+  const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : currentAngleShown;
+  const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
+  return { int, radius, startAngle, endAngle, theta, labelX, labelY, delta, isPlacing, isDrivenFlag, displayVal };
+}
+
+function patternDimItemsFor(sc, c, scaleFn) {
+  const fmtN = (v) => String(Number(Number(v).toFixed(2)));
+  const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
+    ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scaleFn(34), y: h.point.y - scaleFn(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
+    : patternHandles(sc, c).map((h) => ({
+        x: h.point.x + h.dir.x * (h.extent + scaleFn(70)),
+        y: h.point.y + h.dir.y * (h.extent + scaleFn(70)),
+        text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' extent' : ''}`,
+      }));
+  return items.map((it) => ({ ...it, w: scaleFn(Math.max(50, 7 * it.text.length + 10)) }));
+}
+
+function placeDimLabelFor(cx, cy, dirX, dirY, text, { scaleFn, boxMode, boxW = scaleFn(40), centred = false, textColor = '#2563eb', dimFont = '', dimTextAttrs = '', outward } = {}) {
+  const fontPx = scaleFn(11);
+  const textAttrs = boxMode ? dimTextAttrs : `style="fill:${skv(textColor)}"`;
+  const base = `text-anchor="middle" font-size="${fontPx}" ${dimFont}${textAttrs}`;
+  if (boxMode) return { attrs: `x="${cx}" y="${cy + scaleFn(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scaleFn(18)), rect: axisRect(cx, cy, boxW, scaleFn(18)) };
+  if (dirX === null) return { attrs: `x="${cx}" y="${cy + scaleFn(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
+  const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scaleFn(DIM_TEXT_GAP_PX), outward });
+  const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
+  return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds, rect: p.rect };
+}
+
+/**
+ * Axis-aligned world bounds `{ minX, minY, maxX, maxY }` covering all visible `.dim-label` boxes rendered for `state`
+ * at `zoom` (world units per screen px), or `null` when no visible dimension labels exist.
+ */
+export function computeDimLabelBounds(state, zoom = 0) {
+  if (!state || !state.joints || !Array.isArray(state.constraints) || state.constraints.length === 0) return null;
+  const scaleFn = (px) => px * zoom;
+  const boxMode = SettingsManager.get('DIM_LABEL_BOX') !== false;
+  const hidden = hiddenSketchIds(state);
+  const joints = state.joints;
+  const shapes = state.shapes || [];
+  const opJoints = sceneJoints(joints);
+  const opShapes = sceneShapes(shapes);
+  const constraints = state.constraints;
+  const shapeById = new Map(opShapes.map((s) => [s.id, s]));
+  const sc = { joints: opJoints, shapes: opShapes, constraints };
+  const isConstraintHidden = (c) => {
+    if (c.__visible === false) return true;
+    if (!hidden.size) return false;
+    if (isPatternConstraint(c)) {
+      const sIds = c.sources && c.sources.shapes;
+      return Array.isArray(sIds) && sIds.length > 0 && sIds.every((id) => { const sh = shapeById.get(id); return sh && hidden.has(sketchOf(sh)); });
+    }
+    if (Array.isArray(c.joints) && c.joints.length > 0) {
+      return c.joints.every((jid) => { const j = joints.get(jid); return j && hidden.has(sketchOf(j)); });
+    }
+    if (c.shape) { const sh = shapeById.get(c.shape); return !!sh && hidden.has(sketchOf(sh)); }
+    if (Array.isArray(c.shapes) && c.shapes.length > 0) {
+      return c.shapes.every((id) => { const sh = shapeById.get(id); return sh && hidden.has(sketchOf(sh)); });
+    }
+    return false;
+  };
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let hasLabel = false;
+  const padPx = boxMode ? 1.5 : 4; // covers rect stroke or SVG text ascenders/descenders beyond 0.8em
+  const addBox = (b, text = '') => {
+    if (!b) return;
+    let x0 = b.x0, y0 = b.y0, x1 = b.x1, y1 = b.y1;
+    if (boxMode && text) {
+      const textW = dimTextWidth(text, scaleFn(11));
+      const curW = x1 - x0;
+      if (textW > curW) {
+        const extra = (textW - curW) / 2;
+        x0 -= extra; x1 += extra;
+      }
+      y0 -= scaleFn(1); y1 -= scaleFn(1); // dimLabelRect shifts rect -zoom vertically
+    }
+    const pad = scaleFn(padPx);
+    if (x0 - pad < minX) minX = x0 - pad;
+    if (y0 - pad < minY) minY = y0 - pad;
+    if (x1 + pad > maxX) maxX = x1 + pad;
+    if (y1 + pad > maxY) maxY = y1 + pad;
+    hasLabel = true;
+  };
+
+  for (const c of constraints) {
+    if (!c || isConstraintHidden(c)) continue;
+    if (isPatternConstraint(c)) {
+      for (const it of patternDimItemsFor(sc, c, scaleFn)) {
+        addBox(placeDimLabelFor(it.x, it.y, null, null, it.text, { scaleFn, boxMode: false, boxW: it.w }).bounds, it.text);
+        if (boxMode) addBox(centredRect(it.x, it.y, it.w, scaleFn(18)), it.text);
+      }
+      continue;
+    }
+    if (c.type === CONSTRAINT_TYPES.DISTANCE || (c.type === CONSTRAINT_TYPES.OFFSET && c.dimensioned !== false)) {
+      const { j1, j2 } = resolveDimEndpoints(c, opJoints, opShapes);
+      if (!j1) continue;
+      const offset = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
+      if (c.isRadius) {
+        const r = radiusDimInfoFor(c, j1, j2, opJoints, opShapes, offset);
+        addBox(placeDimLabelFor(r.labelX, r.labelY, Math.cos(r.angle), Math.sin(r.angle), r.displayVal, { scaleFn, boxMode, boxW: scaleFn(50) }).bounds, r.displayVal);
+      } else if (j2) {
+        const g = linearDimGeomFor(c, j1, j2, offset, scaleFn, boxMode);
+        addBox(placeDimLabelFor(g.annotX, g.annotY, g.adx, g.ady, g.displayVal, { scaleFn, boxMode, centred: g.centred }).bounds, g.displayVal);
+      }
+    } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
+      const a = angleDimGeomFor(c, opJoints, opShapes);
+      if (!a) continue;
+      addBox(placeDimLabelFor(a.labelX, a.labelY, -Math.sin(a.theta), Math.cos(a.theta), a.displayVal, { scaleFn, boxMode, outward: { x: Math.cos(a.theta), y: Math.sin(a.theta) } }).bounds, a.displayVal);
+    }
+  }
+  return hasLabel ? { minX, minY, maxX, maxY } : null;
+}
 
 /**
  * Single point-visibility rule (Fusion-style):
@@ -388,82 +605,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // --- Dimension geometry, shared by the dimension drawing below and the glyph/label overlap rule ---
   const resolveDimEnds = (c) => resolveDimEndpoints(c, opJoints, opShapes);
-
-  // A radius label: explicit placement (__pos), else `offset` along the declared labelAngle (or projected legacy labelPos).
-  const radiusLabelPos = (c, center, offset) => {
-    if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
-    const legacy = (c && c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
-    const effOffset = legacy ? legacy.offset : offset;
-    const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacy ? legacy.labelAngle : 0);
-    return { x: center.x + Math.cos(angle) * effOffset, y: center.y + Math.sin(angle) * effOffset };
-  };
-
-  // A linear dimension: value text, extension lines, dimension line and arrow direction.
-  // The label always sits ON its dimension line at (offset, labelSlide), centred by default.
-  const linearDimGeom = (c, j1, j2, defaultOffset) => {
-    const frame = linearDimFrame(c, j1, j2);
-    const { dimMode, len, ax: adx, ay: ady, nx, ny } = frame;
-    const legacy = (c && c.labelPos) ? linearPointToParams(frame, c.labelPos) : null;
-    const offset = legacy ? legacy.offset : defaultOffset;
-    const hasSlide = Number.isFinite(c.labelSlide) || !!legacy;
-    const slide = legacy ? legacy.labelSlide : (Number.isFinite(c.labelSlide) ? c.labelSlide : 0);
-    const isPlacing = !!c.__placing;
-    const isDrivenFlag = !!(c.isDriven || c.driven);
-    const hasValue = (typeof c.value === 'number');
-
-    let projDist, ext1End, ext2End;
-    if (dimMode === 'horizontal') {
-      projDist = Math.abs(j2.x - j1.x);
-      const dimY = frame.mid.y + offset;
-      ext1End = { x: j1.x, y: dimY };
-      ext2End = { x: j2.x, y: dimY };
-    } else if (dimMode === 'vertical') {
-      projDist = Math.abs(j2.y - j1.y);
-      const dimX = frame.mid.x + offset;
-      ext1End = { x: dimX, y: j1.y };
-      ext2End = { x: dimX, y: j2.y };
-    } else {
-      projDist = len;
-      ext1End = { x: j1.x + nx * offset, y: j1.y + ny * offset };
-      ext2End = { x: j2.x + nx * offset, y: j2.y + ny * offset };
-    }
-
-    const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : projDist;
-    const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-    const ext1Start = { x: j1.x, y: j1.y };
-    const ext2Start = { x: j2.x, y: j2.y };
-    const dimLineStart = ext1End;
-    const dimLineEnd = ext2End;
-
-    let { x: annotX, y: annotY } = (c && c.__pos)
-      ? { x: c.__pos.x, y: c.__pos.y }
-      : linearParamsToPoint(frame, offset, slide);
-
-    const narrow = isNarrowDim(Math.hypot(dimLineEnd.x - dimLineStart.x, dimLineEnd.y - dimLineStart.y), scale(1));
-    if (narrow && !hasSlide && !(c && c.__pos)) {
-      // Too narrow for two arrowheads: they flip outside, and the value sits beyond the far stub on the extended line.
-      const alongHalf = DIM_LABEL_BOX ? Math.abs(adx) * scale(20) + Math.abs(ady) * scale(9) : dimTextWidth(displayVal, scale(11)) / 2;
-      const reach = scale(DIM_ARROW_PX + DIM_NARROW_STUB_PX) + alongHalf;
-      annotX = dimLineEnd.x + adx * reach;
-      annotY = dimLineEnd.y + ady * reach;
-    }
-    return { displayVal, nx, ny, annotX, annotY, ext1Start, ext1End, ext2Start, ext2End, dimLineStart, dimLineEnd, adx, ady, narrow, centred: false };
-  };
-
-  // The <text> attributes + world bounding box of a dimension value centred on (cx, cy). With the label box (Default) the
-  // text sits on the point exactly as before. Plain (Fusion): a value on a dimension line (dirX/dirY = line direction)
-  // goes just above/beside the line, reading along it (an angle value uses the arc's tangent at its anchor as the direction);
-  // a leader label (dirX null: radius) stays centred on its point.
-  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb', outward) => {
-    const fontPx = scale(11);
-    const textAttrs = DIM_LABEL_BOX ? DIM_TEXT_ATTRS : `style="fill:${skv(textColor)}"`;
-    const base = `text-anchor="middle" font-size="${fontPx}" ${DIM_FONT}${textAttrs}`;
-    if (DIM_LABEL_BOX) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, boxW, scale(18)), rect: axisRect(cx, cy, boxW, scale(18)) };
-    if (dirX === null) return { attrs: `x="${cx}" y="${cy + scale(4)}" ${base}`, bounds: centredRect(cx, cy, dimTextWidth(text, fontPx), fontPx), rect: axisRect(cx, cy, dimTextWidth(text, fontPx), fontPx) };
-    const p = (centred ? placeDimTextCentred : placeDimText)({ cx, cy, dirX, dirY, text, fontPx, gap: scale(DIM_TEXT_GAP_PX), outward });
-    const rot = p.deg ? ` transform="rotate(${p.deg} ${p.x} ${p.y})"` : '';
-    return { attrs: `x="${p.x}" y="${p.y}"${rot} ${base}`, bounds: p.bounds, rect: p.rect };
-  };
+  const linearDimGeom = (c, j1, j2, defaultOffset) => linearDimGeomFor(c, j1, j2, defaultOffset, scale, DIM_LABEL_BOX);
+  const placeDimLabel = (cx, cy, dirX, dirY, text, boxW = scale(40), centred = false, textColor = '#2563eb', outward) =>
+    placeDimLabelFor(cx, cy, dirX, dirY, text, { scaleFn: scale, boxMode: DIM_LABEL_BOX, boxW, centred, textColor, dimFont: DIM_FONT, dimTextAttrs: DIM_TEXT_ATTRS, outward });
 
   // The thin dimension lines a moved or narrow value needs (see dimension-lead.js): an extension of the dimension line and/or
   // a leader to the text. Both stay out of the markup when the value sits where it normally does.
@@ -2375,16 +2519,11 @@ switch(c.type){
     const isHovered = highlight.kind === 'constraint' && highlight.id === c, isSelected = selectedConstraints && selectedConstraints.has(c);
     const color = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb', strokeW = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
     const sc = { joints: opJoints, shapes: opShapes, constraints };
-    const fmtN = (v) => String(Number(Number(v).toFixed(2)));
-    const items = c.type === CONSTRAINT_TYPES.CIRCULAR_PATTERN
-      ? patternHandles(sc, c).map((h) => ({ x: h.point.x + scale(34), y: h.point.y - scale(26), text: `${c.quantity} × ${fmtN(c.angle)}°${c.symmetric ? ' sym' : ''}` }))
-      : patternHandles(sc, c).map((h) => ({ x: h.point.x + h.dir.x * (h.extent + scale(70)), y: h.point.y + h.dir.y * (h.extent + scale(70)), // past the pattern tool's arrow
-          text: `${c.quantity[h.k]} × ${formatLenLabel(Math.abs(c.distanceType === 'total' ? c.distance[h.k] : patternSpacing(c, h.k)))}${c.distanceType === 'total' ? ' extent' : ''}` }));
+    const items = patternDimItemsFor(sc, c, scale);
     items.forEach((it, i) => {
-      const w = scale(Math.max(50, 7 * it.text.length + 10));
       out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${currentTool === 'select' ? 'pointer' : 'default'}">
-        ${dimLabelRect(it.x, it.y, w, scale(18), scale(2), color, strokeW)}
-        <text ${placeDimLabel(it.x, it.y, null, null, it.text, w, false, color).attrs}>${it.text}</text>
+        ${dimLabelRect(it.x, it.y, it.w, scale(18), scale(2), color, strokeW)}
+        <text ${placeDimLabel(it.x, it.y, null, null, it.text, it.w, false, color).attrs}>${it.text}</text>
       </g>`);
       if (i === 0) { try { c.glyphPos = { x: it.x, y: it.y }; } catch (_) { } }
     });
@@ -2455,29 +2594,7 @@ switch(c.type){
         const canEdit = currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION;
 
         if(c.isRadius){
-          // Circle radius dimension
-          const center = j1;
-          const shape = opShapes.find(s => s.id === c.shape);
-          // Always use actual geometry radius for drawing the arrow so it stays attached to the rim
-          // (TASK 448: an arc made without a stored radius falls back to centre->start-joint, so the leader meets the rim)
-          const arcStart = (shape && shape.type === 'arc' && shape.joints && shape.joints[1]) ? opJoints.get(shape.joints[1]) : null;
-          const actualRadius = (shape && typeof shape.radius === 'number') ? shape.radius : (arcStart ? getDist(center, arcStart) : 0);
-          const radius = actualRadius;
-
-          const isPlacing = !!c.__placing;
-          const isDrivenFlag = !!(c.isDriven || c.driven);
-          const hasValue = (typeof c.value === 'number');
-          
-          // If driven or placing, show actual geometry value. If driving, show target value.
-          const actualVal = c.isDiameter ? actualRadius * 2 : actualRadius;
-          const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : actualVal;
-          const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-
-          // Direction from center to label (use offset as radial distance)
-          // TASK 448 / 621: label lives on its radial leader at (offset, labelAngle); legacy labelPos projects onto it.
-          const legacyRad = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
-          const angle = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyRad ? legacyRad.labelAngle : (j2 ? Math.atan2(j2.y - center.y, j2.x - center.x) : 0));
-          const { x: labelX, y: labelY } = radiusLabelPos(c, center, offset);
+          const { center, shape, radius, isPlacing, isDrivenFlag, displayVal, angle, labelX, labelY } = radiusDimInfoFor(c, j1, j2, opJoints, opShapes, offset);
 
           // Leader line from circle edge to label (ghost appearance when placing)
           const visualOpacity = isPlacing ? 0.4 : 1.0;
@@ -2587,31 +2704,9 @@ switch(c.type){
       }
     } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
       // Angle Dimension
-      const s1 = opShapes.find(s => s.id === c.shapes[0]);
-      const s2 = opShapes.find(s => s.id === c.shapes[1]);
-      if (s1 && s2 && s1.joints && s2.joints) {
-        const j1 = opJoints.get(s1.joints[0]), j2 = opJoints.get(s1.joints[1]);
-        const j3 = opJoints.get(s2.joints[0]), j4 = opJoints.get(s2.joints[1]);
-        if (j1 && j2 && j3 && j4) {
-          const int = getLineIntersection(j1, j2, j3, j4);
-          if (int) {
-            const legacyAngle = (c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(int, c.labelPos) : null;
-            const radius = legacyAngle ? Math.max(0.01, legacyAngle.offset) : (Number.isFinite(c.offset) ? Math.max(0.01, c.offset) : (SolverConfig.ANGLE_OFFSET || 40));
-            // Determine angles of the two lines relative to intersection
-            const a1 = Math.atan2(j2.y - j1.y, j2.x - j1.x);
-            const a2 = Math.atan2(j4.y - j3.y, j4.x - j3.x);
-            
-            // A DRIVING dimension draws its stored sector (task 553: reflex ones too, it spans the value once solved); a reference
-            // dimension measures the sector its label sits in (task 543)
-            const { start: startAngle, end: endAngle } = (c.isDriven || c.driven)
-              ? angleDimensionSector(a1, a2, angleLabelAngle(c, int, a1, a2), null)
-              : angleSectorArc(angleSectorOf(c), a1, a2);
-            
-            // Label lives ON the arc at (radius, theta); centred on bisector by default.
-            const bisect = (startAngle + endAngle) / 2;
-            const theta = Number.isFinite(c.labelAngle) ? c.labelAngle : (legacyAngle ? legacyAngle.labelAngle : bisect);
-            const labelX = int.x + Math.cos(theta) * radius;
-            const labelY = int.y + Math.sin(theta) * radius;
+      const angGeom = angleDimGeomFor(c, opJoints, opShapes);
+      if (angGeom) {
+            const { int, radius, startAngle, endAngle, theta, labelX, labelY, delta, isPlacing, isDrivenFlag, displayVal } = angGeom;
             
             // Draw Arc
             const sx = int.x + Math.cos(startAngle) * radius;
@@ -2619,14 +2714,9 @@ switch(c.type){
             const ex = int.x + Math.cos(endAngle) * radius;
             const ey = int.y + Math.sin(endAngle) * radius;
             
-            const isPlacing = !!c.__placing;
             const strokeColor = isPlacing ? '#3B82F6' : '#2563eb';
             const visualOpacity = isPlacing ? 0.4 : 1.0;
             
-            // Normalize delta to [0, 2PI) and compute proper SVG arc flags so arc visually matches the chosen sector
-            let delta = endAngle - startAngle;
-            while (delta < 0) delta += Math.PI * 2;
-            while (delta >= Math.PI * 2) delta -= Math.PI * 2;
             const largeArcFlag = (delta > Math.PI) ? 1 : 0;
             const sweepFlag = 1;
             out.push(`<path d="M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${ex} ${ey}" fill="none" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}"/>`);
@@ -2650,17 +2740,6 @@ switch(c.type){
             // End Arrow
             out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}"/>`);
             
-            // Label (scaled like linear dimensions)
-            const isDrivenFlag = !!(c.isDriven || c.driven);
-            const hasValue = (typeof c.value === 'number');
-            
-            // Use the normalized sector delta for display; prefer stored c.value when present
-            const currentAngleDeg = delta * 180 / Math.PI;
-            // Always display the smaller equivalent angle (<= 180°)
-            const currentAngleShown = (currentAngleDeg > 180) ? (360 - currentAngleDeg) : currentAngleDeg;
-            const valToShow = (!isDrivenFlag && !isPlacing && hasValue) ? c.value : currentAngleShown;
-            const displayVal = formatConstraintValue(c, { value: valToShow, isPlacing });
-
             const cIdx = constraints.indexOf(c);
             
             const labelW = scale(40);
@@ -2686,8 +2765,6 @@ switch(c.type){
               out.push(labelHtml);
             }
           }
-        }
-      }
     } else if(c.type === CONSTRAINT_TYPES.POINT_ON_LINE){
       // Small circle with dot for point-on-line constraint
       // FIGURATIVE COINCIDENT: Hidden by default; drawConstraintGlyph will reveal when the attached joint/cluster is selected

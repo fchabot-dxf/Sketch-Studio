@@ -28,7 +28,7 @@ import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
-import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 
 const OVERLAY_ID = 'fillet-tool-overlay';
 const INPUT_ID = 'fillet-radius-input';
@@ -235,7 +235,8 @@ function openInput(svg, state, viewState, corner) {
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Fillet radius');
   el.setAttribute('aria-invalid', 'false');
-  el.value = formatLenLabel(currentRadius);
+  const defaultValue = formatLenLabel(currentRadius);
+  el.value = defaultValue;
   el.style.position = 'fixed';
   el.style.width = '90px';
   document.body.appendChild(el);
@@ -244,15 +245,17 @@ function openInput(svg, state, viewState, corner) {
   _input = { el, corner, radius: currentRadius, invalid: false, svg, state, viewState, unsubHistory };
   ensureViewListener();
 
-  el.addEventListener('input', () => {
+  const applyInputValue = () => {
     const v = parseFilletRadius(el.value, docUnit());
     if (v != null) { _input.radius = v; _input.invalid = false; }
     else _input.invalid = true;
     el.setAttribute('aria-invalid', _input.invalid ? 'true' : 'false');
     refreshPreview();
-  });
+  };
+  el.addEventListener('input', applyInputValue);
   el.addEventListener('keydown', (ev) => {
     ev.stopPropagation(); // typing must never reach the canvas shortcuts (Delete, F, R, ...)
+    if (handleBoxUndoKey(ev, el, defaultValue, applyInputValue)) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitFilletInput(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });

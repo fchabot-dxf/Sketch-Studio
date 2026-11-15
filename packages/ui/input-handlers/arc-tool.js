@@ -70,6 +70,11 @@ function endAngleFor(state, startAngle, cursorAngle) {
 }
 /** Only a TYPED field locks (the box otherwise shows the live value, rounded). */
 function takeTyped(detail) {
+  if (detail.reset && detail.reset[0]) {
+    if (detail.field === 'radius') arcState.lockedRadius = null;
+    else if (detail.field === 'sweep') arcState.lockedSweep = null;
+    return;
+  }
   if (!detail.typed || !detail.typed[0]) return;
   if (detail.field === 'radius') arcState.lockedRadius = detail.value > 0 ? detail.value : null;
   else if (detail.field === 'sweep') arcState.lockedSweep = detail.value > 0 ? Math.min(detail.value, 359.999) : null;

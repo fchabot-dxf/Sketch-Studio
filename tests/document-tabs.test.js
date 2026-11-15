@@ -7,7 +7,7 @@
 import assert from 'node:assert';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
 import { createDocumentBuffer, MAX_TABS } from '../packages/ui/document-buffer.js';
-import { createSketchState } from '../packages/ui/sketch-state.js';
+import { createSketchState } from '../packages/core/sketch-state.js';
 import { createEngine } from '../packages/core/constraint-solver.js';
 import { buildJournal } from '../packages/core/journal.js';
 import { resetBuffer } from './helpers/reset-buffer.js';

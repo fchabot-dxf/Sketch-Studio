@@ -756,14 +756,19 @@ export const Definitions = {
   },
 
   // Offset (task 650, #core/offset.js): params.offsetRows = the stored constraint's rows (offsetOperands) with dense joint indices and, for a
-  // radius, the radius operand { at, radius, rim, centre } (engine.js); params.value = the distance d. The VALUES come from the one formula,
+  // radius, the radius operand { at, radius, rim, centre } (engine.js); params.value = the distance d, or params.dAt when the distance
+  // is a free scalar unknown (dimensioned === false). The VALUES come from the one formula,
   // #core/offset.js offsetRowValues (the verifier reads the same); the derivatives are here, every operand taking part (a free source moves too).
   offset: {
     rows: (c, shapes) => offsetRowCount(c, shapes),
-    computeError: (params, positions) => offsetRowValues(params.offsetRows || [], Number(params.value) || 0,
+    scalarUnknown: (c, shapes) => !!c && c.dimensioned === false && offsetRowCount(c, shapes) > 0,
+    validScalar: (v) => Number.isFinite(v) && v > 0,
+    computeError: (params, positions) => offsetRowValues(params.offsetRows || [],
+      params.dAt !== undefined ? positions[params.dAt] : (Number(params.value) || 0),
       (i) => ({ x: positions[i*2], y: positions[i*2+1] }), (o) => radiusValue(positions, o.at, o.radius, o.rim, o.centre)),
     computeJacobian: (params, positions, outRows) => {
       const X = (i) => positions[i*2], Y = (i) => positions[i*2+1];
+      const dCol = params.dAt;
       let k = 0;
       for (const r of (params.offsetRows || [])) {
         if (r.k === 'cen') {
@@ -775,6 +780,7 @@ export const Definitions = {
         if (r.k === 'rad') {
           addRadiusDerivative(row, positions, 1, r.off.at, r.off.rim, r.off.centre);
           addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
+          if (dCol !== undefined) row[dCol] += -r.sign;
         } else if (r.k === 'nl') {
           // (q - a) x u / |u|, u = b - a: point_on_line's full derivative
           const ux = X(r.b) - X(r.a), uy = Y(r.b) - Y(r.a), wx = X(r.q) - X(r.a), wy = Y(r.q) - Y(r.a), lu = Math.hypot(ux, uy) || 1e-12;
@@ -782,6 +788,7 @@ export const Definitions = {
           addGrad(row, r.q, uy / lu, -ux / lu);
           addGrad(row, r.a, ((-uy + wy) - f * dd(-1, 0)) / lu, ((-wx + ux) - f * dd(0, -1)) / lu);
           addGrad(row, r.b, ((-wy) - f * dd(1, 0)) / lu, ((wx) - f * dd(0, 1)) / lu);
+          if (dCol !== undefined) row[dCol] += -r.sign;
         } else if (r.k === 'tl') {
           // w . u / |u|, w = q - p, u = b - a:  d/dw = u / |u|,  d/du = w / |u| - (w . u) u / |u|^3
           const ux = X(r.b) - X(r.a), uy = Y(r.b) - Y(r.a), wx = X(r.q) - X(r.p), wy = Y(r.q) - Y(r.p), lu = Math.hypot(ux, uy) || 1e-12;
@@ -794,6 +801,7 @@ export const Definitions = {
           const dx = X(r.q) - X(r.c), dy = Y(r.q) - Y(r.c), l = Math.hypot(dx, dy) || 1e-12;
           addGrad(row, r.q, dx / l, dy / l); addGrad(row, r.c, -dx / l, -dy / l);
           addRadiusDerivative(row, positions, -1, r.src.at, r.src.rim, r.src.centre);
+          if (dCol !== undefined) row[dCol] += -r.sign;
         } else if (r.k === 'ta') {
           // |B| th, th = atan2(A x B, A . B) (q on the RAY c -> p, task 654), A = p - c, B = q - c:
           //   d th/dB = (-By, Bx) / |B|^2,  d th/dA = (Ay, -Ax) / |A|^2  ->  d/dB = th B / |B| + (-By, Bx) / |B|,  d/dA = |B| (Ay, -Ax) / |A|^2

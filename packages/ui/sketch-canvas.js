@@ -1,7 +1,7 @@
 // Shared #core/#ui-backed sketch canvas for a host shell's Design tab (Shaper today).
 // `createSketch()` is the headless core (engine + ops, no DOM — testable in Node).
 // `mountSketch(svgEl)` (P5a) renders via the REAL shared renderer: it builds the full sketch state
-// (#ui/sketch-state.js), creates a world-group render target inside the host svg, seeds a small demo, and runs
+// (#core/sketch-state.js), creates a world-group render target inside the host svg, seeds a small demo, and runs
 // a RAF solve→draw loop (read-only this slice — interactive input arrives in P5b). The host drives start()/stop()
 // on tab show/hide so the loop never runs while hidden. Theme: the host's dark --sk-* vars (P1) colour the
 // render automatically (P2 routed the renderer through them) — nothing is set here.
@@ -15,7 +15,7 @@ import { createSketches, stampSketch, sketchOf, hiddenSketchIds } from '#core/sk
 import { draw } from '#ui/svg-renderer.js';
 import { loadFusionGlyphs } from '#ui/fusion-glyphs.js';
 import { updateGridFromSettings } from '#ui/canvas-grid.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { setupInput } from '#ui/input-manager.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

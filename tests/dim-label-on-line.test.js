@@ -6,7 +6,7 @@ import { px, labelEl, labelPoint } from './helpers/node-dom-read.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { addConstraintObject } from '#core/constraints.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import { TOOL_MODES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { draw } from '#ui/svg-renderer.js';

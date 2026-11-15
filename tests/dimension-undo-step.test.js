@@ -7,7 +7,7 @@
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
 
   const { createEngine } = await import('#core/constraint-solver.js');
-  const { createSketchState } = await import('#ui/sketch-state.js');
+  const { createSketchState } = await import('#core/sketch-state.js');
   const { CONSTRAINT_TYPES, TOOL_MODES } = await import('#core/constants.js');
   const { ConstraintManager } = await import('#core/constraint-manager.js');
   const {

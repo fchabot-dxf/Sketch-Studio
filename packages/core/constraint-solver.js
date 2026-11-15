@@ -6,25 +6,23 @@ import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from './constants.js';
 import { newJointId } from './shape-id.js';
 
 
-// Embedded store (was store.js)
-const joints = new Map();
-const shapes = [];
-const constraints = [];
-
-// Solver metrics for tuning wizard
-let lastSolveStats = { maxDelta: 0, iterations: 0, converged: false, constraintErrors: [] };
-
-function _initStore(){
-  joints.clear();
-  shapes.length = 0;
-  constraints.length = 0;
-  joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
-}
-
 export function createEngine(options = {}){
   // Injected seams (shell wires these). onMetrics replaces the old
   // window.__updateSolverMetrics global so the core never reaches for window.
   const { onMetrics = null } = options || {};
+  // TASK 679: the engine's OWN store (was module-level, so every engine shared one drawing and any engine's init() wiped the open
+  // sketch). Each createEngine() call gets its own joints / shapes / constraints and its own solve stats; two engines never share state.
+  const joints = new Map();
+  const shapes = [];
+  const constraints = [];
+  // Solver metrics for tuning wizard
+  let lastSolveStats = { maxDelta: 0, iterations: 0, converged: false, constraintErrors: [] };
+  function _initStore(){
+    joints.clear();
+    shapes.length = 0;
+    constraints.length = 0;
+    joints.set(ORIGIN_JOINT_ID, { ...ORIGIN_JOINT });
+  }
   // The solver resolves a constraint's shape / joint ids in the SCENE: the real containers (read live) + the two built-in reference lines (task 539).
   const solver = createNewtonSolver(sceneJoints(joints), constraints, sceneShapes(shapes), {
     maxIter: SolverConfig.ITERATIONS || 500,
@@ -81,8 +79,8 @@ export function createEngine(options = {}){
     constraintErrors.sort((a, b) => b.residual - a.residual);
     conflicts.sort((a, b) => b.residual - a.residual);
 
-    // Geometry decides convergence: satisfied iff no constraint exceeds tolerance.
-    const converged = conflicts.length === 0;
+    // Geometry decides convergence: satisfied iff no constraint exceeds tolerance (unless the solver rejected an invalid scalar step).
+    const converged = !result.rejected && conflicts.length === 0;
 
     // Update metrics for tuning wizard
     lastSolveStats = {

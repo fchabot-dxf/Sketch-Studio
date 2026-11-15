@@ -21,7 +21,7 @@ export const PARAMETER_UNITS = ['', 'mm', 'cm', 'in', 'deg', 'rad']; // O18  '' 
 const SAME_VALUE = 1e-9;                              // two values closer than this are the same value (the design's value == evaluate(expression) tolerance)
 
 // ── dimension helpers (the ONE definition of "a dimension" and "a reference dimension") ──
-export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.ANGLE || c.type === CONSTRAINT_TYPES.OFFSET);
+export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.ANGLE || (c.type === CONSTRAINT_TYPES.OFFSET && c.dimensioned !== false));
 export const isReferenceDimension = (c) => !!c && !!(c.isDriven || c.driven);
 const dimensionKind = (c) => (c.type === CONSTRAINT_TYPES.ANGLE ? 'angle' : 'length');
 

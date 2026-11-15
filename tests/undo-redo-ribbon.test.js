@@ -196,7 +196,7 @@
   };
 
   const { createEngine } = await import('#core/constraint-solver.js');
-  const { createSketchState } = await import('#ui/sketch-state.js');
+  const { createSketchState } = await import('#core/sketch-state.js');
   const { createToolRibbon } = await import('#ui/tool-ribbon.js');
   const { setupKeyboardShortcuts } = await import('#ui/input-manager.js');
 

@@ -23,7 +23,7 @@ import { docUnit } from '#core/settings-manager.js';
 import { format as formatUnit } from '#core/units.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
-import { ensureNumericInputStyles } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey } from '#ui/numeric-input-manager.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 
 const OVERLAY_ID = 'offset-tool-overlay';
@@ -33,6 +33,12 @@ const HINT_MS = 6000;
 const MIN_DRAG_MM = 0.01;
 
 let currentDistance = null; // WORLD mm; the last distance used (survives tool switches for the session)
+let _exit = null;
+
+/** Host callback (task 667): ends the Offset tool (back to Select) after OK. */
+export function setupOffsetTool({ exit } = {}) {
+  _exit = typeof exit === 'function' ? exit : null;
+}
 let _distanceUnit = null;   // the document unit the default was seeded for; a unit change re-seeds it
 let _open = null;           // { chain, pickId, side, d, el, svg, state, unsubHistory } while the distance box is open
 let _hover = false;         // the pointer is over the arrow (it draws darker)
@@ -164,7 +170,8 @@ function openInput(svg, state, chain, pickId, side) {
   el.type = 'text';
   el.className = 'dim-input';
   el.setAttribute('aria-label', 'Offset distance');
-  el.value = formatUnit(currentDistance, unit, { decimals: decimalsFor(unit) });
+  const defaultValue = formatUnit(currentDistance, unit, { decimals: decimalsFor(unit) });
+  el.value = defaultValue;
   el.style.position = 'fixed';
   el.style.width = '90px';
   document.body.appendChild(el);
@@ -172,13 +179,15 @@ function openInput(svg, state, chain, pickId, side) {
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
   _open = { chain, pickId, side, d: currentDistance, el, svg, state, unsubHistory };
   ensureViewListener();
-  el.addEventListener('input', () => {
+  const applyInputValue = () => {
     const v = parseOffsetDistance(el.value, docUnit());
     if (v != null) _open.d = v;
     refresh();
-  });
+  };
+  el.addEventListener('input', applyInputValue);
   el.addEventListener('keydown', (ev) => {
     ev.stopPropagation(); // typing never reaches the canvas shortcuts (Delete, F, ...)
+    if (handleBoxUndoKey(ev, el, defaultValue, applyInputValue)) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitOffsetInput(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });
@@ -228,6 +237,7 @@ export function commitOffsetInput() {
   currentDistance = d; // the distance USED is the remembered one
   cancelAll();
   showNotification(`Offset applied (${formatUnit(d, docUnit(), { unit: true, decimals: decimalsFor(docUnit()) })})`, 'info');
+  if (_exit) _exit();
 }
 
 function removeInput() {

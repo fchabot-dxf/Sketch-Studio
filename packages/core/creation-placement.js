@@ -390,7 +390,7 @@ export function firstGivesWay(key, clsFirst, clsSecond) {
 function trySolveAlone(state, anchorOp, cand) {
   const anchorShapes = anchorOp.kind === 'shape' ? [shapeOf(state, anchorOp.id)] : [];
   const anchorJoints = anchorOp.kind === 'joint' ? [anchorOp.id] : (anchorShapes[0] ? anchorShapes[0].joints : []);
-  const snap = snapshotSolverState(state.joints, state.shapes), sizes = measureShapeSizes(state);
+  const snap = snapshotSolverState(state.joints, state.shapes, state.constraints), sizes = measureShapeSizes(state);
   const freed = anchorJoints.map(id => state.joints.get(id)).filter(j => j && !j.fixed);
   const temps = [cand, ...anchorShapes.filter(hasRadiusUnknown).map(s => ({ type: T.DISTANCE, shape: s.id, isRadius: true, value: s.radius }))];
   let res = null;
@@ -579,7 +579,7 @@ export function solveGivingWay(state, c, memo, iter = SolverConfig.ITERATIONS ||
   if (!memo.joints) { memo.joints = cluster(g.joints); memo.circles = new Set(g.circles); memo.anchor = cluster(g.anchor); }
   const anchor = memo.anchor;
   for (;;) {
-    const snap = snapshotSolverState(state.joints, state.shapes);
+    const snap = snapshotSolverState(state.joints, state.shapes, state.constraints);
     const held = [...state.joints].filter(([id, j]) => j && !j.fixed && !memo.joints.has(id)).map(([, j]) => [j, j.fixed]);
     const temps = state.shapes.filter(s => hasRadiusUnknown(s) && !memo.circles.has(s.id)).map(s => ({ type: T.DISTANCE, shape: s.id, isRadius: true, value: s.radius }));
     let res = null;

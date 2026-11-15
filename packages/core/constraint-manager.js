@@ -4,7 +4,7 @@ import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
-import { measureResidual, measureShapeSizes, findCollapsedShape } from './constraint-verifier.js';
+import { measureResidual, measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from './constraint-verifier.js';
 import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
@@ -295,7 +295,7 @@ export class ConstraintManager {
         // handled below: an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
-        const _preAdd = snapshotSolverState(state.joints, state.shapes);
+        const _preAdd = snapshotSolverState(state.joints, state.shapes, state.constraints);
         const _sizesBefore = measureShapeSizes(state);
 
         // Fusion parity: the operand that gives way is placed on its target BEFORE the solve (placeForCreation, task 525).
@@ -346,7 +346,7 @@ export class ConstraintManager {
             if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
                 try { state.engine.solve(opts.solveIterations); } catch (e) { console.error('[ConstraintManager] Solver error:', e); }
             }
-            notify(`Can't add ${this._friendlyName(type)} — it would collapse a ${collapsed.type} to a point. Reverted.`, 'warning', 3500);
+            notify(`Can't add ${this._friendlyName(type)} — it would collapse ${withIndefiniteArticle(collapsed.type)} to a point. Reverted.`, 'warning', 3500);
             dbg.warn('constraints', `[ConstraintManager] ${type} ADD refused + reverted (collapsed ${collapsed.type} ${collapsed.id})`);
             return null;
         }
@@ -440,8 +440,8 @@ export class ConstraintManager {
      */
     static _sandboxVerify(state, type, params, _unused) {
         try {
-            // 1. Snapshot the solver state (joint positions and circle radii)
-            const saved = snapshotSolverState(state.joints, state.shapes);
+            // 1. Snapshot the solver state (joint positions, circle radii and constraint scalar unknowns)
+            const saved = snapshotSolverState(state.joints, state.shapes, state.constraints);
             const sizesBefore = measureShapeSizes(state);
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges

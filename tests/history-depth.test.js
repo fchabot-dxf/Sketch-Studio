@@ -2,7 +2,7 @@
 // order; the redo stack still clears on a new edit; the oldest step drops past the depth; the large-sketch memory stays bounded.
 import assert from 'node:assert';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState, HISTORY_DEPTH } from '#ui/sketch-state.js';
+import { createSketchState, HISTORY_DEPTH } from '#core/sketch-state.js';
 
 const mk = () => { const engine = createEngine(); engine.init(); return createSketchState(engine, { x: 0, y: 0, w: 100, h: 100 }); };
 const xOf = (st) => st.joints.get('j').x;

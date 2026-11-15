@@ -7,7 +7,7 @@ import { deserializeDocument, serializeDocument, DOCUMENT_VERSION } from '#core/
 import { emptyDocument } from '#ui/project-store.js';
 import { ORIGIN_JOINT_ID, ORIGIN_JOINT } from '#core/constants.js';
 import { createEngine } from '#core/constraint-solver.js';
-import { createSketchState } from '#ui/sketch-state.js';
+import { createSketchState } from '#core/sketch-state.js';
 import fs from 'node:fs';
 // TASK 558 F6: the declared origin belongs to Sketch 1 (sketchId 'sketch-1'), so every origin below carries it.
 

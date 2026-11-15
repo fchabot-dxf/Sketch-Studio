@@ -4,6 +4,8 @@
 //   GO TO Shaper (no question): the same two tabs, the same active one, Shaper's Design canvas shows the design; a cut plan (Pocket) on the saved design in
 //   Prepare, and one on the unsaved design; GO TO Pen Plotter: the same tabs; GO TO SketchStudio: the geometry of both is unchanged and Shaper's cut plan is
 //   still in both documents (the saved one in the store, the unsaved one in the shared buffer); GO TO Trace: the same tabs; GO TO Shaper again: both cut plans.
+//   A Trace photo-tracing document (mouse): its traced drawing (Send to Editor) shows in SketchStudio and Shaper; back in Trace it opens in Edit with the drawing,
+//   the photo is gone (it is never stored, TASK 567: only Trace's page memory holds it).
 // EVIDENCE_DIR (optional): cropped screenshots of the tab row in each app.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -164,6 +166,46 @@ await (async () => {
       assert.deepStrictEqual(await cutPlan(), ['pocket'], mode + ': reopened Shaper: the unsaved Hexagon has its Pocket');
       console.log(`${mode}: Studio -> Shaper -> Pen Plotter -> Studio -> Trace -> Shaper: same 2 tabs + active, ${plateShapes} / ${hexShapes} shapes, both Pockets kept`);
       if (phone) { await send('Emulation.setTouchEmulationEnabled', { enabled: false }); await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 800, deviceScaleFactor: 1, mobile: false }); }
+    }
+    // ---- a Trace photo-tracing document in the other apps (mouse): its traced drawing shows; the photo stays in Trace's memory only (TASK 567) --------------
+    {
+      const click = async (sel) => {
+        const c = await evalJs(`(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+        assert(c, sel + ' exists');
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c.x, y: c.y, button: 'none', clickCount: 0 }); await sleep(30);
+        await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c.x, y: c.y, button: 'left', buttons: 1, clickCount: 1 }); await sleep(30);
+        await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c.x, y: c.y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(300);
+      };
+      const menuOpen = `(() => { const g = document.querySelector('.sk-sidebar-goto'); if (!g) return false; const r = g.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.left < innerWidth; })()`;
+      const goTo = async (app) => {
+        if (!(await evalJs(menuOpen))) await click('.sk-sidebar-btn');
+        await waitFor(menuOpen, 'the menu');
+        await click(`.sk-sidebar-goto [data-app="${app}"]`);
+        await waitFor(`location.pathname.startsWith('/apps/${app}/')`, `GO TO ${app}`);
+        await waitForApp(CANVAS[app]);
+      };
+      await resetBufferLive(cdp);
+      await navigate(`http://127.0.0.1:${port}/apps/trace/index.html`, 10000);
+      await waitForApp('design-canvas');
+      await click('.sk-header-tab[data-tab="trace"]');
+      await evalJs(`(async () => { const w = 600, h = 400; const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+        x.fillStyle = '#eee'; x.fillRect(0, 0, w, h); x.fillStyle = '#000'; x.fillRect(150, 100, 300, 200);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9)); const dt = new DataTransfer(); dt.items.add(new File([blob], 'plate.jpg', { type: 'image/jpeg' }));
+        const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); })()`); // the photo chooser's file (a test cannot drive the OS picker)
+      await waitFor(`document.getElementById('original-canvas').width === 600 && !document.getElementById('btn-send-to-edit').disabled`, 'the photo was traced', 30000);
+      await click('#btn-send-to-edit');
+      await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length > 0`, 'Send to Editor: the traced drawing in Edit');
+      const traced = await evalJs(`document.querySelectorAll('#design-canvas .shape-elem').length`);
+      await goTo('sketchstudio');
+      await waitFor(`document.querySelectorAll('#svgCanvas .shape-elem').length === ${traced}`, `SketchStudio shows the traced drawing (${traced} shapes)`);
+      assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-doctab').length`), 1, 'the Trace document is the one tab');
+      assert.strictEqual(await evalJs(`!!document.querySelector('.sk-doctab.active .sk-doctab-dot')`), true, 'unsaved, with content: its dot');
+      await goTo('shaper');
+      await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced}`, 'Shaper has the traced drawing in its Design canvas');
+      await goTo('trace');
+      await waitFor(`document.querySelectorAll('#design-canvas .shape-elem').length === ${traced} && document.querySelector('.sk-header-tab.active').dataset.tab === 'edit'`, 'back in Trace: the drawing, in Edit');
+      assert.strictEqual(await evalJs(`document.getElementById('original-canvas').width`), 0, 'back in Trace: the photo was not kept (never stored, TASK 567)');
+      console.log(`trace document: ${traced} traced shapes shown in SketchStudio and Shaper; back in Trace: Edit with the drawing, no photo`);
     }
     console.log('shared-tabs-684-live: ok');
   } finally { await cdp.close(); }

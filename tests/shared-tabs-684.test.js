@@ -9,11 +9,16 @@
 //   D. TWO PAGES at once (the simplest safe rule): tabs either page opened are both kept; a tab both edited keeps both versions; a tab one closed is dropped;
 //      each app's session slot survives the other page's write.
 //   E. keepTabs() (what GO TO runs) resolves false when the buffer cannot be written; a session's stored() part is what the buffer keeps.
+//   F. a design on (fake) Google Drive with a save not confirmed yet: the next app opens it with every app's sidecar, and its own save keeps the unconfirmed one.
 import assert from 'node:assert';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
 import { createDocumentBuffer, mergeTabBuffers } from '../packages/ui/document-buffer.js';
 import { serializeDocument, deserializeDocument } from '../packages/core/document.js';
 import { createSketchState } from '../packages/ui/sketch-state.js';
+import { createFakeDrive } from './harness/fake-drive.js';
+import { createDriveAdapter } from '../packages/ui/cloud/drive-adapter.js';
+import { createRouterAdapter } from '../packages/ui/cloud/router-adapter.js';
+import { parseProjectFile } from '../packages/ui/project-file.js';
 import { createEngine } from '../packages/core/constraint-solver.js';
 
 let t = 9000;
@@ -226,4 +231,30 @@ function page(app, store, { hostName = null, session = false, stored = null } = 
   assert.deepStrictEqual((await store.readBuffer({})).tabs[0].hostSessions, { trace: { sel: 'kept' } }, 'only the stored part is in the buffer');
 }
 
-console.log('shared-tabs-684: migration, across apps, empty-tab dot, two pages, keepTabs OK');
+// ---- F. a design on (fake) Google Drive whose last save is not confirmed yet (GO TO a moment after an edit): the next app keeps the other sidecars ----------
+{
+  let clock = Date.UTC(2026, 10, 15, 12, 0, 0); let timers = []; let seq = 0;
+  const setTimer = (fn, ms) => { const tm = { fn, at: clock + ms, id: ++seq }; timers.push(tm); return tm; };
+  const clearTimer = (tm) => { timers = timers.filter((x) => x !== tm); };
+  const settle = async () => { for (let i = 0; i < 40; i++) await new Promise((r) => setImmediate(r)); };
+  const drive = createFakeDrive();
+  const local = createMemoryAdapter(); // this device: every page shares it (IndexedDB)
+  const account = { authedFetch: (url, opts = {}) => drive.fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + drive.token, ...(opts.headers || {}) } }) };
+  const pageStore = () => { const remote = createDriveAdapter({ account, meta: local }); return createProjectStore({ adapter: createRouterAdapter({ local, getRemote: () => remote, signedIn: () => true, subscribeSignIn: () => () => {} }), now: () => ++clock, channel: null, setTimer, clearTimer }); };
+  const hostDoc = (hosts) => ({ ...emptyDocument(), geometry: { joints: [['j1', { x: 1, y: 0 }]], shapes: [], constraints: [] }, hosts });
+  const s1 = pageStore();
+  const p = await s1.createProject('P'); const d = await s1.newDesign('D', { app: 'penplotter', projectId: p.id });
+  await s1.save(hostDoc({ penplotter: { pens: 2 } }), { id: d.id, app: 'penplotter' }); await s1.flushDrive(d.id);
+  drive.failWrites = 1000;                                                    // Shaper's edit is kept on this device only (its Drive write not done yet)
+  await s1.save(hostDoc({ shaper: { cut: 1 } }), { id: d.id, app: 'shaper' }); await settle();
+  const s2 = pageStore();                                                     // GO TO: the next page reads the design
+  const seen = await s2.get(d.id);
+  assert.deepStrictEqual(Object.keys(seen.document.hosts).sort(), ['penplotter', 'shaper'], "the local copy opens WITH Drive's other sidecars: " + JSON.stringify(seen.document.hosts));
+  await s2.save(hostDoc({ trace: { params: 3 } }), { id: d.id, app: 'trace' }); await settle(); // Trace saves before Shaper's write reached Drive
+  assert.deepStrictEqual(Object.keys((await local.getMeta('driveShadow:' + d.id)).document.hosts).sort(), ['shaper', 'trace'], "the newer local copy keeps Shaper's unconfirmed sidecar");
+  drive.failWrites = 0; await s2.flushDrive(d.id);
+  const onDrive = parseProjectFile(drive.files.get(d.id.replace(/^drive:/, '')).content).document.hosts;
+  assert.deepStrictEqual(onDrive, { penplotter: { pens: 2 }, shaper: { cut: 1 }, trace: { params: 3 } }, "Drive ends with every app's sidecar: " + JSON.stringify(onDrive));
+}
+
+console.log('shared-tabs-684: migration, across apps, empty-tab dot, two pages, keepTabs, Drive local copy OK');

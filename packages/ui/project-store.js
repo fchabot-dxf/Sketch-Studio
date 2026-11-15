@@ -540,8 +540,6 @@ export function createProjectStore({ adapter = createIdbAdapter(), legacySource 
       for (const key of legacyKeys) await adapter.setMeta(key, null); // merged once: the per-app keys are gone, so they can never come back
       return merged;
     },
-    /** Replace the buffer (null = nothing open but an empty Untitled). A page writes through updateBuffer (it merges with what other pages wrote). */
-    writeBuffer: (data) => adapter.setMeta(OPEN_TABS_BUFFER, data),
     /** Read, change and write the buffer in ONE step (fn(stored | null) -> the new buffer | null): two pages writing at the same moment never
      *  interleave a read and a write (document-buffer.js mergeTabBuffers decides what fn keeps). */
     updateBuffer: (fn) => adapter.updateMeta(OPEN_TABS_BUFFER, fn),
